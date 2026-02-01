@@ -1,0 +1,22 @@
+# Default owners
+* @clawbureau/core
+
+# Domain ownership (placeholders - create teams in org)
+/apps/clawverify/ @clawbureau/identity
+/services/clawverify/ @clawbureau/identity
+
+/apps/clawproxy/ @clawbureau/infra
+/services/clawproxy/ @clawbureau/infra
+
+/apps/clawledger/ @clawbureau/economy
+/services/clawledger/ @clawbureau/economy
+
+/apps/clawescrow/ @clawbureau/economy
+/services/clawescrow/ @clawbureau/economy
+
+/apps/clawbounties/ @clawbureau/labor
+/services/clawbounties/ @clawbureau/labor
+
+# Shared packages
+/packages/schema/ @clawbureau/core
+/packages/sdk/ @clawbureau/core
