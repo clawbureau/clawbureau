@@ -5,7 +5,12 @@
 
 import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
-import type { VerifyArtifactResponse, VerifyMessageResponse } from './types';
+import { verifyReceipt } from './verify-receipt';
+import type {
+  VerifyArtifactResponse,
+  VerifyMessageResponse,
+  VerifyReceiptResponse,
+} from './types';
 
 export interface Env {
   ENVIRONMENT: string;
@@ -98,6 +103,39 @@ async function handleVerifyMessage(request: Request): Promise<Response> {
 }
 
 /**
+ * Handle POST /v1/verify/receipt - Verify gateway receipt signatures
+ */
+async function handleVerifyReceipt(request: Request): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('envelope' in body)
+  ) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  // Verify the receipt signature
+  const verification = await verifyReceipt(envelope);
+  const response: VerifyReceiptResponse = verification;
+
+  // Return 200 for valid, 422 for invalid
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle health check
  */
 function handleHealth(): Response {
@@ -129,6 +167,11 @@ export default {
     // POST /v1/verify/message - Message signature verification
     if (url.pathname === '/v1/verify/message' && method === 'POST') {
       return handleVerifyMessage(request);
+    }
+
+    // POST /v1/verify/receipt - Gateway receipt verification
+    if (url.pathname === '/v1/verify/receipt' && method === 'POST') {
+      return handleVerifyReceipt(request);
     }
 
     // 404 for unknown routes

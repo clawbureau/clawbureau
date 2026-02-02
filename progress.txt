@@ -25,3 +25,29 @@ Started: 2026-02-02T03:08:26.937416
   - Use 422 status for invalid signatures (not 400) - it's unprocessable content, not bad request
   - JSON.stringify is used for canonical payload hashing
 ---
+
+## 2026-02-02T04:30:00Z - CVF-US-002
+- Implemented message signature verification for DID binding
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added MessagePayload type with message_type variants
+  - services/clawverify/src/verify-message.ts - Message verification with expiry support
+  - services/clawverify/src/index.ts - Added /v1/verify/message endpoint
+- **Learnings for future iterations:**
+  - Message types are: account_binding, ownership_proof, challenge_response
+  - Expiry validation should check expires_at field in payload before signature verification
+  - Response includes signer_did at top level for easy consumption by platforms
+  - Follow the verify-artifact.ts pattern for new envelope types - structure is consistent
+---
+
+## 2026-02-02T05:00:00Z - CVF-US-003
+- Implemented gateway receipt verification for proof-of-harness
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added GatewayReceiptPayload and VerifyReceiptRequest/Response types
+  - services/clawverify/src/verify-receipt.ts - Receipt verification with provider/model/gateway_id return
+  - services/clawverify/src/index.ts - Added /v1/verify/receipt endpoint
+- **Learnings for future iterations:**
+  - Gateway receipts contain: receipt_id, gateway_id, provider, model, request/response hashes, token counts, latency
+  - Response includes provider, model, and gateway_id at top level for marketplace consumption
+  - Validate base64url format for request_hash_b64u and response_hash_b64u in payload
+  - Non-negative number validation for tokens_input, tokens_output, latency_ms
+---

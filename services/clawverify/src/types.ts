@@ -70,6 +70,25 @@ export interface MessagePayload {
 }
 
 /**
+ * Gateway receipt payload - represents a proxy receipt for proof-of-harness
+ * Used by marketplaces to validate that requests were routed through a trusted gateway
+ */
+export interface GatewayReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  gateway_id: string;
+  provider: string;
+  model: string;
+  request_hash_b64u: string;
+  response_hash_b64u: string;
+  tokens_input: number;
+  tokens_output: number;
+  latency_ms: number;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Verification result
  */
 export type VerificationStatus = 'VALID' | 'INVALID';
@@ -126,5 +145,17 @@ export interface VerifyMessageRequest {
 export interface VerifyMessageResponse {
   result: VerificationResult;
   signer_did?: string;
+  error?: VerificationError;
+}
+
+export interface VerifyReceiptRequest {
+  envelope: SignedEnvelope<GatewayReceiptPayload>;
+}
+
+export interface VerifyReceiptResponse {
+  result: VerificationResult;
+  provider?: string;
+  model?: string;
+  gateway_id?: string;
   error?: VerificationError;
 }

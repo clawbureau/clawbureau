@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/message endpoint with account_binding, ownership_proof, and challenge_response message types"
     },
     {
       "id": "CVF-US-003",
@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/receipt endpoint with GatewayReceiptPayload validation and provider/model return"
     },
     {
       "id": "CVF-US-004",
