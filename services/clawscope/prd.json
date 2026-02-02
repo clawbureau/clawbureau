@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented POST /v1/tokens/introspect validating EdDSA signature + exp and returning scope/aud/owner_ref (fail-closed on token_version)."
     },
     {
       "id": "CSC-US-003",
@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented POST /v1/tokens/revoke (admin) backed by KV; records revocations immediately and appends to an event/audit feed (GET /v1/revocations/events). Introspection returns active=false for revoked tokens."
     },
     {
       "id": "CSC-US-004",
@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tier-aware policy enforcement for token issuance: supports SCOPE_POLICY_JSON tiers or env-based allowlist/prefix knobs; enforces max TTL and rejects scopes outside policy (incl. optional wildcard bans)."
     },
     {
       "id": "CSC-US-005",
@@ -76,7 +76,7 @@
     {
       "id": "CSC-US-006",
       "title": "Token audit trail",
-      "description": "As a auditor, I want logs so that issuance is traceable.",
+      "description": "As an auditor, I want logs so that issuance is traceable.",
       "acceptanceCriteria": [
         "Log token hash + issuance metadata",
         "Store revocation timestamps",
@@ -84,13 +84,13 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Logs token_hash + issuance metadata to KV (events:issuance:*), stores revocation timestamps, and exports combined audit bundles via GET /v1/audit/bundle (admin)."
     },
     {
       "id": "CSC-US-007",
       "title": "Metrics dashboard",
-      "description": "As a operator, I want real-time metrics so that I can monitor health.",
+      "description": "As an operator, I want real-time metrics so that I can monitor health.",
       "acceptanceCriteria": [
         "Service metrics",
         "Latency charts",
@@ -104,7 +104,7 @@
     {
       "id": "CSC-US-008",
       "title": "Usage reports",
-      "description": "As a enterprise, I want usage reports so that I can track spend.",
+      "description": "As an enterprise, I want usage reports so that I can track spend.",
       "acceptanceCriteria": [
         "Daily usage",
         "Export CSV",
@@ -118,7 +118,7 @@
     {
       "id": "CSC-US-009",
       "title": "Alerting",
-      "description": "As a operator, I want alerts so that I can respond quickly.",
+      "description": "As an operator, I want alerts so that I can respond quickly.",
       "acceptanceCriteria": [
         "Threshold alerts",
         "Email/Slack",
@@ -132,7 +132,7 @@
     {
       "id": "CSC-US-010",
       "title": "Cost analytics",
-      "description": "As a finance, I want cost analytics so that budgets are managed.",
+      "description": "As a finance team, I want cost analytics so that budgets are managed.",
       "acceptanceCriteria": [
         "Cost by service",
         "Trend charts",
@@ -146,7 +146,7 @@
     {
       "id": "CSC-US-011",
       "title": "Trace viewer",
-      "description": "As a engineer, I want tracing so that I can debug issues.",
+      "description": "As an engineer, I want tracing so that I can debug issues.",
       "acceptanceCriteria": [
         "Trace search",
         "Span view",
@@ -160,7 +160,7 @@
     {
       "id": "CSC-US-012",
       "title": "SLA reports",
-      "description": "As a enterprise, I want SLA reports so that compliance is proven.",
+      "description": "As an enterprise, I want SLA reports so that compliance is proven.",
       "acceptanceCriteria": [
         "SLA metrics",
         "Downtime logs",
@@ -174,7 +174,7 @@
     {
       "id": "CSC-US-013",
       "title": "Mission aggregation",
-      "description": "As a operator, I want mission rollups so that multi-agent work is visible.",
+      "description": "As an operator, I want mission rollups so that multi-agent work is visible.",
       "acceptanceCriteria": [
         "Group spend and receipts by mission_id",
         "Show per-role and per-agent breakdowns",

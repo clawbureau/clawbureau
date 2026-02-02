@@ -22,3 +22,41 @@ Started: 2026-02-02T22:30:00Z
   - Other services (e.g. clawproxy) validate CSTs as EdDSA JWT and require a configured issuer public key.
   - Keeping the issuer key discoverable via JWKS allows offline verification.
 ---
+
+## 2026-02-02 - CSC-US-002
+- Added token introspection endpoint: `POST /v1/tokens/introspect`.
+  - Parses JWT segments (header/payload/signature)
+  - Validates `alg=EdDSA`, `token_version=1`, and `exp`.
+  - Verifies signature against issuer key (fail closed if signing key missing).
+  - Returns `{active:true, token_hash, sub, aud, scope, owner_ref, iat, exp}`.
+- Typecheck: `npm run typecheck`.
+---
+
+## 2026-02-02 - CSC-US-003
+- Added token revocation endpoint (admin): `POST /v1/tokens/revoke`.
+  - Stores revocation record in KV under `revoked:hash:<token_hash>`.
+  - Writes an event/audit record under `events:revocations:<invTs>:<token_hash>` (newest-first listing).
+- Added revocation event feed (admin): `GET /v1/revocations/events?limit=&cursor=`.
+- Introspection checks revocation KV and returns `{active:false, revoked:true, ...}` for revoked tokens.
+- Typecheck: `npm run typecheck`.
+---
+
+## 2026-02-02 - CSC-US-004
+- Added tier-aware policy enforcement for token issuance.
+  - Supports `SCOPE_POLICY_JSON` (structured tiers) OR simple env knobs:
+    - `SCOPE_ALLOWED_SCOPES`, `SCOPE_ALLOWED_SCOPE_PREFIXES`, `SCOPE_ALLOW_WILDCARDS`
+    - `SCOPE_POLICY_TIER` selects default tier
+  - Enforces max TTL per tier/policy (passed into token issuance).
+  - Rejects requests with scopes outside policy.
+- Typecheck: `npm run typecheck`.
+---
+
+## 2026-02-02 - CSC-US-006
+- Implemented issuance audit trail (best-effort) using KV:
+  - Writes `issued:hash:<token_hash>` and `events:issuance:<invTs>:<token_hash>` records on successful issuance.
+  - Revocations already store timestamps (`revoked_at`).
+- Added admin audit endpoints:
+  - `GET /v1/audit/issuance` (list issuance events)
+  - `GET /v1/audit/bundle` (combined issuance + revocations export)
+- Typecheck: `npm run typecheck`.
+---
