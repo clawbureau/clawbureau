@@ -272,5 +272,14 @@ export async function verifyAuditChain(
  * Call this during worker startup or as a separate setup step
  */
 export async function initAuditLogSchema(db: AuditLogDB): Promise<void> {
-  await db.exec(AUDIT_LOG_SCHEMA);
+  // D1 exec() may reject multi-statement SQL strings.
+  // Split on ';' and run statements one-by-one.
+  const statements = AUDIT_LOG_SCHEMA
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  for (const stmt of statements) {
+    await db.exec(stmt);
+  }
 }
