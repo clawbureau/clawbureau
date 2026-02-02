@@ -154,8 +154,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added POST /reserve/compute to upsert stable reserve assets for Gemini + FAL compute credits (asset_type=compute_credits, currency=USD) with conservative provider haircuts (gemini=7000bps, fal=6000bps). These assets flow into /attestation/reserve via the existing reserve asset registry." 
     },
     {
       "id": "CLD-US-012",

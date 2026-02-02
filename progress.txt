@@ -293,3 +293,23 @@ Started: 2026-02-02T03:08:26.936251
   - Avoid Number() conversions for big-int ratios; format fixed-point ratios using BigInt string slicing
   - When signing large structures, sign a deterministic hash of the normalized breakdown (reserveAssetsHash) rather than embedding raw JSON in the signature payload
 ---
+
+## 2026-02-02T05:18:22Z - CLD-US-011
+- What was implemented
+  - Added compute reserve asset upsert endpoint:
+    - POST /reserve/compute
+    - Accepts gemini_amount + fal_amount (bigint strings) and optional as_of
+    - Writes/updates two stable reserve asset IDs:
+      - ras_compute_gemini_usd
+      - ras_compute_fal_usd
+    - Applies conservative haircuts by provider (gemini=7000bps, fal=6000bps)
+  - Compute reserve assets are included in coverage attestations automatically via existing /attestation/reserve logic (reads reserve_assets registry)
+- Files changed
+  - services/ledger/src/compute-reserves.ts
+  - services/ledger/src/index.ts
+  - services/ledger/src/types.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - For “computed” reserves without external integrations, prefer deterministic operator-supplied upsert endpoints with stable asset IDs; attestations can stay purely read-only.
+---

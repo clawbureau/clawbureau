@@ -6,6 +6,7 @@
 import { AccountService, isValidDid } from './accounts';
 import { ReserveAttestationService } from './attestation';
 import { ReserveAssetService } from './reserve-assets';
+import { ComputeReserveService } from './compute-reserves';
 import { ClearingService } from './clearing';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
@@ -27,6 +28,7 @@ import type {
   PromoMintRequest,
   ReleaseHoldRequest,
   ReserveAssetUpsertRequest,
+  ComputeReservesUpsertRequest,
   SettlementRequest,
   StakeLockRequest,
   StakeSlashRequest,
@@ -537,6 +539,39 @@ async function handleReserveAttestation(env: Env): Promise<Response> {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse(message, 'ATTESTATION_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /reserve/compute - Upsert compute reserve assets (Gemini/FAL)
+ * CLD-US-011
+ */
+async function handleUpsertComputeReserves(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<ComputeReservesUpsertRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.gemini_amount) {
+    return errorResponse('Missing required field: gemini_amount', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.fal_amount) {
+    return errorResponse('Missing required field: fal_amount', 'INVALID_REQUEST', 400);
+  }
+
+  const service = new ComputeReserveService(env);
+
+  try {
+    const response = await service.upsertComputeReserves(body);
+    return jsonResponse(response, 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'COMPUTE_RESERVES_UPSERT_FAILED', 400);
   }
 }
 
@@ -1564,6 +1599,11 @@ async function router(
   // GET /reserve/assets - List reserve assets
   if (path === '/reserve/assets' && method === 'GET') {
     return handleListReserveAssets(env);
+  }
+
+  // POST /reserve/compute - Upsert compute reserve assets (Gemini/FAL)
+  if (path === '/reserve/compute' && method === 'POST') {
+    return handleUpsertComputeReserves(request, env);
   }
 
   // POST /reserve/assets - Upsert reserve asset

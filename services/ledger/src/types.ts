@@ -390,6 +390,19 @@ export interface ReserveAssetsListResponse {
 }
 
 /**
+ * CLD-US-011: Compute reserve assets (Gemini/FAL credits)
+ */
+export interface ComputeReservesUpsertRequest {
+  gemini_amount: string;
+  fal_amount: string;
+  as_of?: Timestamp;
+}
+
+export interface ComputeReservesUpsertResponse {
+  assets: ReserveAsset[];
+}
+
+/**
  * Reserve attestation - signed proof of reserve coverage
  */
 export interface ReserveAttestation {
