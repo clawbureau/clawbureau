@@ -234,3 +234,18 @@ Started: 2026-02-02T03:08:26.937763
   - With noUncheckedIndexedAccess enabled, avoid destructuring array indices without non-null assertions
   - Keep token logging hash-only and include only receipt hashes/metadata to preserve confidentiality guarantees
 ---
+
+## 2026-02-02T04:39:08Z - CPX-US-012
+- Implemented token/policy binding in receipts:
+  - Added receipt.binding.tokenScopeHashB64u populated from CST claim token_scope_hash_b64u
+  - Ensured policyHash continues to be embedded in receipt binding when present
+  - Fail-closed if CST is provided but token_scope_hash_b64u claim is missing/empty
+- Files changed:
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/src/receipt.ts
+  - services/clawproxy/src/index.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Put provable authorization artifacts (token scope hash / policy hash) into signed receipt.binding so verifiers can audit authorization decisions
+---

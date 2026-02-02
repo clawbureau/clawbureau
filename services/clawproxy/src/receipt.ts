@@ -59,7 +59,14 @@ export async function generateReceipt(
   };
 
   // Add binding fields if provided (for proof chaining)
-  if (binding && (binding.runId || binding.eventHash || binding.nonce || binding.policyHash)) {
+  if (
+    binding &&
+    (binding.runId ||
+      binding.eventHash ||
+      binding.nonce ||
+      binding.policyHash ||
+      binding.tokenScopeHashB64u)
+  ) {
     receipt.binding = {};
     if (binding.runId) {
       receipt.binding.runId = binding.runId;
@@ -72,6 +79,9 @@ export async function generateReceipt(
     }
     if (binding.policyHash) {
       receipt.binding.policyHash = binding.policyHash;
+    }
+    if (binding.tokenScopeHashB64u) {
+      receipt.binding.tokenScopeHashB64u = binding.tokenScopeHashB64u;
     }
   }
 

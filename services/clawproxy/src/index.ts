@@ -349,7 +349,12 @@ async function handleProxy(
   let validatedCst:
     | {
         token_hash: string;
-        claims: { sub: string; aud: string | string[]; scope: string[] };
+        claims: {
+          sub: string;
+          aud: string | string[];
+          scope: string[];
+          token_scope_hash_b64u: string;
+        };
       }
     | undefined;
 
@@ -404,12 +409,22 @@ async function handleProxy(
       }
     }
 
+    if (typeof tokenValidation.claims.token_scope_hash_b64u !== 'string' || tokenValidation.claims.token_scope_hash_b64u.length === 0) {
+      return errorResponseWithRateLimit(
+        'TOKEN_SCOPE_HASH_REQUIRED',
+        'Token is missing required claim token_scope_hash_b64u (needed for receipt binding)',
+        401,
+        rateLimitInfo
+      );
+    }
+
     validatedCst = {
       token_hash: tokenValidation.token_hash,
       claims: {
         sub: tokenValidation.claims.sub,
         aud: tokenValidation.claims.aud,
         scope: tokenValidation.claims.scope,
+        token_scope_hash_b64u: tokenValidation.claims.token_scope_hash_b64u,
       },
     };
   }
@@ -557,10 +572,11 @@ async function handleProxy(
   // Read provider response
   const responseBody = await providerResponse.text();
 
-  // Extend binding with policy hash if present
+  // Extend binding with policy hash and CST token scope hash (when present)
   const finalBinding = {
     ...binding,
     policyHash: policyResult.policyHash,
+    tokenScopeHashB64u: validatedCst?.claims.token_scope_hash_b64u,
   };
 
   // Initialize encryption context for encrypted receipts (if privacy mode requests it)

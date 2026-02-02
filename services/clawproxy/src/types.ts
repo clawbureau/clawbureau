@@ -113,6 +113,8 @@ export interface ReceiptBinding {
   nonce?: string;
   /** Work Policy Contract hash for policy binding */
   policyHash?: string;
+  /** Base64url token scope hash from CST claims (token_scope_hash_b64u) */
+  tokenScopeHashB64u?: string;
 }
 
 /**

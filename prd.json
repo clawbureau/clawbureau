@@ -168,8 +168,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Receipts now embed tokenScopeHashB64u (from CST token_scope_hash_b64u) and policyHash when present. Fail-closed if CST is used without token_scope_hash_b64u claim."
     },
     {
       "id": "CPX-US-013",
