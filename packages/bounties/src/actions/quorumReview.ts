@@ -1,7 +1,9 @@
 import { Bounty } from "../types/bounty.js";
 import { BountyRepository } from "../types/repository.js";
+import { STAKE_RULES } from "../types/stake.js";
 import {
   ReviewerService,
+  ReviewerInfo,
   QuorumState,
   ReviewerVote,
   InitiateQuorumRequest,
@@ -143,22 +145,74 @@ export async function initiateQuorum(
   }
 
   // Select reviewers by reputation
-  const selectResponse = await deps.reviewerService.selectReviewers({
-    bounty_id: bounty.bounty_id,
-    difficulty_scalar: bounty.difficulty_scalar,
-    quorum_size: validatedRequest.quorum_size,
-    require_owner_verified: bounty.require_owner_verified_votes ?? false,
-    exclude_dids: [bounty.requester_did, submission.agent_did],
-    submission_proof_tier: submission.proof_tier,
-  });
+  // CBT-US-014: if owner-verified votes are required, we prefer owner-verified reviewers,
+  // but allow a fallback to non-owner-verified reviewers (who must later stake more to vote).
+  const requireOwnerVerifiedVotes = bounty.require_owner_verified_votes ?? false;
+  const excludeDids = [bounty.requester_did, submission.agent_did];
+
+  let selectedReviewers: ReviewerInfo[] = [];
+
+  if (requireOwnerVerifiedVotes) {
+    const verifiedResponse = await deps.reviewerService.selectReviewers({
+      bounty_id: bounty.bounty_id,
+      difficulty_scalar: bounty.difficulty_scalar,
+      quorum_size: validatedRequest.quorum_size,
+      require_owner_verified: true,
+      exclude_dids: excludeDids,
+      submission_proof_tier: submission.proof_tier,
+    });
+
+    if (verifiedResponse.reviewers.length >= validatedRequest.quorum_size) {
+      selectedReviewers = verifiedResponse.reviewers.slice(0, validatedRequest.quorum_size);
+    } else {
+      const anyResponse = await deps.reviewerService.selectReviewers({
+        bounty_id: bounty.bounty_id,
+        difficulty_scalar: bounty.difficulty_scalar,
+        quorum_size: validatedRequest.quorum_size,
+        require_owner_verified: false,
+        exclude_dids: excludeDids,
+        submission_proof_tier: submission.proof_tier,
+      });
+
+      const seen = new Set<string>();
+      const merged = [] as typeof anyResponse.reviewers;
+
+      for (const r of verifiedResponse.reviewers) {
+        if (merged.length >= validatedRequest.quorum_size) break;
+        if (seen.has(r.reviewer_did)) continue;
+        merged.push(r);
+        seen.add(r.reviewer_did);
+      }
+
+      for (const r of anyResponse.reviewers) {
+        if (merged.length >= validatedRequest.quorum_size) break;
+        if (seen.has(r.reviewer_did)) continue;
+        merged.push(r);
+        seen.add(r.reviewer_did);
+      }
+
+      selectedReviewers = merged;
+    }
+  } else {
+    const anyResponse = await deps.reviewerService.selectReviewers({
+      bounty_id: bounty.bounty_id,
+      difficulty_scalar: bounty.difficulty_scalar,
+      quorum_size: validatedRequest.quorum_size,
+      require_owner_verified: false,
+      exclude_dids: excludeDids,
+      submission_proof_tier: submission.proof_tier,
+    });
+
+    selectedReviewers = anyResponse.reviewers;
+  }
 
   // Verify we got enough reviewers
-  if (selectResponse.reviewers.length < validatedRequest.quorum_size) {
+  if (selectedReviewers.length < validatedRequest.quorum_size) {
     throw new QuorumReviewError(
-      `Not enough eligible reviewers: got ${selectResponse.reviewers.length}, need ${validatedRequest.quorum_size}`,
+      `Not enough eligible reviewers: got ${selectedReviewers.length}, need ${validatedRequest.quorum_size}`,
       "INSUFFICIENT_REVIEWERS",
       {
-        available: selectResponse.reviewers.length,
+        available: selectedReviewers.length,
         required: validatedRequest.quorum_size,
       }
     );
@@ -174,7 +228,7 @@ export async function initiateQuorum(
     submission_id: submission.submission_id,
     bounty_id: bounty.bounty_id,
     required_votes: validatedRequest.quorum_size,
-    selected_reviewers: selectResponse.reviewers,
+    selected_reviewers: selectedReviewers,
     votes: [],
     quorum_reached: false,
     initiated_at: initiatedAt,
@@ -189,7 +243,7 @@ export async function initiateQuorum(
     submission_id: submission.submission_id,
     bounty_id: bounty.bounty_id,
     required_votes: validatedRequest.quorum_size,
-    selected_reviewers: selectResponse.reviewers,
+    selected_reviewers: selectedReviewers,
     initiated_at: initiatedAt,
   };
 }
@@ -294,13 +348,111 @@ export async function castVote(
     });
   }
 
-  // Check owner-verified requirement
-  if (bounty.require_owner_verified_votes && !context.is_owner_verified) {
+  const selectedReviewer = quorumState.selected_reviewers.find(
+    (r) => r.reviewer_did === context.did
+  );
+  if (!selectedReviewer) {
+    // Should be impossible given earlier checks; fail closed.
     throw new QuorumReviewError(
-      "This bounty requires owner-verified reviewers",
-      "OWNER_VERIFICATION_REQUIRED",
-      { bounty_id: bounty.bounty_id }
+      "Reviewer not selected for this quorum",
+      "REVIEWER_NOT_SELECTED",
+      { reviewer_did: context.did, quorum_id: quorumState.quorum_id }
     );
+  }
+
+  // CBT-US-014: owner-verified voting
+  // - If require_owner_verified_votes is enabled, we allow non-owner-verified votes only
+  //   when an explicit fallback stake is provided.
+  // - Always record owner attestation reference when available.
+  const requireOwnerVerifiedVotes = bounty.require_owner_verified_votes ?? false;
+
+  // Fail closed on mismatched identity/attestation claims from the caller.
+  if (
+    context.is_owner_verified !== undefined &&
+    context.is_owner_verified !== selectedReviewer.is_owner_verified
+  ) {
+    throw new QuorumReviewError(
+      "Owner verification status does not match selected reviewer info",
+      "OWNER_VERIFICATION_MISMATCH",
+      {
+        reviewer_did: context.did,
+        context_is_owner_verified: context.is_owner_verified,
+        selected_is_owner_verified: selectedReviewer.is_owner_verified,
+      }
+    );
+  }
+
+  if (
+    context.owner_attestation_ref !== undefined &&
+    context.owner_attestation_ref !== selectedReviewer.owner_attestation_ref
+  ) {
+    throw new QuorumReviewError(
+      "Owner attestation reference does not match selected reviewer info",
+      "OWNER_ATTESTATION_MISMATCH",
+      {
+        reviewer_did: context.did,
+        context_owner_attestation_ref: context.owner_attestation_ref,
+        selected_owner_attestation_ref: selectedReviewer.owner_attestation_ref,
+      }
+    );
+  }
+
+  const NON_VERIFIED_FALLBACK_STAKE_PERCENT = 10;
+  const requiredFallbackStakeAmount = (): number => {
+    const minimum = STAKE_RULES.minimums[bounty.reward.currency] ?? 0;
+    const pct = (bounty.reward.amount * NON_VERIFIED_FALLBACK_STAKE_PERCENT) / 100;
+    return Math.max(minimum, pct);
+  };
+
+  if (requireOwnerVerifiedVotes) {
+    if (selectedReviewer.is_owner_verified) {
+      // If the reviewer is owner-verified, require an attestation reference so it can be recorded.
+      if (!selectedReviewer.owner_attestation_ref) {
+        throw new QuorumReviewError(
+          "Owner-verified votes require owner_attestation_ref",
+          "OWNER_ATTESTATION_REQUIRED",
+          { reviewer_did: context.did, bounty_id: bounty.bounty_id }
+        );
+      }
+    } else {
+      // Fallback: allow non-owner-verified vote only with sufficient stake.
+      const stake = validatedRequest.fallback_stake;
+      if (!stake) {
+        throw new QuorumReviewError(
+          "This bounty requires owner-verified reviewers (or a fallback stake for non-owner-verified votes)",
+          "FALLBACK_STAKE_REQUIRED",
+          { bounty_id: bounty.bounty_id, reviewer_did: context.did }
+        );
+      }
+
+      if (stake.currency !== bounty.reward.currency) {
+        throw new QuorumReviewError(
+          "Fallback stake currency must match bounty reward currency",
+          "FALLBACK_STAKE_CURRENCY_MISMATCH",
+          {
+            bounty_id: bounty.bounty_id,
+            reviewer_did: context.did,
+            stake_currency: stake.currency,
+            reward_currency: bounty.reward.currency,
+          }
+        );
+      }
+
+      const required = requiredFallbackStakeAmount();
+      if (stake.amount < required) {
+        throw new QuorumReviewError(
+          `Fallback stake is insufficient: got ${stake.amount}, need at least ${required}`,
+          "FALLBACK_STAKE_INSUFFICIENT",
+          {
+            bounty_id: bounty.bounty_id,
+            reviewer_did: context.did,
+            stake_amount: stake.amount,
+            required_stake_amount: required,
+            stake_currency: stake.currency,
+          }
+        );
+      }
+    }
   }
 
   const votedAt = now().toISOString();
@@ -317,8 +469,11 @@ export async function castVote(
     signature_envelope: validatedRequest.signature_envelope,
     comment: validatedRequest.comment,
     voted_at: votedAt,
-    is_owner_verified: context.is_owner_verified,
-    owner_attestation_ref: context.owner_attestation_ref,
+    is_owner_verified: selectedReviewer.is_owner_verified,
+    owner_attestation_ref: selectedReviewer.owner_attestation_ref,
+    fallback_stake: selectedReviewer.is_owner_verified
+      ? undefined
+      : validatedRequest.fallback_stake,
   };
 
   // Save vote

@@ -9,6 +9,16 @@ export const VoteDecisionSchema = z.enum(["approve", "reject"]);
 export type VoteDecision = z.infer<typeof VoteDecisionSchema>;
 
 /**
+ * Optional stake required for non-owner-verified vote fallback (CBT-US-014)
+ */
+export const VoteFallbackStakeSchema = z.object({
+  amount: z.number().positive(),
+  currency: z.enum(["CLAW", "USD"]),
+});
+
+export type VoteFallbackStake = z.infer<typeof VoteFallbackStakeSchema>;
+
+/**
  * A signed vote from a reviewer
  */
 export const ReviewerVoteSchema = z.object({
@@ -30,6 +40,8 @@ export const ReviewerVoteSchema = z.object({
   is_owner_verified: z.boolean().optional(),
   /** Reference to owner attestation if owner-verified */
   owner_attestation_ref: z.string().optional(),
+  /** Optional stake required when casting a non-owner-verified fallback vote */
+  fallback_stake: VoteFallbackStakeSchema.optional(),
 });
 
 export type ReviewerVote = z.infer<typeof ReviewerVoteSchema>;
@@ -120,6 +132,8 @@ export const CastVoteRequestSchema = z.object({
   decision: VoteDecisionSchema,
   signature_envelope: SignatureEnvelopeSchema,
   comment: z.string().max(1000).optional(),
+  /** Optional stake used to allow non-owner-verified voting fallback */
+  fallback_stake: VoteFallbackStakeSchema.optional(),
 });
 
 export type CastVoteRequest = z.infer<typeof CastVoteRequestSchema>;

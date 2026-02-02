@@ -196,8 +196,8 @@
         "Typecheck passes"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented owner-verified voting enforcement in quorum review: when bounty.require_owner_verified_votes is enabled, owner-verified reviewers must include owner_attestation_ref (stored on vote), and non-owner-verified reviewers can still vote only by providing a fallback_stake meeting a minimum threshold. Quorum initiation prefers owner-verified reviewers but falls back to non-verified selection if insufficient verified reviewers are available." 
     },
     {
       "id": "CBT-US-015",

@@ -246,3 +246,23 @@ Started: 2026-02-02T03:08:26.937005
 - Quality checks
   - cd packages/bounties && npm run typecheck
 ---
+
+## 2026-02-02T05:57:33Z - CBT-US-014
+- What was implemented
+  - Owner-verified voting for quorum review:
+    - Quorum initiation prefers owner-verified reviewers when `require_owner_verified_votes=true`, but can fall back to non-verified reviewers if there aren’t enough verified reviewers.
+    - Vote casting records reviewer owner verification + owner_attestation_ref from the selected reviewer info.
+    - If owner-verified votes are required:
+      - owner-verified reviewers must have `owner_attestation_ref` (fail closed if missing)
+      - non-owner-verified reviewers can still vote only by providing `fallback_stake` (amount/currency) meeting a minimum threshold.
+  - Added request/record fields:
+    - CastVoteRequest.fallback_stake
+    - ReviewerVote.fallback_stake
+- Files changed
+  - packages/bounties/src/types/quorum.ts
+  - packages/bounties/src/actions/quorumReview.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd packages/bounties && npm run typecheck
+---
