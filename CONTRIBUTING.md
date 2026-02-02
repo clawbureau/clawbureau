@@ -16,10 +16,13 @@
 
 ## Agent Contributions
 
-Agent‑generated work must include proof:
+Agent‑generated work must include proof. Minimum required:
 
 ```
-/proofs/<pr-id>/
+/proofs/<branch>/
+  commit.sig.json   # DID-signed message signature for `commit:<hash>`
+
+  # Optional / future PoH bundle files
   artifact.sig.json
   receipt.json
   manifest.json
