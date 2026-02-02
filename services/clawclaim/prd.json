@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added POST /v1/bindings/revoke (did:key Ed25519) which marks binding inactive + records revoked_at; blocks new bind challenges for revoked DIDs and logs an audit event in KV (events:bindings:*)."
     },
     {
       "id": "CCL-US-004",
