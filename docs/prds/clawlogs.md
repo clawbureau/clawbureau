@@ -6,10 +6,22 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+OpenClaw already has local session logs and run metadata; `clawlogs` is the **external, append-only audit sink** when runs need to be independently verifiable.
+
+Primary OpenClaw integration points:
+- forward `clawproxy` receipts (hash-only) + correlation fields (`agentId`, `sessionKey`, `model`)
+- export bundles for third-party audits without giving full OpenClaw workspace access
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
 Tamper-evident audit logging and Merkle anchoring for all economic and verification events.
 
 ## 2) Target Users
+- OpenClaw gateway operators (optional external audit)
 - Auditors
 - Enterprises
 - Operators

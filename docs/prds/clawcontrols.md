@@ -6,10 +6,21 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+OpenClaw already has a strong local policy system (tool allow/deny profiles + sandboxing). `clawcontrols` should complement this by:
+- hosting **portable policy contracts** (e.g., Work Policy Contracts / WPC)
+- providing a translation layer so OpenClaw can map WPC → tool policy restrictions deterministically
+- hosting token policy tiers used by `clawscope`
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
 Policy engine for spend caps, allowlists, and kill switches.
 
 ## 2) Target Users
+- OpenClaw gateway operators
 - Operators
 - Enterprises
 

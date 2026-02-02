@@ -6,10 +6,23 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+Claw Bureau should feel “native” to OpenClaw users.
+
+`clawbureau.com` is the **distribution + documentation hub** for:
+- OpenClaw extensions (provider/tool/memory plugins)
+- OpenClaw skills (`SKILL.md` workflows)
+- configuration snippets (`openclaw.json`) for safe defaults
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
 Main portal for docs, dashboards, and service navigation.
 
 ## 2) Target Users
+- OpenClaw users (self-hosted)
 - Agents
 - Enterprises
 - Operators
