@@ -331,3 +331,42 @@ export interface VerifyBundleResponse {
   trust_tier?: TrustTier;
   error?: VerificationError;
 }
+
+/**
+ * Event Chain Verification types
+ * CVF-US-008: Verify event chains for tamper-evident logs
+ */
+
+/** Event chain payload for standalone event chain verification */
+export interface EventChainPayload {
+  chain_version: '1';
+  chain_id: string;
+  run_id: string;
+  events: EventChainEntry[];
+  metadata?: Record<string, unknown>;
+}
+
+/** Event chain verification result */
+export interface EventChainVerificationResult {
+  status: VerificationStatus;
+  reason: string;
+  verified_at: string;
+  chain_id?: string;
+  run_id?: string;
+  chain_root_hash?: string;
+  events_count?: number;
+  signer_did?: string;
+}
+
+/** Verify event chain request */
+export interface VerifyEventChainRequest {
+  envelope: SignedEnvelope<EventChainPayload>;
+}
+
+/** Verify event chain response */
+export interface VerifyEventChainResponse {
+  result: EventChainVerificationResult;
+  chain_root_hash?: string;
+  run_id?: string;
+  error?: VerificationError;
+}

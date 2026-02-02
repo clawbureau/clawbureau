@@ -8,6 +8,7 @@ import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
 import { verifyBatch } from './verify-batch';
 import { verifyProofBundle } from './verify-proof-bundle';
+import { verifyEventChain } from './verify-event-chain';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -23,6 +24,7 @@ import type {
   VerifyReceiptResponse,
   VerifyBatchResponse,
   VerifyBundleResponse,
+  VerifyEventChainResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -319,6 +321,57 @@ async function handleVerifyBundle(
 }
 
 /**
+ * Handle POST /v1/verify/event-chain - Verify event chain envelopes
+ */
+async function handleVerifyEventChain(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  // Verify the event chain
+  const verification = await verifyEventChain(envelope);
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'event_chain' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyEventChainResponse & { audit_receipt?: AuditLogReceipt } = {
+    ...verification,
+    chain_root_hash: verification.result.chain_root_hash,
+    run_id: verification.result.run_id,
+    audit_receipt: auditReceipt,
+  };
+
+  // Return 200 for valid, 422 for invalid
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle GET /v1/provenance/:receipt_id - Retrieve audit log entry by receipt ID
  */
 async function handleGetProvenance(
@@ -433,6 +486,11 @@ export default {
     // POST /v1/verify/bundle - Proof bundle verification
     if (url.pathname === '/v1/verify/bundle' && method === 'POST') {
       return handleVerifyBundle(request, env);
+    }
+
+    // POST /v1/verify/event-chain - Event chain verification
+    if (url.pathname === '/v1/verify/event-chain' && method === 'POST') {
+      return handleVerifyEventChain(request, env);
     }
 
     // GET /v1/provenance/:receipt_id - Retrieve audit log entry
