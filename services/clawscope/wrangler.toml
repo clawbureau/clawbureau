@@ -30,5 +30,6 @@ SCOPE_REVOCATION_TTL_SECONDS = "2592000" # 30 days
 # id = "<create via wrangler kv:namespace create clawscope-revocations>"
 
 # Secrets to be set via wrangler secret put:
-# - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required)
+# - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required unless using SCOPE_SIGNING_KEYS_JSON)
+# - SCOPE_SIGNING_KEYS_JSON (JSON array of Ed25519 seeds; base64url; first key is active; optional)
 # - SCOPE_ADMIN_KEY (string; required for token issuance/revocation)

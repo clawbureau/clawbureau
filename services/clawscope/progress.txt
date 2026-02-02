@@ -60,3 +60,12 @@ Started: 2026-02-02T22:30:00Z
   - `GET /v1/audit/bundle` (combined issuance + revocations export)
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-02 - CSC-US-005
+- Implemented key rotation + discovery improvements:
+  - Added `SCOPE_SIGNING_KEYS_JSON` (JSON array of Ed25519 seeds; first key is active signer).
+  - `GET /v1/jwks` now publishes **all** rotated public keys (stable `kid` per key).
+  - Introspection verifies signatures by `header.kid` against the keyset (fails closed on unknown kid).
+  - Keeps cache-control headers on JWKS (`public, max-age=300`).
+- Typecheck: `npm run typecheck`.
+---

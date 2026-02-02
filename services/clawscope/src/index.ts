@@ -32,6 +32,7 @@ export interface Env {
 
   // secrets
   SCOPE_SIGNING_KEY?: string;
+  SCOPE_SIGNING_KEYS_JSON?: string;
   SCOPE_ADMIN_KEY?: string;
 }
 
@@ -140,16 +141,22 @@ function issuanceEventKey(issuedAtSec: number, token_hash: string): string {
   return `${ISSUANCE_EVENT_PREFIX}${invTs}:${token_hash}`;
 }
 
-let cachedKeyRaw: string | null = null;
-let cachedKeys:
-  | {
-      privateKey: CryptoKey;
-      publicKey: CryptoKey;
-      publicKeyBytes: Uint8Array;
-      kid: string;
-      jwkX: string;
-    }
-  | null = null;
+interface IssuerKey {
+  privateKey?: CryptoKey;
+  publicKey: CryptoKey;
+  publicKeyBytes: Uint8Array;
+  kid: string;
+  jwkX: string;
+}
+
+interface IssuerKeySet {
+  active: IssuerKey;
+  keys: IssuerKey[];
+  byKid: Map<string, IssuerKey>;
+}
+
+let cachedKeysetRaw: string | null = null;
+let cachedKeyset: IssuerKeySet | null = null;
 
 function parseIntOrDefault(value: string | undefined, d: number): number {
   if (!value) return d;
@@ -436,27 +443,80 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   return { ok: true, req };
 }
 
-async function getIssuerKeys(env: Env): Promise<typeof cachedKeys> {
-  if (!env.SCOPE_SIGNING_KEY) return null;
+async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
+  const jsonText = env.SCOPE_SIGNING_KEYS_JSON?.trim();
+  const cacheKey = jsonText
+    ? `json:${jsonText}`
+    : env.SCOPE_SIGNING_KEY
+      ? `single:${env.SCOPE_SIGNING_KEY}`
+      : null;
 
-  if (cachedKeys && cachedKeyRaw === env.SCOPE_SIGNING_KEY) {
-    return cachedKeys;
+  if (!cacheKey) return null;
+
+  if (cachedKeyset && cachedKeysetRaw === cacheKey) {
+    return cachedKeyset;
   }
 
-  const kp = await importEd25519Key(env.SCOPE_SIGNING_KEY);
-  const kid = await computeKeyId(kp.publicKeyBytes);
-  const jwkX = base64urlEncode(kp.publicKeyBytes);
+  let keyStrings: string[];
 
-  cachedKeyRaw = env.SCOPE_SIGNING_KEY;
-  cachedKeys = {
-    privateKey: kp.privateKey,
-    publicKey: kp.publicKey,
-    publicKeyBytes: kp.publicKeyBytes,
-    kid,
-    jwkX,
+  if (jsonText) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonText) as unknown;
+    } catch {
+      throw new Error('SCOPE_SIGNING_KEYS_JSON_INVALID');
+    }
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error('SCOPE_SIGNING_KEYS_JSON_INVALID');
+    }
+
+    keyStrings = parsed.map((v) => (typeof v === 'string' ? v.trim() : ''));
+    if (keyStrings.some((k) => k.length === 0)) {
+      throw new Error('SCOPE_SIGNING_KEYS_JSON_INVALID');
+    }
+  } else {
+    // Single-key mode
+    keyStrings = [env.SCOPE_SIGNING_KEY!];
+  }
+
+  const keys: IssuerKey[] = [];
+  const byKid = new Map<string, IssuerKey>();
+
+  for (const keyStr of keyStrings) {
+    const kp = await importEd25519Key(keyStr);
+    const kid = await computeKeyId(kp.publicKeyBytes);
+    const jwkX = base64urlEncode(kp.publicKeyBytes);
+
+    const k: IssuerKey = {
+      privateKey: kp.privateKey,
+      publicKey: kp.publicKey,
+      publicKeyBytes: kp.publicKeyBytes,
+      kid,
+      jwkX,
+    };
+
+    if (byKid.has(kid)) {
+      throw new Error('SCOPE_SIGNING_KEYS_DUPLICATE_KID');
+    }
+
+    keys.push(k);
+    byKid.set(kid, k);
+  }
+
+  const active = keys[0];
+  if (!active) return null;
+
+  const keyset: IssuerKeySet = {
+    active,
+    keys,
+    byKid,
   };
 
-  return cachedKeys;
+  cachedKeysetRaw = cacheKey;
+  cachedKeyset = keyset;
+
+  return keyset;
 }
 
 function encodeJwtJson(obj: unknown): string {
@@ -489,8 +549,13 @@ async function issueToken(
   env: Env,
   maxTtlSeconds: number
 ): Promise<{ token: string; token_hash: string; claims: ScopedTokenClaims; kid: string }> {
-  const keys = await getIssuerKeys(env);
-  if (!keys) {
+  const keyset = await getIssuerKeySet(env);
+  if (!keyset) {
+    throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
+  }
+
+  const keys = keyset.active;
+  if (!keys.privateKey) {
     throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
   }
 
@@ -563,28 +628,40 @@ export default {
 
     // DID + key discovery
     if (request.method === 'GET' && url.pathname === '/v1/did') {
-      const keys = await getIssuerKeys(env);
-      if (!keys) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
-      return jsonResponse({ did: SCOPE_DID, kid: keys.kid, public_key_b64u: keys.jwkX });
+      let keyset: IssuerKeySet | null;
+      try {
+        keyset = await getIssuerKeySet(env);
+      } catch {
+        return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+      }
+
+      if (!keyset) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+
+      const active = keyset.active;
+      return jsonResponse({ did: SCOPE_DID, kid: active.kid, public_key_b64u: active.jwkX });
     }
 
     // JWKS (Ed25519 OKP)
     if (request.method === 'GET' && url.pathname === '/v1/jwks') {
-      const keys = await getIssuerKeys(env);
-      if (!keys) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+      let keyset: IssuerKeySet | null;
+      try {
+        keyset = await getIssuerKeySet(env);
+      } catch {
+        return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+      }
+
+      if (!keyset) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
 
       return jsonResponse(
         {
-          keys: [
-            {
-              kty: 'OKP',
-              crv: 'Ed25519',
-              x: keys.jwkX,
-              kid: keys.kid,
-              alg: 'EdDSA',
-              use: 'sig',
-            },
-          ],
+          keys: keyset.keys.map((k) => ({
+            kty: 'OKP',
+            crv: 'Ed25519',
+            x: k.jwkX,
+            kid: k.kid,
+            alg: 'EdDSA',
+            use: 'sig',
+          })),
         },
         200,
         {
@@ -672,6 +749,12 @@ export default {
 
         if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
           return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
+        if (msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' || msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID') {
+          return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+        }
+        if (msg.startsWith('Invalid Ed25519 key length')) {
+          return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
         }
         if (msg === 'TTL_TOO_LONG') {
           return errorResponse('TTL_TOO_LONG', `ttl exceeds max (${policy.max_ttl_seconds}s)`, 400);
@@ -1003,15 +1086,40 @@ export default {
       }
 
       // Validate signature
-      const keys = await getIssuerKeys(env);
-      if (!keys) {
+      let keyset: IssuerKeySet | null;
+      try {
+        keyset = await getIssuerKeySet(env);
+      } catch {
+        return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+      }
+
+      if (!keyset) {
         return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
       }
 
+      let verifyKey: CryptoKey | null = null;
+      if (typeof h.kid === 'string' && h.kid.trim().length > 0) {
+        const key = keyset.byKid.get(h.kid.trim());
+        if (!key) {
+          return errorResponse('TOKEN_UNKNOWN_KID', 'Unknown token kid', 401);
+        }
+        verifyKey = key.publicKey;
+      }
+
       const signingInput = `${headerB64u}.${payloadB64u}`;
-      let sigValid: boolean;
+      let sigValid = false;
+
       try {
-        sigValid = await verifyEd25519(keys.publicKey, signatureB64u, signingInput);
+        if (verifyKey) {
+          sigValid = await verifyEd25519(verifyKey, signatureB64u, signingInput);
+        } else {
+          for (const k of keyset.keys) {
+            if (await verifyEd25519(k.publicKey, signatureB64u, signingInput)) {
+              sigValid = true;
+              break;
+            }
+          }
+        }
       } catch {
         return errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401);
       }
