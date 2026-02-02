@@ -179,6 +179,15 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
   - return `active: false` on failed signature/exp/aud/scope
   - return parsed claims when active
 
+### CVF-US-014 — Public landing + skill docs
+**As a** developer, **I want** public landing/docs/skill endpoints **so that** I can discover and integrate clawverify quickly.
+
+**Acceptance Criteria:**
+- GET / returns a small HTML landing page with links to /docs and /skill.md
+- GET /skill.md returns integration docs + example curl commands
+- GET /robots.txt and /sitemap.xml exist (minimal)
+- GET /.well-known/security.txt exists
+
 ## 8) Success Metrics
 - Verification success rate
 - Median verification latency < 50ms

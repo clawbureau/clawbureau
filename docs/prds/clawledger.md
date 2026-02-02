@@ -143,6 +143,15 @@ Event-sourced ledger for balances, holds, and transfers. Idempotent and auditabl
   - FAL haircut: 70% (haircut_bps=7000)
 - Include provider metadata in the registry (SKU semantics) and in snapshots (provenance).
 
+### CLD-US-012 — Public landing + skill docs
+**As a** developer, **I want** public landing/docs/skill endpoints **so that** I can discover and integrate the ledger quickly.
+
+**Acceptance Criteria:**
+- GET / returns a small HTML landing page with links to /docs and /skill.md
+- GET /skill.md returns integration docs + example curl commands
+- GET /robots.txt and /sitemap.xml exist (minimal)
+- GET /.well-known/security.txt exists
+
 ## 8) Success Metrics
 - Ledger events/day
 - Idempotent replay success

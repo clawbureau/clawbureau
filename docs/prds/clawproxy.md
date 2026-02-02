@@ -170,6 +170,15 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - Fail-closed:
   - if payment mode is `platform` but platform key/reserve config missing → reject.
 
+### CPX-US-014 — Public landing + skill docs
+**As a** developer, **I want** public landing/docs/skill endpoints **so that** I can discover and integrate clawproxy quickly.
+
+**Acceptance Criteria:**
+- GET / returns a small HTML landing page with links to /docs and /skill.md
+- GET /skill.md returns integration docs + example curl commands
+- GET /robots.txt and /sitemap.xml exist (minimal)
+- GET /.well-known/security.txt exists
+
 ## 8) Success Metrics
 - Receipts issued/day
 - Median proxy latency

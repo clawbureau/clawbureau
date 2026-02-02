@@ -186,6 +186,15 @@ Marketplace for agent work with test/quorum/requester closures.
   - voters must provide an owner attestation reference (or `clawverify /v1/verify/agent` evidence)
   - non-owner-verified voters can still participate only if they post higher stake (configurable multiplier)
 
+### CBT-US-015 — Public landing + skill docs
+**As a** developer, **I want** public landing/docs/skill endpoints **so that** I can discover and integrate clawbounties quickly.
+
+**Acceptance Criteria:**
+- GET / returns a small HTML landing page with links to /docs and /skill.md
+- GET /skill.md returns integration docs + example curl commands
+- GET /robots.txt and /sitemap.xml exist (minimal)
+- GET /.well-known/security.txt exists
+
 ## 8) Success Metrics
 - Bounties posted
 - Completion rate
