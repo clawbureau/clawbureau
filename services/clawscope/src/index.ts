@@ -110,6 +110,36 @@ async function getRevocationRecord(env: Env, token_hash: string): Promise<Revoca
   }
 }
 
+interface IssuanceRecord {
+  token_hash: string;
+  issued_at: number;
+  issued_at_iso: string;
+  sub: string;
+  aud: string | string[];
+  scope: string[];
+  iat: number;
+  exp: number;
+  kid: string;
+  policy_version: string;
+  policy_tier?: string;
+  owner_ref?: string;
+  spend_cap?: number;
+  mission_id?: string;
+  jti?: string;
+}
+
+const ISSUANCE_RECORD_PREFIX = 'issued:hash:';
+const ISSUANCE_EVENT_PREFIX = 'events:issuance:';
+
+function issuanceRecordKey(token_hash: string): string {
+  return `${ISSUANCE_RECORD_PREFIX}${token_hash}`;
+}
+
+function issuanceEventKey(issuedAtSec: number, token_hash: string): string {
+  const invTs = String(MAX_TIMESTAMP_FOR_INVERSION - issuedAtSec).padStart(10, '0');
+  return `${ISSUANCE_EVENT_PREFIX}${invTs}:${token_hash}`;
+}
+
 let cachedKeyRaw: string | null = null;
 let cachedKeys:
   | {
@@ -565,7 +595,7 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
@@ -599,6 +629,35 @@ export default {
           env,
           policy.max_ttl_seconds
         );
+
+        // CSC-US-006 — Token audit trail (best-effort; requires KV binding)
+        const kv = env.SCOPE_REVOCATIONS;
+        if (kv) {
+          const ttl = parseIntOrDefault(env.SCOPE_REVOCATION_TTL_SECONDS, 60 * 60 * 24 * 30);
+          const issuedAt = claims.iat;
+
+          const record: IssuanceRecord = {
+            token_hash,
+            issued_at: issuedAt,
+            issued_at_iso: new Date(issuedAt * 1000).toISOString(),
+            sub: claims.sub,
+            aud: claims.aud,
+            scope: claims.scope,
+            iat: claims.iat,
+            exp: claims.exp,
+            kid,
+            policy_version: policy.policy_version,
+            policy_tier: policy.tier,
+            owner_ref: claims.owner_ref,
+            spend_cap: claims.spend_cap,
+            mission_id: claims.mission_id,
+            jti: claims.jti,
+          };
+
+          await kv.put(issuanceRecordKey(token_hash), JSON.stringify(record), { expirationTtl: ttl });
+          await kv.put(issuanceEventKey(issuedAt, token_hash), JSON.stringify(record), { expirationTtl: ttl });
+        }
+
         return jsonResponse({
           token,
           token_hash,
@@ -751,6 +810,122 @@ export default {
         events,
         cursor: 'cursor' in list ? list.cursor : null,
         list_complete: list.list_complete,
+      });
+    }
+
+    // Issuance audit events (CSC-US-006)
+    if (request.method === 'GET' && url.pathname === '/v1/audit/issuance') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'AUDIT_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 50), 1),
+        200
+      );
+
+      const cursor = url.searchParams.get('cursor') ?? undefined;
+      const list = await kv.list({ prefix: ISSUANCE_EVENT_PREFIX, limit, cursor });
+
+      const events: Array<{ key: string; record: unknown }> = [];
+      for (const k of list.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        events.push({ key: k.name, record });
+      }
+
+      return jsonResponse({
+        events,
+        cursor: 'cursor' in list ? list.cursor : null,
+        list_complete: list.list_complete,
+      });
+    }
+
+    // Audit bundle export (CSC-US-006)
+    if (request.method === 'GET' && url.pathname === '/v1/audit/bundle') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'AUDIT_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 50), 1),
+        200
+      );
+
+      const cursorIssuance = url.searchParams.get('cursor_issuance') ?? undefined;
+      const cursorRevocations = url.searchParams.get('cursor_revocations') ?? undefined;
+
+      const [issuanceList, revocationList] = await Promise.all([
+        kv.list({ prefix: ISSUANCE_EVENT_PREFIX, limit, cursor: cursorIssuance }),
+        kv.list({ prefix: REVOCATION_EVENT_PREFIX, limit, cursor: cursorRevocations }),
+      ]);
+
+      const issuanceEvents: Array<{ key: string; record: unknown }> = [];
+      for (const k of issuanceList.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        issuanceEvents.push({ key: k.name, record });
+      }
+
+      const revocationEvents: Array<{ key: string; record: unknown }> = [];
+      for (const k of revocationList.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        revocationEvents.push({ key: k.name, record });
+      }
+
+      return jsonResponse({
+        generated_at: new Date().toISOString(),
+        issuance: {
+          events: issuanceEvents,
+          cursor: 'cursor' in issuanceList ? issuanceList.cursor : null,
+          list_complete: issuanceList.list_complete,
+        },
+        revocations: {
+          events: revocationEvents,
+          cursor: 'cursor' in revocationList ? revocationList.cursor : null,
+          list_complete: revocationList.list_complete,
+        },
       });
     }
 

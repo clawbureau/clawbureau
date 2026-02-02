@@ -24,7 +24,7 @@ SCOPE_REVOCATION_TTL_SECONDS = "2592000" # 30 days
 # Optional: structured policy config (overrides knobs above)
 # SCOPE_POLICY_JSON = "{\"version\":\"1\",\"tiers\":{\"default\":{\"max_ttl_seconds\":3600,\"allow_wildcards\":false,\"allowed_scope_prefixes\":[\"proxy:\",\"clawproxy:\"]}}}"
 
-# Optional KV binding (needed for revocation + event feed):
+# Optional KV binding (needed for revocation + event feed + audit trail):
 # [[kv_namespaces]]
 # binding = "SCOPE_REVOCATIONS"
 # id = "<create via wrangler kv:namespace create clawscope-revocations>"
