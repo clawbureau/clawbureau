@@ -168,8 +168,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added POST /v1/verify/agent endpoint aggregating DID validity, owner attestation status, and PoH tier (mapped from proof bundle trust_tier). Optional policy_hash support returns policy_compliance when present and includes risk_flags + component results; verification fails closed (422) when provided components fail or mismatched subjects." 
     },
     {
       "id": "CVF-US-013",

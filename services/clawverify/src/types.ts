@@ -20,6 +20,48 @@ export const ENVELOPE_TYPES = [
 ] as const;
 export type EnvelopeType = (typeof ENVELOPE_TYPES)[number];
 
+/**
+ * CVF-US-012: One-call agent verification
+ */
+export interface VerifyAgentRequest {
+  agent_did: string;
+  owner_attestation_envelope?: SignedEnvelope<OwnerAttestationPayload>;
+  proof_bundle_envelope?: SignedEnvelope<ProofBundlePayload>;
+  /** Optional Work Policy Contract hash. If provided, receipts must match this policy hash. */
+  policy_hash?: string;
+}
+
+export interface PolicyComplianceResult {
+  policy_hash: string;
+  compliant: boolean;
+  reason: string;
+}
+
+export interface VerifyAgentResponse {
+  result: VerificationResult;
+  agent_did: string;
+  did_valid: boolean;
+  owner_status: OwnerAttestationStatus;
+  trust_tier: TrustTier;
+  poh_tier: number;
+  policy_compliance?: PolicyComplianceResult;
+  risk_flags?: string[];
+  components?: {
+    owner_attestation?: {
+      result: VerificationResult;
+      owner_status?: OwnerAttestationStatus;
+      error?: VerificationError;
+    };
+    proof_bundle?: {
+      status: VerificationStatus;
+      reason: string;
+      trust_tier?: TrustTier;
+      error?: VerificationError;
+    };
+  };
+  error?: VerificationError;
+}
+
 // Allowlisted algorithms
 export const ALGORITHMS = ['Ed25519'] as const;
 export type Algorithm = (typeof ALGORITHMS)[number];

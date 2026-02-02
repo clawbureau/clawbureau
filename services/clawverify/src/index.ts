@@ -11,6 +11,7 @@ import { verifyProofBundle } from './verify-proof-bundle';
 import { verifyEventChain } from './verify-event-chain';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
 import { verifyCommitProof } from './verify-commit-proof';
+import { verifyAgent } from './verify-agent';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -30,6 +31,7 @@ import type {
   VerifyEventChainResponse,
   VerifyOwnerAttestationResponse,
   VerifyCommitProofResponse,
+  VerifyAgentResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -272,6 +274,26 @@ function parseCommaSeparatedAllowlist(value: string | undefined): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/**
+ * Handle POST /v1/verify/agent - One-call agent verification
+ */
+async function handleVerifyAgent(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    return errorResponse('Request must be an object', 400);
+  }
+
+  const verification = await verifyAgent(body);
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(verification as VerifyAgentResponse, status);
 }
 
 /**
@@ -690,6 +712,11 @@ export default {
     // POST /v1/verify/owner-attestation - Owner attestation verification
     if (url.pathname === '/v1/verify/owner-attestation' && method === 'POST') {
       return handleVerifyOwnerAttestation(request, env);
+    }
+
+    // POST /v1/verify/agent - One-call agent verification
+    if (url.pathname === '/v1/verify/agent' && method === 'POST') {
+      return handleVerifyAgent(request);
     }
 
     // POST /v1/verify/commit-proof - Commit proof verification

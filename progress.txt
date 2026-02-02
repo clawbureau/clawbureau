@@ -10,6 +10,7 @@
 - Hash-chained audit logs: each entry includes prev_hash linking to previous, entry_hash computed from all fields
 - Semantic result fields (e.g., trust_tier, owner_status) are separate from cryptographic VALID/INVALID and should be returned explicitly
 - External dependency checks (e.g., clawclaim existence) should be modeled as explicit, fail-closed allowlists/config in Env
+- One-call agent verification endpoint aggregates component verifiers and fails closed when provided components are invalid/mismatched
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937416
@@ -177,4 +178,25 @@ Started: 2026-02-02T03:08:26.937416
 - **Learnings for future iterations:**
   - When a verifier depends on another domain service (clawclaim), make the dependency explicit and fail-closed rather than guessing
   - Keep claim checks separate from cryptographic verification so failures are attributable (CLAIM_NOT_FOUND vs SIGNATURE_INVALID)
+---
+
+## 2026-02-02T05:04:24Z - CVF-US-012
+- What was implemented
+  - Added POST /v1/verify/agent for one-call agent verification:
+    - DID validity (agent_did)
+    - owner_status (optional owner_attestation_envelope)
+    - trust_tier + poh_tier (optional proof_bundle_envelope)
+    - policy_compliance when policy_hash is provided (evaluated against receipt metadata)
+    - risk_flags and per-component results for debugging
+  - Fail-closed semantics:
+    - If a caller provides an owner attestation or proof bundle, it must verify (otherwise 422)
+    - Enforced subject binding (attestation.subject_did and bundle.payload.agent_did must match agent_did)
+- Files changed
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/types.ts
+  - prd.json
+  - progress.txt
+- Learnings
+  - Aggregator endpoints should return semantic fields (owner_status, poh_tier) alongside cryptographic VALID/INVALID
 ---
