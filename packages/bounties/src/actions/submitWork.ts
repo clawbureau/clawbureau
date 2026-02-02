@@ -1,5 +1,7 @@
 import {
   Bounty,
+  ProofEvidence,
+  ProofTier,
   Submission,
   SubmitWorkRequest,
   SubmitWorkRequestSchema,
@@ -12,6 +14,19 @@ import { BountyRepository } from "../types/repository.js";
  */
 function generateUUID(): string {
   return crypto.randomUUID();
+}
+
+function classifyProofTier(evidence: ProofEvidence | undefined): ProofTier {
+  // Highest assurance wins if multiple signals are present
+  if (evidence?.attestations && evidence.attestations.length > 0) {
+    return "sandbox";
+  }
+
+  if (evidence?.receipts && evidence.receipts.length > 0) {
+    return "gateway";
+  }
+
+  return "self";
 }
 
 /**
@@ -93,6 +108,7 @@ export async function submitWork(
         status: "pending_review",
         submitted_at: existingSubmission.submitted_at,
         proof_bundle_hash: existingSubmission.proof_bundle.hash,
+        proof_tier: existingSubmission.proof_tier,
       };
     }
   }
@@ -145,6 +161,9 @@ export async function submitWork(
   const submissionId = generateId();
   const submittedAt = now().toISOString();
 
+  // Classify proof tier from provided receipts/attestations
+  const proofTier = classifyProofTier(validatedRequest.proof_evidence);
+
   // Build submission record
   const submission: Submission = {
     schema_version: "1",
@@ -154,6 +173,8 @@ export async function submitWork(
     output: validatedRequest.output,
     signature_envelope: validatedRequest.signature_envelope,
     proof_bundle: validatedRequest.proof_bundle,
+    proof_tier: proofTier,
+    proof_evidence: validatedRequest.proof_evidence,
     submitted_at: submittedAt,
     idempotency_key: validatedRequest.idempotency_key,
   };
@@ -175,5 +196,6 @@ export async function submitWork(
     status: "pending_review",
     submitted_at: submittedAt,
     proof_bundle_hash: validatedRequest.proof_bundle.hash,
+    proof_tier: proofTier,
   };
 }

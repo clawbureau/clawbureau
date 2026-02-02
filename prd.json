@@ -126,8 +126,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added proof tier classification for submissions (self/gateway/sandbox) based on provided receipt/attestation references. Stored proof_tier + proof_evidence on Submission, returned proof_tier in submitWork response, and forwarded submission_proof_tier to clawrep reviewer selection for downstream weighting." 
     },
     {
       "id": "CBT-US-010",

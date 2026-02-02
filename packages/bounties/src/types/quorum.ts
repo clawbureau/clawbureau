@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SignatureEnvelopeSchema } from "./bounty.js";
+import { ProofTierSchema, SignatureEnvelopeSchema } from "./bounty.js";
 
 /**
  * Vote decision for quorum review
@@ -47,6 +47,8 @@ export const SelectReviewersRequestSchema = z.object({
   require_owner_verified: z.boolean().default(false),
   /** DIDs to exclude from selection (e.g., requester, worker) */
   exclude_dids: z.array(z.string()).optional(),
+  /** Proof tier of the submission; can be used by clawrep to weight selection/scoring */
+  submission_proof_tier: ProofTierSchema.optional(),
 });
 
 export type SelectReviewersRequest = z.infer<typeof SelectReviewersRequestSchema>;

@@ -198,6 +198,30 @@ export const ProofBundleSchema = z.object({
 export type ProofBundle = z.infer<typeof ProofBundleSchema>;
 
 /**
+ * Proof tier classification
+ * - self: agent self-asserted work only
+ * - gateway: work accompanied by gateway receipts
+ * - sandbox: work accompanied by sandbox execution attestations
+ */
+export const ProofTierSchema = z.enum(["self", "gateway", "sandbox"]);
+
+export type ProofTier = z.infer<typeof ProofTierSchema>;
+
+/**
+ * Evidence used to classify proof tier.
+ * This does not attempt to verify receipts/attestations; it stores references that can
+ * be verified out-of-band by specialized services.
+ */
+export const ProofEvidenceObjectSchema = z.object({
+  /** References to gateway receipts (e.g., clawproxy receipts) */
+  receipts: z.array(z.string().min(1)).max(50).optional(),
+  /** References to sandbox execution attestations */
+  attestations: z.array(z.string().min(1)).max(50).optional(),
+});
+
+export type ProofEvidence = z.infer<typeof ProofEvidenceObjectSchema>;
+
+/**
  * Work submission record
  */
 export const SubmissionSchema = z.object({
@@ -211,6 +235,10 @@ export const SubmissionSchema = z.object({
   signature_envelope: SignatureEnvelopeSchema,
   /** Proof bundle hash for verification */
   proof_bundle: ProofBundleSchema,
+  /** Proof tier classification used for downstream reputation weighting */
+  proof_tier: ProofTierSchema.default("self"),
+  /** Optional evidence references used to classify proof tier */
+  proof_evidence: ProofEvidenceObjectSchema.optional(),
   submitted_at: z.string().datetime(),
   idempotency_key: z.string().optional(),
 });
@@ -228,6 +256,8 @@ export const SubmitWorkRequestSchema = z.object({
   signature_envelope: SignatureEnvelopeSchema,
   /** Proof bundle with hash */
   proof_bundle: ProofBundleSchema,
+  /** Evidence references (receipts/attestations) for proof tier classification */
+  proof_evidence: ProofEvidenceObjectSchema.optional(),
   idempotency_key: z.string().optional(),
 });
 
@@ -243,6 +273,7 @@ export const SubmitWorkResponseSchema = z.object({
   status: z.literal("pending_review"),
   submitted_at: z.string().datetime(),
   proof_bundle_hash: z.string(),
+  proof_tier: ProofTierSchema,
 });
 
 export type SubmitWorkResponse = z.infer<typeof SubmitWorkResponseSchema>;

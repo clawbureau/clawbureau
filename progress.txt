@@ -8,6 +8,7 @@
 - tsconfig needs `lib: ["ES2022", "DOM"]` for fetch/AbortController support
 - BountyRepository interface is shared across actions via types/repository.ts (avoid duplicate interfaces)
 - Stake rules are tier-based: higher trust = lower stake; use STAKE_RULES constant for percentages
+- Proof tiers: submissions classify as self/gateway/sandbox based on presence of proof_evidence.receipts/attestations; store proof_tier on Submission
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937005
@@ -158,4 +159,18 @@ Started: 2026-02-02T03:08:26.937005
   - StakeClient can optionally use EligibilityService for trust tier lookups
   - Minimum stake amounts enforced (10 CLAW, 5 USD) to prevent trivially low stakes
   - Maximum stake cap at 50% of bounty to prevent excessive stake requirements
+---
+
+## 2026-02-02 - CBT-US-009
+- **What was implemented:** Proof tier classification for fair reputation weighting
+- **Files changed:**
+  - packages/bounties/src/types/bounty.ts - Added ProofTier/ProofEvidence schemas; stored proof_tier + proof_evidence on Submission; returned proof_tier on SubmitWorkResponse
+  - packages/bounties/src/actions/submitWork.ts - Classified proof tier from receipts/attestations references and persisted it with the submission
+  - packages/bounties/src/types/quorum.ts - Extended reviewer selection request to include submission_proof_tier
+  - packages/bounties/src/actions/quorumReview.ts - Passed submission_proof_tier to clawrep reviewer selection
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Keep proof tier classification deterministic and local (based on presence of evidence references), and leave cryptographic verification to specialized services
+  - When integrating with external services (clawrep), prefer explicit fields (submission_proof_tier) rather than overloading metadata blobs
 ---
