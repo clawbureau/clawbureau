@@ -271,3 +271,21 @@ Started: 2026-02-02T03:08:26.937763
 - Quality
   - cd services/clawproxy && npm run typecheck
 ---
+
+## 2026-02-02T05:32:14Z - CPX-US-014
+- What was implemented
+  - Public developer endpoints:
+    - GET / (HTML landing with links to /docs and /skill.md)
+    - GET /docs (minimal human-readable HTML docs)
+    - GET /skill.md (OpenClaw-compatible skill file)
+    - GET /robots.txt and GET /sitemap.xml (minimal)
+    - GET /.well-known/security.txt
+  - OpenClaw frontmatter:
+    - `metadata` is a single-line JSON object string
+- Files changed
+  - services/clawproxy/src/index.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/clawproxy && npm run typecheck
+---

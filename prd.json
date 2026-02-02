@@ -199,8 +199,8 @@
         "Typecheck passes"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added GET /, /docs, /skill.md, /robots.txt, /sitemap.xml, and /.well-known/security.txt to the clawproxy worker. /skill.md uses OpenClaw frontmatter with metadata as a single-line JSON object string."
     }
   ]
 }

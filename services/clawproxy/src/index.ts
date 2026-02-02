@@ -93,6 +93,140 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // CPX-US-014: Public landing + docs
+    if (request.method === 'GET') {
+      if (path === '/') {
+        return htmlResponse(
+          `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>clawproxy</title>
+  </head>
+  <body>
+    <main style="max-width: 820px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5;">
+      <h1>clawproxy</h1>
+      <p>Gateway proxy that issues signed receipts (proof-of-harness) for LLM model calls.</p>
+      <ul>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/skill.md">OpenClaw skill</a></li>
+        <li><a href="/v1/did">Proxy DID document</a></li>
+      </ul>
+      <p><small>Version: ${escapeHtml(env.PROXY_VERSION)}</small></p>
+    </main>
+  </body>
+</html>`,
+          200,
+          env.PROXY_VERSION
+        );
+      }
+
+      if (path === '/docs') {
+        const origin = url.origin;
+        return htmlResponse(
+          `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>clawproxy docs</title>
+  </head>
+  <body>
+    <main style="max-width: 820px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5;">
+      <h1>clawproxy docs</h1>
+      <p>Minimal HTTP API documentation.</p>
+
+      <h2>Endpoints</h2>
+      <ul>
+        <li><code>POST /v1/proxy/:provider</code> — Proxy a request to a provider and return provider response + <code>_receipt</code>.</li>
+        <li><code>GET /v1/did</code> — DID document (public key material for receipt verification).</li>
+        <li><code>POST /v1/verify-receipt</code> — Verify a receipt signature and return claims.</li>
+        <li><code>GET /health</code> — Health check.</li>
+      </ul>
+
+      <h2>Quick start</h2>
+      <pre>curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
+
+      <p>See also: <a href="/skill.md">/skill.md</a></p>
+    </main>
+  </body>
+</html>`,
+          200,
+          env.PROXY_VERSION
+        );
+      }
+
+      if (path === '/skill.md') {
+        const metadata = {
+          name: 'clawproxy',
+          version: '1',
+          description:
+            'Gateway proxy that issues signed receipts (proof-of-harness) for LLM model calls.',
+          endpoints: [
+            { method: 'POST', path: '/v1/proxy/:provider' },
+            { method: 'GET', path: '/v1/did' },
+            { method: 'POST', path: '/v1/verify-receipt' },
+          ],
+        };
+
+        const md = `---
+metadata: '${JSON.stringify(metadata)}'
+---
+
+# clawproxy
+
+Proxy requests to supported LLM providers and receive a signed receipt for each call.
+
+## HTTP API
+
+- POST /v1/proxy/:provider
+- GET /v1/did
+- POST /v1/verify-receipt
+
+## Notes
+
+- Receipts are signed with the proxy Ed25519 key; retrieve the public key from /v1/did.
+- When X-Client-DID is set, a scoped token (CST) may be required, depending on deployment config.
+`;
+
+        return textResponse(md, 'text/markdown; charset=utf-8', 200, env.PROXY_VERSION);
+      }
+
+      if (path === '/robots.txt') {
+        const txt = `User-agent: *
+Allow: /
+Sitemap: ${url.origin}/sitemap.xml
+`;
+        return textResponse(txt, 'text/plain; charset=utf-8', 200, env.PROXY_VERSION);
+      }
+
+      if (path === '/sitemap.xml') {
+        const base = url.origin;
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${escapeXml(base)}/</loc></url>
+  <url><loc>${escapeXml(base)}/docs</loc></url>
+  <url><loc>${escapeXml(base)}/skill.md</loc></url>
+</urlset>
+`;
+        return textResponse(xml, 'application/xml; charset=utf-8', 200, env.PROXY_VERSION);
+      }
+
+      if (path === '/.well-known/security.txt') {
+        const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+        const txt = `Contact: mailto:security@clawproxy.com
+Preferred-Languages: en
+Expires: ${expires}
+Canonical: ${url.origin}/.well-known/security.txt
+`;
+        return textResponse(txt, 'text/plain; charset=utf-8', 200, env.PROXY_VERSION);
+      }
+    }
+
     // Health check endpoint
     if (path === '/health' && request.method === 'GET') {
       const signingContext = await initSigningContext(env);
@@ -721,6 +855,49 @@ async function handleProxy(
   recordNonce(binding?.nonce, withReceipt);
 
   return jsonResponseWithRateLimit(withReceipt, 200, rateLimitInfo);
+}
+
+/**
+ * Escape text for HTML contexts
+ */
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Escape text for XML contexts
+ */
+function escapeXml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function textResponse(
+  body: string,
+  contentType: string,
+  status: number,
+  version: string
+): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      'Content-Type': contentType,
+      'X-Proxy-Version': version,
+    },
+  });
+}
+
+function htmlResponse(html: string, status: number, version: string): Response {
+  return textResponse(html, 'text/html; charset=utf-8', status, version);
 }
 
 /**
