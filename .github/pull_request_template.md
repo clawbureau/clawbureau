@@ -11,8 +11,10 @@
 - [ ] Proof bundle attached (if agent work)
 
 ## Proof Bundle (if applicable)
-- Path: `/proofs/<pr-id>/`
-- Includes:
+- Path: `/proofs/<branch>/` (or `/proofs/<pr-id>/` if you rename)
+- Includes (minimum):
+  - [ ] `commit.sig.json` (DID-signed commit proof)
+- Optional / future PoH bundle files:
   - [ ] signature envelope
   - [ ] gateway receipt(s)
   - [ ] manifest/event chain

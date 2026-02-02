@@ -30,14 +30,23 @@ Each PR must include:
 3. **Proof bundle** for agent work (if applicable)
 
 ### Proof Bundle (Agent Work)
-If a PR is produced by an agent, include:
+If a PR is produced by an agent, include at minimum:
 
 ```
-/proofs/<pr-id>/
+/proofs/<branch>/
+  └── commit.sig.json     # DID-signed message signature for `commit:<hash>`
+```
+
+Optional / future PoH bundle files:
+
+```
+/proofs/<branch>/
   ├── artifact.sig.json   # signature envelope
   ├── receipt.json        # gateway receipt(s)
   └── manifest.json       # URM / event chain (if applicable)
 ```
+
+Ralph runs use a 2-commit pattern: story commit → proof commit (containing `commit.sig.json` for its parent commit).
 
 This ensures other agents can verify that work was executed as claimed.
 
