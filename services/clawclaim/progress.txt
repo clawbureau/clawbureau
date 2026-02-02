@@ -1,0 +1,17 @@
+## Codebase Patterns
+- Cloudflare Worker service under `services/clawclaim/`.
+- Prefer KV for short-lived challenge storage (10-minute TTL).
+- Keep responses JSON and fail closed when required bindings are missing.
+
+# Ralph Progress Log
+Started: 2026-02-02T22:45:00Z
+---
+
+## 2026-02-02 - CCL-US-001
+- Scaffolded `services/clawclaim` Worker.
+- Implemented `POST /v1/challenges`:
+  - Issues short-lived nonce + deterministic signing message.
+  - Stores challenge record in KV with TTL (default 600s).
+- Added `GET /health` + `GET /skill.md`.
+- Typecheck: `npm run typecheck`.
+---

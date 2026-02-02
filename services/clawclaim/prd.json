@@ -1,0 +1,134 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawclaim-phase2",
+  "description": "clawclaim.com (DID Binding) — PRD — Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response.",
+  "userStories": [
+    {
+      "id": "CCL-US-001",
+      "title": "Challenge issuance",
+      "description": "As a user, I want a binding challenge so that I can prove key control.",
+      "acceptanceCriteria": [
+        "Issue short-lived nonce",
+        "Store challenge",
+        "Expire after 10 minutes",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented POST /v1/challenges backed by KV with TTL (default 600s). Returns deterministic signing message + nonce and stores challenge with expiration."
+    },
+    {
+      "id": "CCL-US-002",
+      "title": "Bind DID",
+      "description": "As a user, I want to bind my DID so that my identity is portable.",
+      "acceptanceCriteria": [
+        "Verify signature",
+        "Store DID binding",
+        "Mark DID as active",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-003",
+      "title": "Revoke binding",
+      "description": "As a user, I want to revoke a DID so that compromised keys are disabled.",
+      "acceptanceCriteria": [
+        "Mark binding revoked",
+        "Prevent new sessions",
+        "Log audit event",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-004",
+      "title": "Platform claims",
+      "description": "As a user, I want to bind external accounts so that trust aggregates cross-platform.",
+      "acceptanceCriteria": [
+        "Support GitHub/X/Moltbook",
+        "Store proof URL",
+        "Verify via clawverify",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-005",
+      "title": "Primary DID selection",
+      "description": "As a user, I want to pick a primary DID so that my profile is consistent.",
+      "acceptanceCriteria": [
+        "Set is_primary flag",
+        "Only one primary per account",
+        "Expose in profile API",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-006",
+      "title": "Binding audit trail",
+      "description": "As an auditor, I want to inspect binding history so that identity claims are traceable.",
+      "acceptanceCriteria": [
+        "Append-only binding log",
+        "Include timestamps",
+        "Export for compliance",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-007",
+      "title": "Owner attestation registry",
+      "description": "As a platform, I want owner attestations so that sybil resistance is possible.",
+      "acceptanceCriteria": [
+        "Store owner attestation envelope (provider-agnostic)",
+        "Record expiry and verification level",
+        "Support OneMolt/WorldID lookup references",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-008",
+      "title": "Scoped token issuance (CST)",
+      "description": "As a developer, I want scoped tokens so that agents can authenticate safely.",
+      "acceptanceCriteria": [
+        "Exchange DID challenge for token issuance via clawscope",
+        "Issue short-lived tokens bound to DID + scope + audience",
+        "Include optional owner attestation reference",
+        "Log token hash + policy version to clawlogs",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCL-US-009",
+      "title": "Org/team roster claims",
+      "description": "As a team, I want roster claims so that roles can be verified.",
+      "acceptanceCriteria": [
+        "Register org/team DID + roster members",
+        "Issue signed roster manifest",
+        "Expose roster verification endpoint",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
