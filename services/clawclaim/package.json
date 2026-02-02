@@ -11,6 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "bs58": "^5.0.0"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250121.0",
     "typescript": "^5.7.0",

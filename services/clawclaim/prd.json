@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented POST /v1/bind verifying Ed25519 signature (did:key) over stored challenge message; stores binding in KV and marks it active."
     },
     {
       "id": "CCL-US-003",
