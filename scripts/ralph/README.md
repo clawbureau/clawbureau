@@ -55,6 +55,15 @@ You can force attaching `PI.md` every iteration with:
 export PI_ALWAYS_ATTACH_INSTRUCTIONS=1
 ```
 
+### Commit proof automation
+`ralph.sh` will (best-effort) auto-generate and **commit** `proofs/<branch>/commit.sig.json` when it detects at least one git commit occurred during an iteration.
+
+Disable with:
+
+```bash
+export RALPH_AUTO_PROOF=0
+```
+
 ### Run
 
 From a directory containing `prd.json` + `progress.txt` (often the root of a domain worktree):
