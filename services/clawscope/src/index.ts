@@ -19,6 +19,12 @@ export interface Env {
   SCOPE_MAX_SCOPE_ITEMS?: string;
   SCOPE_MAX_SCOPE_LENGTH?: string;
 
+  // revocation storage knobs
+  SCOPE_REVOCATION_TTL_SECONDS?: string;
+
+  // storage (optional bindings)
+  SCOPE_REVOCATIONS?: KVNamespace;
+
   // secrets
   SCOPE_SIGNING_KEY?: string;
   SCOPE_ADMIN_KEY?: string;
@@ -49,6 +55,49 @@ export interface IssueTokenRequest {
   owner_ref?: string;
   spend_cap?: number;
   mission_id?: string;
+}
+
+export interface RevokeTokenRequest {
+  token?: string;
+  token_hash?: string;
+  reason?: string;
+}
+
+interface RevocationRecord {
+  token_hash: string;
+  revoked_at: number;
+  revoked_at_iso: string;
+  reason?: string;
+  revoked_by?: string;
+}
+
+const REVOCATION_RECORD_PREFIX = 'revoked:hash:';
+const REVOCATION_EVENT_PREFIX = 'events:revocations:';
+
+function revokedRecordKey(token_hash: string): string {
+  return `${REVOCATION_RECORD_PREFIX}${token_hash}`;
+}
+
+function revocationEventKey(revokedAtSec: number, token_hash: string): string {
+  // Invert timestamp so KV list() returns newest-first for the prefix.
+  const invTs = String(9999999999 - revokedAtSec).padStart(10, '0');
+  return `${REVOCATION_EVENT_PREFIX}${invTs}:${token_hash}`;
+}
+
+async function getRevocationRecord(env: Env, token_hash: string): Promise<RevocationRecord | null> {
+  const kv = env.SCOPE_REVOCATIONS;
+  if (!kv) return null;
+
+  const raw = await kv.get(revokedRecordKey(token_hash));
+  if (!raw) return null;
+
+  try {
+    const rec = JSON.parse(raw) as RevocationRecord;
+    if (rec && typeof rec === 'object' && rec.token_hash === token_hash) return rec;
+    return { token_hash, revoked_at: 0, revoked_at_iso: '', reason: 'invalid_record' };
+  } catch {
+    return { token_hash, revoked_at: 0, revoked_at_iso: '', reason: 'unparseable_record' };
+  }
 }
 
 let cachedKeyRaw: string | null = null;
@@ -340,7 +389,7 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
@@ -385,6 +434,134 @@ export default {
 
         return errorResponse('ISSUE_FAILED', 'Failed to issue token', 500);
       }
+    }
+
+    // Token revocation (CSC-US-003)
+    if (request.method === 'POST' && url.pathname === '/v1/tokens/revoke') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'REVOCATION_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+      }
+
+      if (typeof body !== 'object' || body === null) {
+        return errorResponse('INVALID_REQUEST', 'Request body must be a JSON object', 400);
+      }
+
+      const b = body as Record<string, unknown>;
+      const token = b.token;
+      const tokenHashInput = b.token_hash;
+      const reason = typeof b.reason === 'string' ? b.reason.trim().slice(0, 256) : undefined;
+
+      let token_hash: string;
+      if (isNonEmptyString(token)) {
+        token_hash = await sha256(token);
+      } else if (isNonEmptyString(tokenHashInput)) {
+        token_hash = tokenHashInput.trim().toLowerCase();
+      } else {
+        return errorResponse('INVALID_REQUEST', 'token or token_hash is required', 400);
+      }
+
+      if (!/^[0-9a-f]{64}$/.test(token_hash)) {
+        return errorResponse('INVALID_TOKEN_HASH', 'token_hash must be a 64-character hex SHA-256', 400);
+      }
+
+      const existing = await kv.get(revokedRecordKey(token_hash));
+      if (existing) {
+        try {
+          const rec = JSON.parse(existing) as RevocationRecord;
+          return jsonResponse({
+            status: 'already_revoked',
+            token_hash,
+            revoked_at: rec.revoked_at,
+            revoked_at_iso: rec.revoked_at_iso,
+          });
+        } catch {
+          return jsonResponse({ status: 'already_revoked', token_hash });
+        }
+      }
+
+      const revokedAtSec = Math.floor(Date.now() / 1000);
+      const record: RevocationRecord = {
+        token_hash,
+        revoked_at: revokedAtSec,
+        revoked_at_iso: new Date(revokedAtSec * 1000).toISOString(),
+        reason,
+        revoked_by: 'admin',
+      };
+
+      const ttl = parseIntOrDefault(env.SCOPE_REVOCATION_TTL_SECONDS, 60 * 60 * 24 * 30);
+
+      await kv.put(revokedRecordKey(token_hash), JSON.stringify(record), { expirationTtl: ttl });
+
+      const eventKey = revocationEventKey(revokedAtSec, token_hash);
+      await kv.put(eventKey, JSON.stringify(record), { expirationTtl: ttl });
+
+      return jsonResponse({
+        status: 'revoked',
+        token_hash,
+        revoked_at: record.revoked_at,
+        revoked_at_iso: record.revoked_at_iso,
+        event_key: eventKey,
+      });
+    }
+
+    // Revocation events (CSC-US-003)
+    if (request.method === 'GET' && url.pathname === '/v1/revocations/events') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'REVOCATION_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 50), 1),
+        200
+      );
+
+      const cursor = url.searchParams.get('cursor') ?? undefined;
+
+      const list = await kv.list({ prefix: REVOCATION_EVENT_PREFIX, limit, cursor });
+
+      const events: Array<{ key: string; record: unknown }> = [];
+      for (const k of list.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        events.push({ key: k.name, record });
+      }
+
+      return jsonResponse({
+        events,
+        cursor: 'cursor' in list ? list.cursor : null,
+        list_complete: list.list_complete,
+      });
     }
 
     // Token introspection (CSC-US-002)
@@ -476,6 +653,23 @@ export default {
 
       if (!sigValid) {
         return errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401);
+      }
+
+      const revocation = await getRevocationRecord(env, token_hash);
+      if (revocation) {
+        return jsonResponse({
+          active: false,
+          revoked: true,
+          token_hash,
+          sub: payload.sub,
+          aud: payload.aud,
+          scope: payload.scope,
+          owner_ref: payload.owner_ref,
+          iat: payload.iat,
+          exp: payload.exp,
+          revoked_at: revocation.revoked_at,
+          revoked_at_iso: revocation.revoked_at_iso,
+        });
       }
 
       return jsonResponse({

@@ -31,3 +31,12 @@ Started: 2026-02-02T22:30:00Z
   - Returns `{active:true, token_hash, sub, aud, scope, owner_ref, iat, exp}`.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-02 - CSC-US-003
+- Added token revocation endpoint (admin): `POST /v1/tokens/revoke`.
+  - Stores revocation record in KV under `revoked:hash:<token_hash>`.
+  - Writes an event/audit record under `events:revocations:<invTs>:<token_hash>` (newest-first listing).
+- Added revocation event feed (admin): `GET /v1/revocations/events?limit=&cursor=`.
+- Introspection checks revocation KV and returns `{active:false, revoked:true, ...}` for revoked tokens.
+- Typecheck: `npm run typecheck`.
+---

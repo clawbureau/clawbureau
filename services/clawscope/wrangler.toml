@@ -10,6 +10,12 @@ SCOPE_POLICY_VERSION = "1"
 SCOPE_MAX_TTL_SECONDS = "3600"
 SCOPE_MAX_SCOPE_ITEMS = "64"
 SCOPE_MAX_SCOPE_LENGTH = "128"
+SCOPE_REVOCATION_TTL_SECONDS = "2592000" # 30 days
+
+# Optional KV binding (needed for revocation + event feed):
+# [[kv_namespaces]]
+# binding = "SCOPE_REVOCATIONS"
+# id = "<create via wrangler kv:namespace create clawscope-revocations>"
 
 # Secrets to be set via wrangler secret put:
 # - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required)
