@@ -1,0 +1,189 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawverify-phase1-trust",
+  "description": "clawverify.com (Verification API) \u2014 PRD \u2014 Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
+  "userStories": [
+    {
+      "id": "CVF-US-001",
+      "title": "Verify artifact signatures",
+      "description": "As a verifier, I want to validate artifact envelopes so that I can prove authorship.",
+      "acceptanceCriteria": [
+        "Reject unknown version/type/algo",
+        "Recompute hash and match envelope",
+        "Return VALID/INVALID with reason",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented Cloudflare Worker with fail-closed validation and Ed25519 verification"
+    },
+    {
+      "id": "CVF-US-002",
+      "title": "Verify message signatures",
+      "description": "As a platform, I want to validate signed messages so that I can bind DIDs to accounts.",
+      "acceptanceCriteria": [
+        "Support message_signature envelopes",
+        "Fail if signature invalid",
+        "Return signer DID",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-003",
+      "title": "Verify gateway receipts",
+      "description": "As a marketplace, I want to validate proxy receipts so that I can enforce proof-of-harness.",
+      "acceptanceCriteria": [
+        "Validate receipt signature",
+        "Check receipt schema",
+        "Return verified provider/model",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-004",
+      "title": "Batch verification",
+      "description": "As a auditor, I want to submit multiple envelopes so that I can verify at scale.",
+      "acceptanceCriteria": [
+        "POST /v1/verify/batch",
+        "Return per-item results",
+        "Limit batch size to prevent abuse",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-005",
+      "title": "Verification provenance",
+      "description": "As a compliance officer, I want verification results logged so that audits are traceable.",
+      "acceptanceCriteria": [
+        "Write hash-chained audit log entry",
+        "Include request hash + timestamp",
+        "Allow retrieval by receipt id",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-006",
+      "title": "Public docs and schema registry",
+      "description": "As a developer, I want clear verification docs so that I can integrate quickly.",
+      "acceptanceCriteria": [
+        "Publish schema versions",
+        "Provide example payloads",
+        "Include fail-closed rules",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-007",
+      "title": "Verify proof bundles",
+      "description": "As a marketplace, I want proof bundle verification so that trust tiers are automated.",
+      "acceptanceCriteria": [
+        "Validate URM + event chain + receipts + attestations",
+        "Fail closed on unknown schema/version",
+        "Return computed trust tier",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-008",
+      "title": "Verify event chains",
+      "description": "As a auditor, I want event chain verification so that logs are tamper-evident.",
+      "acceptanceCriteria": [
+        "Validate hash chain and root",
+        "Enforce run_id consistency",
+        "Return chain_root_hash and error codes",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-009",
+      "title": "Schema registry allowlist",
+      "description": "As a developer, I want a schema registry so that validation is deterministic.",
+      "acceptanceCriteria": [
+        "Publish allowlisted schema ids + versions",
+        "Reject unknown ids by default",
+        "Provide example payloads per schema",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-010",
+      "title": "Verify owner attestations",
+      "description": "As a platform, I want owner verification so that sybil resistance is possible.",
+      "acceptanceCriteria": [
+        "Validate owner attestation envelope",
+        "Check expiry and provider reference",
+        "Return verified/expired/unknown status",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-011",
+      "title": "Verify commit proofs",
+      "description": "As a reviewer, I want commit proof verification so that agent work is trusted.",
+      "acceptanceCriteria": [
+        "Validate commit proof envelope",
+        "Ensure repo claim exists in clawclaim",
+        "Return repo + commit + signer DID",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-012",
+      "title": "One-call agent verification",
+      "description": "As a platform, I want a single verify call so that integrations are easy.",
+      "acceptanceCriteria": [
+        "Return DID validity + owner status + PoH tier",
+        "Include policy compliance (if WPC present)",
+        "Include risk flags (optional)",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-013",
+      "title": "Scoped token introspection",
+      "description": "As a service, I want token introspection so that authorization is safe.",
+      "acceptanceCriteria": [
+        "Validate token signature + expiry",
+        "Return scope + audience + owner_ref",
+        "Log token hash to clawlogs",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

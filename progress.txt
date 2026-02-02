@@ -1,0 +1,27 @@
+## Codebase Patterns
+- Use Cloudflare Workers for verification services (stateless, low latency)
+- Envelope types use versioned schemas: envelope_version + envelope_type + algorithm
+- Fail-closed validation: reject unknown versions/types/algorithms by default
+- Base64url encoding for all binary data (hashes, signatures)
+- did:key format for Ed25519 keys uses multibase z prefix with Ed25519 multicodec (0xed01)
+- Signed envelopes sign the payload_hash_b64u string, not the raw payload
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.937416
+---
+
+## 2026-02-02T03:15:00Z - CVF-US-001
+- Implemented artifact signature verification service as Cloudflare Worker
+- Files created:
+  - services/clawverify/src/types.ts - Core types, envelope structure, verification results
+  - services/clawverify/src/schema-registry.ts - Fail-closed validation for versions/types/algorithms
+  - services/clawverify/src/crypto.ts - Hash computation, base64url, Ed25519 verification
+  - services/clawverify/src/verify-artifact.ts - Main verification logic
+  - services/clawverify/src/index.ts - Worker entry point with /v1/verify endpoint
+  - services/clawverify/package.json, tsconfig.json, wrangler.toml, .eslintrc.json
+- **Learnings for future iterations:**
+  - Cloudflare Workers support Ed25519 via Web Crypto API (crypto.subtle)
+  - did:key extraction requires base58btc decoding and multicodec prefix parsing
+  - Use 422 status for invalid signatures (not 400) - it's unprocessable content, not bad request
+  - JSON.stringify is used for canonical payload hashing
+---
