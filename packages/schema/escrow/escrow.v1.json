@@ -1,0 +1,59 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.escrow.escrow.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Escrow v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "escrow_version",
+    "escrow_id",
+    "requester_did",
+    "agent_did",
+    "amount",
+    "currency",
+    "status",
+    "created_at"
+  ],
+  "properties": {
+    "escrow_version": { "const": "1" },
+    "escrow_id": { "type": "string", "description": "Unique escrow identifier" },
+    "requester_did": { "type": "string", "description": "DID of the requester who created the escrow" },
+    "agent_did": { "type": "string", "description": "DID of the agent who will receive payment" },
+    "amount": { "type": "number", "minimum": 0, "description": "Amount held in escrow" },
+    "currency": { "type": "string", "default": "CLAW", "description": "Currency code" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "held", "released", "disputed", "cancelled", "frozen"],
+      "description": "Current escrow status"
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "held_at": { "type": "string", "format": "date-time" },
+    "released_at": { "type": "string", "format": "date-time" },
+    "dispute_window_hours": { "type": "number", "minimum": 0, "default": 72 },
+    "metadata": { "type": "object", "description": "Arbitrary metadata/terms" },
+    "terms": { "type": "string", "description": "Terms and conditions text" },
+    "job_id": { "type": "string", "description": "Associated job/task ID" },
+    "milestones": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Milestone" },
+      "description": "Optional milestone breakdown"
+    }
+  },
+  "$defs": {
+    "Milestone": {
+      "type": "object",
+      "required": ["milestone_id", "amount", "description", "status"],
+      "properties": {
+        "milestone_id": { "type": "string" },
+        "amount": { "type": "number", "minimum": 0 },
+        "description": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "released", "disputed"]
+        },
+        "released_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

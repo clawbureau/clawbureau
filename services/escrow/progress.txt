@@ -1,0 +1,130 @@
+## Codebase Patterns
+- Services go in `services/<domain>/` with src/ subdirectory
+- Schemas go in `packages/schema/<domain>/` as versioned JSON Schema files (e.g., `escrow.v1.json`)
+- Use TypeScript with ESM (`"type": "module"`) and `.js` extensions in imports
+- Types should mirror JSON schemas for consistency
+- Use `npm run typecheck` (tsc --noEmit) to verify
+- Escrow service depends on LedgerClient interface for balance operations (clawledger dependency)
+- EscrowService uses config object pattern: `new EscrowService({ store, ledger, webhookEmitter })`
+- Use type guards (e.g., `isLedgerV2()`) to check interface capabilities at runtime
+- WebhookEmitter is optional - methods should handle gracefully when not provided
+- Dispute IDs use `dsp_` prefix
+- Optional dependencies (DisputeStore, TrialsClient) follow same pattern as WebhookEmitter - check for presence before using
+- Ledger client versioning: V1 (createHold), V2 (releaseHoldAndTransfer), V3 (releasePartialHoldAndTransfer for milestones), V4 (releaseHold for cancellation)
+- AuditLogger is optional dependency for audit log entries - follows same pattern as WebhookEmitter
+- Audit entry IDs use `aud_` prefix
+- Public docs endpoints (CES-US-007) are implemented in `services/escrow/src/worker.ts` (landing/docs/skill + robots/sitemap/security)
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.936628
+---
+
+## 2026-02-02 - CES-US-001
+- Implemented create escrow hold functionality
+- Files created:
+  - `packages/schema/escrow/escrow.v1.json` - JSON Schema for escrow records
+  - `services/escrow/package.json` - Package config with TypeScript
+  - `services/escrow/tsconfig.json` - TypeScript config
+  - `services/escrow/src/types.ts` - Core type definitions
+  - `services/escrow/src/escrow-service.ts` - EscrowService with createEscrow()
+  - `services/escrow/src/index.ts` - Public exports
+  - `services/escrow/src/stores/memory-store.ts` - In-memory store for testing
+- **Learnings for future iterations:**
+  - No existing services directory - created `services/escrow/` as new pattern
+  - Follow schema versioning pattern from existing schemas (e.g., `escrow.v1.json`)
+  - EscrowService uses dependency injection for store and ledger client
+  - Milestones are validated to sum to total escrow amount
+  - Escrow IDs use `esc_` prefix, milestone IDs use `ms_` prefix
+---
+
+## 2026-02-02 - CES-US-002
+- Implemented release escrow functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added ReleaseEscrowRequest, ReleaseEscrowResult, LedgerClientV2, LedgerTransferResult, WebhookEmitter, WebhookEvent, WebhookEventType
+  - `services/escrow/src/escrow-service.ts` - Added releaseEscrow() method, EscrowServiceConfig interface, type guard for LedgerV2
+  - `services/escrow/src/index.ts` - Exported new types
+- **Learnings for future iterations:**
+  - Use config object pattern for services with optional dependencies (like WebhookEmitter)
+  - Type guards (`'method' in obj`) are useful for checking interface capabilities at runtime
+  - WebhookEmitter is optional - return `webhook_sent: false` when not configured
+  - LedgerClientV2 extends LedgerClient to maintain backward compatibility
+  - Event IDs use `evt_` prefix
+---
+
+## 2026-02-02 - CES-US-003
+- Implemented dispute window functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added Dispute, DisputeStatus, DisputeReason, DisputeResolution, DisputeEscrowRequest, DisputeEscrowResult, DisputeStore, EscalateDisputeRequest, EscalateDisputeResult, TrialsClient, TrialsCaseResult
+  - `services/escrow/src/escrow-service.ts` - Added disputeEscrow(), escalateDispute(), getDispute(), getDisputeByEscrowId() methods; extended EscrowServiceConfig with disputeStore and trialsClient
+  - `services/escrow/src/index.ts` - Exported all new dispute-related types
+- **Learnings for future iterations:**
+  - Dispute window is configurable via `dispute_window_hours` on escrow (default 72 hours)
+  - Disputes freeze escrow (status='frozen') to prevent release during resolution
+  - DisputeStore is separate from EscrowStore - follows single responsibility principle
+  - TrialsClient is optional dependency for escalation - allows escrow service to work without trials service
+  - Only parties to escrow (requester or agent) can initiate or escalate disputes
+  - Dispute window check is done against `held_at` timestamp
+---
+
+## 2026-02-02 - CES-US-004
+- Implemented milestone payouts functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added ReleaseMilestoneRequest, ReleaseMilestoneResult, LedgerClientV3 (extends V2 with releasePartialHoldAndTransfer)
+  - `services/escrow/src/escrow-service.ts` - Added releaseMilestone() and getMilestoneStatus() methods; added isLedgerV3 type guard
+  - `services/escrow/src/index.ts` - Exported new milestone payout types
+- **Learnings for future iterations:**
+  - Milestone payouts use LedgerClientV3 interface for partial releases (releasePartialHoldAndTransfer)
+  - releaseMilestone() updates milestone status to 'released' and tracks released_at timestamp
+  - getMilestoneStatus() provides summary: total/released/remaining amounts and milestone counts
+  - When all milestones are released, escrow status automatically changes to 'released'
+  - Idempotency key pattern for milestones: `escrow_milestone_release_${escrow_id}_${milestone_id}`
+  - Webhook event type 'escrow.milestone_released' includes remaining_amount and remaining_milestones
+---
+
+## 2026-02-02 - CES-US-005
+- Implemented escrow cancellation functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added CancelEscrowRequest, CancelEscrowResult, LedgerReleaseHoldResult, LedgerClientV4, AuditLogAction, AuditLogEntry, AuditLogger
+  - `services/escrow/src/escrow-service.ts` - Added cancelEscrow() method, extended EscrowServiceConfig with auditLogger, added isLedgerV4 type guard
+  - `services/escrow/src/index.ts` - Exported new cancellation and audit types
+- **Learnings for future iterations:**
+  - LedgerClientV4 extends V3 with releaseHold() for returning funds without transfer (cancellation)
+  - cancelEscrow() validates: only requester can cancel, escrow must be 'held' status, no released milestones
+  - Prevents cancellation if partial work done (milestones released) - should use dispute process instead
+  - AuditLogger follows same optional dependency pattern as WebhookEmitter
+  - Idempotency key pattern for cancellation: `escrow_cancel_${escrow_id}`
+  - Webhook event type 'escrow.cancelled' for cancellation notifications
+---
+
+## 2026-02-02 - CES-US-006
+- Implemented escrow status API functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added EscrowTimestamps, MilestoneStatusSummary, GetEscrowStatusResponse types
+  - `services/escrow/src/escrow-service.ts` - Added getEscrowStatus() method for retrieving detailed escrow status
+  - `services/escrow/src/index.ts` - Exported new status API types
+- **Learnings for future iterations:**
+  - getEscrowStatus() returns a structured response suitable for REST API consumption
+  - Includes computed values: dispute_window_expired, dispute_window_expires_at
+  - MilestoneStatusSummary aggregates milestone counts and amounts
+  - Gracefully handles missing disputeStore - returns has_dispute: false if not configured
+  - Existing getEscrow() returns raw Escrow, while getEscrowStatus() returns enriched response
+---
+
+## 2026-02-02T04:57:35Z - CES-US-007
+- What was implemented
+  - Added minimal public HTTP endpoints for discoverability:
+    - GET / (HTML landing with links)
+    - GET /docs (minimal HTML docs)
+    - GET /skill.md (OpenClaw skill file; frontmatter metadata is a single-line JSON object string)
+    - GET /robots.txt
+    - GET /sitemap.xml
+    - GET /.well-known/security.txt
+  - Updated escrow tsconfig to include DOM lib for Request/Response typing
+- Files changed
+  - services/escrow/src/worker.ts
+  - services/escrow/tsconfig.json
+  - prd.json
+  - progress.txt
+- Learnings
+  - Keep public endpoints tiny and cacheable; treat them as integration metadata rather than full API surface
+---
