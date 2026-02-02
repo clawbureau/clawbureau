@@ -140,8 +140,8 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/owner-attestation endpoint with fail-closed owner_attestation envelope validation, expiry handling (EXPIRED), and owner_status (verified/expired/unknown) semantics."
     },
     {
       "id": "CVF-US-011",

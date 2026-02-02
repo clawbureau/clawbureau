@@ -8,6 +8,7 @@
 - Batch operations use Promise.all for concurrent processing with configurable size limits
 - D1 bindings for SQLite storage: add to wrangler.toml with placeholder database_id for local dev
 - Hash-chained audit logs: each entry includes prev_hash linking to previous, entry_hash computed from all fields
+- Semantic result fields (e.g., trust_tier, owner_status) are separate from cryptographic VALID/INVALID and should be returned explicitly
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937416
@@ -141,4 +142,21 @@ Started: 2026-02-02T03:08:26.937416
   - Validation returns detailed error codes: UNKNOWN_SCHEMA_ID, UNKNOWN_SCHEMA_VERSION, DEPRECATED_SCHEMA
   - POST /v1/schemas/validate returns 422 for unknown schemas with list of allowlisted schemas
   - Example payloads are already defined in SCHEMA_DEFINITIONS, reuse via getSchemaExample()
+---
+
+## 2026-02-02T04:21:04Z - CVF-US-010
+- Implemented owner attestation verification:
+  - Added POST /v1/verify/owner-attestation
+  - Fail-closed envelope + payload validation, payload hash recomputation, Ed25519 signature verification
+  - Expiry handling via payload.expires_at (returns error code EXPIRED)
+  - owner_status semantics: verified (provider_ref present), unknown (no provider_ref), expired (expires_at in past)
+- Files changed:
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/verify-owner-attestation.ts
+  - services/clawverify/src/index.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Expose semantic status fields (like owner_status) alongside cryptographic VALID/INVALID to keep API decisions explicit
+  - Treat expires_at as semantic validity (EXPIRED) even if signature is otherwise valid
 ---

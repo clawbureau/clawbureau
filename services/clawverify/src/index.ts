@@ -9,6 +9,7 @@ import { verifyReceipt } from './verify-receipt';
 import { verifyBatch } from './verify-batch';
 import { verifyProofBundle } from './verify-proof-bundle';
 import { verifyEventChain } from './verify-event-chain';
+import { verifyOwnerAttestation } from './verify-owner-attestation';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -26,6 +27,7 @@ import type {
   VerifyBatchResponse,
   VerifyBundleResponse,
   VerifyEventChainResponse,
+  VerifyOwnerAttestationResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -198,6 +200,57 @@ async function handleVerifyReceipt(
       ...verification,
       audit_receipt: auditReceipt,
     };
+
+  // Return 200 for valid, 422 for invalid
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+
+  return jsonResponse(response, status);
+}
+
+/**
+ * Handle POST /v1/verify/owner-attestation - Verify owner attestation envelopes
+ */
+async function handleVerifyOwnerAttestation(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  // Verify the owner attestation
+  const verification = await verifyOwnerAttestation(envelope);
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'owner_attestation' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyOwnerAttestationResponse & {
+    audit_receipt?: AuditLogReceipt;
+  } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
 
   // Return 200 for valid, 422 for invalid
   const status = verification.result.status === 'VALID' ? 200 : 422;
@@ -561,6 +614,11 @@ export default {
     // POST /v1/verify/receipt - Gateway receipt verification
     if (url.pathname === '/v1/verify/receipt' && method === 'POST') {
       return handleVerifyReceipt(request, env);
+    }
+
+    // POST /v1/verify/owner-attestation - Owner attestation verification
+    if (url.pathname === '/v1/verify/owner-attestation' && method === 'POST') {
+      return handleVerifyOwnerAttestation(request, env);
     }
 
     // POST /v1/verify/batch - Batch verification

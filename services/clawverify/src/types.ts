@@ -161,6 +161,34 @@ export interface VerifyReceiptResponse {
 }
 
 /**
+ * Owner Attestation types
+ * CVF-US-010: Verify owner attestations
+ */
+export interface OwnerAttestationPayload {
+  attestation_version: '1';
+  attestation_id: string;
+  subject_did: string;
+  provider_ref?: string;
+  expires_at?: string;
+}
+
+export type OwnerAttestationStatus = 'verified' | 'expired' | 'unknown';
+
+export interface VerifyOwnerAttestationRequest {
+  envelope: SignedEnvelope<OwnerAttestationPayload>;
+}
+
+export interface VerifyOwnerAttestationResponse {
+  result: VerificationResult;
+  owner_status?: OwnerAttestationStatus;
+  attestation_id?: string;
+  subject_did?: string;
+  provider_ref?: string;
+  expires_at?: string;
+  error?: VerificationError;
+}
+
+/**
  * Batch verification types
  * CVF-US-004: Batch verification for scale verification
  */
