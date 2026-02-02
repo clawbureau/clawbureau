@@ -94,3 +94,73 @@ export interface EscrowStore {
   get(escrow_id: string): Promise<Escrow | null>;
   list(filters?: { requester_did?: string; agent_did?: string; status?: EscrowStatus }): Promise<Escrow[]>;
 }
+
+/**
+ * CES-US-002: Release escrow types
+ */
+
+export interface ReleaseEscrowRequest {
+  escrow_id: string;
+  /** DID of the party authorizing the release (must be requester) */
+  authorized_by_did: string;
+  /** Optional reason/note for the release */
+  reason?: string;
+}
+
+export interface ReleaseEscrowResult {
+  escrow_id: string;
+  escrow: Escrow;
+  transfer_event_id: string;
+  amount_released: number;
+  webhook_sent: boolean;
+}
+
+export interface LedgerTransferResult {
+  success: boolean;
+  transfer_event_id?: string;
+  error?: string;
+  new_balance?: number;
+}
+
+/**
+ * Extended ledger client interface with transfer capability
+ */
+export interface LedgerClientV2 extends LedgerClient {
+  /**
+   * Release a hold and transfer funds to the recipient.
+   */
+  releaseHoldAndTransfer(params: {
+    from_account_did: string;
+    to_account_did: string;
+    amount: number;
+    currency: string;
+    reference_id: string;
+    reference_type: 'escrow_release';
+    idempotency_key: string;
+  }): Promise<LedgerTransferResult>;
+}
+
+/**
+ * Webhook event types for escrow service
+ */
+export type WebhookEventType =
+  | 'escrow.created'
+  | 'escrow.released'
+  | 'escrow.disputed'
+  | 'escrow.cancelled'
+  | 'escrow.milestone_released';
+
+export interface WebhookEvent {
+  event_id: string;
+  event_type: WebhookEventType;
+  escrow_id: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Interface for webhook emitter
+ */
+export interface WebhookEmitter {
+  emit(event: WebhookEvent): Promise<{ sent: boolean; error?: string }>;
+}
