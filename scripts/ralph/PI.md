@@ -29,13 +29,25 @@ Use:
 - `feat: [Story ID] - [Story Title]` (or `fix:`/`chore:` if appropriate)
 
 ### Proof bundle (DID-signed commit proof)
-After committing, generate a DID-signed proof file for the current branch:
+After your **work commit**, generate and **commit** a DID-signed proof file.
+
+We use a 2-commit pattern (to avoid the "proof file changes the commit hash" cycle):
+
+1) Commit the story changes (signed).
+2) Generate `proofs/<branch>/commit.sig.json` signing that commit.
+3) Commit the proof file (signed).
 
 ```bash
+WORK_COMMIT=$(git rev-parse HEAD)
+SHORT=$(git rev-parse --short "$WORK_COMMIT")
 BRANCH=$(git branch --show-current)
+
 PROOF_DIR="proofs/${BRANCH}"
 mkdir -p "$PROOF_DIR"
-node ./scripts/did-work/sign-message.mjs "commit:$(git rev-parse HEAD)" > "$PROOF_DIR/commit.sig.json"
+node ./scripts/did-work/sign-message.mjs "commit:${WORK_COMMIT}" > "$PROOF_DIR/commit.sig.json"
+
+git add "$PROOF_DIR/commit.sig.json"
+git commit -S -m "chore(proofs): add commit proof for ${SHORT}"
 ```
 
 If the signing helper fails due to missing identity/passphrase, log it in `progress.txt` and continue (but prefer fixing it).
