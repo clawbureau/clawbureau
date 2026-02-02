@@ -15,3 +15,13 @@ Started: 2026-02-02T22:45:00Z
 - Added `GET /health` + `GET /skill.md`.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-02 - CCL-US-002
+- Added `POST /v1/bind`:
+  - Loads stored challenge from KV, validates expiry + DID match.
+  - Verifies Ed25519 signature for `did:key` DIDs.
+  - Stores a binding record in KV and marks it `active: true`.
+  - Deletes challenge on success to prevent replay.
+- Added crypto helpers for did:key Ed25519 verification.
+- Typecheck: `npm run typecheck`.
+---
