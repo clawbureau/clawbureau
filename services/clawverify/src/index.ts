@@ -15,6 +15,7 @@ import {
   initAuditLogSchema,
   type AuditLogDB,
 } from './audit-log';
+import { getSchemaRegistry, getSchemaById } from './schema-docs';
 import type {
   VerifyArtifactResponse,
   VerifyMessageResponse,
@@ -315,6 +316,25 @@ async function handleInitAuditLog(env: Env): Promise<Response> {
 }
 
 /**
+ * Handle GET /v1/schemas - Get schema registry
+ */
+function handleGetSchemas(): Response {
+  const registry = getSchemaRegistry();
+  return jsonResponse(registry, 200);
+}
+
+/**
+ * Handle GET /v1/schemas/:schema_id - Get individual schema details
+ */
+function handleGetSchemaById(schemaId: string): Response {
+  const result = getSchemaById(schemaId);
+  if (!result.found) {
+    return errorResponse(`Schema '${schemaId}' not found`, 404);
+  }
+  return jsonResponse(result, 200);
+}
+
+/**
  * Handle health check
  */
 function handleHealth(): Response {
@@ -375,6 +395,17 @@ export default {
     // POST /v1/provenance/init - Initialize audit log schema
     if (url.pathname === '/v1/provenance/init' && method === 'POST') {
       return handleInitAuditLog(env);
+    }
+
+    // GET /v1/schemas - Get schema registry
+    if (url.pathname === '/v1/schemas' && method === 'GET') {
+      return handleGetSchemas();
+    }
+
+    // GET /v1/schemas/:schema_id - Get individual schema details
+    const schemaMatch = url.pathname.match(/^\/v1\/schemas\/([^/]+)$/);
+    if (schemaMatch && method === 'GET') {
+      return handleGetSchemaById(schemaMatch[1]);
     }
 
     // 404 for unknown routes
