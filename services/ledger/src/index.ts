@@ -5,11 +5,14 @@
 
 import { AccountService, isValidDid } from './accounts';
 import { EventService, isValidEventType, isValidBucket } from './events';
+import { HoldService } from './holds';
 import type {
   CreateAccountRequest,
   CreateEventRequest,
+  CreateHoldRequest,
   Env,
   ErrorResponse,
+  ReleaseHoldRequest,
 } from './types';
 
 /**
@@ -269,6 +272,150 @@ async function handleVerifyHashChain(env: Env): Promise<Response> {
 }
 
 /**
+ * Handle POST /holds - Create a new hold
+ */
+async function handleCreateHold(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<CreateHoldRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new HoldService(env);
+
+  try {
+    const hold = await service.createHold(body);
+    return jsonResponse(hold, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    // Check for insufficient funds error
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    return errorResponse(message, 'CREATE_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /holds/:id - Get hold by ID
+ */
+async function handleGetHold(id: string, env: Env): Promise<Response> {
+  const service = new HoldService(env);
+  const hold = await service.getHold(id);
+
+  if (!hold) {
+    return errorResponse('Hold not found', 'NOT_FOUND', 404);
+  }
+
+  return jsonResponse(hold);
+}
+
+/**
+ * Handle POST /holds/:id/release - Release a hold
+ */
+async function handleReleaseHold(
+  holdId: string,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<ReleaseHoldRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.releaseType) {
+    return errorResponse(
+      'Missing required field: releaseType',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (body.releaseType !== 'complete' && body.releaseType !== 'cancel') {
+    return errorResponse(
+      `Invalid releaseType: ${body.releaseType}. Must be 'complete' or 'cancel'`,
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (body.releaseType === 'complete' && !body.toAccountId) {
+    return errorResponse(
+      'Complete release requires toAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new HoldService(env);
+
+  try {
+    const result = await service.releaseHold(holdId, body);
+    return jsonResponse(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    if (message.includes('already')) {
+      return errorResponse(message, 'ALREADY_RELEASED', 400);
+    }
+    return errorResponse(message, 'RELEASE_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /accounts/:accountId/holds - Get active holds for an account
+ */
+async function handleGetAccountHolds(
+  accountId: string,
+  env: Env
+): Promise<Response> {
+  const service = new HoldService(env);
+  const holds = await service.getActiveHolds(accountId);
+
+  return jsonResponse({ holds });
+}
+
+/**
  * Router for handling requests
  */
 async function router(request: Request, env: Env): Promise<Response> {
@@ -328,6 +475,29 @@ async function router(request: Request, env: Env): Promise<Response> {
   const accountEventsMatch = path.match(/^\/accounts\/([^/]+)\/events$/);
   if (accountEventsMatch && method === 'GET') {
     return handleGetAccountEvents(accountEventsMatch[1], env, url);
+  }
+
+  // POST /holds - Create hold
+  if (path === '/holds' && method === 'POST') {
+    return handleCreateHold(request, env);
+  }
+
+  // POST /holds/:id/release - Release hold
+  const releaseHoldMatch = path.match(/^\/holds\/([^/]+)\/release$/);
+  if (releaseHoldMatch && method === 'POST') {
+    return handleReleaseHold(releaseHoldMatch[1], request, env);
+  }
+
+  // GET /holds/:id - Get hold by ID
+  const holdByIdMatch = path.match(/^\/holds\/([^/]+)$/);
+  if (holdByIdMatch && method === 'GET') {
+    return handleGetHold(holdByIdMatch[1], env);
+  }
+
+  // GET /accounts/:accountId/holds - Get active holds for an account
+  const accountHoldsMatch = path.match(/^\/accounts\/([^/]+)\/holds$/);
+  if (accountHoldsMatch && method === 'GET') {
+    return handleGetAccountHolds(accountHoldsMatch[1], env);
   }
 
   // 404 for unknown routes

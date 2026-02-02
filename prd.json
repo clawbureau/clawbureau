@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented holds with create/release API, balance validation, and D1 migration"
     },
     {
       "id": "CLD-US-004",

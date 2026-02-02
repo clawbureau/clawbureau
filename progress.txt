@@ -65,3 +65,35 @@ Started: 2026-02-02T03:08:26.936251
   - Unused parameters should be prefixed with underscore (e.g., _startEventId) for ESLint
   - Event buckets default to 'available' if not specified
 ---
+
+## 2026-02-02T05:00:00Z - CLD-US-003
+- What was implemented:
+  - Hold/Release functionality for escrow operations
+  - HoldService and HoldRepository for business logic and database operations
+  - Hold creation: moves funds from available to held bucket
+  - Release modes: 'cancel' (return to available) or 'complete' (transfer to target)
+  - Balance validation with InsufficientFundsError for negative balance prevention
+  - AccountRepository extended with balance update methods:
+    - createHold(): available → held
+    - releaseHoldToAvailable(): held → available (cancel)
+    - completeHold(): remove from held (for transfers)
+    - creditAvailable(): add to available (receive transfers)
+  - API endpoints:
+    - POST /holds - Create new hold (idempotent)
+    - GET /holds/:id - Get hold by ID
+    - POST /holds/:id/release - Release or cancel hold
+    - GET /accounts/:accountId/holds - Get active holds for account
+  - D1 migration for holds table with status tracking
+- Files changed:
+  - services/ledger/src/types.ts (updated - added hold types)
+  - services/ledger/src/accounts.ts (updated - added balance methods)
+  - services/ledger/src/holds.ts (new)
+  - services/ledger/src/index.ts (updated - added hold routes)
+  - services/ledger/migrations/0003_create_holds.sql (new)
+- **Learnings for future iterations:**
+  - Hold status is tracked separately from events (active/released/cancelled)
+  - Release operations require their own idempotency keys
+  - Complete release requires toAccountId for fund destination
+  - InsufficientFundsError provides detailed context for balance failures
+  - Optimistic concurrency via version column prevents race conditions
+---

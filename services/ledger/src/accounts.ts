@@ -116,6 +116,23 @@ export function isValidDid(did: string): boolean {
 }
 
 /**
+ * Error thrown when an operation would result in a negative balance
+ */
+export class InsufficientFundsError extends Error {
+  constructor(
+    public accountId: string,
+    public bucket: string,
+    public requested: bigint,
+    public available: bigint
+  ) {
+    super(
+      `Insufficient funds in ${bucket} bucket for account ${accountId}: requested ${requested}, available ${available}`
+    );
+    this.name = 'InsufficientFundsError';
+  }
+}
+
+/**
  * Account repository for database operations
  */
 export class AccountRepository {
@@ -218,6 +235,198 @@ export class AccountRepository {
       return existing;
     }
     return this.create({ did });
+  }
+
+  /**
+   * Create a hold: move funds from available to held bucket
+   * Validates sufficient funds before the operation
+   */
+  async createHold(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.available < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'available',
+        amount,
+        account.balances.available
+      );
+    }
+
+    const newAvailable = account.balances.available - amount;
+    const newHeld = account.balances.held + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_available = ?, balance_held = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newAvailable.toString(),
+        newHeld.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        available: newAvailable,
+        held: newHeld,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Release a hold: move funds from held back to available (cancel)
+   * Validates sufficient held funds before the operation
+   */
+  async releaseHoldToAvailable(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.held < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'held',
+        amount,
+        account.balances.held
+      );
+    }
+
+    const newHeld = account.balances.held - amount;
+    const newAvailable = account.balances.available + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_available = ?, balance_held = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newAvailable.toString(),
+        newHeld.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        available: newAvailable,
+        held: newHeld,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Complete a hold: remove funds from held bucket (for transfer to another account)
+   * Validates sufficient held funds before the operation
+   */
+  async completeHold(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.held < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'held',
+        amount,
+        account.balances.held
+      );
+    }
+
+    const newHeld = account.balances.held - amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_held = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newHeld.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        held: newHeld,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Credit an account's available balance (for receiving transfers)
+   */
+  async creditAvailable(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    const newAvailable = account.balances.available + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_available = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newAvailable.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        available: newAvailable,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
   }
 }
 

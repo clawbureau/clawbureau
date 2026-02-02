@@ -139,6 +139,60 @@ export interface CreateEventRequest {
 }
 
 /**
+ * Hold creation request
+ */
+export interface CreateHoldRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+
+  /** Account DID or ID to create hold on */
+  accountId: AccountId;
+
+  /** Amount to hold */
+  amount: string;
+
+  /** Optional metadata (e.g., escrow ID, reason) */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Hold response for API
+ */
+export interface HoldResponse {
+  /** Hold ID (same as event ID) */
+  id: EventId;
+  idempotencyKey: IdempotencyKey;
+  accountId: AccountId;
+  amount: string;
+  status: 'active' | 'released' | 'cancelled';
+  createdAt: Timestamp;
+  releasedAt?: Timestamp;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Release type for hold operations
+ */
+export type ReleaseType = 'complete' | 'cancel';
+
+/**
+ * Release hold request
+ */
+export interface ReleaseHoldRequest {
+  /** Client-provided idempotency key for the release operation */
+  idempotencyKey: IdempotencyKey;
+
+  /** How to release: 'complete' transfers funds, 'cancel' returns to available */
+  releaseType: ReleaseType;
+
+  /** Target account for 'complete' (where funds go) */
+  toAccountId?: AccountId;
+
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * Event response for API
  */
 export interface EventResponse {
