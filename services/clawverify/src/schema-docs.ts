@@ -836,3 +836,83 @@ export function getSchemaById(schemaId: string): SchemaDetailResponse {
 export function getSchemaIds(): string[] {
   return SCHEMA_DEFINITIONS.map((s) => s.id);
 }
+
+/**
+ * Schema allowlist response with examples
+ * CVF-US-009: Schema registry allowlist
+ */
+export interface SchemaAllowlistResponse {
+  /** API version */
+  version: string;
+  /** When the allowlist was last updated */
+  updated_at: string;
+  /** Total number of allowlisted schemas */
+  total_schemas: number;
+  /** Allowlisted schema entries with examples */
+  schemas: SchemaAllowlistWithExample[];
+  /** Fail-closed validation rules */
+  validation_rules: string[];
+}
+
+/**
+ * Schema allowlist entry with example payload
+ */
+export interface SchemaAllowlistWithExample {
+  /** Schema identifier */
+  schema_id: string;
+  /** Human-readable name */
+  name: string;
+  /** Schema description */
+  description: string;
+  /** Current active version */
+  current_version: string;
+  /** All supported versions */
+  supported_versions: string[];
+  /** Schema status */
+  status: 'active' | 'deprecated';
+  /** Example payload for this schema */
+  example: unknown;
+  /** Fail-closed rules specific to this schema */
+  fail_closed_rules: string[];
+}
+
+/**
+ * Get the schema allowlist with examples for each schema
+ * This is the authoritative list for deterministic validation
+ */
+export function getSchemaAllowlist(): SchemaAllowlistResponse {
+  const schemasWithExamples: SchemaAllowlistWithExample[] = SCHEMA_DEFINITIONS.map((schema) => ({
+    schema_id: schema.id,
+    name: schema.name,
+    description: schema.description,
+    current_version: schema.version,
+    supported_versions: [schema.version], // Currently only version 1 is supported
+    status: schema.status,
+    example: schema.example,
+    fail_closed_rules: schema.failClosedRules,
+  }));
+
+  return {
+    version: '1',
+    updated_at: '2026-02-02T00:00:00Z',
+    total_schemas: schemasWithExamples.length,
+    schemas: schemasWithExamples,
+    validation_rules: [
+      'Unknown schema_id: REJECTED (code: UNKNOWN_SCHEMA_ID)',
+      'Unknown schema version: REJECTED (code: UNKNOWN_SCHEMA_VERSION)',
+      'Deprecated schema: ACCEPTED with warning (code: DEPRECATED_SCHEMA)',
+      'Missing required envelope fields: REJECTED (code: MISSING_REQUIRED_FIELD)',
+      'Invalid payload structure: REJECTED (code: MALFORMED_ENVELOPE)',
+    ],
+  };
+}
+
+/**
+ * Get example payload for a specific schema ID
+ * @param schemaId - The schema ID to get example for
+ * @returns Example payload or undefined if not found
+ */
+export function getSchemaExample(schemaId: string): unknown | undefined {
+  const schema = SCHEMA_DEFINITIONS.find((s) => s.id === schemaId);
+  return schema?.example;
+}

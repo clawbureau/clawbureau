@@ -17,7 +17,8 @@ import {
   initAuditLogSchema,
   type AuditLogDB,
 } from './audit-log';
-import { getSchemaRegistry, getSchemaById } from './schema-docs';
+import { getSchemaRegistry, getSchemaById, getSchemaAllowlist, getSchemaExample } from './schema-docs';
+import { validateSchemaAllowlist, getAllowlistedSchemaIds } from './schema-registry';
 import type {
   VerifyArtifactResponse,
   VerifyMessageResponse,
@@ -440,6 +441,90 @@ function handleGetSchemaById(schemaId: string): Response {
 }
 
 /**
+ * Handle GET /v1/schemas/allowlist - Get schema allowlist with examples
+ * CVF-US-009: Schema registry allowlist for deterministic validation
+ */
+function handleGetSchemaAllowlist(): Response {
+  const allowlist = getSchemaAllowlist();
+  return jsonResponse(allowlist, 200);
+}
+
+/**
+ * Handle GET /v1/schemas/:schema_id/example - Get example payload for a schema
+ */
+function handleGetSchemaExample(schemaId: string): Response {
+  // Validate schema ID against allowlist (fail-closed)
+  const validation = validateSchemaAllowlist(schemaId);
+  if (!validation.valid) {
+    return jsonResponse({
+      error: validation.error_message,
+      code: validation.error_code,
+      allowlisted_schemas: getAllowlistedSchemaIds(),
+    }, 404);
+  }
+
+  const example = getSchemaExample(schemaId);
+  if (!example) {
+    return errorResponse(`No example available for schema '${schemaId}'`, 404);
+  }
+
+  return jsonResponse({
+    schema_id: schemaId,
+    version: validation.version,
+    example: example,
+    deprecated: validation.error_code === 'DEPRECATED_SCHEMA',
+    deprecation_warning: validation.error_code === 'DEPRECATED_SCHEMA' ? validation.error_message : undefined,
+  }, 200);
+}
+
+/**
+ * Handle POST /v1/schemas/validate - Validate a schema ID against the allowlist
+ * CVF-US-009: Reject unknown IDs by default
+ */
+async function handleValidateSchema(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    return errorResponse('Request must be an object', 400);
+  }
+
+  const { schema_id, version } = body as { schema_id?: unknown; version?: unknown };
+
+  if (typeof schema_id !== 'string') {
+    return errorResponse('schema_id is required and must be a string', 400);
+  }
+
+  const validation = validateSchemaAllowlist(
+    schema_id,
+    typeof version === 'string' ? version : undefined
+  );
+
+  if (!validation.valid) {
+    return jsonResponse({
+      valid: false,
+      schema_id: schema_id,
+      version: version,
+      error: validation.error_message,
+      code: validation.error_code,
+      allowlisted_schemas: getAllowlistedSchemaIds(),
+    }, 422);
+  }
+
+  return jsonResponse({
+    valid: true,
+    schema_id: validation.schema_id,
+    version: validation.version,
+    deprecated: validation.error_code === 'DEPRECATED_SCHEMA',
+    deprecation_warning: validation.error_code === 'DEPRECATED_SCHEMA' ? validation.error_message : undefined,
+  }, 200);
+}
+
+/**
  * Handle health check
  */
 function handleHealth(): Response {
@@ -515,6 +600,22 @@ export default {
     // GET /v1/schemas - Get schema registry
     if (url.pathname === '/v1/schemas' && method === 'GET') {
       return handleGetSchemas();
+    }
+
+    // GET /v1/schemas/allowlist - Get schema allowlist with examples
+    if (url.pathname === '/v1/schemas/allowlist' && method === 'GET') {
+      return handleGetSchemaAllowlist();
+    }
+
+    // POST /v1/schemas/validate - Validate schema ID against allowlist
+    if (url.pathname === '/v1/schemas/validate' && method === 'POST') {
+      return handleValidateSchema(request);
+    }
+
+    // GET /v1/schemas/:schema_id/example - Get example payload for a schema
+    const schemaExampleMatch = url.pathname.match(/^\/v1\/schemas\/([^/]+)\/example$/);
+    if (schemaExampleMatch && method === 'GET') {
+      return handleGetSchemaExample(schemaExampleMatch[1]);
     }
 
     // GET /v1/schemas/:schema_id - Get individual schema details
