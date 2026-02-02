@@ -182,8 +182,8 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "PoH tier gating is implemented end-to-end: PostBountyRequest supports min_poh_tier (default 0) and persists it on Bounty; acceptBounty enforces eligibility by calling clawtrust eligibilityService with required_poh_tier; searchBounties exposes trust_requirements.min_poh_tier in BountyListing." 
     },
     {
       "id": "CBT-US-014",

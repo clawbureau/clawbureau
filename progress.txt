@@ -233,3 +233,16 @@ Started: 2026-02-02T03:08:26.937005
 - Quality checks
   - cd packages/bounties && npm run typecheck
 ---
+
+## 2026-02-02T05:52:55Z - CBT-US-013
+- What was implemented
+  - PoH tier gating (trust requirements) is now marked complete:
+    - Requesters can set `min_poh_tier` on PostBountyRequest (default 0)
+    - Acceptance enforces PoH tier via clawtrust eligibilityService (`required_poh_tier`)
+    - Search listings expose `trust_requirements.min_poh_tier`
+- Files changed
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd packages/bounties && npm run typecheck
+---
