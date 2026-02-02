@@ -5,6 +5,7 @@
 
 import { AccountService, isValidDid } from './accounts';
 import { ReserveAttestationService } from './attestation';
+import { ReserveAssetService } from './reserve-assets';
 import { ClearingService } from './clearing';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
@@ -25,6 +26,7 @@ import type {
   PromoBurnRequest,
   PromoMintRequest,
   ReleaseHoldRequest,
+  ReserveAssetUpsertRequest,
   SettlementRequest,
   StakeLockRequest,
   StakeSlashRequest,
@@ -535,6 +537,61 @@ async function handleReserveAttestation(env: Env): Promise<Response> {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse(message, 'ATTESTATION_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /reserve/assets - Upsert a reserve asset (operator endpoint)
+ */
+async function handleUpsertReserveAsset(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<ReserveAssetUpsertRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.provider) {
+    return errorResponse('Missing required field: provider', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.asset_type) {
+    return errorResponse('Missing required field: asset_type', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.currency) {
+    return errorResponse('Missing required field: currency', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.amount) {
+    return errorResponse('Missing required field: amount', 'INVALID_REQUEST', 400);
+  }
+
+  const service = new ReserveAssetService(env);
+
+  try {
+    const response = await service.upsertAsset(body);
+    return jsonResponse(response, 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'RESERVE_ASSET_UPSERT_FAILED', 400);
+  }
+}
+
+/**
+ * Handle GET /reserve/assets - List reserve assets
+ */
+async function handleListReserveAssets(env: Env): Promise<Response> {
+  const service = new ReserveAssetService(env);
+
+  try {
+    const response = await service.listAssets();
+    return jsonResponse(response, 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'RESERVE_ASSET_LIST_FAILED', 500);
   }
 }
 
@@ -1502,6 +1559,16 @@ async function router(
   const reportByIdMatch = path.match(/^\/reconciliation\/reports\/([^/]+)$/);
   if (reportByIdMatch && method === 'GET') {
     return handleGetReconciliationReport(reportByIdMatch[1], env);
+  }
+
+  // GET /reserve/assets - List reserve assets
+  if (path === '/reserve/assets' && method === 'GET') {
+    return handleListReserveAssets(env);
+  }
+
+  // POST /reserve/assets - Upsert reserve asset
+  if (path === '/reserve/assets' && method === 'POST') {
+    return handleUpsertReserveAsset(request, env);
   }
 
   // GET /attestation/reserve - Generate reserve attestation (public endpoint)

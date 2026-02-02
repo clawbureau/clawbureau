@@ -338,6 +338,60 @@ export interface ReconciliationAlert {
 /**
  * Reserve attestation - signed proof of reserve coverage
  */
+export interface ReserveAsset {
+  /** Unique asset ID */
+  asset_id: string;
+  /** Provider name (e.g., gemini, fal, stripe) */
+  provider: string;
+  /** Asset type (e.g., credit_balance, cash, usdc) */
+  asset_type: string;
+  /** Currency/denomination (e.g., USD, USDC, CREDITS) */
+  currency: string;
+  /** Amount as bigint string */
+  amount: string;
+  /** Haircut in basis points (0-10000). eligible_amount = amount * haircut_bps / 10000 */
+  haircut_bps: number;
+  /** Whether this asset is eligible for coverage calculations */
+  eligible: boolean;
+  /** Timestamp for when this asset snapshot was taken */
+  as_of: Timestamp;
+  /** Record created timestamp */
+  created_at: Timestamp;
+  /** Record updated timestamp */
+  updated_at: Timestamp;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReserveAssetBreakdown extends ReserveAsset {
+  /** Amount after haircut (0 if ineligible) */
+  eligible_amount: string;
+}
+
+export interface ReserveAssetUpsertRequest {
+  asset_id?: string;
+  provider: string;
+  asset_type: string;
+  currency: string;
+  amount: string;
+  haircut_bps?: number;
+  eligible?: boolean;
+  as_of?: Timestamp;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReserveAssetUpsertResponse {
+  asset: ReserveAsset;
+}
+
+export interface ReserveAssetsListResponse {
+  assets: ReserveAsset[];
+  total: number;
+}
+
+/**
+ * Reserve attestation - signed proof of reserve coverage
+ */
 export interface ReserveAttestation {
   /** Unique attestation ID */
   id: string;
@@ -353,9 +407,19 @@ export interface ReserveAttestation {
     feePool: string;
     promo: string;
   };
-  /** Total reserves backing the liabilities */
+
+  /** Total reserves eligible for coverage (after haircuts) */
   totalReserves: string;
-  /** Coverage ratio (reserves / outstanding) as decimal string */
+  /** Sum of reserve asset amounts (all assets, regardless of eligibility) */
+  totalReservesReported: string;
+  /** Sum of amounts for eligible assets (before haircut) */
+  totalReservesEligibleGross: string;
+  /** Hash of reserve assets included in this attestation */
+  reserveAssetsHash: string;
+  /** Reserve asset breakdown (signed via reserveAssetsHash) */
+  reserveAssets: ReserveAssetBreakdown[];
+
+  /** Coverage ratio (eligible reserves / outstanding) as decimal string */
   coverageRatio: string;
   /** Whether coverage meets minimum threshold (>= 1.0) */
   isFullyBacked: boolean;

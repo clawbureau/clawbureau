@@ -7,6 +7,7 @@ import type {
   Env,
   ReserveAttestation,
   ReserveAttestationResponse,
+  ReserveAssetBreakdown,
   Timestamp,
 } from './types';
 
@@ -30,6 +31,36 @@ async function computeHash(data: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function formatRatio(numerator: bigint, denominator: bigint, decimals = 4): string {
+  if (denominator === 0n) {
+    return numerator === 0n ? '1.0' : 'Infinity';
+  }
+
+  const scale = 10n ** BigInt(decimals);
+  const scaled = (numerator * scale) / denominator;
+  const s = scaled.toString();
+
+  if (decimals === 0) return s;
+  if (s.length <= decimals) {
+    return `0.${s.padStart(decimals, '0')}`;
+  }
+
+  return `${s.slice(0, -decimals)}.${s.slice(-decimals)}`;
+}
+
+function parseMetadata(metadataJson: string | null): Record<string, unknown> | undefined {
+  if (!metadataJson) return undefined;
+  try {
+    const parsed = JSON.parse(metadataJson) as unknown;
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as Record<string, unknown>;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Account balance summary for attestation calculation
  */
@@ -41,6 +72,20 @@ interface AccountBalanceSummary {
   feePool: bigint;
   promo: bigint;
   total: bigint;
+}
+
+interface ReserveAssetRow {
+  asset_id: string;
+  provider: string;
+  asset_type: string;
+  currency: string;
+  amount: bigint;
+  haircut_bps: number;
+  eligible: boolean;
+  as_of: Timestamp;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -82,6 +127,38 @@ class AttestationRepository {
   }
 
   /**
+   * Get reserve assets from the registry
+   */
+  async getReserveAssets(): Promise<ReserveAssetRow[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT asset_id, provider, asset_type, currency, amount,
+                haircut_bps, eligible, as_of, metadata_json,
+                created_at, updated_at
+         FROM reserve_assets
+         ORDER BY provider ASC, asset_id ASC`
+      )
+      .all();
+
+    return (result.results || []).map((row) => {
+      const r = row as Record<string, unknown>;
+      return {
+        asset_id: r.asset_id as string,
+        provider: r.provider as string,
+        asset_type: r.asset_type as string,
+        currency: r.currency as string,
+        amount: BigInt((r.amount as string) || '0'),
+        haircut_bps: Number(r.haircut_bps ?? 10000),
+        eligible: (r.eligible as number) === 1,
+        as_of: r.as_of as Timestamp,
+        created_at: r.created_at as Timestamp,
+        updated_at: r.updated_at as Timestamp,
+        metadata: parseMetadata((r.metadata_json as string | null) ?? null),
+      };
+    });
+  }
+
+  /**
    * Get the latest event hash
    */
   async getLatestEventHash(): Promise<string> {
@@ -96,32 +173,6 @@ class AttestationRepository {
     }
 
     return result.event_hash as string;
-  }
-
-  /**
-   * Get total minted minus burned for reserve calculation
-   * This represents the theoretical reserve requirement
-   */
-  async computeNetMinted(): Promise<bigint> {
-    // Sum of all mint events
-    const mintResult = await this.db
-      .prepare(
-        `SELECT COALESCE(SUM(CAST(amount AS INTEGER)), 0) as total
-         FROM events WHERE event_type = 'mint'`
-      )
-      .first();
-    const totalMinted = BigInt((mintResult?.total as number) || 0);
-
-    // Sum of all burn events
-    const burnResult = await this.db
-      .prepare(
-        `SELECT COALESCE(SUM(CAST(amount AS INTEGER)), 0) as total
-         FROM events WHERE event_type = 'burn'`
-      )
-      .first();
-    const totalBurned = BigInt((burnResult?.total as number) || 0);
-
-    return totalMinted - totalBurned;
   }
 }
 
@@ -166,23 +217,51 @@ export class ReserveAttestationService {
     const totalOutstanding =
       totals.available + totals.held + totals.bonded + totals.feePool + totals.promo;
 
-    // Get total reserves (net minted = theoretical reserve backing)
-    const totalReserves = await this.repository.computeNetMinted();
+    // Reserves are computed from the reserve asset registry (eligible assets only, after haircuts)
+    const reserveAssets = await this.repository.getReserveAssets();
 
-    // Compute coverage ratio (handle division by zero)
-    let coverageRatio: string;
-    let isFullyBacked: boolean;
+    let totalReservesReported = 0n;
+    let totalReservesEligibleGross = 0n;
+    let totalReservesEligible = 0n;
 
-    if (totalOutstanding === 0n) {
-      coverageRatio = totalReserves === 0n ? '1.0' : 'Infinity';
-      isFullyBacked = true;
-    } else {
-      // Compute ratio with 4 decimal precision
-      // ratio = reserves / outstanding
-      const scaledRatio = (totalReserves * 10000n) / totalOutstanding;
-      coverageRatio = (Number(scaledRatio) / 10000).toFixed(4);
-      isFullyBacked = totalReserves >= totalOutstanding;
-    }
+    const reserveBreakdown: ReserveAssetBreakdown[] = reserveAssets.map((a) => {
+      totalReservesReported += a.amount;
+
+      let eligibleAmount = 0n;
+      if (a.eligible) {
+        totalReservesEligibleGross += a.amount;
+        eligibleAmount = (a.amount * BigInt(a.haircut_bps)) / 10000n;
+        totalReservesEligible += eligibleAmount;
+      }
+
+      return {
+        asset_id: a.asset_id,
+        provider: a.provider,
+        asset_type: a.asset_type,
+        currency: a.currency,
+        amount: a.amount.toString(),
+        haircut_bps: a.haircut_bps,
+        eligible: a.eligible,
+        as_of: a.as_of,
+        created_at: a.created_at,
+        updated_at: a.updated_at,
+        metadata: a.metadata,
+        eligible_amount: eligibleAmount.toString(),
+      };
+    });
+
+    // Hash reserve assets for signing
+    const reserveAssetData = reserveBreakdown
+      .map(
+        (a) =>
+          `${a.asset_id}:${a.provider}:${a.asset_type}:${a.currency}:${a.amount}:${a.haircut_bps}:${a.eligible ? 1 : 0}:${a.as_of}`
+      )
+      .join('|');
+    const reserveAssetsHash = await computeHash(reserveAssetData);
+
+    // Compute coverage ratio using eligible reserves only (after haircut)
+    const coverageRatio = formatRatio(totalReservesEligible, totalOutstanding, 4);
+    const isFullyBacked = totalReservesEligible >= totalOutstanding;
 
     // Compute hash of all account balances for verification
     const balanceData = accounts
@@ -201,7 +280,10 @@ export class ReserveAttestationService {
       attestationId,
       now,
       totalOutstanding.toString(),
-      totalReserves.toString(),
+      totalReservesEligible.toString(),
+      totalReservesReported.toString(),
+      totalReservesEligibleGross.toString(),
+      reserveAssetsHash,
       coverageRatio,
       accounts.length.toString(),
       balanceHash,
@@ -223,13 +305,17 @@ export class ReserveAttestationService {
         feePool: totals.feePool.toString(),
         promo: totals.promo.toString(),
       },
-      totalReserves: totalReserves.toString(),
+      totalReserves: totalReservesEligible.toString(),
+      totalReservesReported: totalReservesReported.toString(),
+      totalReservesEligibleGross: totalReservesEligibleGross.toString(),
+      reserveAssetsHash,
+      reserveAssets: reserveBreakdown,
       coverageRatio,
       isFullyBacked,
       accountCount: accounts.length,
       balanceHash,
       signature,
-      version: '1.0.0',
+      version: '1.1.0',
     };
 
     // Create human-readable summary
@@ -246,14 +332,18 @@ export class ReserveAttestationService {
    * Format a human-readable summary of the attestation
    */
   private formatSummary(attestation: ReserveAttestation): string {
-    const status = attestation.isFullyBacked ? 'FULLY BACKED' : 'UNDERCOLLATERALIZED';
+    const status = attestation.isFullyBacked
+      ? 'FULLY BACKED'
+      : 'UNDERCOLLATERALIZED';
     return (
       `Reserve Attestation ${attestation.id}\n` +
       `Generated: ${attestation.timestamp}\n` +
       `Status: ${status}\n` +
       `Coverage Ratio: ${attestation.coverageRatio}\n` +
       `Total Outstanding: ${attestation.totalOutstanding}\n` +
-      `Total Reserves: ${attestation.totalReserves}\n` +
+      `Eligible Reserves (after haircut): ${attestation.totalReserves}\n` +
+      `Reported Reserves (gross): ${attestation.totalReservesReported}\n` +
+      `Reserve Assets: ${attestation.reserveAssets.length}\n` +
       `Accounts: ${attestation.accountCount}`
     );
   }
@@ -261,20 +351,24 @@ export class ReserveAttestationService {
   /**
    * Verify an attestation signature
    */
-  async verifyAttestation(attestation: ReserveAttestation, latestEventHash: string): Promise<boolean> {
-    // Reconstruct attestation data
+  async verifyAttestation(
+    attestation: ReserveAttestation,
+    latestEventHash: string
+  ): Promise<boolean> {
     const attestationData = [
       attestation.id,
       attestation.timestamp,
       attestation.totalOutstanding,
       attestation.totalReserves,
+      attestation.totalReservesReported,
+      attestation.totalReservesEligibleGross,
+      attestation.reserveAssetsHash,
       attestation.coverageRatio,
       attestation.accountCount.toString(),
       attestation.balanceHash,
       latestEventHash,
     ].join('|');
 
-    // Verify signature
     const expectedSignature = await computeHash(`sign:${attestationData}`);
     return attestation.signature === expectedSignature;
   }

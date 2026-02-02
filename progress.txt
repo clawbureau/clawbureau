@@ -12,6 +12,7 @@
 - For webhooks/alerts, use optional env vars (e.g., ALERT_WEBHOOK_URL) with conditional sending
 - User accounts use 'acc_' prefix, clearing accounts use 'clr_' prefix
 - Metadata types should use Record<string, unknown> for EventRepository.create() compatibility
+- Reserve assets live in D1 table `reserve_assets` with bigint `amount` as TEXT, `haircut_bps` (0-10000), and `eligible` flag; attestations sign `reserveAssetsHash`
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936251
@@ -268,4 +269,27 @@ Started: 2026-02-02T03:08:26.936251
   - batchId is mandatory for all settlements to enable netting reconciliation
   - Use Record<string, unknown> for metadata types to satisfy EventRepository.create() signature
   - Clearing deposits/withdrawals track both user and clearing account IDs in event metadata
+---
+
+## 2026-02-02T04:46:26Z - CLD-US-010
+- What was implemented
+  - Added reserve asset registry table (D1 migration) storing external reserve assets with haircut factors and eligibility flag
+  - Added reserve asset API:
+    - GET /reserve/assets
+    - POST /reserve/assets (upsert)
+  - Updated reserve attestation computation to:
+    - Compute eligible reserves from reserve_assets (after haircut_bps)
+    - Compute coverage ratio using eligible reserves only
+    - Include reserve asset breakdown in attestation and sign it via reserveAssetsHash
+- Files changed
+  - services/ledger/migrations/0006_create_reserve_assets.sql
+  - services/ledger/src/reserve-assets.ts
+  - services/ledger/src/attestation.ts
+  - services/ledger/src/index.ts
+  - services/ledger/src/types.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Avoid Number() conversions for big-int ratios; format fixed-point ratios using BigInt string slicing
+  - When signing large structures, sign a deterministic hash of the normalized breakdown (reserveAssetsHash) rather than embedding raw JSON in the signature payload
 ---
