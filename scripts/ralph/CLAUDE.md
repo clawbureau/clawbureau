@@ -14,7 +14,7 @@ You are an autonomous coding agent working on a software project.
 8. If checks pass, commit ALL changes with **signed commit** message: `feat: [Story ID] - [Story Title]`
    - Use `git commit -S` or ensure `commit.gpgsign=true` is set
 9. Generate a DID-signed commit proof for the PR proof bundle:
-   - `openclaw did-work sign-message "commit:$(git rev-parse HEAD)" > proofs/<pr-id>/commit.sig.json`
+   - `node ./scripts/did-work/sign-message.mjs "commit:$(git rev-parse HEAD)" > proofs/<pr-id>/commit.sig.json`
 10. Update the PRD to set `passes: true` for the completed story
 11. Append your progress to `progress.txt`
 
