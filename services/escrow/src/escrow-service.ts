@@ -18,9 +18,12 @@ import type {
   EscrowStore,
   LedgerClient,
   LedgerClientV2,
+  LedgerClientV3,
   Milestone,
   ReleaseEscrowRequest,
   ReleaseEscrowResult,
+  ReleaseMilestoneRequest,
+  ReleaseMilestoneResult,
   TrialsClient,
   WebhookEmitter,
   WebhookEvent,
@@ -28,7 +31,7 @@ import type {
 
 export interface EscrowServiceConfig {
   store: EscrowStore;
-  ledger: LedgerClient | LedgerClientV2;
+  ledger: LedgerClient | LedgerClientV2 | LedgerClientV3;
   webhookEmitter?: WebhookEmitter;
   disputeStore?: DisputeStore;
   trialsClient?: TrialsClient;
@@ -36,7 +39,7 @@ export interface EscrowServiceConfig {
 
 export class EscrowService {
   private readonly store: EscrowStore;
-  private readonly ledger: LedgerClient | LedgerClientV2;
+  private readonly ledger: LedgerClient | LedgerClientV2 | LedgerClientV3;
   private readonly webhookEmitter?: WebhookEmitter;
   private readonly disputeStore?: DisputeStore;
   private readonly trialsClient?: TrialsClient;
@@ -254,6 +257,205 @@ export class EscrowService {
       transfer_event_id: transferResult.transfer_event_id!,
       amount_released: escrow.amount,
       webhook_sent: webhookSent,
+    };
+  }
+
+  /**
+   * CES-US-004: Release milestone
+   *
+   * Releases funds for a specific milestone to the agent.
+   * Supports partial releases and tracks remaining balance.
+   *
+   * Acceptance Criteria:
+   * - Define milestones (done in createEscrow)
+   * - Partial releases
+   * - Track remaining
+   */
+  async releaseMilestone(request: ReleaseMilestoneRequest): Promise<ReleaseMilestoneResult> {
+    // Validate escrow exists
+    const escrow = await this.store.get(request.escrow_id);
+    if (!escrow) {
+      throw new EscrowError('ESCROW_NOT_FOUND', `Escrow ${request.escrow_id} not found`);
+    }
+
+    // Only requester can release funds
+    if (request.authorized_by_did !== escrow.requester_did) {
+      throw new EscrowError(
+        'UNAUTHORIZED',
+        'Only the requester can release milestone funds'
+      );
+    }
+
+    // Only held escrows can have milestones released
+    if (escrow.status !== 'held') {
+      throw new EscrowError(
+        'INVALID_STATUS',
+        `Cannot release milestone for escrow in status '${escrow.status}'. Must be 'held'.`
+      );
+    }
+
+    // Escrow must have milestones defined
+    if (!escrow.milestones || escrow.milestones.length === 0) {
+      throw new EscrowError(
+        'NO_MILESTONES',
+        'Escrow does not have milestones defined'
+      );
+    }
+
+    // Find the milestone
+    const milestoneIndex = escrow.milestones.findIndex(
+      (m) => m.milestone_id === request.milestone_id
+    );
+    if (milestoneIndex === -1) {
+      throw new EscrowError(
+        'MILESTONE_NOT_FOUND',
+        `Milestone ${request.milestone_id} not found in escrow ${request.escrow_id}`
+      );
+    }
+
+    const milestone = escrow.milestones[milestoneIndex];
+
+    // Milestone must be pending
+    if (milestone.status !== 'pending') {
+      throw new EscrowError(
+        'MILESTONE_INVALID_STATUS',
+        `Milestone ${request.milestone_id} is already '${milestone.status}'`
+      );
+    }
+
+    // Check ledger supports partial release
+    if (!this.isLedgerV3(this.ledger)) {
+      throw new EscrowError(
+        'LEDGER_UNSUPPORTED',
+        'Ledger client does not support partial release operations (milestone payouts)'
+      );
+    }
+
+    const now = new Date().toISOString();
+    const idempotency_key = `escrow_milestone_release_${escrow.escrow_id}_${milestone.milestone_id}`;
+
+    // Release partial hold and transfer to agent
+    const transferResult = await this.ledger.releasePartialHoldAndTransfer({
+      from_account_did: escrow.requester_did,
+      to_account_did: escrow.agent_did,
+      amount: milestone.amount,
+      currency: escrow.currency,
+      reference_id: milestone.milestone_id,
+      reference_type: 'escrow_milestone_release',
+      original_hold_reference_id: escrow.escrow_id,
+      idempotency_key,
+    });
+
+    if (!transferResult.success) {
+      throw new EscrowError(
+        'TRANSFER_FAILED',
+        transferResult.error ?? 'Failed to transfer milestone funds to agent'
+      );
+    }
+
+    // Update milestone status
+    const updatedMilestones: Milestone[] = escrow.milestones.map((m, idx) =>
+      idx === milestoneIndex
+        ? { ...m, status: 'released' as const, released_at: now }
+        : m
+    );
+
+    // Calculate remaining
+    const releasedMilestones = updatedMilestones.filter((m) => m.status === 'released');
+    const pendingMilestones = updatedMilestones.filter((m) => m.status === 'pending');
+    const releasedAmount = releasedMilestones.reduce((sum, m) => sum + m.amount, 0);
+    const remainingAmount = escrow.amount - releasedAmount;
+    const allMilestonesReleased = pendingMilestones.length === 0;
+
+    // Update escrow (set to released if all milestones done)
+    const updatedEscrow: Escrow = {
+      ...escrow,
+      milestones: updatedMilestones,
+      status: allMilestonesReleased ? 'released' : 'held',
+      updated_at: now,
+      released_at: allMilestonesReleased ? now : escrow.released_at,
+    };
+
+    await this.store.save(updatedEscrow);
+
+    // Emit webhook
+    let webhookSent = false;
+    if (this.webhookEmitter) {
+      const webhookEvent: WebhookEvent = {
+        event_id: `evt_${uuidv4()}`,
+        event_type: 'escrow.milestone_released',
+        escrow_id: escrow.escrow_id,
+        timestamp: now,
+        payload: {
+          escrow_id: escrow.escrow_id,
+          milestone_id: milestone.milestone_id,
+          requester_did: escrow.requester_did,
+          agent_did: escrow.agent_did,
+          amount_released: milestone.amount,
+          remaining_amount: remainingAmount,
+          remaining_milestones: pendingMilestones.length,
+          all_milestones_released: allMilestonesReleased,
+          currency: escrow.currency,
+          transfer_event_id: transferResult.transfer_event_id,
+          reason: request.reason,
+        },
+      };
+
+      const webhookResult = await this.webhookEmitter.emit(webhookEvent);
+      webhookSent = webhookResult.sent;
+    }
+
+    return {
+      escrow_id: escrow.escrow_id,
+      escrow: updatedEscrow,
+      milestone_id: milestone.milestone_id,
+      amount_released: milestone.amount,
+      transfer_event_id: transferResult.transfer_event_id!,
+      remaining_amount: remainingAmount,
+      remaining_milestones: pendingMilestones.length,
+      all_milestones_released: allMilestonesReleased,
+      webhook_sent: webhookSent,
+    };
+  }
+
+  /**
+   * Get milestones for an escrow with their current status and remaining balance
+   */
+  async getMilestoneStatus(escrow_id: string): Promise<{
+    milestones: Milestone[];
+    total_amount: number;
+    released_amount: number;
+    remaining_amount: number;
+    pending_milestones: number;
+    released_milestones: number;
+  } | null> {
+    const escrow = await this.store.get(escrow_id);
+    if (!escrow) {
+      return null;
+    }
+
+    if (!escrow.milestones || escrow.milestones.length === 0) {
+      return {
+        milestones: [],
+        total_amount: escrow.amount,
+        released_amount: 0,
+        remaining_amount: escrow.amount,
+        pending_milestones: 0,
+        released_milestones: 0,
+      };
+    }
+
+    const releasedMilestones = escrow.milestones.filter((m) => m.status === 'released');
+    const pendingMilestones = escrow.milestones.filter((m) => m.status === 'pending');
+    const releasedAmount = releasedMilestones.reduce((sum, m) => sum + m.amount, 0);
+
+    return {
+      milestones: escrow.milestones,
+      total_amount: escrow.amount,
+      released_amount: releasedAmount,
+      remaining_amount: escrow.amount - releasedAmount,
+      pending_milestones: pendingMilestones.length,
+      released_milestones: releasedMilestones.length,
     };
   }
 
@@ -533,8 +735,15 @@ export class EscrowService {
   /**
    * Type guard to check if ledger supports V2 operations
    */
-  private isLedgerV2(ledger: LedgerClient | LedgerClientV2): ledger is LedgerClientV2 {
+  private isLedgerV2(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3): ledger is LedgerClientV2 {
     return 'releaseHoldAndTransfer' in ledger;
+  }
+
+  /**
+   * Type guard to check if ledger supports V3 operations (partial releases)
+   */
+  private isLedgerV3(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3): ledger is LedgerClientV3 {
+    return 'releasePartialHoldAndTransfer' in ledger;
   }
 }
 

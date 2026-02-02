@@ -10,6 +10,7 @@
 - WebhookEmitter is optional - methods should handle gracefully when not provided
 - Dispute IDs use `dsp_` prefix
 - Optional dependencies (DisputeStore, TrialsClient) follow same pattern as WebhookEmitter - check for presence before using
+- Ledger client versioning: V1 (createHold), V2 (releaseHoldAndTransfer), V3 (releasePartialHoldAndTransfer for milestones)
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936628
@@ -60,4 +61,19 @@ Started: 2026-02-02T03:08:26.936628
   - TrialsClient is optional dependency for escalation - allows escrow service to work without trials service
   - Only parties to escrow (requester or agent) can initiate or escalate disputes
   - Dispute window check is done against `held_at` timestamp
+---
+
+## 2026-02-02 - CES-US-004
+- Implemented milestone payouts functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added ReleaseMilestoneRequest, ReleaseMilestoneResult, LedgerClientV3 (extends V2 with releasePartialHoldAndTransfer)
+  - `services/escrow/src/escrow-service.ts` - Added releaseMilestone() and getMilestoneStatus() methods; added isLedgerV3 type guard
+  - `services/escrow/src/index.ts` - Exported new milestone payout types
+- **Learnings for future iterations:**
+  - Milestone payouts use LedgerClientV3 interface for partial releases (releasePartialHoldAndTransfer)
+  - releaseMilestone() updates milestone status to 'released' and tracks released_at timestamp
+  - getMilestoneStatus() provides summary: total/released/remaining amounts and milestone counts
+  - When all milestones are released, escrow status automatically changes to 'released'
+  - Idempotency key pattern for milestones: `escrow_milestone_release_${escrow_id}_${milestone_id}`
+  - Webhook event type 'escrow.milestone_released' includes remaining_amount and remaining_milestones
 ---

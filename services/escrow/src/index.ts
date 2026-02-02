@@ -18,6 +18,7 @@ export type {
   ReleaseEscrowResult,
   LedgerClient,
   LedgerClientV2,
+  LedgerClientV3,
   LedgerHoldResult,
   LedgerTransferResult,
   EscrowStore,
@@ -36,4 +37,7 @@ export type {
   EscalateDisputeResult,
   TrialsClient,
   TrialsCaseResult,
+  // CES-US-004: Milestone payout types
+  ReleaseMilestoneRequest,
+  ReleaseMilestoneResult,
 } from './types.js';

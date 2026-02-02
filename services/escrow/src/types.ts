@@ -276,3 +276,51 @@ export interface DisputeStore {
   getDispute(dispute_id: string): Promise<Dispute | null>;
   getDisputeByEscrowId(escrow_id: string): Promise<Dispute | null>;
 }
+
+/**
+ * CES-US-004: Milestone payout types
+ */
+
+export interface ReleaseMilestoneRequest {
+  escrow_id: string;
+  milestone_id: string;
+  /** DID of the party authorizing the release (must be requester) */
+  authorized_by_did: string;
+  /** Optional reason/note for the milestone release */
+  reason?: string;
+}
+
+export interface ReleaseMilestoneResult {
+  escrow_id: string;
+  escrow: Escrow;
+  milestone_id: string;
+  amount_released: number;
+  transfer_event_id: string;
+  /** Total amount remaining in escrow */
+  remaining_amount: number;
+  /** Number of milestones still pending */
+  remaining_milestones: number;
+  /** Whether all milestones have been released */
+  all_milestones_released: boolean;
+  webhook_sent: boolean;
+}
+
+/**
+ * Extended ledger client interface with partial release capability
+ */
+export interface LedgerClientV3 extends LedgerClientV2 {
+  /**
+   * Release a partial hold and transfer funds to the recipient.
+   * Used for milestone-based releases.
+   */
+  releasePartialHoldAndTransfer(params: {
+    from_account_did: string;
+    to_account_did: string;
+    amount: number;
+    currency: string;
+    reference_id: string;
+    reference_type: 'escrow_milestone_release';
+    original_hold_reference_id: string;
+    idempotency_key: string;
+  }): Promise<LedgerTransferResult>;
+}
