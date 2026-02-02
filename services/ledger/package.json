@@ -1,0 +1,24 @@
+{
+  "name": "@clawbureau/ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Event-sourced ledger for balances, holds, and transfers",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "@eslint/js": "^8.56.0",
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^7.0.0",
+    "vitest": "^1.2.0",
+    "wrangler": "^3.24.0"
+  }
+}
