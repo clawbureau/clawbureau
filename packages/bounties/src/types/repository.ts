@@ -1,4 +1,4 @@
-import { Bounty, AcceptanceReceipt, Submission } from "./bounty.js";
+import { Bounty, AcceptanceReceipt, Submission, TestResult } from "./bounty.js";
 
 /**
  * Repository interface for bounty persistence
@@ -10,5 +10,7 @@ export interface BountyRepository {
   findAcceptanceByIdempotencyKey(key: string): Promise<AcceptanceReceipt | null>;
   saveAcceptance(receipt: AcceptanceReceipt): Promise<void>;
   findSubmissionByIdempotencyKey(key: string): Promise<Submission | null>;
+  findSubmissionById(submissionId: string): Promise<Submission | null>;
   saveSubmission(submission: Submission): Promise<void>;
+  saveTestResult(testResult: TestResult): Promise<void>;
 }

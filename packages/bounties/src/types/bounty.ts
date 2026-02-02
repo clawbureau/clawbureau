@@ -246,3 +246,65 @@ export const SubmitWorkResponseSchema = z.object({
 });
 
 export type SubmitWorkResponse = z.infer<typeof SubmitWorkResponseSchema>;
+
+/**
+ * Test result record stored after test-based auto-approval
+ */
+export const TestResultSchema = z.object({
+  schema_version: z.literal("1"),
+  test_result_id: z.string(),
+  submission_id: z.string(),
+  bounty_id: z.string(),
+  test_harness_id: z.string(),
+  /** Overall pass/fail status */
+  passed: z.boolean(),
+  /** Total number of tests */
+  total_tests: z.number().int().nonnegative(),
+  /** Number of passed tests */
+  passed_tests: z.number().int().nonnegative(),
+  /** Number of failed tests */
+  failed_tests: z.number().int().nonnegative(),
+  /** Total execution time in milliseconds */
+  execution_time_ms: z.number().nonnegative(),
+  /** ISO timestamp when tests completed */
+  completed_at: z.string().datetime(),
+  /** Error message if harness failed to run */
+  error: z.string().optional(),
+});
+
+export type TestResult = z.infer<typeof TestResultSchema>;
+
+/**
+ * Request payload for auto-approval based on test results
+ */
+export const AutoApproveRequestSchema = z.object({
+  submission_id: z.string(),
+});
+
+export type AutoApproveRequest = z.infer<typeof AutoApproveRequestSchema>;
+
+/**
+ * Response after auto-approval attempt
+ */
+export const AutoApproveResponseSchema = z.object({
+  schema_version: z.literal("1"),
+  submission_id: z.string(),
+  bounty_id: z.string(),
+  /** Resulting bounty status (approved or rejected) */
+  status: z.enum(["approved", "rejected"]),
+  /** Whether tests passed */
+  tests_passed: z.boolean(),
+  /** Test result summary */
+  test_result: z.object({
+    total_tests: z.number().int().nonnegative(),
+    passed_tests: z.number().int().nonnegative(),
+    failed_tests: z.number().int().nonnegative(),
+    execution_time_ms: z.number().nonnegative(),
+  }),
+  /** ISO timestamp when decision was made */
+  decided_at: z.string().datetime(),
+  /** Error message if test harness failed */
+  error: z.string().optional(),
+});
+
+export type AutoApproveResponse = z.infer<typeof AutoApproveResponseSchema>;
