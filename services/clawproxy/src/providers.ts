@@ -19,6 +19,13 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     authHeader: 'Authorization',
     contentType: 'application/json',
   },
+  google: {
+    // Base URL for Gemini API - model is appended as path parameter
+    // Full URL format: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+    authHeader: 'x-goog-api-key',
+    contentType: 'application/json',
+  },
 };
 
 /**
@@ -59,8 +66,26 @@ export function buildAuthHeader(
     return { [config.authHeader]: `Bearer ${apiKey}` };
   }
 
-  // Anthropic and others use direct API key
+  // Anthropic, Google, and others use direct API key
   return { [config.authHeader]: apiKey };
+}
+
+/**
+ * Build the full provider URL
+ * Most providers use a static URL, but Google Gemini requires model in the path
+ */
+export function buildProviderUrl(provider: Provider, model?: string): string {
+  const config = PROVIDERS[provider];
+
+  if (provider === 'google') {
+    if (!model) {
+      throw new Error('Model is required for Google Gemini API');
+    }
+    // Gemini URL format: {baseUrl}/{model}:generateContent
+    return `${config.baseUrl}/${model}:generateContent`;
+  }
+
+  return config.baseUrl;
 }
 
 /**

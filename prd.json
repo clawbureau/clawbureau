@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented structured security logging in logging.ts, blocked provider attempts logged with [SECURITY] prefix for observability"
     },
     {
       "id": "CPX-US-004",
@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added Google provider with Gemini API routing. Model required in URL path via buildProviderUrl(). Usage metadata passed through in response."
     },
     {
       "id": "CPX-US-005",

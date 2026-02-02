@@ -4,6 +4,7 @@
 - Package naming: @clawbureau/<service-name>
 - Receipt hashes use SHA-256 hex encoding
 - Types exported from `src/types.ts`, providers from `src/providers.ts`
+- Security events use structured logging via `src/logging.ts` with [SECURITY] prefix
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937763
@@ -45,4 +46,36 @@ Started: 2026-02-02T03:08:26.937763
   - Receipt signature covers JSON-serialized payload excluding signature field
   - Signing context is cached at module level after first request
   - Cache-Control: public, max-age=3600 set on /v1/did responses
+---
+
+## 2026-02-02 - CPX-US-003
+- Implemented structured security logging for blocked provider attempts
+- Added logging.ts with SecurityEvent types and logBlockedProvider function
+- Provider validation now logs BLOCKED_UNKNOWN_PROVIDER events with client IP, user agent, and attempted provider
+- Added getSupportedProviders() helper for dynamic error messages
+- Files created:
+  - services/clawproxy/src/logging.ts (security event logging)
+- Files modified:
+  - services/clawproxy/src/index.ts (integrated logging, improved error messages)
+  - services/clawproxy/src/providers.ts (added getSupportedProviders helper)
+- **Learnings for future iterations:**
+  - Security events use console.warn with [SECURITY] prefix for Cloudflare Workers observability
+  - Client IP available via CF-Connecting-IP header in Cloudflare Workers
+  - Structured JSON logging enables filtering/querying in observability tools
+  - Keep security logging functions separate in logging.ts for reuse
+---
+
+## 2026-02-02 - CPX-US-004
+- Added Google Gemini provider support to clawproxy
+- Implemented dynamic URL building for Gemini's model-in-path requirement
+- Added model validation for Google provider (required for URL construction)
+- Files modified:
+  - services/clawproxy/src/types.ts (added 'google' to Provider union type)
+  - services/clawproxy/src/providers.ts (added Google config, buildProviderUrl function)
+  - services/clawproxy/src/index.ts (integrated buildProviderUrl, added Google model validation)
+- **Learnings for future iterations:**
+  - Gemini API uses `x-goog-api-key` header for authentication (not Bearer token)
+  - Gemini URL format: `models/{model}:generateContent` - model is path param, not body-only
+  - Use buildProviderUrl() for all providers; returns static URL for most, dynamic for Google
+  - Gemini responses include `usageMetadata` field automatically passed through
 ---

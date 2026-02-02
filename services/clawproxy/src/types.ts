@@ -30,7 +30,7 @@ export interface DidResponse {
 /**
  * Supported LLM providers
  */
-export type Provider = 'anthropic' | 'openai';
+export type Provider = 'anthropic' | 'openai' | 'google';
 
 /**
  * Provider configuration for routing

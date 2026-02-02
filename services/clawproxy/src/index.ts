@@ -6,7 +6,7 @@
  */
 
 import type { Env, ErrorResponse, Provider, DidResponse } from './types';
-import { isValidProvider, getProviderConfig, buildAuthHeader, extractModel, getSupportedProviders } from './providers';
+import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, type SigningContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode } from './crypto';
 import { logBlockedProvider } from './logging';
@@ -180,10 +180,28 @@ async function handleProxy(
   // Extract model for receipt
   const model = extractModel(provider, parsedBody);
 
+  // Google Gemini requires model in the URL path
+  if (provider === 'google' && !model) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'Model field is required for Google Gemini API. Specify "model" in the request body.',
+      400
+    );
+  }
+
+  // Build provider-specific URL (Gemini needs model in path)
+  let providerUrl: string;
+  try {
+    providerUrl = buildProviderUrl(provider, model);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('INVALID_REQUEST', message, 400);
+  }
+
   // Forward request to provider
   let providerResponse: Response;
   try {
-    providerResponse = await fetch(config.baseUrl, {
+    providerResponse = await fetch(providerUrl, {
       method: 'POST',
       headers: {
         'Content-Type': config.contentType,
