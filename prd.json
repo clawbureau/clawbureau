@@ -213,8 +213,8 @@
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added a minimal public Cloudflare Worker at services/clawbounties with GET /, /docs, /skill.md (OpenClaw frontmatter metadata as single-line JSON object string), /robots.txt, /sitemap.xml, and /.well-known/security.txt."
     }
   ]
 }

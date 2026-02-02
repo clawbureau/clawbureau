@@ -266,3 +266,20 @@ Started: 2026-02-02T03:08:26.937005
 - Quality checks
   - cd packages/bounties && npm run typecheck
 ---
+
+## 2026-02-02T06:01:14Z - CBT-US-015
+- What was implemented
+  - Added a minimal public worker for clawbounties:
+    - GET / (HTML landing linking to /docs and /skill.md)
+    - GET /docs (minimal HTML docs)
+    - GET /skill.md (OpenClaw skill; frontmatter `metadata` is a single-line JSON object string)
+    - GET /robots.txt, GET /sitemap.xml, GET /.well-known/security.txt
+- Files changed
+  - services/clawbounties/src/index.ts
+  - services/clawbounties/package.json
+  - services/clawbounties/tsconfig.json
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/clawbounties && npm run typecheck
+---
