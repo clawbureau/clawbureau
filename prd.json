@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented releaseEscrow() with LedgerClientV2.releaseHoldAndTransfer() and WebhookEmitter"
     },
     {
       "id": "CES-US-003",
@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented disputeEscrow() and escalateDispute() methods. Configurable dispute_window_hours on escrow, freezes escrow on dispute, integrates with TrialsClient for escalation."
     },
     {
       "id": "CES-US-004",

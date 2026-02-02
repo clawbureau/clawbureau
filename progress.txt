@@ -5,6 +5,11 @@
 - Types should mirror JSON schemas for consistency
 - Use `npm run typecheck` (tsc --noEmit) to verify
 - Escrow service depends on LedgerClient interface for balance operations (clawledger dependency)
+- EscrowService uses config object pattern: `new EscrowService({ store, ledger, webhookEmitter })`
+- Use type guards (e.g., `isLedgerV2()`) to check interface capabilities at runtime
+- WebhookEmitter is optional - methods should handle gracefully when not provided
+- Dispute IDs use `dsp_` prefix
+- Optional dependencies (DisputeStore, TrialsClient) follow same pattern as WebhookEmitter - check for presence before using
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936628
@@ -26,4 +31,33 @@ Started: 2026-02-02T03:08:26.936628
   - EscrowService uses dependency injection for store and ledger client
   - Milestones are validated to sum to total escrow amount
   - Escrow IDs use `esc_` prefix, milestone IDs use `ms_` prefix
+---
+
+## 2026-02-02 - CES-US-002
+- Implemented release escrow functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added ReleaseEscrowRequest, ReleaseEscrowResult, LedgerClientV2, LedgerTransferResult, WebhookEmitter, WebhookEvent, WebhookEventType
+  - `services/escrow/src/escrow-service.ts` - Added releaseEscrow() method, EscrowServiceConfig interface, type guard for LedgerV2
+  - `services/escrow/src/index.ts` - Exported new types
+- **Learnings for future iterations:**
+  - Use config object pattern for services with optional dependencies (like WebhookEmitter)
+  - Type guards (`'method' in obj`) are useful for checking interface capabilities at runtime
+  - WebhookEmitter is optional - return `webhook_sent: false` when not configured
+  - LedgerClientV2 extends LedgerClient to maintain backward compatibility
+  - Event IDs use `evt_` prefix
+---
+
+## 2026-02-02 - CES-US-003
+- Implemented dispute window functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added Dispute, DisputeStatus, DisputeReason, DisputeResolution, DisputeEscrowRequest, DisputeEscrowResult, DisputeStore, EscalateDisputeRequest, EscalateDisputeResult, TrialsClient, TrialsCaseResult
+  - `services/escrow/src/escrow-service.ts` - Added disputeEscrow(), escalateDispute(), getDispute(), getDisputeByEscrowId() methods; extended EscrowServiceConfig with disputeStore and trialsClient
+  - `services/escrow/src/index.ts` - Exported all new dispute-related types
+- **Learnings for future iterations:**
+  - Dispute window is configurable via `dispute_window_hours` on escrow (default 72 hours)
+  - Disputes freeze escrow (status='frozen') to prevent release during resolution
+  - DisputeStore is separate from EscrowStore - follows single responsibility principle
+  - TrialsClient is optional dependency for escalation - allows escrow service to work without trials service
+  - Only parties to escrow (requester or agent) can initiate or escalate disputes
+  - Dispute window check is done against `held_at` timestamp
 ---

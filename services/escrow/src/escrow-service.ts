@@ -8,6 +8,12 @@ import { v4 as uuidv4 } from 'uuid';
 import type {
   CreateEscrowRequest,
   CreateEscrowResult,
+  Dispute,
+  DisputeEscrowRequest,
+  DisputeEscrowResult,
+  DisputeStore,
+  EscalateDisputeRequest,
+  EscalateDisputeResult,
   Escrow,
   EscrowStore,
   LedgerClient,
@@ -15,6 +21,7 @@ import type {
   Milestone,
   ReleaseEscrowRequest,
   ReleaseEscrowResult,
+  TrialsClient,
   WebhookEmitter,
   WebhookEvent,
 } from './types.js';
@@ -23,17 +30,23 @@ export interface EscrowServiceConfig {
   store: EscrowStore;
   ledger: LedgerClient | LedgerClientV2;
   webhookEmitter?: WebhookEmitter;
+  disputeStore?: DisputeStore;
+  trialsClient?: TrialsClient;
 }
 
 export class EscrowService {
   private readonly store: EscrowStore;
   private readonly ledger: LedgerClient | LedgerClientV2;
   private readonly webhookEmitter?: WebhookEmitter;
+  private readonly disputeStore?: DisputeStore;
+  private readonly trialsClient?: TrialsClient;
 
   constructor(config: EscrowServiceConfig) {
     this.store = config.store;
     this.ledger = config.ledger;
     this.webhookEmitter = config.webhookEmitter;
+    this.disputeStore = config.disputeStore;
+    this.trialsClient = config.trialsClient;
   }
 
   /**
@@ -242,6 +255,279 @@ export class EscrowService {
       amount_released: escrow.amount,
       webhook_sent: webhookSent,
     };
+  }
+
+  /**
+   * CES-US-003: Dispute escrow
+   *
+   * Initiates a dispute on an escrow, freezing funds and starting the dispute process.
+   *
+   * Acceptance Criteria:
+   * - Configurable dispute window (via dispute_window_hours on escrow)
+   * - Freeze escrow on dispute
+   * - Escalate to trials (via escalateDispute method)
+   */
+  async disputeEscrow(request: DisputeEscrowRequest): Promise<DisputeEscrowResult> {
+    // Validate escrow exists
+    const escrow = await this.store.get(request.escrow_id);
+    if (!escrow) {
+      throw new EscrowError('ESCROW_NOT_FOUND', `Escrow ${request.escrow_id} not found`);
+    }
+
+    // Only requester or agent can dispute
+    const isParty =
+      request.disputed_by_did === escrow.requester_did ||
+      request.disputed_by_did === escrow.agent_did;
+    if (!isParty) {
+      throw new EscrowError(
+        'UNAUTHORIZED',
+        'Only the requester or agent can dispute an escrow'
+      );
+    }
+
+    // Only held escrows can be disputed
+    if (escrow.status !== 'held') {
+      throw new EscrowError(
+        'INVALID_STATUS',
+        `Cannot dispute escrow in status '${escrow.status}'. Must be 'held'.`
+      );
+    }
+
+    // Check if within dispute window (if escrow was released, check held_at)
+    if (escrow.held_at) {
+      const heldAt = new Date(escrow.held_at);
+      const disputeWindowMs = (escrow.dispute_window_hours ?? 72) * 60 * 60 * 1000;
+      const windowEnd = new Date(heldAt.getTime() + disputeWindowMs);
+      const now = new Date();
+
+      if (now > windowEnd) {
+        throw new EscrowError(
+          'DISPUTE_WINDOW_EXPIRED',
+          `Dispute window expired at ${windowEnd.toISOString()}`
+        );
+      }
+    }
+
+    // Require dispute store for dispute operations
+    if (!this.disputeStore) {
+      throw new EscrowError(
+        'DISPUTE_STORE_REQUIRED',
+        'Dispute store is required for dispute operations'
+      );
+    }
+
+    const now = new Date().toISOString();
+    const dispute_id = `dsp_${uuidv4()}`;
+
+    // Create dispute record
+    const dispute: Dispute = {
+      dispute_id,
+      escrow_id: escrow.escrow_id,
+      disputed_by_did: request.disputed_by_did,
+      reason: request.reason,
+      description: request.description,
+      evidence_urls: request.evidence_urls,
+      status: 'open',
+      created_at: now,
+      updated_at: now,
+    };
+
+    await this.disputeStore.saveDispute(dispute);
+
+    // Freeze escrow (change status to frozen)
+    const frozenEscrow: Escrow = {
+      ...escrow,
+      status: 'frozen',
+      updated_at: now,
+    };
+
+    await this.store.save(frozenEscrow);
+
+    // Emit webhook
+    let webhookSent = false;
+    if (this.webhookEmitter) {
+      const webhookEvent: WebhookEvent = {
+        event_id: `evt_${uuidv4()}`,
+        event_type: 'escrow.disputed',
+        escrow_id: escrow.escrow_id,
+        timestamp: now,
+        payload: {
+          escrow_id: escrow.escrow_id,
+          dispute_id,
+          requester_did: escrow.requester_did,
+          agent_did: escrow.agent_did,
+          disputed_by_did: request.disputed_by_did,
+          reason: request.reason,
+          amount: escrow.amount,
+          currency: escrow.currency,
+        },
+      };
+
+      const webhookResult = await this.webhookEmitter.emit(webhookEvent);
+      webhookSent = webhookResult.sent;
+    }
+
+    return {
+      escrow_id: escrow.escrow_id,
+      escrow: frozenEscrow,
+      dispute_id,
+      disputed_at: now,
+      frozen: true,
+      webhook_sent: webhookSent,
+    };
+  }
+
+  /**
+   * CES-US-003: Escalate dispute to trials
+   *
+   * Escalates an open dispute to the trials service for resolution.
+   */
+  async escalateDispute(request: EscalateDisputeRequest): Promise<EscalateDisputeResult> {
+    // Validate escrow exists
+    const escrow = await this.store.get(request.escrow_id);
+    if (!escrow) {
+      throw new EscrowError('ESCROW_NOT_FOUND', `Escrow ${request.escrow_id} not found`);
+    }
+
+    // Require dispute store
+    if (!this.disputeStore) {
+      throw new EscrowError(
+        'DISPUTE_STORE_REQUIRED',
+        'Dispute store is required for dispute operations'
+      );
+    }
+
+    // Validate dispute exists
+    const dispute = await this.disputeStore.getDispute(request.dispute_id);
+    if (!dispute) {
+      throw new EscrowError('DISPUTE_NOT_FOUND', `Dispute ${request.dispute_id} not found`);
+    }
+
+    // Validate dispute belongs to escrow
+    if (dispute.escrow_id !== request.escrow_id) {
+      throw new EscrowError(
+        'DISPUTE_MISMATCH',
+        `Dispute ${request.dispute_id} does not belong to escrow ${request.escrow_id}`
+      );
+    }
+
+    // Only parties can escalate
+    const isParty =
+      request.escalated_by_did === escrow.requester_did ||
+      request.escalated_by_did === escrow.agent_did;
+    if (!isParty) {
+      throw new EscrowError(
+        'UNAUTHORIZED',
+        'Only the requester or agent can escalate a dispute'
+      );
+    }
+
+    // Only open disputes can be escalated
+    if (dispute.status !== 'open') {
+      throw new EscrowError(
+        'INVALID_STATUS',
+        `Cannot escalate dispute in status '${dispute.status}'. Must be 'open'.`
+      );
+    }
+
+    // Require trials client for escalation
+    if (!this.trialsClient) {
+      throw new EscrowError(
+        'TRIALS_CLIENT_REQUIRED',
+        'Trials client is required for dispute escalation'
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    // Create case in trials service
+    const trialsResult = await this.trialsClient.createCase({
+      escrow_id: escrow.escrow_id,
+      dispute_id: dispute.dispute_id,
+      requester_did: escrow.requester_did,
+      agent_did: escrow.agent_did,
+      disputed_by_did: dispute.disputed_by_did,
+      reason: dispute.reason,
+      description: dispute.description,
+      evidence_urls: dispute.evidence_urls,
+      amount: escrow.amount,
+      currency: escrow.currency,
+      escalation_notes: request.escalation_notes,
+    });
+
+    if (!trialsResult.success) {
+      throw new EscrowError(
+        'ESCALATION_FAILED',
+        trialsResult.error ?? 'Failed to escalate dispute to trials service'
+      );
+    }
+
+    // Update dispute status
+    const updatedDispute: Dispute = {
+      ...dispute,
+      status: 'escalated',
+      escalated_at: now,
+      updated_at: now,
+    };
+
+    await this.disputeStore.saveDispute(updatedDispute);
+
+    // Emit webhook (reusing 'escrow.disputed' event type with escalation info)
+    let webhookSent = false;
+    if (this.webhookEmitter) {
+      const webhookEvent: WebhookEvent = {
+        event_id: `evt_${uuidv4()}`,
+        event_type: 'escrow.disputed',
+        escrow_id: escrow.escrow_id,
+        timestamp: now,
+        payload: {
+          escrow_id: escrow.escrow_id,
+          dispute_id: dispute.dispute_id,
+          escalated: true,
+          escalated_by_did: request.escalated_by_did,
+          trials_case_id: trialsResult.case_id,
+          amount: escrow.amount,
+          currency: escrow.currency,
+        },
+      };
+
+      const webhookResult = await this.webhookEmitter.emit(webhookEvent);
+      webhookSent = webhookResult.sent;
+    }
+
+    return {
+      escrow_id: escrow.escrow_id,
+      dispute_id: dispute.dispute_id,
+      escalated_at: now,
+      trials_case_id: trialsResult.case_id!,
+      webhook_sent: webhookSent,
+    };
+  }
+
+  /**
+   * Get a dispute by ID
+   */
+  async getDispute(dispute_id: string): Promise<Dispute | null> {
+    if (!this.disputeStore) {
+      throw new EscrowError(
+        'DISPUTE_STORE_REQUIRED',
+        'Dispute store is required for dispute operations'
+      );
+    }
+    return this.disputeStore.getDispute(dispute_id);
+  }
+
+  /**
+   * Get the dispute for an escrow (if any)
+   */
+  async getDisputeByEscrowId(escrow_id: string): Promise<Dispute | null> {
+    if (!this.disputeStore) {
+      throw new EscrowError(
+        'DISPUTE_STORE_REQUIRED',
+        'Dispute store is required for dispute operations'
+      );
+    }
+    return this.disputeStore.getDisputeByEscrowId(escrow_id);
   }
 
   /**

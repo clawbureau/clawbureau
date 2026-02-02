@@ -164,3 +164,115 @@ export interface WebhookEvent {
 export interface WebhookEmitter {
   emit(event: WebhookEvent): Promise<{ sent: boolean; error?: string }>;
 }
+
+/**
+ * CES-US-003: Dispute window types
+ */
+
+export type DisputeReason =
+  | 'work_not_delivered'
+  | 'work_incomplete'
+  | 'work_unsatisfactory'
+  | 'fraud'
+  | 'other';
+
+export interface DisputeEscrowRequest {
+  escrow_id: string;
+  /** DID of the party initiating the dispute (must be requester or agent) */
+  disputed_by_did: string;
+  /** Reason for the dispute */
+  reason: DisputeReason;
+  /** Detailed description of the dispute */
+  description: string;
+  /** Optional evidence/documentation URLs */
+  evidence_urls?: string[];
+}
+
+export interface DisputeEscrowResult {
+  escrow_id: string;
+  escrow: Escrow;
+  dispute_id: string;
+  disputed_at: string;
+  frozen: boolean;
+  webhook_sent: boolean;
+}
+
+export interface Dispute {
+  dispute_id: string;
+  escrow_id: string;
+  disputed_by_did: string;
+  reason: DisputeReason;
+  description: string;
+  evidence_urls?: string[];
+  status: DisputeStatus;
+  created_at: string;
+  updated_at: string;
+  escalated_at?: string;
+  resolved_at?: string;
+  resolution?: DisputeResolution;
+}
+
+export type DisputeStatus =
+  | 'open'
+  | 'escalated'
+  | 'resolved';
+
+export type DisputeResolution =
+  | 'released_to_agent'
+  | 'returned_to_requester'
+  | 'split'
+  | 'cancelled';
+
+export interface EscalateDisputeRequest {
+  escrow_id: string;
+  dispute_id: string;
+  /** DID of the party escalating (must be party to the dispute) */
+  escalated_by_did: string;
+  /** Additional notes for the trials service */
+  escalation_notes?: string;
+}
+
+export interface EscalateDisputeResult {
+  escrow_id: string;
+  dispute_id: string;
+  escalated_at: string;
+  trials_case_id: string;
+  webhook_sent: boolean;
+}
+
+/**
+ * Interface for trials service client (for dispute escalation)
+ */
+export interface TrialsClient {
+  /**
+   * Create a case in the trials service for dispute resolution
+   */
+  createCase(params: {
+    escrow_id: string;
+    dispute_id: string;
+    requester_did: string;
+    agent_did: string;
+    disputed_by_did: string;
+    reason: DisputeReason;
+    description: string;
+    evidence_urls?: string[];
+    amount: number;
+    currency: string;
+    escalation_notes?: string;
+  }): Promise<TrialsCaseResult>;
+}
+
+export interface TrialsCaseResult {
+  success: boolean;
+  case_id?: string;
+  error?: string;
+}
+
+/**
+ * Extended store interface with dispute storage
+ */
+export interface DisputeStore {
+  saveDispute(dispute: Dispute): Promise<void>;
+  getDispute(dispute_id: string): Promise<Dispute | null>;
+  getDisputeByEscrowId(escrow_id: string): Promise<Dispute | null>;
+}

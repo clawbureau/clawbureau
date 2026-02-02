@@ -24,4 +24,16 @@ export type {
   WebhookEmitter,
   WebhookEvent,
   WebhookEventType,
+  // CES-US-003: Dispute types
+  Dispute,
+  DisputeStatus,
+  DisputeReason,
+  DisputeResolution,
+  DisputeEscrowRequest,
+  DisputeEscrowResult,
+  DisputeStore,
+  EscalateDisputeRequest,
+  EscalateDisputeResult,
+  TrialsClient,
+  TrialsCaseResult,
 } from './types.js';
