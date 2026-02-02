@@ -10,6 +10,7 @@ import { verifyBatch } from './verify-batch';
 import { verifyProofBundle } from './verify-proof-bundle';
 import { verifyEventChain } from './verify-event-chain';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
+import { verifyCommitProof } from './verify-commit-proof';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -28,6 +29,7 @@ import type {
   VerifyBundleResponse,
   VerifyEventChainResponse,
   VerifyOwnerAttestationResponse,
+  VerifyCommitProofResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -35,6 +37,12 @@ import type {
 export interface Env {
   ENVIRONMENT: string;
   AUDIT_LOG_DB: AuditLogDB;
+
+  /**
+   * Comma-separated list of repo claim IDs that exist in clawclaim.
+   * Used for CVF-US-011 commit proof verification.
+   */
+  CLAWCLAIM_REPO_CLAIM_ALLOWLIST?: string;
 }
 
 /**
@@ -248,6 +256,69 @@ async function handleVerifyOwnerAttestation(
   const response: VerifyOwnerAttestationResponse & {
     audit_receipt?: AuditLogReceipt;
   } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  // Return 200 for valid, 422 for invalid
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+
+  return jsonResponse(response, status);
+}
+
+function parseCommaSeparatedAllowlist(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+/**
+ * Handle POST /v1/verify/commit-proof - Verify commit proof envelopes
+ */
+async function handleVerifyCommitProof(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  const repoClaimAllowlist = parseCommaSeparatedAllowlist(
+    env.CLAWCLAIM_REPO_CLAIM_ALLOWLIST
+  );
+
+  // Verify the commit proof
+  const verification = await verifyCommitProof(envelope, {
+    allowlistedRepoClaimIds: repoClaimAllowlist,
+  });
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'commit_proof' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyCommitProofResponse & { audit_receipt?: AuditLogReceipt } = {
     ...verification,
     audit_receipt: auditReceipt,
   };
@@ -619,6 +690,11 @@ export default {
     // POST /v1/verify/owner-attestation - Owner attestation verification
     if (url.pathname === '/v1/verify/owner-attestation' && method === 'POST') {
       return handleVerifyOwnerAttestation(request, env);
+    }
+
+    // POST /v1/verify/commit-proof - Commit proof verification
+    if (url.pathname === '/v1/verify/commit-proof' && method === 'POST') {
+      return handleVerifyCommitProof(request, env);
     }
 
     // POST /v1/verify/batch - Batch verification

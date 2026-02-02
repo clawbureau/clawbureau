@@ -115,6 +115,8 @@ export type VerificationErrorCode =
   | 'MISSING_REQUIRED_FIELD'
   | 'INVALID_DID_FORMAT'
   | 'EXPIRED'
+  | 'CLAIM_NOT_FOUND'
+  | 'DEPENDENCY_NOT_CONFIGURED'
   | 'PARSE_ERROR';
 
 /**
@@ -185,6 +187,31 @@ export interface VerifyOwnerAttestationResponse {
   subject_did?: string;
   provider_ref?: string;
   expires_at?: string;
+  error?: VerificationError;
+}
+
+/**
+ * Commit Proof types
+ * CVF-US-011: Verify commit proofs
+ */
+export interface CommitProofPayload {
+  proof_version: '1';
+  repo_claim_id: string;
+  commit_sha: string;
+  repository: string;
+  branch?: string;
+}
+
+export interface VerifyCommitProofRequest {
+  envelope: SignedEnvelope<CommitProofPayload>;
+}
+
+export interface VerifyCommitProofResponse {
+  result: VerificationResult;
+  repository?: string;
+  commit_sha?: string;
+  signer_did?: string;
+  repo_claim_id?: string;
   error?: VerificationError;
 }
 

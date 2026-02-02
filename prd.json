@@ -154,8 +154,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/commit-proof endpoint with fail-closed commit_proof envelope validation, repo_claim_id allowlist check (clawclaim registry), and response includes repository + commit_sha + signer_did."
     },
     {
       "id": "CVF-US-012",

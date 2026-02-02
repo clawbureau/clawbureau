@@ -9,6 +9,7 @@
 - D1 bindings for SQLite storage: add to wrangler.toml with placeholder database_id for local dev
 - Hash-chained audit logs: each entry includes prev_hash linking to previous, entry_hash computed from all fields
 - Semantic result fields (e.g., trust_tier, owner_status) are separate from cryptographic VALID/INVALID and should be returned explicitly
+- External dependency checks (e.g., clawclaim existence) should be modeled as explicit, fail-closed allowlists/config in Env
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937416
@@ -159,4 +160,21 @@ Started: 2026-02-02T03:08:26.937416
 - **Learnings for future iterations:**
   - Expose semantic status fields (like owner_status) alongside cryptographic VALID/INVALID to keep API decisions explicit
   - Treat expires_at as semantic validity (EXPIRED) even if signature is otherwise valid
+---
+
+## 2026-02-02T04:35:31Z - CVF-US-011
+- Implemented commit proof verification:
+  - Added POST /v1/verify/commit-proof
+  - Fail-closed commit_proof envelope + payload validation, payload hash recomputation, Ed25519 signature verification
+  - Repo claim existence check modeled as allowlist (Env.CLAWCLAIM_REPO_CLAIM_ALLOWLIST); missing/empty config fails closed
+  - Response includes repository, commit_sha, and signer_did
+- Files changed:
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/verify-commit-proof.ts
+  - services/clawverify/src/index.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - When a verifier depends on another domain service (clawclaim), make the dependency explicit and fail-closed rather than guessing
+  - Keep claim checks separate from cryptographic verification so failures are attributable (CLAIM_NOT_FOUND vs SIGNATURE_INVALID)
 ---
