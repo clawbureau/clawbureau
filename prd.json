@@ -126,8 +126,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented per-domain clearing accounts with ClearingAccountRepository. Added clearing_deposit, clearing_withdraw, settlement event types. Settlements require batchId for netting references. API endpoints: POST/GET /clearing/accounts, POST /clearing/deposit, POST /clearing/withdraw, POST /settlements."
     },
     {
       "id": "CLD-US-010",

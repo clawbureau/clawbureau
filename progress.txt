@@ -10,6 +10,8 @@
 - Scheduled/cron jobs use `async scheduled(event, env, ctx)` handler with ctx.waitUntil()
 - Cron triggers configured in wrangler.toml: [triggers] crons = ["0 2 * * *"]
 - For webhooks/alerts, use optional env vars (e.g., ALERT_WEBHOOK_URL) with conditional sending
+- User accounts use 'acc_' prefix, clearing accounts use 'clr_' prefix
+- Metadata types should use Record<string, unknown> for EventRepository.create() compatibility
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936251
@@ -234,4 +236,36 @@ Started: 2026-02-02T03:08:26.936251
   - moveBetweenBuckets from accounts.ts is ideal for stake_lock (available -> bonded) and fee_transfer operations
   - Direct bucket credit/debit methods useful for promo_mint (creditPromo) and burns (debitBonded, debitFeePool, debitPromo)
   - All stake/fee events link to originating IDs (escrowId, trialId, transactionId, campaignId) via metadata for audit trail
+---
+
+## 2026-02-02T11:00:00Z - CLD-US-009
+- What was implemented:
+  - Per-domain clearing accounts for cross-service settlement (escrow, marketplace, treasury, etc.)
+  - ClearingAccountRepository with CRUD operations and balance management
+  - ClearingService for deposits, withdrawals, and settlements
+  - New event types: clearing_deposit, clearing_withdraw, settlement
+  - All settlement events require batchId for netting reference (audit trail for batch reconciliation)
+  - Helper functions: isClearingEventType, isSettlementEventType
+  - Clearing accounts use 'clr_' prefix to distinguish from user accounts (acc_)
+  - API endpoints:
+    - POST /clearing/accounts - Create clearing account for a domain
+    - GET /clearing/accounts - List all clearing accounts
+    - GET /clearing/accounts/:id - Get clearing account by ID
+    - GET /clearing/accounts/domain/:domain - Get clearing account by domain
+    - POST /clearing/deposit - Deposit from user account to clearing account
+    - POST /clearing/withdraw - Withdraw from clearing account to user account
+    - POST /settlements - Execute settlement with required batchId
+  - D1 migration for clearing_accounts table with unique domain constraint
+- Files changed:
+  - services/ledger/src/types.ts (updated - added clearing account types, settlement types, new event types)
+  - services/ledger/src/events.ts (updated - added clearing/settlement event type validation)
+  - services/ledger/src/clearing.ts (new - ClearingAccountRepository, ClearingService)
+  - services/ledger/src/index.ts (updated - added clearing and settlement API endpoints)
+  - services/ledger/migrations/0005_create_clearing_accounts.sql (new)
+- **Learnings for future iterations:**
+  - Clearing account IDs start with 'clr_' prefix (derived from domain hash)
+  - Settlements can transfer between any combination of user and clearing accounts
+  - batchId is mandatory for all settlements to enable netting reconciliation
+  - Use Record<string, unknown> for metadata types to satisfy EventRepository.create() signature
+  - Clearing deposits/withdrawals track both user and clearing account IDs in event metadata
 ---
