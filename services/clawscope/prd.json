@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented POST /v1/tokens/revoke (admin) backed by KV; records revocations immediately and appends to an event/audit feed (GET /v1/revocations/events). Introspection returns active=false for revoked tokens."
     },
     {
       "id": "CSC-US-004",
@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tier-aware policy enforcement for token issuance: supports SCOPE_POLICY_JSON tiers or env-based allowlist/prefix knobs; enforces max TTL and rejects scopes outside policy (incl. optional wildcard bans)."
     },
     {
       "id": "CSC-US-005",
@@ -84,8 +84,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Logs token_hash + issuance metadata to KV (events:issuance:*), stores revocation timestamps, and exports combined audit bundles via GET /v1/audit/bundle (admin)."
     },
     {
       "id": "CSC-US-007",
