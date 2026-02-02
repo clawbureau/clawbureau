@@ -22,3 +22,12 @@ Started: 2026-02-02T22:30:00Z
   - Other services (e.g. clawproxy) validate CSTs as EdDSA JWT and require a configured issuer public key.
   - Keeping the issuer key discoverable via JWKS allows offline verification.
 ---
+
+## 2026-02-02 - CSC-US-002
+- Added token introspection endpoint: `POST /v1/tokens/introspect`.
+  - Parses JWT segments (header/payload/signature)
+  - Validates `alg=EdDSA`, `token_version=1`, and `exp`.
+  - Verifies signature against issuer key (fail closed if signing key missing).
+  - Returns `{active:true, token_hash, sub, aud, scope, owner_ref, iat, exp}`.
+- Typecheck: `npm run typecheck`.
+---

@@ -1,4 +1,12 @@
-import { base64urlEncode, computeKeyId, importEd25519Key, sha256, signEd25519 } from './crypto';
+import {
+  base64urlDecode,
+  base64urlEncode,
+  computeKeyId,
+  importEd25519Key,
+  sha256,
+  signEd25519,
+  verifyEd25519,
+} from './crypto';
 
 const SCOPE_DID = 'did:web:clawscope.com';
 
@@ -47,6 +55,7 @@ let cachedKeyRaw: string | null = null;
 let cachedKeys:
   | {
       privateKey: CryptoKey;
+      publicKey: CryptoKey;
       publicKeyBytes: Uint8Array;
       kid: string;
       jwkX: string;
@@ -190,6 +199,7 @@ async function getIssuerKeys(env: Env): Promise<typeof cachedKeys> {
   cachedKeyRaw = env.SCOPE_SIGNING_KEY;
   cachedKeys = {
     privateKey: kp.privateKey,
+    publicKey: kp.publicKey,
     publicKeyBytes: kp.publicKeyBytes,
     kid,
     jwkX,
@@ -201,6 +211,26 @@ async function getIssuerKeys(env: Env): Promise<typeof cachedKeys> {
 function encodeJwtJson(obj: unknown): string {
   const json = JSON.stringify(obj);
   return base64urlEncode(new TextEncoder().encode(json));
+}
+
+function decodeJwtJsonSegment(segmentB64u: string): unknown {
+  const bytes = base64urlDecode(segmentB64u);
+  const json = new TextDecoder().decode(bytes);
+  return JSON.parse(json) as unknown;
+}
+
+function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
+  if (typeof payload !== 'object' || payload === null) return false;
+  const p = payload as Record<string, unknown>;
+
+  if (p.token_version !== '1') return false;
+  if (!isNonEmptyString(p.sub)) return false;
+  if (!validateAud(p.aud)) return false;
+  if (!isStringArray(p.scope) || p.scope.length === 0) return false;
+  if (typeof p.iat !== 'number' || !Number.isFinite(p.iat)) return false;
+  if (typeof p.exp !== 'number' || !Number.isFinite(p.exp)) return false;
+
+  return true;
 }
 
 async function issueToken(req: IssueTokenRequest, env: Env): Promise<{ token: string; token_hash: string; claims: ScopedTokenClaims; kid: string }> {
@@ -310,7 +340,7 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
@@ -355,6 +385,109 @@ export default {
 
         return errorResponse('ISSUE_FAILED', 'Failed to issue token', 500);
       }
+    }
+
+    // Token introspection (CSC-US-002)
+    if (request.method === 'POST' && url.pathname === '/v1/tokens/introspect') {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+      }
+
+      if (typeof body !== 'object' || body === null) {
+        return errorResponse('INVALID_REQUEST', 'Request body must be a JSON object', 400);
+      }
+
+      const token = (body as Record<string, unknown>).token;
+      if (!isNonEmptyString(token)) {
+        return errorResponse('INVALID_REQUEST', 'token is required', 400);
+      }
+
+      const token_hash = await sha256(token);
+
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return errorResponse('TOKEN_MALFORMED', 'CST token must be a JWT (header.payload.signature)', 401);
+      }
+
+      const headerB64u = parts[0]!;
+      const payloadB64u = parts[1]!;
+      const signatureB64u = parts[2]!;
+
+      let header: unknown;
+      try {
+        header = decodeJwtJsonSegment(headerB64u);
+      } catch {
+        return errorResponse('TOKEN_MALFORMED', 'Invalid JWT header encoding', 401);
+      }
+
+      if (typeof header !== 'object' || header === null) {
+        return errorResponse('TOKEN_MALFORMED', 'Invalid JWT header', 401);
+      }
+
+      const h = header as Record<string, unknown>;
+      if (h.alg !== 'EdDSA') {
+        return errorResponse('TOKEN_UNSUPPORTED_ALG', 'Unsupported token algorithm (expected EdDSA)', 401);
+      }
+
+      let payload: unknown;
+      try {
+        payload = decodeJwtJsonSegment(payloadB64u);
+      } catch {
+        return errorResponse('TOKEN_MALFORMED', 'Invalid JWT payload encoding', 401);
+      }
+
+      if (typeof payload === 'object' && payload !== null) {
+        const pv = (payload as Record<string, unknown>).token_version;
+        if (pv !== undefined && pv !== '1') {
+          return errorResponse('TOKEN_UNKNOWN_VERSION', 'Unknown token_version', 401);
+        }
+      }
+
+      if (!validateClaimsShape(payload)) {
+        return errorResponse(
+          'TOKEN_INVALID_CLAIMS',
+          'Token claims do not match scoped_token_claims.v1 schema',
+          401
+        );
+      }
+
+      // Validate expiry
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (payload.exp <= nowSec) {
+        return errorResponse('TOKEN_EXPIRED', 'Token has expired', 401);
+      }
+
+      // Validate signature
+      const keys = await getIssuerKeys(env);
+      if (!keys) {
+        return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+      }
+
+      const signingInput = `${headerB64u}.${payloadB64u}`;
+      let sigValid: boolean;
+      try {
+        sigValid = await verifyEd25519(keys.publicKey, signatureB64u, signingInput);
+      } catch {
+        return errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401);
+      }
+
+      if (!sigValid) {
+        return errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401);
+      }
+
+      return jsonResponse({
+        active: true,
+        token_hash,
+        sub: payload.sub,
+        aud: payload.aud,
+        scope: payload.scope,
+        owner_ref: payload.owner_ref,
+        iat: payload.iat,
+        exp: payload.exp,
+      });
     }
 
     return errorResponse('NOT_FOUND', 'Not found', 404);

@@ -98,6 +98,16 @@ export async function signEd25519(privateKey: CryptoKey, data: string): Promise<
 }
 
 /**
+ * Verify Ed25519 signature
+ */
+export async function verifyEd25519(publicKey: CryptoKey, signatureB64u: string, data: string): Promise<boolean> {
+  const sigBytes = base64urlDecode(signatureB64u);
+  const dataBytes = new TextEncoder().encode(data);
+
+  return crypto.subtle.verify({ name: 'Ed25519' }, publicKey, sigBytes, dataBytes);
+}
+
+/**
  * Compute key ID (kid) from public key bytes.
  * Format: SHA-256 hash truncated to first 16 characters.
  */
