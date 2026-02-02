@@ -18,6 +18,19 @@ Pi mode runs non-interactively via the installed `pi` CLI (`@mariozechner/pi-cod
 
 - `<run_dir>/.pi/ralph.session.jsonl`
 
+### Fleet/shared session note
+When using a **shared session** (like `scripts/ralph/fleet.sh`), the session file is usually non-empty, so a fresh process would normally skip attaching `PI.md`.
+
+`ralph.sh` therefore auto-attaches `PI.md` **once per session + PI.md content hash** using a small marker file next to the session file:
+
+- `<session>.pi-md.<sha256>.seen`
+
+You can force attaching `PI.md` every iteration with:
+
+```bash
+export PI_ALWAYS_ATTACH_INSTRUCTIONS=1
+```
+
 ### Run
 
 From a directory containing `prd.json` + `progress.txt` (often the root of a domain worktree):
