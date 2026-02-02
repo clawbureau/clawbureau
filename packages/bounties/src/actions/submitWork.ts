@@ -7,6 +7,7 @@ import {
   SubmitWorkRequestSchema,
   SubmitWorkResponse,
 } from "../types/bounty.js";
+import { verifyCommitSig } from "../services/commitProof.js";
 import { BountyRepository } from "../types/repository.js";
 
 /**
@@ -100,7 +101,20 @@ export async function submitWork(
     const existingSubmission = await deps.bountyRepository.findSubmissionByIdempotencyKey(
       validatedRequest.idempotency_key
     );
+
     if (existingSubmission) {
+      // CBT-US-012: fail closed if this is a code bounty but the stored submission has no commit proof
+      const existingBounty = await deps.bountyRepository.findById(
+        existingSubmission.bounty_id
+      );
+      if (existingBounty?.is_code_bounty && !existingSubmission.commit_sig) {
+        throw new SubmitWorkError(
+          "Code bounties require commit_sig (commit.sig.json)",
+          "COMMIT_PROOF_REQUIRED",
+          { bounty_id: existingSubmission.bounty_id }
+        );
+      }
+
       return {
         schema_version: "1",
         submission_id: existingSubmission.submission_id,
@@ -161,6 +175,33 @@ export async function submitWork(
   const submissionId = generateId();
   const submittedAt = now().toISOString();
 
+  // CBT-US-012: Code bounties require commit.sig.json and it must be valid
+  let commitSha: string | undefined;
+  if (bounty.is_code_bounty) {
+    if (!validatedRequest.commit_sig) {
+      throw new SubmitWorkError(
+        "Code bounties require commit_sig (commit.sig.json)",
+        "COMMIT_PROOF_REQUIRED",
+        { bounty_id: bounty.bounty_id }
+      );
+    }
+
+    const verification = await verifyCommitSig(validatedRequest.commit_sig);
+    if (!verification.valid) {
+      throw new SubmitWorkError(
+        verification.error ?? "Invalid commit signature",
+        "COMMIT_PROOF_INVALID",
+        {
+          bounty_id: bounty.bounty_id,
+          commit_sha: verification.commit_sha,
+          signer_did: verification.signer_did,
+        }
+      );
+    }
+
+    commitSha = verification.commit_sha;
+  }
+
   // Classify proof tier from provided receipts/attestations
   const proofTier = classifyProofTier(validatedRequest.proof_evidence);
 
@@ -175,6 +216,8 @@ export async function submitWork(
     proof_bundle: validatedRequest.proof_bundle,
     proof_tier: proofTier,
     proof_evidence: validatedRequest.proof_evidence,
+    commit_sig: validatedRequest.commit_sig,
+    commit_sha: commitSha,
     submitted_at: submittedAt,
     idempotency_key: validatedRequest.idempotency_key,
   };

@@ -190,6 +190,22 @@ export const SignatureEnvelopeSchema = z.object({
 export type SignatureEnvelope = z.infer<typeof SignatureEnvelopeSchema>;
 
 /**
+ * did-work commit signature envelope (commit.sig.json)
+ * Used for code bounties (CBT-US-012)
+ */
+export const CommitSigSchema = z.object({
+  version: z.literal("m1"),
+  type: z.literal("message_signature"),
+  algo: z.literal("ed25519"),
+  did: z.string().min(1),
+  message: z.string().min(1),
+  createdAt: z.string().datetime(),
+  signature: z.string().min(1),
+});
+
+export type CommitSig = z.infer<typeof CommitSigSchema>;
+
+/**
  * Proof bundle reference attached to submissions
  */
 export const ProofBundleSchema = z.object({
@@ -247,6 +263,12 @@ export const SubmissionSchema = z.object({
   proof_tier: ProofTierSchema.default("self"),
   /** Optional evidence references used to classify proof tier */
   proof_evidence: ProofEvidenceObjectSchema.optional(),
+
+  /** Optional commit signature for code bounties (commit.sig.json) */
+  commit_sig: CommitSigSchema.optional(),
+  /** Convenience: extracted commit SHA from commit_sig.message */
+  commit_sha: z.string().optional(),
+
   submitted_at: z.string().datetime(),
   idempotency_key: z.string().optional(),
 });
@@ -266,6 +288,8 @@ export const SubmitWorkRequestSchema = z.object({
   proof_bundle: ProofBundleSchema,
   /** Evidence references (receipts/attestations) for proof tier classification */
   proof_evidence: ProofEvidenceObjectSchema.optional(),
+  /** Code bounties require a commit signature proof (commit.sig.json) */
+  commit_sig: CommitSigSchema.optional(),
   idempotency_key: z.string().optional(),
 });
 

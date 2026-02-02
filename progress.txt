@@ -211,3 +211,25 @@ Started: 2026-02-02T03:08:26.937005
 - Quality checks
   - cd packages/bounties && npm run typecheck
 ---
+
+## 2026-02-02T05:49:47Z - CBT-US-012
+- What was implemented
+  - Code bounties (bounty.is_code_bounty=true) now require a commit proof at submission:
+    - Added SubmitWorkRequest.commit_sig (did-work commit.sig.json envelope)
+    - Enforced in submitWork(): missing commit_sig => COMMIT_PROOF_REQUIRED
+  - Verification
+    - Verified commit_sig using Ed25519 signature verification (did:key → public key)
+    - Enforced message format: commit:<sha>
+  - Linking
+    - Stored commit_sig and extracted commit_sha on Submission alongside proof_bundle
+    - This ties the commit proof to the proof bundle used for the submission
+- Files changed
+  - packages/bounties/src/types/bounty.ts
+  - packages/bounties/src/services/commitProof.ts
+  - packages/bounties/src/services/index.ts
+  - packages/bounties/src/actions/submitWork.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd packages/bounties && npm run typecheck
+---

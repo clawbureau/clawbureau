@@ -168,8 +168,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Code bounties now require a did-work style commit.sig.json at submission (SubmitWorkRequest.commit_sig). Signature is verified (Ed25519 over message 'commit:<sha>' from did:key) and the extracted commit_sha is stored on the Submission alongside proof_bundle, linking the commit proof to the proof bundle." 
     },
     {
       "id": "CBT-US-013",
