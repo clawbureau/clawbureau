@@ -250,4 +250,62 @@ export interface ErrorResponse {
 export interface Env {
   DB: D1Database;
   ACCOUNT_DO: DurableObjectNamespace;
+  /** Optional webhook URL for reconciliation alerts */
+  ALERT_WEBHOOK_URL?: string;
+}
+
+/**
+ * Reconciliation status
+ */
+export type ReconciliationStatus = 'success' | 'mismatch' | 'error';
+
+/**
+ * Balance mismatch detail for an account
+ */
+export interface BalanceMismatch {
+  accountId: AccountId;
+  bucket: BucketName;
+  storedBalance: string;
+  computedBalance: string;
+  difference: string;
+}
+
+/**
+ * Reconciliation report for audit trail
+ */
+export interface ReconciliationReport {
+  /** Unique report ID */
+  id: string;
+  /** Report status */
+  status: ReconciliationStatus;
+  /** Timestamp when reconciliation started */
+  startedAt: Timestamp;
+  /** Timestamp when reconciliation completed */
+  completedAt: Timestamp;
+  /** Number of events replayed */
+  eventsReplayed: number;
+  /** Number of accounts checked */
+  accountsChecked: number;
+  /** Number of mismatches found */
+  mismatchCount: number;
+  /** Details of any mismatches */
+  mismatches: BalanceMismatch[];
+  /** Hash chain verification result */
+  hashChainValid: boolean;
+  /** Hash chain errors if any */
+  hashChainErrors: string[];
+  /** Error message if status is 'error' */
+  errorMessage?: string;
+}
+
+/**
+ * Reconciliation alert for webhooks
+ */
+export interface ReconciliationAlert {
+  type: 'reconciliation_mismatch' | 'reconciliation_error';
+  reportId: string;
+  timestamp: Timestamp;
+  mismatchCount: number;
+  summary: string;
+  details?: BalanceMismatch[];
 }

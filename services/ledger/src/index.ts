@@ -6,6 +6,7 @@
 import { AccountService, isValidDid } from './accounts';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
+import { ReconciliationService } from './reconciliation';
 import type {
   CreateAccountRequest,
   CreateEventRequest,
@@ -416,6 +417,97 @@ async function handleGetAccountHolds(
 }
 
 /**
+ * Handle POST /reconciliation/run - Trigger a reconciliation job
+ */
+async function handleRunReconciliation(env: Env): Promise<Response> {
+  const service = new ReconciliationService(env);
+
+  try {
+    const report = await service.runReconciliation();
+    return jsonResponse(report, report.status === 'success' ? 200 : 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'RECONCILIATION_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /reconciliation/reports - Get recent reconciliation reports
+ */
+async function handleGetReconciliationReports(
+  env: Env,
+  url: URL
+): Promise<Response> {
+  const limitParam = url.searchParams.get('limit');
+  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 100) : 10;
+
+  const service = new ReconciliationService(env);
+  const reports = await service.getRecentReports(limit);
+
+  return jsonResponse({ reports });
+}
+
+/**
+ * Handle GET /reconciliation/reports/latest - Get the most recent report
+ */
+async function handleGetLatestReport(env: Env): Promise<Response> {
+  const service = new ReconciliationService(env);
+  const report = await service.getLatestReport();
+
+  if (!report) {
+    return errorResponse('No reconciliation reports found', 'NOT_FOUND', 404);
+  }
+
+  return jsonResponse(report);
+}
+
+/**
+ * Handle GET /reconciliation/reports/:id - Get a specific report
+ */
+async function handleGetReconciliationReport(
+  id: string,
+  env: Env
+): Promise<Response> {
+  const service = new ReconciliationService(env);
+  const report = await service.getReport(id);
+
+  if (!report) {
+    return errorResponse('Report not found', 'NOT_FOUND', 404);
+  }
+
+  return jsonResponse(report);
+}
+
+/**
+ * Handle GET /reconciliation/export/:id - Export a report in a downloadable format
+ */
+async function handleExportReport(id: string, env: Env): Promise<Response> {
+  const service = new ReconciliationService(env);
+  const report = await service.getReport(id);
+
+  if (!report) {
+    return errorResponse('Report not found', 'NOT_FOUND', 404);
+  }
+
+  // Format as a detailed export
+  const exportData = {
+    report,
+    exportedAt: new Date().toISOString(),
+    format: 'json',
+    version: '1.0.0',
+  };
+
+  return new Response(JSON.stringify(exportData, null, 2), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Disposition': `attachment; filename="reconciliation-${id}.json"`,
+      'X-Ledger-Version': '1.0.0',
+    },
+  });
+}
+
+/**
  * Router for handling requests
  */
 async function router(request: Request, env: Env): Promise<Response> {
@@ -500,6 +592,33 @@ async function router(request: Request, env: Env): Promise<Response> {
     return handleGetAccountHolds(accountHoldsMatch[1], env);
   }
 
+  // POST /reconciliation/run - Trigger reconciliation
+  if (path === '/reconciliation/run' && method === 'POST') {
+    return handleRunReconciliation(env);
+  }
+
+  // GET /reconciliation/reports - Get recent reports
+  if (path === '/reconciliation/reports' && method === 'GET') {
+    return handleGetReconciliationReports(env, url);
+  }
+
+  // GET /reconciliation/reports/latest - Get the most recent report
+  if (path === '/reconciliation/reports/latest' && method === 'GET') {
+    return handleGetLatestReport(env);
+  }
+
+  // GET /reconciliation/export/:id - Export a report
+  const exportReportMatch = path.match(/^\/reconciliation\/export\/([^/]+)$/);
+  if (exportReportMatch && method === 'GET') {
+    return handleExportReport(exportReportMatch[1], env);
+  }
+
+  // GET /reconciliation/reports/:id - Get a specific report
+  const reportByIdMatch = path.match(/^\/reconciliation\/reports\/([^/]+)$/);
+  if (reportByIdMatch && method === 'GET') {
+    return handleGetReconciliationReport(reportByIdMatch[1], env);
+  }
+
   // 404 for unknown routes
   return errorResponse('Not found', 'NOT_FOUND', 404);
 }
@@ -516,5 +635,34 @@ export default {
       const message = err instanceof Error ? err.message : 'Internal server error';
       return errorResponse(message, 'INTERNAL_ERROR', 500);
     }
+  },
+
+  /**
+   * Scheduled handler for nightly reconciliation job
+   * Configured via wrangler.toml cron triggers
+   */
+  async scheduled(
+    _event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    console.log('Starting scheduled reconciliation job');
+
+    const service = new ReconciliationService(env);
+
+    // Use waitUntil to ensure the reconciliation completes even after the handler returns
+    ctx.waitUntil(
+      service.runReconciliation().then((report) => {
+        console.log(`Reconciliation completed: ${report.status}`, {
+          reportId: report.id,
+          eventsReplayed: report.eventsReplayed,
+          accountsChecked: report.accountsChecked,
+          mismatchCount: report.mismatchCount,
+          hashChainValid: report.hashChainValid,
+        });
+      }).catch((err) => {
+        console.error('Reconciliation job failed:', err);
+      })
+    );
   },
 };

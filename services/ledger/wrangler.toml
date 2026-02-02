@@ -16,3 +16,12 @@ new_classes = ["AccountDurableObject"]
 binding = "DB"
 database_name = "ledger"
 database_id = "placeholder"
+
+# Scheduled triggers for nightly reconciliation
+# Runs at 2:00 AM UTC daily
+[triggers]
+crons = ["0 2 * * *"]
+
+# Optional: Environment variable for alert webhook
+# [vars]
+# ALERT_WEBHOOK_URL = "https://your-webhook-endpoint.com/alerts"
