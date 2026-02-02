@@ -12,11 +12,57 @@ It supports multiple backends:
 
 ---
 
+## Fleet mode (single loop across many worktrees)
+
+Run the trust worktrees (default targets):
+
+```bash
+./scripts/ralph/fleet.sh 200
+```
+
+Run **all** worktrees under `monorepo-worktrees-full/` (auto-discover targets):
+
+```bash
+WORKTREES_ROOT=../monorepo-worktrees-full \
+FLEET_AUTO_TARGETS=1 \
+./scripts/ralph/fleet.sh 200
+```
+
+If you want Fleet to *wait* instead of exiting when everything is green:
+
+```bash
+FLEET_WATCH=1 ./scripts/ralph/fleet.sh 200
+```
+
+---
+
 ## Recommended: Pi harness mode
 
 Pi mode runs non-interactively via the installed `pi` CLI (`@mariozechner/pi-coding-agent`) and persists a per-run session file in the run directory by default:
 
 - `<run_dir>/.pi/ralph.session.jsonl`
+
+### Fleet/shared session note
+When using a **shared session** (like `scripts/ralph/fleet.sh`), the session file is usually non-empty, so a fresh process would normally skip attaching `PI.md`.
+
+`ralph.sh` therefore auto-attaches `PI.md` **once per session + PI.md content hash** using a small marker file next to the session file:
+
+- `<session>.pi-md.<sha256>.seen`
+
+You can force attaching `PI.md` every iteration with:
+
+```bash
+export PI_ALWAYS_ATTACH_INSTRUCTIONS=1
+```
+
+### Commit proof automation
+`ralph.sh` will (best-effort) auto-generate and **commit** `proofs/<branch>/commit.sig.json` when it detects at least one git commit occurred during an iteration.
+
+Disable with:
+
+```bash
+export RALPH_AUTO_PROOF=0
+```
 
 ### Run
 

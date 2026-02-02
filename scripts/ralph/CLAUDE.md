@@ -4,19 +4,34 @@ You are an autonomous coding agent working on a software project.
 
 ## Your Task
 
-1. Read the PRD at `prd.json` in the current working directory (services/<domain>)
-2. Read the progress log at `progress.txt` in the current working directory (check Codebase Patterns section first)
-3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
-4. Pick the **highest priority** user story where `passes: false`
-5. Implement that single user story
-6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires)
-7. Update CLAUDE.md files if you discover reusable patterns (see below)
-8. If checks pass, commit ALL changes with **signed commit** message: `feat: [Story ID] - [Story Title]`
-   - Use `git commit -S` or ensure `commit.gpgsign=true` is set
-9. Generate a DID-signed commit proof for the PR proof bundle:
-   - `node ./scripts/did-work/sign-message.mjs "commit:$(git rev-parse HEAD)" > proofs/<pr-id>/commit.sig.json`
-10. Update the PRD to set `passes: true` for the completed story
-11. Append your progress to `progress.txt`
+1. Read `prd.json` in the current working directory.
+2. Read `progress.txt` in the current working directory (check the **"Codebase Patterns"** section first).
+3. Check you're on the correct branch from `prd.json.branchName`. If not, check it out or create it from `main`.
+4. Pick the **highest priority** user story where `passes: false`.
+5. Implement that single user story.
+6. Run quality checks (e.g., typecheck, lint, test - use whatever your project requires).
+7. Update CLAUDE.md files if you discover reusable patterns (see below).
+8. Update `prd.json` to set `passes: true` for the completed story.
+9. Append your progress to `progress.txt`.
+10. Commit ALL story changes with a **git-signed** commit message:
+    - `feat: [Story ID] - [Story Title]` (or `fix:`/`chore:` if appropriate)
+    - Use `git commit -S` or ensure `commit.gpgsign=true` is set.
+11. Generate and **commit** a DID-signed commit proof (2-commit pattern):
+
+```bash
+WORK_COMMIT=$(git rev-parse HEAD)
+SHORT=$(git rev-parse --short "$WORK_COMMIT")
+BRANCH=$(git branch --show-current)
+
+PROOF_DIR="proofs/${BRANCH}"
+mkdir -p "$PROOF_DIR"
+node ./scripts/did-work/sign-message.mjs "commit:${WORK_COMMIT}" > "$PROOF_DIR/commit.sig.json"
+
+git add "$PROOF_DIR/commit.sig.json"
+git commit -S -m "chore(proofs): add commit proof for ${SHORT}"
+```
+
+If the signing helper fails due to missing identity/passphrase, log it in `progress.txt` and continue (but prefer fixing it).
 
 ## Progress Report Format
 
