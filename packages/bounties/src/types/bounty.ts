@@ -162,3 +162,87 @@ export const AcceptBountyResponseSchema = z.object({
 });
 
 export type AcceptBountyResponse = z.infer<typeof AcceptBountyResponseSchema>;
+
+/**
+ * DID-signed signature envelope for work submissions
+ */
+export const SignatureEnvelopeSchema = z.object({
+  /** DID of the signer (agent) */
+  signer_did: z.string(),
+  /** Signature algorithm used (e.g., EdDSA, ES256) */
+  algorithm: z.string(),
+  /** Base64-encoded signature */
+  signature: z.string(),
+  /** ISO timestamp when signed */
+  signed_at: z.string().datetime(),
+  /** Optional key ID for multi-key DIDs */
+  key_id: z.string().optional(),
+});
+
+export type SignatureEnvelope = z.infer<typeof SignatureEnvelopeSchema>;
+
+/**
+ * Proof bundle reference attached to submissions
+ */
+export const ProofBundleSchema = z.object({
+  /** SHA-256 hash of the proof bundle */
+  hash: z.string(),
+  /** Hash algorithm used */
+  hash_algorithm: z.literal("sha256"),
+  /** URI where proof bundle can be retrieved (optional) */
+  uri: z.string().url().optional(),
+  /** Size of proof bundle in bytes (optional) */
+  size_bytes: z.number().int().positive().optional(),
+});
+
+export type ProofBundle = z.infer<typeof ProofBundleSchema>;
+
+/**
+ * Work submission record
+ */
+export const SubmissionSchema = z.object({
+  schema_version: z.literal("1"),
+  submission_id: z.string(),
+  bounty_id: z.string(),
+  agent_did: z.string(),
+  /** The actual work output (could be text, URL, or structured data) */
+  output: z.union([z.string(), z.record(z.unknown())]),
+  /** DID-signed envelope proving agent created this submission */
+  signature_envelope: SignatureEnvelopeSchema,
+  /** Proof bundle hash for verification */
+  proof_bundle: ProofBundleSchema,
+  submitted_at: z.string().datetime(),
+  idempotency_key: z.string().optional(),
+});
+
+export type Submission = z.infer<typeof SubmissionSchema>;
+
+/**
+ * Request payload for submitting work
+ */
+export const SubmitWorkRequestSchema = z.object({
+  bounty_id: z.string(),
+  /** The work output being submitted */
+  output: z.union([z.string(), z.record(z.unknown())]),
+  /** DID-signed signature envelope */
+  signature_envelope: SignatureEnvelopeSchema,
+  /** Proof bundle with hash */
+  proof_bundle: ProofBundleSchema,
+  idempotency_key: z.string().optional(),
+});
+
+export type SubmitWorkRequest = z.infer<typeof SubmitWorkRequestSchema>;
+
+/**
+ * Response after successfully submitting work
+ */
+export const SubmitWorkResponseSchema = z.object({
+  schema_version: z.literal("1"),
+  submission_id: z.string(),
+  bounty_id: z.string(),
+  status: z.literal("pending_review"),
+  submitted_at: z.string().datetime(),
+  proof_bundle_hash: z.string(),
+});
+
+export type SubmitWorkResponse = z.infer<typeof SubmitWorkResponseSchema>;
