@@ -57,6 +57,19 @@ export interface ArtifactPayload {
 }
 
 /**
+ * Message payload - represents a signed message for DID binding
+ * Used to cryptographically bind a DID to an account or prove ownership
+ */
+export interface MessagePayload {
+  message_version: '1';
+  message_type: 'account_binding' | 'ownership_proof' | 'challenge_response';
+  message: string;
+  nonce: string;
+  audience?: string;
+  expires_at?: string;
+}
+
+/**
  * Verification result
  */
 export type VerificationStatus = 'VALID' | 'INVALID';
@@ -103,5 +116,15 @@ export interface VerifyArtifactRequest {
 
 export interface VerifyArtifactResponse {
   result: VerificationResult;
+  error?: VerificationError;
+}
+
+export interface VerifyMessageRequest {
+  envelope: SignedEnvelope<MessagePayload>;
+}
+
+export interface VerifyMessageResponse {
+  result: VerificationResult;
+  signer_did?: string;
   error?: VerificationError;
 }
