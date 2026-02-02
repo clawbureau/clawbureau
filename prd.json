@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawverify-phase1-trust",
-  "description": "clawverify.com (Verification API) \u2014 PRD \u2014 Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
+  "description": "clawverify.com (Verification API) — PRD — Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
   "userStories": [
     {
       "id": "CVF-US-001",
@@ -182,6 +182,21 @@
         "Typecheck passes"
       ],
       "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CVF-US-014",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawverify quickly.",
+      "acceptanceCriteria": [
+        "GET / returns a small HTML landing page with links to /docs and /skill.md",
+        "GET /skill.md returns integration docs + example curl commands",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 14,
       "passes": false,
       "notes": ""
     }
