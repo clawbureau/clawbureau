@@ -1,0 +1,13 @@
+name = "clawproxy"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Environment variables (non-sensitive)
+PROXY_VERSION = "0.1.0"
+
+# Secrets to be set via wrangler secret put:
+# - PROXY_SIGNING_KEY (Ed25519 private key for signing receipts)
+# - ANTHROPIC_API_KEY (optional, for testing)
+# - OPENAI_API_KEY (optional, for testing)
