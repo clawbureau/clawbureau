@@ -112,8 +112,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/event-chain endpoint with hash chain integrity validation, run_id consistency checks, chain_root_hash return, and dedicated error codes (EMPTY_CHAIN, INCONSISTENT_RUN_ID, HASH_CHAIN_BREAK, INVALID_ROOT)"
     },
     {
       "id": "CVF-US-009",
@@ -126,8 +126,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented SCHEMA_ALLOWLIST with 8 schema IDs and versions. Added GET /v1/schemas/allowlist (list with examples), POST /v1/schemas/validate (fail-closed validation), GET /v1/schemas/:id/example endpoints. Unknown schema IDs return 422 with error details."
     },
     {
       "id": "CVF-US-010",
