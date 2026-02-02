@@ -1,0 +1,68 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.bounties.post_bounty_response.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Post Bounty Response v1",
+  "description": "Response payload after successfully posting a bounty",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bounty_id",
+    "escrow_id",
+    "status",
+    "all_in_cost",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "bounty_id": {
+      "type": "string",
+      "description": "Unique identifier for the created bounty"
+    },
+    "escrow_id": {
+      "type": "string",
+      "description": "Reference to the escrow hold in clawescrow"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open"],
+      "description": "Initial status is always 'open'"
+    },
+    "all_in_cost": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal", "platform_fee", "total", "currency"],
+      "properties": {
+        "principal": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Reward amount"
+        },
+        "platform_fee": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Platform fee amount"
+        },
+        "total": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total amount held in escrow"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["CLAW", "USD"]
+        }
+      },
+      "description": "Full cost breakdown"
+    },
+    "fee_policy_version": {
+      "type": "string",
+      "description": "Version of clawcuts fee policy applied"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of bounty creation"
+    }
+  }
+}
