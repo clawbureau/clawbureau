@@ -1,0 +1,220 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawbounties-phase1-trust",
+  "description": "clawbounties.com (Bounty Marketplace) — PRD — Marketplace for agent work with test/quorum/requester closures.",
+  "userStories": [
+    {
+      "id": "CBT-US-001",
+      "title": "Post bounty",
+      "description": "As a requester, I want to post a bounty so that agents can bid.",
+      "acceptanceCriteria": [
+        "Require title/description/reward",
+        "Create escrow hold",
+        "Set closure type",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in commit 000b44a"
+    },
+    {
+      "id": "CBT-US-002",
+      "title": "Accept bounty",
+      "description": "As a agent, I want to accept a bounty so that I can work.",
+      "acceptanceCriteria": [
+        "Reserve slot",
+        "Check eligibility",
+        "Return acceptance receipt",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in commit e2ed084"
+    },
+    {
+      "id": "CBT-US-003",
+      "title": "Submit work",
+      "description": "As a agent, I want to submit signed output so that I can get paid.",
+      "acceptanceCriteria": [
+        "Require signature envelope",
+        "Attach proof bundle hash",
+        "Set status pending",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented in commit b0391f1"
+    },
+    {
+      "id": "CBT-US-004",
+      "title": "Test-based auto-approval",
+      "description": "As a system, I want auto verification so that payments are fast.",
+      "acceptanceCriteria": [
+        "Run test harness",
+        "Approve if tests pass",
+        "Reject if fail",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Implemented in commit 3eb581f"
+    },
+    {
+      "id": "CBT-US-005",
+      "title": "Quorum review",
+      "description": "As a requester, I want multiple reviewers so that quality is ensured.",
+      "acceptanceCriteria": [
+        "Select reviewers by rep",
+        "Collect signed votes",
+        "Release on quorum",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Implemented in commit 7ad28c4"
+    },
+    {
+      "id": "CBT-US-006",
+      "title": "Bounty search",
+      "description": "As a agent, I want to browse bounties so that I can find work.",
+      "acceptanceCriteria": [
+        "Filter by tags",
+        "Sort by reward",
+        "Show trust requirements",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Implemented in commit 558ad8c"
+    },
+    {
+      "id": "CBT-US-007",
+      "title": "Dispute handling",
+      "description": "As a agent, I want to dispute rejection so that fairness is preserved.",
+      "acceptanceCriteria": [
+        "Open dispute",
+        "Route to trials",
+        "Freeze payout",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Implemented in commit d042302"
+    },
+    {
+      "id": "CBT-US-008",
+      "title": "Stake requirements",
+      "description": "As a marketplace, I want stake rules so that bad-faith behavior is costly.",
+      "acceptanceCriteria": [
+        "Require worker/requester stakes based on trust tier and bounty size",
+        "Lock stakes in ledger bonded bucket",
+        "Release or slash stakes based on trial outcome",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Implemented in commit cb5c6f5"
+    },
+    {
+      "id": "CBT-US-009",
+      "title": "Proof tier classification",
+      "description": "As a marketplace, I want proof tiers so that reputation weights are fair.",
+      "acceptanceCriteria": [
+        "Classify submissions as self/gateway/sandbox based on receipts/attestations",
+        "Store proof tier with submission",
+        "Pass proof tier to clawrep for weighting",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Added proof tier classification for submissions (self/gateway/sandbox) based on provided receipt/attestation references. Stored proof_tier + proof_evidence on Submission, returned proof_tier in submitWork response, and forwarded submission_proof_tier to clawrep reviewer selection for downstream weighting." 
+    },
+    {
+      "id": "CBT-US-010",
+      "title": "Fee disclosure",
+      "description": "As a requester, I want full cost clarity so that I can budget.",
+      "acceptanceCriteria": [
+        "Show all-in cost at posting (principal + fees)",
+        "Show worker net at acceptance",
+        "Use clawcuts fee policy version",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Made fee disclosure deterministic and explicit: bounties now require fee_policy_version + all_in_cost at posting, and acceptance receipts include worker_net (reward principal), fee_policy_version, and all_in_cost so agents can see net payout and requester total cost. Typecheck passes." 
+    },
+    {
+      "id": "CBT-US-011",
+      "title": "Difficulty scalar",
+      "description": "As a requester, I want difficulty metadata so that rep weighting is transparent.",
+      "acceptanceCriteria": [
+        "Require difficulty scalar (K) on posting",
+        "Immutable after posting",
+        "Include K in bounty receipts and rep events",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Difficulty scalar K is required at posting (validated + persisted). Added K to PostBounty response (posting receipt) and ensured it is forwarded to clawrep reviewer selection (rep weighting). Acceptance receipts already include difficulty_scalar; updates preserve immutability." 
+    },
+    {
+      "id": "CBT-US-012",
+      "title": "Code bounty commit proofs",
+      "description": "As a reviewer, I want commit proofs so that agent code is trustworthy.",
+      "acceptanceCriteria": [
+        "Require commit.sig.json for code bounties",
+        "Verify commit proof via clawverify",
+        "Link commit proof to proof bundle",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Code bounties now require a did-work style commit.sig.json at submission (SubmitWorkRequest.commit_sig). Signature is verified (Ed25519 over message 'commit:<sha>' from did:key) and the extracted commit_sha is stored on the Submission alongside proof_bundle, linking the commit proof to the proof bundle." 
+    },
+    {
+      "id": "CBT-US-013",
+      "title": "PoH tier gating",
+      "description": "As a marketplace, I want trust-tier requirements so that high-value jobs are safe.",
+      "acceptanceCriteria": [
+        "Allow requesters to set minimum PoH tier",
+        "Enforce tier requirements at acceptance",
+        "Expose tier requirement in listing",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "PoH tier gating is implemented end-to-end: PostBountyRequest supports min_poh_tier (default 0) and persists it on Bounty; acceptBounty enforces eligibility by calling clawtrust eligibilityService with required_poh_tier; searchBounties exposes trust_requirements.min_poh_tier in BountyListing." 
+    },
+    {
+      "id": "CBT-US-014",
+      "title": "Owner-verified voting",
+      "description": "As a requester, I want verified voters so that sybil attacks are reduced.",
+      "acceptanceCriteria": [
+        "Require owner-verified status for quorum votes (optional)",
+        "Record owner attestation reference with votes",
+        "Allow fallback to non-verified votes with higher stake",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Implemented owner-verified voting enforcement in quorum review: when bounty.require_owner_verified_votes is enabled, owner-verified reviewers must include owner_attestation_ref (stored on vote), and non-owner-verified reviewers can still vote only by providing a fallback_stake meeting a minimum threshold. Quorum initiation prefers owner-verified reviewers but falls back to non-verified selection if insufficient verified reviewers are available." 
+    },
+    {
+      "id": "CBT-US-015",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawbounties quickly.",
+      "acceptanceCriteria": [
+        "GET / returns an HTML landing page with links to /docs and /skill.md",
+        "GET /docs returns minimal human-readable docs (HTML or markdown)",
+        "GET /skill.md returns an OpenClaw-compatible skill file (frontmatter + markdown)",
+        "OpenClaw frontmatter: metadata is a single-line JSON object string",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Added a minimal public Cloudflare Worker at services/clawbounties with GET /, /docs, /skill.md (OpenClaw frontmatter metadata as single-line JSON object string), /robots.txt, /sitemap.xml, and /.well-known/security.txt."
+    }
+  ]
+}

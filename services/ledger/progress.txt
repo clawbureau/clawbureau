@@ -1,0 +1,333 @@
+## Codebase Patterns
+- JSON Schema patterns exist in packages/schema/ - follow naming convention: `{domain}/{resource}.v{version}.json`
+- D1 database with TEXT columns for balances (stored as string representations of bigint)
+- Cloudflare Workers architecture with wrangler.toml configuration
+- ESLint flat config with typescript-eslint for type-aware linting
+- Service structure: services/{service-name}/src/ with index.ts as entry point
+- Event hash chain uses SHA-256 via Web Crypto API (crypto.subtle.digest)
+- Idempotency keys are unique per event, enabling safe retries
+- GENESIS_HASH is 64 zeros ('0'.repeat(64)) for first event in chain
+- Scheduled/cron jobs use `async scheduled(event, env, ctx)` handler with ctx.waitUntil()
+- Cron triggers configured in wrangler.toml: [triggers] crons = ["0 2 * * *"]
+- For webhooks/alerts, use optional env vars (e.g., ALERT_WEBHOOK_URL) with conditional sending
+- User accounts use 'acc_' prefix, clearing accounts use 'clr_' prefix
+- Metadata types should use Record<string, unknown> for EventRepository.create() compatibility
+- Reserve assets live in D1 table `reserve_assets` with bigint `amount` as TEXT, `haircut_bps` (0-10000), and `eligible` flag; attestations sign `reserveAssetsHash`
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.936251
+---
+
+## 2026-02-02T03:30:00Z - CLD-US-001
+- What was implemented:
+  - Created services/ledger/ directory structure
+  - Implemented Account types with balance buckets (available, held, bonded, feePool, promo)
+  - AccountRepository for D1 database operations
+  - AccountService for business logic
+  - API endpoints: POST /accounts, GET /accounts/:did, GET /accounts/id/:id
+  - D1 migration for accounts table with proper indexes
+  - DID validation (did:method:identifier format)
+  - Idempotent account creation (returns existing account if DID exists)
+- Files changed:
+  - services/ledger/package.json (new)
+  - services/ledger/tsconfig.json (new)
+  - services/ledger/wrangler.toml (new)
+  - services/ledger/eslint.config.js (new)
+  - services/ledger/src/types.ts (new)
+  - services/ledger/src/accounts.ts (new)
+  - services/ledger/src/index.ts (new)
+  - services/ledger/migrations/0001_create_accounts.sql (new)
+- **Learnings for future iterations:**
+  - Use TEXT type for balance columns in D1/SQLite to store bigint values as strings
+  - Always run `npm install` before quality checks in a new service
+  - DID format is `did:method:identifier` - validate with regex pattern
+  - Account IDs are derived deterministically from DIDs for reproducibility
+  - Balance buckets align with PRD CLD-US-007 even though implementing CLD-US-001 first
+---
+
+## 2026-02-02T04:15:00Z - CLD-US-002
+- What was implemented:
+  - Event types: mint, burn, transfer, hold, release
+  - LedgerEvent entity with idempotency key support
+  - EventRepository for D1 database operations with idempotent writes
+  - EventService for business logic including hash chain verification
+  - SHA-256 hash chain linking events for audit trail
+  - API endpoints:
+    - POST /events - Create new event (idempotent via idempotency_key)
+    - GET /events/:id - Get event by ID
+    - GET /events/idempotency/:key - Get event by idempotency key
+    - GET /accounts/:accountId/events - Get events for an account
+    - GET /events/verify - Verify hash chain integrity
+  - D1 migration for events table with indexes
+- Files changed:
+  - services/ledger/src/types.ts (updated - added event types)
+  - services/ledger/src/events.ts (new)
+  - services/ledger/src/index.ts (updated - added event routes)
+  - services/ledger/migrations/0002_create_events.sql (new)
+- **Learnings for future iterations:**
+  - Use Web Crypto API (crypto.subtle.digest) for SHA-256 in Cloudflare Workers
+  - Hash chain links events via previousHash → eventHash
+  - Idempotency check happens before hash computation to return cached result
+  - Unused parameters should be prefixed with underscore (e.g., _startEventId) for ESLint
+  - Event buckets default to 'available' if not specified
+---
+
+## 2026-02-02T05:00:00Z - CLD-US-003
+- What was implemented:
+  - Hold/Release functionality for escrow operations
+  - HoldService and HoldRepository for business logic and database operations
+  - Hold creation: moves funds from available to held bucket
+  - Release modes: 'cancel' (return to available) or 'complete' (transfer to target)
+  - Balance validation with InsufficientFundsError for negative balance prevention
+  - AccountRepository extended with balance update methods:
+    - createHold(): available → held
+    - releaseHoldToAvailable(): held → available (cancel)
+    - completeHold(): remove from held (for transfers)
+    - creditAvailable(): add to available (receive transfers)
+  - API endpoints:
+    - POST /holds - Create new hold (idempotent)
+    - GET /holds/:id - Get hold by ID
+    - POST /holds/:id/release - Release or cancel hold
+    - GET /accounts/:accountId/holds - Get active holds for account
+  - D1 migration for holds table with status tracking
+- Files changed:
+  - services/ledger/src/types.ts (updated - added hold types)
+  - services/ledger/src/accounts.ts (updated - added balance methods)
+  - services/ledger/src/holds.ts (new)
+  - services/ledger/src/index.ts (updated - added hold routes)
+  - services/ledger/migrations/0003_create_holds.sql (new)
+- **Learnings for future iterations:**
+  - Hold status is tracked separately from events (active/released/cancelled)
+  - Release operations require their own idempotency keys
+  - Complete release requires toAccountId for fund destination
+  - InsufficientFundsError provides detailed context for balance failures
+  - Optimistic concurrency via version column prevents race conditions
+---
+
+## 2026-02-02T06:00:00Z - CLD-US-004
+- What was implemented:
+  - ReconciliationService for balance replay and verification
+  - ReconciliationRepository for storing reconciliation reports in D1
+  - Event replay engine that recomputes balances from the entire event stream
+  - Hash chain integrity verification integrated into reconciliation
+  - Mismatch detection comparing computed vs stored account balances
+  - Alert webhook mechanism for reconciliation failures (ALERT_WEBHOOK_URL env)
+  - Scheduled handler for nightly reconciliation (cron: 0 2 * * *)
+  - API endpoints for manual reconciliation and report retrieval:
+    - POST /reconciliation/run - Trigger manual reconciliation
+    - GET /reconciliation/reports - List recent reports (with limit param)
+    - GET /reconciliation/reports/latest - Get most recent report
+    - GET /reconciliation/reports/:id - Get specific report by ID
+    - GET /reconciliation/export/:id - Download report as JSON attachment
+  - D1 migration for reconciliation_reports table with indexes
+  - ReconciliationReport, BalanceMismatch, ReconciliationAlert types added
+- Files changed:
+  - services/ledger/src/types.ts (updated - added reconciliation types)
+  - services/ledger/src/reconciliation.ts (new)
+  - services/ledger/src/index.ts (updated - added routes and scheduled handler)
+  - services/ledger/wrangler.toml (updated - added cron trigger)
+  - services/ledger/migrations/0004_create_reconciliation_reports.sql (new)
+- **Learnings for future iterations:**
+  - Cloudflare Workers scheduled handlers use ctx.waitUntil() for async work
+  - Cron triggers configured in wrangler.toml under [triggers] section
+  - ExecutionContext and ScheduledEvent types are global in Workers
+  - For balance reconciliation, must handle accounts that exist in events but not accounts table
+  - createEmptyBalances() from accounts.ts is reusable for initializing computed balances
+  - parseEventFromRow() and parseAccountFromRow() helpers are useful across services
+---
+
+## 2026-02-02T07:00:00Z - CLD-US-005
+- What was implemented:
+  - ReserveAttestationService for computing reserve coverage reports
+  - AttestationRepository for querying all account balances and net minted
+  - Reserve calculation: net minted (total mint - total burn) = theoretical reserve backing
+  - Outstanding calculation: sum of all account balances across all buckets
+  - Coverage ratio computation with 4 decimal precision
+  - Balance hash: SHA-256 of all account balances for verification
+  - Signed attestation using hash-based signature over attestation data
+  - Public API endpoint:
+    - GET /attestation/reserve - Generate and return signed reserve attestation
+  - Types added: ReserveAttestation, ReserveAttestationRequest, ReserveAttestationResponse
+- Files changed:
+  - services/ledger/src/types.ts (updated - added attestation types)
+  - services/ledger/src/attestation.ts (new)
+  - services/ledger/src/index.ts (updated - added attestation route)
+- **Learnings for future iterations:**
+  - Reserve attestations are read-only computations (no D1 migration needed)
+  - Coverage ratio uses scaled bigint division for precision (multiply by 10000, then divide)
+  - Attestation signature includes latest event hash to anchor to chain state
+  - For future: consider storing attestation history or using proper cryptographic signing keys
+  - verifyAttestation() method available for clients to verify attestation integrity
+---
+
+## 2026-02-02T08:00:00Z - CLD-US-006
+- What was implemented:
+  - GET /balances endpoint with pagination (limit/offset) and filtering by account IDs
+  - POST /transfers endpoint for fund transfers between accounts
+  - TransferService for transfer business logic with validation:
+    - Validates sufficient funds before transfer
+    - Verifies both source and target accounts exist
+    - Prevents self-transfers
+    - Updates balances atomically (debit source, credit target)
+    - Creates hash-chained transfer event
+  - WebhookService for event notifications:
+    - Sends POST to EVENT_WEBHOOK_URL when configured
+    - Webhook payload includes event data, timestamp, and webhook ID for deduplication
+    - Non-blocking delivery with error logging
+  - AccountRepository extended with:
+    - list() for paginated account listing
+    - findByIds() for batch account lookup
+    - debitAvailable() for outgoing transfers
+  - GET /webhooks/status endpoint to check webhook configuration
+- Files changed:
+  - services/ledger/src/types.ts (updated - added TransferRequest, TransferResponse, BalanceListResponse, WebhookEventPayload types)
+  - services/ledger/src/accounts.ts (updated - added list, findByIds, debitAvailable, listBalances methods)
+  - services/ledger/src/transfer.ts (new - TransferService and WebhookService)
+  - services/ledger/src/index.ts (updated - added /balances, /transfers, /webhooks/status routes)
+  - services/ledger/wrangler.toml (updated - documented EVENT_WEBHOOK_URL env var)
+- **Learnings for future iterations:**
+  - Use ctx.waitUntil() for non-blocking background operations like webhook delivery
+  - Webhook payloads should include a unique webhookId for consumer-side deduplication
+  - Transfer operations should update balances before creating the event for consistency
+  - Batch account lookup (findByIds) is more efficient than individual queries
+  - ExecutionContext type is global in Workers and doesn't need to be imported
+---
+
+## 2026-02-02T09:00:00Z - CLD-US-007
+- What was implemented:
+  - Complete bucket-level balance operations for all five buckets (available, held, bonded, feePool, promo)
+  - Individual credit/debit methods: creditBonded, debitBonded, creditFeePool, debitFeePool, creditPromo, debitPromo, creditHeld, debitHeld
+  - Generic creditBucket/debitBucket methods for bucket-agnostic operations
+  - moveBetweenBuckets method for atomic cross-bucket transfers within same account
+  - All debit operations validate sufficient funds and throw InsufficientFundsError if balance would go negative
+  - Amount validation rejects negative amounts
+  - Uses optimistic concurrency control via version column
+- Files changed:
+  - services/ledger/src/accounts.ts (updated - added 480 lines of bucket operations with non-negative invariants)
+- **Learnings for future iterations:**
+  - Balance buckets already existed in types.ts and AccountResponse - this story filled in the operational gap
+  - Each bucket has its own column in the accounts table (balance_available, balance_held, balance_bonded, balance_fee_pool, balance_promo)
+  - InsufficientFundsError can be used for any bucket, not just 'available'
+  - moveBetweenBuckets is useful for stake/fee operations that need atomic bucket transfers
+  - Generic creditBucket/debitBucket enable future event-driven bucket operations
+---
+
+## 2026-02-02T10:00:00Z - CLD-US-008
+- What was implemented:
+  - Extended EventType union with six new event types: stake_lock, stake_slash, fee_burn, fee_transfer, promo_mint, promo_burn
+  - Created StakeFeeService class for handling stake, fee, and promo event business logic
+  - Added metadata types for linking events to originating escrow/trial/transaction/campaign IDs
+  - Each event type creates a hash-chained event entry for audit determinism
+  - Implemented API endpoints:
+    - POST /stake/lock - Move funds from available to bonded bucket
+    - POST /stake/slash - Remove funds from bonded bucket (penalty)
+    - POST /fees/burn - Burn funds from fee pool
+    - POST /fees/transfer - Transfer funds to fee pool from any bucket
+    - POST /promo/mint - Mint promotional credits directly to promo bucket
+    - POST /promo/burn - Burn promotional credits
+  - Added request/response types: StakeLockRequest, StakeSlashRequest, FeeBurnRequest, FeeTransferRequest, PromoMintRequest, PromoBurnRequest, StakeFeeEventResponse
+  - Added helper functions to events.ts: isStakeEventType, isFeeEventType, isPromoEventType
+- Files changed:
+  - services/ledger/src/types.ts (updated - added new event types and request/response interfaces)
+  - services/ledger/src/events.ts (updated - extended event type validation and added helper functions)
+  - services/ledger/src/stake-fee.ts (new - StakeFeeService for stake/fee/promo operations)
+  - services/ledger/src/index.ts (updated - added handlers and routes for stake/fee/promo endpoints)
+- **Learnings for future iterations:**
+  - Event metadata types (StakeEventMetadata, etc.) should use Record<string, unknown> for compatibility with EventRepository.create()
+  - moveBetweenBuckets from accounts.ts is ideal for stake_lock (available -> bonded) and fee_transfer operations
+  - Direct bucket credit/debit methods useful for promo_mint (creditPromo) and burns (debitBonded, debitFeePool, debitPromo)
+  - All stake/fee events link to originating IDs (escrowId, trialId, transactionId, campaignId) via metadata for audit trail
+---
+
+## 2026-02-02T11:00:00Z - CLD-US-009
+- What was implemented:
+  - Per-domain clearing accounts for cross-service settlement (escrow, marketplace, treasury, etc.)
+  - ClearingAccountRepository with CRUD operations and balance management
+  - ClearingService for deposits, withdrawals, and settlements
+  - New event types: clearing_deposit, clearing_withdraw, settlement
+  - All settlement events require batchId for netting reference (audit trail for batch reconciliation)
+  - Helper functions: isClearingEventType, isSettlementEventType
+  - Clearing accounts use 'clr_' prefix to distinguish from user accounts (acc_)
+  - API endpoints:
+    - POST /clearing/accounts - Create clearing account for a domain
+    - GET /clearing/accounts - List all clearing accounts
+    - GET /clearing/accounts/:id - Get clearing account by ID
+    - GET /clearing/accounts/domain/:domain - Get clearing account by domain
+    - POST /clearing/deposit - Deposit from user account to clearing account
+    - POST /clearing/withdraw - Withdraw from clearing account to user account
+    - POST /settlements - Execute settlement with required batchId
+  - D1 migration for clearing_accounts table with unique domain constraint
+- Files changed:
+  - services/ledger/src/types.ts (updated - added clearing account types, settlement types, new event types)
+  - services/ledger/src/events.ts (updated - added clearing/settlement event type validation)
+  - services/ledger/src/clearing.ts (new - ClearingAccountRepository, ClearingService)
+  - services/ledger/src/index.ts (updated - added clearing and settlement API endpoints)
+  - services/ledger/migrations/0005_create_clearing_accounts.sql (new)
+- **Learnings for future iterations:**
+  - Clearing account IDs start with 'clr_' prefix (derived from domain hash)
+  - Settlements can transfer between any combination of user and clearing accounts
+  - batchId is mandatory for all settlements to enable netting reconciliation
+  - Use Record<string, unknown> for metadata types to satisfy EventRepository.create() signature
+  - Clearing deposits/withdrawals track both user and clearing account IDs in event metadata
+---
+
+## 2026-02-02T04:46:26Z - CLD-US-010
+- What was implemented
+  - Added reserve asset registry table (D1 migration) storing external reserve assets with haircut factors and eligibility flag
+  - Added reserve asset API:
+    - GET /reserve/assets
+    - POST /reserve/assets (upsert)
+  - Updated reserve attestation computation to:
+    - Compute eligible reserves from reserve_assets (after haircut_bps)
+    - Compute coverage ratio using eligible reserves only
+    - Include reserve asset breakdown in attestation and sign it via reserveAssetsHash
+- Files changed
+  - services/ledger/migrations/0006_create_reserve_assets.sql
+  - services/ledger/src/reserve-assets.ts
+  - services/ledger/src/attestation.ts
+  - services/ledger/src/index.ts
+  - services/ledger/src/types.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Avoid Number() conversions for big-int ratios; format fixed-point ratios using BigInt string slicing
+  - When signing large structures, sign a deterministic hash of the normalized breakdown (reserveAssetsHash) rather than embedding raw JSON in the signature payload
+---
+
+## 2026-02-02T05:18:22Z - CLD-US-011
+- What was implemented
+  - Added compute reserve asset upsert endpoint:
+    - POST /reserve/compute
+    - Accepts gemini_amount + fal_amount (bigint strings) and optional as_of
+    - Writes/updates two stable reserve asset IDs:
+      - ras_compute_gemini_usd
+      - ras_compute_fal_usd
+    - Applies conservative haircuts by provider (gemini=7000bps, fal=6000bps)
+  - Compute reserve assets are included in coverage attestations automatically via existing /attestation/reserve logic (reads reserve_assets registry)
+- Files changed
+  - services/ledger/src/compute-reserves.ts
+  - services/ledger/src/index.ts
+  - services/ledger/src/types.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - For “computed” reserves without external integrations, prefer deterministic operator-supplied upsert endpoints with stable asset IDs; attestations can stay purely read-only.
+---
+
+## 2026-02-02T05:34:21Z - CLD-US-012
+- What was implemented
+  - Public developer endpoints:
+    - GET / (HTML landing with links to /docs and /skill.md)
+    - GET /docs (minimal human-readable HTML docs)
+    - GET /skill.md (integration docs + example curl commands)
+    - GET /robots.txt and GET /sitemap.xml (minimal)
+    - GET /.well-known/security.txt
+  - OpenClaw frontmatter:
+    - `metadata` is a single-line JSON object string
+- Files changed
+  - services/ledger/src/index.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/ledger && npm run typecheck && npm run lint
+---

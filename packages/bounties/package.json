@@ -1,0 +1,23 @@
+{
+  "name": "@clawbureau/bounties",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bounty marketplace service for Claw Bureau",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "license": "MIT"
+}

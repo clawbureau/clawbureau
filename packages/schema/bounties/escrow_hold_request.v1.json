@@ -1,0 +1,58 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.bounties.escrow_hold_request.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Escrow Hold Request v1",
+  "description": "Request to create an escrow hold for a bounty via clawescrow",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "requester_did",
+    "amount",
+    "currency",
+    "bounty_id",
+    "idempotency_key"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "requester_did": {
+      "type": "string",
+      "description": "DID of the requester whose balance will be held"
+    },
+    "amount": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Amount to hold (principal + fees)"
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["CLAW", "USD"],
+      "description": "Currency for the hold"
+    },
+    "bounty_id": {
+      "type": "string",
+      "description": "Reference to the bounty this hold is for"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key to prevent duplicate holds"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "closure_type": {
+          "type": "string",
+          "enum": ["test", "quorum", "requester"]
+        },
+        "difficulty_scalar": {
+          "type": "number"
+        },
+        "fee_policy_version": {
+          "type": "string"
+        }
+      },
+      "description": "Bounty metadata to store with the escrow"
+    }
+  }
+}

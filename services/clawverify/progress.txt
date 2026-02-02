@@ -1,0 +1,238 @@
+## Codebase Patterns
+- Use Cloudflare Workers for verification services (stateless, low latency)
+- Envelope types use versioned schemas: envelope_version + envelope_type + algorithm
+- Fail-closed validation: reject unknown versions/types/algorithms by default
+- Base64url encoding for all binary data (hashes, signatures)
+- did:key format for Ed25519 keys uses multibase z prefix with Ed25519 multicodec (0xed01)
+- Signed envelopes sign the payload_hash_b64u string, not the raw payload
+- Batch operations use Promise.all for concurrent processing with configurable size limits
+- D1 bindings for SQLite storage: add to wrangler.toml with placeholder database_id for local dev
+- Hash-chained audit logs: each entry includes prev_hash linking to previous, entry_hash computed from all fields
+- Semantic result fields (e.g., trust_tier, owner_status) are separate from cryptographic VALID/INVALID and should be returned explicitly
+- External dependency checks (e.g., clawclaim existence) should be modeled as explicit, fail-closed allowlists/config in Env
+- One-call agent verification endpoint aggregates component verifiers and fails closed when provided components are invalid/mismatched
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.937416
+---
+
+## 2026-02-02T03:15:00Z - CVF-US-001
+- Implemented artifact signature verification service as Cloudflare Worker
+- Files created:
+  - services/clawverify/src/types.ts - Core types, envelope structure, verification results
+  - services/clawverify/src/schema-registry.ts - Fail-closed validation for versions/types/algorithms
+  - services/clawverify/src/crypto.ts - Hash computation, base64url, Ed25519 verification
+  - services/clawverify/src/verify-artifact.ts - Main verification logic
+  - services/clawverify/src/index.ts - Worker entry point with /v1/verify endpoint
+  - services/clawverify/package.json, tsconfig.json, wrangler.toml, .eslintrc.json
+- **Learnings for future iterations:**
+  - Cloudflare Workers support Ed25519 via Web Crypto API (crypto.subtle)
+  - did:key extraction requires base58btc decoding and multicodec prefix parsing
+  - Use 422 status for invalid signatures (not 400) - it's unprocessable content, not bad request
+  - JSON.stringify is used for canonical payload hashing
+---
+
+## 2026-02-02T04:30:00Z - CVF-US-002
+- Implemented message signature verification for DID binding
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added MessagePayload type with message_type variants
+  - services/clawverify/src/verify-message.ts - Message verification with expiry support
+  - services/clawverify/src/index.ts - Added /v1/verify/message endpoint
+- **Learnings for future iterations:**
+  - Message types are: account_binding, ownership_proof, challenge_response
+  - Expiry validation should check expires_at field in payload before signature verification
+  - Response includes signer_did at top level for easy consumption by platforms
+  - Follow the verify-artifact.ts pattern for new envelope types - structure is consistent
+---
+
+## 2026-02-02T05:00:00Z - CVF-US-003
+- Implemented gateway receipt verification for proof-of-harness
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added GatewayReceiptPayload and VerifyReceiptRequest/Response types
+  - services/clawverify/src/verify-receipt.ts - Receipt verification with provider/model/gateway_id return
+  - services/clawverify/src/index.ts - Added /v1/verify/receipt endpoint
+- **Learnings for future iterations:**
+  - Gateway receipts contain: receipt_id, gateway_id, provider, model, request/response hashes, token counts, latency
+  - Response includes provider, model, and gateway_id at top level for marketplace consumption
+  - Validate base64url format for request_hash_b64u and response_hash_b64u in payload
+  - Non-negative number validation for tokens_input, tokens_output, latency_ms
+---
+
+## 2026-02-02T06:15:00Z - CVF-US-004
+- Implemented batch verification endpoint for scale verification
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added BatchItem, BatchItemResult, VerifyBatchRequest/Response types
+  - services/clawverify/src/verify-batch.ts - Batch verification with auto-detection of envelope types
+  - services/clawverify/src/index.ts - Added /v1/verify/batch endpoint
+- **Learnings for future iterations:**
+  - Batch endpoint auto-detects envelope_type and routes to appropriate verifier
+  - Use Promise.all for concurrent verification of batch items
+  - HTTP status codes: 200 (all valid), 207 (mixed results), 422 (all invalid), 400 (request error)
+  - BATCH_SIZE_LIMIT constant (100) prevents abuse and should be configurable per deployment
+  - Items can include optional `id` field for client-side correlation in results
+---
+
+## 2026-02-02T07:00:00Z - CVF-US-005
+- Implemented verification provenance with hash-chained audit log
+- Files modified/created:
+  - services/clawverify/src/audit-log.ts - Hash-chained audit log with D1 storage
+  - services/clawverify/src/types.ts - Added AuditLogEntry, AuditLogReceipt, ProvenanceResponse types
+  - services/clawverify/src/index.ts - Integrated audit logging into all verify handlers, added provenance endpoints
+  - services/clawverify/wrangler.toml - Added D1 binding for AUDIT_LOG_DB
+- **Learnings for future iterations:**
+  - D1 is Cloudflare's SQLite database, requires binding in wrangler.toml
+  - Hash chaining: each entry includes prev_hash_b64u, linking to previous entry
+  - Entry hash is computed from: request_hash, envelope_type, status, signer_did, verified_at, prev_hash
+  - Receipt IDs use format: avr_{timestamp_base36}_{random} for uniqueness
+  - Initialize schema with POST /v1/provenance/init before first use
+  - Verify chain integrity with GET /v1/provenance/{receipt_id}/chain
+---
+
+## 2026-02-02T08:00:00Z - CVF-US-006
+- Implemented public docs and schema registry for developer integration
+- Files modified/created:
+  - services/clawverify/src/schema-docs.ts - Schema definitions, examples, and fail-closed rules
+  - services/clawverify/src/index.ts - Added /v1/schemas and /v1/schemas/{id} endpoints
+- **Learnings for future iterations:**
+  - Schema registry should expose both list and individual detail endpoints
+  - Example payloads need realistic data that demonstrates field usage
+  - Fail-closed rules should be documented both globally and per-schema
+  - Common envelope fields can be shared across all schema definitions
+  - Keep types imported only when needed to avoid lint errors (no-unused-vars)
+---
+
+## 2026-02-02T09:00:00Z - CVF-US-007
+- Implemented proof bundle verification with trust tier computation
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added ProofBundlePayload, TrustTier, component types (URMReference, EventChainEntry, AttestationReference)
+  - services/clawverify/src/verify-proof-bundle.ts - Full proof bundle verification with component validation
+  - services/clawverify/src/index.ts - Added /v1/verify/bundle endpoint
+- **Learnings for future iterations:**
+  - Proof bundles contain optional components: urm, event_chain, receipts, attestations (at least one required)
+  - Trust tiers are computed based on validated components: unknown < basic < verified < attested < full
+  - Event chain validation enforces run_id consistency and hash chain linkage (prev_hash must match previous event_hash)
+  - Attestations have an expiry check - expired attestations are rejected
+  - Component validation results are included in response for transparency
+  - Trust tier computation logic: full (all valid), attested (has attestations), verified (has events or receipts), basic (envelope only)
+---
+
+## 2026-02-02T10:00:00Z - CVF-US-008
+- Implemented event chain verification for tamper-evident logs
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added EventChainPayload, EventChainVerificationResult, VerifyEventChainRequest/Response types
+  - services/clawverify/src/verify-event-chain.ts - Full event chain verification with hash chain and run_id validation
+  - services/clawverify/src/index.ts - Added /v1/verify/event-chain endpoint with audit logging
+- **Learnings for future iterations:**
+  - Event chain payload structure: chain_version, chain_id, run_id, events array
+  - First event must have null or empty prev_hash_b64u (root of chain)
+  - chain_root_hash is the event_hash_b64u of the first event in the chain
+  - Dedicated error codes for event chains: EMPTY_CHAIN, INCONSISTENT_RUN_ID, HASH_CHAIN_BREAK, INVALID_ROOT
+  - Event entries validated for: event_id, run_id, event_type, timestamp (ISO 8601), payload_hash_b64u, event_hash_b64u
+  - The EventChainEntry type was already defined in types.ts from CVF-US-007 (reused for standalone verification)
+---
+
+## 2026-02-02T11:00:00Z - CVF-US-009
+- Implemented schema registry allowlist for deterministic validation
+- Files modified/created:
+  - services/clawverify/src/schema-registry.ts - Added SCHEMA_ALLOWLIST with 8 schema IDs, validation functions
+  - services/clawverify/src/schema-docs.ts - Added getSchemaAllowlist(), getSchemaExample() functions
+  - services/clawverify/src/index.ts - Added /v1/schemas/allowlist, /v1/schemas/validate, /v1/schemas/:id/example endpoints
+- **Learnings for future iterations:**
+  - Schema allowlist is the authoritative source for deterministic validation
+  - Allowlist entries have: schema_id, version, supported_versions[], status, added_at, deprecated_at
+  - Use Map for O(1) schema ID lookup (SCHEMA_ALLOWLIST_MAP)
+  - Validation returns detailed error codes: UNKNOWN_SCHEMA_ID, UNKNOWN_SCHEMA_VERSION, DEPRECATED_SCHEMA
+  - POST /v1/schemas/validate returns 422 for unknown schemas with list of allowlisted schemas
+  - Example payloads are already defined in SCHEMA_DEFINITIONS, reuse via getSchemaExample()
+---
+
+## 2026-02-02T04:21:04Z - CVF-US-010
+- Implemented owner attestation verification:
+  - Added POST /v1/verify/owner-attestation
+  - Fail-closed envelope + payload validation, payload hash recomputation, Ed25519 signature verification
+  - Expiry handling via payload.expires_at (returns error code EXPIRED)
+  - owner_status semantics: verified (provider_ref present), unknown (no provider_ref), expired (expires_at in past)
+- Files changed:
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/verify-owner-attestation.ts
+  - services/clawverify/src/index.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Expose semantic status fields (like owner_status) alongside cryptographic VALID/INVALID to keep API decisions explicit
+  - Treat expires_at as semantic validity (EXPIRED) even if signature is otherwise valid
+---
+
+## 2026-02-02T04:35:31Z - CVF-US-011
+- Implemented commit proof verification:
+  - Added POST /v1/verify/commit-proof
+  - Fail-closed commit_proof envelope + payload validation, payload hash recomputation, Ed25519 signature verification
+  - Repo claim existence check modeled as allowlist (Env.CLAWCLAIM_REPO_CLAIM_ALLOWLIST); missing/empty config fails closed
+  - Response includes repository, commit_sha, and signer_did
+- Files changed:
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/verify-commit-proof.ts
+  - services/clawverify/src/index.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - When a verifier depends on another domain service (clawclaim), make the dependency explicit and fail-closed rather than guessing
+  - Keep claim checks separate from cryptographic verification so failures are attributable (CLAIM_NOT_FOUND vs SIGNATURE_INVALID)
+---
+
+## 2026-02-02T05:04:24Z - CVF-US-012
+- What was implemented
+  - Added POST /v1/verify/agent for one-call agent verification:
+    - DID validity (agent_did)
+    - owner_status (optional owner_attestation_envelope)
+    - trust_tier + poh_tier (optional proof_bundle_envelope)
+    - policy_compliance when policy_hash is provided (evaluated against receipt metadata)
+    - risk_flags and per-component results for debugging
+  - Fail-closed semantics:
+    - If a caller provides an owner attestation or proof bundle, it must verify (otherwise 422)
+    - Enforced subject binding (attestation.subject_did and bundle.payload.agent_did must match agent_did)
+- Files changed
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/types.ts
+  - prd.json
+  - progress.txt
+- Learnings
+  - Aggregator endpoints should return semantic fields (owner_status, poh_tier) alongside cryptographic VALID/INVALID
+---
+
+## 2026-02-02T05:28:12Z - CVF-US-013
+- What was implemented
+  - Added scoped token introspection endpoint:
+    - POST /v1/introspect/scoped-token
+    - Validates scoped_token envelope signature + expires_at (fail-closed)
+    - Returns token_hash_b64u + scope + audience + owner_ref
+  - Logging:
+    - Emits structured console log with token_hash_b64u (clawlogs-style)
+    - Writes audit log entry and anchors request_hash_b64u to token_hash_b64u for correlation
+- Files changed
+  - services/clawverify/src/verify-scoped-token.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/types.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - For introspection flows, use the payload hash as the stable “token hash” so services can correlate without storing raw tokens.
+---
+
+## 2026-02-02T05:40:45Z - CVF-US-014
+- What was implemented
+  - Public developer endpoints:
+    - GET / (HTML landing linking to /docs and /skill.md)
+    - GET /docs (minimal human-readable HTML docs)
+    - GET /skill.md (OpenClaw-compatible skill file)
+      - Frontmatter requirement: `metadata` is a single-line JSON object string
+    - GET /robots.txt and GET /sitemap.xml (minimal)
+    - GET /.well-known/security.txt
+- Files changed
+  - services/clawverify/src/index.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/clawverify && npm run typecheck && npm run lint
+---
