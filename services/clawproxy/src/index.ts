@@ -2,11 +2,44 @@
  * Clawproxy - Gateway proxy that issues signed receipts for LLM model calls
  *
  * POST /v1/proxy/:provider - Proxy request to provider and return with receipt
+ * GET /v1/did - Get proxy DID and public key for verification
  */
 
-import type { Env, ErrorResponse, Provider } from './types';
+import type { Env, ErrorResponse, Provider, DidResponse } from './types';
 import { isValidProvider, getProviderConfig, buildAuthHeader, extractModel } from './providers';
-import { generateReceipt, attachReceipt } from './receipt';
+import { generateReceipt, attachReceipt, type SigningContext } from './receipt';
+import { importEd25519Key, computeKeyId, base64urlEncode } from './crypto';
+
+/** Proxy DID identifier */
+const PROXY_DID = 'did:web:clawproxy.com';
+
+/** Cached signing context (initialized on first request) */
+let cachedSigningContext: SigningContext | null = null;
+
+/**
+ * Initialize signing context from environment
+ * Returns null if signing key is not configured
+ */
+async function initSigningContext(env: Env): Promise<SigningContext | null> {
+  if (cachedSigningContext) {
+    return cachedSigningContext;
+  }
+
+  if (!env.PROXY_SIGNING_KEY) {
+    return null;
+  }
+
+  const keyPair = await importEd25519Key(env.PROXY_SIGNING_KEY);
+  const kid = await computeKeyId(keyPair.publicKeyBytes);
+
+  cachedSigningContext = {
+    keyPair,
+    did: PROXY_DID,
+    kid,
+  };
+
+  return cachedSigningContext;
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -15,7 +48,17 @@ export default {
 
     // Health check endpoint
     if (path === '/health' && request.method === 'GET') {
-      return jsonResponse({ status: 'ok', version: env.PROXY_VERSION });
+      const signingContext = await initSigningContext(env);
+      return jsonResponse({
+        status: 'ok',
+        version: env.PROXY_VERSION,
+        signingEnabled: signingContext !== null,
+      });
+    }
+
+    // DID endpoint: GET /v1/did
+    if (path === '/v1/did' && request.method === 'GET') {
+      return handleDidEndpoint(env);
     }
 
     // Proxy endpoint: POST /v1/proxy/:provider
@@ -33,14 +76,63 @@ export default {
 };
 
 /**
+ * Handle GET /v1/did - Return proxy DID and public key
+ */
+async function handleDidEndpoint(env: Env): Promise<Response> {
+  const signingContext = await initSigningContext(env);
+
+  if (!signingContext) {
+    // Fail closed: signing must be configured
+    return errorResponse(
+      'SIGNING_NOT_CONFIGURED',
+      'Proxy signing key is not configured. Receipt signing is required.',
+      503
+    );
+  }
+
+  const publicKeyBase64url = base64urlEncode(signingContext.keyPair.publicKeyBytes);
+
+  const didResponse: DidResponse = {
+    did: signingContext.did,
+    publicKey: publicKeyBase64url,
+    kid: signingContext.kid,
+    algorithm: 'Ed25519',
+    deployment: {
+      version: env.PROXY_VERSION,
+      signingEnabled: true,
+    },
+  };
+
+  // Cache-Control: public, max-age=3600 (1 hour)
+  return new Response(JSON.stringify(didResponse), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=3600',
+      'X-Proxy-Version': env.PROXY_VERSION,
+    },
+  });
+}
+
+/**
  * Handle proxy request to LLM provider
  */
 async function handleProxy(
   request: Request,
-  _env: Env,
+  env: Env,
   providerParam: string
 ): Promise<Response> {
   const startTime = Date.now();
+
+  // Initialize signing context - fail closed if not configured
+  const signingContext = await initSigningContext(env);
+  if (!signingContext) {
+    return errorResponse(
+      'SIGNING_NOT_CONFIGURED',
+      'Proxy signing key is not configured. Receipt signing is required for all proxy requests.',
+      503
+    );
+  }
 
   // Validate provider
   if (!isValidProvider(providerParam)) {
@@ -102,14 +194,17 @@ async function handleProxy(
   // Read provider response
   const responseBody = await providerResponse.text();
 
-  // Generate receipt
-  const receipt = await generateReceipt({
-    provider,
-    model,
-    requestBody,
-    responseBody,
-    startTime,
-  });
+  // Generate signed receipt
+  const receipt = await generateReceipt(
+    {
+      provider,
+      model,
+      requestBody,
+      responseBody,
+      startTime,
+    },
+    signingContext
+  );
 
   // If provider returned an error, pass it through with receipt
   if (!providerResponse.ok) {

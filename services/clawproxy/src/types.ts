@@ -4,7 +4,27 @@
 
 export interface Env {
   PROXY_VERSION: string;
+  /** Ed25519 private key in base64url format for signing receipts */
   PROXY_SIGNING_KEY?: string;
+}
+
+/**
+ * DID document response for /v1/did endpoint
+ */
+export interface DidResponse {
+  /** DID identifier (did:web:clawproxy.com) */
+  did: string;
+  /** Public key in base64url format */
+  publicKey: string;
+  /** Key ID for signature verification */
+  kid: string;
+  /** Key algorithm */
+  algorithm: 'Ed25519';
+  /** Deployment metadata */
+  deployment: {
+    version: string;
+    signingEnabled: boolean;
+  };
 }
 
 /**

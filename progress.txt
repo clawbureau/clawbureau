@@ -1,0 +1,48 @@
+## Codebase Patterns
+- Services live in `services/<service-name>/` with Cloudflare Worker structure
+- Use wrangler.toml for Worker config, tsconfig.json with strict mode
+- Package naming: @clawbureau/<service-name>
+- Receipt hashes use SHA-256 hex encoding
+- Types exported from `src/types.ts`, providers from `src/providers.ts`
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.937763
+---
+
+## 2026-02-02 - CPX-US-001
+- Implemented clawproxy Cloudflare Worker foundation
+- Created POST /v1/proxy/:provider endpoint routing to Anthropic/OpenAI
+- Added receipt generation with SHA-256 hashes of request/response bodies
+- Files created:
+  - services/clawproxy/package.json
+  - services/clawproxy/wrangler.toml
+  - services/clawproxy/tsconfig.json
+  - services/clawproxy/src/index.ts (main entry)
+  - services/clawproxy/src/types.ts (Receipt, Provider types)
+  - services/clawproxy/src/providers.ts (Anthropic/OpenAI routing)
+  - services/clawproxy/src/receipt.ts (receipt generation)
+  - services/clawproxy/src/crypto.ts (SHA-256 hashing)
+- **Learnings for future iterations:**
+  - Receipt version is '1.0' with fields: version, provider, model, requestHash, responseHash, timestamp, latencyMs
+  - Provider allowlist is hardcoded in providers.ts for SSRF prevention
+  - Authorization header supports both "Bearer <key>" and raw key formats
+  - Typecheck: `npm run typecheck` in services/clawproxy/
+---
+
+## 2026-02-02 - CPX-US-002
+- Implemented Ed25519 receipt signing for cryptographically verifiable receipts
+- Added GET /v1/did endpoint to expose proxy DID + public key for verification
+- All proxy requests now fail closed (503) if PROXY_SIGNING_KEY is not configured
+- Files modified:
+  - services/clawproxy/src/types.ts (added DidResponse interface)
+  - services/clawproxy/src/crypto.ts (added Ed25519 import/sign/verify functions, computeKeyId)
+  - services/clawproxy/src/receipt.ts (added SigningContext, signing support in generateReceipt)
+  - services/clawproxy/src/index.ts (added /v1/did endpoint, fail-closed logic, signing integration)
+- **Learnings for future iterations:**
+  - Ed25519 keys stored as base64url-encoded raw 32-byte seed in PROXY_SIGNING_KEY secret
+  - PKCS8 wrapping is required for Web Crypto API Ed25519 import (16-byte header prepended to seed)
+  - DID format: did:web:clawproxy.com with kid as truncated SHA-256 hash of public key
+  - Receipt signature covers JSON-serialized payload excluding signature field
+  - Signing context is cached at module level after first request
+  - Cache-Control: public, max-age=3600 set on /v1/did responses
+---
