@@ -1,0 +1,189 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawscope-phase2",
+  "description": "clawscope.com (Scope + Observability) — PRD — Define and enforce scoped token access, issue/introspect CSTs, and provide mission + usage analytics across services.",
+  "userStories": [
+    {
+      "id": "CSC-US-001",
+      "title": "Issue scoped tokens",
+      "description": "As a platform, I want time-bound tokens so that access is safe.",
+      "acceptanceCriteria": [
+        "Issue tokens bound to DID + audience + scope",
+        "Enforce TTL and max scope length",
+        "Return token hash + policy version",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented POST /v1/tokens/issue issuing Ed25519-signed JWT (alg=EdDSA). Enforces TTL + scope limits and returns token_hash + policy_version."
+    },
+    {
+      "id": "CSC-US-002",
+      "title": "Token introspection",
+      "description": "As a service, I want introspection so that I can verify tokens.",
+      "acceptanceCriteria": [
+        "Validate signature + expiry",
+        "Return scope + audience + owner_ref",
+        "Fail closed on unknown version",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented POST /v1/tokens/introspect validating EdDSA signature + exp and returning scope/aud/owner_ref (fail-closed on token_version)."
+    },
+    {
+      "id": "CSC-US-003",
+      "title": "Token revocation",
+      "description": "As a security operator, I want revocation so that compromises stop.",
+      "acceptanceCriteria": [
+        "Revoke tokens immediately",
+        "Broadcast revocation events",
+        "Provide audit log",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented POST /v1/tokens/revoke (admin) backed by KV; records revocations immediately and appends to an event/audit feed (GET /v1/revocations/events). Introspection returns active=false for revoked tokens."
+    },
+    {
+      "id": "CSC-US-004",
+      "title": "Policy enforcement",
+      "description": "As a platform, I want policy checks so that tokens stay narrow.",
+      "acceptanceCriteria": [
+        "Enforce allowed scopes per tier",
+        "Enforce max TTL per policy",
+        "Reject tokens that exceed limits",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added tier-aware policy enforcement for token issuance: supports SCOPE_POLICY_JSON tiers or env-based allowlist/prefix knobs; enforces max TTL and rejects scopes outside policy (incl. optional wildcard bans)."
+    },
+    {
+      "id": "CSC-US-005",
+      "title": "JWKS / public keys",
+      "description": "As a verifier, I want key discovery so that verification is easy.",
+      "acceptanceCriteria": [
+        "Publish JWKS endpoint",
+        "Rotate keys with versioning",
+        "Cache-control headers",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-006",
+      "title": "Token audit trail",
+      "description": "As an auditor, I want logs so that issuance is traceable.",
+      "acceptanceCriteria": [
+        "Log token hash + issuance metadata",
+        "Store revocation timestamps",
+        "Export audit bundles",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Logs token_hash + issuance metadata to KV (events:issuance:*), stores revocation timestamps, and exports combined audit bundles via GET /v1/audit/bundle (admin)."
+    },
+    {
+      "id": "CSC-US-007",
+      "title": "Metrics dashboard",
+      "description": "As an operator, I want real-time metrics so that I can monitor health.",
+      "acceptanceCriteria": [
+        "Service metrics",
+        "Latency charts",
+        "Error rates",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-008",
+      "title": "Usage reports",
+      "description": "As an enterprise, I want usage reports so that I can track spend.",
+      "acceptanceCriteria": [
+        "Daily usage",
+        "Export CSV",
+        "Segment by service",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-009",
+      "title": "Alerting",
+      "description": "As an operator, I want alerts so that I can respond quickly.",
+      "acceptanceCriteria": [
+        "Threshold alerts",
+        "Email/Slack",
+        "Ack workflow",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-010",
+      "title": "Cost analytics",
+      "description": "As a finance team, I want cost analytics so that budgets are managed.",
+      "acceptanceCriteria": [
+        "Cost by service",
+        "Trend charts",
+        "Forecasting",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-011",
+      "title": "Trace viewer",
+      "description": "As an engineer, I want tracing so that I can debug issues.",
+      "acceptanceCriteria": [
+        "Trace search",
+        "Span view",
+        "Correlation IDs",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-012",
+      "title": "SLA reports",
+      "description": "As an enterprise, I want SLA reports so that compliance is proven.",
+      "acceptanceCriteria": [
+        "SLA metrics",
+        "Downtime logs",
+        "Export reports",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CSC-US-013",
+      "title": "Mission aggregation",
+      "description": "As an operator, I want mission rollups so that multi-agent work is visible.",
+      "acceptanceCriteria": [
+        "Group spend and receipts by mission_id",
+        "Show per-role and per-agent breakdowns",
+        "Export mission summary reports",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
