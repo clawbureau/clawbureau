@@ -159,3 +159,54 @@ export interface VerifyReceiptResponse {
   gateway_id?: string;
   error?: VerificationError;
 }
+
+/**
+ * Batch verification types
+ * CVF-US-004: Batch verification for scale verification
+ */
+
+/** Maximum number of envelopes allowed in a single batch request */
+export const BATCH_SIZE_LIMIT = 100;
+
+/** Individual batch item - envelope type is detected automatically */
+export interface BatchItem {
+  envelope: SignedEnvelope;
+  /** Optional client-provided ID for correlation */
+  id?: string;
+}
+
+/** Result for a single batch item */
+export interface BatchItemResult {
+  /** Client-provided ID (if any) or index in the batch */
+  id: string;
+  /** Detected envelope type */
+  envelope_type?: EnvelopeType;
+  /** Verification result */
+  result: VerificationResult;
+  /** Error details (if verification failed) */
+  error?: VerificationError;
+  /** Additional fields returned based on envelope type */
+  signer_did?: string;
+  provider?: string;
+  model?: string;
+  gateway_id?: string;
+}
+
+/** Batch verification request */
+export interface VerifyBatchRequest {
+  items: BatchItem[];
+}
+
+/** Batch verification response */
+export interface VerifyBatchResponse {
+  /** Total number of items in the batch */
+  total: number;
+  /** Number of valid items */
+  valid_count: number;
+  /** Number of invalid items */
+  invalid_count: number;
+  /** Per-item results in same order as input */
+  results: BatchItemResult[];
+  /** Timestamp when verification completed */
+  verified_at: string;
+}

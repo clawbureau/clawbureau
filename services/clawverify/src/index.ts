@@ -6,10 +6,12 @@
 import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
+import { verifyBatch } from './verify-batch';
 import type {
   VerifyArtifactResponse,
   VerifyMessageResponse,
   VerifyReceiptResponse,
+  VerifyBatchResponse,
 } from './types';
 
 export interface Env {
@@ -136,6 +138,41 @@ async function handleVerifyReceipt(request: Request): Promise<Response> {
 }
 
 /**
+ * Handle POST /v1/verify/batch - Batch verify multiple envelopes
+ */
+async function handleVerifyBatch(request: Request): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Verify the batch
+  const result = await verifyBatch(body);
+
+  // If validation error, return 400
+  if ('error' in result && typeof result.error === 'string') {
+    return errorResponse(result.error, 400);
+  }
+
+  const response = result as VerifyBatchResponse;
+
+  // Return 200 for all valid, 207 for mixed results, 422 for all invalid
+  let status: number;
+  if (response.invalid_count === 0) {
+    status = 200; // All valid
+  } else if (response.valid_count === 0) {
+    status = 422; // All invalid
+  } else {
+    status = 207; // Multi-status (mixed results)
+  }
+
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle health check
  */
 function handleHealth(): Response {
@@ -172,6 +209,11 @@ export default {
     // POST /v1/verify/receipt - Gateway receipt verification
     if (url.pathname === '/v1/verify/receipt' && method === 'POST') {
       return handleVerifyReceipt(request);
+    }
+
+    // POST /v1/verify/batch - Batch verification
+    if (url.pathname === '/v1/verify/batch' && method === 'POST') {
+      return handleVerifyBatch(request);
     }
 
     // 404 for unknown routes
