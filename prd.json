@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawproxy-phase1-trust",
-  "description": "clawproxy.com (Gateway Receipts) \u2014 PRD \u2014 Gateway proxy that issues signed receipts for model calls (proof-of-harness). BYOK-friendly.",
+  "description": "clawproxy.com (Gateway Receipts) — PRD — Gateway proxy that issues signed receipts for model calls (proof-of-harness). BYOK-friendly.",
   "userStories": [
     {
       "id": "CPX-US-001",
@@ -182,6 +182,21 @@
         "Typecheck passes"
       ],
       "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CPX-US-014",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawproxy quickly.",
+      "acceptanceCriteria": [
+        "GET / returns a small HTML landing page with links to /docs and /skill.md",
+        "GET /skill.md returns integration docs + example curl commands",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 14,
       "passes": false,
       "notes": ""
     }
