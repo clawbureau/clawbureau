@@ -12,7 +12,7 @@
 #   WORKTREES_TRUST_ROOT=...         # legacy alias for WORKTREES_ROOT
 #
 #   FLEET_TARGETS="a b c"            # explicit targets (space or comma separated)
-#   FLEET_AUTO_TARGETS=1             # auto-discover targets: all <root>/* dirs that contain prd.json
+#   FLEET_AUTO_TARGETS=1             # auto-discover targets: all <root>/* dirs that contain a prd.json (e.g. services/*/prd.json)
 #   FLEET_WATCH=1                    # when no targets have failing stories, sleep+retry instead of exiting
 #
 #   FLEET_SESSION=...                # shared pi session file path
@@ -39,9 +39,20 @@ if [[ -n "${FLEET_TARGETS:-}" ]]; then
   # shellcheck disable=SC2206
   TARGETS=( ${FLEET_TARGETS//,/ } )
 elif [[ -n "${FLEET_AUTO_TARGETS:-}" ]]; then
-  # Discover all immediate subdirs that contain a prd.json.
+  # Auto-discover targets: any immediate child dir under WORKTREES_ROOT
+  # that contains a prd.json somewhere inside (ignoring node_modules).
   # shellcheck disable=SC2207
-  TARGETS=( $(find "$WORKTREES_ROOT" -maxdepth 2 -name prd.json -print | sed 's|/prd.json$||' | sed 's|.*/||' | sort -u) )
+  TARGETS=( $(
+    find "$WORKTREES_ROOT" \
+      -mindepth 2 -maxdepth 4 \
+      -name prd.json \
+      -not -path '*/node_modules/*' \
+      -not -path '*/.git/*' \
+      -print 2>/dev/null \
+    | sed "s|^${WORKTREES_ROOT}/||" \
+    | cut -d/ -f1 \
+    | sort -u
+  ) )
 else
   TARGETS=("${DEFAULT_TARGETS[@]}")
 fi
@@ -49,6 +60,31 @@ fi
 has_failing_story() {
   local prd="$1"
   jq -e '.userStories[] | select(.passes==false)' "$prd" >/dev/null 2>&1
+}
+
+find_prd_file() {
+  local target_root="$1"
+
+  if [[ -f "$target_root/prd.json" ]]; then
+    echo "$target_root/prd.json"
+    return 0
+  fi
+
+  # Common layout: <worktree>/services/<service>/prd.json
+  local found
+  found=$(find "$target_root" \
+    -maxdepth 4 \
+    -name prd.json \
+    -not -path '*/node_modules/*' \
+    -not -path '*/.git/*' \
+    -print -quit 2>/dev/null || true)
+
+  if [[ -n "$found" ]]; then
+    echo "$found"
+    return 0
+  fi
+
+  return 1
 }
 
 pick_next_target() {
@@ -59,17 +95,21 @@ pick_next_target() {
     local idx=$(((start_idx + offset) % n))
     local name="${TARGETS[$idx]}"
     local dir="$WORKTREES_ROOT/$name"
+    local prd
+    local run_dir
 
     if [[ ! -d "$dir" ]]; then
       continue
     fi
 
-    if [[ ! -f "$dir/prd.json" ]]; then
+    prd=$(find_prd_file "$dir" || true)
+    if [[ -z "$prd" ]]; then
       continue
     fi
 
-    if has_failing_story "$dir/prd.json"; then
-      echo "$idx:$name:$dir"
+    if has_failing_story "$prd"; then
+      run_dir="$(dirname "$prd")"
+      echo "$idx:$name:$run_dir:$prd"
       return 0
     fi
   done
@@ -102,7 +142,9 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
   sel_idx="${selection%%:*}"
   rest="${selection#*:}"
   name="${rest%%:*}"
-  dir="${rest#*:}"
+  rest="${rest#*:}"
+  run_dir="${rest%%:*}"
+  prd="${rest#*:}"
 
   # advance pointer for round-robin
   n="${#TARGETS[@]}"
@@ -119,7 +161,7 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
   # Use the monorepo-root runner so all worktrees benefit from the same
   # up-to-date harness features (Pi support, instruction seeding rules, etc).
   (
-    cd "$dir" \
+    cd "$run_dir" \
     && "$MONOREPO_ROOT/scripts/ralph/ralph.sh" --tool pi --pi-session "$FLEET_SESSION" 1
   )
   status=$?
