@@ -10,7 +10,9 @@
 - WebhookEmitter is optional - methods should handle gracefully when not provided
 - Dispute IDs use `dsp_` prefix
 - Optional dependencies (DisputeStore, TrialsClient) follow same pattern as WebhookEmitter - check for presence before using
-- Ledger client versioning: V1 (createHold), V2 (releaseHoldAndTransfer), V3 (releasePartialHoldAndTransfer for milestones)
+- Ledger client versioning: V1 (createHold), V2 (releaseHoldAndTransfer), V3 (releasePartialHoldAndTransfer for milestones), V4 (releaseHold for cancellation)
+- AuditLogger is optional dependency for audit log entries - follows same pattern as WebhookEmitter
+- Audit entry IDs use `aud_` prefix
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936628
@@ -76,4 +78,19 @@ Started: 2026-02-02T03:08:26.936628
   - When all milestones are released, escrow status automatically changes to 'released'
   - Idempotency key pattern for milestones: `escrow_milestone_release_${escrow_id}_${milestone_id}`
   - Webhook event type 'escrow.milestone_released' includes remaining_amount and remaining_milestones
+---
+
+## 2026-02-02 - CES-US-005
+- Implemented escrow cancellation functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added CancelEscrowRequest, CancelEscrowResult, LedgerReleaseHoldResult, LedgerClientV4, AuditLogAction, AuditLogEntry, AuditLogger
+  - `services/escrow/src/escrow-service.ts` - Added cancelEscrow() method, extended EscrowServiceConfig with auditLogger, added isLedgerV4 type guard
+  - `services/escrow/src/index.ts` - Exported new cancellation and audit types
+- **Learnings for future iterations:**
+  - LedgerClientV4 extends V3 with releaseHold() for returning funds without transfer (cancellation)
+  - cancelEscrow() validates: only requester can cancel, escrow must be 'held' status, no released milestones
+  - Prevents cancellation if partial work done (milestones released) - should use dispute process instead
+  - AuditLogger follows same optional dependency pattern as WebhookEmitter
+  - Idempotency key pattern for cancellation: `escrow_cancel_${escrow_id}`
+  - Webhook event type 'escrow.cancelled' for cancellation notifications
 ---

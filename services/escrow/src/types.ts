@@ -324,3 +324,78 @@ export interface LedgerClientV3 extends LedgerClientV2 {
     idempotency_key: string;
   }): Promise<LedgerTransferResult>;
 }
+
+/**
+ * CES-US-005: Escrow cancellation types
+ */
+
+export interface CancelEscrowRequest {
+  escrow_id: string;
+  /** DID of the party authorizing the cancellation (must be requester) */
+  cancelled_by_did: string;
+  /** Reason for the cancellation */
+  reason?: string;
+}
+
+export interface CancelEscrowResult {
+  escrow_id: string;
+  escrow: Escrow;
+  /** Whether the hold was successfully released back to requester */
+  hold_released: boolean;
+  /** The ledger event ID for the hold release */
+  release_event_id?: string;
+  /** Whether the audit log entry was recorded */
+  audit_logged: boolean;
+  webhook_sent: boolean;
+}
+
+export interface LedgerReleaseHoldResult {
+  success: boolean;
+  release_event_id?: string;
+  error?: string;
+  new_balance?: number;
+}
+
+/**
+ * Extended ledger client interface with hold release (cancellation) capability
+ */
+export interface LedgerClientV4 extends LedgerClientV3 {
+  /**
+   * Release a hold and return funds to the original holder (no transfer).
+   * Used for escrow cancellation.
+   */
+  releaseHold(params: {
+    account_did: string;
+    amount: number;
+    currency: string;
+    reference_id: string;
+    reference_type: 'escrow_cancellation';
+    idempotency_key: string;
+  }): Promise<LedgerReleaseHoldResult>;
+}
+
+/**
+ * Audit log entry type
+ */
+export type AuditLogAction =
+  | 'escrow.created'
+  | 'escrow.released'
+  | 'escrow.cancelled'
+  | 'escrow.disputed'
+  | 'escrow.milestone_released';
+
+export interface AuditLogEntry {
+  entry_id: string;
+  action: AuditLogAction;
+  escrow_id: string;
+  actor_did: string;
+  timestamp: string;
+  details: Record<string, unknown>;
+}
+
+/**
+ * Interface for audit logger
+ */
+export interface AuditLogger {
+  log(entry: AuditLogEntry): Promise<{ logged: boolean; error?: string }>;
+}

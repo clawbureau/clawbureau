@@ -19,8 +19,10 @@ export type {
   LedgerClient,
   LedgerClientV2,
   LedgerClientV3,
+  LedgerClientV4,
   LedgerHoldResult,
   LedgerTransferResult,
+  LedgerReleaseHoldResult,
   EscrowStore,
   WebhookEmitter,
   WebhookEvent,
@@ -40,4 +42,10 @@ export type {
   // CES-US-004: Milestone payout types
   ReleaseMilestoneRequest,
   ReleaseMilestoneResult,
+  // CES-US-005: Escrow cancellation types
+  CancelEscrowRequest,
+  CancelEscrowResult,
+  AuditLogAction,
+  AuditLogEntry,
+  AuditLogger,
 } from './types.js';

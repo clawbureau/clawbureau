@@ -6,6 +6,10 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type {
+  AuditLogEntry,
+  AuditLogger,
+  CancelEscrowRequest,
+  CancelEscrowResult,
   CreateEscrowRequest,
   CreateEscrowResult,
   Dispute,
@@ -19,6 +23,7 @@ import type {
   LedgerClient,
   LedgerClientV2,
   LedgerClientV3,
+  LedgerClientV4,
   Milestone,
   ReleaseEscrowRequest,
   ReleaseEscrowResult,
@@ -31,18 +36,20 @@ import type {
 
 export interface EscrowServiceConfig {
   store: EscrowStore;
-  ledger: LedgerClient | LedgerClientV2 | LedgerClientV3;
+  ledger: LedgerClient | LedgerClientV2 | LedgerClientV3 | LedgerClientV4;
   webhookEmitter?: WebhookEmitter;
   disputeStore?: DisputeStore;
   trialsClient?: TrialsClient;
+  auditLogger?: AuditLogger;
 }
 
 export class EscrowService {
   private readonly store: EscrowStore;
-  private readonly ledger: LedgerClient | LedgerClientV2 | LedgerClientV3;
+  private readonly ledger: LedgerClient | LedgerClientV2 | LedgerClientV3 | LedgerClientV4;
   private readonly webhookEmitter?: WebhookEmitter;
   private readonly disputeStore?: DisputeStore;
   private readonly trialsClient?: TrialsClient;
+  private readonly auditLogger?: AuditLogger;
 
   constructor(config: EscrowServiceConfig) {
     this.store = config.store;
@@ -50,6 +57,7 @@ export class EscrowService {
     this.webhookEmitter = config.webhookEmitter;
     this.disputeStore = config.disputeStore;
     this.trialsClient = config.trialsClient;
+    this.auditLogger = config.auditLogger;
   }
 
   /**
@@ -460,6 +468,139 @@ export class EscrowService {
   }
 
   /**
+   * CES-US-005: Cancel escrow
+   *
+   * Cancels an escrow if no work has been submitted, releasing the hold back to the requester.
+   *
+   * Acceptance Criteria:
+   * - Cancel if no submission (must be in 'held' status, not disputed/frozen)
+   * - Release hold (return funds to requester)
+   * - Audit log entry
+   */
+  async cancelEscrow(request: CancelEscrowRequest): Promise<CancelEscrowResult> {
+    // Validate escrow exists
+    const escrow = await this.store.get(request.escrow_id);
+    if (!escrow) {
+      throw new EscrowError('ESCROW_NOT_FOUND', `Escrow ${request.escrow_id} not found`);
+    }
+
+    // Only requester can cancel escrow
+    if (request.cancelled_by_did !== escrow.requester_did) {
+      throw new EscrowError(
+        'UNAUTHORIZED',
+        'Only the requester can cancel an escrow'
+      );
+    }
+
+    // Only held escrows can be cancelled (not disputed, frozen, released, etc.)
+    if (escrow.status !== 'held') {
+      throw new EscrowError(
+        'INVALID_STATUS',
+        `Cannot cancel escrow in status '${escrow.status}'. Must be 'held'.`
+      );
+    }
+
+    // Check if escrow has any released milestones (partial work done)
+    if (escrow.milestones && escrow.milestones.some((m) => m.status === 'released')) {
+      throw new EscrowError(
+        'PARTIAL_RELEASE',
+        'Cannot cancel escrow with released milestones. Use dispute process instead.'
+      );
+    }
+
+    // Check ledger supports hold release
+    if (!this.isLedgerV4(this.ledger)) {
+      throw new EscrowError(
+        'LEDGER_UNSUPPORTED',
+        'Ledger client does not support hold release operations (cancellation)'
+      );
+    }
+
+    const now = new Date().toISOString();
+    const idempotency_key = `escrow_cancel_${escrow.escrow_id}`;
+
+    // Release hold back to requester
+    const releaseResult = await this.ledger.releaseHold({
+      account_did: escrow.requester_did,
+      amount: escrow.amount,
+      currency: escrow.currency,
+      reference_id: escrow.escrow_id,
+      reference_type: 'escrow_cancellation',
+      idempotency_key,
+    });
+
+    if (!releaseResult.success) {
+      throw new EscrowError(
+        'RELEASE_FAILED',
+        releaseResult.error ?? 'Failed to release hold on funds'
+      );
+    }
+
+    // Update escrow status
+    const updatedEscrow: Escrow = {
+      ...escrow,
+      status: 'cancelled',
+      updated_at: now,
+    };
+
+    await this.store.save(updatedEscrow);
+
+    // Create audit log entry
+    let auditLogged = false;
+    if (this.auditLogger) {
+      const auditEntry: AuditLogEntry = {
+        entry_id: `aud_${uuidv4()}`,
+        action: 'escrow.cancelled',
+        escrow_id: escrow.escrow_id,
+        actor_did: request.cancelled_by_did,
+        timestamp: now,
+        details: {
+          amount: escrow.amount,
+          currency: escrow.currency,
+          agent_did: escrow.agent_did,
+          reason: request.reason,
+          release_event_id: releaseResult.release_event_id,
+        },
+      };
+
+      const auditResult = await this.auditLogger.log(auditEntry);
+      auditLogged = auditResult.logged;
+    }
+
+    // Emit webhook
+    let webhookSent = false;
+    if (this.webhookEmitter) {
+      const webhookEvent: WebhookEvent = {
+        event_id: `evt_${uuidv4()}`,
+        event_type: 'escrow.cancelled',
+        escrow_id: escrow.escrow_id,
+        timestamp: now,
+        payload: {
+          escrow_id: escrow.escrow_id,
+          requester_did: escrow.requester_did,
+          agent_did: escrow.agent_did,
+          amount: escrow.amount,
+          currency: escrow.currency,
+          release_event_id: releaseResult.release_event_id,
+          reason: request.reason,
+        },
+      };
+
+      const webhookResult = await this.webhookEmitter.emit(webhookEvent);
+      webhookSent = webhookResult.sent;
+    }
+
+    return {
+      escrow_id: escrow.escrow_id,
+      escrow: updatedEscrow,
+      hold_released: true,
+      release_event_id: releaseResult.release_event_id,
+      audit_logged: auditLogged,
+      webhook_sent: webhookSent,
+    };
+  }
+
+  /**
    * CES-US-003: Dispute escrow
    *
    * Initiates a dispute on an escrow, freezing funds and starting the dispute process.
@@ -735,15 +876,22 @@ export class EscrowService {
   /**
    * Type guard to check if ledger supports V2 operations
    */
-  private isLedgerV2(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3): ledger is LedgerClientV2 {
+  private isLedgerV2(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3 | LedgerClientV4): ledger is LedgerClientV2 {
     return 'releaseHoldAndTransfer' in ledger;
   }
 
   /**
    * Type guard to check if ledger supports V3 operations (partial releases)
    */
-  private isLedgerV3(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3): ledger is LedgerClientV3 {
+  private isLedgerV3(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3 | LedgerClientV4): ledger is LedgerClientV3 {
     return 'releasePartialHoldAndTransfer' in ledger;
+  }
+
+  /**
+   * Type guard to check if ledger supports V4 operations (hold release for cancellation)
+   */
+  private isLedgerV4(ledger: LedgerClient | LedgerClientV2 | LedgerClientV3 | LedgerClientV4): ledger is LedgerClientV4 {
+    return 'releaseHold' in ledger;
   }
 }
 
