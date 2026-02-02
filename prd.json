@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawescrow-phase1-trust",
-  "description": "clawescrow.com (Escrow) \u2014 PRD \u2014 Escrow holds/releases/milestones for agent work.",
+  "description": "clawescrow.com (Escrow) — PRD — Escrow holds/releases/milestones for agent work.",
   "userStories": [
     {
       "id": "CES-US-001",
@@ -86,6 +86,21 @@
       "priority": 6,
       "passes": true,
       "notes": "Implemented getEscrowStatus() method returning GetEscrowStatusResponse with status, timestamps, milestone summary, dispute window info, and dispute status."
+    },
+    {
+      "id": "CES-US-007",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawescrow quickly.",
+      "acceptanceCriteria": [
+        "GET / returns a small HTML landing page with links to /docs and /skill.md",
+        "GET /skill.md returns integration docs + example curl commands",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
