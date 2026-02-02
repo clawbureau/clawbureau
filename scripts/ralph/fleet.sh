@@ -116,9 +116,11 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
   # Run one iteration; ralph.sh exits 1 when max iterations reached without COMPLETE.
   # That's expected for 1-iteration slices, so we ignore the exit code.
   set +e
+  # Use the monorepo-root runner so all worktrees benefit from the same
+  # up-to-date harness features (Pi support, instruction seeding rules, etc).
   (
     cd "$dir" \
-    && ./scripts/ralph/ralph.sh --tool pi --pi-session "$FLEET_SESSION" 1
+    && "$MONOREPO_ROOT/scripts/ralph/ralph.sh" --tool pi --pi-session "$FLEET_SESSION" 1
   )
   status=$?
   set -e
