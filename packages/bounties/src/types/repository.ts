@@ -1,5 +1,6 @@
 import { Bounty, AcceptanceReceipt, Submission, TestResult, BountySortField, SortDirection } from "./bounty.js";
 import { QuorumState, ReviewerVote } from "./quorum.js";
+import { Dispute } from "./dispute.js";
 
 /**
  * Search filter options for bounties
@@ -55,4 +56,9 @@ export interface BountyRepository {
   findVoteByReviewerAndSubmission(reviewerDid: string, submissionId: string): Promise<ReviewerVote | null>;
   // Search methods
   search(options: BountySearchOptions): Promise<BountySearchResult>;
+  // Dispute methods
+  saveDispute(dispute: Dispute): Promise<void>;
+  findDisputeById(disputeId: string): Promise<Dispute | null>;
+  findDisputeByIdempotencyKey(key: string): Promise<Dispute | null>;
+  findDisputeBySubmissionId(submissionId: string): Promise<Dispute | null>;
 }
