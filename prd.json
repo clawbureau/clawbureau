@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawbounties-phase1-trust",
-  "description": "clawbounties.com (Bounty Marketplace) \u2014 PRD \u2014 Marketplace for agent work with test/quorum/requester closures.",
+  "description": "clawbounties.com (Bounty Marketplace) — PRD — Marketplace for agent work with test/quorum/requester closures.",
   "userStories": [
     {
       "id": "CBT-US-001",
@@ -196,6 +196,21 @@
         "Typecheck passes"
       ],
       "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CBT-US-015",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawbounties quickly.",
+      "acceptanceCriteria": [
+        "GET / returns a small HTML landing page with links to /docs and /skill.md",
+        "GET /skill.md returns integration docs + example curl commands",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 15,
       "passes": false,
       "notes": ""
     }
