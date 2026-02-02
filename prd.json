@@ -182,8 +182,8 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added POST /v1/introspect/scoped-token: validates scoped_token envelope signature + expires_at, returns scope/audience/owner_ref and token_hash_b64u. Logs token hash via structured console log and anchors audit log request_hash_b64u to token_hash_b64u for correlation." 
     },
     {
       "id": "CVF-US-014",

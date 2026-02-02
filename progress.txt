@@ -200,3 +200,22 @@ Started: 2026-02-02T03:08:26.937416
 - Learnings
   - Aggregator endpoints should return semantic fields (owner_status, poh_tier) alongside cryptographic VALID/INVALID
 ---
+
+## 2026-02-02T05:28:12Z - CVF-US-013
+- What was implemented
+  - Added scoped token introspection endpoint:
+    - POST /v1/introspect/scoped-token
+    - Validates scoped_token envelope signature + expires_at (fail-closed)
+    - Returns token_hash_b64u + scope + audience + owner_ref
+  - Logging:
+    - Emits structured console log with token_hash_b64u (clawlogs-style)
+    - Writes audit log entry and anchors request_hash_b64u to token_hash_b64u for correlation
+- Files changed
+  - services/clawverify/src/verify-scoped-token.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/types.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - For introspection flows, use the payload hash as the stable “token hash” so services can correlate without storing raw tokens.
+---

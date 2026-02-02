@@ -12,6 +12,7 @@ import { verifyEventChain } from './verify-event-chain';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
 import { verifyCommitProof } from './verify-commit-proof';
 import { verifyAgent } from './verify-agent';
+import { verifyScopedToken } from './verify-scoped-token';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -32,6 +33,7 @@ import type {
   VerifyOwnerAttestationResponse,
   VerifyCommitProofResponse,
   VerifyAgentResponse,
+  IntrospectScopedTokenResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -274,6 +276,72 @@ function parseCommaSeparatedAllowlist(value: string | undefined): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/**
+ * Handle POST /v1/introspect/scoped-token - Scoped token introspection
+ */
+async function handleIntrospectScopedToken(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  const verification = await verifyScopedToken(envelope);
+
+  // Token hash logging (clawlogs-style structured log)
+  if (verification.token_hash_b64u) {
+    console.log(
+      '[TOKEN_HASH]',
+      JSON.stringify({
+        event: 'SCOPED_TOKEN_INTROSPECTED',
+        token_hash_b64u: verification.token_hash_b64u,
+        status: verification.result.status,
+        signer_did: verification.result.signer_did,
+        audience: verification.audience,
+        scope: verification.scope,
+        owner_ref: verification.owner_ref,
+        verified_at: verification.result.verified_at,
+      })
+    );
+  }
+
+  // Write audit log entry (best-effort). For tokens, we anchor the audit request hash
+  // to the token hash for easy correlation.
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash =
+      verification.token_hash_b64u ?? (await computeRequestHash(body));
+
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'scoped_token' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: IntrospectScopedTokenResponse & { audit_receipt?: AuditLogReceipt } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(response, status);
 }
 
 /**
@@ -712,6 +780,11 @@ export default {
     // POST /v1/verify/owner-attestation - Owner attestation verification
     if (url.pathname === '/v1/verify/owner-attestation' && method === 'POST') {
       return handleVerifyOwnerAttestation(request, env);
+    }
+
+    // POST /v1/introspect/scoped-token - Scoped token introspection
+    if (url.pathname === '/v1/introspect/scoped-token' && method === 'POST') {
+      return handleIntrospectScopedToken(request, env);
     }
 
     // POST /v1/verify/agent - One-call agent verification

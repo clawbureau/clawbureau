@@ -258,6 +258,34 @@ export interface VerifyCommitProofResponse {
 }
 
 /**
+ * Scoped Token types
+ * CVF-US-013: Scoped token introspection
+ */
+export interface ScopedTokenPayload {
+  token_version: '1';
+  token_id: string;
+  scope: string[];
+  audience: string;
+  owner_ref?: string;
+  expires_at: string;
+}
+
+export interface IntrospectScopedTokenRequest {
+  envelope: SignedEnvelope<ScopedTokenPayload>;
+}
+
+export interface IntrospectScopedTokenResponse {
+  result: VerificationResult;
+  token_id?: string;
+  token_hash_b64u?: string;
+  scope?: string[];
+  audience?: string;
+  owner_ref?: string;
+  expires_at?: string;
+  error?: VerificationError;
+}
+
+/**
  * Batch verification types
  * CVF-US-004: Batch verification for scale verification
  */
