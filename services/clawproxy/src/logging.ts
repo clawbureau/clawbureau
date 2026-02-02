@@ -6,7 +6,9 @@ export type SecurityEventType =
   | 'BLOCKED_UNKNOWN_PROVIDER'
   | 'BLOCKED_INVALID_PATH'
   | 'BLOCKED_MISSING_AUTH'
-  | 'RATE_LIMITED';
+  | 'RATE_LIMITED'
+  | 'POLICY_VIOLATION'
+  | 'POLICY_MISSING';
 
 export interface SecurityEvent {
   type: SecurityEventType;
@@ -69,5 +71,35 @@ export function logRateLimited(
   logSecurityEvent(request, 'RATE_LIMITED', {
     rateLimitKey,
     message: `Request rate limited for key: ${rateLimitKey}`,
+  });
+}
+
+/**
+ * Log a policy violation (provider/model not allowed)
+ */
+export function logPolicyViolation(
+  request: Request,
+  policyHash: string,
+  errorCode: string,
+  details: string
+): void {
+  logSecurityEvent(request, 'POLICY_VIOLATION', {
+    policyHash,
+    errorCode,
+    details,
+    message: `Policy violation: ${details}`,
+  });
+}
+
+/**
+ * Log a missing policy in confidential mode
+ */
+export function logPolicyMissing(
+  request: Request,
+  reason: string
+): void {
+  logSecurityEvent(request, 'POLICY_MISSING', {
+    reason,
+    message: `Policy missing in confidential mode: ${reason}`,
   });
 }

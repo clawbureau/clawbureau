@@ -98,8 +98,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added X-Run-Id, X-Event-Hash, X-Idempotency-Key header extraction. Binding fields embedded in receipt and signed. In-memory nonce cache for idempotency (production should use Durable Objects or KV)."
     },
     {
       "id": "CPX-US-008",
@@ -112,8 +112,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented WPC in policy.ts. X-Confidential-Mode header enables strict mode requiring X-Policy-Hash. Enforces provider/model allowlists, applies field redaction rules. Policy hash embedded in receipt binding."
     },
     {
       "id": "CPX-US-009",

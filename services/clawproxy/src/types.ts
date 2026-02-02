@@ -67,6 +67,8 @@ export interface ReceiptBinding {
   eventHash?: string;
   /** Unique nonce for idempotency enforcement */
   nonce?: string;
+  /** Work Policy Contract hash for policy binding */
+  policyHash?: string;
 }
 
 /**

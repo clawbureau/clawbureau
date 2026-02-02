@@ -10,9 +10,16 @@ import type { Env, ErrorResponse, Provider, DidResponse, Receipt, VerifyReceiptR
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519 } from './crypto';
-import { logBlockedProvider, logRateLimited } from './logging';
+import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing } from './logging';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
 import { extractBindingFromHeaders, checkIdempotency, recordNonce } from './idempotency';
+import {
+  extractPolicyFromHeaders,
+  enforceProviderAllowlist,
+  applyRedactionRules,
+  stripUndefined,
+  type WorkPolicyContract,
+} from './policy';
 
 /** Proxy DID identifier */
 const PROXY_DID = 'did:web:clawproxy.com';
@@ -285,6 +292,20 @@ async function handleProxy(
     return jsonResponseWithRateLimit(idempotencyCheck.existingReceipt, 200, rateLimitInfo);
   }
 
+  // Extract policy information for WPC enforcement
+  const policyResult = extractPolicyFromHeaders(request);
+
+  // Fail closed in confidential mode if policy is missing or invalid
+  if (policyResult.error) {
+    logPolicyMissing(request, policyResult.error);
+    return errorResponseWithRateLimit(
+      'POLICY_REQUIRED',
+      policyResult.error,
+      400,
+      rateLimitInfo
+    );
+  }
+
   // Initialize signing context - fail closed if not configured
   const signingContext = await initSigningContext(env);
   if (!signingContext) {
@@ -352,6 +373,33 @@ async function handleProxy(
     );
   }
 
+  // Enforce WPC provider/model allowlist if policy is active
+  if (policyResult.policy) {
+    const allowlistResult = enforceProviderAllowlist(provider, model, policyResult.policy);
+    if (!allowlistResult.allowed) {
+      logPolicyViolation(
+        request,
+        policyResult.policyHash ?? 'unknown',
+        allowlistResult.errorCode ?? 'POLICY_VIOLATION',
+        allowlistResult.error ?? 'Policy enforcement failed'
+      );
+      return errorResponseWithRateLimit(
+        allowlistResult.errorCode ?? 'POLICY_VIOLATION',
+        allowlistResult.error ?? 'Policy enforcement failed',
+        403,
+        rateLimitInfo
+      );
+    }
+  }
+
+  // Apply redaction rules to request body if policy specifies them
+  let finalRequestBody = requestBody;
+  if (policyResult.policy?.redactionRules && policyResult.policy.redactionRules.length > 0) {
+    const redactedBody = applyRedactionRules(parsedBody, policyResult.policy.redactionRules);
+    const strippedBody = stripUndefined(redactedBody);
+    finalRequestBody = JSON.stringify(strippedBody);
+  }
+
   // Build provider-specific URL (Gemini needs model in path)
   let providerUrl: string;
   try {
@@ -361,7 +409,7 @@ async function handleProxy(
     return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);
   }
 
-  // Forward request to provider
+  // Forward request to provider (with redacted body if policy requires)
   let providerResponse: Response;
   try {
     providerResponse = await fetch(providerUrl, {
@@ -370,7 +418,7 @@ async function handleProxy(
         'Content-Type': config.contentType,
         ...buildAuthHeader(provider, apiKey),
       },
-      body: requestBody,
+      body: finalRequestBody,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -380,15 +428,22 @@ async function handleProxy(
   // Read provider response
   const responseBody = await providerResponse.text();
 
+  // Extend binding with policy hash if present
+  const finalBinding = {
+    ...binding,
+    policyHash: policyResult.policyHash,
+  };
+
   // Generate signed receipt with binding fields
+  // Note: requestBody here is the final (possibly redacted) body sent to provider
   const receipt = await generateReceipt(
     {
       provider,
       model,
-      requestBody,
+      requestBody: finalRequestBody,
       responseBody,
       startTime,
-      binding,
+      binding: finalBinding,
     },
     signingContext
   );

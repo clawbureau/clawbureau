@@ -7,6 +7,9 @@
 - Security events use structured logging via `src/logging.ts` with [SECURITY] prefix
 - Rate limiting uses Cloudflare Workers Rate Limiting binding (PROXY_RATE_LIMITER)
 - Rate limit key preference: X-Client-DID header > CF-Connecting-IP (IP address)
+- Receipt binding via X-Run-Id, X-Event-Hash, X-Idempotency-Key headers (idempotency.ts)
+- WPC enforcement via X-Confidential-Mode and X-Policy-Hash headers (policy.ts)
+- Policy violations return 403 with POLICY_* error codes
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937763
@@ -117,4 +120,51 @@ Started: 2026-02-02T03:08:26.937763
   - X-Client-DID header allows agents to be rate limited by identity rather than shared IP
   - Cloudflare doesn't expose exact remaining count; we estimate based on success/failure
   - namespace_id in wrangler.toml is a unique positive integer per account
+---
+
+## 2026-02-02 - CPX-US-007
+- Implemented receipt binding fields for proof chaining
+- Accept X-Run-Id, X-Event-Hash, X-Idempotency-Key headers to bind receipts to runs/events
+- Added ReceiptBinding type with runId, eventHash, nonce fields
+- Binding fields are embedded in receipt and included in signed payload
+- Implemented idempotency enforcement using in-memory nonce cache
+- Duplicate requests with same nonce return previously issued receipt
+- Files created:
+  - services/clawproxy/src/idempotency.ts (binding header extraction, idempotency cache)
+- Files modified:
+  - services/clawproxy/src/types.ts (added ReceiptBinding interface, added binding to Receipt and VerifyReceiptResponse)
+  - services/clawproxy/src/receipt.ts (added binding to ReceiptInput, updated generateReceipt and createSigningPayload)
+  - services/clawproxy/src/index.ts (integrated binding extraction and idempotency, return binding claims in verify)
+- **Learnings for future iterations:**
+  - Binding headers: X-Run-Id, X-Event-Hash, X-Idempotency-Key (defined in idempotency.ts BINDING_HEADERS)
+  - Binding is optional - receipts work without binding fields
+  - Binding fields are included in createSigningPayload() so they're tamper-proof
+  - In-memory nonce cache has 5-minute TTL; production should use Durable Objects or KV for distributed state
+  - Idempotency returns the complete response (with receipt), not just the receipt
+  - Nonces are recorded even for provider errors to ensure consistent idempotency behavior
+---
+
+## 2026-02-02 - CPX-US-008
+- Implemented Work Policy Contract (WPC) enforcement for enterprise confidential runs
+- Added X-Confidential-Mode and X-Policy-Hash header support
+- Enforces provider/model allowlists from WPC (returns 403 on violation)
+- Applies field redaction rules to request bodies per WPC configuration
+- Policy hash is embedded in receipt binding for verification
+- Security logging for POLICY_VIOLATION and POLICY_MISSING events
+- Files created:
+  - services/clawproxy/src/policy.ts (WPC types, parsing, enforcement, redaction)
+- Files modified:
+  - services/clawproxy/src/types.ts (added policyHash to ReceiptBinding)
+  - services/clawproxy/src/logging.ts (added POLICY_VIOLATION, POLICY_MISSING event types and helpers)
+  - services/clawproxy/src/receipt.ts (support policyHash in binding)
+  - services/clawproxy/src/index.ts (integrated policy extraction, enforcement, redaction in proxy handler)
+- **Learnings for future iterations:**
+  - WPC enforcement controlled by X-Confidential-Mode: true header
+  - In confidential mode, X-Policy-Hash is required (fails closed with 400)
+  - Policy enforcement returns 403 status (not 400) for policy violations
+  - Redaction applied to request body BEFORE sending to provider and BEFORE hashing for receipt
+  - Demo policies stored in-memory via registerDemoPolicy(); production should use policy registry
+  - Redaction supports simplified JSON path patterns: $.field, $.nested.field, $.array[*].field
+  - Redaction actions: remove (strips field), mask (replaces with [REDACTED]), hash (marker for async hash)
+  - Policy hash is signed as part of receipt binding for tamper-proof audit trail
 ---
