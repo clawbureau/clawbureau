@@ -94,3 +94,17 @@ Started: 2026-02-02T03:08:26.936628
   - Idempotency key pattern for cancellation: `escrow_cancel_${escrow_id}`
   - Webhook event type 'escrow.cancelled' for cancellation notifications
 ---
+
+## 2026-02-02 - CES-US-006
+- Implemented escrow status API functionality
+- Files changed:
+  - `services/escrow/src/types.ts` - Added EscrowTimestamps, MilestoneStatusSummary, GetEscrowStatusResponse types
+  - `services/escrow/src/escrow-service.ts` - Added getEscrowStatus() method for retrieving detailed escrow status
+  - `services/escrow/src/index.ts` - Exported new status API types
+- **Learnings for future iterations:**
+  - getEscrowStatus() returns a structured response suitable for REST API consumption
+  - Includes computed values: dispute_window_expired, dispute_window_expires_at
+  - MilestoneStatusSummary aggregates milestone counts and amounts
+  - Gracefully handles missing disputeStore - returns has_dispute: false if not configured
+  - Existing getEscrow() returns raw Escrow, while getEscrowStatus() returns enriched response
+---
