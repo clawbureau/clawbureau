@@ -280,6 +280,8 @@ export async function initAuditLogSchema(db: AuditLogDB): Promise<void> {
     .filter(Boolean);
 
   for (const stmt of statements) {
-    await db.exec(stmt);
+    // Use prepare().run() instead of exec() to avoid D1 runtime differences/bugs
+    // around DDL statements.
+    await db.prepare(stmt).run();
   }
 }
