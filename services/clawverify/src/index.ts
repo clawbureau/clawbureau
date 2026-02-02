@@ -7,15 +7,26 @@ import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
 import { verifyBatch } from './verify-batch';
+import {
+  writeAuditLogEntry,
+  getAuditLogEntry,
+  verifyAuditChain,
+  computeRequestHash,
+  initAuditLogSchema,
+  type AuditLogDB,
+} from './audit-log';
 import type {
   VerifyArtifactResponse,
   VerifyMessageResponse,
   VerifyReceiptResponse,
   VerifyBatchResponse,
+  EnvelopeType,
+  AuditLogReceipt,
 } from './types';
 
 export interface Env {
   ENVIRONMENT: string;
+  AUDIT_LOG_DB: AuditLogDB;
 }
 
 /**
@@ -41,7 +52,10 @@ function errorResponse(message: string, status: number = 400): Response {
 /**
  * Handle POST /v1/verify - Verify artifact signatures
  */
-async function handleVerifyArtifact(request: Request): Promise<Response> {
+async function handleVerifyArtifact(
+  request: Request,
+  env: Env
+): Promise<Response> {
   // Parse request body
   let body: unknown;
   try {
@@ -51,11 +65,7 @@ async function handleVerifyArtifact(request: Request): Promise<Response> {
   }
 
   // Validate request structure
-  if (
-    typeof body !== 'object' ||
-    body === null ||
-    !('envelope' in body)
-  ) {
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
@@ -63,7 +73,25 @@ async function handleVerifyArtifact(request: Request): Promise<Response> {
 
   // Verify the artifact
   const verification = await verifyArtifact(envelope);
-  const response: VerifyArtifactResponse = verification;
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'artifact_signature' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyArtifactResponse & { audit_receipt?: AuditLogReceipt } =
+    {
+      ...verification,
+      audit_receipt: auditReceipt,
+    };
 
   // Return 200 for valid, 422 for invalid (signature verification is not a 4xx error)
   const status = verification.result.status === 'VALID' ? 200 : 422;
@@ -74,7 +102,10 @@ async function handleVerifyArtifact(request: Request): Promise<Response> {
 /**
  * Handle POST /v1/verify/message - Verify message signatures
  */
-async function handleVerifyMessage(request: Request): Promise<Response> {
+async function handleVerifyMessage(
+  request: Request,
+  env: Env
+): Promise<Response> {
   // Parse request body
   let body: unknown;
   try {
@@ -84,11 +115,7 @@ async function handleVerifyMessage(request: Request): Promise<Response> {
   }
 
   // Validate request structure
-  if (
-    typeof body !== 'object' ||
-    body === null ||
-    !('envelope' in body)
-  ) {
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
@@ -96,7 +123,25 @@ async function handleVerifyMessage(request: Request): Promise<Response> {
 
   // Verify the message signature
   const verification = await verifyMessage(envelope);
-  const response: VerifyMessageResponse = verification;
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'message_signature' as EnvelopeType,
+      verification.result.status,
+      verification.signer_did
+    );
+  }
+
+  const response: VerifyMessageResponse & { audit_receipt?: AuditLogReceipt } =
+    {
+      ...verification,
+      audit_receipt: auditReceipt,
+    };
 
   // Return 200 for valid, 422 for invalid
   const status = verification.result.status === 'VALID' ? 200 : 422;
@@ -107,7 +152,10 @@ async function handleVerifyMessage(request: Request): Promise<Response> {
 /**
  * Handle POST /v1/verify/receipt - Verify gateway receipt signatures
  */
-async function handleVerifyReceipt(request: Request): Promise<Response> {
+async function handleVerifyReceipt(
+  request: Request,
+  env: Env
+): Promise<Response> {
   // Parse request body
   let body: unknown;
   try {
@@ -117,11 +165,7 @@ async function handleVerifyReceipt(request: Request): Promise<Response> {
   }
 
   // Validate request structure
-  if (
-    typeof body !== 'object' ||
-    body === null ||
-    !('envelope' in body)
-  ) {
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
@@ -129,7 +173,25 @@ async function handleVerifyReceipt(request: Request): Promise<Response> {
 
   // Verify the receipt signature
   const verification = await verifyReceipt(envelope);
-  const response: VerifyReceiptResponse = verification;
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'gateway_receipt' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyReceiptResponse & { audit_receipt?: AuditLogReceipt } =
+    {
+      ...verification,
+      audit_receipt: auditReceipt,
+    };
 
   // Return 200 for valid, 422 for invalid
   const status = verification.result.status === 'VALID' ? 200 : 422;
@@ -140,7 +202,10 @@ async function handleVerifyReceipt(request: Request): Promise<Response> {
 /**
  * Handle POST /v1/verify/batch - Batch verify multiple envelopes
  */
-async function handleVerifyBatch(request: Request): Promise<Response> {
+async function handleVerifyBatch(
+  request: Request,
+  env: Env
+): Promise<Response> {
   // Parse request body
   let body: unknown;
   try {
@@ -159,6 +224,34 @@ async function handleVerifyBatch(request: Request): Promise<Response> {
 
   const response = result as VerifyBatchResponse;
 
+  // Write audit log entries for each item in the batch
+  const auditReceipts: AuditLogReceipt[] = [];
+  if (env.AUDIT_LOG_DB) {
+    for (const item of response.results) {
+      if (item.signer_did && item.envelope_type) {
+        const requestHash = await computeRequestHash({
+          id: item.id,
+          envelope_type: item.envelope_type,
+        });
+        const receipt = await writeAuditLogEntry(
+          env.AUDIT_LOG_DB,
+          requestHash,
+          item.envelope_type,
+          item.result.status,
+          item.signer_did
+        );
+        auditReceipts.push(receipt);
+      }
+    }
+  }
+
+  const responseWithAudit: VerifyBatchResponse & {
+    audit_receipts?: AuditLogReceipt[];
+  } = {
+    ...response,
+    audit_receipts: auditReceipts.length > 0 ? auditReceipts : undefined,
+  };
+
   // Return 200 for all valid, 207 for mixed results, 422 for all invalid
   let status: number;
   if (response.invalid_count === 0) {
@@ -169,7 +262,56 @@ async function handleVerifyBatch(request: Request): Promise<Response> {
     status = 207; // Multi-status (mixed results)
   }
 
-  return jsonResponse(response, status);
+  return jsonResponse(responseWithAudit, status);
+}
+
+/**
+ * Handle GET /v1/provenance/:receipt_id - Retrieve audit log entry by receipt ID
+ */
+async function handleGetProvenance(
+  receiptId: string,
+  env: Env
+): Promise<Response> {
+  if (!env.AUDIT_LOG_DB) {
+    return errorResponse('Audit log not configured', 503);
+  }
+
+  const provenance = await getAuditLogEntry(env.AUDIT_LOG_DB, receiptId);
+
+  if (!provenance.found) {
+    return errorResponse('Receipt not found', 404);
+  }
+
+  return jsonResponse(provenance, 200);
+}
+
+/**
+ * Handle GET /v1/provenance/:receipt_id/chain - Verify audit chain integrity
+ */
+async function handleVerifyChain(
+  receiptId: string,
+  env: Env
+): Promise<Response> {
+  if (!env.AUDIT_LOG_DB) {
+    return errorResponse('Audit log not configured', 503);
+  }
+
+  const chainResult = await verifyAuditChain(env.AUDIT_LOG_DB, receiptId);
+
+  return jsonResponse(chainResult, chainResult.valid ? 200 : 422);
+}
+
+/**
+ * Handle POST /v1/provenance/init - Initialize audit log schema
+ */
+async function handleInitAuditLog(env: Env): Promise<Response> {
+  if (!env.AUDIT_LOG_DB) {
+    return errorResponse('Audit log not configured', 503);
+  }
+
+  await initAuditLogSchema(env.AUDIT_LOG_DB);
+
+  return jsonResponse({ status: 'initialized' }, 200);
 }
 
 /**
@@ -187,7 +329,7 @@ function handleHealth(): Response {
  * Main fetch handler
  */
 export default {
-  async fetch(request: Request, _env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
 
@@ -198,22 +340,41 @@ export default {
 
     // POST /v1/verify - Artifact signature verification
     if (url.pathname === '/v1/verify' && method === 'POST') {
-      return handleVerifyArtifact(request);
+      return handleVerifyArtifact(request, env);
     }
 
     // POST /v1/verify/message - Message signature verification
     if (url.pathname === '/v1/verify/message' && method === 'POST') {
-      return handleVerifyMessage(request);
+      return handleVerifyMessage(request, env);
     }
 
     // POST /v1/verify/receipt - Gateway receipt verification
     if (url.pathname === '/v1/verify/receipt' && method === 'POST') {
-      return handleVerifyReceipt(request);
+      return handleVerifyReceipt(request, env);
     }
 
     // POST /v1/verify/batch - Batch verification
     if (url.pathname === '/v1/verify/batch' && method === 'POST') {
-      return handleVerifyBatch(request);
+      return handleVerifyBatch(request, env);
+    }
+
+    // GET /v1/provenance/:receipt_id - Retrieve audit log entry
+    const provenanceMatch = url.pathname.match(/^\/v1\/provenance\/([^/]+)$/);
+    if (provenanceMatch && method === 'GET') {
+      return handleGetProvenance(provenanceMatch[1], env);
+    }
+
+    // GET /v1/provenance/:receipt_id/chain - Verify audit chain
+    const chainMatch = url.pathname.match(
+      /^\/v1\/provenance\/([^/]+)\/chain$/
+    );
+    if (chainMatch && method === 'GET') {
+      return handleVerifyChain(chainMatch[1], env);
+    }
+
+    // POST /v1/provenance/init - Initialize audit log schema
+    if (url.pathname === '/v1/provenance/init' && method === 'POST') {
+      return handleInitAuditLog(env);
     }
 
     // 404 for unknown routes

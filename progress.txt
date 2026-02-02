@@ -5,6 +5,9 @@
 - Base64url encoding for all binary data (hashes, signatures)
 - did:key format for Ed25519 keys uses multibase z prefix with Ed25519 multicodec (0xed01)
 - Signed envelopes sign the payload_hash_b64u string, not the raw payload
+- Batch operations use Promise.all for concurrent processing with configurable size limits
+- D1 bindings for SQLite storage: add to wrangler.toml with placeholder database_id for local dev
+- Hash-chained audit logs: each entry includes prev_hash linking to previous, entry_hash computed from all fields
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937416
@@ -50,4 +53,34 @@ Started: 2026-02-02T03:08:26.937416
   - Response includes provider, model, and gateway_id at top level for marketplace consumption
   - Validate base64url format for request_hash_b64u and response_hash_b64u in payload
   - Non-negative number validation for tokens_input, tokens_output, latency_ms
+---
+
+## 2026-02-02T06:15:00Z - CVF-US-004
+- Implemented batch verification endpoint for scale verification
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added BatchItem, BatchItemResult, VerifyBatchRequest/Response types
+  - services/clawverify/src/verify-batch.ts - Batch verification with auto-detection of envelope types
+  - services/clawverify/src/index.ts - Added /v1/verify/batch endpoint
+- **Learnings for future iterations:**
+  - Batch endpoint auto-detects envelope_type and routes to appropriate verifier
+  - Use Promise.all for concurrent verification of batch items
+  - HTTP status codes: 200 (all valid), 207 (mixed results), 422 (all invalid), 400 (request error)
+  - BATCH_SIZE_LIMIT constant (100) prevents abuse and should be configurable per deployment
+  - Items can include optional `id` field for client-side correlation in results
+---
+
+## 2026-02-02T07:00:00Z - CVF-US-005
+- Implemented verification provenance with hash-chained audit log
+- Files modified/created:
+  - services/clawverify/src/audit-log.ts - Hash-chained audit log with D1 storage
+  - services/clawverify/src/types.ts - Added AuditLogEntry, AuditLogReceipt, ProvenanceResponse types
+  - services/clawverify/src/index.ts - Integrated audit logging into all verify handlers, added provenance endpoints
+  - services/clawverify/wrangler.toml - Added D1 binding for AUDIT_LOG_DB
+- **Learnings for future iterations:**
+  - D1 is Cloudflare's SQLite database, requires binding in wrangler.toml
+  - Hash chaining: each entry includes prev_hash_b64u, linking to previous entry
+  - Entry hash is computed from: request_hash, envelope_type, status, signer_did, verified_at, prev_hash
+  - Receipt IDs use format: avr_{timestamp_base36}_{random} for uniqueness
+  - Initialize schema with POST /v1/provenance/init before first use
+  - Verify chain integrity with GET /v1/provenance/{receipt_id}/chain
 ---

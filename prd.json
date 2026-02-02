@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/batch endpoint with 100 item limit, auto-detects envelope type, returns per-item results with valid/invalid counts"
     },
     {
       "id": "CVF-US-005",
@@ -70,8 +70,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented D1-backed audit log with hash chaining, /v1/provenance/{receipt_id} retrieval endpoint, and chain verification"
     },
     {
       "id": "CVF-US-006",

@@ -4,3 +4,8 @@ compatibility_date = "2024-01-01"
 
 [vars]
 ENVIRONMENT = "development"
+
+[[d1_databases]]
+binding = "AUDIT_LOG_DB"
+database_name = "clawverify-audit-log"
+database_id = "00000000-0000-0000-0000-000000000000"

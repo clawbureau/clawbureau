@@ -210,3 +210,43 @@ export interface VerifyBatchResponse {
   /** Timestamp when verification completed */
   verified_at: string;
 }
+
+/**
+ * Audit log types for verification provenance
+ * CVF-US-005: Verification provenance for compliance traceability
+ */
+
+/** Audit log entry stored in D1 */
+export interface AuditLogEntry {
+  /** Unique identifier for this audit entry (receipt_id) */
+  receipt_id: string;
+  /** Hash of the verification request */
+  request_hash_b64u: string;
+  /** Type of envelope that was verified */
+  envelope_type: EnvelopeType;
+  /** Verification result status */
+  status: VerificationStatus;
+  /** Signer DID from the envelope */
+  signer_did: string;
+  /** Timestamp of verification */
+  verified_at: string;
+  /** Hash of the previous entry in the chain (null for first entry) */
+  prev_hash_b64u: string | null;
+  /** Hash of this entry (computed from all fields + prev_hash) */
+  entry_hash_b64u: string;
+}
+
+/** Response when creating an audit log entry */
+export interface AuditLogReceipt {
+  receipt_id: string;
+  entry_hash_b64u: string;
+  prev_hash_b64u: string | null;
+  verified_at: string;
+}
+
+/** Response when retrieving provenance by receipt ID */
+export interface ProvenanceResponse {
+  found: boolean;
+  entry?: AuditLogEntry;
+  chain_valid?: boolean;
+}
