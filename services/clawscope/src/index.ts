@@ -15,9 +15,14 @@ export interface Env {
 
   // policy knobs
   SCOPE_POLICY_VERSION?: string;
+  SCOPE_POLICY_JSON?: string;
+  SCOPE_POLICY_TIER?: string;
   SCOPE_MAX_TTL_SECONDS?: string;
   SCOPE_MAX_SCOPE_ITEMS?: string;
   SCOPE_MAX_SCOPE_LENGTH?: string;
+  SCOPE_ALLOW_WILDCARDS?: string;
+  SCOPE_ALLOWED_SCOPES?: string;
+  SCOPE_ALLOWED_SCOPE_PREFIXES?: string;
 
   // revocation storage knobs
   SCOPE_REVOCATION_TTL_SECONDS?: string;
@@ -55,6 +60,7 @@ export interface IssueTokenRequest {
   owner_ref?: string;
   spend_cap?: number;
   mission_id?: string;
+  tier?: string;
 }
 
 export interface RevokeTokenRequest {
@@ -74,13 +80,17 @@ interface RevocationRecord {
 const REVOCATION_RECORD_PREFIX = 'revoked:hash:';
 const REVOCATION_EVENT_PREFIX = 'events:revocations:';
 
+const MAX_REVOCATION_REASON_LENGTH = 256;
+// Maximum 10-digit Unix timestamp used to invert timestamps for newest-first KV sorting.
+const MAX_TIMESTAMP_FOR_INVERSION = 9_999_999_999;
+
 function revokedRecordKey(token_hash: string): string {
   return `${REVOCATION_RECORD_PREFIX}${token_hash}`;
 }
 
 function revocationEventKey(revokedAtSec: number, token_hash: string): string {
   // Invert timestamp so KV list() returns newest-first for the prefix.
-  const invTs = String(9999999999 - revokedAtSec).padStart(10, '0');
+  const invTs = String(MAX_TIMESTAMP_FOR_INVERSION - revokedAtSec).padStart(10, '0');
   return `${REVOCATION_EVENT_PREFIX}${invTs}:${token_hash}`;
 }
 
@@ -98,6 +108,36 @@ async function getRevocationRecord(env: Env, token_hash: string): Promise<Revoca
   } catch {
     return { token_hash, revoked_at: 0, revoked_at_iso: '', reason: 'unparseable_record' };
   }
+}
+
+interface IssuanceRecord {
+  token_hash: string;
+  issued_at: number;
+  issued_at_iso: string;
+  sub: string;
+  aud: string | string[];
+  scope: string[];
+  iat: number;
+  exp: number;
+  kid: string;
+  policy_version: string;
+  policy_tier?: string;
+  owner_ref?: string;
+  spend_cap?: number;
+  mission_id?: string;
+  jti?: string;
+}
+
+const ISSUANCE_RECORD_PREFIX = 'issued:hash:';
+const ISSUANCE_EVENT_PREFIX = 'events:issuance:';
+
+function issuanceRecordKey(token_hash: string): string {
+  return `${ISSUANCE_RECORD_PREFIX}${token_hash}`;
+}
+
+function issuanceEventKey(issuedAtSec: number, token_hash: string): string {
+  const invTs = String(MAX_TIMESTAMP_FOR_INVERSION - issuedAtSec).padStart(10, '0');
+  return `${ISSUANCE_EVENT_PREFIX}${invTs}:${token_hash}`;
 }
 
 let cachedKeyRaw: string | null = null;
@@ -174,12 +214,154 @@ function validateAud(value: unknown): value is string | string[] {
   return false;
 }
 
+function parseCsvList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function parseBoolean(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) return defaultValue;
+  const v = value.trim().toLowerCase();
+  if (v === '1' || v === 'true' || v === 'yes' || v === 'y') return true;
+  if (v === '0' || v === 'false' || v === 'no' || v === 'n') return false;
+  return defaultValue;
+}
+
+interface ScopeTierPolicy {
+  max_ttl_seconds?: number;
+  allow_wildcards?: boolean;
+  allowed_scopes?: string[];
+  allowed_scope_prefixes?: string[];
+}
+
+interface ScopePolicyConfig {
+  version?: string;
+  tiers?: Record<string, ScopeTierPolicy>;
+}
+
+interface ResolvedScopePolicy {
+  tier: string;
+  policy_version: string;
+  max_ttl_seconds: number;
+  allow_wildcards: boolean;
+  allowed_scopes: string[];
+  allowed_scope_prefixes: string[];
+}
+
+let cachedPolicyRaw: string | null = null;
+let cachedPolicy: ScopePolicyConfig | null = null;
+
+function getPolicyConfig(env: Env): ScopePolicyConfig | null {
+  const raw = env.SCOPE_POLICY_JSON;
+  if (!raw || raw.trim().length === 0) return null;
+
+  if (cachedPolicy && cachedPolicyRaw === raw) return cachedPolicy;
+
+  const parsed = JSON.parse(raw) as unknown;
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('POLICY_JSON_INVALID');
+  }
+
+  cachedPolicyRaw = raw;
+  cachedPolicy = parsed as ScopePolicyConfig;
+  return cachedPolicy;
+}
+
+function resolveScopePolicy(env: Env, requestedTier: string): ResolvedScopePolicy {
+  const baseMaxTtl = parseIntOrDefault(env.SCOPE_MAX_TTL_SECONDS, 3600);
+
+  const fallback: ResolvedScopePolicy = {
+    tier: requestedTier,
+    policy_version: env.SCOPE_POLICY_VERSION ?? '1',
+    max_ttl_seconds: baseMaxTtl,
+    allow_wildcards: parseBoolean(env.SCOPE_ALLOW_WILDCARDS, false),
+    allowed_scopes: parseCsvList(env.SCOPE_ALLOWED_SCOPES),
+    allowed_scope_prefixes: parseCsvList(env.SCOPE_ALLOWED_SCOPE_PREFIXES),
+  };
+
+  const config = getPolicyConfig(env);
+  if (!config) return fallback;
+
+  if (!config.tiers || typeof config.tiers !== 'object') {
+    throw new Error('POLICY_JSON_INVALID');
+  }
+
+  const tierPolicy = config.tiers[requestedTier] ?? config.tiers.default;
+  if (!tierPolicy) {
+    throw new Error('POLICY_TIER_NOT_FOUND');
+  }
+
+  return {
+    tier: requestedTier,
+    policy_version: config.version ?? fallback.policy_version,
+    max_ttl_seconds:
+      typeof tierPolicy.max_ttl_seconds === 'number' ? tierPolicy.max_ttl_seconds : fallback.max_ttl_seconds,
+    allow_wildcards:
+      typeof tierPolicy.allow_wildcards === 'boolean' ? tierPolicy.allow_wildcards : fallback.allow_wildcards,
+    allowed_scopes: Array.isArray(tierPolicy.allowed_scopes)
+      ? tierPolicy.allowed_scopes.filter((s) => typeof s === 'string')
+      : fallback.allowed_scopes,
+    allowed_scope_prefixes: Array.isArray(tierPolicy.allowed_scope_prefixes)
+      ? tierPolicy.allowed_scope_prefixes.filter((s) => typeof s === 'string')
+      : fallback.allowed_scope_prefixes,
+  };
+}
+
+function enforceScopePolicy(
+  scopes: string[],
+  policy: ResolvedScopePolicy
+): { ok: true } | { ok: false; res: Response } {
+  if (!policy.allow_wildcards) {
+    for (const s of scopes) {
+      if (s.includes('*')) {
+        return {
+          ok: false,
+          res: errorResponse(
+            'SCOPE_WILDCARD_NOT_ALLOWED',
+            'wildcard scopes are not allowed by policy',
+            400
+          ),
+        };
+      }
+    }
+  }
+
+  if (policy.allowed_scopes.length > 0) {
+    for (const s of scopes) {
+      if (!policy.allowed_scopes.includes(s)) {
+        return {
+          ok: false,
+          res: errorResponse('SCOPE_NOT_ALLOWED', `scope '${s}' is not allowed for tier '${policy.tier}'`, 400),
+        };
+      }
+    }
+  } else if (policy.allowed_scope_prefixes.length > 0) {
+    for (const s of scopes) {
+      if (!policy.allowed_scope_prefixes.some((p) => s.startsWith(p))) {
+        return {
+          ok: false,
+          res: errorResponse('SCOPE_NOT_ALLOWED', `scope '${s}' is not allowed for tier '${policy.tier}'`, 400),
+        };
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
 function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTokenRequest } | { ok: false; res: Response } {
   if (typeof body !== 'object' || body === null) {
     return { ok: false, res: errorResponse('INVALID_REQUEST', 'Request body must be a JSON object', 400) };
   }
 
   const b = body as Record<string, unknown>;
+
+  const tierInput = typeof b.tier === 'string' ? b.tier.trim() : '';
+  const envTier = typeof env.SCOPE_POLICY_TIER === 'string' ? env.SCOPE_POLICY_TIER.trim() : '';
+  const tier = tierInput || envTier || 'default';
 
   if (!isNonEmptyString(b.sub)) {
     return { ok: false, res: errorResponse('INVALID_REQUEST', 'sub is required', 400) };
@@ -219,10 +401,22 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
     return { ok: false, res: errorResponse('INVALID_EXP', 'exp must be a positive number', 400) };
   }
 
+  const scopes = (b.scope as string[])
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  if (scopes.length === 0) {
+    return {
+      ok: false,
+      res: errorResponse('INVALID_REQUEST', 'scope must contain at least one non-empty string', 400),
+    };
+  }
+
   const req: IssueTokenRequest = {
     sub: b.sub.trim(),
     aud: b.aud as string | string[],
-    scope: (b.scope as string[]).map((s) => s.trim()).filter((s) => s.length > 0),
+    scope: scopes,
+    tier,
   };
 
   if (ttl !== undefined) req.ttl_sec = ttl;
@@ -230,6 +424,14 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   if (typeof b.owner_ref === 'string') req.owner_ref = b.owner_ref;
   if (typeof b.spend_cap === 'number') req.spend_cap = b.spend_cap;
   if (typeof b.mission_id === 'string') req.mission_id = b.mission_id;
+
+  try {
+    const policy = resolveScopePolicy(env, tier);
+    const enforced = enforceScopePolicy(req.scope, policy);
+    if (!enforced.ok) return { ok: false, res: enforced.res };
+  } catch {
+    return { ok: false, res: errorResponse('POLICY_CONFIG_INVALID', 'Token policy configuration is invalid', 503) };
+  }
 
   return { ok: true, req };
 }
@@ -282,14 +484,18 @@ function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
   return true;
 }
 
-async function issueToken(req: IssueTokenRequest, env: Env): Promise<{ token: string; token_hash: string; claims: ScopedTokenClaims; kid: string }> {
+async function issueToken(
+  req: IssueTokenRequest,
+  env: Env,
+  maxTtlSeconds: number
+): Promise<{ token: string; token_hash: string; claims: ScopedTokenClaims; kid: string }> {
   const keys = await getIssuerKeys(env);
   if (!keys) {
     throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const maxTtl = parseIntOrDefault(env.SCOPE_MAX_TTL_SECONDS, 3600);
+  const maxTtl = maxTtlSeconds;
 
   let exp: number;
   if (typeof req.exp === 'number') {
@@ -389,7 +595,7 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
@@ -408,12 +614,55 @@ export default {
       const validated = validateIssueRequest(body, env);
       if (!validated.ok) return validated.res;
 
+      const tier = validated.req.tier ?? env.SCOPE_POLICY_TIER ?? 'default';
+
+      let policy: ResolvedScopePolicy;
       try {
-        const { token, token_hash, claims, kid } = await issueToken(validated.req, env);
+        policy = resolveScopePolicy(env, tier);
+      } catch {
+        return errorResponse('POLICY_CONFIG_INVALID', 'Token policy configuration is invalid', 503);
+      }
+
+      try {
+        const { token, token_hash, claims, kid } = await issueToken(
+          validated.req,
+          env,
+          policy.max_ttl_seconds
+        );
+
+        // CSC-US-006 — Token audit trail (best-effort; requires KV binding)
+        const kv = env.SCOPE_REVOCATIONS;
+        if (kv) {
+          const ttl = parseIntOrDefault(env.SCOPE_REVOCATION_TTL_SECONDS, 60 * 60 * 24 * 30);
+          const issuedAt = claims.iat;
+
+          const record: IssuanceRecord = {
+            token_hash,
+            issued_at: issuedAt,
+            issued_at_iso: new Date(issuedAt * 1000).toISOString(),
+            sub: claims.sub,
+            aud: claims.aud,
+            scope: claims.scope,
+            iat: claims.iat,
+            exp: claims.exp,
+            kid,
+            policy_version: policy.policy_version,
+            policy_tier: policy.tier,
+            owner_ref: claims.owner_ref,
+            spend_cap: claims.spend_cap,
+            mission_id: claims.mission_id,
+            jti: claims.jti,
+          };
+
+          await kv.put(issuanceRecordKey(token_hash), JSON.stringify(record), { expirationTtl: ttl });
+          await kv.put(issuanceEventKey(issuedAt, token_hash), JSON.stringify(record), { expirationTtl: ttl });
+        }
+
         return jsonResponse({
           token,
           token_hash,
-          policy_version: env.SCOPE_POLICY_VERSION ?? '1',
+          policy_version: policy.policy_version,
+          policy_tier: policy.tier,
           kid,
           iat: claims.iat,
           exp: claims.exp,
@@ -425,8 +674,7 @@ export default {
           return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
         }
         if (msg === 'TTL_TOO_LONG') {
-          const maxTtl = parseIntOrDefault(env.SCOPE_MAX_TTL_SECONDS, 3600);
-          return errorResponse('TTL_TOO_LONG', `ttl exceeds max (${maxTtl}s)`, 400);
+          return errorResponse('TTL_TOO_LONG', `ttl exceeds max (${policy.max_ttl_seconds}s)`, 400);
         }
         if (msg === 'TTL_EXPIRED') {
           return errorResponse('TTL_EXPIRED', 'exp must be in the future', 400);
@@ -464,7 +712,8 @@ export default {
       const b = body as Record<string, unknown>;
       const token = b.token;
       const tokenHashInput = b.token_hash;
-      const reason = typeof b.reason === 'string' ? b.reason.trim().slice(0, 256) : undefined;
+      const reason =
+        typeof b.reason === 'string' ? b.reason.trim().slice(0, MAX_REVOCATION_REASON_LENGTH) : undefined;
 
       let token_hash: string;
       if (isNonEmptyString(token)) {
@@ -561,6 +810,122 @@ export default {
         events,
         cursor: 'cursor' in list ? list.cursor : null,
         list_complete: list.list_complete,
+      });
+    }
+
+    // Issuance audit events (CSC-US-006)
+    if (request.method === 'GET' && url.pathname === '/v1/audit/issuance') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'AUDIT_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 50), 1),
+        200
+      );
+
+      const cursor = url.searchParams.get('cursor') ?? undefined;
+      const list = await kv.list({ prefix: ISSUANCE_EVENT_PREFIX, limit, cursor });
+
+      const events: Array<{ key: string; record: unknown }> = [];
+      for (const k of list.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        events.push({ key: k.name, record });
+      }
+
+      return jsonResponse({
+        events,
+        cursor: 'cursor' in list ? list.cursor : null,
+        list_complete: list.list_complete,
+      });
+    }
+
+    // Audit bundle export (CSC-US-006)
+    if (request.method === 'GET' && url.pathname === '/v1/audit/bundle') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'AUDIT_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 50), 1),
+        200
+      );
+
+      const cursorIssuance = url.searchParams.get('cursor_issuance') ?? undefined;
+      const cursorRevocations = url.searchParams.get('cursor_revocations') ?? undefined;
+
+      const [issuanceList, revocationList] = await Promise.all([
+        kv.list({ prefix: ISSUANCE_EVENT_PREFIX, limit, cursor: cursorIssuance }),
+        kv.list({ prefix: REVOCATION_EVENT_PREFIX, limit, cursor: cursorRevocations }),
+      ]);
+
+      const issuanceEvents: Array<{ key: string; record: unknown }> = [];
+      for (const k of issuanceList.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        issuanceEvents.push({ key: k.name, record });
+      }
+
+      const revocationEvents: Array<{ key: string; record: unknown }> = [];
+      for (const k of revocationList.keys) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        revocationEvents.push({ key: k.name, record });
+      }
+
+      return jsonResponse({
+        generated_at: new Date().toISOString(),
+        issuance: {
+          events: issuanceEvents,
+          cursor: 'cursor' in issuanceList ? issuanceList.cursor : null,
+          list_complete: issuanceList.list_complete,
+        },
+        revocations: {
+          events: revocationEvents,
+          cursor: 'cursor' in revocationList ? revocationList.cursor : null,
+          list_complete: revocationList.list_complete,
+        },
       });
     }
 
