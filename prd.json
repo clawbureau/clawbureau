@@ -154,8 +154,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added CST (EdDSA JWT) validation for proxy calls when X-Client-DID is set: requires X-CST, validates aud/exp/scope, verifies signature with CST_ISSUER_PUBLIC_KEY, and logs token hash alongside receipt metadata."
     },
     {
       "id": "CPX-US-012",

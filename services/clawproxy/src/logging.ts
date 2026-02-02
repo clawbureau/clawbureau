@@ -9,7 +9,8 @@ export type SecurityEventType =
   | 'RATE_LIMITED'
   | 'POLICY_VIOLATION'
   | 'POLICY_MISSING'
-  | 'CONFIDENTIAL_REQUEST';
+  | 'CONFIDENTIAL_REQUEST'
+  | 'TOKEN_USED';
 
 export interface SecurityEvent {
   type: SecurityEventType;
@@ -123,5 +124,30 @@ export function logConfidentialRequest(
     // Explicitly note that content is not logged
     contentLogged: false,
     message: 'Confidential request processed (content not logged)',
+  });
+}
+
+/**
+ * Log a CST token hash alongside receipt metadata (no plaintext)
+ * CPX-US-011: Scoped token authentication
+ */
+export function logTokenUsed(
+  request: Request,
+  details: {
+    token_hash: string;
+    sub: string;
+    aud: string | string[];
+    scope: string[];
+    provider: string;
+    model?: string;
+    receipt_request_hash: string;
+    receipt_timestamp: string;
+  }
+): void {
+  logSecurityEvent(request, 'TOKEN_USED', {
+    ...details,
+    // Explicitly note that the raw token is never logged
+    tokenLogged: false,
+    message: 'Scoped token used for proxy call (token hash logged, token not logged)',
   });
 }

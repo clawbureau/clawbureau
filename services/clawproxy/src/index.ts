@@ -10,9 +10,10 @@ import type { Env, ErrorResponse, Provider, DidResponse, VerificationMethod, Rec
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext, type EncryptionContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519, importAesKey } from './crypto';
-import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing, logConfidentialRequest } from './logging';
+import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing, logConfidentialRequest, logTokenUsed } from './logging';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
 import { extractBindingFromHeaders, checkIdempotency, recordNonce } from './idempotency';
+import { validateScopedToken } from './scoped-token';
 import {
   extractPolicyFromHeaders,
   enforceProviderAllowlist,
@@ -338,6 +339,81 @@ async function handleProxy(
   // Extract binding fields from headers (for proof chaining)
   const binding = extractBindingFromHeaders(request);
 
+  // Scoped token (CST) authentication
+  // "Authenticated" calls are those that provide X-Client-DID (used for rate limiting)
+  // Fail closed: if X-Client-DID is present, a valid CST must also be present.
+  const clientDidHeader = request.headers.get('X-Client-DID');
+  const rawCstHeader = request.headers.get('X-CST') ?? request.headers.get('X-Scoped-Token');
+  const cstToken = rawCstHeader?.startsWith('Bearer ') ? rawCstHeader.slice(7) : rawCstHeader;
+
+  let validatedCst:
+    | {
+        token_hash: string;
+        claims: { sub: string; aud: string | string[]; scope: string[] };
+      }
+    | undefined;
+
+  if (clientDidHeader && !cstToken) {
+    return errorResponseWithRateLimit(
+      'TOKEN_REQUIRED',
+      'X-CST header required for authenticated requests (when X-Client-DID is set)',
+      401,
+      rateLimitInfo
+    );
+  }
+
+  if (cstToken) {
+    const url = new URL(request.url);
+    const expectedAudiences = Array.from(
+      new Set([
+        env.CST_AUDIENCE ?? url.hostname,
+        url.hostname,
+        url.origin,
+      ])
+    );
+
+    const tokenValidation = await validateScopedToken({
+      token: cstToken,
+      env,
+      expectedAudiences,
+      provider: providerParam,
+      requiredScopes: ['proxy:call', 'clawproxy:call'],
+    });
+
+    if (!tokenValidation.valid) {
+      return errorResponseWithRateLimit(
+        tokenValidation.code,
+        tokenValidation.message,
+        tokenValidation.status,
+        rateLimitInfo
+      );
+    }
+
+    // Ensure DID header matches the token subject when both are present
+    if (clientDidHeader) {
+      const normalizeDid = (did: string): string =>
+        did.startsWith('did:') ? did : `did:${did}`;
+
+      if (normalizeDid(clientDidHeader) !== normalizeDid(tokenValidation.claims.sub)) {
+        return errorResponseWithRateLimit(
+          'TOKEN_SUB_MISMATCH',
+          'X-Client-DID does not match CST subject (sub)',
+          401,
+          rateLimitInfo
+        );
+      }
+    }
+
+    validatedCst = {
+      token_hash: tokenValidation.token_hash,
+      claims: {
+        sub: tokenValidation.claims.sub,
+        aud: tokenValidation.claims.aud,
+        scope: tokenValidation.claims.scope,
+      },
+    };
+  }
+
   // Check idempotency if nonce is provided
   const idempotencyCheck = checkIdempotency(binding?.nonce);
   if (idempotencyCheck.isDuplicate) {
@@ -515,6 +591,20 @@ async function handleProxy(
     signingContext,
     encryptionContext ?? undefined
   );
+
+  // Log token hash with receipt metadata (never log token itself)
+  if (validatedCst) {
+    logTokenUsed(request, {
+      token_hash: validatedCst.token_hash,
+      sub: validatedCst.claims.sub,
+      aud: validatedCst.claims.aud,
+      scope: validatedCst.claims.scope,
+      provider,
+      model,
+      receipt_request_hash: receipt.requestHash,
+      receipt_timestamp: receipt.timestamp,
+    });
+  }
 
   // If provider returned an error, pass it through with receipt
   if (!providerResponse.ok) {

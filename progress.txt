@@ -7,6 +7,7 @@
 - Security events use structured logging via `src/logging.ts` with [SECURITY] prefix
 - Rate limiting uses Cloudflare Workers Rate Limiting binding (PROXY_RATE_LIMITER)
 - Rate limit key preference: X-Client-DID header > CF-Connecting-IP (IP address)
+- CST auth: when X-Client-DID is set, require X-CST (or X-Scoped-Token) and validate as EdDSA JWT (aud/exp/scope) before processing
 - Receipt binding via X-Run-Id, X-Event-Hash, X-Idempotency-Key headers (idempotency.ts)
 - WPC enforcement via X-Confidential-Mode and X-Policy-Hash headers (policy.ts)
 - Policy violations return 403 with POLICY_* error codes
@@ -214,4 +215,22 @@ Started: 2026-02-02T03:08:26.937763
   - Multibase format for base64url uses 'u' prefix before the encoded data
   - Cloudflare request.cf.colo provides datacenter code (e.g., SJC, IAD)
   - ETag header enables conditional requests (If-None-Match) for cache validation
+---
+
+## 2026-02-02T04:29:30Z - CPX-US-011
+- Implemented scoped token (CST) authentication for proxy calls:
+  - If X-Client-DID is present, require X-CST (or X-Scoped-Token)
+  - Validate CST as EdDSA JWT (claims schema v1): audience, expiry, and required scope
+  - Verify signature using configured CST_ISSUER_PUBLIC_KEY (fail-closed if missing)
+  - Log token SHA-256 hash alongside receipt metadata (provider/model + receipt.requestHash + timestamp)
+- Files changed:
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/src/scoped-token.ts
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/logging.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - With noUncheckedIndexedAccess enabled, avoid destructuring array indices without non-null assertions
+  - Keep token logging hash-only and include only receipt hashes/metadata to preserve confidentiality guarantees
 ---

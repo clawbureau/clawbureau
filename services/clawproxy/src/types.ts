@@ -24,6 +24,15 @@ export interface Env {
   PROXY_RATE_LIMITER: RateLimit;
   /** Optional AES key for encrypting receipt payloads (base64url-encoded 32-byte key) */
   PROXY_ENCRYPTION_KEY?: string;
+
+  /**
+   * CST (Scoped Token) issuer public key for validating JWT (EdDSA/Ed25519)
+   * Base64url-encoded raw 32-byte Ed25519 public key.
+   */
+  CST_ISSUER_PUBLIC_KEY?: string;
+
+  /** Optional audience override for CST validation (defaults to request host/origin) */
+  CST_AUDIENCE?: string;
 }
 
 /**
