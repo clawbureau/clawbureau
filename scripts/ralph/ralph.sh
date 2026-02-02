@@ -143,11 +143,115 @@ defaultPiSession() {
   echo "$RUN_DIR/.pi/ralph.session.jsonl"
 }
 
+# Proof lifecycle: ensure a tracked DID commit proof exists.
+# Set RALPH_AUTO_PROOF=0 to disable.
+RALPH_AUTO_PROOF="${RALPH_AUTO_PROOF:-1}"
+
+autoProofIfNeeded() {
+  local iter_start_iso="$1"
+
+  if [[ "$RALPH_AUTO_PROOF" == "0" ]]; then
+    return 0
+  fi
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Only run if at least one commit occurred during this iteration.
+  if ! git reflog --since="$iter_start_iso" --format='%gs' 2>/dev/null | grep -qE '^commit'; then
+    return 0
+  fi
+
+  local branch
+  branch=$(git branch --show-current 2>/dev/null || true)
+  if [[ -z "$branch" ]]; then
+    echo "Auto-proof: skipped (detached HEAD)" >&2
+    return 0
+  fi
+
+  local proof_dir="proofs/${branch}"
+  local proof_path="${proof_dir}/commit.sig.json"
+
+  # If HEAD already looks like a proof-only commit for this branch, do nothing.
+  local changed
+  changed=$(git diff --name-only HEAD^..HEAD 2>/dev/null || true)
+  if [[ -n "$changed" ]]; then
+    local all_in_proofs="1"
+    local has_commit_sig=""
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      if [[ "$f" == "$proof_path" ]]; then
+        has_commit_sig="1"
+      fi
+      if [[ "$f" != "$proof_dir/"* ]]; then
+        all_in_proofs=""
+        break
+      fi
+    done <<< "$changed"
+
+    if [[ -n "$all_in_proofs" && -n "$has_commit_sig" ]]; then
+      return 0
+    fi
+  fi
+
+  # Only proceed if the worktree is clean OR the only dirty file is the proof file.
+  local status
+  status=$(git status --porcelain 2>/dev/null || true)
+  if [[ -n "$status" ]]; then
+    local only_proof="1"
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      local p="${line:3}"
+      if [[ "$p" != "$proof_path" ]]; then
+        only_proof=""
+        break
+      fi
+    done <<< "$status"
+
+    if [[ -z "$only_proof" ]]; then
+      echo "Auto-proof: skipped (dirty worktree has changes beyond $proof_path)" >&2
+      return 0
+    fi
+  fi
+
+  local work_commit
+  work_commit=$(git rev-parse HEAD 2>/dev/null || true)
+  if [[ -z "$work_commit" ]]; then
+    return 0
+  fi
+
+  local short
+  short=$(git rev-parse --short "$work_commit" 2>/dev/null || echo "${work_commit:0:7}")
+
+  mkdir -p "$proof_dir"
+
+  local sign_script="$SCRIPT_DIR/../did-work/sign-message.mjs"
+
+  set +e
+  node "$sign_script" "commit:${work_commit}" > "$proof_path"
+  local rc=$?
+  set -e
+  if [[ "$rc" -ne 0 ]]; then
+    echo "Auto-proof: signing failed (exit=$rc). Skipping." >&2
+    return 0
+  fi
+
+  git add "$proof_path"
+  if git commit -S -m "chore(proofs): add commit proof for ${short}"; then
+    echo "Auto-proof: committed ${proof_path} for ${short}"
+  else
+    echo "Auto-proof: failed to commit proof for ${short}" >&2
+  fi
+}
+
 for i in $(seq 1 $MAX_ITERATIONS); do
   echo ""
   echo "==============================================================="
   echo "  Ralph Iteration $i of $MAX_ITERATIONS ($TOOL)"
   echo "==============================================================="
+
+  ITER_START_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
   # Run the selected tool with the ralph prompt
   if [[ "$TOOL" == "amp" ]]; then
@@ -229,6 +333,9 @@ for i in $(seq 1 $MAX_ITERATIONS); do
       echo "seeded $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$INSTR_MARKER" 2>/dev/null || true
     fi
   fi
+
+  # Auto-commit commit.sig.json proof for new work commits (best-effort).
+  autoProofIfNeeded "$ITER_START_ISO"
 
   # Check for completion signal
   if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then

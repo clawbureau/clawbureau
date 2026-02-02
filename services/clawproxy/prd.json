@@ -1,0 +1,206 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawproxy-phase1-trust",
+  "description": "clawproxy.com (Gateway Receipts) — PRD — Gateway proxy that issues signed receipts for model calls (proof-of-harness). BYOK-friendly.",
+  "userStories": [
+    {
+      "id": "CPX-US-001",
+      "title": "Proxy LLM requests with receipts",
+      "description": "As a agent, I want my calls routed through clawproxy so that I get verifiable receipts.",
+      "acceptanceCriteria": [
+        "Accept Authorization header API key",
+        "Return provider response",
+        "Attach _receipt with hashes",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in services/clawproxy with POST /v1/proxy/:provider endpoint"
+    },
+    {
+      "id": "CPX-US-002",
+      "title": "Ed25519 receipt signing",
+      "description": "As a verifier, I want cryptographically signed receipts so that trust tiers are verifiable.",
+      "acceptanceCriteria": [
+        "Sign receipts with proxy key",
+        "Expose proxy DID + public key",
+        "Fail closed if key missing",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented Ed25519 signing in crypto.ts, added GET /v1/did endpoint, all proxy requests now require signing key"
+    },
+    {
+      "id": "CPX-US-003",
+      "title": "Provider endpoint allowlist",
+      "description": "As a security engineer, I want no arbitrary endpoint proxying so that SSRF is prevented.",
+      "acceptanceCriteria": [
+        "Only known provider endpoints allowed",
+        "Reject unknown provider",
+        "Log blocked attempts",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented structured security logging in logging.ts, blocked provider attempts logged with [SECURITY] prefix for observability"
+    },
+    {
+      "id": "CPX-US-004",
+      "title": "Google/Gemini routing",
+      "description": "As a agent, I want Gemini calls supported so that I can choose my provider.",
+      "acceptanceCriteria": [
+        "Route to models/{model}:generateContent",
+        "Include usage metadata",
+        "Validate required model field",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added Google provider with Gemini API routing. Model required in URL path via buildProviderUrl(). Usage metadata passed through in response."
+    },
+    {
+      "id": "CPX-US-005",
+      "title": "Receipt verification endpoint",
+      "description": "As a platform, I want to validate receipts so that I can automate trust tiers.",
+      "acceptanceCriteria": [
+        "Provide /v1/verify-receipt",
+        "Validate signature",
+        "Return provider/model claims",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added POST /v1/verify-receipt endpoint. Validates signature using Ed25519, checks proxyDid and kid match, returns provider/model claims on success."
+    },
+    {
+      "id": "CPX-US-006",
+      "title": "Rate limits and quotas",
+      "description": "As a operator, I want to limit abuse so that proxy remains stable.",
+      "acceptanceCriteria": [
+        "Rate limit by DID/IP",
+        "Return 429 on limit",
+        "Expose usage headers",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Implemented rate limiting using Cloudflare Workers Rate Limiting binding. Limits by X-Client-DID header (preferred) or IP address (fallback). Returns 429 with Retry-After header. All responses include X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers."
+    },
+    {
+      "id": "CPX-US-007",
+      "title": "Receipt binding fields",
+      "description": "As a verifier, I want receipts bound to runs so that proofs are chainable.",
+      "acceptanceCriteria": [
+        "Accept run_id and event_hash headers",
+        "Embed binding fields in receipt",
+        "Enforce idempotency for receipt issuance",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Added X-Run-Id, X-Event-Hash, X-Idempotency-Key header extraction. Binding fields embedded in receipt and signed. In-memory nonce cache for idempotency (production should use Durable Objects or KV)."
+    },
+    {
+      "id": "CPX-US-008",
+      "title": "Work Policy Contract enforcement",
+      "description": "As a enterprise, I want policy enforcement so that confidential runs are safe.",
+      "acceptanceCriteria": [
+        "Require policy_hash header in confidential mode",
+        "Enforce provider/model allowlists from WPC",
+        "Apply redaction/field stripping per WPC",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Implemented WPC in policy.ts. X-Confidential-Mode header enables strict mode requiring X-Policy-Hash. Enforces provider/model allowlists, applies field redaction rules. Policy hash embedded in receipt binding."
+    },
+    {
+      "id": "CPX-US-009",
+      "title": "Hash-only or encrypted receipts",
+      "description": "As a privacy owner, I want hash-only receipts so that prompts are protected.",
+      "acceptanceCriteria": [
+        "Default to hash-only receipt payloads",
+        "Support encrypted payload receipts when enabled",
+        "Never log plaintext prompts in confidential mode",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Implemented hash-only as default via privacyMode field. Added AES-256-GCM encryption in crypto.ts for optional encrypted receipts via X-Receipt-Privacy-Mode header. Encrypted mode blocked in confidential mode. logConfidentialRequest() logs metadata only, never plaintext."
+    },
+    {
+      "id": "CPX-US-010",
+      "title": "Proxy DID endpoint",
+      "description": "As a integrator, I want proxy DID metadata so that verification is easy.",
+      "acceptanceCriteria": [
+        "GET /v1/did returns DID + public keys + kids",
+        "Cacheable response",
+        "Include deployment metadata",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Enhanced /v1/did to return W3C DID Core compliant document with verificationMethod array, full key IDs (DID#kid), multibase public key encoding. Includes deployment metadata: version, signingEnabled, encryptionEnabled, runtime, region (from CF-Colo), service name. Response has Cache-Control, ETag headers."
+    },
+    {
+      "id": "CPX-US-011",
+      "title": "Scoped token authentication",
+      "description": "As a platform, I want scoped tokens so that calls are user-bound and time-limited.",
+      "acceptanceCriteria": [
+        "Require CST token for authenticated calls",
+        "Validate audience + expiry + scope",
+        "Log token hash with receipt",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Added CST (EdDSA JWT) validation for proxy calls when X-Client-DID is set: requires X-CST, validates aud/exp/scope, verifies signature with CST_ISSUER_PUBLIC_KEY, and logs token hash alongside receipt metadata."
+    },
+    {
+      "id": "CPX-US-012",
+      "title": "Token/policy binding in receipts",
+      "description": "As a verifier, I want receipts bound to policy so that authorization is provable.",
+      "acceptanceCriteria": [
+        "Embed token_scope_hash in receipt",
+        "Embed policy_hash (WPC) when present",
+        "Fail closed if required binding fields missing",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Receipts now embed tokenScopeHashB64u (from CST token_scope_hash_b64u) and policyHash when present. Fail-closed if CST is used without token_scope_hash_b64u claim."
+    },
+    {
+      "id": "CPX-US-013",
+      "title": "Platform-paid inference mode",
+      "description": "As a platform, I want a reserve-backed default so that users can start quickly.",
+      "acceptanceCriteria": [
+        "Support platform-paid routing using reserve credits",
+        "Mark receipts as paid/unpaid",
+        "Record ledger reference for paid receipts",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Implemented platform-paid inference mode: when Authorization header is missing and PLATFORM_PAID_ENABLED=true, clawproxy routes using provider-specific platform API keys (PLATFORM_*_API_KEY). Receipts include payment attribution (mode user/platform, paid boolean) and a ledgerRef for platform-paid calls (clawledger:reserve:<nonce|uuid>). Platform-paid requests require X-Client-DID (and thus CST auth) to keep spend attributable." 
+    },
+    {
+      "id": "CPX-US-014",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawproxy quickly.",
+      "acceptanceCriteria": [
+        "GET / returns an HTML landing page with links to /docs and /skill.md",
+        "GET /docs returns minimal human-readable docs (HTML or markdown)",
+        "GET /skill.md returns an OpenClaw-compatible skill file (frontmatter + markdown)",
+        "OpenClaw frontmatter: metadata is a single-line JSON object string",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Added GET /, /docs, /skill.md, /robots.txt, /sitemap.xml, and /.well-known/security.txt to the clawproxy worker. /skill.md uses OpenClaw frontmatter with metadata as a single-line JSON object string."
+    }
+  ]
+}
