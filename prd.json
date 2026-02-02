@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawledger-phase1-trust",
-  "description": "clawledger.com (Ledger) \u2014 PRD \u2014 Event-sourced ledger for balances, holds, and transfers. Idempotent and auditable.",
+  "description": "clawledger.com (Ledger) — PRD — Event-sourced ledger for balances, holds, and transfers. Idempotent and auditable.",
   "userStories": [
     {
       "id": "CLD-US-001",
@@ -154,6 +154,21 @@
         "Typecheck passes"
       ],
       "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CLD-US-012",
+      "title": "Public landing + skill docs",
+      "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate the ledger quickly.",
+      "acceptanceCriteria": [
+        "GET / returns a small HTML landing page with links to /docs and /skill.md",
+        "GET /skill.md returns integration docs + example curl commands",
+        "GET /robots.txt and /sitemap.xml exist (minimal)",
+        "GET /.well-known/security.txt exists",
+        "Typecheck passes"
+      ],
+      "priority": 12,
       "passes": false,
       "notes": ""
     }
