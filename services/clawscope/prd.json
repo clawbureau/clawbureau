@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added tier-aware policy enforcement for token issuance: supports SCOPE_POLICY_JSON tiers or env-based allowlist/prefix knobs; enforces max TTL and rejects scopes outside policy (incl. optional wildcard bans)."
     },
     {
       "id": "CSC-US-005",

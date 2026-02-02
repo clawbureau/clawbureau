@@ -40,3 +40,13 @@ Started: 2026-02-02T22:30:00Z
 - Introspection checks revocation KV and returns `{active:false, revoked:true, ...}` for revoked tokens.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-02 - CSC-US-004
+- Added tier-aware policy enforcement for token issuance.
+  - Supports `SCOPE_POLICY_JSON` (structured tiers) OR simple env knobs:
+    - `SCOPE_ALLOWED_SCOPES`, `SCOPE_ALLOWED_SCOPE_PREFIXES`, `SCOPE_ALLOW_WILDCARDS`
+    - `SCOPE_POLICY_TIER` selects default tier
+  - Enforces max TTL per tier/policy (passed into token issuance).
+  - Rejects requests with scopes outside policy.
+- Typecheck: `npm run typecheck`.
+---

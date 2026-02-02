@@ -7,10 +7,22 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 SCOPE_VERSION = "0.1.0"
 SCOPE_POLICY_VERSION = "1"
+SCOPE_POLICY_TIER = "default"
+
+# Simple policy knobs (used if SCOPE_POLICY_JSON is not set):
+SCOPE_ALLOW_WILDCARDS = "0"
+SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:"
+SCOPE_ALLOWED_SCOPES = ""
+
+# Limits (also used as fallback defaults for tiers):
 SCOPE_MAX_TTL_SECONDS = "3600"
 SCOPE_MAX_SCOPE_ITEMS = "64"
 SCOPE_MAX_SCOPE_LENGTH = "128"
+
 SCOPE_REVOCATION_TTL_SECONDS = "2592000" # 30 days
+
+# Optional: structured policy config (overrides knobs above)
+# SCOPE_POLICY_JSON = "{\"version\":\"1\",\"tiers\":{\"default\":{\"max_ttl_seconds\":3600,\"allow_wildcards\":false,\"allowed_scope_prefixes\":[\"proxy:\",\"clawproxy:\"]}}}"
 
 # Optional KV binding (needed for revocation + event feed):
 # [[kv_namespaces]]
