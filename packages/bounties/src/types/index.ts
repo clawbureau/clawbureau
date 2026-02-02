@@ -6,3 +6,4 @@ export * from "./repository.js";
 export * from "./testHarness.js";
 export * from "./quorum.js";
 export * from "./dispute.js";
+export * from "./stake.js";

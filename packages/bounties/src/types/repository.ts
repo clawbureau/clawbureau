@@ -1,6 +1,7 @@
 import { Bounty, AcceptanceReceipt, Submission, TestResult, BountySortField, SortDirection } from "./bounty.js";
 import { QuorumState, ReviewerVote } from "./quorum.js";
 import { Dispute } from "./dispute.js";
+import { StakeHold } from "./stake.js";
 
 /**
  * Search filter options for bounties
@@ -61,4 +62,9 @@ export interface BountyRepository {
   findDisputeById(disputeId: string): Promise<Dispute | null>;
   findDisputeByIdempotencyKey(key: string): Promise<Dispute | null>;
   findDisputeBySubmissionId(submissionId: string): Promise<Dispute | null>;
+  // Stake methods
+  saveStake(stake: StakeHold): Promise<void>;
+  findStakeById(stakeId: string): Promise<StakeHold | null>;
+  findStakesByBountyId(bountyId: string): Promise<StakeHold[]>;
+  findStakeByIdempotencyKey(key: string): Promise<StakeHold | null>;
 }
