@@ -25,3 +25,17 @@ Started: 2026-02-02T22:45:00Z
 - Added crypto helpers for did:key Ed25519 verification.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-02 - CCL-US-003
+- Added revoke-capable challenges via `POST /v1/challenges` with optional `purpose` (default: `bind`).
+- Implemented `POST /v1/bindings/revoke`:
+  - Loads stored challenge from KV, validates expiry + DID match + purpose.
+  - Verifies did:key (Ed25519) signature over the challenge message.
+  - Marks binding revoked (`active: false`) with `revoked_at` metadata.
+  - Logs KV audit event (`events:bindings:*`).
+  - Deletes challenge on success to prevent replay.
+- Prevent new sessions:
+  - Blocks new bind challenges when a binding is revoked.
+  - Rejects bind attempts if binding is revoked.
+- Typecheck: `npm run typecheck`.
+---
