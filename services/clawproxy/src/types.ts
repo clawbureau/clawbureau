@@ -33,6 +33,17 @@ export interface Env {
 
   /** Optional audience override for CST validation (defaults to request host/origin) */
   CST_AUDIENCE?: string;
+
+  /**
+   * CPX-US-013: Platform-paid inference mode (reserve-backed)
+   * When enabled, requests without an Authorization header may be routed using platform reserve credits.
+   */
+  PLATFORM_PAID_ENABLED?: string;
+
+  /** Platform-paid provider API keys (used when PLATFORM_PAID_ENABLED is true) */
+  PLATFORM_ANTHROPIC_API_KEY?: string;
+  PLATFORM_OPENAI_API_KEY?: string;
+  PLATFORM_GOOGLE_API_KEY?: string;
 }
 
 /**
@@ -118,6 +129,21 @@ export interface ReceiptBinding {
 }
 
 /**
+ * Receipt payment modes
+ * - user: user provided provider API key; proxy did not spend reserve credits
+ * - platform: proxy spent platform reserve credits (platform-paid inference)
+ */
+export type ReceiptPaymentMode = 'user' | 'platform';
+
+export interface ReceiptPayment {
+  mode: ReceiptPaymentMode;
+  /** True when platform reserve credits were spent */
+  paid: boolean;
+  /** Reference to the ledger entry that recorded the spend (when paid=true) */
+  ledgerRef?: string;
+}
+
+/**
  * Receipt privacy modes
  * - hash_only: Only include hashes (default, most private)
  * - encrypted: Include encrypted payloads for authorized decryption
@@ -171,6 +197,8 @@ export interface Receipt {
   kid?: string;
   /** Binding fields for chaining proofs (optional) */
   binding?: ReceiptBinding;
+  /** Payment attribution (platform-paid vs user-provided key) */
+  payment?: ReceiptPayment;
   /** Privacy mode: hash_only (default) or encrypted */
   privacyMode?: ReceiptPrivacyMode;
   /** Encrypted request payload (only when privacyMode = 'encrypted') */
@@ -230,5 +258,7 @@ export interface VerifyReceiptResponse {
     kid: string;
     /** Binding fields for chaining proofs (if present in receipt) */
     binding?: ReceiptBinding;
+    /** Payment attribution (if present in receipt) */
+    payment?: ReceiptPayment;
   };
 }

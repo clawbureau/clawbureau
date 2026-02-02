@@ -249,3 +249,25 @@ Started: 2026-02-02T03:08:26.937763
 - **Learnings for future iterations:**
   - Put provable authorization artifacts (token scope hash / policy hash) into signed receipt.binding so verifiers can audit authorization decisions
 ---
+
+## 2026-02-02T05:12:59Z - CPX-US-013
+- What was implemented
+  - Added platform-paid inference mode (reserve-backed):
+    - If Authorization is present -> user-paid mode
+    - If Authorization is missing -> platform-paid mode when PLATFORM_PAID_ENABLED=true
+    - Platform-paid uses provider-specific platform API keys (PLATFORM_ANTHROPIC_API_KEY / PLATFORM_OPENAI_API_KEY / PLATFORM_GOOGLE_API_KEY)
+    - Platform-paid requires X-Client-DID (so CST auth applies) to keep spend attributable
+  - Receipts now include payment attribution:
+    - payment.mode = user|platform
+    - payment.paid boolean
+    - payment.ledgerRef for platform-paid receipts
+  - /v1/verify-receipt now returns payment claims when present
+- Files changed
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/receipt.ts
+  - services/clawproxy/src/types.ts
+  - prd.json
+  - progress.txt
+- Quality
+  - cd services/clawproxy && npm run typecheck
+---

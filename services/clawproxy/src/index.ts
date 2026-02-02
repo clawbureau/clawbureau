@@ -6,7 +6,17 @@
  * POST /v1/verify-receipt - Validate receipt signature and return claims
  */
 
-import type { Env, ErrorResponse, Provider, DidResponse, VerificationMethod, Receipt, VerifyReceiptRequest, VerifyReceiptResponse } from './types';
+import type {
+  Env,
+  ErrorResponse,
+  Provider,
+  DidResponse,
+  VerificationMethod,
+  Receipt,
+  ReceiptPayment,
+  VerifyReceiptRequest,
+  VerifyReceiptResponse,
+} from './types';
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext, type EncryptionContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519, importAesKey } from './crypto';
@@ -277,6 +287,7 @@ async function handleVerifyReceipt(request: Request, env: Env): Promise<Response
       timestamp: receipt.timestamp,
       kid: receipt.kid as string,
       binding: receipt.binding,
+      payment: receipt.payment,
     },
   };
 
@@ -478,19 +489,71 @@ async function handleProxy(
   const provider: Provider = providerParam;
   const config = getProviderConfig(provider);
 
-  // Extract API key from Authorization header
+  // CPX-US-013: Platform-paid inference mode (reserve-backed)
+  // If Authorization is present, treat as user-paid (proxy does not spend reserve credits).
+  // If Authorization is missing, allow platform-paid routing ONLY when explicitly enabled.
   const authHeader = request.headers.get('Authorization');
-  if (!authHeader) {
-    return errorResponseWithRateLimit('UNAUTHORIZED', 'Authorization header required', 401, rateLimitInfo);
-  }
 
-  // Parse API key (supports both "Bearer <key>" and raw key formats)
-  const apiKey = authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7)
-    : authHeader;
+  let apiKey: string;
+  let payment: ReceiptPayment;
 
-  if (!apiKey) {
-    return errorResponseWithRateLimit('UNAUTHORIZED', 'API key not provided', 401, rateLimitInfo);
+  if (authHeader && authHeader.trim().length > 0) {
+    // Parse API key (supports both "Bearer <key>" and raw key formats)
+    apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+
+    if (!apiKey) {
+      return errorResponseWithRateLimit(
+        'UNAUTHORIZED',
+        'API key not provided',
+        401,
+        rateLimitInfo
+      );
+    }
+
+    payment = { mode: 'user', paid: false };
+  } else {
+    if (env.PLATFORM_PAID_ENABLED !== 'true') {
+      return errorResponseWithRateLimit(
+        'UNAUTHORIZED',
+        'Authorization header required (platform-paid mode is disabled)',
+        401,
+        rateLimitInfo
+      );
+    }
+
+    // Fail closed: platform-paid calls must be attributable to an authenticated DID.
+    if (!clientDidHeader) {
+      return errorResponseWithRateLimit(
+        'PLATFORM_PAID_REQUIRES_DID',
+        'X-Client-DID is required for platform-paid requests',
+        401,
+        rateLimitInfo
+      );
+    }
+
+    const platformApiKey =
+      provider === 'anthropic'
+        ? env.PLATFORM_ANTHROPIC_API_KEY
+        : provider === 'openai'
+          ? env.PLATFORM_OPENAI_API_KEY
+          : env.PLATFORM_GOOGLE_API_KEY;
+
+    if (!platformApiKey || platformApiKey.trim().length === 0) {
+      return errorResponseWithRateLimit(
+        'PLATFORM_API_KEY_NOT_CONFIGURED',
+        `Platform API key not configured for provider '${provider}'`,
+        503,
+        rateLimitInfo
+      );
+    }
+
+    apiKey = platformApiKey;
+
+    const ledgerRef = binding?.nonce
+      ? `clawledger:reserve:${binding.nonce}`
+      : `clawledger:reserve:${crypto.randomUUID()}`;
+
+    payment = { mode: 'platform', paid: true, ledgerRef };
   }
 
   // Read and validate request body
@@ -602,6 +665,7 @@ async function handleProxy(
       responseBody,
       startTime,
       binding: finalBinding,
+      payment,
       privacyMode: encryptionContext ? policyResult.privacyMode : 'hash_only',
     },
     signingContext,

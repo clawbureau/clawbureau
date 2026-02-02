@@ -2,7 +2,14 @@
  * Receipt generation for proxied LLM requests
  */
 
-import type { Provider, Receipt, ReceiptBinding, ReceiptPrivacyMode, EncryptedPayload } from './types';
+import type {
+  Provider,
+  Receipt,
+  ReceiptBinding,
+  ReceiptPayment,
+  ReceiptPrivacyMode,
+  EncryptedPayload,
+} from './types';
 import { sha256, signEd25519, encryptAes256Gcm, type Ed25519KeyPair, type AesEncryptedPayload } from './crypto';
 
 export interface ReceiptInput {
@@ -13,6 +20,10 @@ export interface ReceiptInput {
   startTime: number;
   /** Optional binding fields for chaining proofs */
   binding?: ReceiptBinding;
+  /** Payment attribution for the receipt */
+  payment?: ReceiptPayment;
+  /** Override timestamp (useful when other IDs depend on it) */
+  timestamp?: string;
   /** Privacy mode: hash_only (default) or encrypted */
   privacyMode?: ReceiptPrivacyMode;
 }
@@ -41,7 +52,17 @@ export async function generateReceipt(
   signingContext?: SigningContext,
   encryptionContext?: EncryptionContext
 ): Promise<Receipt> {
-  const { provider, model, requestBody, responseBody, startTime, binding, privacyMode } = input;
+  const {
+    provider,
+    model,
+    requestBody,
+    responseBody,
+    startTime,
+    binding,
+    payment,
+    timestamp,
+    privacyMode,
+  } = input;
 
   const [requestHash, responseHash] = await Promise.all([
     sha256(requestBody),
@@ -54,9 +75,14 @@ export async function generateReceipt(
     model,
     requestHash,
     responseHash,
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp ?? new Date().toISOString(),
     latencyMs: Date.now() - startTime,
   };
+
+  // Attach payment attribution when present
+  if (payment) {
+    receipt.payment = payment;
+  }
 
   // Add binding fields if provided (for proof chaining)
   if (
@@ -149,6 +175,11 @@ export function createSigningPayload(receipt: Receipt): string {
   // Include binding in signing payload if present (ensures binding is tamper-proof)
   if (receipt.binding) {
     payload.binding = receipt.binding;
+  }
+
+  // Include payment attribution in signing (ensures tamper-proof)
+  if (receipt.payment) {
+    payload.payment = receipt.payment;
   }
 
   // Include privacy mode and encrypted payloads in signing (ensures tamper-proof)

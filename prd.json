@@ -182,8 +182,8 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented platform-paid inference mode: when Authorization header is missing and PLATFORM_PAID_ENABLED=true, clawproxy routes using provider-specific platform API keys (PLATFORM_*_API_KEY). Receipts include payment attribution (mode user/platform, paid boolean) and a ledgerRef for platform-paid calls (clawledger:reserve:<nonce|uuid>). Platform-paid requests require X-Client-DID (and thus CST auth) to keep spend attributable." 
     },
     {
       "id": "CPX-US-014",
