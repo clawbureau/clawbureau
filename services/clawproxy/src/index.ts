@@ -6,9 +6,10 @@
  */
 
 import type { Env, ErrorResponse, Provider, DidResponse } from './types';
-import { isValidProvider, getProviderConfig, buildAuthHeader, extractModel } from './providers';
+import { isValidProvider, getProviderConfig, buildAuthHeader, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, type SigningContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode } from './crypto';
+import { logBlockedProvider } from './logging';
 
 /** Proxy DID identifier */
 const PROXY_DID = 'did:web:clawproxy.com';
@@ -134,11 +135,15 @@ async function handleProxy(
     );
   }
 
-  // Validate provider
+  // Validate provider against allowlist (SSRF prevention)
   if (!isValidProvider(providerParam)) {
+    // Log blocked attempt for security monitoring
+    logBlockedProvider(request, providerParam);
+
+    const supported = getSupportedProviders().join(', ');
     return errorResponse(
       'UNKNOWN_PROVIDER',
-      `Provider '${providerParam}' is not supported. Supported: anthropic, openai`,
+      `Provider '${providerParam}' is not allowed. Only known provider endpoints are permitted. Supported: ${supported}`,
       400
     );
   }

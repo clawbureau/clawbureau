@@ -29,6 +29,13 @@ export function isValidProvider(provider: string): provider is Provider {
 }
 
 /**
+ * Get list of supported provider names
+ */
+export function getSupportedProviders(): string[] {
+  return Object.keys(PROVIDERS);
+}
+
+/**
  * Get provider config or throw
  */
 export function getProviderConfig(provider: string): ProviderConfig {
