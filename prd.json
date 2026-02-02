@@ -92,8 +92,10 @@
       "title": "Public landing + skill docs",
       "description": "As a developer, I want public landing/docs/skill endpoints so that I can discover and integrate clawescrow quickly.",
       "acceptanceCriteria": [
-        "GET / returns a small HTML landing page with links to /docs and /skill.md",
-        "GET /skill.md returns integration docs + example curl commands",
+        "GET / returns an HTML landing page with links to /docs and /skill.md",
+        "GET /docs returns minimal human-readable docs (HTML or markdown)",
+        "GET /skill.md returns an OpenClaw-compatible skill file (frontmatter + markdown)",
+        "OpenClaw frontmatter: metadata is a single-line JSON object string",
         "GET /robots.txt and /sitemap.xml exist (minimal)",
         "GET /.well-known/security.txt exists",
         "Typecheck passes"
