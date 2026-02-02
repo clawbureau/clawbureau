@@ -48,6 +48,38 @@ function jsonResponse<T>(data: T, status = 200): Response {
   });
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeXml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function textResponse(body: string, contentType: string, status = 200): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      'Content-Type': contentType,
+      'X-Ledger-Version': '1.0.0',
+    },
+  });
+}
+
+function htmlResponse(html: string, status = 200): Response {
+  return textResponse(html, 'text/html; charset=utf-8', status);
+}
+
 /**
  * Error response helper
  */
@@ -1407,6 +1439,171 @@ async function router(
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+
+  // CLD-US-012: Public landing + skill docs
+  if (method === 'GET') {
+    if (path === '/') {
+      return htmlResponse(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>clawledger</title>
+  </head>
+  <body>
+    <main style="max-width: 820px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5;">
+      <h1>clawledger</h1>
+      <p>Event-sourced ledger for balances, holds, and transfers.</p>
+      <ul>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/skill.md">OpenClaw skill</a></li>
+        <li><a href="/attestation/reserve">Reserve attestation</a></li>
+      </ul>
+      <p><small>Version: 1.0.0</small></p>
+    </main>
+  </body>
+</html>`);
+    }
+
+    if (path === '/docs') {
+      const origin = url.origin;
+      return htmlResponse(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>clawledger docs</title>
+  </head>
+  <body>
+    <main style="max-width: 820px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5;">
+      <h1>clawledger docs</h1>
+      <p>Minimal HTTP API documentation.</p>
+
+      <h2>Common endpoints</h2>
+      <ul>
+        <li><code>POST /accounts</code> — Create an account (idempotent by DID).</li>
+        <li><code>GET /balances</code> — List balances.</li>
+        <li><code>POST /transfers</code> — Execute transfers between accounts.</li>
+        <li><code>GET /attestation/reserve</code> — Signed reserve coverage attestation (public).</li>
+        <li><code>POST /reserve/compute</code> — Upsert compute reserve assets (Gemini/FAL credits).</li>
+      </ul>
+
+      <h2>Quick start</h2>
+      <pre>curl -sS -X POST "${escapeHtml(origin)}/accounts" \\
+  -H "Content-Type: application/json" \\
+  -d '{"did":"did:key:example"}'</pre>
+
+      <p>See also: <a href="/skill.md">/skill.md</a></p>
+    </main>
+  </body>
+</html>`);
+    }
+
+    if (path === '/skill.md') {
+      const metadata = {
+        name: 'clawledger',
+        version: '1',
+        description:
+          'Event-sourced ledger for balances, holds, transfers, and reserve attestations.',
+        endpoints: [
+          { method: 'POST', path: '/accounts' },
+          { method: 'GET', path: '/balances' },
+          { method: 'POST', path: '/transfers' },
+          { method: 'GET', path: '/attestation/reserve' },
+          { method: 'POST', path: '/reserve/compute' },
+        ],
+      };
+
+      const md = `---
+metadata: '${JSON.stringify(metadata)}'
+---
+
+# clawledger
+
+Event-sourced ledger for balances, holds, and transfers.
+
+## Create an account
+
+\`POST /accounts\`
+
+Example:
+
+\`\`\`bash
+curl -sS -X POST "${url.origin}/accounts" \\
+  -H "Content-Type: application/json" \\
+  -d '{"did":"did:key:z..."}'
+\`\`\`
+
+## List balances
+
+\`GET /balances\`
+
+\`\`\`bash
+curl -sS "${url.origin}/balances"
+\`\`\`
+
+## Transfers
+
+\`POST /transfers\`
+
+\`\`\`bash
+curl -sS -X POST "${url.origin}/transfers" \\
+  -H "Content-Type: application/json" \\
+  -d '{"idempotencyKey":"idem_123","fromAccountId":"acc_...","toAccountId":"acc_...","amount":"100"}'
+\`\`\`
+
+## Reserve attestation (public)
+
+\`GET /attestation/reserve\`
+
+\`\`\`bash
+curl -sS "${url.origin}/attestation/reserve"
+\`\`\`
+
+## Compute reserves
+
+\`POST /reserve/compute\`
+
+\`\`\`bash
+curl -sS -X POST "${url.origin}/reserve/compute" \\
+  -H "Content-Type: application/json" \\
+  -d '{"gemini_amount":"0","fal_amount":"0"}'
+\`\`\`
+`;
+
+      return textResponse(md, 'text/markdown; charset=utf-8', 200);
+    }
+
+    if (path === '/robots.txt') {
+      const txt = `User-agent: *
+Allow: /
+Sitemap: ${url.origin}/sitemap.xml
+`;
+      return textResponse(txt, 'text/plain; charset=utf-8', 200);
+    }
+
+    if (path === '/sitemap.xml') {
+      const base = url.origin;
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${escapeXml(base)}/</loc></url>
+  <url><loc>${escapeXml(base)}/docs</loc></url>
+  <url><loc>${escapeXml(base)}/skill.md</loc></url>
+</urlset>
+`;
+      return textResponse(xml, 'application/xml; charset=utf-8', 200);
+    }
+
+    if (path === '/.well-known/security.txt') {
+      const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      const txt = `Contact: mailto:security@clawledger.com
+Preferred-Languages: en
+Expires: ${expires}
+Canonical: ${url.origin}/.well-known/security.txt
+`;
+      return textResponse(txt, 'text/plain; charset=utf-8', 200);
+    }
+  }
 
   // Health check
   if (path === '/health' && method === 'GET') {

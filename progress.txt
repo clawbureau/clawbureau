@@ -313,3 +313,21 @@ Started: 2026-02-02T03:08:26.936251
 - **Learnings for future iterations:**
   - For “computed” reserves without external integrations, prefer deterministic operator-supplied upsert endpoints with stable asset IDs; attestations can stay purely read-only.
 ---
+
+## 2026-02-02T05:34:21Z - CLD-US-012
+- What was implemented
+  - Public developer endpoints:
+    - GET / (HTML landing with links to /docs and /skill.md)
+    - GET /docs (minimal human-readable HTML docs)
+    - GET /skill.md (integration docs + example curl commands)
+    - GET /robots.txt and GET /sitemap.xml (minimal)
+    - GET /.well-known/security.txt
+  - OpenClaw frontmatter:
+    - `metadata` is a single-line JSON object string
+- Files changed
+  - services/ledger/src/index.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/ledger && npm run typecheck && npm run lint
+---

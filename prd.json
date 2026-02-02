@@ -169,8 +169,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added public endpoints to services/ledger worker: GET / (HTML landing), GET /docs, GET /skill.md (OpenClaw frontmatter with metadata as single-line JSON object string + curl examples), GET /robots.txt, GET /sitemap.xml, and GET /.well-known/security.txt." 
     }
   ]
 }
