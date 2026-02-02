@@ -50,3 +50,13 @@ Started: 2026-02-02T22:30:00Z
   - Rejects requests with scopes outside policy.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-02 - CSC-US-006
+- Implemented issuance audit trail (best-effort) using KV:
+  - Writes `issued:hash:<token_hash>` and `events:issuance:<invTs>:<token_hash>` records on successful issuance.
+  - Revocations already store timestamps (`revoked_at`).
+- Added admin audit endpoints:
+  - `GET /v1/audit/issuance` (list issuance events)
+  - `GET /v1/audit/bundle` (combined issuance + revocations export)
+- Typecheck: `npm run typecheck`.
+---

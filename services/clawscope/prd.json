@@ -84,8 +84,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Logs token_hash + issuance metadata to KV (events:issuance:*), stores revocation timestamps, and exports combined audit bundles via GET /v1/audit/bundle (admin)."
     },
     {
       "id": "CSC-US-007",
