@@ -8,6 +8,7 @@ import type {
   AccountId,
   AccountResponse,
   BalanceBuckets,
+  BalanceListResponse,
   CreateAccountRequest,
   DID,
   Env,
@@ -238,6 +239,59 @@ export class AccountRepository {
   }
 
   /**
+   * List all accounts with pagination
+   */
+  async list(limit = 100, offset = 0): Promise<{ accounts: Account[]; total: number }> {
+    // Get total count
+    const countResult = await this.db
+      .prepare('SELECT COUNT(*) as count FROM accounts')
+      .first();
+    const total = (countResult?.count as number) || 0;
+
+    // Get paginated accounts
+    const results = await this.db
+      .prepare(
+        `SELECT id, did, balance_available, balance_held, balance_bonded,
+                balance_fee_pool, balance_promo, created_at, updated_at, version
+         FROM accounts
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .bind(limit, offset)
+      .all();
+
+    const accounts = (results.results || []).map((row) =>
+      parseAccountFromRow(row as Record<string, unknown>)
+    );
+
+    return { accounts, total };
+  }
+
+  /**
+   * Find multiple accounts by IDs
+   */
+  async findByIds(ids: AccountId[]): Promise<Account[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    // Build placeholders for IN clause
+    const placeholders = ids.map(() => '?').join(', ');
+    const results = await this.db
+      .prepare(
+        `SELECT id, did, balance_available, balance_held, balance_bonded,
+                balance_fee_pool, balance_promo, created_at, updated_at, version
+         FROM accounts WHERE id IN (${placeholders})`
+      )
+      .bind(...ids)
+      .all();
+
+    return (results.results || []).map((row) =>
+      parseAccountFromRow(row as Record<string, unknown>)
+    );
+  }
+
+  /**
    * Create a hold: move funds from available to held bucket
    * Validates sufficient funds before the operation
    */
@@ -391,6 +445,55 @@ export class AccountRepository {
   }
 
   /**
+   * Debit an account's available balance (for outgoing transfers)
+   * Validates sufficient funds before the operation
+   */
+  async debitAvailable(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.available < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'available',
+        amount,
+        account.balances.available
+      );
+    }
+
+    const newAvailable = account.balances.available - amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_available = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newAvailable.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        available: newAvailable,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
    * Credit an account's available balance (for receiving transfers)
    */
   async creditAvailable(accountId: AccountId, amount: bigint): Promise<Account> {
@@ -473,5 +576,35 @@ export class AccountService {
       return null;
     }
     return toAccountResponse(account);
+  }
+
+  /**
+   * List all balances with pagination
+   * Optionally filter by account IDs
+   */
+  async listBalances(
+    accountIds?: string[],
+    limit = 100,
+    offset = 0
+  ): Promise<BalanceListResponse> {
+    if (accountIds && accountIds.length > 0) {
+      // Filter by specific account IDs
+      const accounts = await this.repository.findByIds(accountIds);
+      return {
+        balances: accounts.map(toAccountResponse),
+        total: accounts.length,
+        limit,
+        offset: 0,
+      };
+    }
+
+    // List all accounts with pagination
+    const { accounts, total } = await this.repository.list(limit, offset);
+    return {
+      balances: accounts.map(toAccountResponse),
+      total,
+      limit,
+      offset,
+    };
   }
 }

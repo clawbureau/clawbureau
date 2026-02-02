@@ -8,6 +8,7 @@ import { ReserveAttestationService } from './attestation';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
 import { ReconciliationService } from './reconciliation';
+import { TransferService, WebhookService } from './transfer';
 import type {
   CreateAccountRequest,
   CreateEventRequest,
@@ -15,6 +16,7 @@ import type {
   Env,
   ErrorResponse,
   ReleaseHoldRequest,
+  TransferRequest,
 } from './types';
 
 /**
@@ -525,9 +527,141 @@ async function handleReserveAttestation(env: Env): Promise<Response> {
 }
 
 /**
+ * Handle GET /balances - List account balances
+ * Supports optional filtering by account IDs and pagination
+ */
+async function handleListBalances(env: Env, url: URL): Promise<Response> {
+  const accountIdsParam = url.searchParams.get('accountIds');
+  const limitParam = url.searchParams.get('limit');
+  const offsetParam = url.searchParams.get('offset');
+
+  const accountIds = accountIdsParam
+    ? accountIdsParam.split(',').map((id) => id.trim()).filter(Boolean)
+    : undefined;
+  const limit = limitParam ? Math.min(parseInt(limitParam, 10), 1000) : 100;
+  const offset = offsetParam ? Math.max(parseInt(offsetParam, 10), 0) : 0;
+
+  const service = new AccountService(env);
+
+  try {
+    const result = await service.listBalances(accountIds, limit, offset);
+    return jsonResponse(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'LIST_BALANCES_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /transfers - Execute a transfer between accounts
+ */
+async function handleTransfer(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
+  const body = await parseJsonBody<TransferRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.fromAccountId) {
+    return errorResponse(
+      'Missing required field: fromAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.toAccountId) {
+    return errorResponse(
+      'Missing required field: toAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new TransferService(env);
+
+  try {
+    const result = await service.transfer(body);
+
+    // Send webhook notification in the background
+    const webhookService = new WebhookService(env);
+    if (webhookService.isConfigured()) {
+      ctx.waitUntil(
+        webhookService.sendEventWebhook({
+          id: result.eventId,
+          idempotencyKey: result.idempotencyKey,
+          eventType: 'transfer',
+          accountId: result.fromAccountId,
+          toAccountId: result.toAccountId,
+          amount: result.amount,
+          bucket: 'available',
+          previousHash: '',
+          eventHash: result.eventHash,
+          metadata: body.metadata,
+          createdAt: result.createdAt,
+        })
+      );
+    }
+
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    // Check for insufficient funds error
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    // Check for not found errors
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    // Check for same account error
+    if (message.includes('same account')) {
+      return errorResponse(message, 'INVALID_REQUEST', 400);
+    }
+    return errorResponse(message, 'TRANSFER_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /webhooks/status - Get webhook configuration status
+ */
+function handleWebhookStatus(env: Env): Response {
+  const webhookService = new WebhookService(env);
+  return jsonResponse({
+    configured: webhookService.isConfigured(),
+    types: ['ledger.event.created'],
+  });
+}
+
+/**
  * Router for handling requests
  */
-async function router(request: Request, env: Env): Promise<Response> {
+async function router(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -535,6 +669,21 @@ async function router(request: Request, env: Env): Promise<Response> {
   // Health check
   if (path === '/health' && method === 'GET') {
     return jsonResponse({ status: 'ok', service: 'ledger' });
+  }
+
+  // GET /balances - List account balances
+  if (path === '/balances' && method === 'GET') {
+    return handleListBalances(env, url);
+  }
+
+  // POST /transfers - Execute transfer
+  if (path === '/transfers' && method === 'POST') {
+    return handleTransfer(request, env, ctx);
+  }
+
+  // GET /webhooks/status - Get webhook status
+  if (path === '/webhooks/status' && method === 'GET') {
+    return handleWebhookStatus(env);
   }
 
   // POST /accounts - Create account
@@ -649,9 +798,13 @@ async function router(request: Request, env: Env): Promise<Response> {
  * Main worker export
  */
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<Response> {
     try {
-      return await router(request, env);
+      return await router(request, env, ctx);
     } catch (err) {
       console.error('Unhandled error:', err);
       const message = err instanceof Error ? err.message : 'Internal server error';

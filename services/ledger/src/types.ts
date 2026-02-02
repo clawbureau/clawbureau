@@ -252,6 +252,8 @@ export interface Env {
   ACCOUNT_DO: DurableObjectNamespace;
   /** Optional webhook URL for reconciliation alerts */
   ALERT_WEBHOOK_URL?: string;
+  /** Optional webhook URL for event notifications */
+  EVENT_WEBHOOK_URL?: string;
 }
 
 /**
@@ -361,4 +363,76 @@ export interface ReserveAttestationResponse {
   latestEventHash: string;
   /** Human-readable summary */
   summary: string;
+}
+
+/**
+ * Transfer request for API
+ */
+export interface TransferRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Source account ID or DID */
+  fromAccountId: AccountId;
+  /** Target account ID or DID */
+  toAccountId: AccountId;
+  /** Amount to transfer */
+  amount: string;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Transfer response for API
+ */
+export interface TransferResponse {
+  /** Transfer event ID */
+  eventId: EventId;
+  /** Idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Source account ID */
+  fromAccountId: AccountId;
+  /** Target account ID */
+  toAccountId: AccountId;
+  /** Amount transferred */
+  amount: string;
+  /** Event hash */
+  eventHash: EventHash;
+  /** Timestamp */
+  createdAt: Timestamp;
+}
+
+/**
+ * Balance list request query parameters
+ */
+export interface BalanceListQuery {
+  /** Filter by account IDs (comma-separated) */
+  accountIds?: string;
+  /** Pagination limit */
+  limit?: number;
+  /** Pagination offset */
+  offset?: number;
+}
+
+/**
+ * Balance list response for API
+ */
+export interface BalanceListResponse {
+  balances: AccountResponse[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Webhook event payload
+ */
+export interface WebhookEventPayload {
+  /** Event type identifier for webhook routing */
+  webhookType: 'ledger.event.created';
+  /** Event data */
+  event: EventResponse;
+  /** Timestamp when webhook was sent */
+  sentAt: Timestamp;
+  /** Idempotency key for webhook deduplication */
+  webhookId: string;
 }

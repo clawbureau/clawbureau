@@ -156,3 +156,36 @@ Started: 2026-02-02T03:08:26.936251
   - For future: consider storing attestation history or using proper cryptographic signing keys
   - verifyAttestation() method available for clients to verify attestation integrity
 ---
+
+## 2026-02-02T08:00:00Z - CLD-US-006
+- What was implemented:
+  - GET /balances endpoint with pagination (limit/offset) and filtering by account IDs
+  - POST /transfers endpoint for fund transfers between accounts
+  - TransferService for transfer business logic with validation:
+    - Validates sufficient funds before transfer
+    - Verifies both source and target accounts exist
+    - Prevents self-transfers
+    - Updates balances atomically (debit source, credit target)
+    - Creates hash-chained transfer event
+  - WebhookService for event notifications:
+    - Sends POST to EVENT_WEBHOOK_URL when configured
+    - Webhook payload includes event data, timestamp, and webhook ID for deduplication
+    - Non-blocking delivery with error logging
+  - AccountRepository extended with:
+    - list() for paginated account listing
+    - findByIds() for batch account lookup
+    - debitAvailable() for outgoing transfers
+  - GET /webhooks/status endpoint to check webhook configuration
+- Files changed:
+  - services/ledger/src/types.ts (updated - added TransferRequest, TransferResponse, BalanceListResponse, WebhookEventPayload types)
+  - services/ledger/src/accounts.ts (updated - added list, findByIds, debitAvailable, listBalances methods)
+  - services/ledger/src/transfer.ts (new - TransferService and WebhookService)
+  - services/ledger/src/index.ts (updated - added /balances, /transfers, /webhooks/status routes)
+  - services/ledger/wrangler.toml (updated - documented EVENT_WEBHOOK_URL env var)
+- **Learnings for future iterations:**
+  - Use ctx.waitUntil() for non-blocking background operations like webhook delivery
+  - Webhook payloads should include a unique webhookId for consumer-side deduplication
+  - Transfer operations should update balances before creating the event for consistency
+  - Batch account lookup (findByIds) is more efficient than individual queries
+  - ExecutionContext type is global in Workers and doesn't need to be imported
+---
