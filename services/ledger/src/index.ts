@@ -5,13 +5,17 @@
 
 import { AccountService, isValidDid } from './accounts';
 import { ReserveAttestationService } from './attestation';
+import { ClearingService } from './clearing';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
 import { ReconciliationService } from './reconciliation';
 import { StakeFeeService } from './stake-fee';
 import { TransferService, WebhookService } from './transfer';
 import type {
+  ClearingDepositRequest,
+  ClearingWithdrawRequest,
   CreateAccountRequest,
+  CreateClearingAccountRequest,
   CreateEventRequest,
   CreateHoldRequest,
   Env,
@@ -21,6 +25,7 @@ import type {
   PromoBurnRequest,
   PromoMintRequest,
   ReleaseHoldRequest,
+  SettlementRequest,
   StakeLockRequest,
   StakeSlashRequest,
   TransferRequest,
@@ -998,6 +1003,308 @@ async function handlePromoBurn(
 }
 
 /**
+ * Handle POST /clearing/accounts - Create a clearing account
+ */
+async function handleCreateClearingAccount(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<CreateClearingAccountRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.domain) {
+    return errorResponse(
+      'Missing required field: domain',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.name) {
+    return errorResponse(
+      'Missing required field: name',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new ClearingService(env);
+
+  try {
+    const result = await service.createClearingAccount(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'CREATE_CLEARING_ACCOUNT_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /clearing/accounts - List all clearing accounts
+ */
+async function handleListClearingAccounts(env: Env): Promise<Response> {
+  const service = new ClearingService(env);
+
+  try {
+    const accounts = await service.listClearingAccounts();
+    return jsonResponse({ accounts });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'LIST_CLEARING_ACCOUNTS_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /clearing/accounts/:id - Get clearing account by ID
+ */
+async function handleGetClearingAccountById(
+  id: string,
+  env: Env
+): Promise<Response> {
+  const service = new ClearingService(env);
+  const account = await service.getClearingAccountById(id);
+
+  if (!account) {
+    return errorResponse('Clearing account not found', 'NOT_FOUND', 404);
+  }
+
+  return jsonResponse(account);
+}
+
+/**
+ * Handle GET /clearing/accounts/domain/:domain - Get clearing account by domain
+ */
+async function handleGetClearingAccountByDomain(
+  domain: string,
+  env: Env
+): Promise<Response> {
+  const service = new ClearingService(env);
+  const account = await service.getClearingAccountByDomain(domain);
+
+  if (!account) {
+    return errorResponse('Clearing account not found for domain', 'NOT_FOUND', 404);
+  }
+
+  return jsonResponse(account);
+}
+
+/**
+ * Handle POST /clearing/deposit - Deposit funds to clearing account
+ */
+async function handleClearingDeposit(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<ClearingDepositRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.fromAccountId) {
+    return errorResponse(
+      'Missing required field: fromAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.batchId) {
+    return errorResponse(
+      'Missing required field: batchId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.clearingAccountId && !body.domain) {
+    return errorResponse(
+      'Either clearingAccountId or domain is required',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new ClearingService(env);
+
+  try {
+    const result = await service.deposit(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'CLEARING_DEPOSIT_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /clearing/withdraw - Withdraw funds from clearing account
+ */
+async function handleClearingWithdraw(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<ClearingWithdrawRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.toAccountId) {
+    return errorResponse(
+      'Missing required field: toAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.batchId) {
+    return errorResponse(
+      'Missing required field: batchId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.clearingAccountId && !body.domain) {
+    return errorResponse(
+      'Either clearingAccountId or domain is required',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new ClearingService(env);
+
+  try {
+    const result = await service.withdraw(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'CLEARING_WITHDRAW_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /settlements - Execute a settlement with batch reference
+ */
+async function handleSettlement(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<SettlementRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.fromAccountId) {
+    return errorResponse(
+      'Missing required field: fromAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.toAccountId) {
+    return errorResponse(
+      'Missing required field: toAccountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.batchId) {
+    return errorResponse(
+      'Missing required field: batchId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new ClearingService(env);
+
+  try {
+    const result = await service.settle(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    if (message.includes('same account')) {
+      return errorResponse(message, 'INVALID_REQUEST', 400);
+    }
+    return errorResponse(message, 'SETTLEMENT_FAILED', 500);
+  }
+}
+
+/**
  * Router for handling requests
  */
 async function router(
@@ -1057,6 +1364,45 @@ async function router(
   // POST /promo/burn - Burn promotional credits
   if (path === '/promo/burn' && method === 'POST') {
     return handlePromoBurn(request, env);
+  }
+
+  // === Clearing Accounts & Settlements ===
+
+  // POST /clearing/accounts - Create clearing account
+  if (path === '/clearing/accounts' && method === 'POST') {
+    return handleCreateClearingAccount(request, env);
+  }
+
+  // GET /clearing/accounts - List all clearing accounts
+  if (path === '/clearing/accounts' && method === 'GET') {
+    return handleListClearingAccounts(env);
+  }
+
+  // GET /clearing/accounts/domain/:domain - Get clearing account by domain
+  const clearingByDomainMatch = path.match(/^\/clearing\/accounts\/domain\/([^/]+)$/);
+  if (clearingByDomainMatch && method === 'GET') {
+    return handleGetClearingAccountByDomain(decodeURIComponent(clearingByDomainMatch[1]), env);
+  }
+
+  // GET /clearing/accounts/:id - Get clearing account by ID
+  const clearingByIdMatch = path.match(/^\/clearing\/accounts\/([^/]+)$/);
+  if (clearingByIdMatch && method === 'GET') {
+    return handleGetClearingAccountById(clearingByIdMatch[1], env);
+  }
+
+  // POST /clearing/deposit - Deposit funds to clearing account
+  if (path === '/clearing/deposit' && method === 'POST') {
+    return handleClearingDeposit(request, env);
+  }
+
+  // POST /clearing/withdraw - Withdraw funds from clearing account
+  if (path === '/clearing/withdraw' && method === 'POST') {
+    return handleClearingWithdraw(request, env);
+  }
+
+  // POST /settlements - Execute settlement with batch reference
+  if (path === '/settlements' && method === 'POST') {
+    return handleSettlement(request, env);
   }
 
   // POST /accounts - Create account

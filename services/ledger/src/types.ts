@@ -37,6 +37,9 @@ export type EventHash = string;
  * fee_transfer - Transfer credits to fee pool
  * promo_mint - Mint promotional credits
  * promo_burn - Burn promotional credits
+ * clearing_deposit - Deposit to clearing account
+ * clearing_withdraw - Withdraw from clearing account
+ * settlement - Settlement between accounts with batch reference
  */
 export type EventType =
   | 'mint'
@@ -49,7 +52,10 @@ export type EventType =
   | 'fee_burn'
   | 'fee_transfer'
   | 'promo_mint'
-  | 'promo_burn';
+  | 'promo_burn'
+  | 'clearing_deposit'
+  | 'clearing_withdraw'
+  | 'settlement';
 
 /**
  * Balance bucket names
@@ -647,5 +653,198 @@ export interface StakeFeeEventResponse {
   /** Timestamp */
   createdAt: Timestamp;
   /** Metadata including escrow/trial links */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Clearing account domain types for cross-service settlement
+ * Each domain (e.g., 'escrow', 'marketplace', 'treasury') has its own clearing account
+ */
+export type ClearingDomain = string;
+
+/**
+ * Clearing account entity - special accounts for cross-service settlement
+ * These are system accounts, not user accounts
+ */
+export interface ClearingAccount {
+  /** Unique clearing account ID */
+  id: AccountId;
+  /** Domain identifier (e.g., 'escrow', 'marketplace', 'treasury') */
+  domain: ClearingDomain;
+  /** Human-readable name for the clearing account */
+  name: string;
+  /** Balance buckets (same structure as user accounts) */
+  balances: BalanceBuckets;
+  /** Whether this clearing account is active */
+  isActive: boolean;
+  /** Account creation timestamp */
+  createdAt: Timestamp;
+  /** Last update timestamp */
+  updatedAt: Timestamp;
+  /** Account version for optimistic concurrency */
+  version: number;
+}
+
+/**
+ * Clearing account creation request
+ */
+export interface CreateClearingAccountRequest {
+  /** Domain identifier - must be unique */
+  domain: ClearingDomain;
+  /** Human-readable name */
+  name: string;
+}
+
+/**
+ * Clearing account response for API
+ */
+export interface ClearingAccountResponse {
+  id: AccountId;
+  domain: ClearingDomain;
+  name: string;
+  balances: {
+    available: string;
+    held: string;
+    bonded: string;
+    feePool: string;
+    promo: string;
+    total: string;
+  };
+  isActive: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/**
+ * Settlement event metadata - links to netting batch and originating transactions
+ */
+export interface SettlementEventMetadata {
+  /** Netting batch ID for grouping related settlements */
+  batchId: string;
+  /** Originating escrow ID (if applicable) */
+  escrowId?: string;
+  /** Originating transaction ID (if applicable) */
+  transactionId?: string;
+  /** Settlement type (e.g., 'escrow_release', 'marketplace_payout', 'fee_collection') */
+  settlementType?: string;
+  /** Reason for the settlement */
+  reason?: string;
+  /** Additional context data */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Clearing deposit request - deposit funds to a clearing account
+ */
+export interface ClearingDepositRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Source user account ID */
+  fromAccountId: AccountId;
+  /** Clearing account ID (or domain to look up) */
+  clearingAccountId?: AccountId;
+  /** Clearing domain (alternative to clearingAccountId) */
+  domain?: ClearingDomain;
+  /** Amount to deposit */
+  amount: string;
+  /** Netting batch ID */
+  batchId: string;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Clearing withdraw request - withdraw funds from a clearing account
+ */
+export interface ClearingWithdrawRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Clearing account ID (or domain to look up) */
+  clearingAccountId?: AccountId;
+  /** Clearing domain (alternative to clearingAccountId) */
+  domain?: ClearingDomain;
+  /** Destination user account ID */
+  toAccountId: AccountId;
+  /** Amount to withdraw */
+  amount: string;
+  /** Netting batch ID */
+  batchId: string;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Settlement request - transfer between accounts with batch reference
+ */
+export interface SettlementRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Source account ID (user or clearing) */
+  fromAccountId: AccountId;
+  /** Destination account ID (user or clearing) */
+  toAccountId: AccountId;
+  /** Amount to settle */
+  amount: string;
+  /** Netting batch ID - required for all settlements */
+  batchId: string;
+  /** Settlement type */
+  settlementType?: string;
+  /** Originating escrow ID */
+  escrowId?: string;
+  /** Originating transaction ID */
+  transactionId?: string;
+  /** Reason for settlement */
+  reason?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Settlement response for API
+ */
+export interface SettlementResponse {
+  /** Settlement event ID */
+  eventId: EventId;
+  /** Idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Source account ID */
+  fromAccountId: AccountId;
+  /** Destination account ID */
+  toAccountId: AccountId;
+  /** Amount settled */
+  amount: string;
+  /** Netting batch ID */
+  batchId: string;
+  /** Event hash */
+  eventHash: EventHash;
+  /** Timestamp */
+  createdAt: Timestamp;
+  /** Metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Clearing event response for API (deposit/withdraw)
+ */
+export interface ClearingEventResponse {
+  /** Event ID */
+  eventId: EventId;
+  /** Idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Event type */
+  eventType: 'clearing_deposit' | 'clearing_withdraw';
+  /** User account ID */
+  userAccountId: AccountId;
+  /** Clearing account ID */
+  clearingAccountId: AccountId;
+  /** Amount */
+  amount: string;
+  /** Netting batch ID */
+  batchId: string;
+  /** Event hash */
+  eventHash: EventHash;
+  /** Timestamp */
+  createdAt: Timestamp;
+  /** Metadata */
   metadata?: Record<string, unknown>;
 }

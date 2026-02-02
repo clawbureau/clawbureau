@@ -79,7 +79,24 @@ export function isValidEventType(type: string): type is EventType {
     'fee_transfer',
     'promo_mint',
     'promo_burn',
+    'clearing_deposit',
+    'clearing_withdraw',
+    'settlement',
   ].includes(type);
+}
+
+/**
+ * Check if event type is a clearing-related event
+ */
+export function isClearingEventType(type: string): boolean {
+  return ['clearing_deposit', 'clearing_withdraw'].includes(type);
+}
+
+/**
+ * Check if event type is a settlement event
+ */
+export function isSettlementEventType(type: string): boolean {
+  return type === 'settlement';
 }
 
 /**
