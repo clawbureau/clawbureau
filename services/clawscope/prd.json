@@ -70,8 +70,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "JWKS endpoint publishes all active/rotated public keys with cache-control; added key rotation support via SCOPE_SIGNING_KEYS_JSON (first key used for signing) and introspection verifies by header.kid against the keyset."
     },
     {
       "id": "CSC-US-006",
