@@ -1,23 +1,12 @@
 name = "clawproxy"
+account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-# Environment variables (non-sensitive)
 PROXY_VERSION = "0.1.0"
 
 # Secrets to be set via wrangler secret put:
-# - PROXY_SIGNING_KEY (Ed25519 private key for signing receipts)
-# - ANTHROPIC_API_KEY (optional, for testing)
-# - OPENAI_API_KEY (optional, for testing)
-
-# Rate limiting configuration
-# Limits requests per DID or IP address
-[[ratelimits]]
-binding = "PROXY_RATE_LIMITER"
-namespace_id = "1001"
-
-  [ratelimits.simple]
-  limit = 100
-  period = 60
+# - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
+# - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
