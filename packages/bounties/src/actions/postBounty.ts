@@ -7,6 +7,7 @@ import {
 } from "../types/bounty.js";
 import { EscrowService, EscrowHoldRequest } from "../types/escrow.js";
 import { FeeService } from "../types/fees.js";
+import { BountyRepository } from "../types/repository.js";
 
 /**
  * Generate a random UUID using crypto.randomUUID (available in modern runtimes)
@@ -27,14 +28,6 @@ export class PostBountyError extends Error {
     super(message);
     this.name = "PostBountyError";
   }
-}
-
-/**
- * Repository interface for bounty persistence
- */
-export interface BountyRepository {
-  save(bounty: Bounty): Promise<void>;
-  findByIdempotencyKey(key: string): Promise<Bounty | null>;
 }
 
 /**

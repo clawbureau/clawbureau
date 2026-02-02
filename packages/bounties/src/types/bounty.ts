@@ -122,3 +122,43 @@ export const PostBountyResponseSchema = z.object({
 });
 
 export type PostBountyResponse = z.infer<typeof PostBountyResponseSchema>;
+
+/**
+ * Request payload for accepting a bounty
+ */
+export const AcceptBountyRequestSchema = z.object({
+  bounty_id: z.string(),
+  idempotency_key: z.string().optional(),
+});
+
+export type AcceptBountyRequest = z.infer<typeof AcceptBountyRequestSchema>;
+
+/**
+ * Acceptance receipt returned after successfully accepting a bounty
+ */
+export const AcceptanceReceiptSchema = z.object({
+  schema_version: z.literal("1"),
+  receipt_id: z.string(),
+  bounty_id: z.string(),
+  agent_did: z.string(),
+  accepted_at: z.string().datetime(),
+  bounty_title: z.string(),
+  reward: RewardSchema,
+  difficulty_scalar: z.number(),
+  closure_type: ClosureTypeSchema,
+});
+
+export type AcceptanceReceipt = z.infer<typeof AcceptanceReceiptSchema>;
+
+/**
+ * Response after successfully accepting a bounty
+ */
+export const AcceptBountyResponseSchema = z.object({
+  schema_version: z.literal("1"),
+  bounty_id: z.string(),
+  status: z.literal("accepted"),
+  accepted_at: z.string().datetime(),
+  receipt: AcceptanceReceiptSchema,
+});
+
+export type AcceptBountyResponse = z.infer<typeof AcceptBountyResponseSchema>;
