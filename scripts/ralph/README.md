@@ -1,24 +1,66 @@
 # Ralph Integration
 
-To use Ralph loops per domain:
+Ralph is a long-running agent loop intended to be run **per domain** in its own terminal (or per git worktree).
 
-1. Copy ralph.sh + prompt into this repo:
+This repo ships a harness-aware Ralph runner at:
+
+- `scripts/ralph/ralph.sh`
+
+It supports multiple backends:
+- `--tool claude` (Claude Code)
+- `--tool pi` (Pi Coding Agent, recommended)
+
+---
+
+## Recommended: Pi harness mode
+
+Pi mode runs non-interactively via the installed `pi` CLI (`@mariozechner/pi-coding-agent`) and persists a per-run session file in the run directory by default:
+
+- `<run_dir>/.pi/ralph.session.jsonl`
+
+### Run
+
+From a directory containing `prd.json` + `progress.txt` (often the root of a domain worktree):
 
 ```bash
-mkdir -p scripts/ralph
-cp /path/to/ralph/ralph.sh scripts/ralph/
-cp /path/to/ralph/CLAUDE.md scripts/ralph/
+./scripts/ralph/ralph.sh --tool pi 50
 ```
 
-2. For each domain:
-- Generate `prd.json` from the PRD in `docs/prds/<domain>.md`
-- Store as `services/<domain>/prd.json`
+### Configure model (optional)
 
-3. Run Ralph:
+You can set Pi options via flags:
 
 ```bash
-cd services/<domain>
-../../scripts/ralph/ralph.sh --tool claude 50
+./scripts/ralph/ralph.sh --tool pi \
+  --pi-provider anthropic \
+  --pi-model claude-sonnet-4-20250514 \
+  --pi-thinking high \
+  50
 ```
 
-Parallelize by running multiple domains in different terminals.
+Or via env vars:
+
+```bash
+export PI_PROVIDER=anthropic
+export PI_MODEL=claude-sonnet-4-20250514
+export PI_THINKING=high
+./scripts/ralph/ralph.sh --tool pi 50
+```
+
+---
+
+## Per-domain setup
+
+1) Generate `prd.json` from the PRD in `docs/prds/<domain>.md`.
+
+2) Place `prd.json` + `progress.txt` in the directory you will run Ralph from.
+
+Ralph will prefer `./prd.json` when present (so worktrees can keep their own PRD state).
+
+---
+
+## Parallelization
+
+Run multiple domains in parallel by using:
+- separate terminals, and
+- separate git worktrees (recommended) to avoid branch collisions.
