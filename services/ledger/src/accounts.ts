@@ -9,6 +9,7 @@ import type {
   AccountResponse,
   BalanceBuckets,
   BalanceListResponse,
+  BucketName,
   CreateAccountRequest,
   DID,
   Env,
@@ -527,6 +528,485 @@ export class AccountRepository {
         ...account.balances,
         available: newAvailable,
       },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Credit an account's bonded balance
+   */
+  async creditBonded(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    const newBonded = account.balances.bonded + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_bonded = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newBonded.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        bonded: newBonded,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Debit an account's bonded balance (e.g., for unbonding or slashing)
+   * Validates sufficient funds before the operation
+   */
+  async debitBonded(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.bonded < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'bonded',
+        amount,
+        account.balances.bonded
+      );
+    }
+
+    const newBonded = account.balances.bonded - amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_bonded = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newBonded.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        bonded: newBonded,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Credit an account's fee pool balance
+   */
+  async creditFeePool(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    const newFeePool = account.balances.feePool + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_fee_pool = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newFeePool.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        feePool: newFeePool,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Debit an account's fee pool balance (e.g., for fee burns or transfers)
+   * Validates sufficient funds before the operation
+   */
+  async debitFeePool(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.feePool < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'feePool',
+        amount,
+        account.balances.feePool
+      );
+    }
+
+    const newFeePool = account.balances.feePool - amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_fee_pool = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newFeePool.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        feePool: newFeePool,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Credit an account's promo balance
+   */
+  async creditPromo(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    const newPromo = account.balances.promo + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_promo = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newPromo.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        promo: newPromo,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Debit an account's promo balance (e.g., for promo burns)
+   * Validates sufficient funds before the operation
+   */
+  async debitPromo(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.promo < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'promo',
+        amount,
+        account.balances.promo
+      );
+    }
+
+    const newPromo = account.balances.promo - amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_promo = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newPromo.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        promo: newPromo,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Credit an account's held balance directly
+   */
+  async creditHeld(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    const newHeld = account.balances.held + amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_held = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newHeld.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        held: newHeld,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Debit an account's held balance
+   * Validates sufficient funds before the operation
+   */
+  async debitHeld(accountId: AccountId, amount: bigint): Promise<Account> {
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    if (account.balances.held < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        'held',
+        amount,
+        account.balances.held
+      );
+    }
+
+    const newHeld = account.balances.held - amount;
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET balance_held = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newHeld.toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: {
+        ...account.balances,
+        held: newHeld,
+      },
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Generic bucket operation - credit a specific bucket
+   * Validates that the amount is non-negative
+   */
+  async creditBucket(accountId: AccountId, bucket: BucketName, amount: bigint): Promise<Account> {
+    if (amount < 0n) {
+      throw new Error('Amount must be non-negative');
+    }
+
+    switch (bucket) {
+      case 'available':
+        return this.creditAvailable(accountId, amount);
+      case 'held':
+        return this.creditHeld(accountId, amount);
+      case 'bonded':
+        return this.creditBonded(accountId, amount);
+      case 'feePool':
+        return this.creditFeePool(accountId, amount);
+      case 'promo':
+        return this.creditPromo(accountId, amount);
+      default:
+        throw new Error(`Unknown bucket: ${bucket}`);
+    }
+  }
+
+  /**
+   * Generic bucket operation - debit a specific bucket
+   * Validates sufficient funds and non-negative result
+   */
+  async debitBucket(accountId: AccountId, bucket: BucketName, amount: bigint): Promise<Account> {
+    if (amount < 0n) {
+      throw new Error('Amount must be non-negative');
+    }
+
+    switch (bucket) {
+      case 'available':
+        return this.debitAvailable(accountId, amount);
+      case 'held':
+        return this.debitHeld(accountId, amount);
+      case 'bonded':
+        return this.debitBonded(accountId, amount);
+      case 'feePool':
+        return this.debitFeePool(accountId, amount);
+      case 'promo':
+        return this.debitPromo(accountId, amount);
+      default:
+        throw new Error(`Unknown bucket: ${bucket}`);
+    }
+  }
+
+  /**
+   * Move funds between buckets within the same account
+   * Validates sufficient funds in source bucket
+   */
+  async moveBetweenBuckets(
+    accountId: AccountId,
+    fromBucket: BucketName,
+    toBucket: BucketName,
+    amount: bigint
+  ): Promise<Account> {
+    if (amount < 0n) {
+      throw new Error('Amount must be non-negative');
+    }
+
+    if (fromBucket === toBucket) {
+      throw new Error('Source and destination buckets must be different');
+    }
+
+    const account = await this.findById(accountId);
+    if (!account) {
+      throw new Error(`Account not found: ${accountId}`);
+    }
+
+    // Validate sufficient funds in source bucket
+    if (account.balances[fromBucket] < amount) {
+      throw new InsufficientFundsError(
+        accountId,
+        fromBucket,
+        amount,
+        account.balances[fromBucket]
+      );
+    }
+
+    // Calculate new balances
+    const newBalances = { ...account.balances };
+    newBalances[fromBucket] = account.balances[fromBucket] - amount;
+    newBalances[toBucket] = account.balances[toBucket] + amount;
+
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    // Map bucket names to column names
+    const columnMap: Record<BucketName, string> = {
+      available: 'balance_available',
+      held: 'balance_held',
+      bonded: 'balance_bonded',
+      feePool: 'balance_fee_pool',
+      promo: 'balance_promo',
+    };
+
+    await this.db
+      .prepare(
+        `UPDATE accounts
+         SET ${columnMap[fromBucket]} = ?,
+             ${columnMap[toBucket]} = ?,
+             updated_at = ?,
+             version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newBalances[fromBucket].toString(),
+        newBalances[toBucket].toString(),
+        now,
+        newVersion,
+        accountId,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: newBalances,
       updatedAt: now,
       version: newVersion,
     };
