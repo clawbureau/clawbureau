@@ -70,8 +70,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added POST /v1/verify-receipt endpoint. Validates signature using Ed25519, checks proxyDid and kid match, returns provider/model claims on success."
     },
     {
       "id": "CPX-US-006",
@@ -84,8 +84,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented rate limiting using Cloudflare Workers Rate Limiting binding. Limits by X-Client-DID header (preferred) or IP address (fallback). Returns 429 with Retry-After header. All responses include X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers."
     },
     {
       "id": "CPX-US-007",

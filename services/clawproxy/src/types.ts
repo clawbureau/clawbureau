@@ -2,10 +2,26 @@
  * Clawproxy type definitions
  */
 
+/**
+ * Cloudflare Workers Rate Limit binding
+ */
+export interface RateLimit {
+  limit(options: { key: string }): Promise<RateLimitOutcome>;
+}
+
+/**
+ * Result from rate limit check
+ */
+export interface RateLimitOutcome {
+  success: boolean;
+}
+
 export interface Env {
   PROXY_VERSION: string;
   /** Ed25519 private key in base64url format for signing receipts */
   PROXY_SIGNING_KEY?: string;
+  /** Rate limiter binding for request throttling */
+  PROXY_RATE_LIMITER: RateLimit;
 }
 
 /**

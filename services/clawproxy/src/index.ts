@@ -10,7 +10,8 @@ import type { Env, ErrorResponse, Provider, DidResponse, Receipt, VerifyReceiptR
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519 } from './crypto';
-import { logBlockedProvider } from './logging';
+import { logBlockedProvider, logRateLimited } from './logging';
+import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
 
 /** Proxy DID identifier */
 const PROXY_DID = 'did:web:clawproxy.com';
@@ -264,13 +265,22 @@ async function handleProxy(
 ): Promise<Response> {
   const startTime = Date.now();
 
+  // Check rate limit before processing
+  const rateLimitInfo = await checkRateLimit(request, env);
+  if (!rateLimitInfo.allowed) {
+    // Log rate limited request for monitoring
+    logRateLimited(request, rateLimitInfo.key);
+    return rateLimitedResponse(rateLimitInfo);
+  }
+
   // Initialize signing context - fail closed if not configured
   const signingContext = await initSigningContext(env);
   if (!signingContext) {
-    return errorResponse(
+    return errorResponseWithRateLimit(
       'SIGNING_NOT_CONFIGURED',
       'Proxy signing key is not configured. Receipt signing is required for all proxy requests.',
-      503
+      503,
+      rateLimitInfo
     );
   }
 
@@ -280,10 +290,11 @@ async function handleProxy(
     logBlockedProvider(request, providerParam);
 
     const supported = getSupportedProviders().join(', ');
-    return errorResponse(
+    return errorResponseWithRateLimit(
       'UNKNOWN_PROVIDER',
       `Provider '${providerParam}' is not allowed. Only known provider endpoints are permitted. Supported: ${supported}`,
-      400
+      400,
+      rateLimitInfo
     );
   }
 
@@ -293,7 +304,7 @@ async function handleProxy(
   // Extract API key from Authorization header
   const authHeader = request.headers.get('Authorization');
   if (!authHeader) {
-    return errorResponse('UNAUTHORIZED', 'Authorization header required', 401);
+    return errorResponseWithRateLimit('UNAUTHORIZED', 'Authorization header required', 401, rateLimitInfo);
   }
 
   // Parse API key (supports both "Bearer <key>" and raw key formats)
@@ -302,7 +313,7 @@ async function handleProxy(
     : authHeader;
 
   if (!apiKey) {
-    return errorResponse('UNAUTHORIZED', 'API key not provided', 401);
+    return errorResponseWithRateLimit('UNAUTHORIZED', 'API key not provided', 401, rateLimitInfo);
   }
 
   // Read and validate request body
@@ -313,7 +324,7 @@ async function handleProxy(
     requestBody = await request.text();
     parsedBody = JSON.parse(requestBody);
   } catch {
-    return errorResponse('INVALID_REQUEST', 'Request body must be valid JSON', 400);
+    return errorResponseWithRateLimit('INVALID_REQUEST', 'Request body must be valid JSON', 400, rateLimitInfo);
   }
 
   // Extract model for receipt
@@ -321,10 +332,11 @@ async function handleProxy(
 
   // Google Gemini requires model in the URL path
   if (provider === 'google' && !model) {
-    return errorResponse(
+    return errorResponseWithRateLimit(
       'INVALID_REQUEST',
       'Model field is required for Google Gemini API. Specify "model" in the request body.',
-      400
+      400,
+      rateLimitInfo
     );
   }
 
@@ -334,7 +346,7 @@ async function handleProxy(
     providerUrl = buildProviderUrl(provider, model);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return errorResponse('INVALID_REQUEST', message, 400);
+    return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);
   }
 
   // Forward request to provider
@@ -350,7 +362,7 @@ async function handleProxy(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return errorResponse('PROVIDER_ERROR', `Failed to reach provider: ${message}`, 502);
+    return errorResponseWithRateLimit('PROVIDER_ERROR', `Failed to reach provider: ${message}`, 502, rateLimitInfo);
   }
 
   // Read provider response
@@ -382,7 +394,7 @@ async function handleProxy(
       receipt
     );
 
-    return jsonResponse(withReceipt, providerResponse.status);
+    return jsonResponseWithRateLimit(withReceipt, providerResponse.status, rateLimitInfo);
   }
 
   // Parse successful response and attach receipt
@@ -395,7 +407,7 @@ async function handleProxy(
   }
 
   const withReceipt = attachReceipt(responseObj, receipt);
-  return jsonResponse(withReceipt);
+  return jsonResponseWithRateLimit(withReceipt, 200, rateLimitInfo);
 }
 
 /**
@@ -419,4 +431,60 @@ function errorResponse(code: string, message: string, status: number): Response 
     error: { code, message },
   };
   return jsonResponse(error, status);
+}
+
+/**
+ * Create an error response with rate limit headers
+ */
+function errorResponseWithRateLimit(
+  code: string,
+  message: string,
+  status: number,
+  rateLimitInfo: RateLimitInfo
+): Response {
+  const error: ErrorResponse = {
+    error: { code, message },
+  };
+  return jsonResponseWithRateLimit(error, status, rateLimitInfo);
+}
+
+/**
+ * Create a JSON response with rate limit headers
+ */
+function jsonResponseWithRateLimit(
+  data: unknown,
+  status: number,
+  rateLimitInfo: RateLimitInfo
+): Response {
+  const rateLimitHeaders = buildRateLimitHeaders(rateLimitInfo);
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Proxy-Version': '0.1.0',
+      ...rateLimitHeaders,
+    },
+  });
+}
+
+/**
+ * Create a 429 rate limited response
+ */
+function rateLimitedResponse(rateLimitInfo: RateLimitInfo): Response {
+  const error: ErrorResponse = {
+    error: {
+      code: 'RATE_LIMITED',
+      message: 'Rate limit exceeded. Please try again later.',
+    },
+  };
+  const rateLimitHeaders = buildRateLimitHeaders(rateLimitInfo);
+  return new Response(JSON.stringify(error), {
+    status: 429,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Proxy-Version': '0.1.0',
+      'Retry-After': String(rateLimitInfo.resetTime - Math.floor(Date.now() / 1000)),
+      ...rateLimitHeaders,
+    },
+  });
 }

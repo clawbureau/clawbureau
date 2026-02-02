@@ -5,7 +5,8 @@
 export type SecurityEventType =
   | 'BLOCKED_UNKNOWN_PROVIDER'
   | 'BLOCKED_INVALID_PATH'
-  | 'BLOCKED_MISSING_AUTH';
+  | 'BLOCKED_MISSING_AUTH'
+  | 'RATE_LIMITED';
 
 export interface SecurityEvent {
   type: SecurityEventType;
@@ -55,5 +56,18 @@ export function logBlockedProvider(
   logSecurityEvent(request, 'BLOCKED_UNKNOWN_PROVIDER', {
     attemptedProvider,
     message: `Blocked attempt to use unknown provider: ${attemptedProvider}`,
+  });
+}
+
+/**
+ * Log a rate limited request
+ */
+export function logRateLimited(
+  request: Request,
+  rateLimitKey: string
+): void {
+  logSecurityEvent(request, 'RATE_LIMITED', {
+    rateLimitKey,
+    message: `Request rate limited for key: ${rateLimitKey}`,
   });
 }

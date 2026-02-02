@@ -5,6 +5,8 @@
 - Receipt hashes use SHA-256 hex encoding
 - Types exported from `src/types.ts`, providers from `src/providers.ts`
 - Security events use structured logging via `src/logging.ts` with [SECURITY] prefix
+- Rate limiting uses Cloudflare Workers Rate Limiting binding (PROXY_RATE_LIMITER)
+- Rate limit key preference: X-Client-DID header > CF-Connecting-IP (IP address)
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937763
@@ -78,4 +80,41 @@ Started: 2026-02-02T03:08:26.937763
   - Gemini URL format: `models/{model}:generateContent` - model is path param, not body-only
   - Use buildProviderUrl() for all providers; returns static URL for most, dynamic for Google
   - Gemini responses include `usageMetadata` field automatically passed through
+---
+
+## 2026-02-02 - CPX-US-005
+- Implemented POST /v1/verify-receipt endpoint for validating receipt signatures
+- Added VerifyReceiptRequest and VerifyReceiptResponse types
+- Validates receipt structure, proxyDid match, kid match, and Ed25519 signature
+- Returns provider/model claims on successful verification
+- Files modified:
+  - services/clawproxy/src/types.ts (added VerifyReceiptRequest, VerifyReceiptResponse interfaces)
+  - services/clawproxy/src/crypto.ts (added importEd25519PublicKey for SPKI format import)
+  - services/clawproxy/src/index.ts (added /v1/verify-receipt route, handleVerifyReceipt handler, validateReceiptStructure helper)
+- **Learnings for future iterations:**
+  - Receipt verification uses the cached signing context's public key (same key used for signing)
+  - createSigningPayload() from receipt.ts produces deterministic JSON for verification
+  - SPKI format needed for importing raw Ed25519 public keys (12-byte header + 32-byte key)
+  - Verification response distinguishes between structural errors and signature failures
+  - Provider/model claims only returned when signature is valid
+---
+
+## 2026-02-02 - CPX-US-006
+- Implemented rate limiting using Cloudflare Workers Rate Limiting binding
+- Rate limits by DID (X-Client-DID header) or IP address (CF-Connecting-IP fallback)
+- Returns 429 with Retry-After header when rate limit exceeded
+- All proxy responses now include X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers
+- Files created:
+  - services/clawproxy/src/ratelimit.ts (rate limiting logic, key extraction, header builders)
+- Files modified:
+  - services/clawproxy/src/types.ts (added RateLimit, RateLimitOutcome interfaces, PROXY_RATE_LIMITER binding)
+  - services/clawproxy/src/logging.ts (added RATE_LIMITED security event type, logRateLimited function)
+  - services/clawproxy/src/index.ts (integrated rate limiting, added rate limit headers to all responses)
+  - services/clawproxy/wrangler.toml (added ratelimits binding configuration)
+- **Learnings for future iterations:**
+  - Cloudflare Rate Limiting period must be 10 or 60 seconds
+  - Rate limiting fails open (allows request) if binding is unavailable or errors
+  - X-Client-DID header allows agents to be rate limited by identity rather than shared IP
+  - Cloudflare doesn't expose exact remaining count; we estimate based on success/failure
+  - namespace_id in wrangler.toml is a unique positive integer per account
 ---

@@ -11,3 +11,13 @@ PROXY_VERSION = "0.1.0"
 # - PROXY_SIGNING_KEY (Ed25519 private key for signing receipts)
 # - ANTHROPIC_API_KEY (optional, for testing)
 # - OPENAI_API_KEY (optional, for testing)
+
+# Rate limiting configuration
+# Limits requests per DID or IP address
+[[ratelimits]]
+binding = "PROXY_RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 100
+  period = 60
