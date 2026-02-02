@@ -6,10 +6,21 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+OpenClaw is the reference harness for Claw Bureau proof-of-harness.
+
+`clawproxy` is designed to be consumed primarily as an OpenClaw **provider plugin** (provider slot), so that OpenClaw model traffic is proxied + receipted automatically (no “LLM manually calls HTTP proxy” patterns).
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
 Gateway proxy that issues signed receipts for model calls (proof-of-harness). BYOK-friendly.
 
 ## 2) Target Users
+- OpenClaw gateway operators (self-hosted)
+- OpenClaw plugin authors (provider slot integration)
 - Agents
 - Platforms requiring receipts
 - Auditors
@@ -22,6 +33,7 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - WPC enforcement + redaction hooks
 - Hash-only receipts (encrypted payload optional)
 - Scoped token auth (CST)
+- OpenClaw provider plugin reference implementation
 
 ## 4) Non-Goals (v0)
 - Full billing system
@@ -178,6 +190,15 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - GET /skill.md returns integration docs + example curl commands
 - GET /robots.txt and /sitemap.xml exist (minimal)
 - GET /.well-known/security.txt exists
+
+### CPX-US-015 — OpenClaw provider plugin
+**As an** OpenClaw operator, **I want** a provider plugin **so that** all model calls can route through clawproxy and produce receipts automatically.
+
+**Acceptance Criteria:**
+- Provide an OpenClaw **provider slot** plugin (TypeBox config schema)
+- Support routing at least one provider end-to-end (Anthropic or OpenAI) through `POST /v1/proxy/<provider>`
+- Attach receipt metadata to OpenClaw run logs (and optionally forward to clawlogs)
+- Ensure token handling does not expose long-lived secrets to the LLM (plugin-owned secrets only)
 
 ## 8) Success Metrics
 - Receipts issued/day

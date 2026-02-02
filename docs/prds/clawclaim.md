@@ -6,66 +6,93 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+OpenClaw is the reference harness for Claw Bureau identity and trust flows.
+
+`clawclaim` provides DID binding + external account claims in a form that an OpenClaw gateway (and its plugins/skills) can drive via challenge/response.
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
-Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response.
+Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response, with revocation and auditability suitable for OpenClaw multi-agent setups.
+
+---
 
 ## 2) Target Users
-- Agents
-- Platforms
+- OpenClaw users (self-hosted gateways)
+- OpenClaw plugin authors (identity + trust)
+- Platforms consuming OpenClaw/Claw Bureau proofs
 - Auditors
 
+---
+
 ## 3) MVP Scope
-- Challenge generation
-- Signature verification
+- Challenge generation (purpose-aware: bind, revoke)
+- Signature verification (initially `did:key` Ed25519)
 - Bind/unbind DID
-- Platform claim registry
+- Platform claim registry (GitHub/X/Moltbook)
 - Owner attestation registry (provider-agnostic)
-- Scoped token issuance (CST)
-- Org/team DID roster claims
+- Scoped token bootstrap (exchange DID proof → CST via clawscope)
+- Org/team DID roster claims (future)
+
+---
 
 ## 4) Non-Goals (v0)
-- Full OAuth provider suite v0
+- Full OAuth provider suite
+- Acting as OpenClaw’s local agent identity system (OpenClaw already manages agent identity; clawclaim binds cryptographic identity to trust rails)
+
+---
 
 ## 5) Dependencies
-- clawverify.com
-- clawlogs.com
-- clawcontrols.com
-- clawscope.com
+- clawverify.com (signature / proof verification)
+- clawscope.com (CST issuance)
+- clawlogs.com (audit logging; optional)
+- clawcontrols.com (policy gates; optional)
+
+---
 
 ## 6) Core User Journeys
-- User requests challenge → signs → bind DID
-- User binds GitHub by signed gist
+- **OpenClaw agent DID setup** → user requests challenge → agent signs via DID Work tooling → bind DID
+- DID is used to obtain scoped tokens for calling Claw Bureau services (clawscope)
+- If keys are compromised: revoke binding → tokens stop working (revocation + policy gates)
+
+---
 
 ## 7) User Stories
+
 ### CCL-US-001 — Challenge issuance
-**As a** user, **I want** a binding challenge **so that** I can prove key control.
+**As an** OpenClaw user, **I want** a binding challenge **so that** I can prove key control.
 
 **Acceptance Criteria:**
   - Issue short-lived nonce
   - Store challenge
   - Expire after 10 minutes
+  - Support purpose (`bind` default; `revoke` for revocations)
 
 
 ### CCL-US-002 — Bind DID
-**As a** user, **I want** to bind my DID **so that** my identity is portable.
+**As an** OpenClaw user, **I want** to bind my agent DID **so that** my identity is portable across Claw Bureau services.
 
 **Acceptance Criteria:**
   - Verify signature
   - Store DID binding
   - Mark DID as active
+  - (OpenClaw fit) allow storing `openclaw_agent_id` metadata for multi-agent gateways
 
 
 ### CCL-US-003 — Revoke binding
-**As a** user, **I want** to revoke a DID **so that** compromised keys are disabled.
+**As an** OpenClaw user, **I want** to revoke a DID **so that** compromised keys are disabled.
 
 **Acceptance Criteria:**
   - Mark binding revoked
-  - Prevent new sessions
+  - Prevent new sessions (block new bind challenges / token bootstrap for revoked DIDs)
   - Log audit event
 
 
 ### CCL-US-004 — Platform claims
-**As a** user, **I want** to bind external accounts **so that** trust aggregates cross-platform.
+**As an** OpenClaw user, **I want** to bind external accounts **so that** trust aggregates cross-platform.
 
 **Acceptance Criteria:**
   - Support GitHub/X/Moltbook
@@ -74,7 +101,7 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
 
 
 ### CCL-US-005 — Primary DID selection
-**As a** user, **I want** to pick a primary DID **so that** my profile is consistent.
+**As an** OpenClaw user, **I want** to pick a primary DID **so that** my OpenClaw identity and receipts are consistent.
 
 **Acceptance Criteria:**
   - Set is_primary flag
@@ -83,7 +110,7 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
 
 
 ### CCL-US-006 — Binding audit trail
-**As a** auditor, **I want** to inspect binding history **so that** identity claims are traceable.
+**As an** auditor, **I want** to inspect binding history **so that** identity claims are traceable.
 
 **Acceptance Criteria:**
   - Append-only binding log
@@ -101,7 +128,7 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
 
 
 ### CCL-US-008 — Scoped token issuance (CST)
-**As a** developer, **I want** scoped tokens **so that** agents can authenticate safely.
+**As an** OpenClaw plugin, **I want** scoped tokens **so that** agents can authenticate to Claw Bureau services safely.
 
 **Acceptance Criteria:**
   - Exchange DID challenge for token issuance via clawscope
@@ -119,10 +146,21 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
   - Expose roster verification endpoint
 
 
+### CCL-US-010 — OpenClaw tool plugin + skill workflow
+**As an** OpenClaw user, **I want** a first-class workflow inside OpenClaw **so that** binding/revocation is easy and repeatable.
+
+**Acceptance Criteria:**
+  - Provide an OpenClaw **tool plugin** for clawclaim workflows (bind/revoke/claim)
+  - Provide an OpenClaw **skill** (`skills/clawclaim/SKILL.md`) describing the flow
+  - Support OpenClaw config schema (TypeBox) for base URLs + storage settings
+
+---
+
 ## 8) Success Metrics
 - Bindings created
 - Binding success rate
 - Revocations processed
+- % of OpenClaw gateways with at least one bound DID
 
 ---
 

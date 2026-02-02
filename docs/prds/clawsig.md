@@ -6,11 +6,23 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+OpenClaw already supports cryptographic identity patterns (device pairing, skills for signing workflows). In the OpenClaw ecosystem, **DID Work tooling is the default**.
+
+`clawsig` exists for:
+- interactive signing UX (non-technical users)
+- enterprise custody / policy-managed keys
+- bridging hardware-backed keys to Claw Bureau schemas
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
 Key management + signing UX, including key rotation and optional custodial/HSM support.
 
 ## 2) Target Users
-- Agents
+- OpenClaw users who want a UI instead of CLI signing
 - Enterprises needing custody
 - Auditors
 

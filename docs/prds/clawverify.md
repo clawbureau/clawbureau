@@ -6,12 +6,23 @@
 
 ---
 
+## 0) OpenClaw Fit (primary design target)
+OpenClaw is the reference harness for Claw Bureau verification workflows.
+
+`clawverify` should be consumable from OpenClaw as a **tool plugin** (and/or as an internal library), so OpenClaw can validate receipts/proof bundles during runs (or during post-run audits) without bespoke glue.
+
+See: `docs/OPENCLAW_INTEGRATION.md`.
+
+---
+
 ## 1) Purpose
 Universal signature verifier for artifacts, messages, receipts, and attestations.
 
 **Hard rule:** fail-closed on unknown `schema_id` / `version` / `envelope_type` / `algorithm`.
 
 ## 2) Target Users
+- OpenClaw gateway operators
+- OpenClaw plugin authors (provider/tool integration)
 - Agents verifying work
 - Platforms integrating verification
 - Auditors
@@ -187,6 +198,14 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - GET /skill.md returns integration docs + example curl commands
 - GET /robots.txt and /sitemap.xml exist (minimal)
 - GET /.well-known/security.txt exists
+
+### CVF-US-015 — OpenClaw verification tool plugin
+**As an** OpenClaw operator, **I want** a verification tool inside OpenClaw **so that** I can validate receipts/proof bundles during runs or post-run audits.
+
+**Acceptance Criteria:**
+- Provide an OpenClaw **tool slot** plugin that wraps core verification endpoints
+- Provide an OpenClaw skill (`skills/clawverify/SKILL.md`) with examples (receipt, commit proof, proof bundle)
+- Fail closed on unknown schema/version, matching Claw Bureau verifier semantics
 
 ## 8) Success Metrics
 - Verification success rate
