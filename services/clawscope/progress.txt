@@ -1,0 +1,24 @@
+## Codebase Patterns
+- Services live in `services/<service-name>/` and are typically Cloudflare Workers.
+- Keep secrets in wrangler secrets; fail closed when required keys are missing.
+- CST format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).
+
+# Ralph Progress Log
+Started: 2026-02-02T22:30:00Z
+---
+
+## 2026-02-02 - CSC-US-001
+- Scaffolded clawscope Worker at `services/clawscope/`.
+- Implemented admin-gated token issuance: `POST /v1/tokens/issue`.
+  - Issues Ed25519-signed JWT (JWS compact, `alg=EdDSA`).
+  - Claims align with `packages/schema/auth/scoped_token_claims.v1.json`.
+  - Enforces TTL + scope size/length limits.
+  - Returns `token_hash` (SHA-256 hex) + `policy_version`.
+- Added key discovery:
+  - `GET /v1/jwks` (OKP Ed25519)
+  - `GET /v1/did`
+- Typecheck: `npm run typecheck`.
+- **Learnings for future iterations:**
+  - Other services (e.g. clawproxy) validate CSTs as EdDSA JWT and require a configured issuer public key.
+  - Keeping the issuer key discoverable via JWKS allows offline verification.
+---

@@ -1,0 +1,362 @@
+import { base64urlEncode, computeKeyId, importEd25519Key, sha256, signEd25519 } from './crypto';
+
+const SCOPE_DID = 'did:web:clawscope.com';
+
+export interface Env {
+  SCOPE_VERSION: string;
+
+  // policy knobs
+  SCOPE_POLICY_VERSION?: string;
+  SCOPE_MAX_TTL_SECONDS?: string;
+  SCOPE_MAX_SCOPE_ITEMS?: string;
+  SCOPE_MAX_SCOPE_LENGTH?: string;
+
+  // secrets
+  SCOPE_SIGNING_KEY?: string;
+  SCOPE_ADMIN_KEY?: string;
+}
+
+export interface ScopedTokenClaims {
+  token_version: '1';
+  sub: string;
+  aud: string | string[];
+  scope: string[];
+  iat: number;
+  exp: number;
+  owner_ref?: string;
+  policy_hash_b64u?: string;
+  token_scope_hash_b64u?: string;
+  spend_cap?: number;
+  mission_id?: string;
+  jti?: string;
+  nonce?: string;
+}
+
+export interface IssueTokenRequest {
+  sub: string;
+  aud: string | string[];
+  scope: string[];
+  ttl_sec?: number;
+  exp?: number;
+  owner_ref?: string;
+  spend_cap?: number;
+  mission_id?: string;
+}
+
+let cachedKeyRaw: string | null = null;
+let cachedKeys:
+  | {
+      privateKey: CryptoKey;
+      publicKeyBytes: Uint8Array;
+      kid: string;
+      jwkX: string;
+    }
+  | null = null;
+
+function parseIntOrDefault(value: string | undefined, d: number): number {
+  if (!value) return d;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : d;
+}
+
+function jsonResponse(body: unknown, status = 200, extraHeaders?: HeadersInit): Response {
+  const headers = new Headers(extraHeaders);
+  headers.set('content-type', 'application/json; charset=utf-8');
+  return new Response(JSON.stringify(body, null, 2), { status, headers });
+}
+
+function textResponse(body: string, contentType: string, status = 200, version?: string): Response {
+  const headers = new Headers({ 'content-type': contentType });
+  if (version) headers.set('X-Scope-Version', version);
+  return new Response(body, { status, headers });
+}
+
+function errorResponse(code: string, message: string, status = 400): Response {
+  return jsonResponse({ error: code, message }, status);
+}
+
+function getBearerToken(header: string | null): string | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase().startsWith('bearer ')) return trimmed.slice(7).trim();
+  return trimmed;
+}
+
+function requireAdmin(request: Request, env: Env): Response | null {
+  if (!env.SCOPE_ADMIN_KEY || env.SCOPE_ADMIN_KEY.trim().length === 0) {
+    return errorResponse('ADMIN_KEY_NOT_CONFIGURED', 'SCOPE_ADMIN_KEY is not configured', 503);
+  }
+
+  const token = getBearerToken(request.headers.get('Authorization'));
+  if (!token) {
+    return errorResponse('UNAUTHORIZED', 'Missing Authorization header', 401);
+  }
+
+  if (token !== env.SCOPE_ADMIN_KEY) {
+    return errorResponse('UNAUTHORIZED', 'Invalid admin token', 401);
+  }
+
+  return null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
+function validateAud(value: unknown): value is string | string[] {
+  if (typeof value === 'string' && value.length > 0) return true;
+  if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string' && v.length > 0)) {
+    return true;
+  }
+  return false;
+}
+
+function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTokenRequest } | { ok: false; res: Response } {
+  if (typeof body !== 'object' || body === null) {
+    return { ok: false, res: errorResponse('INVALID_REQUEST', 'Request body must be a JSON object', 400) };
+  }
+
+  const b = body as Record<string, unknown>;
+
+  if (!isNonEmptyString(b.sub)) {
+    return { ok: false, res: errorResponse('INVALID_REQUEST', 'sub is required', 400) };
+  }
+  if (!validateAud(b.aud)) {
+    return { ok: false, res: errorResponse('INVALID_REQUEST', 'aud is required', 400) };
+  }
+  if (!isStringArray(b.scope) || b.scope.length === 0) {
+    return { ok: false, res: errorResponse('INVALID_REQUEST', 'scope must be a non-empty array of strings', 400) };
+  }
+
+  const maxItems = parseIntOrDefault(env.SCOPE_MAX_SCOPE_ITEMS, 64);
+  if (b.scope.length > maxItems) {
+    return {
+      ok: false,
+      res: errorResponse('SCOPE_TOO_LARGE', `scope must have <= ${maxItems} items`, 400),
+    };
+  }
+
+  const maxLen = parseIntOrDefault(env.SCOPE_MAX_SCOPE_LENGTH, 128);
+  for (const s of b.scope) {
+    if (!s || s.length > maxLen) {
+      return {
+        ok: false,
+        res: errorResponse('SCOPE_ITEM_TOO_LONG', `scope entries must be <= ${maxLen} chars`, 400),
+      };
+    }
+  }
+
+  const ttl = typeof b.ttl_sec === 'number' ? b.ttl_sec : undefined;
+  const exp = typeof b.exp === 'number' ? b.exp : undefined;
+
+  if (ttl !== undefined && (!Number.isFinite(ttl) || ttl <= 0)) {
+    return { ok: false, res: errorResponse('INVALID_TTL', 'ttl_sec must be a positive number', 400) };
+  }
+  if (exp !== undefined && (!Number.isFinite(exp) || exp <= 0)) {
+    return { ok: false, res: errorResponse('INVALID_EXP', 'exp must be a positive number', 400) };
+  }
+
+  const req: IssueTokenRequest = {
+    sub: b.sub.trim(),
+    aud: b.aud as string | string[],
+    scope: (b.scope as string[]).map((s) => s.trim()).filter((s) => s.length > 0),
+  };
+
+  if (ttl !== undefined) req.ttl_sec = ttl;
+  if (exp !== undefined) req.exp = exp;
+  if (typeof b.owner_ref === 'string') req.owner_ref = b.owner_ref;
+  if (typeof b.spend_cap === 'number') req.spend_cap = b.spend_cap;
+  if (typeof b.mission_id === 'string') req.mission_id = b.mission_id;
+
+  return { ok: true, req };
+}
+
+async function getIssuerKeys(env: Env): Promise<typeof cachedKeys> {
+  if (!env.SCOPE_SIGNING_KEY) return null;
+
+  if (cachedKeys && cachedKeyRaw === env.SCOPE_SIGNING_KEY) {
+    return cachedKeys;
+  }
+
+  const kp = await importEd25519Key(env.SCOPE_SIGNING_KEY);
+  const kid = await computeKeyId(kp.publicKeyBytes);
+  const jwkX = base64urlEncode(kp.publicKeyBytes);
+
+  cachedKeyRaw = env.SCOPE_SIGNING_KEY;
+  cachedKeys = {
+    privateKey: kp.privateKey,
+    publicKeyBytes: kp.publicKeyBytes,
+    kid,
+    jwkX,
+  };
+
+  return cachedKeys;
+}
+
+function encodeJwtJson(obj: unknown): string {
+  const json = JSON.stringify(obj);
+  return base64urlEncode(new TextEncoder().encode(json));
+}
+
+async function issueToken(req: IssueTokenRequest, env: Env): Promise<{ token: string; token_hash: string; claims: ScopedTokenClaims; kid: string }> {
+  const keys = await getIssuerKeys(env);
+  if (!keys) {
+    throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const maxTtl = parseIntOrDefault(env.SCOPE_MAX_TTL_SECONDS, 3600);
+
+  let exp: number;
+  if (typeof req.exp === 'number') {
+    exp = Math.floor(req.exp);
+  } else {
+    const ttl = Math.floor(req.ttl_sec ?? Math.min(600, maxTtl));
+    exp = nowSec + ttl;
+  }
+
+  const ttl = exp - nowSec;
+  if (ttl <= 0) {
+    return Promise.reject(new Error('TTL_EXPIRED'));
+  }
+  if (ttl > maxTtl) {
+    return Promise.reject(new Error('TTL_TOO_LONG'));
+  }
+
+  const claims: ScopedTokenClaims = {
+    token_version: '1',
+    sub: req.sub,
+    aud: req.aud,
+    scope: req.scope,
+    iat: nowSec,
+    exp,
+    owner_ref: req.owner_ref,
+    spend_cap: req.spend_cap,
+    mission_id: req.mission_id,
+    jti: crypto.randomUUID(),
+    nonce: crypto.randomUUID(),
+  };
+
+  // Remove undefined fields for compactness
+  for (const [k, v] of Object.entries(claims)) {
+    if (v === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (claims as unknown as Record<string, unknown>)[k];
+    }
+  }
+
+  const header = {
+    alg: 'EdDSA',
+    typ: 'JWT',
+    kid: keys.kid,
+  };
+
+  const headerB64u = encodeJwtJson(header);
+  const payloadB64u = encodeJwtJson(claims);
+  const signingInput = `${headerB64u}.${payloadB64u}`;
+
+  const sigB64u = await signEd25519(keys.privateKey, signingInput);
+  const token = `${signingInput}.${sigB64u}`;
+  const token_hash = await sha256(token);
+
+  return { token, token_hash, claims, kid: keys.kid };
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // Health
+    if (request.method === 'GET' && url.pathname === '/health') {
+      return jsonResponse({ status: 'ok', service: 'clawscope', version: env.SCOPE_VERSION });
+    }
+
+    // DID + key discovery
+    if (request.method === 'GET' && url.pathname === '/v1/did') {
+      const keys = await getIssuerKeys(env);
+      if (!keys) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+      return jsonResponse({ did: SCOPE_DID, kid: keys.kid, public_key_b64u: keys.jwkX });
+    }
+
+    // JWKS (Ed25519 OKP)
+    if (request.method === 'GET' && url.pathname === '/v1/jwks') {
+      const keys = await getIssuerKeys(env);
+      if (!keys) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+
+      return jsonResponse(
+        {
+          keys: [
+            {
+              kty: 'OKP',
+              crv: 'Ed25519',
+              x: keys.jwkX,
+              kid: keys.kid,
+              alg: 'EdDSA',
+              use: 'sig',
+            },
+          ],
+        },
+        200,
+        {
+          'cache-control': 'public, max-age=300',
+        }
+      );
+    }
+
+    // Skill doc (minimal)
+    if (request.method === 'GET' && url.pathname === '/skill.md') {
+      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
+    }
+
+    // Token issuance (CSC-US-001)
+    if (request.method === 'POST' && url.pathname === '/v1/tokens/issue') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+      }
+
+      const validated = validateIssueRequest(body, env);
+      if (!validated.ok) return validated.res;
+
+      try {
+        const { token, token_hash, claims, kid } = await issueToken(validated.req, env);
+        return jsonResponse({
+          token,
+          token_hash,
+          policy_version: env.SCOPE_POLICY_VERSION ?? '1',
+          kid,
+          iat: claims.iat,
+          exp: claims.exp,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
+        if (msg === 'TTL_TOO_LONG') {
+          const maxTtl = parseIntOrDefault(env.SCOPE_MAX_TTL_SECONDS, 3600);
+          return errorResponse('TTL_TOO_LONG', `ttl exceeds max (${maxTtl}s)`, 400);
+        }
+        if (msg === 'TTL_EXPIRED') {
+          return errorResponse('TTL_EXPIRED', 'exp must be in the future', 400);
+        }
+
+        return errorResponse('ISSUE_FAILED', 'Failed to issue token', 500);
+      }
+    }
+
+    return errorResponse('NOT_FOUND', 'Not found', 404);
+  },
+};

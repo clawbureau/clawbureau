@@ -1,0 +1,16 @@
+name = "clawscope"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+SCOPE_VERSION = "0.1.0"
+SCOPE_POLICY_VERSION = "1"
+SCOPE_MAX_TTL_SECONDS = "3600"
+SCOPE_MAX_SCOPE_ITEMS = "64"
+SCOPE_MAX_SCOPE_LENGTH = "128"
+
+# Secrets to be set via wrangler secret put:
+# - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required)
+# - SCOPE_ADMIN_KEY (string; required for token issuance/revocation)
