@@ -399,3 +399,51 @@ export interface AuditLogEntry {
 export interface AuditLogger {
   log(entry: AuditLogEntry): Promise<{ logged: boolean; error?: string }>;
 }
+
+/**
+ * CES-US-006: Escrow status API types
+ */
+
+export interface EscrowTimestamps {
+  created_at: string;
+  updated_at?: string;
+  held_at?: string;
+  released_at?: string;
+}
+
+export interface MilestoneStatusSummary {
+  total_milestones: number;
+  pending_milestones: number;
+  released_milestones: number;
+  disputed_milestones: number;
+  total_amount: number;
+  released_amount: number;
+  remaining_amount: number;
+}
+
+export interface GetEscrowStatusResponse {
+  escrow_id: string;
+  status: EscrowStatus;
+  /** Party DIDs */
+  requester_did: string;
+  agent_did: string;
+  /** Financial details */
+  amount: number;
+  currency: string;
+  /** All relevant timestamps */
+  timestamps: EscrowTimestamps;
+  /** Dispute window configuration */
+  dispute_window_hours: number;
+  /** Whether the dispute window has expired */
+  dispute_window_expired: boolean;
+  /** When the dispute window expires (ISO timestamp) */
+  dispute_window_expires_at?: string;
+  /** Job reference if linked */
+  job_id?: string;
+  /** Milestone progress (if milestones are defined) */
+  milestones?: MilestoneStatusSummary;
+  /** Whether there is an active dispute */
+  has_dispute: boolean;
+  /** ID of the dispute if any */
+  dispute_id?: string;
+}

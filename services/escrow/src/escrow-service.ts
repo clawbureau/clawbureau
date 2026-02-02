@@ -20,6 +20,7 @@ import type {
   EscalateDisputeResult,
   Escrow,
   EscrowStore,
+  GetEscrowStatusResponse,
   LedgerClient,
   LedgerClientV2,
   LedgerClientV3,
@@ -162,6 +163,90 @@ export class EscrowService {
    */
   async getEscrow(escrow_id: string): Promise<Escrow | null> {
     return this.store.get(escrow_id);
+  }
+
+  /**
+   * CES-US-006: Escrow status API
+   *
+   * Returns the status of an escrow with all relevant timestamps and progress.
+   *
+   * Acceptance Criteria:
+   * - GET /escrow/{id} (provides data for endpoint)
+   * - Status states (returns current status)
+   * - Include timestamps (all relevant timestamps)
+   */
+  async getEscrowStatus(escrow_id: string): Promise<GetEscrowStatusResponse | null> {
+    const escrow = await this.store.get(escrow_id);
+    if (!escrow) {
+      return null;
+    }
+
+    // Calculate dispute window expiration
+    const disputeWindowHours = escrow.dispute_window_hours ?? 72;
+    let disputeWindowExpired = false;
+    let disputeWindowExpiresAt: string | undefined;
+
+    if (escrow.held_at) {
+      const heldAt = new Date(escrow.held_at);
+      const disputeWindowMs = disputeWindowHours * 60 * 60 * 1000;
+      const windowEnd = new Date(heldAt.getTime() + disputeWindowMs);
+      disputeWindowExpiresAt = windowEnd.toISOString();
+      disputeWindowExpired = new Date() > windowEnd;
+    }
+
+    // Check for dispute
+    let hasDispute = false;
+    let disputeId: string | undefined;
+
+    if (this.disputeStore) {
+      const dispute = await this.disputeStore.getDisputeByEscrowId(escrow_id);
+      if (dispute) {
+        hasDispute = true;
+        disputeId = dispute.dispute_id;
+      }
+    }
+
+    // Calculate milestone summary if milestones exist
+    let milestones: GetEscrowStatusResponse['milestones'];
+
+    if (escrow.milestones && escrow.milestones.length > 0) {
+      const releasedMilestones = escrow.milestones.filter((m) => m.status === 'released');
+      const pendingMilestones = escrow.milestones.filter((m) => m.status === 'pending');
+      const disputedMilestones = escrow.milestones.filter((m) => m.status === 'disputed');
+      const releasedAmount = releasedMilestones.reduce((sum, m) => sum + m.amount, 0);
+
+      milestones = {
+        total_milestones: escrow.milestones.length,
+        pending_milestones: pendingMilestones.length,
+        released_milestones: releasedMilestones.length,
+        disputed_milestones: disputedMilestones.length,
+        total_amount: escrow.amount,
+        released_amount: releasedAmount,
+        remaining_amount: escrow.amount - releasedAmount,
+      };
+    }
+
+    return {
+      escrow_id: escrow.escrow_id,
+      status: escrow.status,
+      requester_did: escrow.requester_did,
+      agent_did: escrow.agent_did,
+      amount: escrow.amount,
+      currency: escrow.currency,
+      timestamps: {
+        created_at: escrow.created_at,
+        updated_at: escrow.updated_at,
+        held_at: escrow.held_at,
+        released_at: escrow.released_at,
+      },
+      dispute_window_hours: disputeWindowHours,
+      dispute_window_expired: disputeWindowExpired,
+      dispute_window_expires_at: disputeWindowExpiresAt,
+      job_id: escrow.job_id,
+      milestones,
+      has_dispute: hasDispute,
+      dispute_id: disputeId,
+    };
   }
 
   /**

@@ -48,4 +48,8 @@ export type {
   AuditLogAction,
   AuditLogEntry,
   AuditLogger,
+  // CES-US-006: Escrow status API types
+  EscrowTimestamps,
+  MilestoneStatusSummary,
+  GetEscrowStatusResponse,
 } from './types.js';
