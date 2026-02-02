@@ -6,6 +6,7 @@ Shared JSON schemas for Claw Bureau services.
 - `poh/` — Proof-of-Harness schemas (commit proofs)
 - `identity/` — Owner attestations (sybil-resistance / human ownership)
 - `auth/` — Scoped token claims (time-bound, narrow scope)
+- `escrow/` — Escrow schemas (holds, releases, milestones)
 
 ## Schemas
 ### `poh/`
@@ -16,3 +17,6 @@ Shared JSON schemas for Claw Bureau services.
 
 ### `auth/`
 - `scoped_token_claims.v1.json`
+
+### `escrow/`
+- `escrow.v1.json`

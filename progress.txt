@@ -1,0 +1,29 @@
+## Codebase Patterns
+- Services go in `services/<domain>/` with src/ subdirectory
+- Schemas go in `packages/schema/<domain>/` as versioned JSON Schema files (e.g., `escrow.v1.json`)
+- Use TypeScript with ESM (`"type": "module"`) and `.js` extensions in imports
+- Types should mirror JSON schemas for consistency
+- Use `npm run typecheck` (tsc --noEmit) to verify
+- Escrow service depends on LedgerClient interface for balance operations (clawledger dependency)
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.936628
+---
+
+## 2026-02-02 - CES-US-001
+- Implemented create escrow hold functionality
+- Files created:
+  - `packages/schema/escrow/escrow.v1.json` - JSON Schema for escrow records
+  - `services/escrow/package.json` - Package config with TypeScript
+  - `services/escrow/tsconfig.json` - TypeScript config
+  - `services/escrow/src/types.ts` - Core type definitions
+  - `services/escrow/src/escrow-service.ts` - EscrowService with createEscrow()
+  - `services/escrow/src/index.ts` - Public exports
+  - `services/escrow/src/stores/memory-store.ts` - In-memory store for testing
+- **Learnings for future iterations:**
+  - No existing services directory - created `services/escrow/` as new pattern
+  - Follow schema versioning pattern from existing schemas (e.g., `escrow.v1.json`)
+  - EscrowService uses dependency injection for store and ledger client
+  - Milestones are validated to sum to total escrow amount
+  - Escrow IDs use `esc_` prefix, milestone IDs use `ms_` prefix
+---
