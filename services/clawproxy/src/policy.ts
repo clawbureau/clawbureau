@@ -7,13 +7,15 @@
  * - Confidentiality mode requirements
  */
 
-import type { Provider } from './types';
+
+import type { Provider, ReceiptPrivacyMode } from './types';
 
 /**
  * Policy header for Work Policy Contract
  */
 export const POLICY_HEADER = 'X-Policy-Hash';
 export const CONFIDENTIAL_MODE_HEADER = 'X-Confidential-Mode';
+export const PRIVACY_MODE_HEADER = 'X-Receipt-Privacy-Mode';
 
 /**
  * Redaction rule for stripping fields from requests/responses
@@ -56,6 +58,8 @@ export interface PolicyExtractionResult {
   policy?: WorkPolicyContract;
   /** Error if policy is invalid or missing when required */
   error?: string;
+  /** Receipt privacy mode requested (defaults to hash_only) */
+  privacyMode: ReceiptPrivacyMode;
 }
 
 /**
@@ -85,6 +89,33 @@ export function registerDemoPolicy(policyHash: string, policy: WorkPolicyContrac
 }
 
 /**
+ * Extract privacy mode from request header
+ * In confidential mode, only hash_only is allowed (encrypted is blocked)
+ */
+function extractPrivacyMode(request: Request, confidentialMode: boolean): ReceiptPrivacyMode {
+  const privacyModeHeader = request.headers.get(PRIVACY_MODE_HEADER);
+
+  // Default to hash_only (most private)
+  if (!privacyModeHeader) {
+    return 'hash_only';
+  }
+
+  // Validate privacy mode header value
+  if (privacyModeHeader !== 'hash_only' && privacyModeHeader !== 'encrypted') {
+    // Invalid value, default to hash_only
+    return 'hash_only';
+  }
+
+  // In confidential mode, encrypted payloads are not allowed
+  // This ensures prompts are never stored in recoverable form
+  if (confidentialMode && privacyModeHeader === 'encrypted') {
+    return 'hash_only';
+  }
+
+  return privacyModeHeader;
+}
+
+/**
  * Extract policy information from request headers
  */
 export function extractPolicyFromHeaders(request: Request): PolicyExtractionResult {
@@ -94,10 +125,14 @@ export function extractPolicyFromHeaders(request: Request): PolicyExtractionResu
   // Confidential mode is enabled if header is present and truthy
   const confidentialMode = confidentialModeHeader === 'true' || confidentialModeHeader === '1';
 
+  // Extract privacy mode (respects confidential mode restrictions)
+  const privacyMode = extractPrivacyMode(request, confidentialMode);
+
   // If confidential mode but no policy hash, that's an error
   if (confidentialMode && !policyHash) {
     return {
       confidentialMode: true,
+      privacyMode,
       error: 'Confidential mode requires X-Policy-Hash header',
     };
   }
@@ -111,6 +146,7 @@ export function extractPolicyFromHeaders(request: Request): PolicyExtractionResu
         return {
           confidentialMode: true,
           policyHash,
+          privacyMode,
           error: `Policy not found for hash: ${policyHash}`,
         };
       }
@@ -118,6 +154,7 @@ export function extractPolicyFromHeaders(request: Request): PolicyExtractionResu
       return {
         confidentialMode: false,
         policyHash,
+        privacyMode,
       };
     }
 
@@ -125,10 +162,11 @@ export function extractPolicyFromHeaders(request: Request): PolicyExtractionResu
       confidentialMode,
       policyHash,
       policy,
+      privacyMode,
     };
   }
 
-  return { confidentialMode: false };
+  return { confidentialMode: false, privacyMode };
 }
 
 /**

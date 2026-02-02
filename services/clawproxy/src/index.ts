@@ -8,9 +8,9 @@
 
 import type { Env, ErrorResponse, Provider, DidResponse, Receipt, VerifyReceiptRequest, VerifyReceiptResponse } from './types';
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
-import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext } from './receipt';
-import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519 } from './crypto';
-import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing } from './logging';
+import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext, type EncryptionContext } from './receipt';
+import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519, importAesKey } from './crypto';
+import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing, logConfidentialRequest } from './logging';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
 import { extractBindingFromHeaders, checkIdempotency, recordNonce } from './idempotency';
 import {
@@ -26,6 +26,9 @@ const PROXY_DID = 'did:web:clawproxy.com';
 
 /** Cached signing context (initialized on first request) */
 let cachedSigningContext: SigningContext | null = null;
+
+/** Cached encryption context (initialized on first request) */
+let cachedEncryptionContext: EncryptionContext | null = null;
 
 /**
  * Initialize signing context from environment
@@ -50,6 +53,28 @@ async function initSigningContext(env: Env): Promise<SigningContext | null> {
   };
 
   return cachedSigningContext;
+}
+
+/**
+ * Initialize encryption context from environment
+ * Returns null if encryption key is not configured
+ */
+async function initEncryptionContext(env: Env): Promise<EncryptionContext | null> {
+  if (cachedEncryptionContext) {
+    return cachedEncryptionContext;
+  }
+
+  if (!env.PROXY_ENCRYPTION_KEY) {
+    return null;
+  }
+
+  const aesKey = await importAesKey(env.PROXY_ENCRYPTION_KEY);
+
+  cachedEncryptionContext = {
+    key: aesKey.key,
+  };
+
+  return cachedEncryptionContext;
 }
 
 export default {
@@ -434,7 +459,20 @@ async function handleProxy(
     policyHash: policyResult.policyHash,
   };
 
-  // Generate signed receipt with binding fields
+  // Initialize encryption context for encrypted receipts (if privacy mode requests it)
+  let encryptionContext: EncryptionContext | null = null;
+  if (policyResult.privacyMode === 'encrypted') {
+    encryptionContext = await initEncryptionContext(env);
+    // If encryption requested but not available, fall back to hash_only
+    // This ensures receipts are never left without privacy protection
+  }
+
+  // Log confidential requests WITHOUT plaintext (only metadata)
+  if (policyResult.confidentialMode) {
+    logConfidentialRequest(request, provider, model, policyResult.policyHash);
+  }
+
+  // Generate signed receipt with binding fields and privacy mode
   // Note: requestBody here is the final (possibly redacted) body sent to provider
   const receipt = await generateReceipt(
     {
@@ -444,8 +482,10 @@ async function handleProxy(
       responseBody,
       startTime,
       binding: finalBinding,
+      privacyMode: encryptionContext ? policyResult.privacyMode : 'hash_only',
     },
-    signingContext
+    signingContext,
+    encryptionContext ?? undefined
   );
 
   // If provider returned an error, pass it through with receipt

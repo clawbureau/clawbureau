@@ -8,7 +8,8 @@ export type SecurityEventType =
   | 'BLOCKED_MISSING_AUTH'
   | 'RATE_LIMITED'
   | 'POLICY_VIOLATION'
-  | 'POLICY_MISSING';
+  | 'POLICY_MISSING'
+  | 'CONFIDENTIAL_REQUEST';
 
 export interface SecurityEvent {
   type: SecurityEventType;
@@ -101,5 +102,26 @@ export function logPolicyMissing(
   logSecurityEvent(request, 'POLICY_MISSING', {
     reason,
     message: `Policy missing in confidential mode: ${reason}`,
+  });
+}
+
+/**
+ * Log a confidential request (metadata only, NEVER plaintext prompts/responses)
+ * This ensures audit trail exists without exposing sensitive content
+ */
+export function logConfidentialRequest(
+  request: Request,
+  provider: string,
+  model: string | undefined,
+  policyHash: string | undefined
+): void {
+  // IMPORTANT: Only log metadata, NEVER log request/response body content
+  logSecurityEvent(request, 'CONFIDENTIAL_REQUEST', {
+    provider,
+    model: model ?? 'unknown',
+    policyHash: policyHash ?? 'unknown',
+    // Explicitly note that content is not logged
+    contentLogged: false,
+    message: 'Confidential request processed (content not logged)',
   });
 }

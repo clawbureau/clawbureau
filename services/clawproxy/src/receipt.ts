@@ -2,8 +2,8 @@
  * Receipt generation for proxied LLM requests
  */
 
-import type { Provider, Receipt, ReceiptBinding } from './types';
-import { sha256, signEd25519, type Ed25519KeyPair } from './crypto';
+import type { Provider, Receipt, ReceiptBinding, ReceiptPrivacyMode, EncryptedPayload } from './types';
+import { sha256, signEd25519, encryptAes256Gcm, type Ed25519KeyPair, type AesEncryptedPayload } from './crypto';
 
 export interface ReceiptInput {
   provider: Provider;
@@ -13,6 +13,8 @@ export interface ReceiptInput {
   startTime: number;
   /** Optional binding fields for chaining proofs */
   binding?: ReceiptBinding;
+  /** Privacy mode: hash_only (default) or encrypted */
+  privacyMode?: ReceiptPrivacyMode;
 }
 
 export interface SigningContext {
@@ -21,18 +23,25 @@ export interface SigningContext {
   kid: string;
 }
 
+export interface EncryptionContext {
+  key: CryptoKey;
+}
+
 /**
  * Generate a receipt for a proxied request
- * Receipt contains hashes (not content) for privacy-preserving verification
+ * Default mode is hash-only: receipts contain hashes (not content) for privacy-preserving verification
+ * Encrypted mode: optionally includes encrypted payloads for authorized decryption
  *
  * @param input - Receipt input data
  * @param signingContext - Optional signing context for Ed25519 signatures
+ * @param encryptionContext - Optional encryption context for encrypted receipts
  */
 export async function generateReceipt(
   input: ReceiptInput,
-  signingContext?: SigningContext
+  signingContext?: SigningContext,
+  encryptionContext?: EncryptionContext
 ): Promise<Receipt> {
-  const { provider, model, requestBody, responseBody, startTime, binding } = input;
+  const { provider, model, requestBody, responseBody, startTime, binding, privacyMode } = input;
 
   const [requestHash, responseHash] = await Promise.all([
     sha256(requestBody),
@@ -66,6 +75,20 @@ export async function generateReceipt(
     }
   }
 
+  // Set privacy mode (defaults to hash_only)
+  receipt.privacyMode = privacyMode ?? 'hash_only';
+
+  // Encrypt payloads if privacy mode is 'encrypted' and encryption context is provided
+  if (receipt.privacyMode === 'encrypted' && encryptionContext) {
+    const [encryptedRequest, encryptedResponse] = await Promise.all([
+      encryptAes256Gcm(encryptionContext.key, requestBody),
+      encryptAes256Gcm(encryptionContext.key, responseBody),
+    ]);
+
+    receipt.encryptedRequest = toEncryptedPayload(encryptedRequest);
+    receipt.encryptedResponse = toEncryptedPayload(encryptedResponse);
+  }
+
   // Sign receipt if signing context is provided
   if (signingContext) {
     receipt.proxyDid = signingContext.did;
@@ -80,6 +103,18 @@ export async function generateReceipt(
   }
 
   return receipt;
+}
+
+/**
+ * Convert AES encrypted payload to EncryptedPayload type
+ */
+function toEncryptedPayload(aesPayload: AesEncryptedPayload): EncryptedPayload {
+  return {
+    algorithm: 'AES-256-GCM',
+    iv: aesPayload.iv,
+    ciphertext: aesPayload.ciphertext,
+    tag: aesPayload.tag,
+  };
 }
 
 /**
@@ -104,6 +139,17 @@ export function createSigningPayload(receipt: Receipt): string {
   // Include binding in signing payload if present (ensures binding is tamper-proof)
   if (receipt.binding) {
     payload.binding = receipt.binding;
+  }
+
+  // Include privacy mode and encrypted payloads in signing (ensures tamper-proof)
+  if (receipt.privacyMode) {
+    payload.privacyMode = receipt.privacyMode;
+  }
+  if (receipt.encryptedRequest) {
+    payload.encryptedRequest = receipt.encryptedRequest;
+  }
+  if (receipt.encryptedResponse) {
+    payload.encryptedResponse = receipt.encryptedResponse;
   }
 
   return JSON.stringify(payload);

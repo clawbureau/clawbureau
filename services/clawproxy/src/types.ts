@@ -22,6 +22,8 @@ export interface Env {
   PROXY_SIGNING_KEY?: string;
   /** Rate limiter binding for request throttling */
   PROXY_RATE_LIMITER: RateLimit;
+  /** Optional AES key for encrypting receipt payloads (base64url-encoded 32-byte key) */
+  PROXY_ENCRYPTION_KEY?: string;
 }
 
 /**
@@ -72,8 +74,35 @@ export interface ReceiptBinding {
 }
 
 /**
+ * Receipt privacy modes
+ * - hash_only: Only include hashes (default, most private)
+ * - encrypted: Include encrypted payloads for authorized decryption
+ */
+export type ReceiptPrivacyMode = 'hash_only' | 'encrypted';
+
+/**
+ * Encrypted payload for receipts (when privacy mode = 'encrypted')
+ * Uses AES-256-GCM with per-receipt keys
+ */
+export interface EncryptedPayload {
+  /** Encryption algorithm used */
+  algorithm: 'AES-256-GCM';
+  /** Base64url-encoded IV (12 bytes for GCM) */
+  iv: string;
+  /** Base64url-encoded ciphertext */
+  ciphertext: string;
+  /** Base64url-encoded authentication tag (16 bytes for GCM) */
+  tag: string;
+  /** Key ID used to wrap the content encryption key */
+  keyWrappingKid?: string;
+  /** Base64url-encoded wrapped content encryption key (when keyWrappingKid is set) */
+  wrappedKey?: string;
+}
+
+/**
  * Receipt issued for each proxied request
  * Contains hashes of request/response for verification without exposing content
+ * Default mode is hash-only; encrypted payloads are opt-in for authorized access
  */
 export interface Receipt {
   /** Receipt schema version */
@@ -98,6 +127,12 @@ export interface Receipt {
   kid?: string;
   /** Binding fields for chaining proofs (optional) */
   binding?: ReceiptBinding;
+  /** Privacy mode: hash_only (default) or encrypted */
+  privacyMode?: ReceiptPrivacyMode;
+  /** Encrypted request payload (only when privacyMode = 'encrypted') */
+  encryptedRequest?: EncryptedPayload;
+  /** Encrypted response payload (only when privacyMode = 'encrypted') */
+  encryptedResponse?: EncryptedPayload;
 }
 
 /**

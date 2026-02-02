@@ -183,3 +183,101 @@ export async function importEd25519PublicKey(base64urlKey: string): Promise<Cryp
     ['verify']
   );
 }
+
+/**
+ * AES-256-GCM encryption key
+ */
+export interface AesKey {
+  key: CryptoKey;
+  keyBytes: Uint8Array;
+}
+
+/**
+ * Import AES-256 key from base64url-encoded raw bytes
+ */
+export async function importAesKey(base64urlKey: string): Promise<AesKey> {
+  const keyBytes = base64urlDecode(base64urlKey);
+
+  if (keyBytes.length !== 32) {
+    throw new Error(`Invalid AES-256 key length: ${keyBytes.length}. Expected 32 bytes.`);
+  }
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  return { key, keyBytes };
+}
+
+/**
+ * Encrypted payload result from AES-256-GCM encryption
+ */
+export interface AesEncryptedPayload {
+  /** Base64url-encoded IV (12 bytes) */
+  iv: string;
+  /** Base64url-encoded ciphertext */
+  ciphertext: string;
+  /** Base64url-encoded authentication tag (16 bytes) */
+  tag: string;
+}
+
+/**
+ * Encrypt data using AES-256-GCM
+ * Returns IV, ciphertext, and auth tag separately
+ */
+export async function encryptAes256Gcm(
+  key: CryptoKey,
+  plaintext: string
+): Promise<AesEncryptedPayload> {
+  // Generate 12-byte IV (recommended for GCM)
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plaintextBytes = new TextEncoder().encode(plaintext);
+
+  // Encrypt with AES-256-GCM (tag is appended to ciphertext by Web Crypto)
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    key,
+    plaintextBytes
+  );
+
+  const encryptedBytes = new Uint8Array(encrypted);
+
+  // Split ciphertext and tag (last 16 bytes is the tag)
+  const ciphertext = encryptedBytes.slice(0, encryptedBytes.length - 16);
+  const tag = encryptedBytes.slice(encryptedBytes.length - 16);
+
+  return {
+    iv: base64urlEncode(iv),
+    ciphertext: base64urlEncode(ciphertext),
+    tag: base64urlEncode(tag),
+  };
+}
+
+/**
+ * Decrypt data using AES-256-GCM
+ */
+export async function decryptAes256Gcm(
+  key: CryptoKey,
+  payload: AesEncryptedPayload
+): Promise<string> {
+  const iv = base64urlDecode(payload.iv);
+  const ciphertext = base64urlDecode(payload.ciphertext);
+  const tag = base64urlDecode(payload.tag);
+
+  // Combine ciphertext and tag (Web Crypto expects them concatenated)
+  const encryptedBytes = new Uint8Array(ciphertext.length + tag.length);
+  encryptedBytes.set(ciphertext, 0);
+  encryptedBytes.set(tag, ciphertext.length);
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    key,
+    encryptedBytes
+  );
+
+  return new TextDecoder().decode(decrypted);
+}
