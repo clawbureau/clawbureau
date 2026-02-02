@@ -1,10 +1,13 @@
 #!/bin/bash
 # Fleet Ralph - single long-running loop across multiple domain worktrees.
 #
+# This is intended for "run all night" mode where you want ONE process, but you
+# still want branch/work isolation.
+#
 # Default targets: phase1-trust worktrees (verify -> proxy -> ledger -> bounties).
 #
 # Usage:
-#   ./scripts/ralph/fleet.sh [max_cycles]
+#   ./scripts/ralph/fleet.sh [max_iterations]
 #
 # Optional env vars:
 #   WORKTREES_TRUST_ROOT=...          # root containing trust worktrees
@@ -13,7 +16,7 @@
 
 set -e
 
-MAX_CYCLES="${1:-200}"
+MAX_ITERATIONS="${1:-200}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONOREPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -24,6 +27,7 @@ WORKTREES_TRUST_ROOT="${WORKTREES_TRUST_ROOT:-$MONOREPO_ROOT/../monorepo-worktre
 FLEET_SESSION="${FLEET_SESSION:-$MONOREPO_ROOT/.pi/ralph.fleet.session.jsonl}"
 mkdir -p "$(dirname "$FLEET_SESSION")"
 
+# Priority order (round-robin within this list)
 TARGETS=(clawverify clawproxy clawledger clawbounties clawescrow)
 
 has_failing_story() {
@@ -31,62 +35,76 @@ has_failing_story() {
   jq -e '.userStories[] | select(.passes==false)' "$prd" >/dev/null 2>&1
 }
 
-echo "Fleet Ralph starting"
-echo "- trust worktrees root: $WORKTREES_TRUST_ROOT"
-echo "- shared pi session:    $FLEET_SESSION"
-echo "- max cycles:           $MAX_CYCLES"
+pick_next_target() {
+  local start_idx="$1"
+  local n="${#TARGETS[@]}"
 
-echo ""
-
-for cycle in $(seq 1 "$MAX_CYCLES"); do
-  echo "==============================================================="
-  echo "  Fleet Cycle $cycle of $MAX_CYCLES"
-  echo "==============================================================="
-
-  any=false
-
-  for name in "${TARGETS[@]}"; do
-    dir="$WORKTREES_TRUST_ROOT/$name"
+  for ((offset=0; offset<n; offset++)); do
+    local idx=$(((start_idx + offset) % n))
+    local name="${TARGETS[$idx]}"
+    local dir="$WORKTREES_TRUST_ROOT/$name"
 
     if [[ ! -d "$dir" ]]; then
-      echo "- $name: missing dir ($dir) -> skip"
       continue
     fi
 
     if [[ ! -f "$dir/prd.json" ]]; then
-      echo "- $name: missing prd.json -> skip"
       continue
     fi
 
-    if ! has_failing_story "$dir/prd.json"; then
-      echo "- $name: no failing stories -> skip"
-      continue
+    if has_failing_story "$dir/prd.json"; then
+      echo "$idx:$name:$dir"
+      return 0
     fi
-
-    any=true
-    echo "- $name: running 1 iteration"
-
-    # Run one iteration; ralph.sh exits 1 when max iterations reached without COMPLETE.
-    # That's expected for 1-iteration slices, so we ignore the exit code.
-    set +e
-    (
-      cd "$dir" \
-      && ./scripts/ralph/ralph.sh --tool pi --pi-session "$FLEET_SESSION" 1
-    )
-    status=$?
-    set -e
-
-    echo "  $name: iteration done (exit=$status)"
-    echo ""
   done
 
-  if [[ "$any" == "false" ]]; then
+  return 1
+}
+
+echo "Fleet Ralph starting"
+echo "- trust worktrees root: $WORKTREES_TRUST_ROOT"
+echo "- shared pi session:    $FLEET_SESSION"
+echo "- max iterations:       $MAX_ITERATIONS"
+echo ""
+
+next_idx=0
+
+for iter in $(seq 1 "$MAX_ITERATIONS"); do
+  selection=$(pick_next_target "$next_idx" || true)
+  if [[ -z "$selection" ]]; then
     echo "All targets have no failing stories. Fleet complete."
     exit 0
   fi
 
+  sel_idx="${selection%%:*}"
+  rest="${selection#*:}"
+  name="${rest%%:*}"
+  dir="${rest#*:}"
+
+  # advance pointer for round-robin
+  n="${#TARGETS[@]}"
+  next_idx=$(((sel_idx + 1) % n))
+
+  echo "==============================================================="
+  echo "  Fleet Iteration $iter of $MAX_ITERATIONS"
+  echo "  Target: $name"
+  echo "==============================================================="
+
+  # Run one iteration; ralph.sh exits 1 when max iterations reached without COMPLETE.
+  # That's expected for 1-iteration slices, so we ignore the exit code.
+  set +e
+  (
+    cd "$dir" \
+    && ./scripts/ralph/ralph.sh --tool pi --pi-session "$FLEET_SESSION" 1
+  )
+  status=$?
+  set -e
+
+  echo "Target $name: iteration done (exit=$status)"
+  echo ""
+
   sleep 2
 done
 
-echo "Fleet reached max cycles ($MAX_CYCLES)."
+echo "Fleet reached max iterations ($MAX_ITERATIONS)."
 exit 0
