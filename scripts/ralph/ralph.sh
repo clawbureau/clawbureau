@@ -182,19 +182,52 @@ for i in $(seq 1 $MAX_ITERATIONS); do
       PI_CMD+=(--session "$PI_SESSION")
     fi
 
-    # Only attach the full PI.md instructions on the first turn of a (non-empty) session.
+    # Instruction attachment policy:
+    # - Always attach PI.md in --pi-no-session mode.
+    # - Otherwise, attach PI.md once per session + PI.md content hash.
+    #   (This matters for shared sessions like fleet.sh, where the session file is
+    #    non-empty but a new process still needs to be seeded with the Ralph rules.)
+    # - Set PI_ALWAYS_ATTACH_INSTRUCTIONS=1 to force attaching PI.md every iteration.
     PI_PROMPT_ARGS=()
+    PI_MD="$SCRIPT_DIR/PI.md"
+    ATTACH_PI_MD=""
+    INSTR_MARKER=""
+
     if [[ -n "$PI_NO_SESSION" ]]; then
-      PI_PROMPT_ARGS+=("@$SCRIPT_DIR/PI.md")
+      ATTACH_PI_MD="1"
     else
-      if [[ ! -f "$PI_SESSION" || ! -s "$PI_SESSION" ]]; then
-        PI_PROMPT_ARGS+=("@$SCRIPT_DIR/PI.md")
+      # Hash PI.md to detect updates across runs/processes.
+      if command -v sha256sum >/dev/null 2>&1; then
+        PI_MD_HASH=$(sha256sum "$PI_MD" | awk '{print $1}')
+      elif command -v shasum >/dev/null 2>&1; then
+        PI_MD_HASH=$(shasum -a 256 "$PI_MD" | awk '{print $1}')
+      else
+        PI_MD_HASH=$(openssl dgst -sha256 "$PI_MD" | awk '{print $NF}')
       fi
+
+      INSTR_MARKER="${PI_SESSION}.pi-md.${PI_MD_HASH}.seen"
+
+      if [[ -n "${PI_ALWAYS_ATTACH_INSTRUCTIONS:-}" ]]; then
+        ATTACH_PI_MD="1"
+      elif [[ ! -f "$PI_SESSION" || ! -s "$PI_SESSION" ]]; then
+        ATTACH_PI_MD="1"
+      elif [[ ! -f "$INSTR_MARKER" ]]; then
+        ATTACH_PI_MD="1"
+      fi
+    fi
+
+    if [[ -n "$ATTACH_PI_MD" ]]; then
+      PI_PROMPT_ARGS+=("@$PI_MD")
     fi
 
     PI_PROMPT_ARGS+=("Ralph iteration $i/$MAX_ITERATIONS. Continue the Ralph loop in the current repo. Read prd.json + progress.txt in the run directory and complete exactly ONE failing story (highest priority).")
 
     OUTPUT=$("${PI_CMD[@]}" "${PI_PROMPT_ARGS[@]}" 2>&1 | tee /dev/stderr) || true
+
+    # Mark instructions as seeded for this session + PI.md content hash (best effort).
+    if [[ -n "$ATTACH_PI_MD" && -n "$INSTR_MARKER" ]]; then
+      echo "seeded $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$INSTR_MARKER" 2>/dev/null || true
+    fi
   fi
 
   # Check for completion signal
