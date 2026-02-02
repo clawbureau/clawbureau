@@ -88,3 +88,34 @@ export interface ErrorResponse {
     details?: unknown;
   };
 }
+
+/**
+ * Request body for /v1/verify-receipt endpoint
+ */
+export interface VerifyReceiptRequest {
+  /** Receipt to verify */
+  receipt: Receipt;
+}
+
+/**
+ * Response from /v1/verify-receipt endpoint
+ */
+export interface VerifyReceiptResponse {
+  /** Whether the receipt signature is valid */
+  valid: boolean;
+  /** Verification error code if invalid */
+  error?: string;
+  /** Verified claims from the receipt (only present if valid) */
+  claims?: {
+    /** Provider that handled the request */
+    provider: string;
+    /** Model used */
+    model?: string;
+    /** Proxy DID that signed the receipt */
+    proxyDid: string;
+    /** Timestamp of the proxied request */
+    timestamp: string;
+    /** Key ID used for signing */
+    kid: string;
+  };
+}

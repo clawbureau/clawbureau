@@ -150,3 +150,36 @@ export async function computeKeyId(publicKeyBytes: Uint8Array): Promise<string> 
   const hash = await sha256(publicKeyBytes.buffer as ArrayBuffer);
   return hash.slice(0, 16);
 }
+
+/**
+ * Import Ed25519 public key from base64url-encoded raw bytes
+ * Used for receipt verification
+ */
+export async function importEd25519PublicKey(base64urlKey: string): Promise<CryptoKey> {
+  const publicKeyBytes = base64urlDecode(base64urlKey);
+
+  if (publicKeyBytes.length !== 32) {
+    throw new Error(`Invalid Ed25519 public key length: ${publicKeyBytes.length}. Expected 32 bytes.`);
+  }
+
+  // Import as raw SPKI format
+  // Ed25519 SPKI header (12 bytes) + 32 bytes raw public key
+  const spkiHeader = new Uint8Array([
+    0x30, 0x2a, // SEQUENCE, length 42
+    0x30, 0x05, // SEQUENCE, length 5
+    0x06, 0x03, 0x2b, 0x65, 0x70, // OID 1.3.101.112 (Ed25519)
+    0x03, 0x21, 0x00, // BIT STRING, length 33, no unused bits
+  ]);
+
+  const spkiKey = new Uint8Array(spkiHeader.length + publicKeyBytes.length);
+  spkiKey.set(spkiHeader);
+  spkiKey.set(publicKeyBytes, spkiHeader.length);
+
+  return crypto.subtle.importKey(
+    'spki',
+    spkiKey,
+    { name: 'Ed25519' },
+    true,
+    ['verify']
+  );
+}

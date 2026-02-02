@@ -3,12 +3,13 @@
  *
  * POST /v1/proxy/:provider - Proxy request to provider and return with receipt
  * GET /v1/did - Get proxy DID and public key for verification
+ * POST /v1/verify-receipt - Validate receipt signature and return claims
  */
 
-import type { Env, ErrorResponse, Provider, DidResponse } from './types';
+import type { Env, ErrorResponse, Provider, DidResponse, Receipt, VerifyReceiptRequest, VerifyReceiptResponse } from './types';
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
-import { generateReceipt, attachReceipt, type SigningContext } from './receipt';
-import { importEd25519Key, computeKeyId, base64urlEncode } from './crypto';
+import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext } from './receipt';
+import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519 } from './crypto';
 import { logBlockedProvider } from './logging';
 
 /** Proxy DID identifier */
@@ -62,6 +63,11 @@ export default {
       return handleDidEndpoint(env);
     }
 
+    // Verify receipt endpoint: POST /v1/verify-receipt
+    if (path === '/v1/verify-receipt' && request.method === 'POST') {
+      return handleVerifyReceipt(request, env);
+    }
+
     // Proxy endpoint: POST /v1/proxy/:provider
     const proxyMatch = path.match(/^\/v1\/proxy\/([^/]+)$/);
     if (proxyMatch && request.method === 'POST') {
@@ -113,6 +119,139 @@ async function handleDidEndpoint(env: Env): Promise<Response> {
       'X-Proxy-Version': env.PROXY_VERSION,
     },
   });
+}
+
+/**
+ * Handle POST /v1/verify-receipt - Validate receipt signature and return claims
+ */
+async function handleVerifyReceipt(request: Request, env: Env): Promise<Response> {
+  // Initialize signing context to get the public key
+  const signingContext = await initSigningContext(env);
+
+  if (!signingContext) {
+    return errorResponse(
+      'SIGNING_NOT_CONFIGURED',
+      'Proxy signing key is not configured. Cannot verify receipts.',
+      503
+    );
+  }
+
+  // Parse request body
+  let body: VerifyReceiptRequest;
+  try {
+    body = await request.json() as VerifyReceiptRequest;
+  } catch {
+    return errorResponse('INVALID_REQUEST', 'Request body must be valid JSON', 400);
+  }
+
+  // Validate receipt structure
+  const receipt = body.receipt;
+  if (!receipt) {
+    return errorResponse('INVALID_REQUEST', 'Missing "receipt" field in request body', 400);
+  }
+
+  // Verify required fields exist
+  const validationResult = validateReceiptStructure(receipt);
+  if (!validationResult.valid) {
+    const response: VerifyReceiptResponse = {
+      valid: false,
+      error: validationResult.error,
+    };
+    return jsonResponse(response);
+  }
+
+  // Verify the receipt was signed by this proxy
+  if (receipt.proxyDid !== signingContext.did) {
+    const response: VerifyReceiptResponse = {
+      valid: false,
+      error: `Receipt was not signed by this proxy. Expected DID: ${signingContext.did}, got: ${receipt.proxyDid}`,
+    };
+    return jsonResponse(response);
+  }
+
+  // Verify the key ID matches
+  if (receipt.kid !== signingContext.kid) {
+    const response: VerifyReceiptResponse = {
+      valid: false,
+      error: `Receipt was signed with unknown key. Expected kid: ${signingContext.kid}, got: ${receipt.kid}`,
+    };
+    return jsonResponse(response);
+  }
+
+  // Verify the signature
+  const payloadToVerify = createSigningPayload(receipt);
+  let signatureValid: boolean;
+
+  try {
+    signatureValid = await verifyEd25519(
+      signingContext.keyPair.publicKey,
+      receipt.signature as string,
+      payloadToVerify
+    );
+  } catch {
+    const response: VerifyReceiptResponse = {
+      valid: false,
+      error: 'Failed to verify signature: invalid signature format',
+    };
+    return jsonResponse(response);
+  }
+
+  if (!signatureValid) {
+    const response: VerifyReceiptResponse = {
+      valid: false,
+      error: 'Signature verification failed',
+    };
+    return jsonResponse(response);
+  }
+
+  // Return verified claims
+  const response: VerifyReceiptResponse = {
+    valid: true,
+    claims: {
+      provider: receipt.provider,
+      model: receipt.model,
+      proxyDid: receipt.proxyDid as string,
+      timestamp: receipt.timestamp,
+      kid: receipt.kid as string,
+    },
+  };
+
+  return jsonResponse(response);
+}
+
+/**
+ * Validate receipt structure has all required fields for verification
+ */
+function validateReceiptStructure(receipt: Receipt): { valid: true } | { valid: false; error: string } {
+  if (!receipt.version) {
+    return { valid: false, error: 'Missing required field: version' };
+  }
+  if (!receipt.provider) {
+    return { valid: false, error: 'Missing required field: provider' };
+  }
+  if (!receipt.requestHash) {
+    return { valid: false, error: 'Missing required field: requestHash' };
+  }
+  if (!receipt.responseHash) {
+    return { valid: false, error: 'Missing required field: responseHash' };
+  }
+  if (!receipt.timestamp) {
+    return { valid: false, error: 'Missing required field: timestamp' };
+  }
+  if (receipt.latencyMs === undefined) {
+    return { valid: false, error: 'Missing required field: latencyMs' };
+  }
+  if (!receipt.proxyDid) {
+    return { valid: false, error: 'Missing required field: proxyDid (receipt is unsigned)' };
+  }
+  if (!receipt.kid) {
+    return { valid: false, error: 'Missing required field: kid' };
+  }
+  if (!receipt.signature) {
+    return { valid: false, error: 'Missing required field: signature' };
+  }
+
+  return { valid: true };
 }
 
 /**
