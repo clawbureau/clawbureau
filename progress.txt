@@ -189,3 +189,49 @@ Started: 2026-02-02T03:08:26.936251
   - Batch account lookup (findByIds) is more efficient than individual queries
   - ExecutionContext type is global in Workers and doesn't need to be imported
 ---
+
+## 2026-02-02T09:00:00Z - CLD-US-007
+- What was implemented:
+  - Complete bucket-level balance operations for all five buckets (available, held, bonded, feePool, promo)
+  - Individual credit/debit methods: creditBonded, debitBonded, creditFeePool, debitFeePool, creditPromo, debitPromo, creditHeld, debitHeld
+  - Generic creditBucket/debitBucket methods for bucket-agnostic operations
+  - moveBetweenBuckets method for atomic cross-bucket transfers within same account
+  - All debit operations validate sufficient funds and throw InsufficientFundsError if balance would go negative
+  - Amount validation rejects negative amounts
+  - Uses optimistic concurrency control via version column
+- Files changed:
+  - services/ledger/src/accounts.ts (updated - added 480 lines of bucket operations with non-negative invariants)
+- **Learnings for future iterations:**
+  - Balance buckets already existed in types.ts and AccountResponse - this story filled in the operational gap
+  - Each bucket has its own column in the accounts table (balance_available, balance_held, balance_bonded, balance_fee_pool, balance_promo)
+  - InsufficientFundsError can be used for any bucket, not just 'available'
+  - moveBetweenBuckets is useful for stake/fee operations that need atomic bucket transfers
+  - Generic creditBucket/debitBucket enable future event-driven bucket operations
+---
+
+## 2026-02-02T10:00:00Z - CLD-US-008
+- What was implemented:
+  - Extended EventType union with six new event types: stake_lock, stake_slash, fee_burn, fee_transfer, promo_mint, promo_burn
+  - Created StakeFeeService class for handling stake, fee, and promo event business logic
+  - Added metadata types for linking events to originating escrow/trial/transaction/campaign IDs
+  - Each event type creates a hash-chained event entry for audit determinism
+  - Implemented API endpoints:
+    - POST /stake/lock - Move funds from available to bonded bucket
+    - POST /stake/slash - Remove funds from bonded bucket (penalty)
+    - POST /fees/burn - Burn funds from fee pool
+    - POST /fees/transfer - Transfer funds to fee pool from any bucket
+    - POST /promo/mint - Mint promotional credits directly to promo bucket
+    - POST /promo/burn - Burn promotional credits
+  - Added request/response types: StakeLockRequest, StakeSlashRequest, FeeBurnRequest, FeeTransferRequest, PromoMintRequest, PromoBurnRequest, StakeFeeEventResponse
+  - Added helper functions to events.ts: isStakeEventType, isFeeEventType, isPromoEventType
+- Files changed:
+  - services/ledger/src/types.ts (updated - added new event types and request/response interfaces)
+  - services/ledger/src/events.ts (updated - extended event type validation and added helper functions)
+  - services/ledger/src/stake-fee.ts (new - StakeFeeService for stake/fee/promo operations)
+  - services/ledger/src/index.ts (updated - added handlers and routes for stake/fee/promo endpoints)
+- **Learnings for future iterations:**
+  - Event metadata types (StakeEventMetadata, etc.) should use Record<string, unknown> for compatibility with EventRepository.create()
+  - moveBetweenBuckets from accounts.ts is ideal for stake_lock (available -> bonded) and fee_transfer operations
+  - Direct bucket credit/debit methods useful for promo_mint (creditPromo) and burns (debitBonded, debitFeePool, debitPromo)
+  - All stake/fee events link to originating IDs (escrowId, trialId, transactionId, campaignId) via metadata for audit trail
+---

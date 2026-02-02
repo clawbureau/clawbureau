@@ -8,6 +8,7 @@ import { ReserveAttestationService } from './attestation';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
 import { ReconciliationService } from './reconciliation';
+import { StakeFeeService } from './stake-fee';
 import { TransferService, WebhookService } from './transfer';
 import type {
   CreateAccountRequest,
@@ -15,7 +16,13 @@ import type {
   CreateHoldRequest,
   Env,
   ErrorResponse,
+  FeeBurnRequest,
+  FeeTransferRequest,
+  PromoBurnRequest,
+  PromoMintRequest,
   ReleaseHoldRequest,
+  StakeLockRequest,
+  StakeSlashRequest,
   TransferRequest,
 } from './types';
 
@@ -655,6 +662,342 @@ function handleWebhookStatus(env: Env): Response {
 }
 
 /**
+ * Handle POST /stake/lock - Lock funds in bonded bucket
+ */
+async function handleStakeLock(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<StakeLockRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new StakeFeeService(env);
+
+  try {
+    const result = await service.stakeLock(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'STAKE_LOCK_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /stake/slash - Slash bonded funds
+ */
+async function handleStakeSlash(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<StakeSlashRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new StakeFeeService(env);
+
+  try {
+    const result = await service.stakeSlash(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'STAKE_SLASH_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /fees/burn - Burn funds from fee pool
+ */
+async function handleFeeBurn(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<FeeBurnRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new StakeFeeService(env);
+
+  try {
+    const result = await service.feeBurn(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'FEE_BURN_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /fees/transfer - Transfer funds to fee pool
+ */
+async function handleFeeTransfer(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<FeeTransferRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  // Validate bucket if provided
+  if (body.fromBucket && !isValidBucket(body.fromBucket)) {
+    return errorResponse(
+      `Invalid fromBucket: ${body.fromBucket}. Must be one of: available, held, bonded, feePool, promo`,
+      'INVALID_BUCKET',
+      400
+    );
+  }
+
+  const service = new StakeFeeService(env);
+
+  try {
+    const result = await service.feeTransfer(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'FEE_TRANSFER_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /promo/mint - Mint promotional credits
+ */
+async function handlePromoMint(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<PromoMintRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new StakeFeeService(env);
+
+  try {
+    const result = await service.promoMint(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'PROMO_MINT_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /promo/burn - Burn promotional credits
+ */
+async function handlePromoBurn(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = await parseJsonBody<PromoBurnRequest>(request);
+
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  // Validate required fields
+  if (!body.idempotencyKey) {
+    return errorResponse(
+      'Missing required field: idempotencyKey',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.accountId) {
+    return errorResponse(
+      'Missing required field: accountId',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  if (!body.amount) {
+    return errorResponse(
+      'Missing required field: amount',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const service = new StakeFeeService(env);
+
+  try {
+    const result = await service.promoBurn(body);
+    return jsonResponse(result, 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'PROMO_BURN_FAILED', 500);
+  }
+}
+
+/**
  * Router for handling requests
  */
 async function router(
@@ -684,6 +1027,36 @@ async function router(
   // GET /webhooks/status - Get webhook status
   if (path === '/webhooks/status' && method === 'GET') {
     return handleWebhookStatus(env);
+  }
+
+  // POST /stake/lock - Lock funds in bonded bucket
+  if (path === '/stake/lock' && method === 'POST') {
+    return handleStakeLock(request, env);
+  }
+
+  // POST /stake/slash - Slash bonded funds
+  if (path === '/stake/slash' && method === 'POST') {
+    return handleStakeSlash(request, env);
+  }
+
+  // POST /fees/burn - Burn funds from fee pool
+  if (path === '/fees/burn' && method === 'POST') {
+    return handleFeeBurn(request, env);
+  }
+
+  // POST /fees/transfer - Transfer funds to fee pool
+  if (path === '/fees/transfer' && method === 'POST') {
+    return handleFeeTransfer(request, env);
+  }
+
+  // POST /promo/mint - Mint promotional credits
+  if (path === '/promo/mint' && method === 'POST') {
+    return handlePromoMint(request, env);
+  }
+
+  // POST /promo/burn - Burn promotional credits
+  if (path === '/promo/burn' && method === 'POST') {
+    return handlePromoBurn(request, env);
   }
 
   // POST /accounts - Create account

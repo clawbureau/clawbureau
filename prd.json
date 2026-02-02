@@ -98,8 +98,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented bucket-level operations (credit/debit) for all five buckets with non-negative enforcement via InsufficientFundsError. Added generic creditBucket/debitBucket and moveBetweenBuckets methods. API responses already expose per-bucket balances in AccountResponse."
     },
     {
       "id": "CLD-US-008",
@@ -112,8 +112,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented stake_lock, stake_slash, fee_burn, fee_transfer, promo_mint, promo_burn event types with metadata for escrow/trial/campaign linking. Hash-chained events via StakeFeeService. API endpoints at /stake/lock, /stake/slash, /fees/burn, /fees/transfer, /promo/mint, /promo/burn."
     },
     {
       "id": "CLD-US-009",

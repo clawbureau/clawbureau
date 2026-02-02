@@ -67,7 +67,40 @@ export async function computeEventHash(
  * Validate event type
  */
 export function isValidEventType(type: string): type is EventType {
-  return ['mint', 'burn', 'transfer', 'hold', 'release'].includes(type);
+  return [
+    'mint',
+    'burn',
+    'transfer',
+    'hold',
+    'release',
+    'stake_lock',
+    'stake_slash',
+    'fee_burn',
+    'fee_transfer',
+    'promo_mint',
+    'promo_burn',
+  ].includes(type);
+}
+
+/**
+ * Check if event type is a stake-related event
+ */
+export function isStakeEventType(type: string): boolean {
+  return ['stake_lock', 'stake_slash'].includes(type);
+}
+
+/**
+ * Check if event type is a fee-related event
+ */
+export function isFeeEventType(type: string): boolean {
+  return ['fee_burn', 'fee_transfer'].includes(type);
+}
+
+/**
+ * Check if event type is a promo-related event
+ */
+export function isPromoEventType(type: string): boolean {
+  return ['promo_mint', 'promo_burn'].includes(type);
 }
 
 /**

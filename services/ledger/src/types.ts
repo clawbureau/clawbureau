@@ -31,8 +31,25 @@ export type EventHash = string;
  * transfer - Move credits between accounts
  * hold - Lock credits for pending transaction
  * release - Unlock held credits (complete or cancel)
+ * stake_lock - Lock credits in bonded bucket for staking
+ * stake_slash - Slash bonded credits (penalty)
+ * fee_burn - Burn credits from fee pool
+ * fee_transfer - Transfer credits to fee pool
+ * promo_mint - Mint promotional credits
+ * promo_burn - Burn promotional credits
  */
-export type EventType = 'mint' | 'burn' | 'transfer' | 'hold' | 'release';
+export type EventType =
+  | 'mint'
+  | 'burn'
+  | 'transfer'
+  | 'hold'
+  | 'release'
+  | 'stake_lock'
+  | 'stake_slash'
+  | 'fee_burn'
+  | 'fee_transfer'
+  | 'promo_mint'
+  | 'promo_burn';
 
 /**
  * Balance bucket names
@@ -435,4 +452,200 @@ export interface WebhookEventPayload {
   sentAt: Timestamp;
   /** Idempotency key for webhook deduplication */
   webhookId: string;
+}
+
+/**
+ * Stake event metadata - links to originating escrow/trial
+ */
+export interface StakeEventMetadata {
+  /** Originating escrow ID (for stake_lock, stake_slash) */
+  escrowId?: string;
+  /** Originating trial ID (for stake events related to trials) */
+  trialId?: string;
+  /** Reason for the stake operation */
+  reason?: string;
+  /** Additional context data */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Fee event metadata - links to originating transaction/escrow
+ */
+export interface FeeEventMetadata {
+  /** Originating escrow ID (for fee_transfer, fee_burn) */
+  escrowId?: string;
+  /** Originating transaction ID */
+  transactionId?: string;
+  /** Fee type (e.g., 'platform', 'evaluation', 'settlement') */
+  feeType?: string;
+  /** Reason for the fee operation */
+  reason?: string;
+  /** Additional context data */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Promo event metadata - links to campaign/promotion
+ */
+export interface PromoEventMetadata {
+  /** Campaign ID for the promo credits */
+  campaignId?: string;
+  /** Promotion code if applicable */
+  promoCode?: string;
+  /** Reason for the promo operation */
+  reason?: string;
+  /** Expiration timestamp for promo credits */
+  expiresAt?: Timestamp;
+  /** Additional context data */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Stake lock request for API
+ */
+export interface StakeLockRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Account ID to stake from */
+  accountId: AccountId;
+  /** Amount to stake (move from available to bonded) */
+  amount: string;
+  /** Originating escrow ID */
+  escrowId?: string;
+  /** Originating trial ID */
+  trialId?: string;
+  /** Reason for staking */
+  reason?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Stake slash request for API
+ */
+export interface StakeSlashRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Account ID to slash from */
+  accountId: AccountId;
+  /** Amount to slash from bonded bucket */
+  amount: string;
+  /** Originating escrow ID */
+  escrowId?: string;
+  /** Originating trial ID */
+  trialId?: string;
+  /** Reason for slashing */
+  reason?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Fee burn request for API
+ */
+export interface FeeBurnRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Account ID to burn fees from */
+  accountId: AccountId;
+  /** Amount to burn from fee pool */
+  amount: string;
+  /** Originating escrow ID */
+  escrowId?: string;
+  /** Originating transaction ID */
+  transactionId?: string;
+  /** Fee type */
+  feeType?: string;
+  /** Reason for burning */
+  reason?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Fee transfer request for API
+ */
+export interface FeeTransferRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Account ID to transfer fees from */
+  accountId: AccountId;
+  /** Amount to transfer to fee pool */
+  amount: string;
+  /** Source bucket to transfer from (defaults to 'available') */
+  fromBucket?: BucketName;
+  /** Originating escrow ID */
+  escrowId?: string;
+  /** Originating transaction ID */
+  transactionId?: string;
+  /** Fee type */
+  feeType?: string;
+  /** Reason for fee transfer */
+  reason?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Promo mint request for API
+ */
+export interface PromoMintRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Account ID to mint promo credits to */
+  accountId: AccountId;
+  /** Amount to mint to promo bucket */
+  amount: string;
+  /** Campaign ID */
+  campaignId?: string;
+  /** Promotion code */
+  promoCode?: string;
+  /** Reason for minting */
+  reason?: string;
+  /** Expiration timestamp for promo credits */
+  expiresAt?: Timestamp;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Promo burn request for API
+ */
+export interface PromoBurnRequest {
+  /** Client-provided idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Account ID to burn promo credits from */
+  accountId: AccountId;
+  /** Amount to burn from promo bucket */
+  amount: string;
+  /** Campaign ID */
+  campaignId?: string;
+  /** Reason for burning */
+  reason?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Generic stake/fee event response for API
+ */
+export interface StakeFeeEventResponse {
+  /** Event ID */
+  eventId: EventId;
+  /** Idempotency key */
+  idempotencyKey: IdempotencyKey;
+  /** Event type */
+  eventType: EventType;
+  /** Account ID */
+  accountId: AccountId;
+  /** Amount affected */
+  amount: string;
+  /** Bucket affected */
+  bucket: BucketName;
+  /** Event hash */
+  eventHash: EventHash;
+  /** Timestamp */
+  createdAt: Timestamp;
+  /** Metadata including escrow/trial links */
+  metadata?: Record<string, unknown>;
 }
