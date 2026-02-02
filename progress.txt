@@ -84,3 +84,31 @@ Started: 2026-02-02T03:08:26.937416
   - Initialize schema with POST /v1/provenance/init before first use
   - Verify chain integrity with GET /v1/provenance/{receipt_id}/chain
 ---
+
+## 2026-02-02T08:00:00Z - CVF-US-006
+- Implemented public docs and schema registry for developer integration
+- Files modified/created:
+  - services/clawverify/src/schema-docs.ts - Schema definitions, examples, and fail-closed rules
+  - services/clawverify/src/index.ts - Added /v1/schemas and /v1/schemas/{id} endpoints
+- **Learnings for future iterations:**
+  - Schema registry should expose both list and individual detail endpoints
+  - Example payloads need realistic data that demonstrates field usage
+  - Fail-closed rules should be documented both globally and per-schema
+  - Common envelope fields can be shared across all schema definitions
+  - Keep types imported only when needed to avoid lint errors (no-unused-vars)
+---
+
+## 2026-02-02T09:00:00Z - CVF-US-007
+- Implemented proof bundle verification with trust tier computation
+- Files modified/created:
+  - services/clawverify/src/types.ts - Added ProofBundlePayload, TrustTier, component types (URMReference, EventChainEntry, AttestationReference)
+  - services/clawverify/src/verify-proof-bundle.ts - Full proof bundle verification with component validation
+  - services/clawverify/src/index.ts - Added /v1/verify/bundle endpoint
+- **Learnings for future iterations:**
+  - Proof bundles contain optional components: urm, event_chain, receipts, attestations (at least one required)
+  - Trust tiers are computed based on validated components: unknown < basic < verified < attested < full
+  - Event chain validation enforces run_id consistency and hash chain linkage (prev_hash must match previous event_hash)
+  - Attestations have an expiry check - expired attestations are rejected
+  - Component validation results are included in response for transparency
+  - Trust tier computation logic: full (all valid), attested (has attestations), verified (has events or receipts), basic (envelope only)
+---

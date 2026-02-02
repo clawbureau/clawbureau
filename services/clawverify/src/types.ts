@@ -250,3 +250,84 @@ export interface ProvenanceResponse {
   entry?: AuditLogEntry;
   chain_valid?: boolean;
 }
+
+/**
+ * Proof Bundle types
+ * CVF-US-007: Verify proof bundles for trust tier computation
+ */
+
+/** Universal Resource Manifest (URM) - minimal structure for proof bundles */
+export interface URMReference {
+  urm_version: '1';
+  urm_id: string;
+  resource_type: string;
+  resource_hash_b64u: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Event chain entry for hash-linked event logs */
+export interface EventChainEntry {
+  event_id: string;
+  run_id: string;
+  event_type: string;
+  timestamp: string;
+  payload_hash_b64u: string;
+  prev_hash_b64u: string | null;
+  event_hash_b64u: string;
+}
+
+/** Attestation reference in proof bundles */
+export interface AttestationReference {
+  attestation_id: string;
+  attestation_type: 'owner' | 'third_party';
+  attester_did: string;
+  subject_did: string;
+  expires_at?: string;
+  signature_b64u: string;
+}
+
+/** Proof bundle payload structure */
+export interface ProofBundlePayload {
+  bundle_version: '1';
+  bundle_id: string;
+  agent_did: string;
+  urm?: URMReference;
+  event_chain?: EventChainEntry[];
+  receipts?: SignedEnvelope<GatewayReceiptPayload>[];
+  attestations?: AttestationReference[];
+  metadata?: Record<string, unknown>;
+}
+
+/** Trust tiers computed from proof bundle contents */
+export type TrustTier = 'unknown' | 'basic' | 'verified' | 'attested' | 'full';
+
+/** Proof bundle verification result */
+export interface ProofBundleVerificationResult {
+  status: VerificationStatus;
+  reason: string;
+  verified_at: string;
+  bundle_id?: string;
+  agent_did?: string;
+  trust_tier?: TrustTier;
+  component_results?: {
+    envelope_valid: boolean;
+    urm_valid?: boolean;
+    event_chain_valid?: boolean;
+    receipts_valid?: boolean;
+    attestations_valid?: boolean;
+    receipts_count?: number;
+    attestations_count?: number;
+  };
+}
+
+/** Verify bundle request */
+export interface VerifyBundleRequest {
+  envelope: SignedEnvelope<ProofBundlePayload>;
+}
+
+/** Verify bundle response */
+export interface VerifyBundleResponse {
+  result: ProofBundleVerificationResult;
+  trust_tier?: TrustTier;
+  error?: VerificationError;
+}

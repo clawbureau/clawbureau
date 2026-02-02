@@ -7,6 +7,7 @@ import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
 import { verifyBatch } from './verify-batch';
+import { verifyProofBundle } from './verify-proof-bundle';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -21,6 +22,7 @@ import type {
   VerifyMessageResponse,
   VerifyReceiptResponse,
   VerifyBatchResponse,
+  VerifyBundleResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -267,6 +269,56 @@ async function handleVerifyBatch(
 }
 
 /**
+ * Handle POST /v1/verify/bundle - Verify proof bundle envelopes
+ */
+async function handleVerifyBundle(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  // Verify the proof bundle
+  const verification = await verifyProofBundle(envelope);
+
+  // Write audit log entry
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.agent_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'proof_bundle' as EnvelopeType,
+      verification.result.status,
+      verification.result.agent_did
+    );
+  }
+
+  const response: VerifyBundleResponse & { audit_receipt?: AuditLogReceipt } = {
+    ...verification,
+    trust_tier: verification.result.trust_tier,
+    audit_receipt: auditReceipt,
+  };
+
+  // Return 200 for valid, 422 for invalid
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle GET /v1/provenance/:receipt_id - Retrieve audit log entry by receipt ID
  */
 async function handleGetProvenance(
@@ -376,6 +428,11 @@ export default {
     // POST /v1/verify/batch - Batch verification
     if (url.pathname === '/v1/verify/batch' && method === 'POST') {
       return handleVerifyBatch(request, env);
+    }
+
+    // POST /v1/verify/bundle - Proof bundle verification
+    if (url.pathname === '/v1/verify/bundle' && method === 'POST') {
+      return handleVerifyBundle(request, env);
     }
 
     // GET /v1/provenance/:receipt_id - Retrieve audit log entry

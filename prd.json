@@ -84,8 +84,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/schemas and /v1/schemas/{id} endpoints with schema definitions, examples, and fail-closed rules for all 8 envelope types"
     },
     {
       "id": "CVF-US-007",
@@ -98,8 +98,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented /v1/verify/bundle endpoint with URM, event chain, receipts, and attestations validation. Trust tier computation (unknown/basic/verified/attested/full) based on validated components."
     },
     {
       "id": "CVF-US-008",
