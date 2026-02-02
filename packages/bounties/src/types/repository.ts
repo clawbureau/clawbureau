@@ -1,5 +1,38 @@
-import { Bounty, AcceptanceReceipt, Submission, TestResult } from "./bounty.js";
+import { Bounty, AcceptanceReceipt, Submission, TestResult, BountySortField, SortDirection } from "./bounty.js";
 import { QuorumState, ReviewerVote } from "./quorum.js";
+
+/**
+ * Search filter options for bounties
+ */
+export interface BountySearchFilters {
+  tags?: string[];
+  status?: string;
+  closure_type?: string;
+  min_reward?: number;
+  max_reward?: number;
+  currency?: string;
+  requester_did?: string;
+  is_code_bounty?: boolean;
+}
+
+/**
+ * Search options including sort and pagination
+ */
+export interface BountySearchOptions {
+  filters: BountySearchFilters;
+  sort_by: BountySortField;
+  sort_direction: SortDirection;
+  page: number;
+  page_size: number;
+}
+
+/**
+ * Search result with bounties and count
+ */
+export interface BountySearchResult {
+  bounties: Bounty[];
+  total_count: number;
+}
 
 /**
  * Repository interface for bounty persistence
@@ -20,4 +53,6 @@ export interface BountyRepository {
   findQuorumStateBySubmissionId(submissionId: string): Promise<QuorumState | null>;
   saveVote(vote: ReviewerVote): Promise<void>;
   findVoteByReviewerAndSubmission(reviewerDid: string, submissionId: string): Promise<ReviewerVote | null>;
+  // Search methods
+  search(options: BountySearchOptions): Promise<BountySearchResult>;
 }

@@ -308,3 +308,100 @@ export const AutoApproveResponseSchema = z.object({
 });
 
 export type AutoApproveResponse = z.infer<typeof AutoApproveResponseSchema>;
+
+/**
+ * Sort field options for bounty search
+ */
+export const BountySortFieldSchema = z.enum([
+  "reward",
+  "created_at",
+  "difficulty_scalar",
+]);
+
+export type BountySortField = z.infer<typeof BountySortFieldSchema>;
+
+/**
+ * Sort direction options
+ */
+export const SortDirectionSchema = z.enum(["asc", "desc"]);
+
+export type SortDirection = z.infer<typeof SortDirectionSchema>;
+
+/**
+ * Request payload for searching bounties
+ */
+export const SearchBountiesRequestSchema = z.object({
+  /** Filter by tags (bounty must have at least one matching tag) */
+  tags: z.array(z.string().max(50)).max(10).optional(),
+  /** Filter by bounty status */
+  status: BountyStatusSchema.optional(),
+  /** Filter by closure type */
+  closure_type: ClosureTypeSchema.optional(),
+  /** Filter by minimum reward amount */
+  min_reward: z.number().nonnegative().optional(),
+  /** Filter by maximum reward amount */
+  max_reward: z.number().nonnegative().optional(),
+  /** Filter by currency */
+  currency: z.enum(["CLAW", "USD"]).optional(),
+  /** Filter by requester DID */
+  requester_did: z.string().optional(),
+  /** Filter by code bounty flag */
+  is_code_bounty: z.boolean().optional(),
+  /** Sort field */
+  sort_by: BountySortFieldSchema.default("created_at"),
+  /** Sort direction */
+  sort_direction: SortDirectionSchema.default("desc"),
+  /** Page number (1-indexed) */
+  page: z.number().int().positive().default(1),
+  /** Number of results per page */
+  page_size: z.number().int().positive().max(100).default(20),
+});
+
+export type SearchBountiesRequest = z.infer<typeof SearchBountiesRequestSchema>;
+
+/**
+ * Trust requirements info shown in bounty listings
+ */
+export const TrustRequirementsSchema = z.object({
+  /** Minimum PoH tier required (0-5) */
+  min_poh_tier: z.number().int().min(0).max(5),
+  /** Whether owner-verified votes are required for quorum */
+  require_owner_verified_votes: z.boolean(),
+});
+
+export type TrustRequirements = z.infer<typeof TrustRequirementsSchema>;
+
+/**
+ * Bounty listing item in search results
+ */
+export const BountyListingSchema = z.object({
+  bounty_id: z.string(),
+  title: z.string(),
+  description: z.string(),
+  reward: RewardSchema,
+  closure_type: ClosureTypeSchema,
+  difficulty_scalar: z.number(),
+  status: BountyStatusSchema,
+  tags: z.array(z.string()).optional(),
+  is_code_bounty: z.boolean().optional(),
+  created_at: z.string().datetime(),
+  trust_requirements: TrustRequirementsSchema,
+});
+
+export type BountyListing = z.infer<typeof BountyListingSchema>;
+
+/**
+ * Response for bounty search
+ */
+export const SearchBountiesResponseSchema = z.object({
+  schema_version: z.literal("1"),
+  bounties: z.array(BountyListingSchema),
+  pagination: z.object({
+    page: z.number().int().positive(),
+    page_size: z.number().int().positive(),
+    total_count: z.number().int().nonnegative(),
+    total_pages: z.number().int().nonnegative(),
+  }),
+});
+
+export type SearchBountiesResponse = z.infer<typeof SearchBountiesResponseSchema>;
