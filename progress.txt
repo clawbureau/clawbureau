@@ -10,6 +10,9 @@
 - Receipt binding via X-Run-Id, X-Event-Hash, X-Idempotency-Key headers (idempotency.ts)
 - WPC enforcement via X-Confidential-Mode and X-Policy-Hash headers (policy.ts)
 - Policy violations return 403 with POLICY_* error codes
+- Receipt privacy via X-Receipt-Privacy-Mode header (hash_only default, encrypted optional)
+- AES-256-GCM encryption uses Web Crypto with 12-byte IV and 128-bit tag
+- Encrypted mode blocked in confidential mode to protect prompts
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.937763
@@ -167,4 +170,48 @@ Started: 2026-02-02T03:08:26.937763
   - Redaction supports simplified JSON path patterns: $.field, $.nested.field, $.array[*].field
   - Redaction actions: remove (strips field), mask (replaces with [REDACTED]), hash (marker for async hash)
   - Policy hash is signed as part of receipt binding for tamper-proof audit trail
+---
+
+## 2026-02-02 - CPX-US-009
+- Implemented hash-only and encrypted receipt modes for privacy protection
+- Default privacy mode is hash_only (only requestHash/responseHash in receipts)
+- Added X-Receipt-Privacy-Mode header to request encrypted payloads
+- Implemented AES-256-GCM encryption for optional encrypted payload receipts
+- Encrypted mode automatically blocked in confidential mode (prompts protected)
+- Added logConfidentialRequest() to log metadata without plaintext content
+- Files modified:
+  - services/clawproxy/src/types.ts (added ReceiptPrivacyMode, EncryptedPayload, PROXY_ENCRYPTION_KEY env)
+  - services/clawproxy/src/crypto.ts (added AES-256-GCM import/encrypt/decrypt functions)
+  - services/clawproxy/src/receipt.ts (added privacyMode, EncryptionContext, encrypted payloads)
+  - services/clawproxy/src/policy.ts (added privacy mode extraction and confidential mode restrictions)
+  - services/clawproxy/src/logging.ts (added CONFIDENTIAL_REQUEST event, logConfidentialRequest)
+  - services/clawproxy/src/index.ts (integrated encryption context and privacy mode)
+- **Learnings for future iterations:**
+  - Privacy mode controlled via X-Receipt-Privacy-Mode header (hash_only | encrypted)
+  - AES-256-GCM uses 12-byte IV and 16-byte tag (128-bit) per encryption
+  - Encrypted payloads stored in encryptedRequest/encryptedResponse fields of receipt
+  - In confidential mode, encrypted mode is silently downgraded to hash_only
+  - Encryption key stored as base64url-encoded 32-byte key in PROXY_ENCRYPTION_KEY
+  - Encrypted payloads are included in signing payload for tamper-proofing
+  - logConfidentialRequest() only logs provider, model, policyHash - NEVER plaintext
+---
+
+## 2026-02-02 - CPX-US-010
+- Enhanced GET /v1/did endpoint to return W3C DID Core compliant document
+- Added verificationMethod array with Ed25519VerificationKey2020 type and multibase encoding
+- Full key IDs use DID#fragment format (e.g., did:web:clawproxy.com#abc123)
+- Added @context array referencing DID Core and Ed25519 2020 specs
+- Added authentication and assertionMethod key references
+- Enhanced deployment metadata: version, signingEnabled, encryptionEnabled, runtime, region, service
+- Region extracted from request.cf.colo (Cloudflare datacenter code)
+- Added ETag header based on kid for cache validation
+- Files modified:
+  - services/clawproxy/src/types.ts (added VerificationMethod, DeploymentMetadata interfaces, updated DidResponse)
+  - services/clawproxy/src/index.ts (enhanced handleDidEndpoint to build DID document format)
+- **Learnings for future iterations:**
+  - W3C DID documents use @context, id, verificationMethod, authentication, assertionMethod structure
+  - Ed25519 public keys use Ed25519VerificationKey2020 type with publicKeyMultibase encoding
+  - Multibase format for base64url uses 'u' prefix before the encoded data
+  - Cloudflare request.cf.colo provides datacenter code (e.g., SJC, IAD)
+  - ETag header enables conditional requests (If-None-Match) for cache validation
 ---

@@ -27,22 +27,55 @@ export interface Env {
 }
 
 /**
+ * Verification method for DID document
+ * Follows W3C DID Core specification
+ */
+export interface VerificationMethod {
+  /** Full key ID (DID#kid format) */
+  id: string;
+  /** Key type (Ed25519VerificationKey2020 for Ed25519) */
+  type: 'Ed25519VerificationKey2020';
+  /** Controller DID */
+  controller: string;
+  /** Public key in multibase format (base64url) */
+  publicKeyMultibase: string;
+}
+
+/**
+ * Deployment metadata for proxy instance
+ */
+export interface DeploymentMetadata {
+  /** Proxy software version */
+  version: string;
+  /** Whether receipt signing is enabled */
+  signingEnabled: boolean;
+  /** Whether payload encryption is available */
+  encryptionEnabled: boolean;
+  /** Runtime environment identifier */
+  runtime: 'cloudflare-workers';
+  /** Optional deployment region (when available) */
+  region?: string;
+  /** Service name */
+  service: string;
+}
+
+/**
  * DID document response for /v1/did endpoint
+ * Follows W3C DID Core specification with extensions for proxy metadata
  */
 export interface DidResponse {
+  /** DID document context */
+  '@context': string[];
   /** DID identifier (did:web:clawproxy.com) */
-  did: string;
-  /** Public key in base64url format */
-  publicKey: string;
-  /** Key ID for signature verification */
-  kid: string;
-  /** Key algorithm */
-  algorithm: 'Ed25519';
-  /** Deployment metadata */
-  deployment: {
-    version: string;
-    signingEnabled: boolean;
-  };
+  id: string;
+  /** Verification methods (public keys) */
+  verificationMethod: VerificationMethod[];
+  /** Authentication key references */
+  authentication: string[];
+  /** Assertion method key references (for signing) */
+  assertionMethod: string[];
+  /** Deployment metadata (custom extension) */
+  deployment: DeploymentMetadata;
 }
 
 /**

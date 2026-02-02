@@ -126,8 +126,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented hash-only as default via privacyMode field. Added AES-256-GCM encryption in crypto.ts for optional encrypted receipts via X-Receipt-Privacy-Mode header. Encrypted mode blocked in confidential mode. logConfidentialRequest() logs metadata only, never plaintext."
     },
     {
       "id": "CPX-US-010",
@@ -140,8 +140,8 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Enhanced /v1/did to return W3C DID Core compliant document with verificationMethod array, full key IDs (DID#kid), multibase public key encoding. Includes deployment metadata: version, signingEnabled, encryptionEnabled, runtime, region (from CF-Colo), service name. Response has Cache-Control, ETag headers."
     },
     {
       "id": "CPX-US-011",

@@ -6,7 +6,7 @@
  * POST /v1/verify-receipt - Validate receipt signature and return claims
  */
 
-import type { Env, ErrorResponse, Provider, DidResponse, Receipt, VerifyReceiptRequest, VerifyReceiptResponse } from './types';
+import type { Env, ErrorResponse, Provider, DidResponse, VerificationMethod, Receipt, VerifyReceiptRequest, VerifyReceiptResponse } from './types';
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext, type EncryptionContext } from './receipt';
 import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519, importAesKey } from './crypto';
@@ -94,7 +94,7 @@ export default {
 
     // DID endpoint: GET /v1/did
     if (path === '/v1/did' && request.method === 'GET') {
-      return handleDidEndpoint(env);
+      return handleDidEndpoint(env, request);
     }
 
     // Verify receipt endpoint: POST /v1/verify-receipt
@@ -117,9 +117,10 @@ export default {
 };
 
 /**
- * Handle GET /v1/did - Return proxy DID and public key
+ * Handle GET /v1/did - Return proxy DID document with public keys
+ * Follows W3C DID Core specification with extensions for proxy metadata
  */
-async function handleDidEndpoint(env: Env): Promise<Response> {
+async function handleDidEndpoint(env: Env, request: Request): Promise<Response> {
   const signingContext = await initSigningContext(env);
 
   if (!signingContext) {
@@ -131,25 +132,52 @@ async function handleDidEndpoint(env: Env): Promise<Response> {
     );
   }
 
-  const publicKeyBase64url = base64urlEncode(signingContext.keyPair.publicKeyBytes);
+  // Build full key ID in DID#fragment format
+  const fullKeyId = `${signingContext.did}#${signingContext.kid}`;
+
+  // Encode public key in multibase format (base64url with 'u' prefix)
+  const publicKeyMultibase = 'u' + base64urlEncode(signingContext.keyPair.publicKeyBytes);
+
+  // Check if encryption is available
+  const encryptionEnabled = !!env.PROXY_ENCRYPTION_KEY;
+
+  // Extract region from Cloudflare headers if available
+  const cfColo = request.cf?.colo as string | undefined;
 
   const didResponse: DidResponse = {
-    did: signingContext.did,
-    publicKey: publicKeyBase64url,
-    kid: signingContext.kid,
-    algorithm: 'Ed25519',
+    '@context': [
+      'https://www.w3.org/ns/did/v1',
+      'https://w3id.org/security/suites/ed25519-2020/v1',
+    ],
+    id: signingContext.did,
+    verificationMethod: [
+      {
+        id: fullKeyId,
+        type: 'Ed25519VerificationKey2020',
+        controller: signingContext.did,
+        publicKeyMultibase,
+      },
+    ],
+    authentication: [fullKeyId],
+    assertionMethod: [fullKeyId],
     deployment: {
       version: env.PROXY_VERSION,
       signingEnabled: true,
+      encryptionEnabled,
+      runtime: 'cloudflare-workers',
+      region: cfColo,
+      service: 'clawproxy',
     },
   };
 
   // Cache-Control: public, max-age=3600 (1 hour)
+  // ETag based on kid for cache validation
   return new Response(JSON.stringify(didResponse), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'public, max-age=3600',
+      'ETag': `"${signingContext.kid}"`,
       'X-Proxy-Version': env.PROXY_VERSION,
     },
   });
