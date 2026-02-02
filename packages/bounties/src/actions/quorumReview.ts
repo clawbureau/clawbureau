@@ -145,6 +145,7 @@ export async function initiateQuorum(
   // Select reviewers by reputation
   const selectResponse = await deps.reviewerService.selectReviewers({
     bounty_id: bounty.bounty_id,
+    difficulty_scalar: bounty.difficulty_scalar,
     quorum_size: validatedRequest.quorum_size,
     require_owner_verified: bounty.require_owner_verified_votes ?? false,
     exclude_dids: [bounty.requester_did, submission.agent_did],

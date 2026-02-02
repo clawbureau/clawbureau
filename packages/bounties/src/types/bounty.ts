@@ -118,6 +118,8 @@ export const PostBountyResponseSchema = z.object({
   status: z.literal("open"),
   all_in_cost: AllInCostSchema,
   fee_policy_version: z.string(),
+  /** Difficulty scalar (K) used for downstream weighting */
+  difficulty_scalar: z.number().min(0.1).max(10.0),
   created_at: z.string().datetime(),
 });
 

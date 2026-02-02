@@ -39,6 +39,8 @@ export type ReviewerVote = z.infer<typeof ReviewerVoteSchema>;
  */
 export const SelectReviewersRequestSchema = z.object({
   bounty_id: z.string(),
+  /** Difficulty scalar (K) for weighting/transparent scoring */
+  difficulty_scalar: z.number().min(0.1).max(10.0),
   /** Number of reviewers needed for quorum */
   quorum_size: z.number().int().min(1).max(10),
   /** Minimum reputation score required for reviewers */

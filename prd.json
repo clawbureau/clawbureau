@@ -154,8 +154,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Difficulty scalar K is required at posting (validated + persisted). Added K to PostBounty response (posting receipt) and ensured it is forwarded to clawrep reviewer selection (rep weighting). Acceptance receipts already include difficulty_scalar; updates preserve immutability." 
     },
     {
       "id": "CBT-US-012",

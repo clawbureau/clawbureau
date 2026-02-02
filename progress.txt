@@ -193,3 +193,21 @@ Started: 2026-02-02T03:08:26.937005
 - **Learnings for future iterations:**
   - Cost transparency is easiest when fee fields are required at persistence boundaries (not optional), and then echoed into downstream receipts.
 ---
+
+## 2026-02-02T05:37:35Z - CBT-US-011
+- What was implemented
+  - Difficulty scalar (K) is now included wherever it needs to be visible/usable:
+    - Post bounty response (posting receipt) now returns `difficulty_scalar`
+    - Quorum reviewer selection request forwarded to clawrep now includes `difficulty_scalar` for weighting/transparent scoring
+  - Immutability:
+    - K remains part of the persisted bounty record and is not modified by later lifecycle actions (accept/submit/review)
+- Files changed
+  - packages/bounties/src/types/bounty.ts
+  - packages/bounties/src/actions/postBounty.ts
+  - packages/bounties/src/types/quorum.ts
+  - packages/bounties/src/actions/quorumReview.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd packages/bounties && npm run typecheck
+---

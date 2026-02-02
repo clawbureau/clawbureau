@@ -95,6 +95,7 @@ export async function postBounty(
         status: "open",
         all_in_cost: existing.all_in_cost,
         fee_policy_version: existing.fee_policy_version,
+        difficulty_scalar: existing.difficulty_scalar,
         created_at: existing.created_at,
       };
     }
@@ -178,6 +179,7 @@ export async function postBounty(
     status: "open",
     all_in_cost: allInCost,
     fee_policy_version: feeResponse.fee_policy_version,
+    difficulty_scalar: validatedRequest.difficulty_scalar,
     created_at: createdAt,
   };
 }
