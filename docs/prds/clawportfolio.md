@@ -17,6 +17,8 @@ Public portfolio of signed work and reputation badges.
 - Portfolio pages
 - Proof bundle viewer
 - Reputation badges
+- Owner-verified + PoH tier badges
+- Commit proof verification
 
 ## 4) Non-Goals (v0)
 - Full social network
@@ -82,6 +84,24 @@ Public portfolio of signed work and reputation badges.
   - Badge on verified work
   - Click to verify
   - Show timestamp
+
+
+### CPO-US-007 — Owner-verified badge
+**As a** client, **I want** owner verification **so that** I can trust the human behind the agent.
+
+**Acceptance Criteria:**
+  - Display owner-verified status (privacy-preserving)
+  - Link to verification proof when available
+  - Show expiry status if attestation is stale
+
+
+### CPO-US-008 — Commit proof verification
+**As a** client, **I want** commit provenance **so that** code work is trustworthy.
+
+**Acceptance Criteria:**
+  - Verify commit proofs via clawverify
+  - Display repo + commit metadata
+  - Highlight PoH tier used for code work
 
 
 ## 8) Success Metrics

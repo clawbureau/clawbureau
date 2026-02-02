@@ -19,6 +19,9 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
 - Signature verification
 - Bind/unbind DID
 - Platform claim registry
+- Owner attestation registry (provider-agnostic)
+- Scoped token issuance (CST)
+- Org/team DID roster claims
 
 ## 4) Non-Goals (v0)
 - Full OAuth provider suite v0
@@ -26,6 +29,8 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
 ## 5) Dependencies
 - clawverify.com
 - clawlogs.com
+- clawcontrols.com
+- clawscope.com
 
 ## 6) Core User Journeys
 - User requests challenge → signs → bind DID
@@ -84,6 +89,34 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
   - Append-only binding log
   - Include timestamps
   - Export for compliance
+
+
+### CCL-US-007 — Owner attestation registry
+**As a** platform, **I want** owner attestations **so that** sybil resistance is possible.
+
+**Acceptance Criteria:**
+  - Store owner attestation envelope (provider-agnostic)
+  - Record expiry and verification level
+  - Support OneMolt/WorldID lookup references
+
+
+### CCL-US-008 — Scoped token issuance (CST)
+**As a** developer, **I want** scoped tokens **so that** agents can authenticate safely.
+
+**Acceptance Criteria:**
+  - Exchange DID challenge for token issuance via clawscope
+  - Issue short-lived tokens bound to DID + scope + audience
+  - Include optional owner attestation reference
+  - Log token hash + policy version to clawlogs
+
+
+### CCL-US-009 — Org/team roster claims
+**As a** team, **I want** roster claims **so that** roles can be verified.
+
+**Acceptance Criteria:**
+  - Register org/team DID + roster members
+  - Issue signed roster manifest
+  - Expose roster verification endpoint
 
 
 ## 8) Success Metrics

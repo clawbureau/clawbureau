@@ -1,0 +1,30 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.auth.scoped_token_claims.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scoped Token Claims v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "token_version",
+    "sub",
+    "aud",
+    "scope",
+    "iat",
+    "exp"
+  ],
+  "properties": {
+    "token_version": { "const": "1" },
+    "sub": { "type": "string", "description": "Agent DID" },
+    "owner_ref": { "type": "string", "description": "Optional owner attestation hash" },
+    "aud": { "type": ["string", "array"], "items": { "type": "string" } },
+    "scope": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "policy_hash_b64u": { "type": "string" },
+    "token_scope_hash_b64u": { "type": "string" },
+    "spend_cap": { "type": "number", "minimum": 0 },
+    "mission_id": { "type": "string" },
+    "jti": { "type": "string" },
+    "iat": { "type": "integer", "description": "Issued-at (epoch seconds)" },
+    "exp": { "type": "integer", "description": "Expiry (epoch seconds)" },
+    "nonce": { "type": "string" }
+  }
+}

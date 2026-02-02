@@ -14,6 +14,9 @@ Includes:
 - Signature envelopes (artifact, message, receipt)
 - Proof bundle schema
 - URM + event chain
+- Commit proof schema
+- Owner attestation schema
+- Scoped token claims schema
 - Policy contracts (WPC)
 
 **Rule:** Domain services must not fork schema.

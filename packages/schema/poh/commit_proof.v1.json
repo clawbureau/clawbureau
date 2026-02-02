@@ -1,0 +1,32 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.commit_proof.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Commit Proof v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proof_version",
+    "commit_sha",
+    "repo_url",
+    "agent_did",
+    "issued_at"
+  ],
+  "properties": {
+    "proof_version": { "const": "1" },
+    "commit_sha": { "type": "string" },
+    "repo_url": { "type": "string", "format": "uri" },
+    "agent_did": { "type": "string" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "run_id": { "type": "string" },
+    "proof_bundle_hash_b64u": { "type": "string" },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "metadata": { "type": "object" }
+  }
+}

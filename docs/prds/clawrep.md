@@ -15,9 +15,12 @@ Compute non-transferable reputation and trust tiers based on verified outcomes.
 - Risk systems
 
 ## 3) MVP Scope
-- Reputation scoring engine
-- Trust tiers (0–3)
+- Reputation scoring engine (concave value function)
+- Trust tiers (0–3) + dispute-rate gating
 - Decay and dispute penalties
+- Proof tier weighting (self/gateway/sandbox)
+- Owner-verified weighting (optional)
+- Reviewer reputation track
 
 ## 4) Non-Goals (v0)
 - Tokenized reputation
@@ -84,6 +87,15 @@ Compute non-transferable reputation and trust tiers based on verified outcomes.
   - GET /v1/rep/{did}
   - Include tier + history
   - Rate limit access
+
+
+### CRP-US-007 — Owner-verified weighting
+**As a** platform, **I want** owner weighting **so that** sybil risk is reduced.
+
+**Acceptance Criteria:**
+  - Apply optional multiplier for owner-verified agents
+  - Use clawclaim owner attestation status
+  - Emit rep events with owner_status flag
 
 
 ## 8) Success Metrics

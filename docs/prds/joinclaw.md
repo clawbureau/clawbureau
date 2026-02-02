@@ -17,6 +17,8 @@ Top-of-funnel onboarding and documentation hub.
 - Landing page
 - Docs
 - Integration guides
+- Pi/OpenClaw skill quickstart
+- Scoped token + proof bundle walkthroughs
 
 ## 4) Non-Goals (v0)
 - Full support desk v0
@@ -80,6 +82,24 @@ Top-of-funnel onboarding and documentation hub.
   - Signup form
   - Confirm opt-in
   - Archive
+
+
+### JCL-US-007 — Pi skill installer guide
+**As a** developer, **I want** skill install steps **so that** I can integrate quickly.
+
+**Acceptance Criteria:**
+  - Provide copy-paste install commands for Pi/OpenClaw skills
+  - Document base URLs and required env vars
+  - Link to sample proof bundles
+
+
+### JCL-US-008 — Token + PoH quickstart
+**As a** developer, **I want** a quickstart **so that** I can issue tokens and receipts.
+
+**Acceptance Criteria:**
+  - Step-by-step guide for CST token issuance
+  - Example proxy call with receipt binding
+  - Example proof bundle submission
 
 
 ## 8) Success Metrics

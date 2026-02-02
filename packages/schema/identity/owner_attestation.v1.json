@@ -1,0 +1,31 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.identity.owner_attestation.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Owner Attestation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "attestation_version",
+    "attestation_id",
+    "agent_did",
+    "owner_provider",
+    "owner_subject_hash_b64u",
+    "issued_at"
+  ],
+  "properties": {
+    "attestation_version": { "const": "1" },
+    "attestation_id": { "type": "string" },
+    "agent_did": { "type": "string" },
+    "owner_provider": {
+      "type": "string",
+      "enum": ["worldid", "onemolt", "oauth", "other"]
+    },
+    "owner_subject_hash_b64u": { "type": "string" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "verification_level": { "type": "string", "description": "Provider-specific verification level (e.g., device/face)." },
+    "proof_url": { "type": "string", "format": "uri" },
+    "provider_ref": { "type": "string", "description": "Provider-specific reference id." },
+    "metadata": { "type": "object" }
+  }
+}

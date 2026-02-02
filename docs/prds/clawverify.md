@@ -7,7 +7,9 @@
 ---
 
 ## 1) Purpose
-Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.
+Universal signature verifier for artifacts, messages, receipts, and attestations.
+
+**Hard rule:** fail-closed on unknown `schema_id` / `version` / `envelope_type` / `algorithm`.
 
 ## 2) Target Users
 - Agents verifying work
@@ -15,10 +17,13 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Auditors
 
 ## 3) MVP Scope
-- POST /v1/verify for artifact signatures
-- POST /v1/verify-message for message envelopes
+- Artifact + message signature verification
 - Receipt verification (gateway receipts)
-- Fail-closed validation (version/type/algo)
+- Proof bundle verification (URM + chain + receipts)
+- Owner attestation verification
+- Commit proof verification
+- One-call agent verification
+- Scoped token introspection
 
 ## 4) Non-Goals (v0)
 - Full chain-of-custody storage
@@ -27,6 +32,7 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 ## 5) Dependencies
 - clawlogs.com (audit logging, optional)
 - clawsig.com (schema alignment)
+- clawclaim.com (repo/identity claim registry)
 
 ## 6) Core User Journeys
 - Agent submits a signed artifact → verifier returns VALID
@@ -34,59 +40,153 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Auditor batch-verifies archive of artifacts
 
 ## 7) User Stories
+
 ### CVF-US-001 — Verify artifact signatures
 **As a** verifier, **I want** to validate artifact envelopes **so that** I can prove authorship.
 
 **Acceptance Criteria:**
-  - Reject unknown version/type/algo
-  - Recompute hash and match envelope
-  - Return VALID/INVALID with reason
-
+- Reject unknown version/type/algo
+- Recompute hash and match envelope
+- Return VALID/INVALID with reason
 
 ### CVF-US-002 — Verify message signatures
 **As a** platform, **I want** to validate signed messages **so that** I can bind DIDs to accounts.
 
 **Acceptance Criteria:**
-  - Support message_signature envelopes
-  - Fail if signature invalid
-  - Return signer DID
-
+- Support message_signature envelopes
+- Fail if signature invalid
+- Return signer DID
 
 ### CVF-US-003 — Verify gateway receipts
 **As a** marketplace, **I want** to validate proxy receipts **so that** I can enforce proof-of-harness.
 
 **Acceptance Criteria:**
-  - Validate receipt signature
-  - Check receipt schema
-  - Return verified provider/model
-
+- Validate receipt signature
+- Check receipt schema
+- Return verified provider/model
 
 ### CVF-US-004 — Batch verification
 **As a** auditor, **I want** to submit multiple envelopes **so that** I can verify at scale.
 
 **Acceptance Criteria:**
-  - POST /v1/verify/batch
-  - Return per-item results
-  - Limit batch size to prevent abuse
-
+- POST /v1/verify/batch
+- Return per-item results
+- Limit batch size to prevent abuse
 
 ### CVF-US-005 — Verification provenance
 **As a** compliance officer, **I want** verification results logged **so that** audits are traceable.
 
 **Acceptance Criteria:**
-  - Write hash-chained audit log entry
-  - Include request hash + timestamp
-  - Allow retrieval by receipt id
-
+- Write hash-chained audit log entry
+- Include request hash + timestamp
+- Allow retrieval by receipt id
 
 ### CVF-US-006 — Public docs and schema registry
 **As a** developer, **I want** clear verification docs **so that** I can integrate quickly.
 
 **Acceptance Criteria:**
-  - Publish schema versions
-  - Provide example payloads
-  - Include fail-closed rules
+- Publish schema versions
+- Provide example payloads
+- Include fail-closed rules
 
+### CVF-US-007 — Verify proof bundles
+**As a** marketplace, **I want** proof bundle verification **so that** trust tiers are automated.
+
+**Acceptance Criteria:**
+- Validate URM + event chain + receipts + attestations
+- Fail closed on unknown schema/version
+- Return computed trust tier
+
+### CVF-US-008 — Verify event chains
+**As a** auditor, **I want** event chain verification **so that** logs are tamper-evident.
+
+**Acceptance Criteria:**
+- Validate hash chain and root
+- Enforce run_id consistency
+- Return chain_root_hash and error codes
+
+### CVF-US-009 — Schema registry allowlist
+**As a** developer, **I want** a schema registry **so that** validation is deterministic.
+
+**Acceptance Criteria:**
+- Publish allowlisted schema ids + versions
+- Reject unknown ids by default
+- Provide example payloads per schema
+
+---
+
+### CVF-US-010 — Verify owner attestations
+**As a** platform, **I want** owner verification **so that** sybil resistance is possible.
+
+**Acceptance Criteria:**
+- Validate owner attestation envelope
+- Check expiry and provider reference
+- Return verified/expired/unknown status
+
+**Implementation notes (v1 guidance):**
+- **Source of truth schema:** `packages/schema/identity/owner_attestation.v1.json`.
+- Suggested endpoint: `POST /v1/verify/owner-attestation`.
+- Semantics (deterministic):
+  - `owner_status = VERIFIED` when the envelope is cryptographically valid **and** not expired.
+  - `owner_status = EXPIRED` when cryptographically valid but `expires_at < now`.
+  - `owner_status = UNKNOWN` when cryptographically valid and not expired, but the provider reference is missing/unsupported.
+- Always fail-closed on unknown `owner_provider` / schema version.
+
+### CVF-US-011 — Verify commit proofs
+**As a** reviewer, **I want** commit proof verification **so that** agent work is trusted.
+
+**Acceptance Criteria:**
+- Validate commit proof envelope
+- Ensure repo claim exists in clawclaim
+- Return repo + commit + signer DID
+
+**Implementation notes (v1 guidance):**
+- **Source of truth schema:** `packages/schema/poh/commit_proof.v1.json`.
+- Suggested endpoint: `POST /v1/verify/commit-proof`.
+- Hard rules:
+  - Fail-closed if `commit_sha` is not a 40-hex SHA.
+  - Fail-closed if `repo_url` is not a valid URI.
+  - Enforce `payload.agent_did === envelope.signer_did` (unless an explicit delegation model is introduced).
+- Repo claim check:
+  - **Fast-path:** accept an optional `repo_claim` object in the request so this can work before `clawclaim` is live.
+  - **Best-path:** call `clawclaim` to resolve `repo_url -> active claim -> agent_did` and require a match.
+
+### CVF-US-012 — One-call agent verification
+**As a** platform, **I want** a single verify call **so that** integrations are easy.
+
+**Acceptance Criteria:**
+- Return DID validity + owner status + PoH tier
+- Include policy compliance (if WPC present)
+- Include risk flags (optional)
+
+**Implementation notes (v1 guidance):**
+- Suggested endpoint: `POST /v1/verify/agent`.
+- Should compose existing verifiers (message, owner attestation, receipt / bundle) and return a single normalized response.
+- **Fast-path:** only support `{ did, proof_bundle? }` and return `{ did_valid, proof_tier }` + optional `owner_status` when an attestation is provided.
+
+### CVF-US-013 — Scoped token introspection
+**As a** service, **I want** token introspection **so that** authorization is safe.
+
+**Acceptance Criteria:**
+- Validate token signature + expiry
+- Return scope + audience + owner_ref
+- Log token hash to clawlogs
+
+**Implementation notes (v1 guidance):**
+- **Source of truth schema:** `packages/schema/auth/scoped_token_claims.v1.json`.
+- Suggested endpoint: `POST /v1/token/introspect` (RFC-7662-ish semantics).
+- Response should be stable and safe for services to consume:
+  - return `active: false` on failed signature/exp/aud/scope
+  - return parsed claims when active
+
+### CVF-US-014 — Public landing + skill docs
+**As a** developer, **I want** public landing/docs/skill endpoints **so that** I can discover and integrate clawverify quickly.
+
+**Acceptance Criteria:**
+- GET / returns a small HTML landing page with links to /docs and /skill.md
+- GET /skill.md returns integration docs + example curl commands
+- GET /robots.txt and /sitemap.xml exist (minimal)
+- GET /.well-known/security.txt exists
 
 ## 8) Success Metrics
 - Verification success rate
