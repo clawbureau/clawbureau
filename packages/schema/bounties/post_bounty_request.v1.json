@@ -1,0 +1,98 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.bounties.post_bounty_request.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Post Bounty Request v1",
+  "description": "Request payload for posting a new bounty",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "title",
+    "description",
+    "reward",
+    "closure_type",
+    "difficulty_scalar"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Short title describing the bounty"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000,
+      "description": "Detailed description of the work required"
+    },
+    "reward": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amount", "currency"],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Principal reward amount"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["CLAW", "USD"],
+          "description": "Currency for the reward"
+        }
+      }
+    },
+    "closure_type": {
+      "type": "string",
+      "enum": ["test", "quorum", "requester"],
+      "description": "How the bounty is verified and closed"
+    },
+    "difficulty_scalar": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 10.0,
+      "description": "Difficulty scalar (K) for reputation weighting"
+    },
+    "min_poh_tier": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 0,
+      "description": "Minimum proof-of-harness tier required for acceptance"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 50 },
+      "maxItems": 10,
+      "description": "Tags for search and filtering"
+    },
+    "require_owner_verified_votes": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether quorum votes require owner-verified status"
+    },
+    "is_code_bounty": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this bounty requires commit proofs"
+    },
+    "test_harness_id": {
+      "type": "string",
+      "description": "ID of test harness for test-based closure (required if closure_type is 'test')"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Optional idempotency key to prevent duplicate posts"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Additional metadata for the bounty"
+    }
+  },
+  "if": {
+    "properties": { "closure_type": { "const": "test" } }
+  },
+  "then": {
+    "required": ["test_harness_id"]
+  }
+}

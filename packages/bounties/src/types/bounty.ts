@@ -1,0 +1,124 @@
+import { z } from "zod";
+
+/**
+ * Reward amount and currency
+ */
+export const RewardSchema = z.object({
+  amount: z.number().positive(),
+  currency: z.enum(["CLAW", "USD"]),
+});
+
+export type Reward = z.infer<typeof RewardSchema>;
+
+/**
+ * Closure type determines how bounty verification works
+ */
+export const ClosureTypeSchema = z.enum(["test", "quorum", "requester"]);
+
+export type ClosureType = z.infer<typeof ClosureTypeSchema>;
+
+/**
+ * Bounty status lifecycle
+ */
+export const BountyStatusSchema = z.enum([
+  "open",
+  "accepted",
+  "pending_review",
+  "approved",
+  "rejected",
+  "disputed",
+  "cancelled",
+]);
+
+export type BountyStatus = z.infer<typeof BountyStatusSchema>;
+
+/**
+ * All-in cost breakdown shown at posting
+ */
+export const AllInCostSchema = z.object({
+  principal: z.number().nonnegative(),
+  platform_fee: z.number().nonnegative(),
+  total: z.number().nonnegative(),
+  currency: z.enum(["CLAW", "USD"]),
+});
+
+export type AllInCost = z.infer<typeof AllInCostSchema>;
+
+/**
+ * Full bounty record as stored
+ */
+export const BountySchema = z.object({
+  schema_version: z.literal("1"),
+  bounty_id: z.string(),
+  requester_did: z.string(),
+  title: z.string().min(1).max(256),
+  description: z.string().min(1).max(10000),
+  reward: RewardSchema,
+  closure_type: ClosureTypeSchema,
+  difficulty_scalar: z.number().min(0.1).max(10.0),
+  escrow_id: z.string(),
+  status: BountyStatusSchema,
+  min_poh_tier: z.number().int().min(0).max(5).optional(),
+  tags: z.array(z.string().max(50)).max(10).optional(),
+  require_owner_verified_votes: z.boolean().optional(),
+  is_code_bounty: z.boolean().optional(),
+  test_harness_id: z.string().optional(),
+  fee_policy_version: z.string().optional(),
+  all_in_cost: AllInCostSchema.optional(),
+  created_at: z.string().datetime(),
+  accepted_at: z.string().datetime().optional(),
+  accepted_by: z.string().optional(),
+  idempotency_key: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export type Bounty = z.infer<typeof BountySchema>;
+
+/**
+ * Request payload for posting a new bounty
+ */
+export const PostBountyRequestSchema = z
+  .object({
+    title: z.string().min(1).max(256),
+    description: z.string().min(1).max(10000),
+    reward: RewardSchema,
+    closure_type: ClosureTypeSchema,
+    difficulty_scalar: z.number().min(0.1).max(10.0),
+    min_poh_tier: z.number().int().min(0).max(5).default(0),
+    tags: z.array(z.string().max(50)).max(10).optional(),
+    require_owner_verified_votes: z.boolean().default(false),
+    is_code_bounty: z.boolean().default(false),
+    test_harness_id: z.string().optional(),
+    idempotency_key: z.string().optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .refine(
+    (data) => {
+      // test_harness_id is required when closure_type is 'test'
+      if (data.closure_type === "test" && !data.test_harness_id) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "test_harness_id is required when closure_type is 'test'",
+      path: ["test_harness_id"],
+    }
+  );
+
+export type PostBountyRequest = z.infer<typeof PostBountyRequestSchema>;
+
+/**
+ * Response after successfully posting a bounty
+ */
+export const PostBountyResponseSchema = z.object({
+  schema_version: z.literal("1"),
+  bounty_id: z.string(),
+  escrow_id: z.string(),
+  status: z.literal("open"),
+  all_in_cost: AllInCostSchema,
+  fee_policy_version: z.string().optional(),
+  created_at: z.string().datetime(),
+});
+
+export type PostBountyResponse = z.infer<typeof PostBountyResponseSchema>;
