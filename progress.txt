@@ -174,3 +174,22 @@ Started: 2026-02-02T03:08:26.937005
   - Keep proof tier classification deterministic and local (based on presence of evidence references), and leave cryptographic verification to specialized services
   - When integrating with external services (clawrep), prefer explicit fields (submission_proof_tier) rather than overloading metadata blobs
 ---
+
+## 2026-02-02T05:23:09Z - CBT-US-010
+- What was implemented
+  - Fee disclosure now surfaces end-to-end:
+    - Posting already returns all_in_cost (principal + platform_fee + total) and fee_policy_version from clawcuts.
+    - Acceptance receipts now include:
+      - worker_net (agent payout; currently equals reward principal)
+      - fee_policy_version (from clawcuts at posting)
+      - all_in_cost (requester total cost)
+  - Tightened schema invariants so fee_policy_version + all_in_cost are required on stored Bounty records.
+- Files changed
+  - packages/bounties/src/types/bounty.ts
+  - packages/bounties/src/actions/acceptBounty.ts
+  - packages/bounties/src/actions/postBounty.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Cost transparency is easiest when fee fields are required at persistence boundaries (not optional), and then echoed into downstream receipts.
+---

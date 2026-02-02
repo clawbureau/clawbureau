@@ -63,8 +63,8 @@ export const BountySchema = z.object({
   require_owner_verified_votes: z.boolean().optional(),
   is_code_bounty: z.boolean().optional(),
   test_harness_id: z.string().optional(),
-  fee_policy_version: z.string().optional(),
-  all_in_cost: AllInCostSchema.optional(),
+  fee_policy_version: z.string(),
+  all_in_cost: AllInCostSchema,
   created_at: z.string().datetime(),
   accepted_at: z.string().datetime().optional(),
   accepted_by: z.string().optional(),
@@ -117,7 +117,7 @@ export const PostBountyResponseSchema = z.object({
   escrow_id: z.string(),
   status: z.literal("open"),
   all_in_cost: AllInCostSchema,
-  fee_policy_version: z.string().optional(),
+  fee_policy_version: z.string(),
   created_at: z.string().datetime(),
 });
 
@@ -144,6 +144,12 @@ export const AcceptanceReceiptSchema = z.object({
   accepted_at: z.string().datetime(),
   bounty_title: z.string(),
   reward: RewardSchema,
+  /** Worker net payout shown at acceptance (typically equals reward principal) */
+  worker_net: RewardSchema,
+  /** Fee policy version used at posting (from clawcuts) */
+  fee_policy_version: z.string(),
+  /** All-in cost that the requester paid (principal + fees) */
+  all_in_cost: AllInCostSchema,
   difficulty_scalar: z.number(),
   closure_type: ClosureTypeSchema,
 });

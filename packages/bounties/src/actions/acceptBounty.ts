@@ -148,6 +148,9 @@ export async function acceptBounty(
     accepted_at: acceptedAt,
     bounty_title: bounty.title,
     reward: bounty.reward,
+    worker_net: bounty.reward,
+    fee_policy_version: bounty.fee_policy_version,
+    all_in_cost: bounty.all_in_cost,
     difficulty_scalar: bounty.difficulty_scalar,
     closure_type: bounty.closure_type,
   };

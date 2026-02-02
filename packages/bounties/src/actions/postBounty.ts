@@ -93,7 +93,7 @@ export async function postBounty(
         bounty_id: existing.bounty_id,
         escrow_id: existing.escrow_id,
         status: "open",
-        all_in_cost: existing.all_in_cost as AllInCost,
+        all_in_cost: existing.all_in_cost,
         fee_policy_version: existing.fee_policy_version,
         created_at: existing.created_at,
       };
