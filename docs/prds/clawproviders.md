@@ -16,7 +16,10 @@ Registry and onboarding for providers (compute, judges, auditors).
 ## 3) MVP Scope
 - Provider onboarding
 - KYC/KYB flags
-- Bond requirements
+- Bond requirements (risk + volume-based)
+- Listing fees (anti-sybil)
+- Receipt/attestation requirements
+- Reserve provider classification
 
 ## 4) Non-Goals (v0)
 - Automated full compliance v0
@@ -82,6 +85,33 @@ Registry and onboarding for providers (compute, judges, auditors).
   - GET /providers
   - Filters
   - Pagination
+
+
+### CPR-US-007 — Listing fee
+**As a** platform, **I want** listing fees **so that** sybils are deterred.
+
+**Acceptance Criteria:**
+  - Charge listing fee per offer or per period
+  - Require fee before listing becomes active
+  - Record fee events in ledger
+
+
+### CPR-US-008 — Receipt requirements
+**As a** buyer, **I want** execution receipts **so that** supply is verifiable.
+
+**Acceptance Criteria:**
+  - Require proxy receipts or sandbox attestations for delivered work
+  - Store receipt hashes with each provider job
+  - Downgrade provider trust tier on missing receipts
+
+
+### CPR-US-009 — Reserve provider type
+**As a** platform, **I want** reserve providers **so that** compute credits are auditable.
+
+**Acceptance Criteria:**
+  - Support provider type "reserve" with balance attestations
+  - Require signed reserve statements with expiry
+  - Surface reserve provider status in API
 
 
 ## 8) Success Metrics

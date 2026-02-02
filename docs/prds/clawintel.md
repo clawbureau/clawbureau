@@ -17,6 +17,7 @@ Fraud/collusion detection, anomaly monitoring, and risk scoring.
 - Anomaly detection
 - Collusion signals
 - Risk scores
+- Sybil/owner verification signals
 
 ## 4) Non-Goals (v0)
 - Full ML pipeline v0
@@ -82,6 +83,15 @@ Fraud/collusion detection, anomaly monitoring, and risk scoring.
   - Export risk data
   - Include timestamps
   - Signed bundles
+
+
+### CINL-US-007 — Owner verification signals
+**As a** platform, **I want** owner signals **so that** sybil risk is reduced.
+
+**Acceptance Criteria:**
+  - Ingest owner attestation status from clawclaim
+  - Emit risk flags for unverified or expired owners
+  - Expose owner risk score API
 
 
 ## 8) Success Metrics

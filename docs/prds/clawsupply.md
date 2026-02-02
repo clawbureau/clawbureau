@@ -18,6 +18,9 @@ Marketplace for compute/work supply offers priced in credits.
 - Provider offers
 - Order execution
 - Receipt-based settlement
+- Bond requirements (risk + volume)
+- Listing fees (anti-sybil)
+- First-party inference offers (Gemini/FAL)
 
 ## 4) Non-Goals (v0)
 - Full derivatives market
@@ -83,6 +86,24 @@ Marketplace for compute/work supply offers priced in credits.
   - Require bond for high volume
   - Lock bond in ledger
   - Slash on disputes
+
+
+### CSU-US-007 — Listing fee
+**As a** platform, **I want** listing fees **so that** sybils are deterred.
+
+**Acceptance Criteria:**
+  - Charge listing fee per offer or per period
+  - Require fee before offer is visible
+  - Record fee events in ledger
+
+
+### CSU-US-008 — First-party inference offers
+**As a** developer, **I want** default compute offers **so that** I can start quickly.
+
+**Acceptance Criteria:**
+  - Publish Gemini token offers and FAL job offers
+  - Meter usage via proxy receipts
+  - Link fulfillment to reserve-backed ledger events
 
 
 ## 8) Success Metrics

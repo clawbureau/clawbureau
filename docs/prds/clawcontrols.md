@@ -17,6 +17,11 @@ Policy engine for spend caps, allowlists, and kill switches.
 - Spend caps
 - Allowlist rules
 - Global kill switch
+- Dispute parameter registry
+- Reserve impairment circuit breaker
+- Trials kill switches
+- Token policy registry (CST)
+- Owner-verified gating rules
 
 ## 4) Non-Goals (v0)
 - Full IAM v0
@@ -81,6 +86,51 @@ Policy engine for spend caps, allowlists, and kill switches.
   - Log changes
   - Include actor
   - Export logs
+
+
+### CCO-US-007 — Dispute parameter registry
+**As a** operator, **I want** dispute configs **so that** trials are consistent.
+
+**Acceptance Criteria:**
+  - Define bonds, deadlines, quorum rules
+  - Version parameter sets
+  - Expose registry API
+
+
+### CCO-US-008 — Trials kill switch
+**As a** safety officer, **I want** to halt trials **so that** incidents are contained.
+
+**Acceptance Criteria:**
+  - Disable new trial creation
+  - Allow ongoing cases to finish or pause
+  - Require quorum override to re-enable
+
+
+### CCO-US-009 — Reserve impairment circuit breaker
+**As a** finance operator, **I want** reserve gates **so that** cash-out is safe.
+
+**Acceptance Criteria:**
+  - Disable cash-out when reserve coverage drops below threshold
+  - Publish impairment notice
+  - Log override actions with quorum
+
+
+### CCO-US-010 — Token policy registry
+**As a** platform, **I want** token policies **so that** CST scopes are controlled.
+
+**Acceptance Criteria:**
+  - Define max TTL + allowed scopes per tier
+  - Enforce audience restrictions per service
+  - Provide policy simulation endpoint
+
+
+### CCO-US-011 — Owner-verified gating
+**As a** platform, **I want** owner verification gates **so that** sybil attacks are reduced.
+
+**Acceptance Criteria:**
+  - Configure actions requiring owner-verified status
+  - Provide rate-limit multipliers by owner status
+  - Log enforcement decisions
 
 
 ## 8) Success Metrics

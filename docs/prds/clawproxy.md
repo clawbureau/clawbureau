@@ -17,8 +17,11 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 ## 3) MVP Scope
 - POST /v1/proxy/<provider>
 - Signed receipt with request/response hashes
-- Receipt includes proxy DID
+- Receipt includes proxy DID + binding fields
 - Provider routing (Anthropic/OpenAI/Google)
+- WPC enforcement + redaction hooks
+- Hash-only receipts (encrypted payload optional)
+- Scoped token auth (CST)
 
 ## 4) Non-Goals (v0)
 - Full billing system
@@ -27,6 +30,7 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 ## 5) Dependencies
 - clawlogs.com (optional)
 - clawverify.com (receipt verification)
+- clawscope.com
 
 ## 6) Core User Journeys
 - Agent routes call through proxy → gets receipt
@@ -85,6 +89,69 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
   - Rate limit by DID/IP
   - Return 429 on limit
   - Expose usage headers
+
+
+### CPX-US-007 — Receipt binding fields
+**As a** verifier, **I want** receipts bound to runs **so that** proofs are chainable.
+
+**Acceptance Criteria:**
+  - Accept run_id and event_hash headers
+  - Embed binding fields in receipt
+  - Enforce idempotency for receipt issuance
+
+
+### CPX-US-008 — Work Policy Contract enforcement
+**As a** enterprise, **I want** policy enforcement **so that** confidential runs are safe.
+
+**Acceptance Criteria:**
+  - Require policy_hash header in confidential mode
+  - Enforce provider/model allowlists from WPC
+  - Apply redaction/field stripping per WPC
+
+
+### CPX-US-009 — Hash-only or encrypted receipts
+**As a** privacy owner, **I want** hash-only receipts **so that** prompts are protected.
+
+**Acceptance Criteria:**
+  - Default to hash-only receipt payloads
+  - Support encrypted payload receipts when enabled
+  - Never log plaintext prompts in confidential mode
+
+
+### CPX-US-010 — Proxy DID endpoint
+**As a** integrator, **I want** proxy DID metadata **so that** verification is easy.
+
+**Acceptance Criteria:**
+  - GET /v1/did returns DID + public keys + kids
+  - Cacheable response
+  - Include deployment metadata
+
+
+### CPX-US-011 — Scoped token authentication
+**As a** platform, **I want** scoped tokens **so that** calls are user-bound and time-limited.
+
+**Acceptance Criteria:**
+  - Require CST token for authenticated calls
+  - Validate audience + expiry + scope
+  - Log token hash with receipt
+
+
+### CPX-US-012 — Token/policy binding in receipts
+**As a** verifier, **I want** receipts bound to policy **so that** authorization is provable.
+
+**Acceptance Criteria:**
+  - Embed token_scope_hash in receipt
+  - Embed policy_hash (WPC) when present
+  - Fail closed if required binding fields missing
+
+
+### CPX-US-013 — Platform-paid inference mode
+**As a** platform, **I want** a reserve-backed default **so that** users can start quickly.
+
+**Acceptance Criteria:**
+  - Support platform-paid routing using reserve credits
+  - Mark receipts as paid/unpaid
+  - Record ledger reference for paid receipts
 
 
 ## 8) Success Metrics

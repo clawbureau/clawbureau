@@ -85,6 +85,15 @@ Tamper-evident audit logging and Merkle anchoring for all economic and verificat
   - Audit access events
 
 
+### CLG-US-007 — Token/attestation hash logging
+**As a** auditor, **I want** token and owner hashes **so that** authorization is provable.
+
+**Acceptance Criteria:**
+  - Store token_scope_hash + policy_hash on relevant events
+  - Store owner attestation hash when present
+  - Store commit proof hash when supplied
+
+
 ## 8) Success Metrics
 - Log events/day
 - Inclusion proof latency

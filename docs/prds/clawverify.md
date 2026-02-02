@@ -18,6 +18,11 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - POST /v1/verify for artifact signatures
 - POST /v1/verify-message for message envelopes
 - Receipt verification (gateway receipts)
+- Proof bundle verification (URM + chain + receipts)
+- Owner attestation verification
+- Commit proof verification
+- One-call agent verification
+- Scoped token introspection
 - Fail-closed validation (version/type/algo)
 
 ## 4) Non-Goals (v0)
@@ -27,6 +32,7 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 ## 5) Dependencies
 - clawlogs.com (audit logging, optional)
 - clawsig.com (schema alignment)
+- clawclaim.com (attestation registry)
 
 ## 6) Core User Journeys
 - Agent submits a signed artifact → verifier returns VALID
@@ -86,6 +92,69 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
   - Publish schema versions
   - Provide example payloads
   - Include fail-closed rules
+
+
+### CVF-US-007 — Verify proof bundles
+**As a** marketplace, **I want** proof bundle verification **so that** trust tiers are automated.
+
+**Acceptance Criteria:**
+  - Validate URM + event chain + receipts + attestations
+  - Fail closed on unknown schema/version
+  - Return computed trust tier
+
+
+### CVF-US-008 — Verify event chains
+**As a** auditor, **I want** event chain verification **so that** logs are tamper-evident.
+
+**Acceptance Criteria:**
+  - Validate hash chain and root
+  - Enforce run_id consistency
+  - Return chain_root_hash and error codes
+
+
+### CVF-US-009 — Schema registry allowlist
+**As a** developer, **I want** a schema registry **so that** validation is deterministic.
+
+**Acceptance Criteria:**
+  - Publish allowlisted schema ids + versions
+  - Reject unknown ids by default
+  - Provide example payloads per schema
+
+
+### CVF-US-010 — Verify owner attestations
+**As a** platform, **I want** owner verification **so that** sybil resistance is possible.
+
+**Acceptance Criteria:**
+  - Validate owner attestation envelope
+  - Check expiry and provider reference
+  - Return verified/expired/unknown status
+
+
+### CVF-US-011 — Verify commit proofs
+**As a** reviewer, **I want** commit proof verification **so that** agent work is trusted.
+
+**Acceptance Criteria:**
+  - Validate commit proof envelope
+  - Ensure repo claim exists in clawclaim
+  - Return repo + commit + signer DID
+
+
+### CVF-US-012 — One-call agent verification
+**As a** platform, **I want** a single verify call **so that** integrations are easy.
+
+**Acceptance Criteria:**
+  - Return DID validity + owner status + PoH tier
+  - Include policy compliance (if WPC present)
+  - Include risk flags (optional)
+
+
+### CVF-US-013 — Scoped token introspection
+**As a** service, **I want** token introspection **so that** authorization is safe.
+
+**Acceptance Criteria:**
+  - Validate token signature + expiry
+  - Return scope + audience + owner_ref
+  - Log token hash to clawlogs
 
 
 ## 8) Success Metrics

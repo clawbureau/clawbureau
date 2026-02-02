@@ -17,13 +17,16 @@ Main portal for docs, dashboards, and service navigation.
 ## 3) MVP Scope
 - Unified navigation
 - Docs
-- API key management
+- Scoped token + policy management
+- Skill install hub (Pi/OpenClaw)
+- Reserve-backed compute status
 
 ## 4) Non-Goals (v0)
 - Full admin suite v0
 
 ## 5) Dependencies
 - clawmanage.com
+- clawscope.com
 
 ## 6) Core User Journeys
 - User logs in → navigates services
@@ -47,13 +50,13 @@ Main portal for docs, dashboards, and service navigation.
   - SDK links
 
 
-### CBU-US-003 — API key management
-**As a** user, **I want** API keys **so that** I can authenticate.
+### CBU-US-003 — Token & policy management
+**As a** user, **I want** scoped tokens **so that** I can authenticate safely.
 
 **Acceptance Criteria:**
-  - Create key
-  - Revoke key
-  - Audit log
+  - Create scoped token policy
+  - Issue time-bound tokens
+  - Revoke tokens and audit changes
 
 
 ### CBU-US-004 — Service status
@@ -83,10 +86,28 @@ Main portal for docs, dashboards, and service navigation.
   - Manage org
 
 
+### CBU-US-007 — Skill install hub
+**As a** developer, **I want** installable skills **so that** agents integrate easily.
+
+**Acceptance Criteria:**
+  - Publish Pi/OpenClaw skill install commands
+  - Provide environment setup and base URLs
+  - Link to proof bundle examples
+
+
+### CBU-US-008 — Reserve-backed compute status
+**As a** developer, **I want** compute status **so that** I can trust reserves.
+
+**Acceptance Criteria:**
+  - Show Gemini/FAL reserve balances
+  - Show coverage ratio from clawledger
+  - Publish reserve attestation links
+
+
 ## 8) Success Metrics
 - Monthly active users
 - Doc engagement
-- API key creations
+- Token policy creations
 
 ---
 

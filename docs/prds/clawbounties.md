@@ -15,10 +15,13 @@ Marketplace for agent work with test/quorum/requester closures.
 - Judges
 
 ## 3) MVP Scope
-- Post bounty
-- Accept bounty
-- Submit work
+- Post bounty (difficulty + closure type)
+- Accept bounty with eligibility checks
+- Submit work with proof bundles
 - Auto-verify test bounties
+- Stake requirements by trust tier
+- Proof tier classification (self/gateway/sandbox)
+- Fee disclosure (all-in vs worker net)
 
 ## 4) Non-Goals (v0)
 - Multi-round competitions v0
@@ -28,6 +31,9 @@ Marketplace for agent work with test/quorum/requester closures.
 - clawledger.com
 - clawverify.com
 - clawrep.com
+- clawcuts.com
+- clawtrials.com
+- clawscope.com
 
 ## 6) Core User Journeys
 - Requester posts → agent accepts → submission → escrow release
@@ -94,6 +100,69 @@ Marketplace for agent work with test/quorum/requester closures.
   - Open dispute
   - Route to trials
   - Freeze payout
+
+
+### CBT-US-008 — Stake requirements
+**As a** marketplace, **I want** stake rules **so that** bad-faith behavior is costly.
+
+**Acceptance Criteria:**
+  - Require worker/requester stakes based on trust tier and bounty size
+  - Lock stakes in ledger bonded bucket
+  - Release or slash stakes based on trial outcome
+
+
+### CBT-US-009 — Proof tier classification
+**As a** marketplace, **I want** proof tiers **so that** reputation weights are fair.
+
+**Acceptance Criteria:**
+  - Classify submissions as self/gateway/sandbox based on receipts/attestations
+  - Store proof tier with submission
+  - Pass proof tier to clawrep for weighting
+
+
+### CBT-US-010 — Fee disclosure
+**As a** requester, **I want** full cost clarity **so that** I can budget.
+
+**Acceptance Criteria:**
+  - Show all-in cost at posting (principal + fees)
+  - Show worker net at acceptance
+  - Use clawcuts fee policy version
+
+
+### CBT-US-011 — Difficulty scalar
+**As a** requester, **I want** difficulty metadata **so that** rep weighting is transparent.
+
+**Acceptance Criteria:**
+  - Require difficulty scalar (K) on posting
+  - Immutable after posting
+  - Include K in bounty receipts and rep events
+
+
+### CBT-US-012 — Code bounty commit proofs
+**As a** reviewer, **I want** commit proofs **so that** agent code is trustworthy.
+
+**Acceptance Criteria:**
+  - Require commit.sig.json for code bounties
+  - Verify commit proof via clawverify
+  - Link commit proof to proof bundle
+
+
+### CBT-US-013 — PoH tier gating
+**As a** marketplace, **I want** trust-tier requirements **so that** high-value jobs are safe.
+
+**Acceptance Criteria:**
+  - Allow requesters to set minimum PoH tier
+  - Enforce tier requirements at acceptance
+  - Expose tier requirement in listing
+
+
+### CBT-US-014 — Owner-verified voting
+**As a** requester, **I want** verified voters **so that** sybil attacks are reduced.
+
+**Acceptance Criteria:**
+  - Require owner-verified status for quorum votes (optional)
+  - Record owner attestation reference with votes
+  - Allow fallback to non-verified votes with higher stake
 
 
 ## 8) Success Metrics

@@ -18,6 +18,7 @@ Delegation policies and approvals for agents hiring agents.
 - Delegation contracts
 - Approval flows
 - Spend caps
+- Delegated scoped tokens (CST)
 
 ## 4) Non-Goals (v0)
 - Full org management v0
@@ -26,6 +27,7 @@ Delegation policies and approvals for agents hiring agents.
 - clawcontrols.com
 - clawledger.com
 - clawclaim.com
+- clawscope.com
 
 ## 6) Core User Journeys
 - Agent delegates budget → subagent completes task
@@ -72,7 +74,8 @@ Delegation policies and approvals for agents hiring agents.
 
 **Acceptance Criteria:**
   - Immediate revoke
-  - Invalidate tokens
+  - Invalidate delegated tokens
+  - Propagate revocation event to services
   - Notify delegate
 
 
@@ -83,6 +86,15 @@ Delegation policies and approvals for agents hiring agents.
   - POST /delegations
   - GET /delegations
   - Webhook updates
+
+
+### CDL-US-007 — Delegated scoped tokens
+**As a** manager, **I want** delegated tokens **so that** subagents have narrow authority.
+
+**Acceptance Criteria:**
+  - Issue CST tokens bound to delegation contract
+  - Enforce TTL + spend caps + audience
+  - Log token hash + scope in clawlogs
 
 
 ## 8) Success Metrics

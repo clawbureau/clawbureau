@@ -16,8 +16,13 @@ Safe execution layer (Moltworker-style) that produces run attestations.
 
 ## 3) MVP Scope
 - Sandbox runner
-- Receipt bundle
+- Receipt bundle + event chain
 - Artifact hashes
+- Work Policy Contract enforcement
+- Redaction pipeline + log root
+- Egress mediation via clawproxy
+- Scoped token auth (CST)
+- Mission metadata binding
 
 ## 4) Non-Goals (v0)
 - Full TEE v0
@@ -26,6 +31,7 @@ Safe execution layer (Moltworker-style) that produces run attestations.
 - clawproxy.com
 - clawsilo.com
 - clawverify.com
+- clawscope.com
 
 ## 6) Core User Journeys
 - Job runs in sandbox → proof bundle produced
@@ -83,6 +89,33 @@ Safe execution layer (Moltworker-style) that produces run attestations.
   - Bundle URM + receipts
   - Signed bundle
   - Link to storage
+
+
+### CEA-US-007 — Attestation log root
+**As a** verifier, **I want** log roots embedded **so that** audits are consistent.
+
+**Acceptance Criteria:**
+  - Include clawlogs log_root_hash in attestation
+  - Include receipt hashes + artifact hashes
+  - Provide bundle export for verification
+
+
+### CEA-US-008 — Scoped token enforcement
+**As a** platform, **I want** scoped tokens **so that** runs are authorized.
+
+**Acceptance Criteria:**
+  - Require CST token on run start
+  - Validate audience + expiry + scope
+  - Embed token_scope_hash in attestation
+
+
+### CEA-US-009 — Mission metadata binding
+**As a** operator, **I want** mission ids **so that** multi-agent runs are grouped.
+
+**Acceptance Criteria:**
+  - Accept mission_id on run start
+  - Persist mission_id in URM and attestation
+  - Emit mission_id in run events
 
 
 ## 8) Success Metrics

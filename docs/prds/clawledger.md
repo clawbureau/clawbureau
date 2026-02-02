@@ -85,6 +85,51 @@ Event-sourced ledger for balances, holds, and transfers. Idempotent and auditabl
   - Webhook for events
 
 
+### CLD-US-007 — Balance buckets & invariants
+**As a** system, **I want** balance buckets **so that** holds, stakes, and fees are explicit.
+
+**Acceptance Criteria:**
+  - Track buckets: available (A), held (H), bonded (B), fee pool (F), promo (P)
+  - Enforce non-negative balances per bucket
+  - Expose balances per bucket in API responses
+
+
+### CLD-US-008 — Stake/fee event types
+**As a** platform, **I want** explicit stake and fee events **so that** audits are deterministic.
+
+**Acceptance Criteria:**
+  - Support event types: stake_lock, stake_slash, fee_burn, fee_transfer, promo_mint, promo_burn
+  - Link stake/fee events to originating escrow/trial ids
+  - Emit hash-chained log entry for each event
+
+
+### CLD-US-009 — Clearing accounts & settlement refs
+**As a** finance operator, **I want** clearing accounts **so that** cross-service settlement is clean.
+
+**Acceptance Criteria:**
+  - Create per-domain clearing accounts
+  - Allow transfers between user accounts and clearing accounts
+  - Store netting batch ids on settlement events
+
+
+### CLD-US-010 — Reserve asset registry
+**As a** auditor, **I want** reserve asset tables **so that** coverage is verifiable.
+
+**Acceptance Criteria:**
+  - Store reserve assets with haircut factors
+  - Compute coverage ratio from eligible reserves only
+  - Include reserve breakdown in signed attestation
+
+
+### CLD-US-011 — Compute reserve assets
+**As a** finance operator, **I want** compute reserves **so that** credits are backed.
+
+**Acceptance Criteria:**
+  - Record Gemini/FAL credit balances as reserve assets
+  - Apply conservative haircuts by provider
+  - Include compute reserves in coverage attestations
+
+
 ## 8) Success Metrics
 - Ledger events/day
 - Idempotent replay success
