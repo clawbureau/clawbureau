@@ -7,6 +7,9 @@
 - Event hash chain uses SHA-256 via Web Crypto API (crypto.subtle.digest)
 - Idempotency keys are unique per event, enabling safe retries
 - GENESIS_HASH is 64 zeros ('0'.repeat(64)) for first event in chain
+- Scheduled/cron jobs use `async scheduled(event, env, ctx)` handler with ctx.waitUntil()
+- Cron triggers configured in wrangler.toml: [triggers] crons = ["0 2 * * *"]
+- For webhooks/alerts, use optional env vars (e.g., ALERT_WEBHOOK_URL) with conditional sending
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936251
@@ -96,4 +99,60 @@ Started: 2026-02-02T03:08:26.936251
   - Complete release requires toAccountId for fund destination
   - InsufficientFundsError provides detailed context for balance failures
   - Optimistic concurrency via version column prevents race conditions
+---
+
+## 2026-02-02T06:00:00Z - CLD-US-004
+- What was implemented:
+  - ReconciliationService for balance replay and verification
+  - ReconciliationRepository for storing reconciliation reports in D1
+  - Event replay engine that recomputes balances from the entire event stream
+  - Hash chain integrity verification integrated into reconciliation
+  - Mismatch detection comparing computed vs stored account balances
+  - Alert webhook mechanism for reconciliation failures (ALERT_WEBHOOK_URL env)
+  - Scheduled handler for nightly reconciliation (cron: 0 2 * * *)
+  - API endpoints for manual reconciliation and report retrieval:
+    - POST /reconciliation/run - Trigger manual reconciliation
+    - GET /reconciliation/reports - List recent reports (with limit param)
+    - GET /reconciliation/reports/latest - Get most recent report
+    - GET /reconciliation/reports/:id - Get specific report by ID
+    - GET /reconciliation/export/:id - Download report as JSON attachment
+  - D1 migration for reconciliation_reports table with indexes
+  - ReconciliationReport, BalanceMismatch, ReconciliationAlert types added
+- Files changed:
+  - services/ledger/src/types.ts (updated - added reconciliation types)
+  - services/ledger/src/reconciliation.ts (new)
+  - services/ledger/src/index.ts (updated - added routes and scheduled handler)
+  - services/ledger/wrangler.toml (updated - added cron trigger)
+  - services/ledger/migrations/0004_create_reconciliation_reports.sql (new)
+- **Learnings for future iterations:**
+  - Cloudflare Workers scheduled handlers use ctx.waitUntil() for async work
+  - Cron triggers configured in wrangler.toml under [triggers] section
+  - ExecutionContext and ScheduledEvent types are global in Workers
+  - For balance reconciliation, must handle accounts that exist in events but not accounts table
+  - createEmptyBalances() from accounts.ts is reusable for initializing computed balances
+  - parseEventFromRow() and parseAccountFromRow() helpers are useful across services
+---
+
+## 2026-02-02T07:00:00Z - CLD-US-005
+- What was implemented:
+  - ReserveAttestationService for computing reserve coverage reports
+  - AttestationRepository for querying all account balances and net minted
+  - Reserve calculation: net minted (total mint - total burn) = theoretical reserve backing
+  - Outstanding calculation: sum of all account balances across all buckets
+  - Coverage ratio computation with 4 decimal precision
+  - Balance hash: SHA-256 of all account balances for verification
+  - Signed attestation using hash-based signature over attestation data
+  - Public API endpoint:
+    - GET /attestation/reserve - Generate and return signed reserve attestation
+  - Types added: ReserveAttestation, ReserveAttestationRequest, ReserveAttestationResponse
+- Files changed:
+  - services/ledger/src/types.ts (updated - added attestation types)
+  - services/ledger/src/attestation.ts (new)
+  - services/ledger/src/index.ts (updated - added attestation route)
+- **Learnings for future iterations:**
+  - Reserve attestations are read-only computations (no D1 migration needed)
+  - Coverage ratio uses scaled bigint division for precision (multiply by 10000, then divide)
+  - Attestation signature includes latest event hash to anchor to chain state
+  - For future: consider storing attestation history or using proper cryptographic signing keys
+  - verifyAttestation() method available for clients to verify attestation integrity
 ---

@@ -309,3 +309,56 @@ export interface ReconciliationAlert {
   summary: string;
   details?: BalanceMismatch[];
 }
+
+/**
+ * Reserve attestation - signed proof of reserve coverage
+ */
+export interface ReserveAttestation {
+  /** Unique attestation ID */
+  id: string;
+  /** Attestation timestamp */
+  timestamp: Timestamp;
+  /** Total outstanding liabilities (sum of all user balances) */
+  totalOutstanding: string;
+  /** Breakdown of outstanding by bucket */
+  outstandingByBucket: {
+    available: string;
+    held: string;
+    bonded: string;
+    feePool: string;
+    promo: string;
+  };
+  /** Total reserves backing the liabilities */
+  totalReserves: string;
+  /** Coverage ratio (reserves / outstanding) as decimal string */
+  coverageRatio: string;
+  /** Whether coverage meets minimum threshold (>= 1.0) */
+  isFullyBacked: boolean;
+  /** Number of accounts included in calculation */
+  accountCount: number;
+  /** Hash of all account balances for verification */
+  balanceHash: string;
+  /** Signature over the attestation data */
+  signature: string;
+  /** Version of the attestation format */
+  version: string;
+}
+
+/**
+ * Reserve attestation request - for API
+ */
+export interface ReserveAttestationRequest {
+  /** Optional: include detailed account breakdown (admin only) */
+  includeDetails?: boolean;
+}
+
+/**
+ * Reserve attestation response - public API format
+ */
+export interface ReserveAttestationResponse {
+  attestation: ReserveAttestation;
+  /** Latest event hash at time of attestation */
+  latestEventHash: string;
+  /** Human-readable summary */
+  summary: string;
+}

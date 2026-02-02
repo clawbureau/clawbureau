@@ -4,6 +4,7 @@
  */
 
 import { AccountService, isValidDid } from './accounts';
+import { ReserveAttestationService } from './attestation';
 import { EventService, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
 import { ReconciliationService } from './reconciliation';
@@ -508,6 +509,22 @@ async function handleExportReport(id: string, env: Env): Promise<Response> {
 }
 
 /**
+ * Handle GET /attestation/reserve - Generate reserve attestation
+ * Public endpoint for auditors to verify reserve coverage
+ */
+async function handleReserveAttestation(env: Env): Promise<Response> {
+  const service = new ReserveAttestationService(env);
+
+  try {
+    const response = await service.generateAttestation();
+    return jsonResponse(response);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'ATTESTATION_FAILED', 500);
+  }
+}
+
+/**
  * Router for handling requests
  */
 async function router(request: Request, env: Env): Promise<Response> {
@@ -617,6 +634,11 @@ async function router(request: Request, env: Env): Promise<Response> {
   const reportByIdMatch = path.match(/^\/reconciliation\/reports\/([^/]+)$/);
   if (reportByIdMatch && method === 'GET') {
     return handleGetReconciliationReport(reportByIdMatch[1], env);
+  }
+
+  // GET /attestation/reserve - Generate reserve attestation (public endpoint)
+  if (path === '/attestation/reserve' && method === 'GET') {
+    return handleReserveAttestation(env);
   }
 
   // 404 for unknown routes

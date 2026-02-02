@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented nightly cron job (2 AM UTC), event replay with balance comparison, hash chain verification, alert webhooks, and export endpoint"
     },
     {
       "id": "CLD-US-005",
@@ -70,8 +70,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented reserve attestation with GET /attestation/reserve endpoint, net minted calculation, balance hash verification, and hash-based signature"
     },
     {
       "id": "CLD-US-006",
