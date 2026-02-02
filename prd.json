@@ -101,8 +101,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added minimal public worker endpoints: landing page (/), docs (/docs), OpenClaw skill (/skill.md with single-line JSON metadata frontmatter), plus /robots.txt, /sitemap.xml, and /.well-known/security.txt. Also updated escrow tsconfig to include DOM lib for Request/Response types."
     }
   ]
 }

@@ -13,6 +13,7 @@
 - Ledger client versioning: V1 (createHold), V2 (releaseHoldAndTransfer), V3 (releasePartialHoldAndTransfer for milestones), V4 (releaseHold for cancellation)
 - AuditLogger is optional dependency for audit log entries - follows same pattern as WebhookEmitter
 - Audit entry IDs use `aud_` prefix
+- Public docs endpoints (CES-US-007) are implemented in `services/escrow/src/worker.ts` (landing/docs/skill + robots/sitemap/security)
 
 # Ralph Progress Log
 Started: 2026-02-02T03:08:26.936628
@@ -107,4 +108,23 @@ Started: 2026-02-02T03:08:26.936628
   - MilestoneStatusSummary aggregates milestone counts and amounts
   - Gracefully handles missing disputeStore - returns has_dispute: false if not configured
   - Existing getEscrow() returns raw Escrow, while getEscrowStatus() returns enriched response
+---
+
+## 2026-02-02T04:57:35Z - CES-US-007
+- What was implemented
+  - Added minimal public HTTP endpoints for discoverability:
+    - GET / (HTML landing with links)
+    - GET /docs (minimal HTML docs)
+    - GET /skill.md (OpenClaw skill file; frontmatter metadata is a single-line JSON object string)
+    - GET /robots.txt
+    - GET /sitemap.xml
+    - GET /.well-known/security.txt
+  - Updated escrow tsconfig to include DOM lib for Request/Response typing
+- Files changed
+  - services/escrow/src/worker.ts
+  - services/escrow/tsconfig.json
+  - prd.json
+  - progress.txt
+- Learnings
+  - Keep public endpoints tiny and cacheable; treat them as integration metadata rather than full API surface
 ---
