@@ -12,6 +12,7 @@ import { generateReceipt, attachReceipt, createSigningPayload, type SigningConte
 import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519 } from './crypto';
 import { logBlockedProvider, logRateLimited } from './logging';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
+import { extractBindingFromHeaders, checkIdempotency, recordNonce } from './idempotency';
 
 /** Proxy DID identifier */
 const PROXY_DID = 'did:web:clawproxy.com';
@@ -205,7 +206,7 @@ async function handleVerifyReceipt(request: Request, env: Env): Promise<Response
     return jsonResponse(response);
   }
 
-  // Return verified claims
+  // Return verified claims (including binding fields if present)
   const response: VerifyReceiptResponse = {
     valid: true,
     claims: {
@@ -214,6 +215,7 @@ async function handleVerifyReceipt(request: Request, env: Env): Promise<Response
       proxyDid: receipt.proxyDid as string,
       timestamp: receipt.timestamp,
       kid: receipt.kid as string,
+      binding: receipt.binding,
     },
   };
 
@@ -271,6 +273,16 @@ async function handleProxy(
     // Log rate limited request for monitoring
     logRateLimited(request, rateLimitInfo.key);
     return rateLimitedResponse(rateLimitInfo);
+  }
+
+  // Extract binding fields from headers (for proof chaining)
+  const binding = extractBindingFromHeaders(request);
+
+  // Check idempotency if nonce is provided
+  const idempotencyCheck = checkIdempotency(binding?.nonce);
+  if (idempotencyCheck.isDuplicate) {
+    // Return previously issued receipt for duplicate request
+    return jsonResponseWithRateLimit(idempotencyCheck.existingReceipt, 200, rateLimitInfo);
   }
 
   // Initialize signing context - fail closed if not configured
@@ -368,7 +380,7 @@ async function handleProxy(
   // Read provider response
   const responseBody = await providerResponse.text();
 
-  // Generate signed receipt
+  // Generate signed receipt with binding fields
   const receipt = await generateReceipt(
     {
       provider,
@@ -376,6 +388,7 @@ async function handleProxy(
       requestBody,
       responseBody,
       startTime,
+      binding,
     },
     signingContext
   );
@@ -394,6 +407,9 @@ async function handleProxy(
       receipt
     );
 
+    // Record nonce for idempotency (even for provider errors)
+    recordNonce(binding?.nonce, withReceipt);
+
     return jsonResponseWithRateLimit(withReceipt, providerResponse.status, rateLimitInfo);
   }
 
@@ -407,6 +423,10 @@ async function handleProxy(
   }
 
   const withReceipt = attachReceipt(responseObj, receipt);
+
+  // Record nonce for idempotency enforcement (if provided)
+  recordNonce(binding?.nonce, withReceipt);
+
   return jsonResponseWithRateLimit(withReceipt, 200, rateLimitInfo);
 }
 

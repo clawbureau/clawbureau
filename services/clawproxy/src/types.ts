@@ -58,6 +58,18 @@ export interface ProviderConfig {
 }
 
 /**
+ * Binding fields for chaining receipts to runs/events
+ */
+export interface ReceiptBinding {
+  /** Run ID for correlating receipts to agent runs */
+  runId?: string;
+  /** Hash of the previous event in the chain */
+  eventHash?: string;
+  /** Unique nonce for idempotency enforcement */
+  nonce?: string;
+}
+
+/**
  * Receipt issued for each proxied request
  * Contains hashes of request/response for verification without exposing content
  */
@@ -82,6 +94,8 @@ export interface Receipt {
   signature?: string;
   /** Key ID used for signing */
   kid?: string;
+  /** Binding fields for chaining proofs (optional) */
+  binding?: ReceiptBinding;
 }
 
 /**
@@ -133,5 +147,7 @@ export interface VerifyReceiptResponse {
     timestamp: string;
     /** Key ID used for signing */
     kid: string;
+    /** Binding fields for chaining proofs (if present in receipt) */
+    binding?: ReceiptBinding;
   };
 }

@@ -2,7 +2,7 @@
  * Receipt generation for proxied LLM requests
  */
 
-import type { Provider, Receipt } from './types';
+import type { Provider, Receipt, ReceiptBinding } from './types';
 import { sha256, signEd25519, type Ed25519KeyPair } from './crypto';
 
 export interface ReceiptInput {
@@ -11,6 +11,8 @@ export interface ReceiptInput {
   requestBody: string;
   responseBody: string;
   startTime: number;
+  /** Optional binding fields for chaining proofs */
+  binding?: ReceiptBinding;
 }
 
 export interface SigningContext {
@@ -30,7 +32,7 @@ export async function generateReceipt(
   input: ReceiptInput,
   signingContext?: SigningContext
 ): Promise<Receipt> {
-  const { provider, model, requestBody, responseBody, startTime } = input;
+  const { provider, model, requestBody, responseBody, startTime, binding } = input;
 
   const [requestHash, responseHash] = await Promise.all([
     sha256(requestBody),
@@ -46,6 +48,20 @@ export async function generateReceipt(
     timestamp: new Date().toISOString(),
     latencyMs: Date.now() - startTime,
   };
+
+  // Add binding fields if provided (for proof chaining)
+  if (binding && (binding.runId || binding.eventHash || binding.nonce)) {
+    receipt.binding = {};
+    if (binding.runId) {
+      receipt.binding.runId = binding.runId;
+    }
+    if (binding.eventHash) {
+      receipt.binding.eventHash = binding.eventHash;
+    }
+    if (binding.nonce) {
+      receipt.binding.nonce = binding.nonce;
+    }
+  }
 
   // Sign receipt if signing context is provided
   if (signingContext) {
@@ -69,7 +85,8 @@ export async function generateReceipt(
  */
 export function createSigningPayload(receipt: Receipt): string {
   // Create payload with fields in deterministic order
-  const payload = {
+  // Note: binding fields are included when present to ensure they're signed
+  const payload: Record<string, unknown> = {
     version: receipt.version,
     proxyDid: receipt.proxyDid,
     provider: receipt.provider,
@@ -80,6 +97,11 @@ export function createSigningPayload(receipt: Receipt): string {
     latencyMs: receipt.latencyMs,
     kid: receipt.kid,
   };
+
+  // Include binding in signing payload if present (ensures binding is tamper-proof)
+  if (receipt.binding) {
+    payload.binding = receipt.binding;
+  }
 
   return JSON.stringify(payload);
 }
