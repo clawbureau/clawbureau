@@ -69,6 +69,42 @@ function errorResponse(message: string, status: number = 400): Response {
   return jsonResponse({ error: message }, status);
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeXml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function textResponse(
+  body: string,
+  contentType: string,
+  status = 200
+): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      'Content-Type': contentType,
+      'X-Clawverify-Version': '1',
+    },
+  });
+}
+
+function htmlResponse(html: string, status = 200): Response {
+  return textResponse(html, 'text/html; charset=utf-8', status);
+}
+
 /**
  * Handle POST /v1/verify - Verify artifact signatures
  */
@@ -756,6 +792,162 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
+
+    // CVF-US-014: Public landing + skill docs
+    if (method === 'GET') {
+      if (url.pathname === '/') {
+        return htmlResponse(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>clawverify</title>
+  </head>
+  <body>
+    <main style="max-width: 820px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5;">
+      <h1>clawverify</h1>
+      <p>Universal signature verification API for artifacts, messages, receipts, and attestations.</p>
+      <ul>
+        <li><a href="/docs">Docs</a></li>
+        <li><a href="/skill.md">OpenClaw skill</a></li>
+        <li><a href="/v1/schemas">Schema registry</a></li>
+        <li><a href="/v1/schemas/allowlist">Schema allowlist</a></li>
+      </ul>
+      <p><small>Environment: ${escapeHtml(env.ENVIRONMENT)}</small></p>
+    </main>
+  </body>
+</html>`);
+      }
+
+      if (url.pathname === '/docs') {
+        const origin = url.origin;
+        return htmlResponse(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>clawverify docs</title>
+  </head>
+  <body>
+    <main style="max-width: 820px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5;">
+      <h1>clawverify docs</h1>
+      <p>Minimal HTTP API documentation.</p>
+
+      <h2>Core endpoints</h2>
+      <ul>
+        <li><code>POST /v1/verify</code> — artifact_signature verification</li>
+        <li><code>POST /v1/verify/message</code> — message_signature verification</li>
+        <li><code>POST /v1/verify/receipt</code> — gateway_receipt verification</li>
+        <li><code>POST /v1/verify/owner-attestation</code> — owner_attestation verification</li>
+        <li><code>POST /v1/verify/commit-proof</code> — commit_proof verification</li>
+        <li><code>POST /v1/verify/batch</code> — batch verification</li>
+        <li><code>POST /v1/verify/bundle</code> — proof bundle verification (trust tier)</li>
+        <li><code>POST /v1/verify/event-chain</code> — event chain verification</li>
+        <li><code>POST /v1/verify/agent</code> — one-call agent verification</li>
+        <li><code>POST /v1/introspect/scoped-token</code> — scoped token introspection</li>
+      </ul>
+
+      <h2>Schema registry</h2>
+      <ul>
+        <li><code>GET /v1/schemas</code></li>
+        <li><code>GET /v1/schemas/allowlist</code></li>
+        <li><code>GET /v1/schemas/:id</code></li>
+        <li><code>GET /v1/schemas/:id/example</code></li>
+      </ul>
+
+      <h2>Quick start</h2>
+      <pre>curl -sS -X POST "${escapeHtml(origin)}/v1/verify/message" \
+  -H "Content-Type: application/json" \
+  -d '{"envelope":{}}'</pre>
+
+      <p>See also: <a href="/skill.md">/skill.md</a></p>
+    </main>
+  </body>
+</html>`);
+      }
+
+      if (url.pathname === '/skill.md') {
+        const metadata = {
+          name: 'clawverify',
+          version: '1',
+          description:
+            'Universal signature verification API for artifacts, messages, receipts, and attestations.',
+          endpoints: [
+            { method: 'POST', path: '/v1/verify' },
+            { method: 'POST', path: '/v1/verify/message' },
+            { method: 'POST', path: '/v1/verify/receipt' },
+            { method: 'POST', path: '/v1/verify/owner-attestation' },
+            { method: 'POST', path: '/v1/verify/commit-proof' },
+            { method: 'POST', path: '/v1/verify/batch' },
+            { method: 'POST', path: '/v1/verify/bundle' },
+            { method: 'POST', path: '/v1/verify/event-chain' },
+            { method: 'POST', path: '/v1/verify/agent' },
+            { method: 'POST', path: '/v1/introspect/scoped-token' },
+            { method: 'GET', path: '/v1/schemas' },
+            { method: 'GET', path: '/v1/schemas/allowlist' },
+          ],
+        };
+
+        const md = `---
+metadata: '${JSON.stringify(metadata)}'
+---
+
+# clawverify
+
+Verification API for signed envelopes.
+
+## Example: verify a message envelope
+
+\`POST /v1/verify/message\`
+
+\`\`\`bash
+curl -sS -X POST "${url.origin}/v1/verify/message" \\
+  -H "Content-Type: application/json" \\
+  -d '{"envelope":{}}'
+\`\`\`
+
+## Schema registry
+
+Use the schema registry to discover allowlisted schema IDs and example payloads:
+
+- GET /v1/schemas
+- GET /v1/schemas/allowlist
+- GET /v1/schemas/:id/example
+`;
+
+        return textResponse(md, 'text/markdown; charset=utf-8', 200);
+      }
+
+      if (url.pathname === '/robots.txt') {
+        const txt = `User-agent: *
+Allow: /
+Sitemap: ${url.origin}/sitemap.xml
+`;
+        return textResponse(txt, 'text/plain; charset=utf-8', 200);
+      }
+
+      if (url.pathname === '/sitemap.xml') {
+        const base = url.origin;
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${escapeXml(base)}/</loc></url>
+  <url><loc>${escapeXml(base)}/docs</loc></url>
+  <url><loc>${escapeXml(base)}/skill.md</loc></url>
+</urlset>
+`;
+        return textResponse(xml, 'application/xml; charset=utf-8', 200);
+      }
+
+      if (url.pathname === '/.well-known/security.txt') {
+        const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+        const txt = `Contact: mailto:security@clawverify.com
+Preferred-Languages: en
+Expires: ${expires}
+Canonical: ${url.origin}/.well-known/security.txt
+`;
+        return textResponse(txt, 'text/plain; charset=utf-8', 200);
+      }
+    }
 
     // Health check
     if (url.pathname === '/health' && method === 'GET') {

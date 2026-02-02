@@ -199,8 +199,8 @@
         "Typecheck passes"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added public endpoints to clawverify worker: GET /, /docs, /skill.md (OpenClaw frontmatter with metadata as single-line JSON object string), /robots.txt, /sitemap.xml, and /.well-known/security.txt."
     }
   ]
 }

@@ -219,3 +219,20 @@ Started: 2026-02-02T03:08:26.937416
 - **Learnings for future iterations:**
   - For introspection flows, use the payload hash as the stable “token hash” so services can correlate without storing raw tokens.
 ---
+
+## 2026-02-02T05:40:45Z - CVF-US-014
+- What was implemented
+  - Public developer endpoints:
+    - GET / (HTML landing linking to /docs and /skill.md)
+    - GET /docs (minimal human-readable HTML docs)
+    - GET /skill.md (OpenClaw-compatible skill file)
+      - Frontmatter requirement: `metadata` is a single-line JSON object string
+    - GET /robots.txt and GET /sitemap.xml (minimal)
+    - GET /.well-known/security.txt
+- Files changed
+  - services/clawverify/src/index.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/clawverify && npm run typecheck && npm run lint
+---
