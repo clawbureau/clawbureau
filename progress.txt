@@ -1,0 +1,161 @@
+## Codebase Patterns
+- Use Zod for runtime validation of all schemas
+- TypeScript types are derived from Zod schemas using `z.infer<>`
+- Service clients implement interfaces for testability (EscrowService, FeeService, EligibilityService)
+- JSON schemas in packages/schema/ follow the naming pattern: `{entity}.v{version}.json`
+- Actions take a deps object for dependency injection (repository, services)
+- Use `crypto.randomUUID()` for ID generation (works in modern runtimes)
+- tsconfig needs `lib: ["ES2022", "DOM"]` for fetch/AbortController support
+- BountyRepository interface is shared across actions via types/repository.ts (avoid duplicate interfaces)
+- Stake rules are tier-based: higher trust = lower stake; use STAKE_RULES constant for percentages
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.937005
+---
+
+## 2026-02-02 - CBT-US-001
+- **What was implemented:** Post bounty action with escrow hold integration
+- **Files changed:**
+  - packages/schema/bounties/bounty.v1.json - Main bounty schema
+  - packages/schema/bounties/post_bounty_request.v1.json - API request schema
+  - packages/schema/bounties/post_bounty_response.v1.json - API response schema
+  - packages/schema/bounties/escrow_hold_request.v1.json - Escrow integration schema
+  - packages/bounties/src/types/*.ts - TypeScript types with Zod validation
+  - packages/bounties/src/actions/postBounty.ts - Main action implementation
+  - packages/bounties/src/services/*.ts - Escrow and fee service clients
+- **Learnings for future iterations:**
+  - The codebase follows a schema-first approach: define JSON schema, then derive TS types
+  - Escrow integration requires idempotency keys with `escrow:` prefix
+  - Fee calculation happens before escrow hold to show all-in cost
+  - BountyRepository interface allows persistence layer to be swapped
+  - Closure type "test" requires test_harness_id (validated via Zod refinement)
+---
+
+## 2026-02-02 - CBT-US-002
+- **What was implemented:** Accept bounty action with eligibility checking
+- **Files changed:**
+  - packages/bounties/src/types/bounty.ts - Added AcceptBountyRequest/Response, AcceptanceReceipt schemas
+  - packages/bounties/src/types/eligibility.ts - EligibilityCheckRequest/Response schemas for clawtrust
+  - packages/bounties/src/types/repository.ts - Shared BountyRepository interface
+  - packages/bounties/src/actions/acceptBounty.ts - Main action implementation
+  - packages/bounties/src/services/eligibilityClient.ts - HTTP client for clawtrust
+  - packages/bounties/src/actions/postBounty.ts - Refactored to use shared repository
+- **Learnings for future iterations:**
+  - BountyRepository interface was duplicated in postBounty.ts; moved to shared types/repository.ts
+  - EligibilityService checks PoH tier via clawtrust with simple is_eligible boolean
+  - AcceptanceReceipt captures bounty snapshot (title, reward, difficulty_scalar, closure_type) at acceptance time
+  - Bounty status transitions: open -> accepted (with accepted_at, accepted_by fields)
+  - min_poh_tier defaults to 0 (no requirement) if not set on bounty
+---
+
+## 2026-02-02 - CBT-US-003
+- **What was implemented:** Submit work action with signature envelope and proof bundle
+- **Files changed:**
+  - packages/bounties/src/types/bounty.ts - Added SignatureEnvelope, ProofBundle, Submission, SubmitWorkRequest/Response schemas
+  - packages/bounties/src/types/repository.ts - Added findSubmissionByIdempotencyKey and saveSubmission methods
+  - packages/bounties/src/actions/submitWork.ts - Main action implementation
+  - packages/bounties/src/actions/index.ts - Export new action
+- **Learnings for future iterations:**
+  - SignatureEnvelope requires signer_did matching the agent context for verification
+  - ProofBundle uses sha256 hash algorithm (required literal, not flexible)
+  - Bounty status transitions: accepted -> pending_review (on submission)
+  - Only the agent who accepted the bounty (bounty.accepted_by) can submit work
+  - Submission records store both the output and cryptographic proof references
+---
+
+## 2026-02-02 - CBT-US-004
+- **What was implemented:** Test-based auto-approval action for bounties with test closure type
+- **Files changed:**
+  - packages/bounties/src/types/testHarness.ts - TestHarnessService interface, RunTestHarnessRequest/Response schemas
+  - packages/bounties/src/services/testHarnessClient.ts - HTTP client for test harness service
+  - packages/bounties/src/types/bounty.ts - Added TestResult, AutoApproveRequest/Response schemas
+  - packages/bounties/src/types/repository.ts - Added findSubmissionById and saveTestResult methods
+  - packages/bounties/src/actions/autoApprove.ts - Main action implementation
+  - packages/bounties/src/types/index.ts - Export testHarness types
+  - packages/bounties/src/services/index.ts - Export testHarnessClient
+  - packages/bounties/src/actions/index.ts - Export autoApprove action
+- **Learnings for future iterations:**
+  - TestHarnessService follows same HTTP client pattern as other services (EscrowClient, FeeClient)
+  - autoApprove requires bounty closure_type="test" and test_harness_id to be set
+  - Bounty status transitions: pending_review -> approved (if tests pass) or rejected (if tests fail)
+  - TestResult stores test execution summary (total/passed/failed tests, execution time)
+  - Repository needs findSubmissionById to look up submissions for approval
+---
+
+## 2026-02-02 - CBT-US-005
+- **What was implemented:** Quorum review system for bounties with quorum-based closure type
+- **Files changed:**
+  - packages/bounties/src/types/quorum.ts - ReviewerVote, QuorumState, InitiateQuorum/CastVote/FinalizeQuorum request/response schemas
+  - packages/bounties/src/types/repository.ts - Added quorum persistence methods (saveQuorumState, findQuorumStateById, etc.)
+  - packages/bounties/src/services/reviewerClient.ts - HTTP client for clawrep reviewer service
+  - packages/bounties/src/actions/quorumReview.ts - Main actions: initiateQuorum, castVote, finalizeQuorum
+  - packages/bounties/src/types/index.ts - Export quorum types
+  - packages/bounties/src/services/index.ts - Export reviewerClient
+  - packages/bounties/src/actions/index.ts - Export quorumReview actions
+- **Learnings for future iterations:**
+  - ReviewerService selects reviewers by reputation, excluding requester and worker DIDs
+  - QuorumState tracks selected reviewers, collected votes, and quorum progress
+  - Majority threshold for quorum: Math.ceil(required_votes / 2)
+  - Bounty status transitions: pending_review -> approved/rejected (on quorum reached)
+  - Votes are signed with DID signature envelopes (same pattern as submissions)
+  - Owner-verified voting is optional (bounty.require_owner_verified_votes)
+  - Each reviewer can only vote once (checked via findVoteByReviewerAndSubmission)
+---
+
+## 2026-02-02 - CBT-US-006
+- **What was implemented:** Bounty search action with filtering, sorting, and pagination
+- **Files changed:**
+  - packages/bounties/src/types/bounty.ts - Added BountySortField, SortDirection, SearchBountiesRequest/Response, TrustRequirements, BountyListing schemas
+  - packages/bounties/src/types/repository.ts - Added BountySearchFilters, BountySearchOptions, BountySearchResult interfaces and search() method
+  - packages/bounties/src/actions/searchBounties.ts - Main action implementation
+  - packages/bounties/src/actions/index.ts - Export searchBounties action
+- **Learnings for future iterations:**
+  - Search types (filters, sort, pagination) added to bounty.ts; repository-specific interfaces in repository.ts
+  - BountyListing includes TrustRequirements (min_poh_tier, require_owner_verified_votes) for agent decision-making
+  - Repository.search() takes BountySearchOptions with filters, sorting, and pagination params
+  - Default sort by created_at desc, page_size 20, max page_size 100
+  - Filter by tags checks if bounty has at least one matching tag (implemented by repository)
+---
+
+## 2026-02-02 - CBT-US-007
+- **What was implemented:** Dispute handling system for rejected bounties
+- **Files changed:**
+  - packages/bounties/src/types/dispute.ts - Dispute, OpenDisputeRequest/Response, RouteToTrialsRequest/Response, FreezePayoutRequest/Response, TrialsService interface
+  - packages/bounties/src/types/escrow.ts - Added EscrowFreezeRequest/Response schemas and freezeHold method to EscrowService
+  - packages/bounties/src/types/repository.ts - Added dispute persistence methods (saveDispute, findDisputeById, findDisputeBySubmissionId, etc.)
+  - packages/bounties/src/services/trialsClient.ts - HTTP client for clawtrial service
+  - packages/bounties/src/services/escrowClient.ts - Added freezeHold implementation
+  - packages/bounties/src/actions/dispute.ts - Main actions: openDispute, routeToTrials, freezePayout
+  - packages/bounties/src/types/index.ts - Export dispute types
+  - packages/bounties/src/services/index.ts - Export trialsClient
+  - packages/bounties/src/actions/index.ts - Export dispute actions
+- **Learnings for future iterations:**
+  - Disputes can only be opened on bounties with status "rejected"
+  - Only the agent who submitted the work can open a dispute
+  - openDispute automatically freezes escrow payout via escrowService.freezeHold()
+  - Bounty status transitions: rejected -> disputed (on dispute open)
+  - TrialsService follows same HTTP client pattern as other services
+  - DisputeReason enum provides structured reasons: unfair_rejection, incorrect_test_results, quorum_manipulation, scope_disagreement, other
+  - Dispute record stores signature envelope for non-repudiation
+---
+
+## 2026-02-02 - CBT-US-008
+- **What was implemented:** Stake requirements system for bad-faith behavior deterrence
+- **Files changed:**
+  - packages/bounties/src/types/stake.ts - StakeRequirement, StakeHold, StakeService interface, calculateStakeAmount function, STAKE_RULES config
+  - packages/bounties/src/services/stakeClient.ts - HTTP client for ledger bonded bucket operations (lockStake, releaseStake, slashStake)
+  - packages/bounties/src/actions/stake.ts - Main actions: calculateStake, lockBountyStakes, releaseBountyStakes, resolveStakesForTrial
+  - packages/bounties/src/types/repository.ts - Added stake persistence methods (saveStake, findStakeById, findStakesByBountyId, findStakeByIdempotencyKey)
+  - packages/bounties/src/types/index.ts - Export stake types
+  - packages/bounties/src/services/index.ts - Export stakeClient
+  - packages/bounties/src/actions/index.ts - Export stake actions
+- **Learnings for future iterations:**
+  - Stake percentages scale with trust tier (higher tier = lower stake requirement)
+  - Worker stakes: Tier 0 = 25%, Tier 5 = 0%; Requester stakes: Tier 0 = 15%, Tier 5 = 0%
+  - StakeService interacts with ledger bonded bucket for lock/release/slash operations
+  - Trial outcomes determine stake disposition: approve = slash requester/release worker, reject = slash worker/release requester, split = 50% slash for both
+  - StakeHold tracks ledger_tx_id for audit trail
+  - StakeClient can optionally use EligibilityService for trust tier lookups
+  - Minimum stake amounts enforced (10 CLAW, 5 USD) to prevent trivially low stakes
+  - Maximum stake cap at 50% of bounty to prevent excessive stake requirements
+---
