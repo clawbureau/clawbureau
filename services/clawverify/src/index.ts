@@ -666,9 +666,16 @@ async function handleInitAuditLog(env: Env): Promise<Response> {
     return errorResponse('Audit log not configured', 503);
   }
 
-  await initAuditLogSchema(env.AUDIT_LOG_DB);
-
-  return jsonResponse({ status: 'initialized' }, 200);
+  try {
+    await initAuditLogSchema(env.AUDIT_LOG_DB);
+    return jsonResponse({ status: 'initialized' }, 200);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    // Avoid crashing the worker (1101) when D1 isn't ready / schema SQL fails.
+    // We still want the caller to get a debuggable error.
+    console.error('audit_log_init_failed', message);
+    return jsonResponse({ error: 'audit_log_init_failed', message }, 500);
+  }
 }
 
 /**
