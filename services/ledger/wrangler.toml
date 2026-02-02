@@ -1,0 +1,28 @@
+name = "ledger"
+main = "src/index.ts"
+compatibility_date = "2024-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [
+  { name = "ACCOUNT_DO", class_name = "AccountDurableObject" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["AccountDurableObject"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ledger"
+database_id = "placeholder"
+
+# Scheduled triggers for nightly reconciliation
+# Runs at 2:00 AM UTC daily
+[triggers]
+crons = ["0 2 * * *"]
+
+# Optional: Environment variables for webhooks
+# [vars]
+# ALERT_WEBHOOK_URL = "https://your-webhook-endpoint.com/alerts"
+# EVENT_WEBHOOK_URL = "https://your-webhook-endpoint.com/events"

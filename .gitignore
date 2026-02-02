@@ -12,6 +12,8 @@ node_modules
 .last-branch
 ralph.out
 ralph.pid
+fleet.out
+fleet*.out
 archive/
 
 # locks (prefer pnpm/yarn if needed; avoid committing npm locks from agent runs)

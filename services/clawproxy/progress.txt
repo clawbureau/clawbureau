@@ -1,0 +1,291 @@
+## Codebase Patterns
+- Services live in `services/<service-name>/` with Cloudflare Worker structure
+- Use wrangler.toml for Worker config, tsconfig.json with strict mode
+- Package naming: @clawbureau/<service-name>
+- Receipt hashes use SHA-256 hex encoding
+- Types exported from `src/types.ts`, providers from `src/providers.ts`
+- Security events use structured logging via `src/logging.ts` with [SECURITY] prefix
+- Rate limiting uses Cloudflare Workers Rate Limiting binding (PROXY_RATE_LIMITER)
+- Rate limit key preference: X-Client-DID header > CF-Connecting-IP (IP address)
+- CST auth: when X-Client-DID is set, require X-CST (or X-Scoped-Token) and validate as EdDSA JWT (aud/exp/scope) before processing
+- Receipt binding via X-Run-Id, X-Event-Hash, X-Idempotency-Key headers (idempotency.ts)
+- WPC enforcement via X-Confidential-Mode and X-Policy-Hash headers (policy.ts)
+- Policy violations return 403 with POLICY_* error codes
+- Receipt privacy via X-Receipt-Privacy-Mode header (hash_only default, encrypted optional)
+- AES-256-GCM encryption uses Web Crypto with 12-byte IV and 128-bit tag
+- Encrypted mode blocked in confidential mode to protect prompts
+
+# Ralph Progress Log
+Started: 2026-02-02T03:08:26.937763
+---
+
+## 2026-02-02 - CPX-US-001
+- Implemented clawproxy Cloudflare Worker foundation
+- Created POST /v1/proxy/:provider endpoint routing to Anthropic/OpenAI
+- Added receipt generation with SHA-256 hashes of request/response bodies
+- Files created:
+  - services/clawproxy/package.json
+  - services/clawproxy/wrangler.toml
+  - services/clawproxy/tsconfig.json
+  - services/clawproxy/src/index.ts (main entry)
+  - services/clawproxy/src/types.ts (Receipt, Provider types)
+  - services/clawproxy/src/providers.ts (Anthropic/OpenAI routing)
+  - services/clawproxy/src/receipt.ts (receipt generation)
+  - services/clawproxy/src/crypto.ts (SHA-256 hashing)
+- **Learnings for future iterations:**
+  - Receipt version is '1.0' with fields: version, provider, model, requestHash, responseHash, timestamp, latencyMs
+  - Provider allowlist is hardcoded in providers.ts for SSRF prevention
+  - Authorization header supports both "Bearer <key>" and raw key formats
+  - Typecheck: `npm run typecheck` in services/clawproxy/
+---
+
+## 2026-02-02 - CPX-US-002
+- Implemented Ed25519 receipt signing for cryptographically verifiable receipts
+- Added GET /v1/did endpoint to expose proxy DID + public key for verification
+- All proxy requests now fail closed (503) if PROXY_SIGNING_KEY is not configured
+- Files modified:
+  - services/clawproxy/src/types.ts (added DidResponse interface)
+  - services/clawproxy/src/crypto.ts (added Ed25519 import/sign/verify functions, computeKeyId)
+  - services/clawproxy/src/receipt.ts (added SigningContext, signing support in generateReceipt)
+  - services/clawproxy/src/index.ts (added /v1/did endpoint, fail-closed logic, signing integration)
+- **Learnings for future iterations:**
+  - Ed25519 keys stored as base64url-encoded raw 32-byte seed in PROXY_SIGNING_KEY secret
+  - PKCS8 wrapping is required for Web Crypto API Ed25519 import (16-byte header prepended to seed)
+  - DID format: did:web:clawproxy.com with kid as truncated SHA-256 hash of public key
+  - Receipt signature covers JSON-serialized payload excluding signature field
+  - Signing context is cached at module level after first request
+  - Cache-Control: public, max-age=3600 set on /v1/did responses
+---
+
+## 2026-02-02 - CPX-US-003
+- Implemented structured security logging for blocked provider attempts
+- Added logging.ts with SecurityEvent types and logBlockedProvider function
+- Provider validation now logs BLOCKED_UNKNOWN_PROVIDER events with client IP, user agent, and attempted provider
+- Added getSupportedProviders() helper for dynamic error messages
+- Files created:
+  - services/clawproxy/src/logging.ts (security event logging)
+- Files modified:
+  - services/clawproxy/src/index.ts (integrated logging, improved error messages)
+  - services/clawproxy/src/providers.ts (added getSupportedProviders helper)
+- **Learnings for future iterations:**
+  - Security events use console.warn with [SECURITY] prefix for Cloudflare Workers observability
+  - Client IP available via CF-Connecting-IP header in Cloudflare Workers
+  - Structured JSON logging enables filtering/querying in observability tools
+  - Keep security logging functions separate in logging.ts for reuse
+---
+
+## 2026-02-02 - CPX-US-004
+- Added Google Gemini provider support to clawproxy
+- Implemented dynamic URL building for Gemini's model-in-path requirement
+- Added model validation for Google provider (required for URL construction)
+- Files modified:
+  - services/clawproxy/src/types.ts (added 'google' to Provider union type)
+  - services/clawproxy/src/providers.ts (added Google config, buildProviderUrl function)
+  - services/clawproxy/src/index.ts (integrated buildProviderUrl, added Google model validation)
+- **Learnings for future iterations:**
+  - Gemini API uses `x-goog-api-key` header for authentication (not Bearer token)
+  - Gemini URL format: `models/{model}:generateContent` - model is path param, not body-only
+  - Use buildProviderUrl() for all providers; returns static URL for most, dynamic for Google
+  - Gemini responses include `usageMetadata` field automatically passed through
+---
+
+## 2026-02-02 - CPX-US-005
+- Implemented POST /v1/verify-receipt endpoint for validating receipt signatures
+- Added VerifyReceiptRequest and VerifyReceiptResponse types
+- Validates receipt structure, proxyDid match, kid match, and Ed25519 signature
+- Returns provider/model claims on successful verification
+- Files modified:
+  - services/clawproxy/src/types.ts (added VerifyReceiptRequest, VerifyReceiptResponse interfaces)
+  - services/clawproxy/src/crypto.ts (added importEd25519PublicKey for SPKI format import)
+  - services/clawproxy/src/index.ts (added /v1/verify-receipt route, handleVerifyReceipt handler, validateReceiptStructure helper)
+- **Learnings for future iterations:**
+  - Receipt verification uses the cached signing context's public key (same key used for signing)
+  - createSigningPayload() from receipt.ts produces deterministic JSON for verification
+  - SPKI format needed for importing raw Ed25519 public keys (12-byte header + 32-byte key)
+  - Verification response distinguishes between structural errors and signature failures
+  - Provider/model claims only returned when signature is valid
+---
+
+## 2026-02-02 - CPX-US-006
+- Implemented rate limiting using Cloudflare Workers Rate Limiting binding
+- Rate limits by DID (X-Client-DID header) or IP address (CF-Connecting-IP fallback)
+- Returns 429 with Retry-After header when rate limit exceeded
+- All proxy responses now include X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers
+- Files created:
+  - services/clawproxy/src/ratelimit.ts (rate limiting logic, key extraction, header builders)
+- Files modified:
+  - services/clawproxy/src/types.ts (added RateLimit, RateLimitOutcome interfaces, PROXY_RATE_LIMITER binding)
+  - services/clawproxy/src/logging.ts (added RATE_LIMITED security event type, logRateLimited function)
+  - services/clawproxy/src/index.ts (integrated rate limiting, added rate limit headers to all responses)
+  - services/clawproxy/wrangler.toml (added ratelimits binding configuration)
+- **Learnings for future iterations:**
+  - Cloudflare Rate Limiting period must be 10 or 60 seconds
+  - Rate limiting fails open (allows request) if binding is unavailable or errors
+  - X-Client-DID header allows agents to be rate limited by identity rather than shared IP
+  - Cloudflare doesn't expose exact remaining count; we estimate based on success/failure
+  - namespace_id in wrangler.toml is a unique positive integer per account
+---
+
+## 2026-02-02 - CPX-US-007
+- Implemented receipt binding fields for proof chaining
+- Accept X-Run-Id, X-Event-Hash, X-Idempotency-Key headers to bind receipts to runs/events
+- Added ReceiptBinding type with runId, eventHash, nonce fields
+- Binding fields are embedded in receipt and included in signed payload
+- Implemented idempotency enforcement using in-memory nonce cache
+- Duplicate requests with same nonce return previously issued receipt
+- Files created:
+  - services/clawproxy/src/idempotency.ts (binding header extraction, idempotency cache)
+- Files modified:
+  - services/clawproxy/src/types.ts (added ReceiptBinding interface, added binding to Receipt and VerifyReceiptResponse)
+  - services/clawproxy/src/receipt.ts (added binding to ReceiptInput, updated generateReceipt and createSigningPayload)
+  - services/clawproxy/src/index.ts (integrated binding extraction and idempotency, return binding claims in verify)
+- **Learnings for future iterations:**
+  - Binding headers: X-Run-Id, X-Event-Hash, X-Idempotency-Key (defined in idempotency.ts BINDING_HEADERS)
+  - Binding is optional - receipts work without binding fields
+  - Binding fields are included in createSigningPayload() so they're tamper-proof
+  - In-memory nonce cache has 5-minute TTL; production should use Durable Objects or KV for distributed state
+  - Idempotency returns the complete response (with receipt), not just the receipt
+  - Nonces are recorded even for provider errors to ensure consistent idempotency behavior
+---
+
+## 2026-02-02 - CPX-US-008
+- Implemented Work Policy Contract (WPC) enforcement for enterprise confidential runs
+- Added X-Confidential-Mode and X-Policy-Hash header support
+- Enforces provider/model allowlists from WPC (returns 403 on violation)
+- Applies field redaction rules to request bodies per WPC configuration
+- Policy hash is embedded in receipt binding for verification
+- Security logging for POLICY_VIOLATION and POLICY_MISSING events
+- Files created:
+  - services/clawproxy/src/policy.ts (WPC types, parsing, enforcement, redaction)
+- Files modified:
+  - services/clawproxy/src/types.ts (added policyHash to ReceiptBinding)
+  - services/clawproxy/src/logging.ts (added POLICY_VIOLATION, POLICY_MISSING event types and helpers)
+  - services/clawproxy/src/receipt.ts (support policyHash in binding)
+  - services/clawproxy/src/index.ts (integrated policy extraction, enforcement, redaction in proxy handler)
+- **Learnings for future iterations:**
+  - WPC enforcement controlled by X-Confidential-Mode: true header
+  - In confidential mode, X-Policy-Hash is required (fails closed with 400)
+  - Policy enforcement returns 403 status (not 400) for policy violations
+  - Redaction applied to request body BEFORE sending to provider and BEFORE hashing for receipt
+  - Demo policies stored in-memory via registerDemoPolicy(); production should use policy registry
+  - Redaction supports simplified JSON path patterns: $.field, $.nested.field, $.array[*].field
+  - Redaction actions: remove (strips field), mask (replaces with [REDACTED]), hash (marker for async hash)
+  - Policy hash is signed as part of receipt binding for tamper-proof audit trail
+---
+
+## 2026-02-02 - CPX-US-009
+- Implemented hash-only and encrypted receipt modes for privacy protection
+- Default privacy mode is hash_only (only requestHash/responseHash in receipts)
+- Added X-Receipt-Privacy-Mode header to request encrypted payloads
+- Implemented AES-256-GCM encryption for optional encrypted payload receipts
+- Encrypted mode automatically blocked in confidential mode (prompts protected)
+- Added logConfidentialRequest() to log metadata without plaintext content
+- Files modified:
+  - services/clawproxy/src/types.ts (added ReceiptPrivacyMode, EncryptedPayload, PROXY_ENCRYPTION_KEY env)
+  - services/clawproxy/src/crypto.ts (added AES-256-GCM import/encrypt/decrypt functions)
+  - services/clawproxy/src/receipt.ts (added privacyMode, EncryptionContext, encrypted payloads)
+  - services/clawproxy/src/policy.ts (added privacy mode extraction and confidential mode restrictions)
+  - services/clawproxy/src/logging.ts (added CONFIDENTIAL_REQUEST event, logConfidentialRequest)
+  - services/clawproxy/src/index.ts (integrated encryption context and privacy mode)
+- **Learnings for future iterations:**
+  - Privacy mode controlled via X-Receipt-Privacy-Mode header (hash_only | encrypted)
+  - AES-256-GCM uses 12-byte IV and 16-byte tag (128-bit) per encryption
+  - Encrypted payloads stored in encryptedRequest/encryptedResponse fields of receipt
+  - In confidential mode, encrypted mode is silently downgraded to hash_only
+  - Encryption key stored as base64url-encoded 32-byte key in PROXY_ENCRYPTION_KEY
+  - Encrypted payloads are included in signing payload for tamper-proofing
+  - logConfidentialRequest() only logs provider, model, policyHash - NEVER plaintext
+---
+
+## 2026-02-02 - CPX-US-010
+- Enhanced GET /v1/did endpoint to return W3C DID Core compliant document
+- Added verificationMethod array with Ed25519VerificationKey2020 type and multibase encoding
+- Full key IDs use DID#fragment format (e.g., did:web:clawproxy.com#abc123)
+- Added @context array referencing DID Core and Ed25519 2020 specs
+- Added authentication and assertionMethod key references
+- Enhanced deployment metadata: version, signingEnabled, encryptionEnabled, runtime, region, service
+- Region extracted from request.cf.colo (Cloudflare datacenter code)
+- Added ETag header based on kid for cache validation
+- Files modified:
+  - services/clawproxy/src/types.ts (added VerificationMethod, DeploymentMetadata interfaces, updated DidResponse)
+  - services/clawproxy/src/index.ts (enhanced handleDidEndpoint to build DID document format)
+- **Learnings for future iterations:**
+  - W3C DID documents use @context, id, verificationMethod, authentication, assertionMethod structure
+  - Ed25519 public keys use Ed25519VerificationKey2020 type with publicKeyMultibase encoding
+  - Multibase format for base64url uses 'u' prefix before the encoded data
+  - Cloudflare request.cf.colo provides datacenter code (e.g., SJC, IAD)
+  - ETag header enables conditional requests (If-None-Match) for cache validation
+---
+
+## 2026-02-02T04:29:30Z - CPX-US-011
+- Implemented scoped token (CST) authentication for proxy calls:
+  - If X-Client-DID is present, require X-CST (or X-Scoped-Token)
+  - Validate CST as EdDSA JWT (claims schema v1): audience, expiry, and required scope
+  - Verify signature using configured CST_ISSUER_PUBLIC_KEY (fail-closed if missing)
+  - Log token SHA-256 hash alongside receipt metadata (provider/model + receipt.requestHash + timestamp)
+- Files changed:
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/src/scoped-token.ts
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/logging.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - With noUncheckedIndexedAccess enabled, avoid destructuring array indices without non-null assertions
+  - Keep token logging hash-only and include only receipt hashes/metadata to preserve confidentiality guarantees
+---
+
+## 2026-02-02T04:39:08Z - CPX-US-012
+- Implemented token/policy binding in receipts:
+  - Added receipt.binding.tokenScopeHashB64u populated from CST claim token_scope_hash_b64u
+  - Ensured policyHash continues to be embedded in receipt binding when present
+  - Fail-closed if CST is provided but token_scope_hash_b64u claim is missing/empty
+- Files changed:
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/src/receipt.ts
+  - services/clawproxy/src/index.ts
+  - prd.json
+  - progress.txt
+- **Learnings for future iterations:**
+  - Put provable authorization artifacts (token scope hash / policy hash) into signed receipt.binding so verifiers can audit authorization decisions
+---
+
+## 2026-02-02T05:12:59Z - CPX-US-013
+- What was implemented
+  - Added platform-paid inference mode (reserve-backed):
+    - If Authorization is present -> user-paid mode
+    - If Authorization is missing -> platform-paid mode when PLATFORM_PAID_ENABLED=true
+    - Platform-paid uses provider-specific platform API keys (PLATFORM_ANTHROPIC_API_KEY / PLATFORM_OPENAI_API_KEY / PLATFORM_GOOGLE_API_KEY)
+    - Platform-paid requires X-Client-DID (so CST auth applies) to keep spend attributable
+  - Receipts now include payment attribution:
+    - payment.mode = user|platform
+    - payment.paid boolean
+    - payment.ledgerRef for platform-paid receipts
+  - /v1/verify-receipt now returns payment claims when present
+- Files changed
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/receipt.ts
+  - services/clawproxy/src/types.ts
+  - prd.json
+  - progress.txt
+- Quality
+  - cd services/clawproxy && npm run typecheck
+---
+
+## 2026-02-02T05:32:14Z - CPX-US-014
+- What was implemented
+  - Public developer endpoints:
+    - GET / (HTML landing with links to /docs and /skill.md)
+    - GET /docs (minimal human-readable HTML docs)
+    - GET /skill.md (OpenClaw-compatible skill file)
+    - GET /robots.txt and GET /sitemap.xml (minimal)
+    - GET /.well-known/security.txt
+  - OpenClaw frontmatter:
+    - `metadata` is a single-line JSON object string
+- Files changed
+  - services/clawproxy/src/index.ts
+  - prd.json
+  - progress.txt
+- Quality checks
+  - cd services/clawproxy && npm run typecheck
+---
