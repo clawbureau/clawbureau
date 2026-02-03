@@ -1,36 +1,531 @@
 /**
- * clawescrow.com — public landing/docs/skill endpoints
- * CES-US-007
+ * clawescrow.com worker
  *
- * This worker is intentionally minimal: it exists to make the service discoverable
- * (docs + OpenClaw skill file), not to expose the full escrow API.
+ * - Public discovery endpoints (landing/docs/skill/robots/sitemap/security/health)
+ * - Admin-gated escrow API (Agent Economy MVP)
  */
 
-function htmlResponse(body: string, status = 200): Response {
-  return new Response(body, {
-    status,
+export interface Env {
+  ESCROW_VERSION: string;
+
+  /** Admin key required for all non-public endpoints. Set via `wrangler secret put`. */
+  ESCROW_ADMIN_KEY?: string;
+
+  /** Used to call clawledger. Set via `wrangler secret put`. */
+  LEDGER_ADMIN_KEY?: string;
+
+  /** Defaults to https://clawledger.com (set in wrangler vars). */
+  LEDGER_BASE_URL?: string;
+
+  /** Clearing account domain for fee pool transfers (defaults to clawcuts). */
+  FEE_CLEARING_DOMAIN?: string;
+
+  /** D1 database binding */
+  ESCROW_DB: D1Database;
+}
+
+type EscrowStatus = 'held' | 'released' | 'frozen' | 'cancelled';
+
+type FeePayer = 'buyer' | 'worker';
+
+interface FeeItem {
+  kind: string;
+  payer: FeePayer;
+  amount_minor: string;
+  rate_bps: number;
+  min_fee_minor: string;
+  floor_applied: boolean;
+}
+
+interface FeeQuoteSnapshot {
+  policy_id: string;
+  policy_version: string;
+  policy_hash_b64u: string;
+  buyer_total_minor: string;
+  worker_net_minor: string;
+  fees: FeeItem[];
+}
+
+interface CreateEscrowResponseBody {
+  escrow_id: string;
+  status: 'held';
+  held_amount_minor: string;
+  dispute_window_ends_at: string;
+  ledger_refs: {
+    hold_transfer: string;
+  };
+}
+
+interface AssignEscrowResponseBody {
+  escrow_id: string;
+  status: EscrowStatus;
+  worker_did: string;
+}
+
+interface ReleaseEscrowResponseBody {
+  escrow_id: string;
+  status: 'released';
+  ledger_refs: {
+    worker_transfer: string;
+    fee_transfers: string[];
+  };
+}
+
+interface DisputeEscrowResponseBody {
+  escrow_id: string;
+  status: 'frozen';
+  dispute_window_ends_at: string;
+}
+
+interface EscrowRecord {
+  escrow_id: string;
+  create_idempotency_key: string;
+  buyer_did: string;
+  worker_did: string | null;
+  currency: 'USD';
+  amount_minor: string;
+  buyer_total_minor: string;
+  worker_net_minor: string;
+  fee_quote: FeeQuoteSnapshot;
+  metadata: Record<string, unknown> | null;
+  status: EscrowStatus;
+  created_at: string;
+  updated_at: string;
+  held_at: string;
+  released_at: string | null;
+  dispute_window_seconds: number;
+  dispute_window_ends_at: string;
+  ledger_hold_event_id: string;
+  ledger_worker_event_id: string | null;
+  ledger_fee_event_ids: string[];
+  assign_idempotency_key: string | null;
+  release_idempotency_key: string | null;
+  dispute_idempotency_key: string | null;
+  verification: Record<string, unknown> | null;
+  dispute: Record<string, unknown> | null;
+}
+
+function jsonResponse(body: unknown, status = 200, version?: string): Response {
+  const headers = new Headers();
+  headers.set('content-type', 'application/json; charset=utf-8');
+  if (version) headers.set('X-Escrow-Version', version);
+  return new Response(JSON.stringify(body, null, 2), { status, headers });
+}
+
+function textResponse(body: string, contentType: string, status = 200, version?: string): Response {
+  const headers = new Headers();
+  headers.set('content-type', contentType);
+  headers.set('cache-control', 'public, max-age=300');
+  if (version) headers.set('X-Escrow-Version', version);
+  return new Response(body, { status, headers });
+}
+
+function htmlResponse(body: string, status = 200, version?: string): Response {
+  return textResponse(body, 'text/html; charset=utf-8', status, version);
+}
+
+function errorResponse(code: string, message: string, status = 400, details?: Record<string, unknown>, version?: string): Response {
+  return jsonResponse({ error: code, message, details }, status, version);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function parsePositiveMinor(input: unknown): bigint | null {
+  if (typeof input !== 'string') return null;
+  const s = input.trim();
+  if (!/^[0-9]+$/.test(s)) return null;
+  try {
+    const n = BigInt(s);
+    if (n <= 0n) return null;
+    return n;
+  } catch {
+    return null;
+  }
+}
+
+function parseNonNegativeMinor(input: unknown): bigint | null {
+  if (typeof input !== 'string') return null;
+  const s = input.trim();
+  if (!/^[0-9]+$/.test(s)) return null;
+  try {
+    const n = BigInt(s);
+    if (n < 0n) return null;
+    return n;
+  } catch {
+    return null;
+  }
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function addSeconds(iso: string, seconds: number): string {
+  const base = new Date(iso);
+  return new Date(base.getTime() + seconds * 1000).toISOString();
+}
+
+function getBearerToken(header: string | null): string | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!trimmed) return null;
+  if (trimmed.toLowerCase().startsWith('bearer ')) return trimmed.slice(7).trim();
+  return trimmed;
+}
+
+function getAdminToken(request: Request): string | null {
+  const bearer = getBearerToken(request.headers.get('authorization'));
+  if (bearer) return bearer;
+  const headerKey = request.headers.get('x-admin-key');
+  if (headerKey && headerKey.trim().length > 0) return headerKey.trim();
+  return null;
+}
+
+function requireAdmin(request: Request, env: Env, version: string): Response | null {
+  if (!env.ESCROW_ADMIN_KEY || env.ESCROW_ADMIN_KEY.trim().length === 0) {
+    return errorResponse('ADMIN_KEY_NOT_CONFIGURED', 'ESCROW_ADMIN_KEY is not configured', 503, undefined, version);
+  }
+
+  const token = getAdminToken(request);
+  if (!token) {
+    return errorResponse('UNAUTHORIZED', 'Missing admin token', 401, undefined, version);
+  }
+
+  if (token !== env.ESCROW_ADMIN_KEY) {
+    return errorResponse('UNAUTHORIZED', 'Invalid admin token', 401, undefined, version);
+  }
+
+  return null;
+}
+
+async function parseJsonBody(request: Request): Promise<unknown | null> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+function safeJsonParse<T>(input: string | null): T | null {
+  if (!input) return null;
+  try {
+    return JSON.parse(input) as T;
+  } catch {
+    return null;
+  }
+}
+
+function resolveLedgerBaseUrl(env: Env): string {
+  const base = env.LEDGER_BASE_URL?.trim();
+  if (base && base.length > 0) return base;
+  return 'https://clawledger.com';
+}
+
+async function ledgerV1Transfer(
+  env: Env,
+  params: {
+    idempotency_key: string;
+    from: { account: string; bucket: 'A' | 'H' | 'B' | 'F' | 'P' };
+    to: { account: string; bucket: 'A' | 'H' | 'B' | 'F' | 'P' };
+    amount_minor: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<{ event_id: string }> {
+  if (!env.LEDGER_ADMIN_KEY || env.LEDGER_ADMIN_KEY.trim().length === 0) {
+    throw new Error('LEDGER_ADMIN_KEY_NOT_CONFIGURED');
+  }
+
+  const url = `${resolveLedgerBaseUrl(env)}/v1/transfers`;
+  const response = await fetch(url, {
+    method: 'POST',
     headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
+      'content-type': 'application/json; charset=utf-8',
+      'x-admin-key': env.LEDGER_ADMIN_KEY,
     },
+    body: JSON.stringify({
+      idempotency_key: params.idempotency_key,
+      currency: 'USD',
+      from: params.from,
+      to: params.to,
+      amount_minor: params.amount_minor,
+      metadata: params.metadata,
+    }),
   });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`LEDGER_TRANSFER_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isNonEmptyString(json.event_id)) {
+    throw new Error('LEDGER_TRANSFER_INVALID_RESPONSE');
+  }
+
+  return { event_id: json.event_id };
 }
 
-function textResponse(body: string, contentType: string, status = 200): Response {
-  return new Response(body, {
-    status,
-    headers: {
-      'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=300',
-    },
-  });
+function d1String(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return value.toString();
+  return null;
 }
 
-function notFound(): Response {
-  return textResponse('Not found', 'text/plain; charset=utf-8', 404);
+function d1Number(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
-function landingPage(origin: string): string {
+function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
+  const escrow_id = d1String(row.escrow_id);
+  const create_idempotency_key = d1String(row.create_idempotency_key);
+  const buyer_did = d1String(row.buyer_did);
+  const currency = d1String(row.currency);
+  const amount_minor = d1String(row.amount_minor);
+  const buyer_total_minor = d1String(row.buyer_total_minor);
+  const worker_net_minor = d1String(row.worker_net_minor);
+  const status = d1String(row.status);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+  const held_at = d1String(row.held_at);
+  const dispute_window_ends_at = d1String(row.dispute_window_ends_at);
+  const dispute_window_seconds = d1Number(row.dispute_window_seconds);
+  const ledger_hold_event_id = d1String(row.ledger_hold_event_id);
+
+  if (
+    !escrow_id ||
+    !create_idempotency_key ||
+    !buyer_did ||
+    currency !== 'USD' ||
+    !amount_minor ||
+    !buyer_total_minor ||
+    !worker_net_minor ||
+    !status ||
+    !created_at ||
+    !updated_at ||
+    !held_at ||
+    dispute_window_seconds === null ||
+    !dispute_window_ends_at ||
+    !ledger_hold_event_id
+  ) {
+    return null;
+  }
+
+  const fee_quote = safeJsonParse<FeeQuoteSnapshot>(d1String(row.fee_quote_json));
+  if (!fee_quote) return null;
+
+  const metadata = safeJsonParse<Record<string, unknown>>(d1String(row.metadata_json));
+  const ledger_fee_event_ids = safeJsonParse<string[]>(d1String(row.ledger_fee_event_ids_json)) ?? [];
+  const verification = safeJsonParse<Record<string, unknown>>(d1String(row.verification_json));
+  const dispute = safeJsonParse<Record<string, unknown>>(d1String(row.dispute_json));
+
+  const statusTyped = status as EscrowStatus;
+  if (statusTyped !== 'held' && statusTyped !== 'released' && statusTyped !== 'frozen' && statusTyped !== 'cancelled') {
+    return null;
+  }
+
+  return {
+    escrow_id,
+    create_idempotency_key,
+    buyer_did,
+    worker_did: d1String(row.worker_did),
+    currency: 'USD',
+    amount_minor,
+    buyer_total_minor,
+    worker_net_minor,
+    fee_quote,
+    metadata,
+    status: statusTyped,
+    created_at,
+    updated_at,
+    held_at,
+    released_at: d1String(row.released_at),
+    dispute_window_seconds,
+    dispute_window_ends_at,
+    ledger_hold_event_id,
+    ledger_worker_event_id: d1String(row.ledger_worker_event_id),
+    ledger_fee_event_ids,
+    assign_idempotency_key: d1String(row.assign_idempotency_key),
+    release_idempotency_key: d1String(row.release_idempotency_key),
+    dispute_idempotency_key: d1String(row.dispute_idempotency_key),
+    verification,
+    dispute,
+  };
+}
+
+async function getEscrowById(db: D1Database, escrowId: string): Promise<EscrowRecord | null> {
+  const row = await db.prepare('SELECT * FROM escrows WHERE escrow_id = ?').bind(escrowId).first();
+  if (!row) return null;
+  if (!isRecord(row)) return null;
+  return parseEscrowRow(row);
+}
+
+async function getEscrowByCreateIdempotencyKey(db: D1Database, key: string): Promise<EscrowRecord | null> {
+  const row = await db.prepare('SELECT * FROM escrows WHERE create_idempotency_key = ?').bind(key).first();
+  if (!row) return null;
+  if (!isRecord(row)) return null;
+  return parseEscrowRow(row);
+}
+
+async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO escrows (
+        escrow_id,
+        create_idempotency_key,
+        buyer_did,
+        worker_did,
+        currency,
+        amount_minor,
+        buyer_total_minor,
+        worker_net_minor,
+        fee_quote_json,
+        metadata_json,
+        status,
+        created_at,
+        updated_at,
+        held_at,
+        released_at,
+        dispute_window_seconds,
+        dispute_window_ends_at,
+        ledger_hold_event_id,
+        ledger_worker_event_id,
+        ledger_fee_event_ids_json,
+        assign_idempotency_key,
+        release_idempotency_key,
+        dispute_idempotency_key,
+        verification_json,
+        dispute_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      record.escrow_id,
+      record.create_idempotency_key,
+      record.buyer_did,
+      record.worker_did,
+      record.currency,
+      record.amount_minor,
+      record.buyer_total_minor,
+      record.worker_net_minor,
+      JSON.stringify(record.fee_quote),
+      record.metadata ? JSON.stringify(record.metadata) : null,
+      record.status,
+      record.created_at,
+      record.updated_at,
+      record.held_at,
+      record.released_at,
+      record.dispute_window_seconds,
+      record.dispute_window_ends_at,
+      record.ledger_hold_event_id,
+      record.ledger_worker_event_id,
+      JSON.stringify(record.ledger_fee_event_ids),
+      record.assign_idempotency_key,
+      record.release_idempotency_key,
+      record.dispute_idempotency_key,
+      record.verification ? JSON.stringify(record.verification) : null,
+      record.dispute ? JSON.stringify(record.dispute) : null
+    )
+    .run();
+}
+
+async function updateEscrowAssign(db: D1Database, escrowId: string, workerDid: string, idempotencyKey: string, now: string): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE escrows
+       SET worker_did = ?, assign_idempotency_key = ?, updated_at = ?
+       WHERE escrow_id = ?`
+    )
+    .bind(workerDid, idempotencyKey, now, escrowId)
+    .run();
+}
+
+async function tryLockRelease(db: D1Database, escrowId: string, idempotencyKey: string, now: string): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE escrows
+       SET release_idempotency_key = ?, updated_at = ?
+       WHERE escrow_id = ? AND status = 'held' AND release_idempotency_key IS NULL`
+    )
+    .bind(idempotencyKey, now, escrowId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
+async function updateEscrowReleased(
+  db: D1Database,
+  escrowId: string,
+  releasedAt: string,
+  workerEventId: string,
+  feeEventIds: string[],
+  verification: Record<string, unknown> | null
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE escrows
+       SET status = 'released', released_at = ?, updated_at = ?, ledger_worker_event_id = ?, ledger_fee_event_ids_json = ?, verification_json = ?
+       WHERE escrow_id = ?`
+    )
+    .bind(
+      releasedAt,
+      releasedAt,
+      workerEventId,
+      JSON.stringify(feeEventIds),
+      verification ? JSON.stringify(verification) : null,
+      escrowId
+    )
+    .run();
+}
+
+async function tryLockDispute(db: D1Database, escrowId: string, idempotencyKey: string, now: string): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE escrows
+       SET dispute_idempotency_key = ?, updated_at = ?
+       WHERE escrow_id = ? AND status = 'held' AND dispute_idempotency_key IS NULL`
+    )
+    .bind(idempotencyKey, now, escrowId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
+async function updateEscrowDisputed(
+  db: D1Database,
+  escrowId: string,
+  now: string,
+  dispute: Record<string, unknown>
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE escrows
+       SET status = 'frozen', dispute_json = ?, updated_at = ?
+       WHERE escrow_id = ?`
+    )
+    .bind(JSON.stringify(dispute), now, escrowId)
+    .run();
+}
+
+function landingPage(origin: string, version: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -41,13 +536,16 @@ function landingPage(origin: string): string {
 <body>
   <main style="max-width: 780px; margin: 40px auto; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; line-height: 1.5; padding: 0 16px;">
     <h1>clawescrow.com</h1>
-    <p>Escrow holds/releases/milestones for agent work.</p>
+    <p>Escrow holds/releases for agent work (Agent Economy MVP).</p>
 
     <h2>Developer</h2>
     <ul>
       <li><a href="${origin}/docs">Docs</a></li>
       <li><a href="${origin}/skill.md">OpenClaw Skill</a></li>
+      <li><a href="${origin}/health">Health</a></li>
     </ul>
+
+    <p><small>Version: ${version}</small></p>
 
     <h2>Security</h2>
     <ul>
@@ -73,23 +571,31 @@ function docsPage(origin: string): string {
 
     <h2>Purpose</h2>
     <p>
-      clawescrow provides escrow holds/releases/milestones for agent work.
-      It is typically used by marketplaces (e.g. clawbounties) to lock requester funds until work is approved.
+      clawescrow holds buyer funds (A→H) and releases them (H→A) based on marketplace flows.
+      It is typically used by <code>clawbounties</code>.
     </p>
 
-    <h2>Integration</h2>
-    <p>
-      For agent tooling, use the <a href="${origin}/skill.md">OpenClaw skill</a>.
-      This endpoint exists so clients can discover integration info.
-    </p>
-
-    <h2>Capabilities (library)</h2>
+    <h2>Public endpoints</h2>
     <ul>
-      <li>Create escrow holds</li>
-      <li>Release escrow to an agent</li>
-      <li>Milestone payouts</li>
-      <li>Dispute window + freeze + escalation</li>
-      <li>Status lookups</li>
+      <li><code>GET /</code></li>
+      <li><code>GET /docs</code></li>
+      <li><code>GET /skill.md</code></li>
+      <li><code>GET /health</code></li>
+      <li><code>GET /robots.txt</code></li>
+      <li><code>GET /sitemap.xml</code></li>
+      <li><code>GET /.well-known/security.txt</code></li>
+    </ul>
+
+    <h2>Escrow API (admin)</h2>
+    <p>
+      All <code>/v1/*</code> endpoints require <code>Authorization: Bearer &lt;ESCROW_ADMIN_KEY&gt;</code>.
+    </p>
+    <ul>
+      <li><code>POST /v1/escrows</code> — create escrow hold (calls clawledger /v1/transfers A→H)</li>
+      <li><code>POST /v1/escrows/{escrow_id}/assign</code> — set worker DID</li>
+      <li><code>POST /v1/escrows/{escrow_id}/release</code> — release to worker + fee pool (calls clawledger /v1/transfers)</li>
+      <li><code>POST /v1/escrows/{escrow_id}/dispute</code> — freeze within dispute window</li>
+      <li><code>GET /v1/escrows/{escrow_id}</code> — fetch escrow record</li>
     </ul>
 
     <p style="margin-top: 32px; opacity: 0.8;">© Claw Bureau</p>
@@ -98,18 +604,19 @@ function docsPage(origin: string): string {
 </html>`;
 }
 
-function skillMarkdown(origin: string): string {
+function skillMarkdown(origin: string, version: string): string {
   // OpenClaw requirement: frontmatter metadata must be a single-line JSON object string.
   const metadata = JSON.stringify({
     schema_version: '1',
     id: 'clawescrow',
     name: 'clawescrow.com',
-    version: '0.1.0',
+    version,
     base_url: origin,
     endpoints: {
       docs: `${origin}/docs`,
+      health: `${origin}/health`,
     },
-    capabilities: ['escrow_hold', 'escrow_release', 'milestones', 'disputes', 'status'],
+    capabilities: ['escrow_hold', 'escrow_release', 'disputes', 'status'],
   });
 
   return `---
@@ -119,7 +626,7 @@ metadata: '${metadata}'
 
 # clawescrow
 
-Escrow holds/releases/milestones for agent work.
+Escrow holds/releases for agent work.
 
 ## Base URL
 
@@ -140,13 +647,15 @@ Sitemap: ${origin}/sitemap.xml
 }
 
 function sitemapXml(origin: string): string {
-  const urls = [`${origin}/`, `${origin}/docs`, `${origin}/skill.md`, `${origin}/.well-known/security.txt`];
+  const urls = [
+    `${origin}/`,
+    `${origin}/docs`,
+    `${origin}/skill.md`,
+    `${origin}/health`,
+    `${origin}/.well-known/security.txt`,
+  ];
 
-  const urlset = urls
-    .map(
-      (u) => `  <url><loc>${u}</loc></url>`
-    )
-    .join('\n');
+  const urlset = urls.map((u) => `  <url><loc>${u}</loc></url>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -155,55 +664,668 @@ ${urlset}
 `;
 }
 
-function securityTxt(): string {
+function securityTxt(origin: string): string {
   // Minimal, RFC 9116-ish.
   return `Contact: mailto:security@clawbureau.org
 Preferred-Languages: en
-Canonical: /.well-known/security.txt
+Canonical: ${origin}/.well-known/security.txt
 `;
 }
 
+function sumFeesMinor(fees: FeeItem[]): bigint {
+  return fees.reduce((acc, fee) => {
+    const n = parseNonNegativeMinor(fee.amount_minor);
+    if (n === null) return acc;
+    return acc + n;
+  }, 0n);
+}
+
+function validateFeeQuoteSnapshot(snapshot: unknown): FeeQuoteSnapshot | null {
+  if (!isRecord(snapshot)) return null;
+
+  const policy_id = snapshot.policy_id;
+  const policy_version = snapshot.policy_version;
+  const policy_hash_b64u = snapshot.policy_hash_b64u;
+  const buyer_total_minor = snapshot.buyer_total_minor;
+  const worker_net_minor = snapshot.worker_net_minor;
+  const fees = snapshot.fees;
+
+  if (!isNonEmptyString(policy_id)) return null;
+  if (!isNonEmptyString(policy_version)) return null;
+  if (!isNonEmptyString(policy_hash_b64u)) return null;
+  if (parsePositiveMinor(buyer_total_minor) === null) return null;
+  if (parseNonNegativeMinor(worker_net_minor) === null) return null;
+  if (!Array.isArray(fees)) return null;
+
+  const parsedFees: FeeItem[] = [];
+  for (const item of fees) {
+    if (!isRecord(item)) return null;
+    const kind = item.kind;
+    const payer = item.payer;
+    const amount_minor = item.amount_minor;
+    const rate_bps = item.rate_bps;
+    const min_fee_minor = item.min_fee_minor;
+    const floor_applied = item.floor_applied;
+
+    if (!isNonEmptyString(kind)) return null;
+    if (payer !== 'buyer' && payer !== 'worker') return null;
+
+    if (typeof amount_minor !== 'string') return null;
+    const amount_minor_trimmed = amount_minor.trim();
+    if (parseNonNegativeMinor(amount_minor_trimmed) === null) return null;
+
+    if (typeof rate_bps !== 'number' || !Number.isFinite(rate_bps)) return null;
+
+    if (typeof min_fee_minor !== 'string') return null;
+    const min_fee_minor_trimmed = min_fee_minor.trim();
+    if (parseNonNegativeMinor(min_fee_minor_trimmed) === null) return null;
+
+    if (typeof floor_applied !== 'boolean') return null;
+
+    parsedFees.push({
+      kind: kind.trim(),
+      payer,
+      amount_minor: amount_minor_trimmed,
+      rate_bps,
+      min_fee_minor: min_fee_minor_trimmed,
+      floor_applied,
+    });
+  }
+
+  return {
+    policy_id: policy_id.trim(),
+    policy_version: policy_version.trim(),
+    policy_hash_b64u: policy_hash_b64u.trim(),
+    buyer_total_minor: (buyer_total_minor as string).trim(),
+    worker_net_minor: (worker_net_minor as string).trim(),
+    fees: parsedFees,
+  };
+}
+
+async function handleCreateEscrow(request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const buyer_did = bodyRaw.buyer_did;
+  const worker_did = bodyRaw.worker_did;
+  const currency = bodyRaw.currency;
+  const amount_minor = bodyRaw.amount_minor;
+  const fee_quote = validateFeeQuoteSnapshot(bodyRaw.fee_quote);
+  const dispute_window_seconds = bodyRaw.dispute_window_seconds;
+  const metadata = bodyRaw.metadata;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'Missing required field: idempotency_key', 400, undefined, version);
+  }
+  if (!isNonEmptyString(buyer_did) || !buyer_did.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'buyer_did must be a DID string', 400, undefined, version);
+  }
+  if (worker_did !== undefined && worker_did !== null) {
+    if (!isNonEmptyString(worker_did) || !worker_did.trim().startsWith('did:')) {
+      return errorResponse('INVALID_REQUEST', 'worker_did must be null or a DID string', 400, undefined, version);
+    }
+  }
+  if (!isNonEmptyString(currency) || currency.trim().toUpperCase() !== 'USD') {
+    return errorResponse('UNSUPPORTED_CURRENCY', 'Only USD is supported', 400, undefined, version);
+  }
+
+  const principal = parsePositiveMinor(amount_minor);
+  if (principal === null) {
+    return errorResponse('INVALID_REQUEST', 'amount_minor must be a positive integer string', 400, undefined, version);
+  }
+
+  if (!fee_quote) {
+    return errorResponse('INVALID_REQUEST', 'fee_quote is missing or invalid', 400, undefined, version);
+  }
+
+  // Validate fee quote arithmetic (fail-closed).
+  const buyerFeeTotal = sumFeesMinor(fee_quote.fees.filter((f) => f.payer === 'buyer'));
+  const workerFeeTotal = sumFeesMinor(fee_quote.fees.filter((f) => f.payer === 'worker'));
+  const expectedBuyerTotal = principal + buyerFeeTotal;
+  const expectedWorkerNet = principal - workerFeeTotal;
+
+  const buyerTotal = parsePositiveMinor(fee_quote.buyer_total_minor);
+  const workerNet = parseNonNegativeMinor(fee_quote.worker_net_minor);
+  if (buyerTotal === null || workerNet === null) {
+    return errorResponse('INVALID_REQUEST', 'fee_quote amounts invalid', 400, undefined, version);
+  }
+
+  if (buyerTotal !== expectedBuyerTotal) {
+    return errorResponse(
+      'FEE_QUOTE_MISMATCH',
+      'fee_quote.buyer_total_minor does not match amount_minor + buyer fees',
+      400,
+      {
+        expected_buyer_total_minor: expectedBuyerTotal.toString(),
+        received_buyer_total_minor: buyerTotal.toString(),
+      },
+      version
+    );
+  }
+
+  if (workerNet !== expectedWorkerNet) {
+    return errorResponse(
+      'FEE_QUOTE_MISMATCH',
+      'fee_quote.worker_net_minor does not match amount_minor - worker fees',
+      400,
+      {
+        expected_worker_net_minor: expectedWorkerNet.toString(),
+        received_worker_net_minor: workerNet.toString(),
+      },
+      version
+    );
+  }
+
+  const existing = await getEscrowByCreateIdempotencyKey(env.ESCROW_DB, idempotency_key.trim());
+  if (existing) {
+    const response: CreateEscrowResponseBody = {
+      escrow_id: existing.escrow_id,
+      status: 'held',
+      held_amount_minor: existing.buyer_total_minor,
+      dispute_window_ends_at: existing.dispute_window_ends_at,
+      ledger_refs: {
+        hold_transfer: existing.ledger_hold_event_id,
+      },
+    };
+    return jsonResponse(response, 200, version);
+  }
+
+  let disputeWindowSeconds = 86400;
+  if (dispute_window_seconds !== undefined) {
+    if (typeof dispute_window_seconds !== 'number' || !Number.isFinite(dispute_window_seconds) || dispute_window_seconds <= 0) {
+      return errorResponse('INVALID_REQUEST', 'dispute_window_seconds must be a positive number', 400, undefined, version);
+    }
+    disputeWindowSeconds = Math.floor(dispute_window_seconds);
+  }
+
+  if (metadata !== undefined && metadata !== null && !isRecord(metadata)) {
+    return errorResponse('INVALID_REQUEST', 'metadata must be an object', 400, undefined, version);
+  }
+
+  const createdAt = nowIso();
+  const heldAt = createdAt;
+  const disputeWindowEndsAt = addSeconds(heldAt, disputeWindowSeconds);
+
+  // 1) Hold funds on ledger (A -> H on buyer).
+  let holdEventId: string;
+  try {
+    const holdResult = await ledgerV1Transfer(env, {
+      idempotency_key: `escrow:create:${idempotency_key.trim()}:hold`,
+      from: { account: buyer_did.trim(), bucket: 'A' },
+      to: { account: buyer_did.trim(), bucket: 'H' },
+      amount_minor: fee_quote.buyer_total_minor,
+      metadata: {
+        kind: 'escrow_hold',
+        create_idempotency_key: idempotency_key.trim(),
+        buyer_did: buyer_did.trim(),
+        policy_id: fee_quote.policy_id,
+        policy_version: fee_quote.policy_version,
+        policy_hash_b64u: fee_quote.policy_hash_b64u,
+      },
+    });
+    holdEventId = holdResult.event_id;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('LEDGER_HOLD_FAILED', message, 502, undefined, version);
+  }
+
+  // 2) Persist escrow.
+  const escrow_id = `esc_${crypto.randomUUID()}`;
+  const record: EscrowRecord = {
+    escrow_id,
+    create_idempotency_key: idempotency_key.trim(),
+    buyer_did: buyer_did.trim(),
+    worker_did: worker_did === null || worker_did === undefined ? null : worker_did.trim(),
+    currency: 'USD',
+    amount_minor: principal.toString(),
+    buyer_total_minor: buyerTotal.toString(),
+    worker_net_minor: workerNet.toString(),
+    fee_quote,
+    metadata: metadata ? (metadata as Record<string, unknown>) : null,
+    status: 'held',
+    created_at: createdAt,
+    updated_at: createdAt,
+    held_at: heldAt,
+    released_at: null,
+    dispute_window_seconds: disputeWindowSeconds,
+    dispute_window_ends_at: disputeWindowEndsAt,
+    ledger_hold_event_id: holdEventId,
+    ledger_worker_event_id: null,
+    ledger_fee_event_ids: [],
+    assign_idempotency_key: null,
+    release_idempotency_key: null,
+    dispute_idempotency_key: null,
+    verification: null,
+    dispute: null,
+  };
+
+  try {
+    await insertEscrow(env.ESCROW_DB, record);
+  } catch (err) {
+    // If insert failed due to concurrency, try to return the existing record.
+    const existingAfter = await getEscrowByCreateIdempotencyKey(env.ESCROW_DB, idempotency_key.trim());
+    if (existingAfter) {
+      const response: CreateEscrowResponseBody = {
+        escrow_id: existingAfter.escrow_id,
+        status: 'held',
+        held_amount_minor: existingAfter.buyer_total_minor,
+        dispute_window_ends_at: existingAfter.dispute_window_ends_at,
+        ledger_refs: { hold_transfer: existingAfter.ledger_hold_event_id },
+      };
+      return jsonResponse(response, 200, version);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  const response: CreateEscrowResponseBody = {
+    escrow_id,
+    status: 'held',
+    held_amount_minor: record.buyer_total_minor,
+    dispute_window_ends_at: record.dispute_window_ends_at,
+    ledger_refs: {
+      hold_transfer: record.ledger_hold_event_id,
+    },
+  };
+
+  return jsonResponse(response, 201, version);
+}
+
+async function handleGetEscrow(escrowId: string, env: Env, version: string): Promise<Response> {
+  const escrow = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!escrow) {
+    return errorResponse('NOT_FOUND', 'Escrow not found', 404, undefined, version);
+  }
+
+  return jsonResponse(
+    {
+      escrow_id: escrow.escrow_id,
+      status: escrow.status,
+      buyer_did: escrow.buyer_did,
+      worker_did: escrow.worker_did,
+      currency: escrow.currency,
+      amount_minor: escrow.amount_minor,
+      buyer_total_minor: escrow.buyer_total_minor,
+      worker_net_minor: escrow.worker_net_minor,
+      fee_quote: escrow.fee_quote,
+      metadata: escrow.metadata,
+      timestamps: {
+        created_at: escrow.created_at,
+        held_at: escrow.held_at,
+        released_at: escrow.released_at,
+        updated_at: escrow.updated_at,
+      },
+      dispute_window_seconds: escrow.dispute_window_seconds,
+      dispute_window_ends_at: escrow.dispute_window_ends_at,
+      ledger_refs: {
+        hold_transfer: escrow.ledger_hold_event_id,
+        worker_transfer: escrow.ledger_worker_event_id,
+        fee_transfers: escrow.ledger_fee_event_ids,
+      },
+      verification: escrow.verification,
+      dispute: escrow.dispute,
+    },
+    200,
+    version
+  );
+}
+
+async function handleAssignEscrow(escrowId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const worker_did = bodyRaw.worker_did;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'Missing required field: idempotency_key', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(worker_did) || !worker_did.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
+  }
+
+  const escrow = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!escrow) {
+    return errorResponse('NOT_FOUND', 'Escrow not found', 404, undefined, version);
+  }
+
+  if (escrow.status !== 'held') {
+    return errorResponse('INVALID_STATUS', `Cannot assign worker in status '${escrow.status}'`, 409, undefined, version);
+  }
+
+  if (escrow.worker_did) {
+    if (escrow.worker_did === worker_did.trim()) {
+      const response: AssignEscrowResponseBody = { escrow_id: escrow.escrow_id, status: escrow.status, worker_did: escrow.worker_did };
+      return jsonResponse(response, 200, version);
+    }
+
+    return errorResponse('WORKER_ALREADY_ASSIGNED', 'Escrow already assigned to a different worker', 409, undefined, version);
+  }
+
+  const now = nowIso();
+  await updateEscrowAssign(env.ESCROW_DB, escrowId, worker_did.trim(), idempotency_key.trim(), now);
+
+  const updated = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!updated || !updated.worker_did) {
+    return errorResponse('DB_WRITE_FAILED', 'Failed to update escrow assignment', 500, undefined, version);
+  }
+
+  const response: AssignEscrowResponseBody = { escrow_id: updated.escrow_id, status: updated.status, worker_did: updated.worker_did };
+  return jsonResponse(response, 200, version);
+}
+
+async function handleReleaseEscrow(escrowId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const approved_by = bodyRaw.approved_by;
+  const verificationRaw = bodyRaw.verification;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'Missing required field: idempotency_key', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(approved_by) || !approved_by.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'approved_by must be a DID string', 400, undefined, version);
+  }
+
+  const escrow = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!escrow) {
+    return errorResponse('NOT_FOUND', 'Escrow not found', 404, undefined, version);
+  }
+
+  if (escrow.status === 'released') {
+    const response: ReleaseEscrowResponseBody = {
+      escrow_id: escrow.escrow_id,
+      status: 'released',
+      ledger_refs: {
+        worker_transfer: escrow.ledger_worker_event_id ?? '',
+        fee_transfers: escrow.ledger_fee_event_ids,
+      },
+    };
+    return jsonResponse(response, 200, version);
+  }
+
+  if (escrow.status !== 'held') {
+    return errorResponse('INVALID_STATUS', `Cannot release escrow in status '${escrow.status}'`, 409, undefined, version);
+  }
+
+  if (!escrow.worker_did) {
+    return errorResponse('WORKER_NOT_ASSIGNED', 'Escrow has no worker assigned', 409, undefined, version);
+  }
+
+  if (approved_by.trim() !== escrow.buyer_did) {
+    return errorResponse('UNAUTHORIZED', 'approved_by must match buyer_did', 401, undefined, version);
+  }
+
+  // Acquire idempotency lock: prevent double release with different idempotency keys.
+  const now = nowIso();
+  if (!escrow.release_idempotency_key) {
+    await tryLockRelease(env.ESCROW_DB, escrowId, idempotency_key.trim(), now);
+  }
+
+  const locked = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!locked) {
+    return errorResponse('DB_READ_FAILED', 'Failed to read escrow', 500, undefined, version);
+  }
+
+  if (locked.release_idempotency_key && locked.release_idempotency_key !== idempotency_key.trim()) {
+    return errorResponse(
+      'IDEMPOTENCY_CONFLICT',
+      'Release already in progress with a different idempotency_key',
+      409,
+      { release_idempotency_key: locked.release_idempotency_key },
+      version
+    );
+  }
+
+  if (!locked.worker_did) {
+    return errorResponse('WORKER_NOT_ASSIGNED', 'Escrow has no worker assigned', 409, undefined, version);
+  }
+
+  const feeTotal = sumFeesMinor(locked.fee_quote.fees);
+  const buyerTotal = parsePositiveMinor(locked.buyer_total_minor);
+  const workerNet = parseNonNegativeMinor(locked.worker_net_minor);
+  if (buyerTotal === null || workerNet === null) {
+    return errorResponse('INTERNAL_ERROR', 'Stored amounts invalid', 500, undefined, version);
+  }
+
+  if (workerNet + feeTotal !== buyerTotal) {
+    return errorResponse(
+      'FEE_QUOTE_MISMATCH',
+      'Stored fee quote does not sum to buyer_total_minor',
+      500,
+      {
+        worker_net_minor: workerNet.toString(),
+        fee_total_minor: feeTotal.toString(),
+        buyer_total_minor: buyerTotal.toString(),
+      },
+      version
+    );
+  }
+
+  const feeClearingDomain = env.FEE_CLEARING_DOMAIN?.trim().length ? env.FEE_CLEARING_DOMAIN!.trim() : 'clawcuts';
+  const clearingAccount = `clearing:${feeClearingDomain}`;
+
+  const ledgerBaseId = `escrow:${locked.escrow_id}:release:${idempotency_key.trim()}`;
+
+  let workerEventId: string;
+  const feeEventIds: string[] = [];
+
+  try {
+    // Worker payout
+    const workerTransfer = await ledgerV1Transfer(env, {
+      idempotency_key: `${ledgerBaseId}:worker`,
+      from: { account: locked.buyer_did, bucket: 'H' },
+      to: { account: locked.worker_did, bucket: 'A' },
+      amount_minor: locked.worker_net_minor,
+      metadata: {
+        kind: 'escrow_release_worker',
+        escrow_id: locked.escrow_id,
+        policy_id: locked.fee_quote.policy_id,
+        policy_version: locked.fee_quote.policy_version,
+      },
+    });
+    workerEventId = workerTransfer.event_id;
+
+    // Fee transfers
+    for (let i = 0; i < locked.fee_quote.fees.length; i++) {
+      const fee = locked.fee_quote.fees[i];
+      const amount = parseNonNegativeMinor(fee.amount_minor);
+      if (amount === null || amount === 0n) continue;
+
+      const feeTransfer = await ledgerV1Transfer(env, {
+        idempotency_key: `${ledgerBaseId}:fee:${i}`,
+        from: { account: locked.buyer_did, bucket: 'H' },
+        to: { account: clearingAccount, bucket: 'F' },
+        amount_minor: fee.amount_minor,
+        metadata: {
+          kind: 'escrow_release_fee',
+          escrow_id: locked.escrow_id,
+          fee_kind: fee.kind,
+          fee_payer: fee.payer,
+          rate_bps: fee.rate_bps,
+          min_fee_minor: fee.min_fee_minor,
+          floor_applied: fee.floor_applied,
+          policy_id: locked.fee_quote.policy_id,
+          policy_version: locked.fee_quote.policy_version,
+          policy_hash_b64u: locked.fee_quote.policy_hash_b64u,
+        },
+      });
+      feeEventIds.push(feeTransfer.event_id);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('LEDGER_RELEASE_FAILED', message, 502, undefined, version);
+  }
+
+  let verification: Record<string, unknown> | null = null;
+  if (verificationRaw !== undefined) {
+    if (verificationRaw !== null && !isRecord(verificationRaw)) {
+      return errorResponse('INVALID_REQUEST', 'verification must be an object', 400, undefined, version);
+    }
+    verification = verificationRaw ? (verificationRaw as Record<string, unknown>) : null;
+  }
+
+  const releasedAt = nowIso();
+  await updateEscrowReleased(env.ESCROW_DB, escrowId, releasedAt, workerEventId!, feeEventIds, verification);
+
+  const response: ReleaseEscrowResponseBody = {
+    escrow_id: locked.escrow_id,
+    status: 'released',
+    ledger_refs: {
+      worker_transfer: workerEventId!,
+      fee_transfers: feeEventIds,
+    },
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
+async function handleDisputeEscrow(escrowId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const disputed_by = bodyRaw.disputed_by;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'Missing required field: idempotency_key', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(disputed_by) || !disputed_by.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'disputed_by must be a DID string', 400, undefined, version);
+  }
+
+  const escrow = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!escrow) {
+    return errorResponse('NOT_FOUND', 'Escrow not found', 404, undefined, version);
+  }
+
+  if (escrow.status === 'frozen') {
+    const response: DisputeEscrowResponseBody = {
+      escrow_id: escrow.escrow_id,
+      status: 'frozen',
+      dispute_window_ends_at: escrow.dispute_window_ends_at,
+    };
+    return jsonResponse(response, 200, version);
+  }
+
+  if (escrow.status !== 'held') {
+    return errorResponse('INVALID_STATUS', `Cannot dispute escrow in status '${escrow.status}'`, 409, undefined, version);
+  }
+
+  const now = new Date();
+  const windowEnd = new Date(escrow.dispute_window_ends_at);
+  if (Number.isFinite(windowEnd.getTime()) && now > windowEnd) {
+    return errorResponse('DISPUTE_WINDOW_EXPIRED', 'Dispute window expired', 409, { dispute_window_ends_at: escrow.dispute_window_ends_at }, version);
+  }
+
+  // Acquire lock
+  const lockNow = nowIso();
+  if (!escrow.dispute_idempotency_key) {
+    await tryLockDispute(env.ESCROW_DB, escrowId, idempotency_key.trim(), lockNow);
+  }
+
+  const locked = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!locked) {
+    return errorResponse('DB_READ_FAILED', 'Failed to read escrow', 500, undefined, version);
+  }
+
+  if (locked.dispute_idempotency_key && locked.dispute_idempotency_key !== idempotency_key.trim()) {
+    return errorResponse(
+      'IDEMPOTENCY_CONFLICT',
+      'Dispute already in progress with a different idempotency_key',
+      409,
+      { dispute_idempotency_key: locked.dispute_idempotency_key },
+      version
+    );
+  }
+
+  const dispute: Record<string, unknown> = {
+    disputed_by: disputed_by.trim(),
+    reason: isNonEmptyString(bodyRaw.reason) ? bodyRaw.reason.trim() : undefined,
+    description: isNonEmptyString(bodyRaw.description) ? bodyRaw.description.trim() : undefined,
+    evidence_urls: Array.isArray(bodyRaw.evidence_urls) ? bodyRaw.evidence_urls : undefined,
+    created_at: lockNow,
+  };
+
+  await updateEscrowDisputed(env.ESCROW_DB, escrowId, lockNow, dispute);
+
+  const response: DisputeEscrowResponseBody = {
+    escrow_id: locked.escrow_id,
+    status: 'frozen',
+    dispute_window_ends_at: locked.dispute_window_ends_at,
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method.toUpperCase();
-    const origin = url.origin;
 
-    if (method !== 'GET' && method !== 'HEAD') {
-      return new Response('Method not allowed', {
-        status: 405,
-        headers: {
-          Allow: 'GET, HEAD',
-          'Content-Type': 'text/plain; charset=utf-8',
-        },
-      });
+    const version = env.ESCROW_VERSION?.trim().length ? env.ESCROW_VERSION.trim() : '0.1.0';
+
+    // Public endpoints
+    if (method === 'GET' || method === 'HEAD') {
+      const origin = url.origin;
+
+      if (path === '/') return htmlResponse(landingPage(origin, version), 200, version);
+      if (path === '/docs') return htmlResponse(docsPage(origin), 200, version);
+      if (path === '/skill.md') return textResponse(skillMarkdown(origin, version), 'text/markdown; charset=utf-8', 200, version);
+      if (path === '/health') return jsonResponse({ status: 'ok', service: 'clawescrow', version }, 200, version);
+      if (path === '/robots.txt') return textResponse(robotsTxt(origin), 'text/plain; charset=utf-8', 200, version);
+      if (path === '/sitemap.xml') return textResponse(sitemapXml(origin), 'application/xml; charset=utf-8', 200, version);
+      if (path === '/.well-known/security.txt') return textResponse(securityTxt(origin), 'text/plain; charset=utf-8', 200, version);
     }
 
-    if (path === '/') {
-      return htmlResponse(landingPage(origin));
+    // Admin-gated API
+    if (path.startsWith('/v1/')) {
+      const adminError = requireAdmin(request, env, version);
+      if (adminError) return adminError;
+
+      if (path === '/v1/escrows' && method === 'POST') {
+        return handleCreateEscrow(request, env, version);
+      }
+
+      const getMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)$/);
+      if (getMatch && method === 'GET') {
+        return handleGetEscrow(getMatch[1], env, version);
+      }
+
+      const assignMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)\/assign$/);
+      if (assignMatch && method === 'POST') {
+        return handleAssignEscrow(assignMatch[1], request, env, version);
+      }
+
+      const releaseMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)\/release$/);
+      if (releaseMatch && method === 'POST') {
+        return handleReleaseEscrow(releaseMatch[1], request, env, version);
+      }
+
+      const disputeMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)\/dispute$/);
+      if (disputeMatch && method === 'POST') {
+        return handleDisputeEscrow(disputeMatch[1], request, env, version);
+      }
+
+      return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
     }
 
-    if (path === '/docs') {
-      return htmlResponse(docsPage(origin));
-    }
-
-    if (path === '/skill.md') {
-      return textResponse(skillMarkdown(origin), 'text/markdown; charset=utf-8');
-    }
-
-    if (path === '/robots.txt') {
-      return textResponse(robotsTxt(origin), 'text/plain; charset=utf-8');
-    }
-
-    if (path === '/sitemap.xml') {
-      return textResponse(sitemapXml(origin), 'application/xml; charset=utf-8');
-    }
-
-    if (path === '/.well-known/security.txt') {
-      return textResponse(securityTxt(), 'text/plain; charset=utf-8');
-    }
-
-    return notFound();
+    return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
   },
 };

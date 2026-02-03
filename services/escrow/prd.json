@@ -103,6 +103,24 @@
       "priority": 7,
       "passes": true,
       "notes": "Added minimal public worker endpoints: landing page (/), docs (/docs), OpenClaw skill (/skill.md with single-line JSON metadata frontmatter), plus /robots.txt, /sitemap.xml, and /.well-known/security.txt. Also updated escrow tsconfig to include DOM lib for Request/Response types."
+    },
+    {
+      "id": "CES-US-008",
+      "title": "Escrow API v1 (D1 + ledger integration)",
+      "description": "As a marketplace, I want escrow HTTP endpoints so that I can atomically hold and release funds.",
+      "acceptanceCriteria": [
+        "POST /v1/escrows holds buyer_total_minor via clawledger /v1/transfers (A→H)",
+        "POST /v1/escrows/{escrow_id}/assign sets worker DID (idempotent)",
+        "POST /v1/escrows/{escrow_id}/release pays worker + fee pool from held (H→A/F)",
+        "POST /v1/escrows/{escrow_id}/dispute freezes escrow within dispute window",
+        "GET /v1/escrows/{escrow_id} returns stored snapshot + ledger refs",
+        "Admin auth fail-closed for all /v1 endpoints",
+        "D1 persistence + idempotency",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Implemented escrow API in services/escrow/src/worker.ts with D1 storage, admin auth, and clawledger /v1/transfers integration."
     }
   ]
 }
