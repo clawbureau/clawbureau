@@ -289,6 +289,186 @@ export class ClearingAccountRepository {
       version: newVersion,
     };
   }
+
+  /**
+   * Generic bucket operation - credit a specific bucket.
+   */
+  async creditBucket(
+    id: AccountId,
+    bucket: BucketName,
+    amount: bigint
+  ): Promise<ClearingAccount> {
+    if (amount < 0n) {
+      throw new Error('Amount must be non-negative');
+    }
+
+    const account = await this.findById(id);
+    if (!account) {
+      throw new Error(`Clearing account not found: ${id}`);
+    }
+
+    const newBalances = { ...account.balances };
+    newBalances[bucket] = account.balances[bucket] + amount;
+
+    const columnMap: Record<BucketName, string> = {
+      available: 'balance_available',
+      held: 'balance_held',
+      bonded: 'balance_bonded',
+      feePool: 'balance_fee_pool',
+      promo: 'balance_promo',
+    };
+
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE clearing_accounts
+         SET ${columnMap[bucket]} = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newBalances[bucket].toString(),
+        now,
+        newVersion,
+        id,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: newBalances,
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Generic bucket operation - debit a specific bucket.
+   */
+  async debitBucket(
+    id: AccountId,
+    bucket: BucketName,
+    amount: bigint
+  ): Promise<ClearingAccount> {
+    if (amount < 0n) {
+      throw new Error('Amount must be non-negative');
+    }
+
+    const account = await this.findById(id);
+    if (!account) {
+      throw new Error(`Clearing account not found: ${id}`);
+    }
+
+    if (account.balances[bucket] < amount) {
+      throw new InsufficientFundsError(id, bucket, amount, account.balances[bucket]);
+    }
+
+    const newBalances = { ...account.balances };
+    newBalances[bucket] = account.balances[bucket] - amount;
+
+    const columnMap: Record<BucketName, string> = {
+      available: 'balance_available',
+      held: 'balance_held',
+      bonded: 'balance_bonded',
+      feePool: 'balance_fee_pool',
+      promo: 'balance_promo',
+    };
+
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE clearing_accounts
+         SET ${columnMap[bucket]} = ?, updated_at = ?, version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newBalances[bucket].toString(),
+        now,
+        newVersion,
+        id,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: newBalances,
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
+
+  /**
+   * Move funds between buckets within the same clearing account.
+   */
+  async moveBetweenBuckets(
+    id: AccountId,
+    fromBucket: BucketName,
+    toBucket: BucketName,
+    amount: bigint
+  ): Promise<ClearingAccount> {
+    if (amount < 0n) {
+      throw new Error('Amount must be non-negative');
+    }
+
+    if (fromBucket === toBucket) {
+      throw new Error('Source and destination buckets must be different');
+    }
+
+    const account = await this.findById(id);
+    if (!account) {
+      throw new Error(`Clearing account not found: ${id}`);
+    }
+
+    if (account.balances[fromBucket] < amount) {
+      throw new InsufficientFundsError(id, fromBucket, amount, account.balances[fromBucket]);
+    }
+
+    const newBalances = { ...account.balances };
+    newBalances[fromBucket] = account.balances[fromBucket] - amount;
+    newBalances[toBucket] = account.balances[toBucket] + amount;
+
+    const columnMap: Record<BucketName, string> = {
+      available: 'balance_available',
+      held: 'balance_held',
+      bonded: 'balance_bonded',
+      feePool: 'balance_fee_pool',
+      promo: 'balance_promo',
+    };
+
+    const now = new Date().toISOString();
+    const newVersion = account.version + 1;
+
+    await this.db
+      .prepare(
+        `UPDATE clearing_accounts
+         SET ${columnMap[fromBucket]} = ?,
+             ${columnMap[toBucket]} = ?,
+             updated_at = ?,
+             version = ?
+         WHERE id = ? AND version = ?`
+      )
+      .bind(
+        newBalances[fromBucket].toString(),
+        newBalances[toBucket].toString(),
+        now,
+        newVersion,
+        id,
+        account.version
+      )
+      .run();
+
+    return {
+      ...account,
+      balances: newBalances,
+      updatedAt: now,
+      version: newVersion,
+    };
+  }
 }
 
 /**

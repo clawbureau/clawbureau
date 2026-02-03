@@ -171,6 +171,20 @@
       "priority": 12,
       "passes": true,
       "notes": "Added public endpoints to services/ledger worker: GET / (HTML landing), GET /docs, GET /skill.md (OpenClaw frontmatter with metadata as single-line JSON object string + curl examples), GET /robots.txt, GET /sitemap.xml, and GET /.well-known/security.txt." 
+    },
+    {
+      "id": "CLD-US-013",
+      "title": "Spec-compatible v1 endpoints",
+      "description": "As an integrator, I want /v1/balances and /v1/transfers so that the ledger matches the Agent Economy MVP spec.",
+      "acceptanceCriteria": [
+        "GET /v1/balances?did=<did> returns buckets A/H/B/F/P as integer strings",
+        "POST /v1/transfers supports bucket moves and cross-account transfers with idempotency_key",
+        "Supports clearing: accounts (auto-create) as transfer targets/sources",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Added spec-compatible endpoints /v1/balances and /v1/transfers (bucket letters A/H/B/F/P), including clearing: account support and event logging."
     }
   ]
 }

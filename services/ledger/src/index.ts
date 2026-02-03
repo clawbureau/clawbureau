@@ -3,17 +3,18 @@
  * Cloudflare Worker entry point
  */
 
-import { AccountService, isValidDid } from './accounts';
+import { AccountRepository, AccountService, isValidDid } from './accounts';
 import { ReserveAttestationService } from './attestation';
 import { ReserveAssetService } from './reserve-assets';
 import { ComputeReserveService } from './compute-reserves';
-import { ClearingService } from './clearing';
-import { EventService, isValidEventType, isValidBucket } from './events';
+import { ClearingAccountRepository, ClearingService } from './clearing';
+import { EventRepository, EventService, computeEventHash, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
 import { ReconciliationService } from './reconciliation';
 import { StakeFeeService } from './stake-fee';
 import { TransferService, WebhookService } from './transfer';
 import type {
+  BucketName,
   ClearingDepositRequest,
   ClearingWithdrawRequest,
   CreateAccountRequest,
@@ -685,6 +686,385 @@ async function handleListBalances(env: Env, url: URL): Promise<Response> {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse(message, 'LIST_BALANCES_FAILED', 500);
+  }
+}
+
+type V1Bucket = 'A' | 'H' | 'B' | 'F' | 'P';
+
+type V1TransferStatus = 'applied';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isV1Bucket(value: unknown): value is V1Bucket {
+  return value === 'A' || value === 'H' || value === 'B' || value === 'F' || value === 'P';
+}
+
+function v1BucketToBucketName(bucket: V1Bucket): BucketName {
+  switch (bucket) {
+    case 'A':
+      return 'available';
+    case 'H':
+      return 'held';
+    case 'B':
+      return 'bonded';
+    case 'F':
+      return 'feePool';
+    case 'P':
+      return 'promo';
+  }
+}
+
+function bucketNameToV1Bucket(bucket: BucketName): V1Bucket {
+  switch (bucket) {
+    case 'available':
+      return 'A';
+    case 'held':
+      return 'H';
+    case 'bonded':
+      return 'B';
+    case 'feePool':
+      return 'F';
+    case 'promo':
+      return 'P';
+  }
+}
+
+function parsePositiveBigInt(value: unknown): bigint | null {
+  if (typeof value !== 'string') return null;
+  const s = value.trim();
+  if (!/^[0-9]+$/.test(s)) return null;
+  try {
+    const n = BigInt(s);
+    if (n <= 0n) return null;
+    return n;
+  } catch {
+    return null;
+  }
+}
+
+interface V1BalancesResponse {
+  did: string;
+  currency: 'USD';
+  buckets: Record<V1Bucket, string>;
+  as_of: string;
+}
+
+async function handleV1GetBalances(env: Env, url: URL): Promise<Response> {
+  const did = url.searchParams.get('did');
+
+  if (!isNonEmptyString(did)) {
+    return errorResponse('Missing required query param: did', 'INVALID_REQUEST', 400);
+  }
+
+  const didTrimmed = did.trim();
+  if (!isValidDid(didTrimmed)) {
+    return errorResponse('Invalid DID format. Expected: did:method:identifier', 'INVALID_DID', 400);
+  }
+
+  const service = new AccountService(env);
+
+  try {
+    // Spec-aligned behavior: create on first use.
+    const account = await service.createAccount({ did: didTrimmed });
+
+    const response: V1BalancesResponse = {
+      did: account.did,
+      currency: 'USD',
+      buckets: {
+        A: account.balances.available,
+        H: account.balances.held,
+        B: account.balances.bonded,
+        F: account.balances.feePool,
+        P: account.balances.promo,
+      },
+      as_of: new Date().toISOString(),
+    };
+
+    return jsonResponse(response);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'BALANCES_FAILED', 500);
+  }
+}
+
+interface V1TransferParty {
+  account: string;
+  bucket: V1Bucket;
+}
+
+interface V1TransferRequestBody {
+  idempotency_key: string;
+  currency: string;
+  from: V1TransferParty;
+  to: V1TransferParty;
+  amount_minor: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface V1TransferResponseBody {
+  event_id: string;
+  status: V1TransferStatus;
+}
+
+type V1AccountKind = 'user' | 'clearing';
+
+interface V1ResolvedAccount {
+  kind: V1AccountKind;
+  id: string;
+  display: string;
+}
+
+async function resolveV1AccountRef(account: string, env: Env): Promise<V1ResolvedAccount> {
+  const input = account.trim();
+
+  if (input.startsWith('did:')) {
+    if (!isValidDid(input)) {
+      throw new Error('INVALID_DID');
+    }
+
+    const accountService = new AccountService(env);
+    const resolved = await accountService.createAccount({ did: input });
+    return { kind: 'user', id: resolved.id, display: input };
+  }
+
+  if (input.startsWith('clearing:')) {
+    const domain = input.slice('clearing:'.length).trim();
+    if (!domain) {
+      throw new Error('INVALID_CLEARING_DOMAIN');
+    }
+
+    const clearingService = new ClearingService(env);
+    let clearing = await clearingService.getClearingAccountByDomain(domain);
+    if (!clearing) {
+      clearing = await clearingService.createClearingAccount({ domain, name: domain });
+    }
+
+    return { kind: 'clearing', id: clearing.id, display: input };
+  }
+
+  throw new Error('UNSUPPORTED_ACCOUNT');
+}
+
+async function debitV1Account(
+  account: V1ResolvedAccount,
+  bucket: BucketName,
+  amount: bigint,
+  repositories: {
+    users: AccountRepository;
+    clearing: ClearingAccountRepository;
+  }
+): Promise<void> {
+  if (account.kind === 'user') {
+    await repositories.users.debitBucket(account.id, bucket, amount);
+    return;
+  }
+
+  await repositories.clearing.debitBucket(account.id, bucket, amount);
+}
+
+async function creditV1Account(
+  account: V1ResolvedAccount,
+  bucket: BucketName,
+  amount: bigint,
+  repositories: {
+    users: AccountRepository;
+    clearing: ClearingAccountRepository;
+  }
+): Promise<void> {
+  if (account.kind === 'user') {
+    await repositories.users.creditBucket(account.id, bucket, amount);
+    return;
+  }
+
+  await repositories.clearing.creditBucket(account.id, bucket, amount);
+}
+
+/**
+ * Handle GET /v1/balances - Spec-compatible balances endpoint.
+ */
+async function handleV1Balances(env: Env, url: URL): Promise<Response> {
+  return handleV1GetBalances(env, url);
+}
+
+/**
+ * Handle POST /v1/transfers - Spec-compatible transfer endpoint (supports bucket moves).
+ */
+async function handleV1Transfers(request: Request, env: Env): Promise<Response> {
+  const bodyRaw = await parseJsonBody<unknown>(request);
+
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const currency = bodyRaw.currency;
+  const from = bodyRaw.from;
+  const to = bodyRaw.to;
+  const amount_minor = bodyRaw.amount_minor;
+  const metadataRaw = bodyRaw.metadata;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('Missing required field: idempotency_key', 'INVALID_REQUEST', 400);
+  }
+
+  if (!isNonEmptyString(currency) || currency.trim().toUpperCase() !== 'USD') {
+    return errorResponse('Only USD is supported', 'UNSUPPORTED_CURRENCY', 400);
+  }
+
+  if (!isRecord(from)) {
+    return errorResponse('Missing required object: from', 'INVALID_REQUEST', 400);
+  }
+
+  if (!isRecord(to)) {
+    return errorResponse('Missing required object: to', 'INVALID_REQUEST', 400);
+  }
+
+  const fromAccount = from.account;
+  const fromBucket = from.bucket;
+  const toAccount = to.account;
+  const toBucket = to.bucket;
+
+  if (!isNonEmptyString(fromAccount)) {
+    return errorResponse('Missing required field: from.account', 'INVALID_REQUEST', 400);
+  }
+  if (!isV1Bucket(fromBucket)) {
+    return errorResponse('from.bucket must be one of A|H|B|F|P', 'INVALID_REQUEST', 400);
+  }
+  if (!isNonEmptyString(toAccount)) {
+    return errorResponse('Missing required field: to.account', 'INVALID_REQUEST', 400);
+  }
+  if (!isV1Bucket(toBucket)) {
+    return errorResponse('to.bucket must be one of A|H|B|F|P', 'INVALID_REQUEST', 400);
+  }
+
+  const amount = parsePositiveBigInt(amount_minor);
+  if (amount === null) {
+    return errorResponse('amount_minor must be a positive integer string', 'INVALID_REQUEST', 400);
+  }
+
+  let metadata: Record<string, unknown> | undefined;
+  if (metadataRaw !== undefined) {
+    if (!isRecord(metadataRaw)) {
+      return errorResponse('metadata must be an object', 'INVALID_REQUEST', 400);
+    }
+    metadata = metadataRaw;
+  }
+
+  const eventRepo = new EventRepository(env.DB);
+
+  // Idempotency: return existing event if present.
+  const existing = await eventRepo.findByIdempotencyKey(idempotency_key.trim());
+  if (existing) {
+    const response: V1TransferResponseBody = { event_id: existing.id, status: 'applied' };
+    return jsonResponse(response);
+  }
+
+  let resolvedFrom: V1ResolvedAccount;
+  let resolvedTo: V1ResolvedAccount;
+
+  try {
+    resolvedFrom = await resolveV1AccountRef(fromAccount, env);
+    resolvedTo = await resolveV1AccountRef(toAccount, env);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message === 'INVALID_DID') {
+      return errorResponse('Invalid DID account format', 'INVALID_ACCOUNT', 400);
+    }
+    if (message === 'INVALID_CLEARING_DOMAIN') {
+      return errorResponse('Invalid clearing account domain', 'INVALID_ACCOUNT', 400);
+    }
+    if (message === 'UNSUPPORTED_ACCOUNT') {
+      return errorResponse('Unsupported account identifier', 'INVALID_ACCOUNT', 400);
+    }
+    return errorResponse('Failed to resolve account', 'ACCOUNT_RESOLUTION_FAILED', 500);
+  }
+
+  const fromBucketName = v1BucketToBucketName(fromBucket);
+  const toBucketName = v1BucketToBucketName(toBucket);
+
+  if (resolvedFrom.id === resolvedTo.id && fromBucketName === toBucketName) {
+    return errorResponse('from and to must not be identical', 'INVALID_REQUEST', 400);
+  }
+
+  const repositories = {
+    users: new AccountRepository(env.DB),
+    clearing: new ClearingAccountRepository(env.DB),
+  };
+
+  try {
+    if (resolvedFrom.id === resolvedTo.id) {
+      // Same account, bucket move.
+      if (resolvedFrom.kind === 'user') {
+        await repositories.users.moveBetweenBuckets(resolvedFrom.id, fromBucketName, toBucketName, amount);
+      } else {
+        await repositories.clearing.moveBetweenBuckets(resolvedFrom.id, fromBucketName, toBucketName, amount);
+      }
+    } else {
+      // Cross-account transfer (supports any buckets).
+      await debitV1Account(resolvedFrom, fromBucketName, amount, repositories);
+      await creditV1Account(resolvedTo, toBucketName, amount, repositories);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('not found')) {
+      return errorResponse(message, 'NOT_FOUND', 404);
+    }
+    return errorResponse(message, 'TRANSFER_FAILED', 500);
+  }
+
+  try {
+    const previousHash = await eventRepo.getLastEventHash();
+    const now = new Date().toISOString();
+
+    const enrichedMetadata: Record<string, unknown> = {
+      ...(metadata ?? {}),
+      spec_v1: {
+        currency: 'USD',
+        from: { account: resolvedFrom.display, bucket: fromBucket },
+        to: { account: resolvedTo.display, bucket: toBucket },
+        amount_minor: amount.toString(),
+      },
+      from_bucket: bucketNameToV1Bucket(fromBucketName),
+      to_bucket: bucketNameToV1Bucket(toBucketName),
+    };
+
+    const eventHash = await computeEventHash(
+      previousHash,
+      'transfer',
+      resolvedFrom.id,
+      resolvedTo.id,
+      amount,
+      fromBucketName,
+      idempotency_key.trim(),
+      now
+    );
+
+    const event = await eventRepo.create(
+      idempotency_key.trim(),
+      'transfer',
+      resolvedFrom.id,
+      amount,
+      fromBucketName,
+      previousHash,
+      eventHash,
+      resolvedTo.id,
+      enrichedMetadata
+    );
+
+    const response: V1TransferResponseBody = { event_id: event.id, status: 'applied' };
+    return jsonResponse(response);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'EVENT_WRITE_FAILED', 500);
   }
 }
 
@@ -1482,8 +1862,10 @@ async function router(
       <h2>Common endpoints</h2>
       <ul>
         <li><code>POST /accounts</code> — Create an account (idempotent by DID).</li>
-        <li><code>GET /balances</code> — List balances.</li>
-        <li><code>POST /transfers</code> — Execute transfers between accounts.</li>
+        <li><code>GET /balances</code> — List balances (internal format).</li>
+        <li><code>GET /v1/balances?did=&lt;did&gt;</code> — Spec-compatible balances (buckets A/H/B/F/P).</li>
+        <li><code>POST /transfers</code> — Execute transfers between accounts (internal format).</li>
+        <li><code>POST /v1/transfers</code> — Spec-compatible transfers (bucket moves, clearing accounts).</li>
         <li><code>GET /attestation/reserve</code> — Signed reserve coverage attestation (public).</li>
         <li><code>POST /reserve/compute</code> — Upsert compute reserve assets (Gemini/FAL credits).</li>
       </ul>
@@ -1508,7 +1890,9 @@ async function router(
         endpoints: [
           { method: 'POST', path: '/accounts' },
           { method: 'GET', path: '/balances' },
+          { method: 'GET', path: '/v1/balances' },
           { method: 'POST', path: '/transfers' },
+          { method: 'POST', path: '/v1/transfers' },
           { method: 'GET', path: '/attestation/reserve' },
           { method: 'POST', path: '/reserve/compute' },
         ],
@@ -1542,6 +1926,14 @@ curl -sS -X POST "${url.origin}/accounts" \\
 curl -sS "${url.origin}/balances"
 \`\`\`
 
+## Spec balances (Agent Economy MVP)
+
+\`GET /v1/balances?did=<did>\`
+
+\`\`\`bash
+curl -sS "${url.origin}/v1/balances?did=did:key:z..."
+\`\`\`
+
 ## Transfers
 
 \`POST /transfers\`
@@ -1550,6 +1942,16 @@ curl -sS "${url.origin}/balances"
 curl -sS -X POST "${url.origin}/transfers" \\
   -H "Content-Type: application/json" \\
   -d '{"idempotencyKey":"idem_123","fromAccountId":"acc_...","toAccountId":"acc_...","amount":"100"}'
+\`\`\`
+
+## Spec transfers (Agent Economy MVP)
+
+\`POST /v1/transfers\`
+
+\`\`\`bash
+curl -sS -X POST "${url.origin}/v1/transfers" \\
+  -H "Content-Type: application/json" \\
+  -d '{"idempotency_key":"escrow:esc_123:hold","currency":"USD","from":{"account":"did:key:zBuyer","bucket":"A"},"to":{"account":"did:key:zBuyer","bucket":"H"},"amount_minor":"5000","metadata":{"reason":"escrow_hold"}}'
 \`\`\`
 
 ## Reserve attestation (public)
@@ -1608,6 +2010,15 @@ Canonical: ${url.origin}/.well-known/security.txt
   // Health check
   if (path === '/health' && method === 'GET') {
     return jsonResponse({ status: 'ok', service: 'ledger' });
+  }
+
+  // Spec-compatible endpoints
+  if (path === '/v1/balances' && method === 'GET') {
+    return handleV1Balances(env, url);
+  }
+
+  if (path === '/v1/transfers' && method === 'POST') {
+    return handleV1Transfers(request, env);
   }
 
   // GET /balances - List account balances

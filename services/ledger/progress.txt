@@ -331,3 +331,11 @@ Started: 2026-02-02T03:08:26.936251
 - Quality checks
   - cd services/ledger && npm run typecheck && npm run lint
 ---
+
+## 2026-02-03 - CLD-US-013
+- Added spec-compatible endpoints:
+  - GET /v1/balances?did=<did> (returns buckets A/H/B/F/P)
+  - POST /v1/transfers (supports bucket moves + cross-account transfers; accepts did: and clearing: accounts)
+- Updated /docs and /skill.md to reference the /v1 endpoints.
+- Typecheck: npm run typecheck
+---
