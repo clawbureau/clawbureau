@@ -39,6 +39,9 @@ This document covers OpenClaw's plugin architecture, which provides extensibilit
 
 For information about configuring individual channel integrations, see the Channel-specific documentation. For agent tool configuration, see [Tools and Skills](https://deepwiki.com/openclaw/openclaw/6-tools-and-skills). For model provider setup, see [Model Selection and Failover](https://deepwiki.com/openclaw/openclaw/5.4-model-selection-and-failover).
 
+Claw Bureau-specific integration guides:
+- `10.4-claw-marketplace-integration.md` — marketplace worker plugin + tip pools
+
 ---
 
 ## Plugin System Architecture
