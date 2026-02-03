@@ -95,6 +95,18 @@ Escrow holds/releases/milestones for agent work.
   - GET /.well-known/security.txt exists
 
 
+### CES-US-008 — Escrow API v1 (D1 + ledger integration)
+**As a** marketplace, **I want** escrow HTTP endpoints **so that** I can hold and release funds deterministically.
+
+**Acceptance Criteria:**
+  - POST /v1/escrows creates an escrow record and holds buyer_total_minor on clawledger (A→H)
+  - POST /v1/escrows/{escrow_id}/assign sets worker DID
+  - POST /v1/escrows/{escrow_id}/release pays worker + fee pool from held (H→A/F)
+  - POST /v1/escrows/{escrow_id}/dispute freezes escrow within dispute window
+  - GET /v1/escrows/{escrow_id} returns stored fee snapshot + ledger refs
+  - Admin auth required for /v1 endpoints (fail-closed)
+
+
 ## 8) Success Metrics
 - Escrows created
 - Avg time to release
