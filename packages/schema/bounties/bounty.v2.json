@@ -118,9 +118,9 @@
       "additionalProperties": false,
       "required": ["principal_minor", "platform_fee_minor", "total_minor", "currency"],
       "properties": {
-        "principal_minor": { "type": "string", "pattern": "^[0-9]+$" },
+        "principal_minor": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "platform_fee_minor": { "type": "string", "pattern": "^[0-9]+$" },
-        "total_minor": { "type": "string", "pattern": "^[0-9]+$" },
+        "total_minor": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "currency": { "const": "USD" }
       },
       "description": "Full cost breakdown shown at posting"

@@ -28,7 +28,7 @@
     },
     "amount_minor": {
       "type": "string",
-      "pattern": "^[0-9]+$",
+      "pattern": "^[1-9][0-9]*$",
       "description": "Amount held in escrow in minor units (cents)"
     },
     "currency": {
@@ -61,7 +61,7 @@
       "required": ["milestone_id", "amount_minor", "description", "status"],
       "properties": {
         "milestone_id": { "type": "string" },
-        "amount_minor": { "type": "string", "pattern": "^[0-9]+$" },
+        "amount_minor": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "description": { "type": "string" },
         "status": {
           "type": "string",
