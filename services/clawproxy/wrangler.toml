@@ -4,9 +4,32 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "clawproxy.com/*", zone_name = "clawproxy.com" },
+  { pattern = "www.clawproxy.com/*", zone_name = "clawproxy.com" }
+]
+
 [vars]
 PROXY_VERSION = "0.1.0"
+
+# CST (Scoped Token) issuer public key (from clawscope)
+CST_ISSUER_PUBLIC_KEY = "KhBwy4lBSKtd7M9eWyNnYfpIPl7sGnDWTSyJpmjYcjc"
+# Audience override (stabilizes staging usage)
+CST_AUDIENCE = "clawproxy.com"
 
 # Secrets to be set via wrangler secret put:
 # - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
 # - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
+# - PLATFORM_PAID_ENABLED ("true" to allow platform-paid mode; optional)
+# - PLATFORM_OPENAI_API_KEY / PLATFORM_ANTHROPIC_API_KEY / PLATFORM_GOOGLE_API_KEY (optional)
+
+[env.staging]
+name = "clawproxy-staging"
+routes = [
+  { pattern = "staging.clawproxy.com/*", zone_name = "clawproxy.com" }
+]
+
+[env.staging.vars]
+PROXY_VERSION = "0.1.0"
+CST_ISSUER_PUBLIC_KEY = "pwdA3cDDu9BF7vmFGs7E5m_aT8qRtMHe0QOIi5-ci90"
+CST_AUDIENCE = "clawproxy.com"
