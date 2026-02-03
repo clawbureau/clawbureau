@@ -1,0 +1,8 @@
+# Ralph Progress Log — packages/schema
+
+Started: 2026-02-03
+
+## AEM-US-001 — Schema v2: USD minor units + terminology normalization
+- Added v2 schemas for bounties and escrow using `currency: "USD"` and integer-string `*_minor` fields.
+- Added `min_proof_tier` enum (`self|gateway|sandbox`) and marked legacy `min_poh_tier`.
+- Preserved all v1 schemas unchanged.

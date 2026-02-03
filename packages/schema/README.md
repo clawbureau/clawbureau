@@ -3,20 +3,31 @@
 Shared JSON schemas for Claw Bureau services.
 
 ## Directories
-- `poh/` — Proof-of-Harness schemas (commit proofs)
-- `identity/` — Owner attestations (sybil-resistance / human ownership)
-- `auth/` — Scoped token claims (time-bound, narrow scope)
-- `escrow/` — Escrow schemas (holds, releases, milestones)
+- `auth/` — scoped token claims.
+- `bounties/` — marketplace request/response schemas.
+- `escrow/` — escrow record schemas.
+- `identity/` — ownership/attestation schemas.
+- `poh/` — proof-of-harness schemas.
 
-## Schemas
-### `poh/`
-- `commit_proof.v1.json`
+## Money conventions
+- **v2** schemas use **USD** only (`currency: "USD"`) and represent monetary values as **integer strings in minor units** (e.g. cents) using `*_minor` fields.
+- **v1** schemas remain for backward compatibility.
 
-### `identity/`
-- `owner_attestation.v1.json`
+## Schemas (selected)
+### `bounties/`
+- `post_bounty_request.v1.json`, `post_bounty_request.v2.json`
+- `post_bounty_response.v1.json`, `post_bounty_response.v2.json`
+- `escrow_hold_request.v1.json`, `escrow_hold_request.v2.json`
+- `bounty.v1.json`, `bounty.v2.json`
+
+### `escrow/`
+- `escrow.v1.json`, `escrow.v2.json`
 
 ### `auth/`
 - `scoped_token_claims.v1.json`
 
-### `escrow/`
-- `escrow.v1.json`
+### `identity/`
+- `owner_attestation.v1.json`
+
+### `poh/`
+- `commit_proof.v1.json`
