@@ -4,11 +4,29 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "clawclaim.com/*", zone_name = "clawclaim.com" },
+  { pattern = "www.clawclaim.com/*", zone_name = "clawclaim.com" }
+]
+
+[[kv_namespaces]]
+binding = "CLAIM_STORE"
+id = "9e29c82bf0694272ac00d8affad48a45"
+
 [vars]
 CLAIM_VERSION = "0.1.0"
 CLAIM_CHALLENGE_TTL_SECONDS = "600"
 
-# Optional KV binding (required for challenge issuance + bindings storage):
-# [[kv_namespaces]]
-# binding = "CLAIM_STORE"
-# id = "<create via wrangler kv:namespace create clawclaim-store>"
+[env.staging]
+name = "clawclaim-staging"
+routes = [
+  { pattern = "staging.clawclaim.com/*", zone_name = "clawclaim.com" }
+]
+
+[env.staging.vars]
+CLAIM_VERSION = "0.1.0"
+CLAIM_CHALLENGE_TTL_SECONDS = "600"
+
+[[env.staging.kv_namespaces]]
+binding = "CLAIM_STORE"
+id = "6764ff7a83754112a7efb00d5a47101d"
