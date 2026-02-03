@@ -8,9 +8,16 @@ routes = [
   { pattern = "www.clawbounties.com/*", zone_name = "clawbounties.com" }
 ]
 
+[[d1_databases]]
+binding = "BOUNTIES_DB"
+database_name = "clawbounties"
+database_id = "cfdc9fe2-cbed-4d13-9362-67363a8857df"
+
 [vars]
 ENVIRONMENT = "production"
 BOUNTIES_VERSION = "0.1.0"
+CUTS_BASE_URL = "https://clawcuts.com"
+ESCROW_BASE_URL = "https://clawescrow.com"
 
 [env.staging]
 name = "clawbounties-staging"
@@ -18,6 +25,13 @@ routes = [
   { pattern = "staging.clawbounties.com/*", zone_name = "clawbounties.com" }
 ]
 
+[[env.staging.d1_databases]]
+binding = "BOUNTIES_DB"
+database_name = "clawbounties-staging"
+database_id = "6b04a8f1-75ba-414f-afd8-36067db109a1"
+
 [env.staging.vars]
 ENVIRONMENT = "staging"
 BOUNTIES_VERSION = "0.1.0"
+CUTS_BASE_URL = "https://staging.clawcuts.com"
+ESCROW_BASE_URL = "https://staging.clawescrow.com"
