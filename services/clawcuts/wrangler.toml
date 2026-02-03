@@ -4,5 +4,19 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "clawcuts.com/*", zone_name = "clawcuts.com" },
+  { pattern = "www.clawcuts.com/*", zone_name = "clawcuts.com" }
+]
+
 [vars]
+CUTS_VERSION = "0.1.0"
+
+[env.staging]
+name = "clawcuts-staging"
+routes = [
+  { pattern = "staging.clawcuts.com/*", zone_name = "clawcuts.com" }
+]
+
+[env.staging.vars]
 CUTS_VERSION = "0.1.0"
