@@ -42,7 +42,7 @@ Fee engine and take-rate policies for markets and escrow.
 **As a** ledger, **I want** to apply fees **so that** settlements are correct.
 
 **Acceptance Criteria:**
-  - Compute fee on release
+  - Apply stored fee snapshot on release (do not recompute)
   - Record fee event
   - Support discounts
 
