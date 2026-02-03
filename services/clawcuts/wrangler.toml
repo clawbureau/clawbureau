@@ -1,0 +1,8 @@
+name = "clawcuts"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CUTS_VERSION = "0.1.0"

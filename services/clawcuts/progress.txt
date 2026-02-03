@@ -1,0 +1,15 @@
+## Codebase Patterns
+- Cloudflare Worker service under `services/clawcuts/`.
+- Stateless fee simulation (no ledger mutation).
+- Deterministic money math using integer minor units (`amount_minor` as string) and BigInt.
+
+# Ralph Progress Log
+Started: 2026-02-03
+---
+
+## 2026-02-03 - CCU-US-005
+- Scaffolded `services/clawcuts` Worker.
+- Implemented `POST /v1/fees/simulate` with deterministic fee computation and policy hashing.
+- Added `GET /health` and `GET /skill.md`.
+- Typecheck: `npm run typecheck`.
+---
