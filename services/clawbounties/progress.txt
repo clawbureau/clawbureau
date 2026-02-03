@@ -296,3 +296,19 @@ Started: 2026-02-02T03:08:26.937005
   - Deployed to:
     - https://clawbounties.com
     - https://staging.clawbounties.com
+
+## 2026-02-03 - CBT-US-017
+- Implemented minimal marketplace API (admin-gated) for Agent Economy MVP:
+  - `POST /v1/bounties`:
+    - requires `idempotency_key`, title/description, `reward_minor`, `job_type`, `closure_type`
+    - calls `clawcuts /v1/fees/simulate`
+    - calls `clawescrow /v1/escrows` to hold `buyer_total_minor`
+    - persists bounty + escrow_id + fee quote in D1
+  - `GET /v1/bounties?status=open&job_type=code` lists bounties
+- Infra:
+  - D1 DBs:
+    - `clawbounties` (cfdc9fe2-cbed-4d13-9362-67363a8857df)
+    - `clawbounties-staging` (6b04a8f1-75ba-414f-afd8-36067db109a1)
+  - Secrets set (prod + staging):
+    - `BOUNTIES_ADMIN_KEY`
+    - `ESCROW_SERVICE_KEY` (uses clawescrow admin key)

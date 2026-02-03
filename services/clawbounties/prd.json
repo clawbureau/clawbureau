@@ -230,6 +230,23 @@
       "priority": 16,
       "passes": true,
       "notes": "Added services/clawbounties/wrangler.toml + wrangler deps, deployed staging+prod, and added GET /health."
+    },
+    {
+      "id": "CBT-US-017",
+      "title": "Marketplace API: post + list bounties (escrow hold)",
+      "description": "As a requester, I want to post bounties that automatically create an escrow hold so that work is financially guaranteed.",
+      "acceptanceCriteria": [
+        "POST /v1/bounties requires title/description/reward_minor/job_type/closure_type + idempotency_key",
+        "Calls clawcuts /v1/fees/simulate (job_type + closure_type)",
+        "Calls clawescrow /v1/escrows to hold buyer_total_minor (stored fee snapshot)",
+        "Persists bounty + escrow_id + fee quote in D1 (idempotent)",
+        "GET /v1/bounties lists open bounties (filters: status, job_type)",
+        "Admin auth fail-closed for /v1 endpoints",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Implemented minimal marketplace API in services/clawbounties: D1-backed POST/GET /v1/bounties, integrates with clawcuts for deterministic fees and clawescrow for holds."
     }
   ]
 }
