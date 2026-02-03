@@ -3,6 +3,11 @@ account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+routes = [
+  { pattern = "clawverify.com/*", zone_name = "clawverify.com" },
+  { pattern = "www.clawverify.com/*", zone_name = "clawverify.com" }
+]
+
 [vars]
 ENVIRONMENT = "production"
 
@@ -10,3 +15,17 @@ ENVIRONMENT = "production"
 binding = "AUDIT_LOG_DB"
 database_name = "clawverify-audit-log"
 database_id = "9150187b-07b2-4b44-9be8-46d8934ab785"
+
+[env.staging]
+name = "clawverify-staging"
+routes = [
+  { pattern = "staging.clawverify.com/*", zone_name = "clawverify.com" }
+]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+[[env.staging.d1_databases]]
+binding = "AUDIT_LOG_DB"
+database_name = "clawverify-audit-log-staging"
+database_id = "1aa0fbf8-6464-42e9-afaf-676535bcbef1"
