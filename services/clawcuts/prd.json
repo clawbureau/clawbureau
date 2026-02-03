@@ -1,0 +1,91 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/clawcuts/CCU-US-005-fee-simulation",
+  "description": "clawcuts.com (Pricing Engine) — PRD — Fee engine and take-rate policies for markets and escrow.",
+  "userStories": [
+    {
+      "id": "CCU-US-001",
+      "title": "Define fee policies",
+      "description": "As a operator, I want to set fees so that revenue is consistent.",
+      "acceptanceCriteria": [
+        "Create policy per product",
+        "Version policies",
+        "Activate/deactivate",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCU-US-002",
+      "title": "Apply fees",
+      "description": "As a ledger, I want to apply fees so that settlements are correct.",
+      "acceptanceCriteria": [
+        "Apply stored fee snapshot on release (do not recompute)",
+        "Record fee event",
+        "Support discounts",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCU-US-003",
+      "title": "Referral splits",
+      "description": "As a growth, I want referral splits so that partners are rewarded.",
+      "acceptanceCriteria": [
+        "Define split rules",
+        "Apply on transactions",
+        "Ledger event emitted",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCU-US-004",
+      "title": "Policy audit",
+      "description": "As a auditor, I want fee change logs so that pricing is transparent.",
+      "acceptanceCriteria": [
+        "Log policy changes",
+        "Include actor + timestamp",
+        "Expose history API",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "CCU-US-005",
+      "title": "Fee simulation",
+      "description": "As a operator, I want simulate fees so that pricing changes are safe.",
+      "acceptanceCriteria": [
+        "Input sample transaction",
+        "Return computed fees",
+        "No ledger mutation",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Implemented POST /v1/fees/simulate with built-in policies (bounties_v1 + tips_v1), deterministic BigInt money math (ceil + min_fee_minor), and stable policy_hash_b64u."
+    },
+    {
+      "id": "CCU-US-006",
+      "title": "Revenue reporting",
+      "description": "As a finance, I want fee revenue reports so that I can track income.",
+      "acceptanceCriteria": [
+        "Monthly fee summary",
+        "Export CSV",
+        "Segment by product",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
