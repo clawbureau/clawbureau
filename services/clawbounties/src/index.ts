@@ -1,5 +1,6 @@
 export interface Env {
   ENVIRONMENT?: string;
+  BOUNTIES_VERSION?: string;
 }
 
 function escapeHtml(input: string): string {
@@ -40,12 +41,25 @@ function htmlResponse(body: string, status = 200, headers?: HeadersInit): Respon
   return textResponse(body, "text/html; charset=utf-8", status, headers);
 }
 
+function jsonResponse(body: unknown, status = 200, headers?: HeadersInit): Response {
+  return textResponse(JSON.stringify(body, null, 2), "application/json; charset=utf-8", status, headers);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method;
 
     if (method === "GET") {
+      if (url.pathname === "/health") {
+        return jsonResponse({
+          status: "ok",
+          service: "clawbounties",
+          version: env.BOUNTIES_VERSION ?? "0.1.0",
+          environment: env.ENVIRONMENT ?? "unknown",
+        });
+      }
+
       if (url.pathname === "/") {
         const environment = env.ENVIRONMENT ? escapeHtml(env.ENVIRONMENT) : "unknown";
         return htmlResponse(`<!doctype html>

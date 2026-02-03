@@ -215,6 +215,21 @@
       "priority": 15,
       "passes": true,
       "notes": "Added a minimal public Cloudflare Worker at services/clawbounties with GET /, /docs, /skill.md (OpenClaw frontmatter metadata as single-line JSON object string), /robots.txt, /sitemap.xml, and /.well-known/security.txt."
+    },
+    {
+      "id": "CBT-US-016",
+      "title": "Production deploy (routes + health)",
+      "description": "As a developer, I want clawbounties deployed to real domains so that clients can discover and integrate it.",
+      "acceptanceCriteria": [
+        "Configure worker routes for clawbounties.com and www.clawbounties.com",
+        "Configure staging route staging.clawbounties.com",
+        "DNS records exist for apex + staging + www",
+        "GET /health returns status/version/environment",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Added services/clawbounties/wrangler.toml + wrangler deps, deployed staging+prod, and added GET /health."
     }
   ]
 }

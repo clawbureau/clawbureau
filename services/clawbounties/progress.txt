@@ -283,3 +283,16 @@ Started: 2026-02-02T03:08:26.937005
 - Quality checks
   - cd services/clawbounties && npm run typecheck
 ---
+
+## 2026-02-03 - CBT-US-016
+- Deployed clawbounties discovery worker to real domains:
+  - Added `services/clawbounties/wrangler.toml` with prod + staging routes.
+  - Added `GET /health` endpoint.
+  - Added Wrangler + Workers types tooling to `services/clawbounties/package.json`.
+  - Created Cloudflare DNS records for:
+    - `clawbounties.com`
+    - `www.clawbounties.com`
+    - `staging.clawbounties.com`
+  - Deployed to:
+    - https://clawbounties.com
+    - https://staging.clawbounties.com
