@@ -1,21 +1,19 @@
-name = "ledger"
+name = "clawledger"
+account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
 compatibility_date = "2024-01-15"
 compatibility_flags = ["nodejs_compat"]
 
-[durable_objects]
-bindings = [
-  { name = "ACCOUNT_DO", class_name = "AccountDurableObject" }
+# Worker routes (custom domains)
+routes = [
+  { pattern = "clawledger.com/*", zone_name = "clawledger.com" },
+  { pattern = "www.clawledger.com/*", zone_name = "clawledger.com" }
 ]
-
-[[migrations]]
-tag = "v1"
-new_classes = ["AccountDurableObject"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "ledger"
-database_id = "placeholder"
+database_name = "clawledger"
+database_id = "729dda2e-33d2-48b1-92fe-00a15d9cd6c5"
 
 # Scheduled triggers for nightly reconciliation
 # Runs at 2:00 AM UTC daily
@@ -26,3 +24,20 @@ crons = ["0 2 * * *"]
 # [vars]
 # ALERT_WEBHOOK_URL = "https://your-webhook-endpoint.com/alerts"
 # EVENT_WEBHOOK_URL = "https://your-webhook-endpoint.com/events"
+
+[env.staging]
+name = "clawledger-staging"
+
+# Stage on staging.clawledger.com
+routes = [
+  { pattern = "staging.clawledger.com/*", zone_name = "clawledger.com" }
+]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "clawledger-staging"
+database_id = "064bf1cf-9baa-4835-a8a2-ef9bbc0fd7ce"
+
+# Disable scheduled triggers in staging by default.
+[env.staging.triggers]
+crons = []
