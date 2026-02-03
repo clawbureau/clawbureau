@@ -1,0 +1,21 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/schema/AEM-US-001-schema-v2-usd-minor",
+  "description": "packages/schema — Agent Economy MVP schema alignment (USD minor units + proof tier terminology).",
+  "userStories": [
+    {
+      "id": "AEM-US-001",
+      "title": "Schema v2: USD minor units + terminology normalization",
+      "description": "As an integrator, I want v2 schemas using USD minor-unit strings and proof-tier naming so that services and OpenClaw integrations share deterministic contracts.",
+      "acceptanceCriteria": [
+        "New v2 schemas added with new $id values; strict additionalProperties:false",
+        "All monetary fields are string integers in minor units",
+        "Add min_proof_tier enum (self|gateway|sandbox) and mark min_poh_tier as legacy",
+        "Schemas are valid JSON (draft 2020-12)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Added v2 schema files for bounties + escrow using USD-only currency and integer-string minor-unit fields (e.g. amount_minor). Introduced min_proof_tier enum (self|gateway|sandbox) and marked legacy min_poh_tier as deprecated."
+    }
+  ]
+}
