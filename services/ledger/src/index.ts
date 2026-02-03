@@ -1820,6 +1820,43 @@ async function router(
   const path = url.pathname;
   const method = request.method;
 
+  // Fail-closed auth: require LEDGER_ADMIN_KEY for all non-public endpoints.
+  const isPublicGet =
+    method === 'GET' &&
+    (path === '/' ||
+      path === '/docs' ||
+      path === '/skill.md' ||
+      path === '/robots.txt' ||
+      path === '/sitemap.xml' ||
+      path === '/.well-known/security.txt' ||
+      path === '/health' ||
+      path === '/attestation/reserve');
+
+  if (!isPublicGet) {
+    const adminKey = env.LEDGER_ADMIN_KEY;
+
+    if (!adminKey) {
+      return errorResponse(
+        'Ledger admin key not configured',
+        'LEDGER_ADMIN_KEY_MISSING',
+        503
+      );
+    }
+
+    const authHeader =
+      request.headers.get('authorization') ??
+      request.headers.get('Authorization');
+    const bearerMatch = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
+    const bearer = bearerMatch?.[1]?.trim();
+
+    const xAdminKey =
+      request.headers.get('x-admin-key') ?? request.headers.get('X-Admin-Key');
+
+    if (bearer !== adminKey && xAdminKey !== adminKey) {
+      return errorResponse('Unauthorized', 'UNAUTHORIZED', 401);
+    }
+  }
+
   // CLD-US-012: Public landing + skill docs
   if (method === 'GET') {
     if (path === '/') {

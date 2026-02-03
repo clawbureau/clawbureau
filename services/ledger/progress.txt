@@ -339,3 +339,16 @@ Started: 2026-02-02T03:08:26.936251
 - Updated /docs and /skill.md to reference the /v1 endpoints.
 - Typecheck: npm run typecheck
 ---
+
+## 2026-02-03 - CLD-US-014
+- Deployed clawledger to Cloudflare Workers with real D1 bindings + custom domains.
+  - Production: clawledger.com
+  - Staging: staging.clawledger.com
+- Added fail-closed auth gate:
+  - All non-public endpoints require `Authorization: Bearer <LEDGER_ADMIN_KEY>` (or `X-Admin-Key`).
+  - If `LEDGER_ADMIN_KEY` is unset, non-public endpoints return 503.
+- D1 migrations applied to staging + production.
+- Live smoke tests:
+  - GET /health (public)
+  - GET /v1/balances + POST /v1/transfers (authorized)
+---

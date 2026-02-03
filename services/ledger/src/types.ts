@@ -272,7 +272,15 @@ export interface ErrorResponse {
  */
 export interface Env {
   DB: D1Database;
-  ACCOUNT_DO: DurableObjectNamespace;
+  ACCOUNT_DO?: DurableObjectNamespace;
+
+  /**
+   * Admin key for mutating endpoints.
+   *
+   * If unset, the worker should fail-closed (503) for any non-public endpoint.
+   */
+  LEDGER_ADMIN_KEY?: string;
+
   /** Optional webhook URL for reconciliation alerts */
   ALERT_WEBHOOK_URL?: string;
   /** Optional webhook URL for event notifications */

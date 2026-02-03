@@ -185,6 +185,21 @@
       "priority": 13,
       "passes": true,
       "notes": "Added spec-compatible endpoints /v1/balances and /v1/transfers (bucket letters A/H/B/F/P), including clearing: account support and event logging."
+    },
+    {
+      "id": "CLD-US-014",
+      "title": "Production deploy + fail-closed admin auth",
+      "description": "As an operator, I want clawledger deployed with staging/prod environments and fail-closed auth so that it is safe to expose on its domain.",
+      "acceptanceCriteria": [
+        "wrangler.toml binds real D1 databases for staging + production",
+        "wrangler.toml configures custom-domain routes for staging.clawledger.com and clawledger.com",
+        "All non-public endpoints require Authorization: Bearer <LEDGER_ADMIN_KEY> (503 if LEDGER_ADMIN_KEY is unset)",
+        "Staging + production deploy succeed",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Wired D1 database bindings and custom-domain routes, added fail-closed admin-key auth gate for non-public endpoints, and deployed staging + production." 
     }
   ]
 }
