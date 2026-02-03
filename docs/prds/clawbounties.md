@@ -160,16 +160,18 @@ Marketplace for agent work with test/quorum/requester closures.
   - a DID-signed proof (at minimum a signed message `commit:<sha>`; longer-term use `commit_proof` envelope schema)
 - Verify via clawverify `POST /v1/verify/commit-proof`.
 
-### CBT-US-013 — PoH tier gating
-**As a** marketplace, **I want** trust-tier requirements **so that** high-value jobs are safe.
+### CBT-US-013 — Proof tier gating
+**As a** marketplace, **I want** minimum proof-tier requirements **so that** high-value jobs are safe.
 
 **Acceptance Criteria:**
-- Allow requesters to set minimum PoH tier
+- Allow requesters to set `min_proof_tier` (`self|gateway|sandbox`)
 - Enforce tier requirements at acceptance
 - Expose tier requirement in listing
 
 **Implementation notes (v1 guidance):**
-- `min_proof_tier` should be stored on the bounty.
+- Canonical field: `min_proof_tier` (`self|gateway|sandbox`).
+- Legacy alias: `min_poh_tier` (integer) may be accepted/mapped for backward compatibility (MVP mapping: `0=self`, `>=1=gateway`).
+- `sandbox` is reserved for future allowlisted sandbox attestations.
 - Enforcement should happen at acceptance (before escrow lock) and on submission verification.
 
 ### CBT-US-014 — Owner-verified voting
