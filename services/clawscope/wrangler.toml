@@ -4,6 +4,15 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "clawscope.com/*", zone_name = "clawscope.com" },
+  { pattern = "www.clawscope.com/*", zone_name = "clawscope.com" }
+]
+
+[[kv_namespaces]]
+binding = "SCOPE_REVOCATIONS"
+id = "30f94e9e07fe426cb295b3efc9936836"
+
 [vars]
 SCOPE_VERSION = "0.1.0"
 SCOPE_POLICY_VERSION = "1"
@@ -33,3 +42,25 @@ SCOPE_REVOCATION_TTL_SECONDS = "2592000" # 30 days
 # - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required unless using SCOPE_SIGNING_KEYS_JSON)
 # - SCOPE_SIGNING_KEYS_JSON (JSON array of Ed25519 seeds; base64url; first key is active; optional)
 # - SCOPE_ADMIN_KEY (string; required for token issuance/revocation)
+
+[env.staging]
+name = "clawscope-staging"
+routes = [
+  { pattern = "staging.clawscope.com/*", zone_name = "clawscope.com" }
+]
+
+[env.staging.vars]
+SCOPE_VERSION = "0.1.0"
+SCOPE_POLICY_VERSION = "1"
+SCOPE_POLICY_TIER = "default"
+SCOPE_ALLOW_WILDCARDS = "0"
+SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:"
+SCOPE_ALLOWED_SCOPES = ""
+SCOPE_MAX_TTL_SECONDS = "3600"
+SCOPE_MAX_SCOPE_ITEMS = "64"
+SCOPE_MAX_SCOPE_LENGTH = "128"
+SCOPE_REVOCATION_TTL_SECONDS = "2592000"
+
+[[env.staging.kv_namespaces]]
+binding = "SCOPE_REVOCATIONS"
+id = "0eabaa70badf4983b5f20d671d1d943d"
