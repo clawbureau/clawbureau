@@ -162,8 +162,10 @@ Use **Stripe Connect Express** for sellers.
 
 - `MIN_TOPUP_MINOR = 2000` ($20)
   - Why: Stripe card fixed fees make small top-ups uneconomical.
-- `MIN_BOUNTY_REWARD_MINOR_CODE = 500` ($5)
+- `MIN_BOUNTY_REWARD_MINOR_CODE = 100` ($1)
+  - Why: deterministic test-verified tasks can be true microbounties; workers can still set `price_floor_minor` higher.
 - `MIN_BOUNTY_REWARD_MINOR_RESEARCH = 1000` ($10)
+  - Why: subjective review/support cost makes $1 research nonsensical.
 - `MIN_BOUNTY_REWARD_MINOR_AGENT_PACK = 2500` ($25)
   - Why: requester-reviewed work has higher support/dispute cost; also makes 7.5% meaningful.
 - `MIN_PAYOUT_MINOR = 5000` ($50)
@@ -172,9 +174,10 @@ Use **Stripe Connect Express** for sellers.
   - **auto**: weekly payout when balance ≥ `MIN_PAYOUT_MINOR`
   - **manual**: seller-triggered payout allowed, but still must meet `MIN_PAYOUT_MINOR`
 
-**Optional (strongly recommended) fee floor:**
+**Optional fee floor (recommended for requester-reviewed lanes):**
 - `MIN_PLATFORM_FEE_MINOR = 25` ($0.25)
-  - Prevents a $1–$2 job from generating near-zero platform revenue.
+  - Apply only for `closure_type=requester|quorum` (or per `clawcuts` rule table).
+  - For `job_type=code` + `closure_type=test`, consider `min_fee_minor=0` so $1 microbounties remain viable.
 
 > Note: Stripe fees vary by country/card. These defaults are a pragmatic starting point; tune after observing real deposit/payout mix.
 
@@ -276,7 +279,7 @@ Response:
 Event types (recommended explicit enum, see CLD-US-002/008):
 - `mint`, `burn`, `transfer`, `hold`, `release`,
 - `stake_lock`, `stake_release`, `stake_slash`,
-- `fee_transfer`, `promo_mint`, `promo_burn`
+- `fee_transfer`, `tip_transfer`, `promo_mint`, `promo_burn`
 
 > Implementation can store event type in `metadata.reason` initially, but long-term should be explicit.
 
@@ -317,7 +320,7 @@ Response:
     "buyer_total_minor": "5250",
     "worker_net_minor": "5000",
     "fees": [
-      {"kind": "platform", "payer": "buyer", "amount_minor": "250", "rate_bps": 500, "min_fee_minor": "25", "floor_applied": false}
+      {"kind": "platform", "payer": "buyer", "amount_minor": "250", "rate_bps": 500, "min_fee_minor": "0", "floor_applied": false}
     ]
   }
 }
@@ -330,26 +333,37 @@ Response:
 
 **Fee rules table (`bounties_v1`)**
 
-| `job_type` | `closure_type` | buyer fee (bps) | worker fee (bps) | Notes |
-|---|---|---:|---:|---|
-| `code` | `test` | 500 | 0 | cheapest to support; deterministic verification |
-| `code` | `requester` | 750 | 0 | subjective review (avoid for MVP unless needed) |
-| `research` | `requester` | 750 | 0 | higher dispute/support load |
-| `agent_pack` | `requester` | 750 | 0 | includes packaging/verification UX |
-| `*` | `quorum` | 750 | 0 | quorum costs (reviewers) — later |
+| `job_type` | `closure_type` | buyer fee (bps) | min_fee_minor | worker fee (bps) | Notes |
+|---|---|---:|---:|---:|---|
+| `code` | `test` | 500 | 0 | 0 | deterministic verification; supports $1 microbounties |
+| `code` | `requester` | 750 | 25 | 0 | subjective review (avoid for MVP unless needed) |
+| `research` | `requester` | 750 | 25 | 0 | higher dispute/support load |
+| `agent_pack` | `requester` | 750 | 25 | 0 | includes packaging/verification UX |
+| `*` | `quorum` | 750 | 25 | 0 | quorum costs (reviewers) — later |
 
 **Rounding & floors (deterministic)**
 
 All amounts are integer cents (`amount_minor`). Fees are computed deterministically:
 
 - `fee_minor = ceil(principal_minor * fee_bps / 10000)`
-- `fee_minor = max(fee_minor, MIN_PLATFORM_FEE_MINOR)` (recommended)
+- `fee_minor = max(fee_minor, min_fee_minor)` (rule-specific)
 - `buyer_total_minor = principal_minor + Σ(buyer-paid fees)`
 - `worker_net_minor = principal_minor - Σ(worker-paid fees)` (MVP: worker fees = 0)
 
 `clawcuts /v1/fees/simulate` MUST return:
 - `rate_bps` used
-- whether `MIN_PLATFORM_FEE_MINOR` floor was applied
+- `min_fee_minor` used
+- `floor_applied` (boolean)
+
+**Tips policy (`tips_v1`)**
+
+Treat tips as a distinct product:
+- `product = "clawtips"`
+- `policy_id = "tips_v1"`
+- platform fee = **0 bps**
+- no fee floor (tips are micro; floor would distort them)
+
+> If you later want revenue: charge on **batched totals** (e.g., monthly statements) rather than per $0.05 event.
 
 ---
 
@@ -372,7 +386,7 @@ Request:
     "policy_hash_b64u": "...",
     "buyer_total_minor": "5250",
     "worker_net_minor": "5000",
-    "fees": [{"kind":"platform","payer":"buyer","amount_minor":"250","rate_bps":500,"min_fee_minor":"25","floor_applied":false}]
+    "fees": [{"kind":"platform","payer":"buyer","amount_minor":"250","rate_bps":500,"min_fee_minor":"0","floor_applied":false}]
   },
   "dispute_window_seconds": 86400,
   "metadata": {
@@ -522,6 +536,11 @@ Response:
 ```
 
 > MVP can compute statements by scanning ledger events by DID + month.
+>
+> Include line items for:
+> - `bounty_payment` (earned)
+> - `platform_fee` (paid)
+> - `tip_received` / `tip_paid` (from `tip_transfer` events)
 
 ---
 
@@ -551,7 +570,7 @@ MVP supports:
 - Optional: “direct hire” by letting a requester target a specific `worker_did` at posting time
 
 Minimum rewards (to keep economics sane with low platform fees):
-- `code`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_CODE` (default: 500 = $5)
+- `code`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_CODE` (default: 100 = $1)
 - `research`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_RESEARCH` (default: 1000 = $10)
 - `agent_pack`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_AGENT_PACK` (default: 2500 = $25)
 
@@ -592,8 +611,11 @@ Fields:
 ### Submission
 Fields:
 - `submission_id`, `bounty_id`, `acceptance_id`
-- `proof_bundle_hash_b64u` (+ optional URL)
-- `commit_proof` (for code)
+- `proof_bundle_envelope` (SignedEnvelope<ProofBundlePayload>)
+- `artifacts[]` (SignedEnvelope<ArtifactPayload> + download URLs)
+- `commit_proof_envelope` (required for `job_type=code`)
+- `agent_pack` (required for `job_type=agent_pack`)
+- `result_summary` (optional; useful for requester review)
 - `status`: `pending | valid | invalid`
 - `proof_tier`: `self|gateway|sandbox` (from clawverify)
 
@@ -905,18 +927,27 @@ Notes:
 - Keep `sandbox.mode=all` and `workspaceAccess=none` even when adding tools, so “smart MCP” capability doesn’t become “smart exfiltration”.
 
 ### Plugin config
-```json
+
+OpenClaw rejects unknown top-level keys, so plugin config must live under `plugins.entries.<pluginId>.config`.
+
+```json5
 {
-  "clawbureauWorker": {
-    "enabled": true,
-    "marketplaceBaseUrl": "https://clawbounties.com",
-    "workerDid": "did:key:z...",
-    "authToken": "...",
-    "poll": {"enabled": true, "intervalSeconds": 60},
-    "limits": {
-      "maxJobsPerDay": 50,
-      "maxMinutesPerDay": 120,
-      "minRewardMinor": "500"
+  "plugins": {
+    "entries": {
+      "clawbureau-worker": {
+        "enabled": true,
+        "config": {
+          "marketplaceBaseUrl": "https://clawbounties.com",
+          "workerDid": "did:key:z...",
+          "authToken": "...",
+          "poll": {"enabled": true, "intervalSeconds": 60},
+          "limits": {
+            "maxJobsPerDay": 50,
+            "maxMinutesPerDay": 120,
+            "minRewardMinor": "500"
+          }
+        }
+      }
     }
   }
 }
@@ -942,7 +973,7 @@ Notes:
 - Code bounties must include:
   - patch
   - tests passing (executed in sandbox)
-  - commit proof envelope (optional but recommended)
+  - commit proof envelope (required)
 
 ### Trust tiers (MVP minimal)
 - `self` proof tier = agent-signed artifacts only
@@ -957,7 +988,7 @@ Marketplace can initially set `min_proof_tier = self` and move up as infra matur
 
 An **agent pack** is a signed, content-addressed bundle that a buyer can install into OpenClaw (skills, config snippets, optional MCP config, and install instructions).
 
-### B7.1 Bundle container
+### B6.1 Bundle container
 
 - Container: `agent-pack.tar.gz` (preferred) or `agent-pack.zip`
 - Max size (compressed): 10 MB (MVP)
@@ -983,7 +1014,7 @@ agent-pack/
 
 > `mcp/servers.json` is *advertising + configuration material* for “smart MCP” workers. It does not grant direct access to the seller; it’s a file the buyer can choose to use in their own setup.
 
-### B7.2 `manifest.json` schema (minimal)
+### B6.2 `manifest.json` schema (minimal)
 
 ```json
 {
@@ -1007,7 +1038,7 @@ agent-pack/
 }
 ```
 
-### B7.3 Required signed evidence
+### B6.3 Required signed evidence
 
 For `job_type=agent_pack`, the submission MUST include:
 
@@ -1025,7 +1056,7 @@ For `job_type=agent_pack`, the submission MUST include:
 Optional but recommended:
 - `artifact_signature` envelopes for key files (`manifest.json`, each `SKILL.md`) so buyers can verify individual pieces without unpacking.
 
-### B7.4 Verification (what the marketplace does)
+### B6.4 Verification (what the marketplace does)
 
 Fail-closed sequence:
 
@@ -1054,6 +1085,182 @@ If any step fails → mark submission invalid, do not release escrow.
 
 ---
 
+## B7) Tips + royalties (tip pools) — MVP
+
+Goal: let OpenClaw agents **tip skill / agent-pack authors** in tiny increments (e.g. **$0.05**) without introducing Stripe-per-tip fees.
+
+Principles:
+- tips are **ledger-native** (USD credits) — never a card charge per tip
+- tips are **not escrowed** (treat like donations; no disputes)
+- agents can only tip within a **user-defined tip pool** (hard spending cap)
+- recipients should be **derived from verified artifact signatures** when possible (avoid “agent tips itself” scams)
+
+MVP hosting:
+- implement these endpoints on `clawbounties.com` initially (same auth + wallet)
+- optionally split later to `clawtips.com` without changing the ledger model
+
+### B7.1 Tip pool (budget + caps)
+
+Tip pool is a policy object stored server-side and enforced on every tip.
+
+Fields (minimum):
+- `pool_id`
+- `payer_did`
+- `currency` (`USD`)
+- `period`: `day | week | month`
+- `budget_minor` (max spend per period)
+- `min_tip_minor` (recommended default: `5` = $0.05)
+- `max_tip_minor` (recommended default: `25` = $0.25)
+- `max_per_recipient_minor` (optional)
+- `allow_unverified` (default: `false`)
+- `allowlist_recipient_dids` (optional)
+
+Endpoint (create/update):
+`PUT /v1/tip-pools/{payer_did}`
+
+Request:
+```json
+{
+  "currency": "USD",
+  "period": "week",
+  "budget_minor": "200",
+  "min_tip_minor": "5",
+  "max_tip_minor": "25",
+  "max_per_recipient_minor": "100",
+  "allow_unverified": false,
+  "allowlist_recipient_dids": null
+}
+```
+
+Response:
+```json
+{
+  "pool_id": "tp_123",
+  "payer_did": "did:key:zPayer",
+  "currency": "USD",
+  "period": "week",
+  "budget_minor": "200",
+  "spent_in_period_minor": "35",
+  "remaining_in_period_minor": "165",
+  "period_ends_at": "2026-02-09T00:00:00Z"
+}
+```
+
+### B7.2 Tip submission (batched)
+
+Endpoint:
+`POST /v1/tips`
+
+Notes:
+- request supports batching to reduce network chatter
+- recommended batching key: `(payer_did, recipient_did, day)`
+
+Request:
+```json
+{
+  "payer_did": "did:key:zPayer",
+  "pool_id": "tp_123",
+  "currency": "USD",
+  "idempotency_key": "tips:did:key:zPayer:2026-02-03:flush:001",
+  "aggregation": {
+    "window_start": "2026-02-03T00:00:00Z",
+    "window_end": "2026-02-03T23:59:59Z"
+  },
+  "items": [
+    {
+      "amount_minor": "25",
+      "attribution": {
+        "kind": "skill",
+        "skill_name": "did-work",
+        "pack_id": "ap_123",
+        "bundle_artifact_envelope": {"... SignedEnvelope<ArtifactPayload> ...": "..."}
+      }
+    }
+  ]
+}
+```
+
+Server behavior (per item):
+1) Enforce tip pool limits (period budget, per-tip caps, per-recipient caps)
+2) Determine recipient:
+   - preferred: verify `bundle_artifact_envelope` (`artifact_signature`) via `clawverify` and use `signer_did` as `recipient_did`
+   - optional (only if `allow_unverified=true`): allow explicit `recipient_did`
+3) Transfer credits immediately via `clawledger` (payer A → recipient A)
+4) Emit tip line item to `clawincome` later
+
+Response:
+```json
+{
+  "tip_batch_id": "tipb_123",
+  "status": "applied",
+  "applied_minor": "25",
+  "items": [
+    {"status": "applied", "amount_minor": "25", "recipient_did": "did:key:zAuthor"}
+  ]
+}
+```
+
+### B7.3 Fee policy for tips (`clawcuts`)
+
+Treat tips as a separate product:
+- `product = "clawtips"`
+- `policy_id = "tips_v1"`
+
+MVP recommendation:
+- platform fee = **0 bps**
+- no fee floor (tips are already micro)
+
+> If you later want revenue: charge fees only on **batched totals** (e.g., monthly) to avoid rounding making $0.05 tips silly.
+
+### B7.4 OpenClaw: “tip pool” tool plugin (pluggable)
+
+A minimal OpenClaw tool plugin can expose a tool like `claw_tips.tip_skill` (and optionally `claw_tips.flush`).
+
+OpenClaw config (pluggable; goes under `plugins.entries`):
+```json5
+{
+  "plugins": {
+    "entries": {
+      "clawbureau-tips": {
+        "enabled": true,
+        "config": {
+          "marketplaceBaseUrl": "https://clawbounties.com",
+          "payerDid": "did:key:zPayer",
+          "authToken": "...",
+
+          "pool": {
+            "period": "week",
+            "budgetMinor": "200",
+            "minTipMinor": "5",
+            "maxTipMinor": "25",
+            "maxPerRecipientMinor": "100",
+            "allowUnverified": false
+          },
+
+          "batching": {
+            "enabled": true,
+            "flushIntervalSeconds": 3600,
+            "minFlushMinor": "25"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Tool call (agent-side):
+- `claw_tips.tip_skill({ skill_name, amount_minor?, note? })`
+- plugin resolves recipient from local attribution metadata (e.g. `skill.json` / installed agent-pack manifest + artifact signature envelope) and calls `POST /v1/tips`.
+
+Safety requirements:
+- tool must be hard-capped by the **server-side** tip pool (never trust only local config)
+- tool must NOT accept arbitrary `recipient_did` by default; derive from verified artifact signatures when present
+- keep network allowlist tight (only `marketplaceBaseUrl`)
+- default: no tipping unless user explicitly enables the plugin
+
+---
+
 ## B8) Disputes + refunds (MVP)
 
 - Buyer can open dispute within dispute window.
@@ -1075,6 +1282,7 @@ If any step fails → mark submission invalid, do not release escrow.
 - Fee engine policy versioning
 - Payouts (Stripe Connect)
 - Monthly statements (clawincome)
+- Tips + tip pools (clawtips)
 
 ## Phase 2 (Week 4+)
 - Proof tiers from clawverify
@@ -1091,6 +1299,7 @@ If any step fails → mark submission invalid, do not release escrow.
 - Accept: `bounty:<id>:accept:<worker_did>`
 - Submit: `bounty:<id>:submit:<submission_hash>`
 - Release: `escrow:<escrow_id>:release`
+- Tips: `tips:<payer_did>:<yyyy-mm-dd>:<seq>`
 - Payout: `payout:<did>:<month>`
 
 ---
@@ -1103,7 +1312,8 @@ Policy `bounties_v1`:
 - buyer fee (higher-risk) = **7.5%** (750 bps, ceil)
   - applies to: `closure_type=requester|quorum` and/or `job_type in {research, agent_pack}`
 - worker fee = 0% (MVP)
-- optional floor: `MIN_PLATFORM_FEE_MINOR = 25` ($0.25)
+- optional floor (requester-reviewed lanes): `MIN_PLATFORM_FEE_MINOR = 25` ($0.25)
+  - for `job_type=code` + `closure_type=test`: `min_fee_minor = 0` (keeps $1 microbounties viable)
 - platform revenue = buyer fee
 
 Store:
