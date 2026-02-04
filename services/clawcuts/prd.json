@@ -86,6 +86,20 @@
       "priority": 6,
       "passes": false,
       "notes": ""
+    },
+    {
+      "id": "CCU-US-007",
+      "title": "Fee simulation params v2 (is_code_bounty + closure_type)",
+      "description": "As a marketplace, I want fee simulation to accept schema-v2 bounty lane params so that posting bounties doesn't require legacy job_type fields.",
+      "acceptanceCriteria": [
+        "bounties_v1 policy selects rules using params.is_code_bounty + params.closure_type",
+        "job_type is no longer required/accepted",
+        "GET /skill.md example uses is_code_bounty + closure_type",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Updated /v1/fees/simulate to use params.is_code_bounty + params.closure_type per Agent Economy MVP spec (schema v2 alignment)."
     }
   ]
 }

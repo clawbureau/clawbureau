@@ -13,3 +13,11 @@ Started: 2026-02-03
 - Added `GET /health` and `GET /skill.md`.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-04 - CCU-US-007
+- Updated `POST /v1/fees/simulate` bounties policy inputs to match schema-v2 bounty lane params:
+  - `params.is_code_bounty` (boolean)
+  - `params.closure_type` (`test|requester|quorum`)
+- Removed legacy `params.job_type` requirement and updated `/skill.md` example.
+- Policy hashing updated to `clawcuts.policy.v2` canonical schema.
+- Typecheck: `npm run typecheck`.
