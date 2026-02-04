@@ -1,0 +1,232 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { getChannels, getProviders } from '../../lib/data/loaders';
+import type { SEOMeta, Breadcrumb } from '../../lib/data/types';
+
+const channels = getChannels();
+const providers = getProviders();
+
+const seo: SEOMeta = {
+  title: 'Messaging Channels - OpenClaw Integration Guides',
+  description: 'Setup guides for all messaging channels supported by OpenClaw. Connect WhatsApp, Telegram, Discord, Slack, Signal, and more to your AI assistant.',
+  canonical: 'https://clawproviders.com/channels/',
+  keywords: ['WhatsApp bot', 'Telegram bot', 'Discord bot', 'Slack bot', 'Signal bot', 'OpenClaw channels'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Channels', url: '/channels/' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>Messaging Channels</h1>
+      <p class="page-intro">
+        Connect OpenClaw to the messaging platforms your users already use.
+        Each channel supports different features and access control policies.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="channels-grid">
+        {channels.map((channel) => (
+          <a href={`/channels/${channel.slug}/`} class="channel-card card">
+            <div class="channel-header">
+              <h2>{channel.name}</h2>
+              <span class="protocol">{channel.protocolLibrary}</span>
+            </div>
+            <p>{channel.description}</p>
+
+            <div class="capabilities-grid">
+              <div class={`capability ${channel.capabilities.dms ? 'supported' : 'not-supported'}`}>
+                <span class="cap-icon">{channel.capabilities.dms ? '✓' : '—'}</span>
+                <span class="cap-label">DMs</span>
+              </div>
+              <div class={`capability ${channel.capabilities.groups ? 'supported' : 'not-supported'}`}>
+                <span class="cap-icon">{channel.capabilities.groups ? '✓' : '—'}</span>
+                <span class="cap-label">Groups</span>
+              </div>
+              <div class={`capability ${channel.capabilities.media ? 'supported' : 'not-supported'}`}>
+                <span class="cap-icon">{channel.capabilities.media ? '✓' : '—'}</span>
+                <span class="cap-label">Media</span>
+              </div>
+              <div class={`capability ${channel.capabilities.voice ? 'supported' : 'not-supported'}`}>
+                <span class="cap-icon">{channel.capabilities.voice ? '✓' : '—'}</span>
+                <span class="cap-label">Voice</span>
+              </div>
+              <div class={`capability ${channel.capabilities.reactions ? 'supported' : 'not-supported'}`}>
+                <span class="cap-icon">{channel.capabilities.reactions ? '✓' : '—'}</span>
+                <span class="cap-label">Reactions</span>
+              </div>
+              <div class={`capability ${channel.capabilities.threads ? 'supported' : 'not-supported'}`}>
+                <span class="cap-icon">{channel.capabilities.threads ? '✓' : '—'}</span>
+                <span class="cap-label">Threads</span>
+              </div>
+            </div>
+
+            <div class="channel-features">
+              {channel.features.slice(0, 3).map((feature) => (
+                <span class="feature-tag">{feature}</span>
+              ))}
+            </div>
+
+            <div class="provider-links">
+              <span class="label">Setup with:</span>
+              <div class="provider-list">
+                {providers.slice(0, 4).map((provider) => (
+                  <span class="provider-link-wrapper" onclick={`event.stopPropagation(); window.location.href='/channels/${channel.slug}/${provider.slug}/'`}>
+                    {provider.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    padding-bottom: 3rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .section {
+    padding-bottom: 6rem;
+  }
+
+  .channels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .channel-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .channel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .channel-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text);
+  }
+
+  .protocol {
+    background: var(--bg-secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border);
+  }
+
+  .capabilities-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.5rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .capability {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .cap-icon {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .cap-label {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+
+  .supported .cap-icon {
+    color: var(--success);
+  }
+
+  .not-supported .cap-icon {
+    color: var(--border);
+  }
+
+  .channel-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .feature-tag {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+  }
+
+  .provider-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    margin-top: auto;
+  }
+
+  .provider-links .label {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .provider-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .provider-link-wrapper {
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+  }
+
+  .provider-link-wrapper:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+</style>

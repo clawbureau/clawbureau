@@ -1,0 +1,323 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import type { SEOMeta, Breadcrumb } from '../lib/data/types';
+
+const seo: SEOMeta = {
+  title: 'SimpleClaw - Deploy OpenClaw in 1 Minute',
+  description: 'Avoid technical complexity. One-click deploy your own 24/7 active OpenClaw instance. The fastest way to get started with your AI assistant.',
+  canonical: 'https://clawproviders.com/simple-claw',
+  keywords: ['SimpleClaw', 'managed OpenClaw', 'one click deploy', 'AI assistant hosting'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'SimpleClaw', url: '/simple-claw' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="hero-section">
+    <div class="container">
+      <div class="hero-content">
+        <h1>Deploy OpenClaw <br/><span class="text-gradient">Under 1 Minute</span></h1>
+        <p class="hero-subtitle">
+          Avoid all technical complexity. One-click deploy your own 24/7 active OpenClaw instance.
+        </p>
+        <div class="hero-cta">
+          <a href="https://simpleclaw.com" class="btn btn-lg btn-glow">Deploy Now</a>
+          <p class="small-text">Servers, SSH & Environment pre-configured.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="comparison-box">
+        <h2>Traditional vs. SimpleClaw</h2>
+        <div class="comparison-table-wrapper">
+          <div class="comparison-grid">
+            <div class="col traditional">
+              <h3>Traditional Method</h3>
+              <div class="total-time">~30 Minutes</div>
+              <ul class="step-list">
+                <li>
+                  <span class="step-name">Purchase virtual machine</span>
+                  <span class="step-time">10 min</span>
+                </li>
+                <li>
+                  <span class="step-name">Create & store SSH keys</span>
+                  <span class="step-time">3 min</span>
+                </li>
+                <li>
+                  <span class="step-name">Connect via SSH</span>
+                  <span class="step-time">3 min</span>
+                </li>
+                <li>
+                  <span class="step-name">Install Node.js & NPM</span>
+                  <span class="step-time">5 min</span>
+                </li>
+                <li>
+                  <span class="step-name">Install OpenClaw</span>
+                  <span class="step-time">2 min</span>
+                </li>
+                <li>
+                  <span class="step-name">Configure OpenClaw</span>
+                  <span class="step-time">5 min</span>
+                </li>
+                <li>
+                  <span class="step-name">Connect to Telegram</span>
+                  <span class="step-time">2 min</span>
+                </li>
+              </ul>
+            </div>
+            
+            <div class="vs-divider">
+              <span>VS</span>
+            </div>
+
+            <div class="col simple">
+              <h3>SimpleClaw</h3>
+              <div class="total-time highlight">&lt;1 Minute</div>
+              <div class="simple-content">
+                <p class="simple-desc">
+                  Pick a model, connect Telegram, deploy — <strong>done.</strong>
+                </p>
+                <ul class="check-list">
+                  <li>Servers pre-configured</li>
+                  <li>SSH setup handled</li>
+                  <li>Environment ready</li>
+                  <li>Secure connection</li>
+                  <li>24/7 Active</li>
+                </ul>
+                <a href="#" class="btn btn-full">Start 1-Minute Setup</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero-section {
+    padding: 6rem 0 4rem;
+    text-align: center;
+    background: radial-gradient(circle at center, rgba(34, 197, 94, 0.1) 0%, transparent 70%);
+  }
+
+  h1 {
+    font-size: 3.5rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.1;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #22c55e 0%, #3b82f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero-subtitle {
+    font-size: 1.25rem;
+    max-width: 600px;
+    margin: 0 auto 2rem;
+    color: var(--text-secondary);
+  }
+
+  .btn-lg {
+    padding: 1rem 2.5rem;
+    font-size: 1.125rem;
+    border-radius: 9999px;
+  }
+
+  .btn-glow {
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+    background: #22c55e;
+  }
+
+  .btn-glow:hover {
+    background: #16a34a;
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.6);
+  }
+
+  .small-text {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+  }
+
+  .comparison-box {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .comparison-box h2 {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0;
+    align-items: stretch;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+  }
+
+  .col {
+    padding: 2.5rem;
+  }
+
+  .col h3 {
+    text-align: center;
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+  }
+
+  .total-time {
+    text-align: center;
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    color: var(--text);
+  }
+
+  .total-time.highlight {
+    color: #22c55e;
+  }
+
+  .step-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .step-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9375rem;
+  }
+
+  .step-list li:last-child {
+    border-bottom: none;
+  }
+
+  .step-time {
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .vs-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 0;
+  }
+
+  .vs-divider span {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-weight: 700;
+    padding: 0.5rem;
+    border-radius: 50%;
+    z-index: 10;
+    font-size: 0.875rem;
+  }
+  
+  .vs-divider::before {
+    content: '';
+    position: absolute;
+    top: 2rem;
+    bottom: 2rem;
+    left: 50%;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .simple {
+    background: rgba(34, 197, 94, 0.03);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .simple-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .simple-desc {
+    text-align: center;
+    font-size: 1.125rem;
+    margin-bottom: 2rem;
+    color: var(--text);
+  }
+
+  .check-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 2rem;
+  }
+
+  .check-list li {
+    padding: 0.5rem 0;
+    padding-left: 2rem;
+    position: relative;
+    color: var(--text-secondary);
+  }
+
+  .check-list li::before {
+    content: '✓';
+    position: absolute;
+    left: 0;
+    color: #22c55e;
+    font-weight: 700;
+  }
+
+  .btn-full {
+    width: 100%;
+    background: #22c55e;
+    text-align: center;
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    color: white;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+
+  .btn-full:hover {
+    background: #16a34a;
+  }
+
+  @media (max-width: 768px) {
+    .comparison-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .vs-divider {
+      height: 4rem;
+      width: 100%;
+    }
+    
+    .vs-divider::before {
+      top: 50%;
+      bottom: auto;
+      left: 2rem;
+      right: 2rem;
+      width: auto;
+      height: 1px;
+    }
+  }
+</style>

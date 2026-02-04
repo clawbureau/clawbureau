@@ -1,0 +1,182 @@
+---
+import BaseLayout from '../../../components/layout/BaseLayout.astro';
+import { getChannelComparisons } from '../../../lib/data/loaders';
+import type { SEOMeta, Breadcrumb } from '../../../lib/data/types';
+
+const comparisons = getChannelComparisons();
+
+const seo: SEOMeta = {
+  title: 'Messaging Channel Comparisons - WhatsApp vs Telegram vs Discord',
+  description: 'Compare all messaging channels supported by OpenClaw. Head-to-head comparisons of WhatsApp, Telegram, Discord, Slack, Signal, and more.',
+  canonical: 'https://clawproviders.com/compare/channels/',
+  keywords: ['messaging comparison', 'WhatsApp vs Telegram', 'Discord vs Slack', 'channel comparison'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Compare', url: '/compare/' },
+  { name: 'Channels', url: '/compare/channels/' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>Messaging Channel Comparisons</h1>
+      <p class="page-intro">
+        Compare messaging channels head-to-head. Find the best platform for your
+        AI assistant based on features, capabilities, and use cases.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="comparison-grid">
+        {comparisons.map(({ a, b }) => (
+          <a href={`/compare/channels/${a.slug}-vs-${b.slug}/`} class="comparison-card card">
+            <div class="vs-header">
+              <span class="entity">{a.name}</span>
+              <span class="vs">vs</span>
+              <span class="entity">{b.name}</span>
+            </div>
+            <div class="comparison-preview">
+              <div class="preview-row header-row">
+                <span class="feature"></span>
+                <span>{a.name.slice(0, 3)}</span>
+                <span>{b.name.slice(0, 3)}</span>
+              </div>
+              <div class="preview-row">
+                <span class="feature">DMs</span>
+                <span class={a.capabilities.dms ? 'yes' : 'no'}>{a.capabilities.dms ? '✓' : '—'}</span>
+                <span class={b.capabilities.dms ? 'yes' : 'no'}>{b.capabilities.dms ? '✓' : '—'}</span>
+              </div>
+              <div class="preview-row">
+                <span class="feature">Groups</span>
+                <span class={a.capabilities.groups ? 'yes' : 'no'}>{a.capabilities.groups ? '✓' : '—'}</span>
+                <span class={b.capabilities.groups ? 'yes' : 'no'}>{b.capabilities.groups ? '✓' : '—'}</span>
+              </div>
+              <div class="preview-row">
+                <span class="feature">Media</span>
+                <span class={a.capabilities.media ? 'yes' : 'no'}>{a.capabilities.media ? '✓' : '—'}</span>
+                <span class={b.capabilities.media ? 'yes' : 'no'}>{b.capabilities.media ? '✓' : '—'}</span>
+              </div>
+            </div>
+            <span class="view-details">Compare details →</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: var(--bg-alt);
+    padding: 3rem 0;
+    text-align: center;
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-light);
+  }
+
+  .section {
+    padding: 3rem 0;
+  }
+
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+
+  .comparison-card {
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+  }
+
+  .vs-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .entity {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--primary);
+  }
+
+  .vs {
+    background: var(--bg-alt);
+    color: var(--text-light);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .comparison-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    background: var(--bg-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+
+  .preview-row {
+    display: grid;
+    grid-template-columns: 1fr 40px 40px;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .header-row {
+    font-weight: 600;
+    color: var(--text-light);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .feature {
+    text-align: left;
+    color: var(--text-light);
+  }
+
+  .yes {
+    color: var(--success);
+    font-weight: 600;
+  }
+
+  .no {
+    color: var(--text-light);
+  }
+  
+  .view-details {
+    margin-top: auto;
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  .comparison-card:hover .view-details {
+    text-decoration: underline;
+  }
+</style>

@@ -1,0 +1,710 @@
+{
+  "channels": [
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp",
+      "slug": "whatsapp",
+      "description": "WhatsApp integration via the Baileys library implements the WhatsApp Web protocol. Connect your AI assistant to WhatsApp for DMs and group chats with media support, QR code authentication, and automatic reconnection.",
+      "shortDescription": "Connect AI to WhatsApp via Baileys protocol",
+      "website": "https://whatsapp.com",
+      "protocolLibrary": "@whiskeysockets/baileys",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": false,
+        "topics": false,
+        "media": true,
+        "voice": true,
+        "reactions": false,
+        "nativeCommands": false
+      },
+      "configOptions": [
+        {
+          "key": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Enable WhatsApp monitoring",
+          "default": true
+        },
+        {
+          "key": "accountId",
+          "type": "string",
+          "required": false,
+          "description": "Identifier for multi-account support",
+          "default": "default"
+        },
+        {
+          "key": "dmPolicy",
+          "type": "string",
+          "required": false,
+          "description": "DM access control policy",
+          "default": "pairing"
+        },
+        {
+          "key": "allowFrom",
+          "type": "array",
+          "required": false,
+          "description": "Allowlist of JIDs for DM access"
+        },
+        {
+          "key": "groupPolicy",
+          "type": "string",
+          "required": false,
+          "description": "Group chat access policy",
+          "default": "allowlist"
+        },
+        {
+          "key": "mediaMaxMb",
+          "type": "number",
+          "required": false,
+          "description": "Maximum media download size in MB",
+          "default": 5
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"whatsapp\": {\n      \"enabled\": true,\n      \"dmPolicy\": \"pairing\",\n      \"allowFrom\": [\"111@s.whatsapp.net\"],\n      \"groupPolicy\": \"allowlist\",\n      \"mediaMaxMb\": 5\n    }\n  }\n}",
+      "setupSteps": [
+        "Enable WhatsApp in your openclaw.json configuration",
+        "Start the OpenClaw gateway with 'openclaw gateway start'",
+        "Scan the QR code displayed in terminal with WhatsApp mobile app",
+        "Wait for authentication to complete",
+        "Configure DM policy and allowlist for access control"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4096,
+      "features": [
+        "QR code authentication",
+        "Multi-file auth state persistence",
+        "Media handling (images, audio, video, documents)",
+        "Contact and location message support",
+        "Automatic reconnection with backoff",
+        "Message deduplication"
+      ],
+      "pros": [
+        "Most popular messaging app globally",
+        "End-to-end encryption",
+        "Rich media support",
+        "Group chat support"
+      ],
+      "cons": [
+        "Requires phone number",
+        "QR login needs physical access initially",
+        "No native bot API",
+        "Session can expire"
+      ],
+      "useCases": [
+        "Personal AI assistant",
+        "Family group automation",
+        "Business customer support",
+        "Team communication"
+      ]
+    },
+    {
+      "id": "telegram",
+      "name": "Telegram",
+      "slug": "telegram",
+      "description": "Telegram integration via the grammY library provides full bot API access. Support for DMs, groups, topics/forums, native commands, inline keyboards, and reactions.",
+      "shortDescription": "Full-featured Telegram bot with commands and reactions",
+      "website": "https://telegram.org",
+      "protocolLibrary": "grammy",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": false,
+        "topics": true,
+        "media": true,
+        "voice": true,
+        "reactions": true,
+        "nativeCommands": true
+      },
+      "configOptions": [
+        {
+          "key": "botToken",
+          "type": "string",
+          "required": true,
+          "description": "Telegram bot token from @BotFather",
+          "envVar": "TELEGRAM_BOT_TOKEN"
+        },
+        {
+          "key": "dmPolicy",
+          "type": "string",
+          "required": false,
+          "description": "DM access control policy",
+          "default": "pairing"
+        },
+        {
+          "key": "allowFrom",
+          "type": "array",
+          "required": false,
+          "description": "Allowlist of usernames or user IDs"
+        },
+        {
+          "key": "historyLimit",
+          "type": "number",
+          "required": false,
+          "description": "Group history retention",
+          "default": 20
+        },
+        {
+          "key": "reactionNotifications",
+          "type": "string",
+          "required": false,
+          "description": "Reaction notification mode",
+          "default": "own"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"telegram\": {\n      \"botToken\": \"${TELEGRAM_BOT_TOKEN}\",\n      \"dmPolicy\": \"pairing\",\n      \"allowFrom\": [\"alice\", \"bob\"],\n      \"historyLimit\": 20,\n      \"reactionNotifications\": \"own\"\n    }\n  }\n}",
+      "setupSteps": [
+        "Create a bot with @BotFather on Telegram",
+        "Copy the bot token provided",
+        "Set TELEGRAM_BOT_TOKEN environment variable",
+        "Add telegram configuration to openclaw.json",
+        "Start the gateway and message your bot"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4096,
+      "features": [
+        "Native bot API support",
+        "Forum/topics support",
+        "Inline keyboards",
+        "Reaction notifications",
+        "Native slash commands",
+        "Edit message support",
+        "Multi-account support"
+      ],
+      "pros": [
+        "Official bot API",
+        "Rich bot features",
+        "Cloud-based (no phone needed)",
+        "Fast and reliable",
+        "Forums/topics support"
+      ],
+      "cons": [
+        "Bot accounts are separate from users",
+        "Some features require group admin",
+        "Learning curve for advanced features"
+      ],
+      "useCases": [
+        "AI assistant bot",
+        "Group automation",
+        "Customer support bot",
+        "Team productivity"
+      ]
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "slug": "discord",
+      "description": "Discord integration via discord.js through @buape/carbon provides slash commands, DMs, server channels, threads, buttons, and autocomplete features.",
+      "shortDescription": "Discord bot with slash commands and threads",
+      "website": "https://discord.com",
+      "protocolLibrary": "discord.js via @buape/carbon",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": true,
+        "topics": false,
+        "media": true,
+        "voice": false,
+        "reactions": true,
+        "nativeCommands": true
+      },
+      "configOptions": [
+        {
+          "key": "token",
+          "type": "string",
+          "required": true,
+          "description": "Discord bot token",
+          "envVar": "DISCORD_BOT_TOKEN"
+        },
+        {
+          "key": "applicationId",
+          "type": "string",
+          "required": true,
+          "description": "Discord application ID"
+        },
+        {
+          "key": "dmPolicy",
+          "type": "string",
+          "required": false,
+          "description": "DM access control policy",
+          "default": "allowlist"
+        },
+        {
+          "key": "groupPolicy",
+          "type": "string",
+          "required": false,
+          "description": "Server/channel access policy",
+          "default": "allowlist"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"discord\": {\n      \"token\": \"${DISCORD_BOT_TOKEN}\",\n      \"applicationId\": \"your-app-id\",\n      \"dmPolicy\": \"allowlist\",\n      \"allowFrom\": [\"user123\"]\n    }\n  }\n}",
+      "setupSteps": [
+        "Create a Discord application at discord.com/developers",
+        "Create a bot user and copy the token",
+        "Set DISCORD_BOT_TOKEN environment variable",
+        "Configure OAuth2 and add bot to your server",
+        "Add discord configuration to openclaw.json"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 2000,
+      "features": [
+        "Slash commands",
+        "Button interactions",
+        "Autocomplete",
+        "Thread support",
+        "Rich embeds",
+        "Reaction handling"
+      ],
+      "pros": [
+        "Rich interaction features",
+        "Thread support",
+        "Server/guild organization",
+        "Strong developer tools"
+      ],
+      "cons": [
+        "Character limit (2000)",
+        "Complex permission system",
+        "Requires server invitation"
+      ],
+      "useCases": [
+        "Community AI assistant",
+        "Gaming server bot",
+        "Developer team helper",
+        "Support communities"
+      ]
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "slug": "slack",
+      "description": "Slack integration via @slack/bolt provides workspace messaging with Block Kit formatting, threads, slash commands, and app home features.",
+      "shortDescription": "Slack app with Block Kit and threads",
+      "website": "https://slack.com",
+      "protocolLibrary": "@slack/bolt",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": true,
+        "topics": false,
+        "media": true,
+        "voice": false,
+        "reactions": true,
+        "nativeCommands": true
+      },
+      "configOptions": [
+        {
+          "key": "botToken",
+          "type": "string",
+          "required": true,
+          "description": "Slack bot token",
+          "envVar": "SLACK_BOT_TOKEN"
+        },
+        {
+          "key": "appToken",
+          "type": "string",
+          "required": true,
+          "description": "Slack app token for Socket Mode",
+          "envVar": "SLACK_APP_TOKEN"
+        },
+        {
+          "key": "signingSecret",
+          "type": "string",
+          "required": false,
+          "description": "Slack signing secret"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"slack\": {\n      \"botToken\": \"${SLACK_BOT_TOKEN}\",\n      \"appToken\": \"${SLACK_APP_TOKEN}\",\n      \"dmPolicy\": \"allowlist\"\n    }\n  }\n}",
+      "setupSteps": [
+        "Create a Slack app at api.slack.com/apps",
+        "Enable Socket Mode and create app token",
+        "Add bot token scopes and install to workspace",
+        "Set SLACK_BOT_TOKEN and SLACK_APP_TOKEN environment variables",
+        "Configure slack in openclaw.json"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4000,
+      "features": [
+        "Socket Mode (no public URL needed)",
+        "Block Kit formatting",
+        "Thread support",
+        "Slash commands",
+        "App home",
+        "Reaction events"
+      ],
+      "pros": [
+        "Enterprise-grade",
+        "Rich formatting",
+        "Thread conversations",
+        "No public URL needed with Socket Mode"
+      ],
+      "cons": [
+        "Complex app setup",
+        "Workspace-specific",
+        "Paid workspaces for full features"
+      ],
+      "useCases": [
+        "Workplace AI assistant",
+        "Team productivity",
+        "DevOps automation",
+        "Customer support"
+      ]
+    },
+    {
+      "id": "signal",
+      "name": "Signal",
+      "slug": "signal",
+      "description": "Signal integration via signal-cli daemon provides encrypted messaging for DMs and groups. Requires external signal-cli daemon and SSE event stream.",
+      "shortDescription": "Encrypted messaging via signal-cli daemon",
+      "website": "https://signal.org",
+      "protocolLibrary": "signal-cli (external daemon)",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": false,
+        "topics": false,
+        "media": true,
+        "voice": true,
+        "reactions": true,
+        "nativeCommands": false
+      },
+      "configOptions": [
+        {
+          "key": "account",
+          "type": "string",
+          "required": true,
+          "description": "Signal phone number"
+        },
+        {
+          "key": "signalCliPath",
+          "type": "string",
+          "required": false,
+          "description": "Path to signal-cli binary"
+        },
+        {
+          "key": "dmPolicy",
+          "type": "string",
+          "required": false,
+          "description": "DM access control policy",
+          "default": "pairing"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"signal\": {\n      \"account\": \"+15551234567\",\n      \"dmPolicy\": \"pairing\",\n      \"allowFrom\": [\"+15559876543\"]\n    }\n  }\n}",
+      "setupSteps": [
+        "Install signal-cli on your system",
+        "Register or link a Signal account",
+        "Start signal-cli daemon",
+        "Configure signal in openclaw.json",
+        "Start OpenClaw gateway"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4096,
+      "features": [
+        "End-to-end encryption",
+        "Group support",
+        "Media attachments",
+        "Reaction messages",
+        "Voice message support"
+      ],
+      "pros": [
+        "Maximum privacy",
+        "End-to-end encryption",
+        "No metadata collection",
+        "Open source"
+      ],
+      "cons": [
+        "Requires signal-cli daemon",
+        "More complex setup",
+        "Smaller user base"
+      ],
+      "useCases": [
+        "Privacy-focused assistant",
+        "Secure team communication",
+        "Journalism/activism",
+        "Healthcare communication"
+      ]
+    },
+    {
+      "id": "imessage",
+      "name": "iMessage",
+      "slug": "imessage",
+      "description": "iMessage integration via the imsg library (macOS only) connects your AI to Apple's messaging ecosystem. Requires a Mac running the gateway.",
+      "shortDescription": "Apple iMessage integration (macOS only)",
+      "website": "https://apple.com/imessage",
+      "protocolLibrary": "imsg (macOS-only)",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": false,
+        "topics": false,
+        "media": true,
+        "voice": true,
+        "reactions": false,
+        "nativeCommands": false
+      },
+      "configOptions": [
+        {
+          "key": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "Enable iMessage monitoring",
+          "default": true
+        },
+        {
+          "key": "dmPolicy",
+          "type": "string",
+          "required": false,
+          "description": "DM access control policy",
+          "default": "pairing"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"imessage\": {\n      \"enabled\": true,\n      \"dmPolicy\": \"pairing\",\n      \"allowFrom\": [\"friend@icloud.com\"]\n    }\n  }\n}",
+      "setupSteps": [
+        "Ensure you're running macOS with Messages app",
+        "Grant Full Disk Access to Terminal/Node",
+        "Enable imessage in openclaw.json",
+        "Start the gateway",
+        "Send a test message to trigger pairing"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4096,
+      "features": [
+        "Native macOS integration",
+        "iCloud sync",
+        "Media support",
+        "Group chats"
+      ],
+      "pros": [
+        "Native Apple ecosystem",
+        "Works with existing contacts",
+        "No bot account needed"
+      ],
+      "cons": [
+        "macOS only",
+        "Requires Full Disk Access",
+        "No official API"
+      ],
+      "useCases": [
+        "Personal AI assistant",
+        "Family communication",
+        "Apple ecosystem users"
+      ]
+    },
+    {
+      "id": "matrix",
+      "name": "Matrix",
+      "slug": "matrix",
+      "description": "Matrix integration via matrix-bot-sdk provides access to the decentralized Matrix protocol. Connect to any Matrix homeserver for encrypted, federated messaging.",
+      "shortDescription": "Decentralized Matrix protocol support",
+      "website": "https://matrix.org",
+      "protocolLibrary": "matrix-bot-sdk",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": true,
+        "topics": false,
+        "media": true,
+        "voice": false,
+        "reactions": true,
+        "nativeCommands": false
+      },
+      "configOptions": [
+        {
+          "key": "homeserver",
+          "type": "string",
+          "required": true,
+          "description": "Matrix homeserver URL"
+        },
+        {
+          "key": "accessToken",
+          "type": "string",
+          "required": true,
+          "description": "Matrix access token"
+        },
+        {
+          "key": "userId",
+          "type": "string",
+          "required": true,
+          "description": "Matrix user ID (@user:server)"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"matrix\": {\n      \"homeserver\": \"https://matrix.org\",\n      \"accessToken\": \"${MATRIX_ACCESS_TOKEN}\",\n      \"userId\": \"@mybot:matrix.org\"\n    }\n  }\n}",
+      "setupSteps": [
+        "Create a Matrix account on your preferred homeserver",
+        "Generate an access token",
+        "Configure matrix in openclaw.json",
+        "Start the gateway",
+        "Invite the bot to rooms"
+      ],
+      "dmPolicies": ["allowlist", "pairing", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4096,
+      "features": [
+        "Decentralized/federated",
+        "End-to-end encryption",
+        "Thread support",
+        "Self-hosted option"
+      ],
+      "pros": [
+        "Decentralized",
+        "Self-hosted option",
+        "Strong encryption",
+        "Open protocol"
+      ],
+      "cons": [
+        "Smaller user base",
+        "Complex for non-technical users",
+        "Federation can be slow"
+      ],
+      "useCases": [
+        "Privacy-focused teams",
+        "Open source communities",
+        "Self-hosted environments"
+      ]
+    },
+    {
+      "id": "msteams",
+      "name": "Microsoft Teams",
+      "slug": "microsoft-teams",
+      "description": "Microsoft Teams integration via @microsoft/agents-hosting provides enterprise messaging with channel support, threading, and Microsoft 365 integration.",
+      "shortDescription": "Enterprise Teams integration via Microsoft SDK",
+      "website": "https://teams.microsoft.com",
+      "protocolLibrary": "@microsoft/agents-hosting",
+      "capabilities": {
+        "dms": true,
+        "groups": true,
+        "threads": true,
+        "topics": false,
+        "media": true,
+        "voice": false,
+        "reactions": true,
+        "nativeCommands": true
+      },
+      "configOptions": [
+        {
+          "key": "appId",
+          "type": "string",
+          "required": true,
+          "description": "Microsoft App ID"
+        },
+        {
+          "key": "appPassword",
+          "type": "string",
+          "required": true,
+          "description": "Microsoft App Password"
+        },
+        {
+          "key": "tenantId",
+          "type": "string",
+          "required": false,
+          "description": "Azure AD tenant ID"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"msteams\": {\n      \"appId\": \"${MSTEAMS_APP_ID}\",\n      \"appPassword\": \"${MSTEAMS_APP_PASSWORD}\"\n    }\n  }\n}",
+      "setupSteps": [
+        "Register an app in Azure Portal",
+        "Create a Bot Channel Registration",
+        "Configure Teams channel in Azure",
+        "Set app credentials in openclaw.json",
+        "Deploy and add bot to Teams"
+      ],
+      "dmPolicies": ["allowlist", "open"],
+      "groupPolicies": ["allowlist", "open"],
+      "textChunkLimit": 4000,
+      "features": [
+        "Enterprise SSO",
+        "Microsoft 365 integration",
+        "Adaptive Cards",
+        "Thread support"
+      ],
+      "pros": [
+        "Enterprise standard",
+        "Microsoft 365 integration",
+        "Strong admin controls",
+        "Compliance features"
+      ],
+      "cons": [
+        "Complex setup",
+        "Azure dependency",
+        "Requires organization admin"
+      ],
+      "useCases": [
+        "Enterprise AI assistant",
+        "Corporate automation",
+        "IT support bot",
+        "HR automation"
+      ]
+    },
+    {
+      "id": "nostr",
+      "name": "Nostr",
+      "slug": "nostr",
+      "description": "Nostr integration via nostr-tools connects your AI to the decentralized Nostr protocol. Publish and receive notes across the Nostr network.",
+      "shortDescription": "Decentralized Nostr protocol support",
+      "website": "https://nostr.com",
+      "protocolLibrary": "nostr-tools",
+      "capabilities": {
+        "dms": true,
+        "groups": false,
+        "threads": false,
+        "topics": false,
+        "media": false,
+        "voice": false,
+        "reactions": true,
+        "nativeCommands": false
+      },
+      "configOptions": [
+        {
+          "key": "privateKey",
+          "type": "string",
+          "required": true,
+          "description": "Nostr private key (nsec)"
+        },
+        {
+          "key": "relays",
+          "type": "array",
+          "required": true,
+          "description": "List of Nostr relay URLs"
+        }
+      ],
+      "configExample": "{\n  \"channels\": {\n    \"nostr\": {\n      \"privateKey\": \"${NOSTR_PRIVATE_KEY}\",\n      \"relays\": [\"wss://relay.damus.io\", \"wss://nos.lol\"]\n    }\n  }\n}",
+      "setupSteps": [
+        "Generate a Nostr key pair",
+        "Choose relay servers",
+        "Configure nostr in openclaw.json",
+        "Start the gateway",
+        "Publish your public key"
+      ],
+      "dmPolicies": ["allowlist", "open"],
+      "groupPolicies": ["open"],
+      "textChunkLimit": 4096,
+      "features": [
+        "Decentralized",
+        "Censorship-resistant",
+        "Public notes",
+        "Encrypted DMs"
+      ],
+      "pros": [
+        "Fully decentralized",
+        "No central authority",
+        "Censorship-resistant",
+        "Growing ecosystem"
+      ],
+      "cons": [
+        "Small user base",
+        "No groups yet",
+        "Relay reliability varies"
+      ],
+      "useCases": [
+        "Decentralized AI",
+        "Public bot",
+        "Crypto community"
+      ]
+    }
+  ]
+}

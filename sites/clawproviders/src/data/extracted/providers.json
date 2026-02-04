@@ -1,0 +1,503 @@
+{
+  "providers": [
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "slug": "anthropic",
+      "description": "Anthropic is an AI safety company that builds Claude, a family of frontier AI assistants designed to be helpful, harmless, and honest. Claude models excel at reasoning, coding, and following complex instructions.",
+      "shortDescription": "Creator of Claude AI models with advanced reasoning capabilities",
+      "website": "https://anthropic.com",
+      "docsUrl": "https://docs.anthropic.com",
+      "models": [
+        {
+          "id": "claude-sonnet-4-20250514",
+          "name": "Claude Sonnet 4",
+          "description": "High-performance model balancing capability and speed",
+          "contextWindow": 200000,
+          "inputPrice": 3.0,
+          "outputPrice": 15.0,
+          "supportsImages": true,
+          "supportsTools": true
+        },
+        {
+          "id": "claude-haiku-20250107",
+          "name": "Claude Haiku",
+          "description": "Fast, cost-effective model for simple tasks",
+          "contextWindow": 200000,
+          "inputPrice": 0.25,
+          "outputPrice": 1.25,
+          "supportsImages": true,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "api_key",
+          "envVar": "ANTHROPIC_API_KEY",
+          "description": "Standard API key authentication",
+          "setupSteps": [
+            "Create an account at console.anthropic.com",
+            "Navigate to API Keys section",
+            "Generate a new API key",
+            "Set ANTHROPIC_API_KEY environment variable"
+          ]
+        },
+        {
+          "type": "oauth",
+          "description": "OAuth for Claude subscriptions",
+          "setupSteps": [
+            "Run openclaw onboard",
+            "Select OAuth authentication",
+            "Complete browser-based login",
+            "Tokens are automatically managed"
+          ]
+        }
+      ],
+      "defaultModel": "claude-sonnet-4-20250514",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"anthropic\": {\n        \"apiKey\": \"${ANTHROPIC_API_KEY}\"\n      }\n    }\n  },\n  \"agents\": {\n    \"defaults\": {\n      \"model\": {\n        \"primary\": \"anthropic/claude-sonnet-4-20250514\"\n      }\n    }\n  }\n}",
+      "features": [
+        "200K context window",
+        "Image understanding",
+        "Tool/function calling",
+        "Streaming responses",
+        "Multiple auth methods"
+      ],
+      "pros": [
+        "Excellent at following complex instructions",
+        "Strong reasoning and coding abilities",
+        "Large context window",
+        "Good safety alignment"
+      ],
+      "cons": [
+        "Higher cost than some alternatives",
+        "Rate limits on free tier",
+        "No fine-tuning available"
+      ],
+      "useCases": [
+        "Complex coding tasks",
+        "Document analysis",
+        "Creative writing",
+        "Research assistance"
+      ]
+    },
+    {
+      "id": "openai-codex",
+      "name": "OpenAI Codex",
+      "slug": "openai-codex",
+      "description": "OpenAI provides GPT models through their API, including GPT-4 and GPT-5 variants. Their models are widely used for general-purpose AI tasks with strong performance across diverse applications.",
+      "shortDescription": "GPT models with broad capabilities and wide ecosystem support",
+      "website": "https://openai.com",
+      "docsUrl": "https://platform.openai.com/docs",
+      "models": [
+        {
+          "id": "gpt-5.2",
+          "name": "GPT-5.2",
+          "description": "Latest flagship model with advanced capabilities",
+          "contextWindow": 128000,
+          "inputPrice": 5.0,
+          "outputPrice": 15.0,
+          "supportsImages": true,
+          "supportsTools": true
+        },
+        {
+          "id": "gpt-4-turbo",
+          "name": "GPT-4 Turbo",
+          "description": "Fast, capable model for most tasks",
+          "contextWindow": 128000,
+          "inputPrice": 10.0,
+          "outputPrice": 30.0,
+          "supportsImages": true,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "api_key",
+          "envVar": "OPENAI_API_KEY",
+          "description": "Standard API key authentication",
+          "setupSteps": [
+            "Create an account at platform.openai.com",
+            "Navigate to API Keys section",
+            "Generate a new API key",
+            "Set OPENAI_API_KEY environment variable"
+          ]
+        },
+        {
+          "type": "oauth",
+          "description": "OAuth for ChatGPT/Codex subscriptions",
+          "setupSteps": [
+            "Run openclaw onboard",
+            "Select OpenAI OAuth",
+            "Complete browser-based login"
+          ]
+        }
+      ],
+      "defaultModel": "gpt-5.2",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"openai-codex\": {\n        \"apiKey\": \"${OPENAI_API_KEY}\"\n      }\n    }\n  },\n  \"agents\": {\n    \"defaults\": {\n      \"model\": {\n        \"primary\": \"openai-codex/gpt-5.2\"\n      }\n    }\n  }\n}",
+      "features": [
+        "128K context window",
+        "Image generation and understanding",
+        "Tool/function calling",
+        "Fine-tuning available",
+        "Wide ecosystem support"
+      ],
+      "pros": [
+        "Extensive ecosystem and tooling",
+        "Good performance across tasks",
+        "Fine-tuning options",
+        "Strong developer community"
+      ],
+      "cons": [
+        "Can be expensive at scale",
+        "Rate limits vary by tier",
+        "Model updates can change behavior"
+      ],
+      "useCases": [
+        "General AI assistance",
+        "Image generation",
+        "Code generation",
+        "Content creation"
+      ]
+    },
+    {
+      "id": "google-gemini",
+      "name": "Google Gemini",
+      "slug": "google-gemini",
+      "description": "Google's Gemini models offer strong multimodal capabilities with competitive pricing. Gemini Flash provides fast, cost-effective inference for high-volume applications.",
+      "shortDescription": "Multimodal AI with competitive pricing and speed",
+      "website": "https://deepmind.google/technologies/gemini/",
+      "docsUrl": "https://ai.google.dev/docs",
+      "models": [
+        {
+          "id": "gemini-2.0-flash-exp",
+          "name": "Gemini 2.0 Flash",
+          "description": "Fast experimental model with multimodal capabilities",
+          "contextWindow": 1000000,
+          "inputPrice": 0.075,
+          "outputPrice": 0.30,
+          "supportsImages": true,
+          "supportsTools": true
+        },
+        {
+          "id": "gemini-pro-1.5",
+          "name": "Gemini Pro 1.5",
+          "description": "High-capability model for complex tasks",
+          "contextWindow": 1000000,
+          "inputPrice": 1.25,
+          "outputPrice": 5.0,
+          "supportsImages": true,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "api_key",
+          "envVar": "GOOGLE_API_KEY",
+          "description": "Google AI API key",
+          "setupSteps": [
+            "Go to ai.google.dev",
+            "Create or select a project",
+            "Enable the Gemini API",
+            "Generate an API key",
+            "Set GOOGLE_API_KEY environment variable"
+          ]
+        },
+        {
+          "type": "oauth",
+          "description": "OAuth via Antigravity or Gemini CLI",
+          "setupSteps": [
+            "Install Gemini CLI plugin",
+            "Run authentication flow",
+            "Tokens managed automatically"
+          ]
+        }
+      ],
+      "defaultModel": "gemini-2.0-flash-exp",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"google-gemini\": {\n        \"apiKey\": \"${GOOGLE_API_KEY}\",\n        \"baseUrl\": \"https://generativelanguage.googleapis.com\"\n      }\n    }\n  },\n  \"agents\": {\n    \"defaults\": {\n      \"model\": {\n        \"primary\": \"google-gemini/gemini-2.0-flash-exp\"\n      }\n    }\n  }\n}",
+      "features": [
+        "1M token context window",
+        "Multimodal understanding",
+        "Fast inference",
+        "Competitive pricing",
+        "Strong at code and reasoning"
+      ],
+      "pros": [
+        "Extremely large context window",
+        "Very cost-effective",
+        "Fast inference speeds",
+        "Good multimodal capabilities"
+      ],
+      "cons": [
+        "Still experimental features",
+        "Less mature ecosystem",
+        "API can change frequently"
+      ],
+      "useCases": [
+        "Long document processing",
+        "Cost-sensitive applications",
+        "High-volume inference",
+        "Multimodal tasks"
+      ]
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "slug": "openrouter",
+      "description": "OpenRouter provides unified access to multiple AI models through a single API, allowing you to switch between providers without changing your code. Great for model comparison and fallback strategies.",
+      "shortDescription": "Unified API gateway to multiple AI providers",
+      "website": "https://openrouter.ai",
+      "docsUrl": "https://openrouter.ai/docs",
+      "models": [
+        {
+          "id": "anthropic/claude-sonnet-4",
+          "name": "Claude Sonnet 4 (via OpenRouter)",
+          "description": "Access Claude through OpenRouter",
+          "contextWindow": 200000,
+          "supportsImages": true,
+          "supportsTools": true
+        },
+        {
+          "id": "openai/gpt-4-turbo",
+          "name": "GPT-4 Turbo (via OpenRouter)",
+          "description": "Access GPT-4 through OpenRouter",
+          "contextWindow": 128000,
+          "supportsImages": true,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "api_key",
+          "envVar": "OPENROUTER_API_KEY",
+          "description": "OpenRouter API key",
+          "setupSteps": [
+            "Create account at openrouter.ai",
+            "Generate API key",
+            "Set OPENROUTER_API_KEY environment variable"
+          ]
+        }
+      ],
+      "defaultModel": "anthropic/claude-sonnet-4",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"openrouter\": {\n        \"apiKey\": \"${OPENROUTER_API_KEY}\",\n        \"baseUrl\": \"https://openrouter.ai/api/v1\"\n      }\n    }\n  },\n  \"agents\": {\n    \"defaults\": {\n      \"model\": {\n        \"primary\": \"openrouter/anthropic/claude-sonnet-4\"\n      }\n    }\n  }\n}",
+      "features": [
+        "Access to 100+ models",
+        "Unified billing",
+        "Model comparison",
+        "Automatic fallbacks",
+        "Usage analytics"
+      ],
+      "pros": [
+        "Single API for multiple providers",
+        "Easy model switching",
+        "Unified billing",
+        "Good for experimentation"
+      ],
+      "cons": [
+        "Additional latency",
+        "Markup on base prices",
+        "Dependent on third party"
+      ],
+      "useCases": [
+        "Model comparison",
+        "Fallback strategies",
+        "Multi-provider setups",
+        "Experimentation"
+      ]
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama",
+      "slug": "ollama",
+      "description": "Ollama allows you to run large language models locally on your own hardware. Perfect for privacy-sensitive applications, offline use, or when you want to avoid API costs.",
+      "shortDescription": "Run open-source LLMs locally with no API costs",
+      "website": "https://ollama.ai",
+      "docsUrl": "https://github.com/ollama/ollama",
+      "models": [
+        {
+          "id": "llama3.3",
+          "name": "Llama 3.3",
+          "description": "Meta's latest open-source model",
+          "contextWindow": 128000,
+          "supportsImages": false,
+          "supportsTools": true
+        },
+        {
+          "id": "mistral",
+          "name": "Mistral",
+          "description": "Efficient model from Mistral AI",
+          "contextWindow": 32000,
+          "supportsImages": false,
+          "supportsTools": true
+        },
+        {
+          "id": "codellama",
+          "name": "Code Llama",
+          "description": "Specialized for code generation",
+          "contextWindow": 16000,
+          "supportsImages": false,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "none",
+          "description": "No authentication required for local instance",
+          "setupSteps": [
+            "Install Ollama from ollama.ai",
+            "Run 'ollama pull llama3.3'",
+            "Start Ollama service",
+            "Configure baseUrl in OpenClaw"
+          ]
+        }
+      ],
+      "defaultModel": "llama3.3",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"ollama\": {\n        \"baseUrl\": \"http://localhost:11434\"\n      }\n    }\n  },\n  \"agents\": {\n    \"defaults\": {\n      \"model\": {\n        \"primary\": \"ollama/llama3.3\"\n      }\n    }\n  }\n}",
+      "features": [
+        "Completely local",
+        "No API costs",
+        "Privacy-focused",
+        "Many model options",
+        "GPU acceleration"
+      ],
+      "pros": [
+        "No API costs",
+        "Full data privacy",
+        "Works offline",
+        "No rate limits"
+      ],
+      "cons": [
+        "Requires capable hardware",
+        "Slower than cloud APIs",
+        "Less capable than frontier models"
+      ],
+      "useCases": [
+        "Privacy-sensitive applications",
+        "Offline use",
+        "Cost-conscious deployments",
+        "Development and testing"
+      ]
+    },
+    {
+      "id": "bedrock",
+      "name": "AWS Bedrock",
+      "slug": "aws-bedrock",
+      "description": "Amazon Bedrock provides access to foundation models from multiple providers through AWS, with enterprise-grade security, compliance, and integration with AWS services.",
+      "shortDescription": "Enterprise AI through AWS with compliance and security",
+      "website": "https://aws.amazon.com/bedrock/",
+      "docsUrl": "https://docs.aws.amazon.com/bedrock/",
+      "models": [
+        {
+          "id": "anthropic.claude-3-sonnet",
+          "name": "Claude 3 Sonnet (Bedrock)",
+          "description": "Claude through AWS Bedrock",
+          "contextWindow": 200000,
+          "supportsImages": true,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "token",
+          "description": "AWS credentials or bearer token",
+          "setupSteps": [
+            "Configure AWS CLI with credentials",
+            "Enable Bedrock in your AWS region",
+            "Request model access in AWS console",
+            "Set AWS_PROFILE or credentials in OpenClaw"
+          ]
+        }
+      ],
+      "defaultModel": "anthropic.claude-3-sonnet",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"bedrock\": {\n        \"region\": \"us-east-1\",\n        \"profile\": \"default\"\n      }\n    }\n  },\n  \"agents\": {\n    \"defaults\": {\n      \"model\": {\n        \"primary\": \"bedrock/anthropic.claude-3-sonnet\"\n      }\n    }\n  }\n}",
+      "features": [
+        "Enterprise security",
+        "AWS integration",
+        "Multiple providers",
+        "Compliance certifications",
+        "Private endpoints"
+      ],
+      "pros": [
+        "Enterprise-grade security",
+        "AWS ecosystem integration",
+        "Compliance certifications",
+        "VPC private links"
+      ],
+      "cons": [
+        "AWS account required",
+        "More complex setup",
+        "Region availability varies"
+      ],
+      "useCases": [
+        "Enterprise deployments",
+        "Regulated industries",
+        "AWS-native applications",
+        "High-security environments"
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI (Standard)",
+      "slug": "openai",
+      "description": "Direct OpenAI API access for standard GPT models without Codex features. Use for basic chat and completion tasks.",
+      "shortDescription": "Standard OpenAI API for GPT models",
+      "website": "https://openai.com",
+      "docsUrl": "https://platform.openai.com/docs",
+      "models": [
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o",
+          "description": "Optimized multimodal model",
+          "contextWindow": 128000,
+          "inputPrice": 2.5,
+          "outputPrice": 10.0,
+          "supportsImages": true,
+          "supportsTools": true
+        },
+        {
+          "id": "gpt-4o-mini",
+          "name": "GPT-4o Mini",
+          "description": "Smaller, faster version",
+          "contextWindow": 128000,
+          "inputPrice": 0.15,
+          "outputPrice": 0.60,
+          "supportsImages": true,
+          "supportsTools": true
+        }
+      ],
+      "authMethods": [
+        {
+          "type": "api_key",
+          "envVar": "OPENAI_API_KEY",
+          "description": "Standard API key only",
+          "setupSteps": [
+            "Create account at platform.openai.com",
+            "Generate API key",
+            "Set OPENAI_API_KEY environment variable"
+          ]
+        }
+      ],
+      "defaultModel": "gpt-4o",
+      "configExample": "{\n  \"models\": {\n    \"providers\": {\n      \"openai\": {\n        \"apiKey\": \"${OPENAI_API_KEY}\"\n      }\n    }\n  }\n}",
+      "features": [
+        "Standard OpenAI access",
+        "GPT-4o models",
+        "Simple setup",
+        "Wide compatibility"
+      ],
+      "pros": [
+        "Simple setup",
+        "Well-documented",
+        "Stable API"
+      ],
+      "cons": [
+        "No OAuth support",
+        "Limited to API key auth"
+      ],
+      "useCases": [
+        "Simple integrations",
+        "API-key only environments",
+        "Standard chat applications"
+      ]
+    }
+  ]
+}

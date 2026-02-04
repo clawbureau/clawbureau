@@ -1,0 +1,409 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { getDeployments, getProviders } from '../../lib/data/loaders';
+import type { SEOMeta, Breadcrumb } from '../../lib/data/types';
+
+const deployments = getDeployments();
+const providers = getProviders();
+
+const seo: SEOMeta = {
+  title: 'Deploy OpenClaw - Local, VPS, Cloud & Docker Guides',
+  description: 'Complete deployment guides for OpenClaw AI assistants. Run locally for development, deploy to VPS for production, or use Docker for containerized environments.',
+  canonical: 'https://clawproviders.com/deploy/',
+  keywords: ['OpenClaw deploy', 'AI assistant hosting', 'Docker AI bot', 'VPS deployment', 'cloud deployment'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Deploy', url: '/deploy/' },
+];
+
+// Helper to get difficulty from type
+function getDifficulty(type: string): string {
+  switch (type) {
+    case 'local': return 'Easy';
+    case 'vps': return 'Medium';
+    case 'cloud': return 'Medium';
+    case 'container': return 'Medium';
+    default: return 'Medium';
+  }
+}
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>Deployment Options</h1>
+      <p class="page-intro">
+        Choose how to run your OpenClaw AI assistant. From local development to
+        production cloud deployment, find the setup that fits your needs.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="deployments-grid">
+        {deployments.map((deployment) => (
+          <a href={`/deploy/${deployment.slug}/`} class="deployment-card card">
+            <div class="deployment-header">
+              <h2>{deployment.name}</h2>
+              <span class={`difficulty-badge ${getDifficulty(deployment.type).toLowerCase()}`}>{getDifficulty(deployment.type)}</span>
+            </div>
+            <p>{deployment.description}</p>
+
+            <div class="pros-cons">
+              <div class="pros">
+                <h4>Advantages</h4>
+                <ul>
+                  {deployment.pros.slice(0, 3).map((pro) => (
+                    <li>{pro}</li>
+                  ))}
+                </ul>
+              </div>
+              <div class="cons">
+                <h4>Considerations</h4>
+                <ul>
+                  {deployment.cons.slice(0, 2).map((con) => (
+                    <li>{con}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div class="requirements">
+              <h4>Requirements</h4>
+              <div class="requirement-tags">
+                {deployment.requirements.slice(0, 3).map((req) => (
+                  <span class="requirement-tag">{req.name}</span>
+                ))}
+              </div>
+            </div>
+
+            <div class="provider-links">
+              <span class="label">Setup guides:</span>
+              <div class="provider-list">
+                {providers.slice(0, 4).map((provider) => (
+                  <span class="provider-link-wrapper" onclick={`event.stopPropagation(); window.location.href='/deploy/${deployment.slug}/${provider.slug}/'`}>
+                    {provider.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="comparison-section">
+    <div class="container">
+      <h2>Deployment Comparison</h2>
+      <div class="comparison-table-wrapper">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th class="feature-col">Feature</th>
+              {deployments.map((d) => <th>{d.name}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Difficulty</td>
+              {deployments.map((d) => <td><span class={`difficulty-badge small ${getDifficulty(d.type).toLowerCase()}`}>{getDifficulty(d.type)}</span></td>)}
+            </tr>
+            <tr>
+              <td>Cost</td>
+              {deployments.map((d) => (
+                <td>
+                  {d.slug === 'local' && 'Free'}
+                  {d.slug === 'vps' && '$5-20/mo'}
+                  {d.slug === 'cloud' && 'Pay per use'}
+                  {d.slug === 'docker' && 'Hosting cost'}
+                </td>
+              ))}
+            </tr>
+            <tr>
+              <td>24/7 Availability</td>
+              {deployments.map((d) => (
+                <td>{d.slug === 'local' ? '—' : '✓'}</td>
+              ))}
+            </tr>
+            <tr>
+              <td>Scalability</td>
+              {deployments.map((d) => (
+                <td>
+                  {d.slug === 'local' && '—'}
+                  {d.slug === 'vps' && 'Manual'}
+                  {d.slug === 'cloud' && 'Auto'}
+                  {d.slug === 'docker' && 'Container'}
+                </td>
+              ))}
+            </tr>
+            <tr>
+              <td>Best For</td>
+              {deployments.map((d) => (
+                <td class="best-for">{d.useCases[0]}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .section {
+    padding-bottom: 6rem;
+  }
+
+  .deployments-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .deployment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .deployment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .deployment-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text);
+  }
+
+  .difficulty-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: capitalize;
+    border: 1px solid transparent;
+  }
+  
+  .difficulty-badge.easy {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    border-color: rgba(34, 197, 94, 0.2);
+  }
+  
+  .difficulty-badge.medium {
+    background: rgba(234, 179, 8, 0.1);
+    color: var(--warning);
+    border-color: rgba(234, 179, 8, 0.2);
+  }
+  
+  .difficulty-badge.hard {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+  
+  .difficulty-badge.small {
+    font-size: 0.625rem;
+    padding: 0.125rem 0.5rem;
+  }
+
+  .pros-cons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    border: 1px solid var(--border);
+  }
+
+  .pros h4,
+  .cons h4 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    margin-bottom: 0.75rem;
+  }
+
+  .pros ul,
+  .cons ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+  }
+  
+  .pros li, .cons li {
+    margin-bottom: 0.25rem;
+    padding-left: 1rem;
+    position: relative;
+  }
+
+  .pros li::before {
+    content: '+';
+    position: absolute;
+    left: 0;
+    color: var(--success);
+  }
+
+  .cons li::before {
+    content: '-';
+    position: absolute;
+    left: 0;
+    color: var(--text-tertiary);
+  }
+
+  .requirements h4 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    margin-bottom: 0.5rem;
+  }
+
+  .requirement-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .requirement-tag {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+
+  .provider-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    margin-top: auto;
+  }
+
+  .provider-links .label {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .provider-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  
+  .provider-link-wrapper {
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+  }
+
+  .provider-link-wrapper:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .comparison-section {
+    padding-bottom: 6rem;
+  }
+
+  .comparison-section h2 {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .comparison-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+  }
+
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0;
+    border: none;
+  }
+  
+  .comparison-table th {
+    background: var(--bg-tertiary);
+    color: var(--text);
+    text-align: center;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .comparison-table th.feature-col {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background: var(--bg-tertiary);
+  }
+  
+  .comparison-table td {
+    padding: 1rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+  }
+
+  .comparison-table td:first-child {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--bg-tertiary);
+    position: sticky;
+    left: 0;
+  }
+
+  .best-for {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  @media (max-width: 768px) {
+    .deployments-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .pros-cons {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

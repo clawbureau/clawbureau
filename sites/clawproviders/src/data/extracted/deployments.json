@@ -1,0 +1,362 @@
+{
+  "deployments": [
+    {
+      "id": "local",
+      "name": "Local Deployment",
+      "slug": "local",
+      "description": "Run OpenClaw Gateway locally on your own machine (macOS, Linux, or Windows via WSL2). The Gateway binds to loopback (127.0.0.1) by default for security, accessible only from the local machine.",
+      "shortDescription": "Run on your personal machine with local-only access",
+      "type": "local",
+      "requirements": [
+        {
+          "name": "Node.js 22+",
+          "description": "Node.js version 22 or higher is required",
+          "required": true
+        },
+        {
+          "name": "macOS, Linux, or WSL2",
+          "description": "Supported operating systems",
+          "required": true
+        },
+        {
+          "name": "npm or pnpm",
+          "description": "Package manager for installation",
+          "required": true
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "title": "Install OpenClaw",
+          "description": "Install OpenClaw globally via npm or the installer script",
+          "command": "curl -fsSL https://openclaw.bot/install.sh | bash"
+        },
+        {
+          "order": 2,
+          "title": "Run Onboarding",
+          "description": "Complete the setup wizard",
+          "command": "openclaw onboard --install-daemon"
+        },
+        {
+          "order": 3,
+          "title": "Configure Providers",
+          "description": "Add your AI provider credentials during onboarding or manually"
+        },
+        {
+          "order": 4,
+          "title": "Start Gateway",
+          "description": "Start the Gateway service",
+          "command": "openclaw gateway start"
+        },
+        {
+          "order": 5,
+          "title": "Verify Status",
+          "description": "Check that everything is running correctly",
+          "command": "openclaw status"
+        }
+      ],
+      "configExample": "{\n  \"gateway\": {\n    \"mode\": \"local\",\n    \"bind\": \"loopback\",\n    \"port\": 18789,\n    \"auth\": {\n      \"mode\": \"token\",\n      \"allowTailscale\": false\n    }\n  }\n}",
+      "serviceManagement": [
+        "openclaw gateway install",
+        "openclaw gateway start",
+        "openclaw gateway stop",
+        "openclaw gateway restart",
+        "openclaw gateway status"
+      ],
+      "stateDirectory": "~/.openclaw/",
+      "bindingModes": ["loopback", "lan", "tailnet", "auto"],
+      "authModes": ["token", "password", "open"],
+      "pros": [
+        "Simplest setup",
+        "No network exposure",
+        "Full control",
+        "No hosting costs"
+      ],
+      "cons": [
+        "Must be running locally",
+        "No remote access by default",
+        "Depends on your machine"
+      ],
+      "useCases": [
+        "Personal AI assistant",
+        "Development and testing",
+        "Privacy-conscious users",
+        "Single-machine setup"
+      ]
+    },
+    {
+      "id": "vps",
+      "name": "VPS Deployment",
+      "slug": "vps",
+      "description": "Deploy OpenClaw on a Virtual Private Server for always-on availability. Run as a systemd service on any Linux VPS with persistent state and remote access via SSH tunnel or Tailscale.",
+      "shortDescription": "Always-on deployment on a Linux VPS",
+      "type": "vps",
+      "platform": "Linux VPS",
+      "requirements": [
+        {
+          "name": "Linux VPS",
+          "description": "Ubuntu, Debian, or similar Linux distribution",
+          "required": true
+        },
+        {
+          "name": "Node.js 22+",
+          "description": "Node.js version 22 or higher",
+          "required": true
+        },
+        {
+          "name": "SSH access",
+          "description": "SSH access to the server",
+          "required": true
+        },
+        {
+          "name": "systemd",
+          "description": "For service management",
+          "required": true
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "title": "Provision VPS",
+          "description": "Create a VPS instance with your preferred provider (DigitalOcean, Hetzner, etc.)"
+        },
+        {
+          "order": 2,
+          "title": "Install Node.js",
+          "description": "Install Node.js 22+ on the server",
+          "command": "curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs"
+        },
+        {
+          "order": 3,
+          "title": "Install OpenClaw",
+          "description": "Install OpenClaw globally",
+          "command": "npm install -g openclaw@latest"
+        },
+        {
+          "order": 4,
+          "title": "Run Onboarding",
+          "description": "Complete setup and install systemd service",
+          "command": "openclaw onboard --install-daemon"
+        },
+        {
+          "order": 5,
+          "title": "Enable Service",
+          "description": "Enable and start the systemd service",
+          "command": "systemctl --user enable --now openclaw-gateway.service"
+        },
+        {
+          "order": 6,
+          "title": "Configure Remote Access",
+          "description": "Set up SSH tunnel or Tailscale for remote access"
+        }
+      ],
+      "configExample": "{\n  \"gateway\": {\n    \"mode\": \"remote\",\n    \"bind\": \"loopback\",\n    \"port\": 18789,\n    \"auth\": {\n      \"mode\": \"token\"\n    }\n  }\n}",
+      "serviceManagement": [
+        "systemctl --user enable openclaw-gateway.service",
+        "systemctl --user start openclaw-gateway.service",
+        "systemctl --user stop openclaw-gateway.service",
+        "systemctl --user restart openclaw-gateway.service",
+        "journalctl --user -u openclaw-gateway.service -f"
+      ],
+      "stateDirectory": "~/.openclaw/",
+      "bindingModes": ["loopback", "lan", "tailnet"],
+      "authModes": ["token", "password"],
+      "pros": [
+        "Always-on availability",
+        "Accessible from anywhere",
+        "Cheap hosting options",
+        "Full control"
+      ],
+      "cons": [
+        "Requires server management",
+        "Monthly hosting cost",
+        "Manual updates",
+        "Security responsibility"
+      ],
+      "useCases": [
+        "24/7 AI assistant",
+        "Team deployments",
+        "Remote workers",
+        "Multi-device access"
+      ]
+    },
+    {
+      "id": "cloud",
+      "name": "Cloud Deployment",
+      "slug": "cloud",
+      "description": "Deploy OpenClaw on containerized cloud platforms like Fly.io for managed infrastructure, automatic scaling, and global edge locations. Persistent volumes store state across deployments.",
+      "shortDescription": "Managed container deployment on Fly.io or similar",
+      "type": "cloud",
+      "platform": "Fly.io",
+      "requirements": [
+        {
+          "name": "Fly.io Account",
+          "description": "Account on Fly.io (or similar PaaS)",
+          "required": true
+        },
+        {
+          "name": "flyctl CLI",
+          "description": "Fly.io command-line tool",
+          "required": true
+        },
+        {
+          "name": "Persistent Volume",
+          "description": "For state persistence",
+          "required": true
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "title": "Install flyctl",
+          "description": "Install the Fly.io CLI",
+          "command": "curl -L https://fly.io/install.sh | sh"
+        },
+        {
+          "order": 2,
+          "title": "Login to Fly",
+          "description": "Authenticate with Fly.io",
+          "command": "fly auth login"
+        },
+        {
+          "order": 3,
+          "title": "Create App",
+          "description": "Create a new Fly.io app",
+          "command": "fly apps create openclaw-gateway"
+        },
+        {
+          "order": 4,
+          "title": "Create Volume",
+          "description": "Create persistent volume for state",
+          "command": "fly volumes create openclaw_data --size 1"
+        },
+        {
+          "order": 5,
+          "title": "Configure fly.toml",
+          "description": "Set up the Fly.io configuration file"
+        },
+        {
+          "order": 6,
+          "title": "Set Secrets",
+          "description": "Configure environment variables",
+          "command": "fly secrets set ANTHROPIC_API_KEY=sk-ant-..."
+        },
+        {
+          "order": 7,
+          "title": "Deploy",
+          "description": "Deploy to Fly.io",
+          "command": "fly deploy"
+        }
+      ],
+      "configExample": "# fly.toml\napp = \"openclaw-gateway\"\nprimary_region = \"iad\"\n\n[build]\n  image = \"node:22-slim\"\n\n[env]\n  NODE_ENV = \"production\"\n  OPENCLAW_STATE_DIR = \"/data\"\n\n[mounts]\n  source = \"openclaw_data\"\n  destination = \"/data\"\n\n[[services]]\n  internal_port = 18789\n  protocol = \"tcp\"\n\n  [[services.ports]]\n    port = 443\n    handlers = [\"tls\", \"http\"]",
+      "serviceManagement": [
+        "fly deploy",
+        "fly status",
+        "fly logs",
+        "fly ssh console",
+        "fly scale count 1"
+      ],
+      "stateDirectory": "/data (mounted volume)",
+      "bindingModes": ["lan"],
+      "authModes": ["token", "password"],
+      "pros": [
+        "Managed infrastructure",
+        "Global edge locations",
+        "Automatic TLS",
+        "Easy scaling",
+        "No server management"
+      ],
+      "cons": [
+        "Higher cost",
+        "Vendor lock-in",
+        "Less control",
+        "Cold start latency"
+      ],
+      "useCases": [
+        "Production deployments",
+        "Team collaboration",
+        "Global availability",
+        "Zero-ops preference"
+      ]
+    },
+    {
+      "id": "docker",
+      "name": "Docker Deployment",
+      "slug": "docker",
+      "description": "Run OpenClaw in a Docker container for portable, reproducible deployments. Use Docker Compose for easy orchestration with persistent volumes.",
+      "shortDescription": "Containerized deployment with Docker",
+      "type": "container",
+      "platform": "Docker",
+      "requirements": [
+        {
+          "name": "Docker",
+          "description": "Docker Engine 20.10+",
+          "required": true
+        },
+        {
+          "name": "Docker Compose",
+          "description": "For multi-container orchestration",
+          "required": false
+        }
+      ],
+      "steps": [
+        {
+          "order": 1,
+          "title": "Create Dockerfile",
+          "description": "Create a Dockerfile for OpenClaw"
+        },
+        {
+          "order": 2,
+          "title": "Create docker-compose.yml",
+          "description": "Set up Docker Compose configuration"
+        },
+        {
+          "order": 3,
+          "title": "Build Image",
+          "description": "Build the Docker image",
+          "command": "docker compose build"
+        },
+        {
+          "order": 4,
+          "title": "Start Container",
+          "description": "Start the container",
+          "command": "docker compose up -d"
+        },
+        {
+          "order": 5,
+          "title": "Run Onboarding",
+          "description": "Complete setup inside container",
+          "command": "docker compose exec openclaw openclaw onboard"
+        }
+      ],
+      "configExample": "# docker-compose.yml\nversion: '3.8'\nservices:\n  openclaw:\n    image: node:22-slim\n    command: [\"sh\", \"-c\", \"npm install -g openclaw@latest && openclaw gateway\"]\n    ports:\n      - \"18789:18789\"\n    volumes:\n      - openclaw_data:/root/.openclaw\n    environment:\n      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}\n    restart: unless-stopped\n\nvolumes:\n  openclaw_data:",
+      "serviceManagement": [
+        "docker compose up -d",
+        "docker compose down",
+        "docker compose logs -f",
+        "docker compose restart",
+        "docker compose exec openclaw openclaw status"
+      ],
+      "stateDirectory": "/root/.openclaw (mounted volume)",
+      "bindingModes": ["lan"],
+      "authModes": ["token", "password"],
+      "pros": [
+        "Portable",
+        "Reproducible",
+        "Isolation",
+        "Easy backup"
+      ],
+      "cons": [
+        "Docker overhead",
+        "Additional complexity",
+        "Storage management"
+      ],
+      "useCases": [
+        "Self-hosted infrastructure",
+        "Development environments",
+        "Kubernetes deployments",
+        "CI/CD pipelines"
+      ]
+    }
+  ]
+}

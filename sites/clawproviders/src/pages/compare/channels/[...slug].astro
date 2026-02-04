@@ -1,0 +1,469 @@
+---
+import BaseLayout from '../../../components/layout/BaseLayout.astro';
+import FAQSection from '../../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../../components/seo/SchemaOrg.astro';
+import { getChannels, getChannelComparisons, getProviders } from '../../../lib/data/loaders';
+import type { Channel, Breadcrumb, SEOMeta, FAQ } from '../../../lib/data/types';
+
+export async function getStaticPaths() {
+  const comparisons = getChannelComparisons();
+  return comparisons.map(({ a, b }) => ({
+    params: { slug: `${a.slug}-vs-${b.slug}` },
+    props: { channelA: a, channelB: b },
+  }));
+}
+
+interface Props {
+  channelA: Channel;
+  channelB: Channel;
+}
+
+const { channelA, channelB } = Astro.props;
+const providers = getProviders();
+
+const seo: SEOMeta = {
+  title: `${channelA.name} vs ${channelB.name} - Messaging Channel Comparison`,
+  description: `Compare ${channelA.name} and ${channelB.name} for your OpenClaw AI assistant. Side-by-side comparison of features, capabilities, and use cases.`,
+  canonical: `https://clawproviders.com/compare/channels/${channelA.slug}-vs-${channelB.slug}/`,
+  keywords: [`${channelA.name} vs ${channelB.name}`, 'messaging comparison', 'chat platform comparison'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Compare', url: '/compare/' },
+  { name: 'Channels', url: '/compare/channels/' },
+  { name: `${channelA.name} vs ${channelB.name}`, url: seo.canonical },
+];
+
+const faqs: FAQ[] = [
+  {
+    question: `Which is better for AI assistants, ${channelA.name} or ${channelB.name}?`,
+    answer: `Both work well with OpenClaw. ${channelA.name} is better for ${channelA.useCases[0]?.toLowerCase()}, while ${channelB.name} excels at ${channelB.useCases[0]?.toLowerCase()}. Consider your audience and feature requirements.`,
+  },
+  {
+    question: `Can I use both ${channelA.name} and ${channelB.name} with OpenClaw?`,
+    answer: `Yes! OpenClaw supports multiple channels simultaneously. You can connect the same AI assistant to both ${channelA.name} and ${channelB.name}, allowing users to interact through their preferred platform.`,
+  },
+  {
+    question: `Which has better group chat support?`,
+    answer: `${channelA.capabilities.groups && channelB.capabilities.groups ? `Both support group chats. ${channelA.name} uses ${channelA.groupPolicies.join(', ')} policies, while ${channelB.name} uses ${channelB.groupPolicies.join(', ')}.` : channelA.capabilities.groups ? `${channelA.name} supports group chats, while ${channelB.name} does not.` : channelB.capabilities.groups ? `${channelB.name} supports group chats, while ${channelA.name} does not.` : 'Neither platform focuses on group chat functionality.'}`,
+  },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="article"
+    title={seo.title}
+    description={seo.description}
+    url={seo.canonical}
+  />
+
+  <section class="page-header">
+    <div class="container">
+      <div class="vs-title">
+        <span class="channel-name">{channelA.name}</span>
+        <span class="vs-badge">VS</span>
+        <span class="channel-name">{channelB.name}</span>
+      </div>
+      <p class="page-intro">
+        Detailed comparison to help you choose the right messaging channel for your OpenClaw assistant.
+      </p>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <section class="section">
+      <h2>Quick Summary</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <h3>{channelA.name}</h3>
+          <p class="text-secondary">{channelA.shortDescription}</p>
+          <ul>
+            {channelA.features.slice(0, 3).map((f) => <li>{f}</li>)}
+          </ul>
+          <a href={`/channels/${channelA.slug}/`} class="btn btn-outline">View Full Guide</a>
+        </div>
+        <div class="summary-card">
+          <h3>{channelB.name}</h3>
+          <p class="text-secondary">{channelB.shortDescription}</p>
+          <ul>
+            {channelB.features.slice(0, 3).map((f) => <li>{f}</li>)}
+          </ul>
+          <a href={`/channels/${channelB.slug}/`} class="btn btn-outline">View Full Guide</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Capability Comparison</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>{channelA.name}</th>
+              <th>{channelB.name}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Direct Messages</td>
+              <td class={channelA.capabilities.dms ? 'yes' : 'no'}>{channelA.capabilities.dms ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.dms ? 'yes' : 'no'}>{channelB.capabilities.dms ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Group Chats</td>
+              <td class={channelA.capabilities.groups ? 'yes' : 'no'}>{channelA.capabilities.groups ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.groups ? 'yes' : 'no'}>{channelB.capabilities.groups ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Media Messages</td>
+              <td class={channelA.capabilities.media ? 'yes' : 'no'}>{channelA.capabilities.media ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.media ? 'yes' : 'no'}>{channelB.capabilities.media ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Voice Messages</td>
+              <td class={channelA.capabilities.voice ? 'yes' : 'no'}>{channelA.capabilities.voice ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.voice ? 'yes' : 'no'}>{channelB.capabilities.voice ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Reactions</td>
+              <td class={channelA.capabilities.reactions ? 'yes' : 'no'}>{channelA.capabilities.reactions ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.reactions ? 'yes' : 'no'}>{channelB.capabilities.reactions ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Thread Support</td>
+              <td class={channelA.capabilities.threads ? 'yes' : 'no'}>{channelA.capabilities.threads ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.threads ? 'yes' : 'no'}>{channelB.capabilities.threads ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Native Commands</td>
+              <td class={channelA.capabilities.nativeCommands ? 'yes' : 'no'}>{channelA.capabilities.nativeCommands ? '✓ Yes' : '— No'}</td>
+              <td class={channelB.capabilities.nativeCommands ? 'yes' : 'no'}>{channelB.capabilities.nativeCommands ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Text Limit</td>
+              <td>{channelA.textChunkLimit} chars</td>
+              <td>{channelB.textChunkLimit} chars</td>
+            </tr>
+            <tr>
+              <td>Protocol</td>
+              <td>{channelA.protocolLibrary}</td>
+              <td>{channelB.protocolLibrary}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Access Control Policies</h2>
+      <div class="policies-grid">
+        <div class="policy-box">
+          <h3>{channelA.name}</h3>
+          <h4>DM Policies</h4>
+          <ul>
+            {channelA.dmPolicies.map((p) => <li><code>{p}</code></li>)}
+          </ul>
+          <h4>Group Policies</h4>
+          <ul>
+            {channelA.groupPolicies.map((p) => <li><code>{p}</code></li>)}
+          </ul>
+        </div>
+        <div class="policy-box">
+          <h3>{channelB.name}</h3>
+          <h4>DM Policies</h4>
+          <ul>
+            {channelB.dmPolicies.map((p) => <li><code>{p}</code></li>)}
+          </ul>
+          <h4>Group Policies</h4>
+          <ul>
+            {channelB.groupPolicies.map((p) => <li><code>{p}</code></li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Best Use Cases</h2>
+      <div class="use-cases-grid">
+        <div class="use-case-box">
+          <h3>Choose {channelA.name} for:</h3>
+          <ul>
+            {channelA.useCases.map((uc) => <li>{uc}</li>)}
+          </ul>
+        </div>
+        <div class="use-case-box">
+          <h3>Choose {channelB.name} for:</h3>
+          <ul>
+            {channelB.useCases.map((uc) => <li>{uc}</li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Use with AI Providers</h2>
+      <p>Both channels work with all OpenClaw AI providers:</p>
+      <div class="grid grid-3">
+        {providers.slice(0, 6).map((provider) => (
+          <div class="provider-links card">
+            <h3>{provider.name}</h3>
+            <div class="link-pair">
+              <a href={`/channels/${channelA.slug}/${provider.slug}/`}>{channelA.name}</a>
+              <a href={`/channels/${channelB.slug}/${provider.slug}/`}>{channelB.name}</a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <FAQSection faqs={faqs} />
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .vs-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .channel-name {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .vs-badge {
+    background: var(--accent);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
+  }
+
+  .page-intro {
+    opacity: 0.9;
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-secondary);
+  }
+
+  .main-content {
+    padding: 3rem 0;
+  }
+
+  .section {
+    margin-bottom: 4rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .summary-card {
+    background: var(--bg-alt);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .summary-card h3 {
+    margin-top: 0;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .summary-card ul {
+    padding-left: 1.25rem;
+    margin-bottom: 2rem;
+    color: var(--text-secondary);
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    border: none;
+  }
+
+  th, td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    background: var(--bg-tertiary);
+    color: var(--text);
+    font-weight: 600;
+  }
+  
+  td {
+    color: var(--text-secondary);
+  }
+
+  td.yes {
+    color: var(--success);
+    font-weight: 600;
+  }
+
+  td.no {
+    color: var(--text-tertiary);
+  }
+
+  .policies-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .policy-box {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .policy-box h3 {
+    margin-top: 0;
+    color: var(--text);
+  }
+
+  .policy-box h4 {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    margin: 1.5rem 0 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .policy-box ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .policy-box li {
+    margin-bottom: 0.5rem;
+  }
+  
+  .policy-box code {
+    color: var(--accent);
+    background: transparent;
+    padding: 0;
+    border: none;
+    font-size: 1rem;
+  }
+
+  .use-cases-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .use-case-box {
+    background: var(--bg-alt);
+    padding: 2rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .use-case-box h3 {
+    margin-top: 0;
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
+  }
+
+  .use-case-box ul {
+    padding-left: 1.25rem;
+    margin: 0;
+    color: var(--text-secondary);
+  }
+  
+  .use-case-box li {
+    margin-bottom: 0.5rem;
+  }
+
+  .provider-links {
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .provider-links h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.125rem;
+  }
+
+  .link-pair {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .link-pair a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+  }
+
+  .link-pair a:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  @media (max-width: 768px) {
+    .vs-title {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .channel-name {
+      font-size: 1.5rem;
+    }
+
+    .summary-grid,
+    .policies-grid,
+    .use-cases-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

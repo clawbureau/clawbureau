@@ -1,0 +1,269 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import type { SEOMeta, Breadcrumb } from '../lib/data/types';
+
+const seo: SEOMeta = {
+  title: 'OpenClaw Setup Guide - Configuration & Identity',
+  description: 'Learn how to configure your OpenClaw assistant. Set up identity, memory, tools, and brand voice to create a true teammate, not just a chatbot.',
+  canonical: 'https://clawproviders.com/setup-guide',
+  keywords: ['OpenClaw setup', 'AI identity', 'AI memory', 'OpenClaw configuration'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Setup Guide', url: '/setup-guide' },
+];
+
+const coreFiles = [
+  { name: 'IDENTITY.md', desc: 'Who the assistant is (name, personality, vibe)' },
+  { name: 'USER.md', desc: 'Who YOU are (name, timezone, preferences)' },
+  { name: 'SOUL.md', desc: 'Tone, boundaries, and ethical guidelines' },
+  { name: 'MEMORY/', desc: 'Daily logs it writes and references automatically' },
+  { name: 'TOOLS.md', desc: 'Notes on your external tools and API keys' },
+];
+
+const advancedFiles = [
+  { name: 'Brand Voice.md', desc: '2,000 words on how you write, your vocabulary, and style' },
+  { name: 'Email Style.md', desc: 'Sign-offs, formatting, tone for different recipients' },
+  { name: 'Admin Playbook.md', desc: 'Calendar rules, travel preferences, scheduling logic' },
+  { name: 'Key Contacts.md', desc: 'Who important people are and your relationship to them' },
+  { name: 'Skills.md', desc: 'Specific instructions for repeating workflows (research, content)' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>Turn Your Bot into a Teammate</h1>
+      <p class="page-intro">
+        The difference between "chatbot" and "teammate" is what you feed OpenClaw on day one.
+        It doesn't "learn" like a human. It loads context like software.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="setup-grid">
+        <div class="card core-files">
+          <h2>The Skeleton</h2>
+          <p class="subtitle">These files come pre-installed and form the base:</p>
+          <ul class="file-list">
+            {coreFiles.map((file) => (
+              <li>
+                <span class="file-name">{file.name}</span>
+                <span class="file-desc">{file.desc}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="card advanced-files">
+          <h2>The Brain</h2>
+          <p class="subtitle">Add these to make it truly useful:</p>
+          <ul class="file-list">
+            {advancedFiles.map((file) => (
+              <li>
+                <span class="file-name">{file.name}</span>
+                <span class="file-desc">{file.desc}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Example: Savio's Power Setup</h2>
+      <p class="section-intro">
+        Here is a real-world example of how <a href="https://twitter.com/saviomartin7" target="_blank">Savio Martin</a> sets up his OpenClaw environment for maximum security and productivity.
+      </p>
+
+      <div class="steps-container">
+        <div class="step-item">
+          <span class="step-num">1</span>
+          <div class="step-content">
+            <h3>Isolated Environment</h3>
+            <p>Running on a Mac Mini with a dedicated Apple ID. This keeps the assistant's access physically and digitally separate from main work machines.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <span class="step-num">2</span>
+          <div class="step-content">
+            <h3>Dedicated Accounts</h3>
+            <p>New Google account for Gmail/Drive access via CLI. New Amazon account for shopping. This prevents accidental flags on personal accounts.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <span class="step-num">3</span>
+          <div class="step-content">
+            <h3>Smart Tools</h3>
+            <p>Enabled <strong>Brave Search</strong> for internet access and configured <strong>Smart Memory</strong> (vector DB) for long-term recall.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <span class="step-num">4</span>
+          <div class="step-content">
+            <h3>Model Strategy</h3>
+            <p>Uses <strong>Claude 3.5 Opus</strong> for complex tasks (shopping, research) and <strong>Haiku</strong> for quick replies to save costs.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <span class="step-num">5</span>
+          <div class="step-content">
+            <h3>Human-in-the-loop</h3>
+            <p>Shared calendars for scheduling. The assistant is cc'd on emails where it needs to draft replies or take action.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="quote-box">
+        <blockquote>
+          "The more specific your files, the less you explain. Every. Single. Time."
+        </blockquote>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+  }
+
+  .section {
+    padding: 4rem 0;
+  }
+
+  .setup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .subtitle {
+    color: var(--text-tertiary);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .file-list li {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .file-list li:last-child {
+    border-bottom: none;
+  }
+
+  .file-name {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .file-desc {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+  }
+
+  .core-files {
+    border-top: 4px solid var(--text-tertiary);
+  }
+
+  .advanced-files {
+    border-top: 4px solid var(--accent);
+  }
+
+  .section-intro {
+    max-width: 700px;
+    margin-bottom: 3rem;
+    color: var(--text-secondary);
+  }
+
+  .steps-container {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 800px;
+  }
+
+  .step-item {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .step-content h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.125rem;
+  }
+
+  .step-content p {
+    margin: 0;
+    color: var(--text-secondary);
+  }
+
+  .quote-box {
+    margin-top: 4rem;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text);
+    padding: 2rem;
+    background: var(--bg-alt);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  blockquote {
+    margin: 0;
+    font-style: italic;
+  }
+
+  @media (max-width: 768px) {
+    .setup-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

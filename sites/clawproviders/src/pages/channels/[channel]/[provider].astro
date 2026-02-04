@@ -1,0 +1,465 @@
+---
+import BaseLayout from '../../../components/layout/BaseLayout.astro';
+import FAQSection from '../../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../../components/seo/SchemaOrg.astro';
+import { getProviders, getChannels, getDeployments, getProviderChannelCombos } from '../../../lib/data/loaders';
+import { generateSEOMeta, generateFAQs, generateRelatedPages } from '../../../lib/content/generator';
+import type { Provider, Channel, Breadcrumb } from '../../../lib/data/types';
+
+export async function getStaticPaths() {
+  const combos = getProviderChannelCombos();
+  return combos.map(({ provider, channel }) => ({
+    params: { channel: channel.slug, provider: provider.slug },
+    props: { provider, channel },
+  }));
+}
+
+interface Props {
+  provider: Provider;
+  channel: Channel;
+}
+
+const { provider, channel } = Astro.props;
+const deployments = getDeployments();
+
+const slug = `/channels/${channel.slug}/${provider.slug}/`;
+const seo = generateSEOMeta('channel-provider', slug, { provider, channel });
+const faqs = generateFAQs('channel-provider', { provider, channel });
+const relatedPages = generateRelatedPages('channel-provider', { provider, channel }, getProviders(), getChannels(), deployments);
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Channels', url: '/channels/' },
+  { name: channel.name, url: `/channels/${channel.slug}/` },
+  { name: provider.name, url: slug },
+];
+
+// Generate setup steps combining channel and provider
+const combinedSteps = [
+  ...channel.setupSteps.slice(0, 3),
+  ...provider.authMethods[0]?.setupSteps.slice(0, 2) || [],
+  'Configure OpenClaw with both channel and provider settings',
+  'Start the gateway and send a test message',
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="howto"
+    title={`Setup ${provider.name} on ${channel.name} with OpenClaw`}
+    description={`Complete guide to building a ${channel.name} AI assistant powered by ${provider.name}.`}
+    steps={combinedSteps.map((step, i) => ({ name: `Step ${i + 1}`, text: step }))}
+  />
+
+  <section class="page-header">
+    <div class="container">
+      <h1>{provider.name} on {channel.name}</h1>
+      <p class="page-intro">
+        Build an intelligent {channel.name} bot powered by {provider.name}'s AI models.
+        Complete integration guide with configuration examples.
+      </p>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <div class="content-grid">
+      <main class="content">
+        <section class="overview section">
+          <h2>Overview</h2>
+          <p class="text-secondary">
+            This guide shows you how to connect <strong>{provider.name}</strong> to
+            <strong>{channel.name}</strong> using OpenClaw. You'll configure the messaging
+            channel, set up AI provider authentication, and deploy your assistant.
+          </p>
+
+          <div class="combo-features">
+            <div class="feature-box channel-features">
+              <h3>{channel.name} Capabilities</h3>
+              <ul>
+                {channel.capabilities.dms && <li>Direct messages</li>}
+                {channel.capabilities.groups && <li>Group chats</li>}
+                {channel.capabilities.media && <li>Media support</li>}
+                {channel.capabilities.reactions && <li>Reactions</li>}
+                {channel.capabilities.threads && <li>Thread support</li>}
+                {channel.capabilities.nativeCommands && <li>Native commands</li>}
+              </ul>
+            </div>
+            <div class="feature-box provider-features">
+              <h3>{provider.name} Features</h3>
+              <ul>
+                {provider.features.slice(0, 4).map((f) => <li>{f}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Step 1: Configure {channel.name}</h2>
+          <ol class="setup-steps">
+            {channel.setupSteps.map((step) => (
+              <li>{step}</li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="section">
+          <h2>Step 2: Configure {provider.name}</h2>
+          <p class="text-secondary">{provider.authMethods[0]?.description}</p>
+          <ol class="setup-steps">
+            {provider.authMethods[0]?.setupSteps.map((step) => (
+              <li>{step}</li>
+            ))}
+          </ol>
+          {provider.authMethods[0]?.envVar && (
+            <p class="text-secondary"><strong>Environment variable:</strong> <code class="env-var">{provider.authMethods[0].envVar}</code></p>
+          )}
+        </section>
+
+        <section class="section">
+          <h2>Step 3: Combined Configuration</h2>
+          <p class="text-secondary">Add both configurations to your <code>openclaw.json</code>:</p>
+          <pre><code>{`{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "${provider.id}/${provider.defaultModel}"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "${provider.id}": ${provider.configExample.match(/\{[\s\S]*?\}/)?.[0] || '{}'}
+    }
+  },
+  "channels": ${channel.configExample.match(/"channels":\s*(\{[\s\S]*\})/)?.[1] || channel.configExample}
+}`}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Step 4: Start and Test</h2>
+          <pre><code>{`# Start the gateway
+openclaw gateway start
+
+# Check connection status
+openclaw status
+
+# View real-time logs
+openclaw logs --follow`}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Access Control</h2>
+          <p class="text-secondary">{channel.name} supports the following access control policies:</p>
+
+          <h3>DM Policies</h3>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Policy</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {channel.dmPolicies.map((policy) => (
+                  <tr>
+                    <td><code>{policy}</code></td>
+                    <td>
+                      {policy === 'pairing' && 'Unknown senders receive a pairing code; admin must approve'}
+                      {policy === 'allowlist' && 'Only senders in allowFrom list are processed'}
+                      {policy === 'open' && 'All DMs are processed (requires allowFrom: ["*"])'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Group Policies</h3>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Policy</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {channel.groupPolicies.map((policy) => (
+                  <tr>
+                    <td><code>{policy}</code></td>
+                    <td>
+                      {policy === 'allowlist' && 'Only groups in groupAllowFrom are processed'}
+                      {policy === 'open' && 'All groups are processed'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Deploy Options</h2>
+          <p class="text-secondary">Choose how to deploy your {channel.name} + {provider.name} setup:</p>
+          <div class="grid grid-2">
+            {deployments.map((deployment) => (
+              <a href={`/deploy/${deployment.slug}/${provider.slug}/`} class="card deployment-card">
+                <h3>{deployment.name}</h3>
+                <p>{deployment.shortDescription}</p>
+                <span class="setup-link">View Guide →</span>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <FAQSection faqs={faqs} />
+      </main>
+
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <h3>{channel.name} Limits</h3>
+          <p><strong>Text limit:</strong> <span class="text-secondary">{channel.textChunkLimit} chars</span></p>
+          <p><strong>Protocol:</strong> <span class="text-secondary">{channel.protocolLibrary}</span></p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>{provider.name} Model</h3>
+          <p><strong>Default:</strong> <span class="text-secondary">{provider.models[0]?.name}</span></p>
+          <p><strong>Context:</strong> <span class="text-secondary">{(provider.models[0]?.contextWindow / 1000).toFixed(0)}K tokens</span></p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Best For</h3>
+          <ul>
+            {channel.useCases.slice(0, 2).map((uc) => <li>{uc}</li>)}
+            {provider.useCases.slice(0, 2).map((uc) => <li>{uc}</li>)}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Related Guides</h3>
+          <ul class="related-links">
+            <li><a href={`/channels/${channel.slug}/`}>{channel.name} Overview</a></li>
+            <li><a href={`/providers/${provider.slug}/`}>{provider.name} Overview</a></li>
+            {relatedPages.slice(0, 3).map((page) => (
+              <li><a href={page}>{page.split('/').filter(Boolean).join(' / ')}</a></li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto 2rem;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .main-content {
+    padding: 3rem 0;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 4rem;
+  }
+  
+  .content {
+    min-width: 0;
+  }
+
+  .section {
+    margin-bottom: 4rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .combo-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .feature-box {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .feature-box h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+  }
+
+  .feature-box ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: var(--text-secondary);
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+  
+  .env-var {
+    color: var(--warning);
+  }
+
+  .setup-steps li {
+    margin-bottom: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.5rem;
+  }
+  
+  table {
+    margin-bottom: 0;
+    border: none;
+  }
+  
+  td {
+    vertical-align: top;
+  }
+  
+  .deployment-card {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .deployment-card h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+  }
+
+  .deployment-card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0 0 1rem;
+    flex-grow: 1;
+  }
+  
+  .setup-link {
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .sidebar-section {
+    background: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-section h3 {
+    margin-top: 0;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+
+  .sidebar-section p {
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+    color: var(--text);
+  }
+
+  .sidebar-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .sidebar-section li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section li:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  
+  .sidebar-section li:first-child {
+    padding-top: 0;
+  }
+
+  .related-links a {
+    color: var(--accent);
+    text-decoration: none;
+    display: block;
+    padding: 0.25rem 0;
+    transition: color 0.2s;
+    text-transform: capitalize;
+  }
+
+  .related-links a:hover {
+    color: var(--accent-hover);
+    text-decoration: none;
+  }
+
+  @media (max-width: 968px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .combo-features {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+  }
+</style>

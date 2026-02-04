@@ -1,0 +1,72 @@
+---
+import type { Breadcrumb } from '../../lib/data/types';
+import SchemaOrg from './SchemaOrg.astro';
+
+interface Props {
+  breadcrumbs: Breadcrumb[];
+}
+
+const { breadcrumbs } = Astro.props;
+---
+
+<SchemaOrg type="breadcrumb" breadcrumbs={breadcrumbs} />
+
+<nav aria-label="Breadcrumb" class="breadcrumbs">
+  <ol>
+    {breadcrumbs.map((crumb, index) => (
+      <li>
+        {index < breadcrumbs.length - 1 ? (
+          <>
+            <a href={crumb.url}>{crumb.name}</a>
+            <span class="separator" aria-hidden="true">/</span>
+          </>
+        ) : (
+          <span aria-current="page" class="current">{crumb.name}</span>
+        )}
+      </li>
+    ))}
+  </ol>
+</nav>
+
+<style>
+  .breadcrumbs {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .breadcrumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 0.5rem;
+  }
+
+  .breadcrumbs li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .breadcrumbs a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .breadcrumbs a:hover {
+    color: var(--text);
+  }
+
+  .breadcrumbs .separator {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+  }
+
+  .breadcrumbs .current {
+    color: var(--text);
+    font-weight: 500;
+  }
+</style>

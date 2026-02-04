@@ -1,0 +1,414 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import FAQSection from '../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../components/seo/SchemaOrg.astro';
+import { getProviders, getChannels, getDeployments } from '../../lib/data/loaders';
+import { generateSEOMeta, generateBreadcrumbs, generateFAQs, generateRelatedPages } from '../../lib/content/generator';
+import type { Provider } from '../../lib/data/types';
+
+export async function getStaticPaths() {
+  const providers = getProviders();
+  return providers.map((provider) => ({
+    params: { provider: provider.slug },
+    props: { provider },
+  }));
+}
+
+interface Props {
+  provider: Provider;
+}
+
+const { provider } = Astro.props;
+const channels = getChannels();
+const deployments = getDeployments();
+
+const seo = generateSEOMeta('provider', `/providers/${provider.slug}/`, { provider });
+const breadcrumbs = generateBreadcrumbs('provider', { provider });
+const faqs = generateFAQs('provider', { provider });
+const relatedPages = generateRelatedPages('provider', { provider }, getProviders(), channels, deployments);
+
+const setupSteps = provider.authMethods[0]?.setupSteps || [];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="article"
+    title={seo.title}
+    description={seo.description}
+    url={seo.canonical}
+  />
+
+  {setupSteps.length > 0 && (
+    <SchemaOrg
+      type="howto"
+      title={`How to Setup ${provider.name} with OpenClaw`}
+      description={`Step-by-step guide to configure ${provider.name} for your OpenClaw AI assistant.`}
+      steps={setupSteps.map((step, i) => ({ name: `Step ${i + 1}`, text: step }))}
+    />
+  )}
+
+  <section class="page-header">
+    <div class="container">
+      <h1>Setup {provider.name} with OpenClaw</h1>
+      <p class="page-intro">{provider.description}</p>
+      <div class="quick-links">
+        <a href={provider.website} target="_blank" rel="noopener" class="btn btn-outline">
+          Official Website
+        </a>
+        <a href={provider.docsUrl} target="_blank" rel="noopener" class="btn btn-outline">
+          Documentation
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <div class="content-grid">
+      <main class="content">
+        <section class="section">
+          <h2>Available Models</h2>
+          <div class="models-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Context</th>
+                  <th>Images</th>
+                  <th>Tools</th>
+                  {provider.models[0]?.inputPrice && <th>Price (1M tokens)</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {provider.models.map((model) => (
+                  <tr>
+                    <td>
+                      <strong>{model.name}</strong>
+                      <br />
+                      <small class="text-tertiary">{model.description}</small>
+                    </td>
+                    <td>{(model.contextWindow / 1000).toFixed(0)}K</td>
+                    <td><span class={model.supportsImages ? 'text-success' : 'text-muted'}>{model.supportsImages ? '✓' : '—'}</span></td>
+                    <td><span class={model.supportsTools ? 'text-success' : 'text-muted'}>{model.supportsTools ? '✓' : '—'}</span></td>
+                    {provider.models[0]?.inputPrice && (
+                      <td>
+                        {model.inputPrice ? `$${model.inputPrice} / $${model.outputPrice}` : '—'}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Authentication</h2>
+          {provider.authMethods.map((auth) => (
+            <div class="auth-method">
+              <h3>{auth.type.replace('_', ' ').toUpperCase()}</h3>
+              <p>{auth.description}</p>
+              {auth.envVar && (
+                <p><strong>Environment Variable:</strong> <code class="env-var">{auth.envVar}</code></p>
+              )}
+              <h4>Setup Steps:</h4>
+              <ol class="setup-steps">
+                {auth.setupSteps.map((step) => (
+                  <li>{step}</li>
+                ))}
+              </ol>
+            </div>
+          ))}
+        </section>
+
+        <section class="section">
+          <h2>Configuration Example</h2>
+          <pre><code>{provider.configExample}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Use {provider.name} with Messaging Channels</h2>
+          <p>Connect {provider.name} to your favorite messaging platforms:</p>
+          <div class="grid grid-3">
+            {channels.map((channel) => (
+              <a href={`/providers/${provider.slug}/${channel.slug}/`} class="card channel-card">
+                <h3>{channel.name}</h3>
+                <p>{channel.shortDescription}</p>
+                <span class="setup-link">View Guide →</span>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <FAQSection faqs={faqs} />
+      </main>
+
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <h3>Key Features</h3>
+          <ul class="feature-list">
+            {provider.features.map((feature) => (
+              <li>{feature}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Pros</h3>
+          <ul class="pros-list">
+            {provider.pros.map((pro) => (
+              <li>{pro}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Cons</h3>
+          <ul class="cons-list">
+            {provider.cons.map((con) => (
+              <li>{con}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Best For</h3>
+          <ul>
+            {provider.useCases.map((useCase) => (
+              <li>{useCase}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Related Guides</h3>
+          <ul class="related-links">
+            {relatedPages.slice(0, 5).map((page) => (
+              <li><a href={page}>{page.split('/').filter(Boolean).slice(-2).join(' ').replace(/-/g, ' ')}</a></li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto 2rem;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .quick-links {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .main-content {
+    padding: 3rem 0;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 4rem;
+  }
+
+  .content {
+    min-width: 0;
+  }
+
+  .section {
+    margin-bottom: 4rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .models-table {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  
+  .models-table table {
+    margin-bottom: 0;
+    border: none;
+  }
+  
+  .models-table td {
+    vertical-align: middle;
+  }
+  
+  .text-tertiary {
+    color: var(--text-tertiary);
+  }
+  
+  .text-success {
+    color: var(--success);
+    font-weight: bold;
+  }
+  
+  .text-muted {
+    color: var(--text-tertiary);
+  }
+
+  .auth-method {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+  }
+
+  .auth-method h3 {
+    margin-top: 0;
+    font-size: 1.25rem;
+    color: var(--text);
+  }
+  
+  .env-var {
+    color: var(--warning);
+  }
+
+  .setup-steps li {
+    margin-bottom: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .channel-card {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .channel-card h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+  }
+
+  .channel-card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0 0 1rem;
+    flex-grow: 1;
+  }
+  
+  .setup-link {
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .sidebar-section {
+    background: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-section h3 {
+    margin-top: 0;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+
+  .sidebar-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .sidebar-section li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section li:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  
+  .sidebar-section li:first-child {
+    padding-top: 0;
+  }
+
+  .feature-list li::before {
+    content: '✓ ';
+    color: var(--accent);
+    margin-right: 0.5rem;
+  }
+
+  .pros-list li::before {
+    content: '+ ';
+    color: var(--success);
+    margin-right: 0.5rem;
+  }
+
+  .cons-list li::before {
+    content: '- ';
+    color: var(--text-tertiary);
+    margin-right: 0.5rem;
+  }
+
+  .related-links a {
+    color: var(--accent);
+    text-decoration: none;
+    display: block;
+    padding: 0.25rem 0;
+    transition: color 0.2s;
+    text-transform: capitalize;
+  }
+
+  .related-links a:hover {
+    color: var(--accent-hover);
+    text-decoration: none;
+  }
+
+  @media (max-width: 968px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+  }
+</style>

@@ -1,0 +1,51 @@
+---
+import type { SEOMeta } from '../../lib/data/types';
+
+interface Props {
+  seo: SEOMeta;
+}
+
+const { seo } = Astro.props;
+
+const {
+  title,
+  description,
+  canonical,
+  ogTitle = title,
+  ogDescription = description,
+  ogImage = '/og-default.png',
+  twitterCard = 'summary_large_image',
+  robots = 'index, follow',
+  keywords = [],
+} = seo;
+
+const siteName = 'ClawProviders';
+const fullTitle = `${title} | ${siteName}`;
+---
+
+<!-- Primary Meta Tags -->
+<title>{fullTitle}</title>
+<meta name="title" content={fullTitle} />
+<meta name="description" content={description} />
+<meta name="robots" content={robots} />
+{keywords.length > 0 && <meta name="keywords" content={keywords.join(', ')} />}
+<link rel="canonical" href={canonical} />
+
+<!-- Open Graph / Facebook -->
+<meta property="og:type" content="article" />
+<meta property="og:url" content={canonical} />
+<meta property="og:title" content={ogTitle} />
+<meta property="og:description" content={ogDescription} />
+<meta property="og:image" content={ogImage} />
+<meta property="og:site_name" content={siteName} />
+
+<!-- Twitter -->
+<meta property="twitter:card" content={twitterCard} />
+<meta property="twitter:url" content={canonical} />
+<meta property="twitter:title" content={ogTitle} />
+<meta property="twitter:description" content={ogDescription} />
+<meta property="twitter:image" content={ogImage} />
+
+<!-- Additional Meta -->
+<meta name="author" content="ClawProviders" />
+<meta name="generator" content={Astro.generator} />

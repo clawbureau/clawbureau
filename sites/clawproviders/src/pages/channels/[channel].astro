@@ -1,0 +1,453 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import FAQSection from '../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../components/seo/SchemaOrg.astro';
+import { getChannels, getProviders, getDeployments } from '../../lib/data/loaders';
+import { generateSEOMeta, generateBreadcrumbs, generateFAQs, generateRelatedPages } from '../../lib/content/generator';
+import type { Channel } from '../../lib/data/types';
+
+export async function getStaticPaths() {
+  const channels = getChannels();
+  return channels.map((channel) => ({
+    params: { channel: channel.slug },
+    props: { channel },
+  }));
+}
+
+interface Props {
+  channel: Channel;
+}
+
+const { channel } = Astro.props;
+const providers = getProviders();
+const deployments = getDeployments();
+
+const seo = generateSEOMeta('channel', `/channels/${channel.slug}/`, { channel });
+const breadcrumbs = generateBreadcrumbs('channel', { channel });
+const faqs = generateFAQs('channel', { channel });
+const relatedPages = generateRelatedPages('channel', { channel }, providers, getChannels(), deployments);
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="article"
+    title={seo.title}
+    description={seo.description}
+    url={seo.canonical}
+  />
+
+  {channel.setupSteps.length > 0 && (
+    <SchemaOrg
+      type="howto"
+      title={`How to Setup ${channel.name} with OpenClaw`}
+      description={`Step-by-step guide to configure ${channel.name} for your OpenClaw AI assistant.`}
+      steps={channel.setupSteps.map((step, i) => ({ name: `Step ${i + 1}`, text: step }))}
+    />
+  )}
+
+  <section class="page-header">
+    <div class="container">
+      <h1>Setup {channel.name} with OpenClaw</h1>
+      <p class="page-intro">{channel.description}</p>
+      <div class="quick-links">
+        <a href={channel.docsUrl} target="_blank" rel="noopener" class="btn btn-outline">
+          Official Documentation
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <div class="content-grid">
+      <main class="content">
+        <section class="section">
+          <h2>Channel Capabilities</h2>
+          <div class="capabilities-overview">
+            <table>
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th>Supported</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Direct Messages</td>
+                  <td><span class={channel.capabilities.dms ? 'text-success' : 'text-muted'}>{channel.capabilities.dms ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.dms ? 'Full support for 1:1 conversations' : 'Not available'}</td>
+                </tr>
+                <tr>
+                  <td>Group Chats</td>
+                  <td><span class={channel.capabilities.groups ? 'text-success' : 'text-muted'}>{channel.capabilities.groups ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.groups ? 'Participate in group conversations' : 'Not available'}</td>
+                </tr>
+                <tr>
+                  <td>Media Messages</td>
+                  <td><span class={channel.capabilities.media ? 'text-success' : 'text-muted'}>{channel.capabilities.media ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.media ? 'Send and receive images, files' : 'Text only'}</td>
+                </tr>
+                <tr>
+                  <td>Voice Messages</td>
+                  <td><span class={channel.capabilities.voice ? 'text-success' : 'text-muted'}>{channel.capabilities.voice ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.voice ? 'Audio message support' : 'Not available'}</td>
+                </tr>
+                <tr>
+                  <td>Reactions</td>
+                  <td><span class={channel.capabilities.reactions ? 'text-success' : 'text-muted'}>{channel.capabilities.reactions ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.reactions ? 'React to messages with emoji' : 'Not available'}</td>
+                </tr>
+                <tr>
+                  <td>Threads</td>
+                  <td><span class={channel.capabilities.threads ? 'text-success' : 'text-muted'}>{channel.capabilities.threads ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.threads ? 'Threaded conversation support' : 'Not available'}</td>
+                </tr>
+                <tr>
+                  <td>Native Commands</td>
+                  <td><span class={channel.capabilities.nativeCommands ? 'text-success' : 'text-muted'}>{channel.capabilities.nativeCommands ? '✓' : '—'}</span></td>
+                  <td class="text-secondary">{channel.capabilities.nativeCommands ? 'Platform-specific slash commands' : 'Not available'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Access Control Policies</h2>
+
+          <div class="policy-section">
+            <h3>DM Policies</h3>
+            <p class="text-secondary">Control who can send direct messages to your bot:</p>
+            <div class="policies-grid">
+              {channel.dmPolicies.map((policy) => (
+                <div class="policy-card">
+                  <code>{policy}</code>
+                  <p>
+                    {policy === 'pairing' && 'Unknown senders receive a pairing code that admin must approve before access is granted.'}
+                    {policy === 'allowlist' && 'Only senders in the allowFrom list can interact with the bot.'}
+                    {policy === 'open' && 'All direct messages are processed (requires allowFrom: ["*"]).'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div class="policy-section">
+            <h3>Group Policies</h3>
+            <p class="text-secondary">Control which groups your bot participates in:</p>
+            <div class="policies-grid">
+              {channel.groupPolicies.map((policy) => (
+                <div class="policy-card">
+                  <code>{policy}</code>
+                  <p>
+                    {policy === 'allowlist' && 'Only groups in groupAllowFrom are processed.'}
+                    {policy === 'open' && 'Bot responds in all groups it is added to.'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Setup Guide</h2>
+          <ol class="setup-steps">
+            {channel.setupSteps.map((step) => (
+              <li>{step}</li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="section">
+          <h2>Configuration Example</h2>
+          <pre><code>{channel.configExample}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Use {channel.name} with AI Providers</h2>
+          <p>Connect {channel.name} to your preferred AI model provider:</p>
+          <div class="grid grid-3">
+            {providers.map((provider) => (
+              <a href={`/channels/${channel.slug}/${provider.slug}/`} class="card provider-card">
+                <h3>{provider.name}</h3>
+                <p>{provider.shortDescription}</p>
+                <span class="setup-link">View Guide →</span>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <FAQSection faqs={faqs} />
+      </main>
+
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <h3>Key Features</h3>
+          <ul class="feature-list">
+            {channel.features.map((feature) => (
+              <li>{feature}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Technical Details</h3>
+          <p><strong>Protocol:</strong> <span class="text-secondary">{channel.protocolLibrary}</span></p>
+          <p><strong>Text Limit:</strong> <span class="text-secondary">{channel.textChunkLimit} chars</span></p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Best For</h3>
+          <ul>
+            {channel.useCases.map((useCase) => (
+              <li>{useCase}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Related Guides</h3>
+          <ul class="related-links">
+            {relatedPages.slice(0, 5).map((page) => (
+              <li><a href={page}>{page.split('/').filter(Boolean).slice(-2).join(' ').replace(/-/g, ' ')}</a></li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto 2rem;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .quick-links {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .main-content {
+    padding: 3rem 0;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 4rem;
+  }
+
+  .content {
+    min-width: 0;
+  }
+
+  .section {
+    margin-bottom: 4rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .capabilities-overview {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  
+  .capabilities-overview table {
+    margin-bottom: 0;
+    border: none;
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+  
+  .text-success {
+    color: var(--success);
+    font-weight: bold;
+  }
+  
+  .text-muted {
+    color: var(--text-tertiary);
+  }
+
+  .policy-section {
+    margin-bottom: 2.5rem;
+  }
+
+  .policy-section h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+  }
+
+  .policies-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .policy-card {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .policy-card code {
+    display: block;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--accent);
+    background: transparent;
+    padding: 0;
+    border: none;
+  }
+
+  .policy-card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .setup-steps li {
+    margin-bottom: 0.75rem;
+    color: var(--text-secondary);
+  }
+
+  .provider-card {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .provider-card h3 {
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+  }
+
+  .provider-card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0 0 1rem;
+    flex-grow: 1;
+  }
+  
+  .setup-link {
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .sidebar-section {
+    background: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-section h3 {
+    margin-top: 0;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+
+  .sidebar-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .sidebar-section li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section li:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  
+  .sidebar-section li:first-child {
+    padding-top: 0;
+  }
+
+  .sidebar-section p {
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+    color: var(--text);
+  }
+
+  .feature-list li::before {
+    content: '✓ ';
+    color: var(--accent);
+    margin-right: 0.5rem;
+  }
+
+  .related-links a {
+    color: var(--accent);
+    text-decoration: none;
+    display: block;
+    padding: 0.25rem 0;
+    transition: color 0.2s;
+    text-transform: capitalize;
+  }
+
+  .related-links a:hover {
+    color: var(--accent-hover);
+    text-decoration: none;
+  }
+
+  @media (max-width: 968px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+  }
+</style>

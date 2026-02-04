@@ -1,0 +1,191 @@
+---
+const currentYear = new Date().getFullYear();
+
+const footerLinks = [
+  {
+    title: 'Providers',
+    links: [
+      { label: 'Anthropic', href: '/providers/anthropic/' },
+      { label: 'OpenAI', href: '/providers/openai-codex/' },
+      { label: 'Google Gemini', href: '/providers/google-gemini/' },
+      { label: 'Ollama', href: '/providers/ollama/' },
+      { label: 'All Providers', href: '/providers/' },
+    ],
+  },
+  {
+    title: 'Channels',
+    links: [
+      { label: 'WhatsApp', href: '/channels/whatsapp/' },
+      { label: 'Telegram', href: '/channels/telegram/' },
+      { label: 'Discord', href: '/channels/discord/' },
+      { label: 'Slack', href: '/channels/slack/' },
+      { label: 'All Channels', href: '/channels/' },
+    ],
+  },
+  {
+    title: 'Resources',
+    links: [
+      { label: 'SimpleClaw', href: '/simple-claw/' },
+      { label: 'Use Cases', href: '/use-cases/' },
+      { label: 'Setup Guide', href: '/setup-guide/' },
+      { label: 'Compare', href: '/compare/' },
+    ],
+  },
+  {
+    title: 'Community',
+    links: [
+      { label: 'Documentation', href: 'https://openclaw.bot/docs' },
+      { label: 'GitHub', href: 'https://github.com/openclaw/openclaw' },
+      { label: 'Discord', href: 'https://discord.gg/openclaw' },
+      { label: 'llms.txt', href: '/llms.txt' },
+    ],
+  },
+];
+---
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="logo">
+          <span class="logo-icon">🦞</span>
+          <span class="logo-text">ClawProviders</span>
+        </a>
+        <p>Setup guides for OpenClaw AI assistants. Connect any AI provider to any messaging channel.</p>
+      </div>
+      {footerLinks.map((section) => (
+        <div class="footer-section">
+          <h4>{section.title}</h4>
+          <ul>
+            {section.links.map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; {currentYear} ClawProviders. Part of the <a href="https://openclaw.bot">OpenClaw</a> ecosystem.</p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--border);
+    padding: 5rem 0 2rem;
+    margin-top: 6rem;
+    background: var(--bg-secondary);
+  }
+
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 2fr repeat(4, 1fr);
+    gap: 4rem;
+    padding-bottom: 4rem;
+  }
+
+  .footer-brand .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1.125rem;
+    margin-bottom: 1rem;
+  }
+
+  .footer-brand p {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    max-width: 320px;
+  }
+
+  .footer-section h4 {
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+  }
+
+  .footer-section ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .footer-section li {
+    margin-bottom: 0.75rem;
+  }
+
+  .footer-section a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: color 0.2s ease;
+  }
+
+  .footer-section a:hover {
+    color: var(--text);
+  }
+
+  .footer-bottom {
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-bottom p {
+    color: var(--text-tertiary);
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  .footer-bottom a {
+    color: var(--text-secondary);
+    text-decoration: none;
+  }
+
+  .footer-bottom a:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+
+  @media (max-width: 1024px) {
+    .footer-grid {
+      gap: 2rem;
+    }
+  }
+
+  @media (max-width: 968px) {
+    .footer-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .footer-brand {
+      grid-column: span 2;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .footer-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .footer-brand {
+      grid-column: span 1;
+    }
+    
+    .footer-bottom {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+  }
+</style>
