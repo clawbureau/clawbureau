@@ -35,7 +35,7 @@
       "properties": {
         "principal_minor": {
           "type": "string",
-          "pattern": "^[0-9]+$",
+          "pattern": "^[1-9][0-9]*$",
           "description": "Reward amount in minor units (cents)"
         },
         "platform_fee_minor": {
@@ -45,7 +45,7 @@
         },
         "total_minor": {
           "type": "string",
-          "pattern": "^[0-9]+$",
+          "pattern": "^[1-9][0-9]*$",
           "description": "Total amount held in escrow in minor units (cents)"
         },
         "currency": {
