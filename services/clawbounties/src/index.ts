@@ -1073,20 +1073,6 @@ async function getBountyById(db: D1Database, bountyId: string): Promise<BountyV2
   return parseBountyRow(row);
 }
 
-async function lockBountyAcceptIdempotency(db: D1Database, bountyId: string, idempotencyKey: string, now: string): Promise<void> {
-  await db
-    .prepare(
-      `UPDATE bounties
-         SET accept_idempotency_key = ?, updated_at = ?
-       WHERE bounty_id = ?
-         AND status = 'open'
-         AND worker_did IS NULL
-         AND accept_idempotency_key IS NULL`
-    )
-    .bind(idempotencyKey, now, bountyId)
-    .run();
-}
-
 async function updateBountyAccepted(
   db: D1Database,
   params: {
@@ -1881,19 +1867,9 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
     }
   }
 
-  // Idempotency: already accepted.
+  // Already accepted.
   if (bounty.worker_did) {
     if (bounty.worker_did === worker_did) {
-      if (bounty.accept_idempotency_key && bounty.accept_idempotency_key !== idempotency_key) {
-        return errorResponse(
-          'IDEMPOTENCY_CONFLICT',
-          'Bounty already accepted with a different idempotency_key',
-          409,
-          { accept_idempotency_key: bounty.accept_idempotency_key },
-          version
-        );
-      }
-
       const accepted_at = bounty.accepted_at ?? bounty.updated_at;
       const response: AcceptBountyResponseV1 = {
         bounty_id: bounty.bounty_id,
@@ -1918,50 +1894,12 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('INVALID_STATUS', `Cannot accept bounty in status '${bounty.status}'`, 409, undefined, version);
   }
 
-  if (bounty.accept_idempotency_key && bounty.accept_idempotency_key !== idempotency_key) {
-    return errorResponse(
-      'IDEMPOTENCY_CONFLICT',
-      'Bounty accept already in progress with a different idempotency_key',
-      409,
-      { accept_idempotency_key: bounty.accept_idempotency_key },
-      version
-    );
-  }
-
   const now = new Date().toISOString();
-
-  if (!bounty.accept_idempotency_key) {
-    try {
-      await lockBountyAcceptIdempotency(env.BOUNTIES_DB, bountyId, idempotency_key, now);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
-    }
-  }
-
-  const locked = await getBountyById(env.BOUNTIES_DB, bountyId);
-  if (!locked) {
-    return errorResponse('DB_READ_FAILED', 'Failed to read bounty', 500, undefined, version);
-  }
-
-  if (locked.accept_idempotency_key && locked.accept_idempotency_key !== idempotency_key) {
-    return errorResponse(
-      'IDEMPOTENCY_CONFLICT',
-      'Bounty accept already in progress with a different idempotency_key',
-      409,
-      { accept_idempotency_key: locked.accept_idempotency_key },
-      version
-    );
-  }
-
-  if (locked.worker_did && locked.worker_did !== worker_did) {
-    return errorResponse('BOUNTY_ALREADY_ACCEPTED', 'Bounty already accepted', 409, { worker_did: locked.worker_did }, version);
-  }
 
   // Assign escrow (canonical lock)
   try {
     await escrowAssignWorker(env, {
-      escrow_id: locked.escrow_id,
+      escrow_id: bounty.escrow_id,
       idempotency_key,
       worker_did,
     });
