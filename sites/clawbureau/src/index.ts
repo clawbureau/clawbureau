@@ -454,6 +454,12 @@ export default {
     const path = url.pathname;
     const method = request.method.toUpperCase();
     const version = env.SITE_VERSION ?? '0.1.0';
+
+    // Force HTTPS redirect
+    if (url.protocol === 'http:') {
+      return Response.redirect(`https://${url.host}${url.pathname}${url.search}`, 301);
+    }
+
     const origin = url.origin;
 
     // Handle trailing slashes
