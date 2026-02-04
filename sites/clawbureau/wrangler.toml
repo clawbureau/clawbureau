@@ -1,0 +1,23 @@
+name = "clawbureau"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+routes = [
+  { pattern = "clawbureau.com/*", zone_name = "clawbureau.com" },
+  { pattern = "www.clawbureau.com/*", zone_name = "clawbureau.com" }
+]
+
+[vars]
+ENVIRONMENT = "production"
+SITE_VERSION = "0.1.0"
+
+[env.staging]
+name = "clawbureau-staging"
+routes = [
+  { pattern = "staging.clawbureau.com/*", zone_name = "clawbureau.com" }
+]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+SITE_VERSION = "0.1.0"
