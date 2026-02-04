@@ -14,7 +14,7 @@ This plan sharpens Claw Bureau PRDs so that each service maps cleanly onto OpenC
 ---
 
 ## OpenClaw architectural constraints (what we optimize for)
-From `docs/openclaw/*`:
+From the upstream OpenClaw documentation (maintained in the separate OpenClaw project, external to this repository):
 
 1) **Plugins are first-class**
 - Extensions live under `extensions/*` and are loaded via `openclaw.extensions`.

@@ -71,7 +71,7 @@ Define and enforce scoped token access (CST), issue/introspect/revoke tokens, an
 **As an** OpenClaw gateway/plugin, **I want** time-bound tokens **so that** external service calls are safe and don’t require long-lived secrets.
 
 **Acceptance Criteria:**
-  - Issue tokens bound to **agent DID** (`sub`) + **audience** (`aud`) + **scope[]`
+  - Issue tokens bound to **agent DID** (`sub`) + **audience** (`aud`) + **scope[]**
   - Enforce TTL and max scope length
   - Return token hash + policy version
   - Support OpenClaw correlation via `mission_id` (recommended default = OpenClaw `sessionKey`)
