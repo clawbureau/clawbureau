@@ -1566,6 +1566,27 @@ async function handleRegisterWorker(request: Request, env: Env, version: string)
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
   }
 
+  // Prevent trivial DID takeover: if a worker DID already exists, require the existing bearer token
+  // to rotate the token / update the record.
+  if (existing) {
+    const token = getBearerToken(request.headers.get('authorization'));
+    if (!token) {
+      return errorResponse('UNAUTHORIZED', 'Missing worker token for re-registration', 401, undefined, version);
+    }
+
+    let authed: WorkerRecordV1 | null;
+    try {
+      authed = await getWorkerByAuthToken(env.BOUNTIES_DB, token);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    if (!authed || authed.worker_did !== worker_did) {
+      return errorResponse('UNAUTHORIZED', 'Invalid or expired worker token', 401, undefined, version);
+    }
+  }
+
   const worker_id = existing?.worker_id ?? `wrk_${crypto.randomUUID()}`;
   const created_at = existing?.created_at ?? now;
 
@@ -1600,8 +1621,21 @@ async function handleRegisterWorker(request: Request, env: Env, version: string)
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
+  // Re-read after upsert to avoid returning an incorrect worker_id under concurrent registrations.
+  let persisted: WorkerRecordV1 | null;
+  try {
+    persisted = await getWorkerByDid(env.BOUNTIES_DB, worker_did);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!persisted) {
+    return errorResponse('DB_READ_FAILED', 'Worker record not found after upsert', 500, undefined, version);
+  }
+
   const response: RegisterWorkerResponseV1 = {
-    worker_id,
+    worker_id: persisted.worker_id,
     auth: { mode: 'token', token: authToken },
   };
 
@@ -1627,9 +1661,14 @@ async function handleListWorkers(url: URL, env: Env, version: string): Promise<R
     limit = n;
   }
 
+  // NOTE: We currently store filterable worker fields (job_types/tags) inside JSON.
+  // Until we project/index those fields in SQL, we over-fetch a bounded window, filter in-memory,
+  // then apply the requested limit so discovery results are not accidentally empty.
+  const scanLimit = (job_type || tags.length > 0) ? Math.min(500, Math.max(limit, limit * 10)) : limit;
+
   let workers: WorkerListItemV1[];
   try {
-    workers = await listWorkers(env.BOUNTIES_DB, limit);
+    workers = await listWorkers(env.BOUNTIES_DB, scanLimit);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
@@ -1642,6 +1681,8 @@ async function handleListWorkers(url: URL, env: Env, version: string): Promise<R
   if (tags.length > 0) {
     workers = workers.filter((w) => tags.some((t) => w.listing.tags.includes(t)));
   }
+
+  workers = workers.slice(0, limit);
 
   return jsonResponse({ workers }, 200, version);
 }
