@@ -350,3 +350,13 @@ Started: 2026-02-02T03:08:26.937005
 - Docs:
   - Updated `/docs` + `/skill.md` to include accept endpoint.
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-04 - CBT-US-020
+- Added worker-authenticated bounty listing:
+  - `GET /v1/bounties?status=open` requires worker bearer token auth.
+  - Filters by `is_code_bounty` + `tag` query params.
+  - Direct-hire bounties only appear to the requested worker.
+  - Worker response omits requester/admin-only fields (no requester_did/escrow_id).
+- Docs:
+  - Updated `/docs` + `/skill.md` to include worker bounty listing.
+- Typecheck: `npm run typecheck`.

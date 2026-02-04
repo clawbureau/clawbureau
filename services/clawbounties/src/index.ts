@@ -143,6 +143,20 @@ interface BountyListItemV2 {
   min_proof_tier: ProofTier;
 }
 
+interface WorkerBountyListItemV2 {
+  schema_version: '2';
+  bounty_id: string;
+  title: string;
+  reward: RewardV2;
+  closure_type: ClosureType;
+  difficulty_scalar: number;
+  status: BountyStatus;
+  created_at: string;
+  is_code_bounty: boolean;
+  tags: string[];
+  min_proof_tier: ProofTier;
+}
+
 type WorkerStatus = 'online' | 'offline' | 'paused';
 type WorkerAuthMode = 'token';
 type WorkerAvailabilityMode = 'manual' | 'auto';
@@ -494,6 +508,13 @@ function getBearerToken(header: string | null): string | null {
   if (!trimmed) return null;
   if (trimmed.toLowerCase().startsWith('bearer ')) return trimmed.slice(7).trim();
   return trimmed;
+}
+
+function isAdminAuthorized(request: Request, env: Env): boolean {
+  if (!env.BOUNTIES_ADMIN_KEY || env.BOUNTIES_ADMIN_KEY.trim().length === 0) return false;
+  const token = getBearerToken(request.headers.get('authorization')) ?? request.headers.get('x-admin-key')?.trim() ?? null;
+  if (!token) return false;
+  return token === env.BOUNTIES_ADMIN_KEY;
 }
 
 function requireAdmin(request: Request, env: Env, version: string): Response | null {
@@ -1244,6 +1265,99 @@ async function listBounties(
   return parsed.filter((b) => wantedTags.some((t) => b.tags.includes(t)));
 }
 
+async function listWorkerBounties(
+  db: D1Database,
+  workerDid: string,
+  filters: { status: BountyStatus; is_code_bounty?: boolean; tags?: string[] },
+  limit = 50
+): Promise<WorkerBountyListItemV2[]> {
+  const status = filters.status;
+  const isCode = filters.is_code_bounty;
+
+  let query =
+    'SELECT bounty_id, title, reward_amount_minor, reward_currency, closure_type, difficulty_scalar, status, created_at, is_code_bounty, tags_json, min_proof_tier, metadata_json FROM bounties WHERE status = ?';
+  const bindings: unknown[] = [status];
+
+  if (isCode !== undefined) {
+    query += ' AND is_code_bounty = ?';
+    bindings.push(isCode ? 1 : 0);
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT ?';
+  bindings.push(limit);
+
+  const results = await db.prepare(query).bind(...bindings).all();
+
+  const parsed: WorkerBountyListItemV2[] = [];
+  for (const raw of results.results ?? []) {
+    if (!isRecord(raw)) continue;
+
+    const bounty_id = d1String(raw.bounty_id);
+    const title = d1String(raw.title);
+    const reward_amount_minor = d1String(raw.reward_amount_minor);
+    const reward_currency = d1String(raw.reward_currency);
+    const closure_type = parseClosureType(d1String(raw.closure_type));
+    const difficulty_scalar = d1Number(raw.difficulty_scalar);
+    const statusParsed = parseBountyStatus(d1String(raw.status));
+    const created_at = d1String(raw.created_at);
+    const is_code_bounty_num = d1Number(raw.is_code_bounty);
+    const tags_json = d1String(raw.tags_json);
+    const min_proof_tier = parseProofTier(d1String(raw.min_proof_tier));
+    const metadata_json = d1String(raw.metadata_json);
+
+    if (
+      !bounty_id ||
+      !title ||
+      !reward_amount_minor ||
+      reward_currency !== 'USD' ||
+      !closure_type ||
+      difficulty_scalar === null ||
+      !statusParsed ||
+      !created_at ||
+      is_code_bounty_num === null ||
+      !tags_json ||
+      !min_proof_tier ||
+      !metadata_json
+    ) {
+      continue;
+    }
+
+    const tags = parseJsonStringArray(tags_json);
+    const metadata = parseJsonObject(metadata_json);
+    if (!tags || !metadata) continue;
+
+    const requested_raw = metadata.requested_worker_did;
+    if (requested_raw !== undefined && requested_raw !== null) {
+      if (!isNonEmptyString(requested_raw) || !requested_raw.trim().startsWith('did:')) {
+        continue;
+      }
+
+      if (requested_raw.trim() !== workerDid) {
+        continue;
+      }
+    }
+
+    parsed.push({
+      schema_version: '2',
+      bounty_id,
+      title,
+      reward: { amount_minor: reward_amount_minor, currency: 'USD' },
+      closure_type,
+      difficulty_scalar,
+      status: statusParsed,
+      created_at,
+      is_code_bounty: Boolean(is_code_bounty_num),
+      tags,
+      min_proof_tier,
+    });
+  }
+
+  const wantedTags = filters.tags ?? [];
+  if (wantedTags.length === 0) return parsed;
+
+  return parsed.filter((b) => wantedTags.some((t) => b.tags.includes(t)));
+}
+
 function parseWorkerRow(row: Record<string, unknown>): WorkerRecordV1 | null {
   const worker_id = d1String(row.worker_id);
   const worker_did = d1String(row.worker_did);
@@ -1484,6 +1598,7 @@ function docsPage(origin: string): string {
         <li><code>POST /v1/workers/register</code> — register a worker and receive an auth token (MVP)</li>
         <li><code>GET /v1/workers?job_type=code&amp;tag=typescript</code> — list workers</li>
         <li><code>GET /v1/workers/self</code> — show your worker record (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
+        <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list open bounties (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>POST /v1/bounties/{bounty_id}/accept</code> — accept a bounty (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
       </ul>
 
@@ -1501,6 +1616,10 @@ function docsPage(origin: string): string {
     "availability": {"mode": "manual", "paused": false}
   }'</pre>
 
+      <h3>GET /v1/bounties (open)</h3>
+      <pre>curl -sS "${o}/v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript" \
+  -H "Authorization: Bearer &lt;WORKER_TOKEN&gt;"</pre>
+
       <h3>POST /v1/bounties/{bounty_id}/accept</h3>
       <pre>curl -sS \
   -X POST "${o}/v1/bounties/bty_.../accept" \
@@ -1512,7 +1631,7 @@ function docsPage(origin: string): string {
   }'</pre>
 
       <h3>Bounties API (admin)</h3>
-      <p>Requester/admin bounty endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>. (Worker lifecycle endpoints like <code>POST /v1/bounties/{bounty_id}/accept</code> use the worker token instead.)</p>
+      <p>Requester/admin bounty endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>. Admin auth also allows listing any status via <code>GET /v1/bounties</code>. Worker tokens may list open bounties and accept assignments.</p>
       <p><strong>Until CST auth is wired</strong>, posting a bounty requires an extra header:
         <code>x-requester-did: did:key:...</code>
       </p>
@@ -1563,6 +1682,7 @@ function skillMarkdown(origin: string): string {
       { method: 'POST', path: '/v1/workers/register' },
       { method: 'GET', path: '/v1/workers' },
       { method: 'GET', path: '/v1/workers/self' },
+      { method: 'GET', path: '/v1/bounties' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/accept' },
     ],
   };
@@ -1580,6 +1700,7 @@ Public worker endpoints:
 - POST ${origin}/v1/workers/register
 - GET ${origin}/v1/workers?job_type=code&tag=typescript
 - GET ${origin}/v1/workers/self (requires Authorization: Bearer <token>)
+- GET ${origin}/v1/bounties?status=open&is_code_bounty=true&tag=typescript (requires Authorization: Bearer <token>)
 - POST ${origin}/v1/bounties/{bounty_id}/accept (requires Authorization: Bearer <token>)
 
 Admin bounty endpoints (require BOUNTIES_ADMIN_KEY):
@@ -2288,6 +2409,41 @@ async function handleListBounties(url: URL, env: Env, version: string): Promise<
   return jsonResponse({ bounties }, 200, version);
 }
 
+async function handleListBountiesForWorker(request: Request, url: URL, env: Env, version: string): Promise<Response> {
+  const auth = await requireWorker(request, env, version);
+  if ('error' in auth) return auth.error;
+
+  const statusRaw = url.searchParams.get('status') ?? 'open';
+  const status = parseBountyStatus(statusRaw);
+  if (!status) {
+    return errorResponse('INVALID_REQUEST', 'status must be open', 400, undefined, version);
+  }
+
+  if (status !== 'open') {
+    return errorResponse('FORBIDDEN', 'Workers may only list open bounties', 403, undefined, version);
+  }
+
+  const isCodeRaw = url.searchParams.get('is_code_bounty');
+  let is_code_bounty: boolean | undefined;
+  if (isCodeRaw !== null) {
+    const v = isCodeRaw.trim().toLowerCase();
+    if (v !== 'true' && v !== 'false') {
+      return errorResponse('INVALID_REQUEST', 'is_code_bounty must be true|false', 400, undefined, version);
+    }
+    is_code_bounty = v === 'true';
+  }
+
+  const tags = url.searchParams.getAll('tag').map((t) => t.trim()).filter((t) => t.length > 0);
+
+  const bounties = await listWorkerBounties(
+    env.BOUNTIES_DB,
+    auth.worker.worker_did,
+    { status, is_code_bounty, tags },
+    100
+  );
+  return jsonResponse({ bounties }, 200, version);
+}
+
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
   const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   if (!bounty) {
@@ -2353,16 +2509,19 @@ export default {
         return handleAcceptBounty(bountyId, request, env, version);
       }
 
+      if (path === '/v1/bounties' && method === 'GET') {
+        if (isAdminAuthorized(request, env)) {
+          return handleListBounties(url, env, version);
+        }
+        return handleListBountiesForWorker(request, url, env, version);
+      }
+
       // Bounties API (admin)
       const adminError = requireAdmin(request, env, version);
       if (adminError) return adminError;
 
       if (path === '/v1/bounties' && method === 'POST') {
         return handlePostBounty(request, env, version);
-      }
-
-      if (path === '/v1/bounties' && method === 'GET') {
-        return handleListBounties(url, env, version);
       }
 
       const bountyMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)$/);
