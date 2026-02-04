@@ -1,0 +1,508 @@
+---
+import BaseLayout from '../../../components/layout/BaseLayout.astro';
+import FAQSection from '../../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../../components/seo/SchemaOrg.astro';
+import { getProviders, getProviderComparisons, getChannels } from '../../../lib/data/loaders';
+import type { Provider, Breadcrumb, SEOMeta, FAQ } from '../../../lib/data/types';
+
+export async function getStaticPaths() {
+  const comparisons = getProviderComparisons();
+  return comparisons.map(({ a, b }) => ({
+    params: { slug: `${a.slug}-vs-${b.slug}` },
+    props: { providerA: a, providerB: b },
+  }));
+}
+
+interface Props {
+  providerA: Provider;
+  providerB: Provider;
+}
+
+const { providerA, providerB } = Astro.props;
+const channels = getChannels();
+
+const seo: SEOMeta = {
+  title: `${providerA.name} vs ${providerB.name} - AI Provider Comparison`,
+  description: `Compare ${providerA.name} and ${providerB.name} for your OpenClaw AI assistant. Side-by-side comparison of models, pricing, features, and capabilities.`,
+  canonical: `https://clawproviders.com/compare/providers/${providerA.slug}-vs-${providerB.slug}/`,
+  keywords: [`${providerA.name} vs ${providerB.name}`, 'AI comparison', 'LLM comparison'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Compare', url: '/compare/' },
+  { name: 'Providers', url: '/compare/providers/' },
+  { name: `${providerA.name} vs ${providerB.name}`, url: seo.canonical },
+];
+
+const faqs: FAQ[] = [
+  {
+    question: `Which is better, ${providerA.name} or ${providerB.name}?`,
+    answer: `It depends on your use case. ${providerA.name} excels at ${providerA.useCases[0]?.toLowerCase()}, while ${providerB.name} is best for ${providerB.useCases[0]?.toLowerCase()}. Consider your specific needs for context length, pricing, and feature requirements.`,
+  },
+  {
+    question: `Can I use both ${providerA.name} and ${providerB.name} with OpenClaw?`,
+    answer: `Yes! OpenClaw supports multiple providers simultaneously. You can configure ${providerA.name} as your primary and ${providerB.name} as a fallback, or use different providers for different agents.`,
+  },
+  {
+    question: `Which has better pricing, ${providerA.name} or ${providerB.name}?`,
+    answer: `${providerA.name} uses ${providerA.pricingModel} pricing, while ${providerB.name} uses ${providerB.pricingModel}. The best value depends on your usage volume and whether you need premium features.`,
+  },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="article"
+    title={seo.title}
+    description={seo.description}
+    url={seo.canonical}
+  />
+
+  <section class="page-header">
+    <div class="container">
+      <div class="vs-title">
+        <span class="provider-name">{providerA.name}</span>
+        <span class="vs-badge">VS</span>
+        <span class="provider-name">{providerB.name}</span>
+      </div>
+      <p class="page-intro">
+        Detailed comparison to help you choose the right AI provider for your OpenClaw setup.
+      </p>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <section class="section">
+      <h2>Quick Summary</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <h3>{providerA.name}</h3>
+          <p class="text-secondary">{providerA.shortDescription}</p>
+          <ul>
+            {providerA.features.slice(0, 3).map((f) => <li>{f}</li>)}
+          </ul>
+          <a href={`/providers/${providerA.slug}/`} class="btn btn-outline">View Full Guide</a>
+        </div>
+        <div class="summary-card">
+          <h3>{providerB.name}</h3>
+          <p class="text-secondary">{providerB.shortDescription}</p>
+          <ul>
+            {providerB.features.slice(0, 3).map((f) => <li>{f}</li>)}
+          </ul>
+          <a href={`/providers/${providerB.slug}/`} class="btn btn-outline">View Full Guide</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Model Comparison</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Aspect</th>
+              <th>{providerA.name}</th>
+              <th>{providerB.name}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Number of Models</td>
+              <td>{providerA.models.length}</td>
+              <td>{providerB.models.length}</td>
+            </tr>
+            <tr>
+              <td>Default Model</td>
+              <td>{providerA.models[0]?.name}</td>
+              <td>{providerB.models[0]?.name}</td>
+            </tr>
+            <tr>
+              <td>Max Context Window</td>
+              <td>{Math.max(...providerA.models.map(m => m.contextWindow)) / 1000}K tokens</td>
+              <td>{Math.max(...providerB.models.map(m => m.contextWindow)) / 1000}K tokens</td>
+            </tr>
+            <tr>
+              <td>Image Support</td>
+              <td>{providerA.models.some(m => m.supportsImages) ? '✓ Yes' : '— No'}</td>
+              <td>{providerB.models.some(m => m.supportsImages) ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Tool/Function Calling</td>
+              <td>{providerA.models.some(m => m.supportsTools) ? '✓ Yes' : '— No'}</td>
+              <td>{providerB.models.some(m => m.supportsTools) ? '✓ Yes' : '— No'}</td>
+            </tr>
+            <tr>
+              <td>Pricing Model</td>
+              <td>{providerA.pricingModel}</td>
+              <td>{providerB.pricingModel}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Authentication</h2>
+      <div class="auth-comparison">
+        <div class="auth-box">
+          <h3>{providerA.name}</h3>
+          {providerA.authMethods.map((auth) => (
+            <div class="auth-method">
+              <strong>{auth.type}</strong>
+              <p>{auth.description}</p>
+              {auth.envVar && <code>{auth.envVar}</code>}
+            </div>
+          ))}
+        </div>
+        <div class="auth-box">
+          <h3>{providerB.name}</h3>
+          {providerB.authMethods.map((auth) => (
+            <div class="auth-method">
+              <strong>{auth.type}</strong>
+              <p>{auth.description}</p>
+              {auth.envVar && <code>{auth.envVar}</code>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Pros & Cons</h2>
+      <div class="pros-cons-grid">
+        <div class="pros-cons-box">
+          <h3>{providerA.name}</h3>
+          <div class="pros">
+            <h4>Pros</h4>
+            <ul>
+              {providerA.pros.map((pro) => <li>{pro}</li>)}
+            </ul>
+          </div>
+          <div class="cons">
+            <h4>Cons</h4>
+            <ul>
+              {providerA.cons.map((con) => <li>{con}</li>)}
+            </ul>
+          </div>
+        </div>
+        <div class="pros-cons-box">
+          <h3>{providerB.name}</h3>
+          <div class="pros">
+            <h4>Pros</h4>
+            <ul>
+              {providerB.pros.map((pro) => <li>{pro}</li>)}
+            </ul>
+          </div>
+          <div class="cons">
+            <h4>Cons</h4>
+            <ul>
+              {providerB.cons.map((con) => <li>{con}</li>)}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Best Use Cases</h2>
+      <div class="use-cases-grid">
+        <div class="use-case-box">
+          <h3>Choose {providerA.name} if you need:</h3>
+          <ul>
+            {providerA.useCases.map((uc) => <li>{uc}</li>)}
+          </ul>
+        </div>
+        <div class="use-case-box">
+          <h3>Choose {providerB.name} if you need:</h3>
+          <ul>
+            {providerB.useCases.map((uc) => <li>{uc}</li>)}
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Use with Messaging Channels</h2>
+      <p>Both providers work with all OpenClaw messaging channels:</p>
+      <div class="grid grid-3">
+        {channels.slice(0, 6).map((channel) => (
+          <div class="channel-links card">
+            <h3>{channel.name}</h3>
+            <div class="link-pair">
+              <a href={`/providers/${providerA.slug}/${channel.slug}/`}>{providerA.name}</a>
+              <a href={`/providers/${providerB.slug}/${channel.slug}/`}>{providerB.name}</a>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+
+    <FAQSection faqs={faqs} />
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .vs-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .provider-name {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .vs-badge {
+    background: var(--accent);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
+  }
+
+  .page-intro {
+    opacity: 0.9;
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-secondary);
+  }
+
+  .main-content {
+    padding: 2rem 0;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .summary-card {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .summary-card h3 {
+    margin-top: 0;
+  }
+
+  .summary-card ul {
+    padding-left: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    border: none;
+  }
+
+  th, td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  th {
+    background: var(--bg-tertiary);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .auth-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .auth-box {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .auth-box h3 {
+    margin-top: 0;
+  }
+
+  .auth-method {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+  }
+
+  .auth-method code {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--accent);
+    background: transparent;
+    padding: 0;
+    border: none;
+  }
+
+  .pros-cons-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .pros-cons-box {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .pros-cons-box h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+  }
+
+  .pros h4, .cons h4 {
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    color: var(--text-tertiary);
+  }
+
+  .pros ul, .cons ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem;
+    color: var(--text-secondary);
+  }
+  
+  .pros li, .cons li {
+    margin-bottom: 0.25rem;
+  }
+
+  .pros li::before {
+    content: '+ ';
+    color: var(--success);
+  }
+
+  .cons li::before {
+    content: '- ';
+    color: var(--error);
+  }
+
+  .use-cases-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+
+  .use-case-box {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .use-case-box h3 {
+    margin-top: 0;
+    font-size: 1rem;
+  }
+
+  .use-case-box ul {
+    padding-left: 1.25rem;
+    margin: 0;
+    color: var(--text-secondary);
+  }
+  
+  .use-case-box li {
+    margin-bottom: 0.25rem;
+  }
+
+  .channel-links {
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .channel-links h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.125rem;
+  }
+
+  .link-pair {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    width: 100%;
+  }
+
+  .link-pair a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+  }
+
+  .link-pair a:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  @media (max-width: 768px) {
+    .vs-title {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .provider-name {
+      font-size: 1.5rem;
+    }
+
+    .summary-grid,
+    .auth-comparison,
+    .pros-cons-grid,
+    .use-cases-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

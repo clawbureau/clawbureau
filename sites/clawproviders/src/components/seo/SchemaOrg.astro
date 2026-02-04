@@ -1,0 +1,128 @@
+---
+import type {
+  SchemaOrgArticle,
+  SchemaOrgHowTo,
+  SchemaOrgFAQ,
+  SchemaOrgBreadcrumb,
+  Breadcrumb,
+  FAQ
+} from '../../lib/data/types';
+
+interface Props {
+  type: 'article' | 'howto' | 'faq' | 'breadcrumb';
+  title?: string;
+  description?: string;
+  url?: string;
+  datePublished?: string;
+  dateModified?: string;
+  steps?: { name: string; text: string }[];
+  faqs?: FAQ[];
+  breadcrumbs?: Breadcrumb[];
+}
+
+const {
+  type,
+  title = '',
+  description = '',
+  url = '',
+  datePublished = new Date().toISOString(),
+  dateModified = new Date().toISOString(),
+  steps = [],
+  faqs = [],
+  breadcrumbs = []
+} = Astro.props;
+
+const siteUrl = 'https://clawproviders.com';
+
+function buildArticleSchema(): SchemaOrgArticle {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: title,
+    description: description,
+    author: {
+      '@type': 'Organization',
+      name: 'ClawProviders',
+      url: siteUrl,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'ClawProviders',
+      logo: {
+        '@type': 'ImageObject',
+        url: `${siteUrl}/logo.png`,
+      },
+    },
+    datePublished,
+    dateModified,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': url || siteUrl,
+    },
+  };
+}
+
+function buildHowToSchema(): SchemaOrgHowTo {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: title,
+    description: description,
+    step: steps.map((step, index) => ({
+      '@type': 'HowToStep',
+      position: index + 1,
+      name: step.name,
+      text: step.text,
+    })),
+  };
+}
+
+function buildFAQSchema(): SchemaOrgFAQ {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer,
+      },
+    })),
+  };
+}
+
+function buildBreadcrumbSchema(): SchemaOrgBreadcrumb {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbs.map((crumb, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: crumb.name,
+      item: crumb.url.startsWith('http') ? crumb.url : `${siteUrl}${crumb.url}`,
+    })),
+  };
+}
+
+let schema: Record<string, unknown>;
+
+switch (type) {
+  case 'article':
+    schema = buildArticleSchema();
+    break;
+  case 'howto':
+    schema = buildHowToSchema();
+    break;
+  case 'faq':
+    schema = buildFAQSchema();
+    break;
+  case 'breadcrumb':
+    schema = buildBreadcrumbSchema();
+    break;
+  default:
+    schema = buildArticleSchema();
+}
+---
+
+<script type="application/ld+json" set:html={JSON.stringify(schema)} />

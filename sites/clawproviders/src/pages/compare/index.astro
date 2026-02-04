@@ -1,0 +1,303 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { getProviders, getChannels, getProviderComparisons, getChannelComparisons } from '../../lib/data/loaders';
+import type { SEOMeta, Breadcrumb } from '../../lib/data/types';
+
+const providers = getProviders();
+const channels = getChannels();
+const providerComparisons = getProviderComparisons();
+const channelComparisons = getChannelComparisons();
+
+const seo: SEOMeta = {
+  title: 'Compare AI Providers & Channels - OpenClaw Comparison Guides',
+  description: 'Head-to-head comparisons of AI providers (Claude vs GPT vs Gemini) and messaging channels (WhatsApp vs Telegram vs Discord). Find the best fit for your needs.',
+  canonical: 'https://clawproviders.com/compare/',
+  keywords: ['Claude vs GPT', 'AI provider comparison', 'WhatsApp vs Telegram', 'messaging channel comparison'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Compare', url: '/compare/' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>Comparison Guides</h1>
+      <p class="page-intro">
+        Head-to-head comparisons to help you choose the right AI provider
+        and messaging channel for your OpenClaw setup.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Provider Comparisons</h2>
+      <p class="section-intro">Compare AI model providers by features, pricing, and capabilities.</p>
+
+      <div class="comparison-grid">
+        {providerComparisons.slice(0, 12).map(({ a, b }) => (
+          <a href={`/compare/providers/${a.slug}-vs-${b.slug}/`} class="comparison-card card">
+            <div class="vs-header">
+              <span class="entity">{a.name}</span>
+              <span class="vs">vs</span>
+              <span class="entity">{b.name}</span>
+            </div>
+            <p>Compare {a.name} and {b.name} for your AI assistant.</p>
+          </a>
+        ))}
+      </div>
+
+      <div class="see-all">
+        <a href="/compare/providers/" class="btn btn-outline">
+          View All Provider Comparisons ({providerComparisons.length})
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="container">
+      <h2>Channel Comparisons</h2>
+      <p class="section-intro">Compare messaging channels by features, capabilities, and use cases.</p>
+
+      <div class="comparison-grid">
+        {channelComparisons.slice(0, 12).map(({ a, b }) => (
+          <a href={`/compare/channels/${a.slug}-vs-${b.slug}/`} class="comparison-card card">
+            <div class="vs-header">
+              <span class="entity">{a.name}</span>
+              <span class="vs">vs</span>
+              <span class="entity">{b.name}</span>
+            </div>
+            <p>Compare {a.name} and {b.name} for messaging.</p>
+          </a>
+        ))}
+      </div>
+
+      <div class="see-all">
+        <a href="/compare/channels/" class="btn btn-outline">
+          View All Channel Comparisons ({channelComparisons.length})
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Quick Comparison Tables</h2>
+
+      <h3>AI Providers at a Glance</h3>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>Best Model</th>
+              <th>Context</th>
+              <th>Images</th>
+              <th>Tools</th>
+              <th>Pricing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((p) => (
+              <tr>
+                <td><a href={`/providers/${p.slug}/`} class="table-link">{p.name}</a></td>
+                <td>{p.models[0]?.name}</td>
+                <td>{(p.models[0]?.contextWindow / 1000).toFixed(0)}K</td>
+                <td><span class={p.models[0]?.supportsImages ? 'text-success' : 'text-muted'}>{p.models[0]?.supportsImages ? '✓' : '—'}</span></td>
+                <td><span class={p.models[0]?.supportsTools ? 'text-success' : 'text-muted'}>{p.models[0]?.supportsTools ? '✓' : '—'}</span></td>
+                <td>{p.pricingModel}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Messaging Channels at a Glance</h3>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Channel</th>
+              <th>DMs</th>
+              <th>Groups</th>
+              <th>Media</th>
+              <th>Reactions</th>
+              <th>Threads</th>
+              <th>Text Limit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {channels.map((c) => (
+              <tr>
+                <td><a href={`/channels/${c.slug}/`} class="table-link">{c.name}</a></td>
+                <td><span class={c.capabilities.dms ? 'text-success' : 'text-muted'}>{c.capabilities.dms ? '✓' : '—'}</span></td>
+                <td><span class={c.capabilities.groups ? 'text-success' : 'text-muted'}>{c.capabilities.groups ? '✓' : '—'}</span></td>
+                <td><span class={c.capabilities.media ? 'text-success' : 'text-muted'}>{c.capabilities.media ? '✓' : '—'}</span></td>
+                <td><span class={c.capabilities.reactions ? 'text-success' : 'text-muted'}>{c.capabilities.reactions ? '✓' : '—'}</span></td>
+                <td><span class={c.capabilities.threads ? 'text-success' : 'text-muted'}>{c.capabilities.threads ? '✓' : '—'}</span></td>
+                <td>{c.textChunkLimit}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    color: var(--text);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto 2rem;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .section {
+    padding: 3rem 0;
+  }
+
+  .section-alt {
+    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.02) 20%, rgba(255, 255, 255, 0.02) 80%, transparent);
+  }
+
+  .section h2 {
+    margin-bottom: 0.5rem;
+    color: var(--text);
+  }
+
+  .section-intro {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+  }
+
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .comparison-card {
+    text-align: center;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .vs-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .entity {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--text);
+  }
+
+  .vs {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .comparison-card p {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .see-all {
+    text-align: center;
+    margin-top: 3rem;
+  }
+
+  .section h3 {
+    margin-top: 3rem;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    color: var(--text);
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0;
+    border: none;
+  }
+
+  th, td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  th {
+    background: var(--bg-tertiary);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .table-link {
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .table-link:hover {
+    color: var(--accent);
+  }
+  
+  .text-success {
+    color: var(--success);
+    font-weight: bold;
+  }
+  
+  .text-muted {
+    color: var(--text-tertiary);
+  }
+
+  @media (max-width: 768px) {
+    .comparison-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

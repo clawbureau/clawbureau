@@ -1,0 +1,447 @@
+---
+import BaseLayout from '../../../components/layout/BaseLayout.astro';
+import FAQSection from '../../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../../components/seo/SchemaOrg.astro';
+import { getDeployments, getProviders, getChannels } from '../../../lib/data/loaders';
+import { generateSEOMeta, generateFAQs, generateRelatedPages } from '../../../lib/content/generator';
+import type { Deployment, Provider, Breadcrumb } from '../../../lib/data/types';
+
+export async function getStaticPaths() {
+  const deployments = getDeployments();
+  const providers = getProviders();
+  const paths = [];
+
+  for (const deployment of deployments) {
+    for (const provider of providers) {
+      paths.push({
+        params: { method: deployment.slug, provider: provider.slug },
+        props: { deployment, provider },
+      });
+    }
+  }
+
+  return paths;
+}
+
+interface Props {
+  deployment: Deployment;
+  provider: Provider;
+}
+
+const { deployment, provider } = Astro.props;
+const channels = getChannels();
+
+const slug = `/deploy/${deployment.slug}/${provider.slug}/`;
+const seo = generateSEOMeta('deploy-provider', slug, { deployment, provider });
+const faqs = generateFAQs('deploy-provider', { deployment, provider });
+const relatedPages = generateRelatedPages('deploy-provider', { deployment, provider }, getProviders(), channels, getDeployments());
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Deploy', url: '/deploy/' },
+  { name: deployment.name, url: `/deploy/${deployment.slug}/` },
+  { name: provider.name, url: slug },
+];
+
+// Combine deployment and provider setup steps
+const deploymentSteps = deployment.steps?.map(s => s.description) || [];
+const combinedSteps = [
+  ...deploymentSteps.slice(0, 3),
+  ...provider.authMethods[0]?.setupSteps.slice(0, 2) || [],
+  `Configure ${provider.name} in your openclaw.json`,
+  `Deploy to ${deployment.platform || deployment.type}`,
+  'Verify the deployment and test your AI assistant',
+];
+
+// Helper to get difficulty from type
+function getDifficulty(type: string): string {
+  switch (type) {
+    case 'local': return 'Easy';
+    case 'vps': return 'Medium';
+    case 'cloud': return 'Medium';
+    case 'container': return 'Medium';
+    default: return 'Medium';
+  }
+}
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="howto"
+    title={`Deploy ${provider.name} with ${deployment.name}`}
+    description={`Complete guide to deploying ${provider.name} AI assistant using ${deployment.name.toLowerCase()}.`}
+    steps={combinedSteps.map((step, i) => ({ name: `Step ${i + 1}`, text: step }))}
+  />
+
+  <section class="page-header">
+    <div class="container">
+      <h1>Deploy {provider.name} - {deployment.name}</h1>
+      <p class="page-intro">
+        Complete guide to deploying your {provider.name}-powered AI assistant
+        using {deployment.name.toLowerCase()}. From setup to production.
+      </p>
+      <div class="header-badges">
+        <span class="badge">{getDifficulty(deployment.type)}</span>
+        <span class="badge">{deployment.platform || deployment.type}</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <div class="content-grid">
+      <main class="content">
+        <section class="section">
+          <h2>Overview</h2>
+          <p class="text-secondary">
+            This guide walks you through deploying an AI assistant powered by
+            <strong>{provider.name}</strong> using <strong>{deployment.name}</strong>.
+            You'll configure the provider, set up the deployment environment, and
+            get your assistant running.
+          </p>
+
+          <div class="combo-info">
+            <div class="info-box">
+              <h3>Why {provider.name}?</h3>
+              <ul>
+                {provider.features.slice(0, 3).map((f) => <li>{f}</li>)}
+              </ul>
+            </div>
+            <div class="info-box">
+              <h3>Why {deployment.name}?</h3>
+              <ul>
+                {deployment.pros.slice(0, 3).map((p) => <li>{p}</li>)}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Requirements</h2>
+          <ul class="requirements-list">
+            {deployment.requirements.map((req) => (
+              <li><strong>{req.name}:</strong> {req.description}</li>
+            ))}
+            <li><strong>{provider.name} credentials:</strong> API key or authentication</li>
+          </ul>
+        </section>
+
+        <section class="section">
+          <h2>Step 1: Configure {provider.name}</h2>
+          <p class="text-secondary">{provider.authMethods[0]?.description}</p>
+          <ol class="setup-steps">
+            {provider.authMethods[0]?.setupSteps.map((step) => (
+              <li>{step}</li>
+            ))}
+          </ol>
+          {provider.authMethods[0]?.envVar && (
+            <div class="env-var-box">
+              <strong>Environment Variable:</strong>
+              <code>{provider.authMethods[0].envVar}</code>
+            </div>
+          )}
+        </section>
+
+        <section class="section">
+          <h2>Step 2: Prepare {deployment.name} Environment</h2>
+          <ol class="setup-steps">
+            {deployment.steps?.map((step) => (
+              <li>
+                <strong>{step.title}:</strong> {step.description}
+                {step.command && <pre><code>{step.command}</code></pre>}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="section">
+          <h2>Step 3: Configuration</h2>
+          <p class="text-secondary">Create your <code>openclaw.json</code> configuration:</p>
+          <pre><code>{`{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "${provider.id}/${provider.defaultModel}"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "${provider.id}": ${provider.configExample.match(/\{[\s\S]*?\}/)?.[0] || '{}'}
+    }
+  }
+}`}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Step 4: Deploy</h2>
+          <pre><code>{deployment.configExample}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Step 5: Verify</h2>
+          <pre><code>{`# Check deployment status
+openclaw status
+
+# View logs
+openclaw logs --follow
+
+# Test with a message
+openclaw test "Hello, are you working?"`}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Connect to Channels</h2>
+          <p class="text-secondary">Now connect your deployed {provider.name} assistant to messaging channels:</p>
+          <div class="grid grid-3">
+            {channels.slice(0, 6).map((channel) => (
+              <a href={`/providers/${provider.slug}/${channel.slug}/`} class="card channel-card">
+                <h3>{channel.name}</h3>
+                <p>{channel.shortDescription}</p>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <FAQSection faqs={faqs} />
+      </main>
+
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <h3>{deployment.name} Info</h3>
+          <p><strong>Difficulty:</strong> {getDifficulty(deployment.type)}</p>
+          <p><strong>Platform:</strong> {deployment.platform || deployment.type}</p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>{provider.name} Model</h3>
+          <p><strong>Default:</strong> {provider.models[0]?.name}</p>
+          <p><strong>Context:</strong> {(provider.models[0]?.contextWindow / 1000).toFixed(0)}K tokens</p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Best For</h3>
+          <ul>
+            {deployment.useCases.slice(0, 2).map((uc) => <li>{uc}</li>)}
+            {provider.useCases.slice(0, 2).map((uc) => <li>{uc}</li>)}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Related Guides</h3>
+          <ul class="related-links">
+            <li><a href={`/deploy/${deployment.slug}/`}>{deployment.name} Overview</a></li>
+            <li><a href={`/providers/${provider.slug}/`}>{provider.name} Overview</a></li>
+            {relatedPages.slice(0, 3).map((page) => (
+              <li><a href={page}>{page.split('/').filter(Boolean).join(' / ')}</a></li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    color: var(--text);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  .header-badges {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .header-badges .badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    text-transform: capitalize;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .main-content {
+    padding: 2rem 0;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 3rem;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .combo-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .info-box {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .info-box h3 {
+    margin-top: 0;
+    font-size: 1rem;
+  }
+
+  .info-box ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: var(--text-secondary);
+  }
+
+  .requirements-list {
+    background: var(--bg-alt);
+    padding: 1.5rem 1.5rem 1.5rem 2.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .requirements-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-steps li {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+  }
+
+  .env-var-box {
+    background: var(--bg-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .env-var-box code {
+    margin-left: 0.5rem;
+    color: var(--accent);
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  .channel-card {
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .channel-card h3 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+  }
+
+  .channel-card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 100px;
+    align-self: start;
+  }
+
+  .sidebar-section {
+    background: var(--bg-alt);
+    padding: 1.25rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-section h3 {
+    margin: 0 0 0.75rem;
+    font-size: 0.9375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+
+  .sidebar-section p {
+    margin: 0.5rem 0;
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section li {
+    padding: 0.375rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section li:last-child {
+    border-bottom: none;
+  }
+
+  .related-links a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .related-links a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 968px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .combo-info {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+    }
+  }
+</style>

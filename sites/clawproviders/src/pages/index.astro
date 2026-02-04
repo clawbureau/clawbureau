@@ -1,0 +1,478 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import { getProviders, getChannels, getDeployments, getPageCount } from '../lib/data/loaders';
+import type { SEOMeta } from '../lib/data/types';
+
+const providers = getProviders();
+const channels = getChannels();
+const deployments = getDeployments();
+const pageCount = getPageCount();
+
+const seo: SEOMeta = {
+  title: 'OpenClaw Setup Guides - AI Assistant Integration',
+  description: 'Complete setup guides for OpenClaw AI assistants. Connect any AI provider (Claude, GPT, Gemini) to any messaging channel (WhatsApp, Telegram, Discord, Slack).',
+  canonical: 'https://clawproviders.com/',
+  keywords: ['OpenClaw', 'AI assistant', 'ChatGPT', 'Claude', 'WhatsApp bot', 'Telegram bot', 'Discord bot'],
+};
+---
+
+<BaseLayout seo={seo}>
+  <section class="hero">
+    <div class="container">
+      <div class="hero-content">
+        <h1>Connect your AI to the world</h1>
+        <p class="hero-subtitle">
+          Complete integration guides for OpenClaw. Connect any AI provider to any messaging channel with just a few lines of configuration.
+        </p>
+        <div class="hero-cta">
+          <a href="/providers/" class="btn btn-lg">Browse Providers</a>
+          <a href="/channels/" class="btn btn-lg btn-outline">Explore Channels</a>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <span class="stat-value">{providers.length}</span>
+            <span class="stat-label">AI Providers</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-value">{channels.length}</span>
+            <span class="stat-label">Channels</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-value">{deployments.length}</span>
+            <span class="stat-label">Deploy Options</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat">
+            <span class="stat-value">{pageCount}+</span>
+            <span class="stat-label">Guides</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-glow"></div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <h2>AI Providers</h2>
+        <p class="section-intro">Choose your model. Each provider supports multiple models with different capabilities.</p>
+      </div>
+      <div class="grid grid-3">
+        {providers.slice(0, 6).map((provider) => (
+          <a href={`/providers/${provider.slug}/`} class="card provider-card">
+            <div class="card-header">
+              <h3>{provider.name}</h3>
+              <span class="arrow-icon">→</span>
+            </div>
+            <p>{provider.shortDescription}</p>
+            <div class="card-footer">
+              <ul class="feature-list">
+                {provider.features.slice(0, 3).map((feature) => (
+                  <li>{feature}</li>
+                ))}
+              </ul>
+            </div>
+          </a>
+        ))}
+      </div>
+      <div class="section-footer">
+        <a href="/providers/" class="btn btn-outline">View All Providers</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="container">
+      <div class="section-header">
+        <h2>Messaging Channels</h2>
+        <p class="section-intro">Connect where your users are.</p>
+      </div>
+      <div class="grid grid-3">
+        {channels.slice(0, 6).map((channel) => (
+          <a href={`/channels/${channel.slug}/`} class="card channel-card">
+             <div class="card-header">
+              <h3>{channel.name}</h3>
+              <span class="arrow-icon">→</span>
+            </div>
+            <p>{channel.shortDescription}</p>
+            <div class="capabilities">
+              {channel.capabilities.dms && <span class="badge">DMs</span>}
+              {channel.capabilities.groups && <span class="badge">Groups</span>}
+              {channel.capabilities.media && <span class="badge">Media</span>}
+              {channel.capabilities.reactions && <span class="badge">Reactions</span>}
+            </div>
+          </a>
+        ))}
+      </div>
+      <div class="section-footer">
+        <a href="/channels/" class="btn btn-outline">View All Channels</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <h2>Deployment Options</h2>
+        <p class="section-intro">Run OpenClaw anywhere. From local dev to production cloud.</p>
+      </div>
+      <div class="grid grid-2">
+        {deployments.map((deployment) => (
+          <a href={`/deploy/${deployment.slug}/`} class="card deploy-card">
+            <div class="card-header">
+              <h3>{deployment.name}</h3>
+              <span class="arrow-icon">→</span>
+            </div>
+            <p>{deployment.shortDescription}</p>
+            <ul class="feature-list horizontal">
+              {deployment.pros.slice(0, 3).map((pro) => (
+                <li>{pro}</li>
+              ))}
+            </ul>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section section-alt">
+    <div class="container">
+      <div class="section-header">
+        <h2>Popular Combinations</h2>
+        <p class="section-intro">Start with a proven stack.</p>
+      </div>
+      <div class="grid grid-3">
+        <a href="/providers/anthropic/whatsapp/" class="card combo-card">
+          <div class="combo-icons">
+            <span class="icon-placeholder">🤖</span>
+            <span class="icon-divider">+</span>
+            <span class="icon-placeholder">💬</span>
+          </div>
+          <h3>Claude + WhatsApp</h3>
+          <p>Build a powerful WhatsApp AI assistant with Anthropic's Claude models.</p>
+        </a>
+        <a href="/providers/openai-codex/telegram/" class="card combo-card">
+          <div class="combo-icons">
+             <span class="icon-placeholder">🧠</span>
+            <span class="icon-divider">+</span>
+            <span class="icon-placeholder">✈️</span>
+          </div>
+          <h3>GPT + Telegram</h3>
+          <p>Create a feature-rich Telegram bot powered by OpenAI's GPT models.</p>
+        </a>
+        <a href="/providers/google-gemini/discord/" class="card combo-card">
+          <div class="combo-icons">
+             <span class="icon-placeholder">💎</span>
+            <span class="icon-divider">+</span>
+            <span class="icon-placeholder">🎮</span>
+          </div>
+          <h3>Gemini + Discord</h3>
+          <p>Build a Discord bot with Google's fast and cost-effective Gemini models.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-content">
+        <h2>Ready to build?</h2>
+        <p>Choose a provider and channel to get started with your personalized setup guide.</p>
+        <div class="cta-buttons">
+          <a href="/providers/" class="btn btn-lg">Get Started</a>
+          <a href="https://github.com/openclaw/openclaw" class="btn btn-lg btn-outline" target="_blank" rel="noopener">
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .hero {
+    position: relative;
+    padding: 8rem 0 6rem;
+    overflow: hidden;
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 10;
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+    filter: blur(60px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .hero h1 {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    background: linear-gradient(to right, #ffffff, #a1a1aa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.03em;
+  }
+
+  .hero-subtitle {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    margin: 0 auto 3rem;
+    max-width: 600px;
+    line-height: 1.6;
+  }
+
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 4rem;
+  }
+  
+  .btn-lg {
+    padding: 0.875rem 2rem;
+    font-size: 1.0625rem;
+  }
+
+  .hero-stats {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 0.75rem 2rem;
+    backdrop-filter: blur(10px);
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 1.5rem;
+  }
+
+  .stat-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border);
+  }
+
+  .stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+
+  .section {
+    padding: 6rem 0;
+    position: relative;
+  }
+
+  .section-alt {
+    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.02) 20%, rgba(255, 255, 255, 0.02) 80%, transparent);
+  }
+
+  .section-header {
+    text-align: center;
+    margin-bottom: 3rem;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .section-header h2 {
+    margin-top: 0;
+  }
+
+  .section-intro {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+  }
+
+  .section-footer {
+    text-align: center;
+    margin-top: 3rem;
+  }
+
+  /* Card Styles */
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+  }
+
+  .card h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text);
+  }
+  
+  .arrow-icon {
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease, color 0.2s ease;
+  }
+  
+  .card:hover .arrow-icon {
+    color: var(--accent);
+    transform: translateX(4px);
+  }
+
+  .card p {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    flex-grow: 1;
+  }
+  
+  .card-footer {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.8125rem;
+  }
+
+  .feature-list li {
+    padding: 0.125rem 0;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .feature-list li::before {
+    content: '';
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  
+  .feature-list.horizontal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  
+  .feature-list.horizontal li {
+    padding: 0;
+  }
+
+  .capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: auto;
+  }
+  
+  .combo-card {
+    text-align: center;
+    align-items: center;
+  }
+  
+  .combo-icons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+  }
+  
+  .icon-divider {
+    color: var(--text-tertiary);
+    font-size: 1rem;
+  }
+
+  .cta-section {
+    padding: 8rem 0;
+    text-align: center;
+    background: radial-gradient(circle at center, rgba(59, 130, 246, 0.1) 0%, transparent 60%);
+  }
+
+  .cta-content {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .cta-section h2 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .cta-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-top: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .hero {
+      padding: 6rem 0 4rem;
+    }
+    
+    .hero h1 {
+      font-size: 2.5rem;
+    }
+
+    .hero-stats {
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1.5rem;
+      border-radius: var(--radius-lg);
+      width: 100%;
+    }
+    
+    .stat {
+      width: 100%;
+      flex-direction: row;
+      justify-content: space-between;
+      padding: 0;
+    }
+    
+    .stat-divider {
+      display: none;
+    }
+    
+    .hero-cta {
+      flex-direction: column;
+    }
+    
+    .cta-buttons {
+      flex-direction: column;
+    }
+  }
+</style>

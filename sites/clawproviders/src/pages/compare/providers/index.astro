@@ -1,0 +1,164 @@
+---
+import BaseLayout from '../../../components/layout/BaseLayout.astro';
+import { getProviderComparisons } from '../../../lib/data/loaders';
+import type { SEOMeta, Breadcrumb } from '../../../lib/data/types';
+
+const comparisons = getProviderComparisons();
+
+const seo: SEOMeta = {
+  title: 'AI Provider Comparisons - Claude vs GPT vs Gemini vs Ollama',
+  description: 'Compare all AI providers supported by OpenClaw. Head-to-head comparisons of Claude, GPT, Gemini, Ollama, and more.',
+  canonical: 'https://clawproviders.com/compare/providers/',
+  keywords: ['AI comparison', 'Claude vs GPT', 'Gemini vs Claude', 'LLM comparison'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Compare', url: '/compare/' },
+  { name: 'Providers', url: '/compare/providers/' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>AI Provider Comparisons</h1>
+      <p class="page-intro">
+        Compare AI model providers head-to-head. Find the best fit for your
+        performance needs, budget, and use case.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="comparison-grid">
+        {comparisons.map(({ a, b }) => (
+          <a href={`/compare/providers/${a.slug}-vs-${b.slug}/`} class="comparison-card card">
+            <div class="vs-header">
+              <span class="entity">{a.name}</span>
+              <span class="vs">vs</span>
+              <span class="entity">{b.name}</span>
+            </div>
+            <div class="comparison-preview">
+              <div class="preview-item">
+                <span class="label">Models</span>
+                <span class="value">{a.models.length} <span class="divider">/</span> {b.models.length}</span>
+              </div>
+              <div class="preview-item">
+                <span class="label">Best Context</span>
+                <span class="value">
+                  {Math.max(...a.models.map(m => m.contextWindow)) / 1000}K <span class="divider">/</span> {Math.max(...b.models.map(m => m.contextWindow)) / 1000}K
+                </span>
+              </div>
+            </div>
+            <span class="view-details">Compare details →</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: var(--bg-alt);
+    padding: 3rem 0;
+    text-align: center;
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-light);
+  }
+
+  .section {
+    padding: 3rem 0;
+  }
+
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+
+  .comparison-card {
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+  }
+
+  .vs-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .entity {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--primary);
+  }
+
+  .vs {
+    background: var(--bg-alt);
+    color: var(--text-light);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .comparison-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    background: var(--bg-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+
+  .preview-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .preview-item .label {
+    color: var(--text-light);
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .preview-item .value {
+    font-weight: 500;
+    color: var(--text);
+  }
+  
+  .preview-item .divider {
+    color: var(--text-tertiary);
+    margin: 0 0.25rem;
+  }
+  
+  .view-details {
+    margin-top: auto;
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  
+  .comparison-card:hover .view-details {
+    text-decoration: underline;
+  }
+</style>

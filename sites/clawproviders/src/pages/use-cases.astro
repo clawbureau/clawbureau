@@ -1,0 +1,268 @@
+---
+import BaseLayout from '../components/layout/BaseLayout.astro';
+import type { SEOMeta, Breadcrumb } from '../lib/data/types';
+
+const seo: SEOMeta = {
+  title: 'OpenClaw Use Cases - 100+ Ways to Use Your AI Agent',
+  description: 'From managing emails and calendar to negotiating deals and writing code. Explore the limitless possibilities of your OpenClaw AI assistant.',
+  canonical: 'https://clawproviders.com/use-cases',
+  keywords: ['AI use cases', 'OpenClaw examples', 'AI automation', 'personal assistant tasks'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Use Cases', url: '/use-cases' },
+];
+
+const categories = [
+  {
+    title: "Communication & Inbox Zero",
+    icon: "✉️",
+    items: [
+      "Read & summarize emails",
+      "Draft replies and follow-ups",
+      "Translate messages in real-time",
+      "Organize your inbox folders",
+      "Answer support tickets",
+      "Screen cold outreach emails",
+      "Notify you of urgent messages",
+      "Sync context across time zones"
+    ]
+  },
+  {
+    title: "Executive Admin",
+    icon: "📅",
+    items: [
+      "Schedule meetings from chat",
+      "Remind you of deadlines",
+      "Plan your weekly agenda",
+      "Take meeting notes & summaries",
+      "Book travel and hotels",
+      "Run standup summaries",
+      "Draft job descriptions",
+      "Screen and prioritize leads"
+    ]
+  },
+  {
+    title: "Finance & Shopping",
+    icon: "💳",
+    items: [
+      "Track expenses and receipts",
+      "Do your taxes (preliminary prep)",
+      "Compare insurance quotes",
+      "Manage and cancel subscriptions",
+      "Run payroll calculations",
+      "Negotiate refunds with support",
+      "Find coupons and discount codes",
+      "Monitor price drops & deals"
+    ]
+  },
+  {
+    title: "Research & Strategy",
+    icon: "🔍",
+    items: [
+      "Research competitors",
+      "Summarize long documents/PDFs",
+      "Monitor news and industry alerts",
+      "Set and track goals (OKRs/KPIs)",
+      "Compare product specifications",
+      "Find best prices online",
+      "Fact-check information",
+      "Analyze market trends"
+    ]
+  },
+  {
+    title: "Creative & Content",
+    icon: "✨",
+    items: [
+      "Create presentations from bullet points",
+      "Draft social media posts",
+      "Write contracts and NDAs",
+      "Find recipes from ingredients",
+      "Generate invoices",
+      "Brainstorm blog topics",
+      "Edit copy for tone and voice",
+      "Generate image prompts"
+    ]
+  }
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>What Can OpenClaw Do?</h1>
+      <p class="page-intro">
+        One assistant, thousands of use cases. From the mundane to the complex, 
+        OpenClaw handles your digital life so you can focus on what matters.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="use-cases-grid">
+        {categories.map((category) => (
+          <div class="category-card">
+            <div class="category-header">
+              <span class="icon">{category.icon}</span>
+              <h2>{category.title}</h2>
+            </div>
+            <ul class="use-case-list">
+              {category.items.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        
+        <div class="category-card custom-card">
+          <div class="category-header">
+            <span class="icon">🚀</span>
+            <h2>Anything Else</h2>
+          </div>
+          <p>
+            The best part? You're not limited to this list. 
+            You can add as many use cases as you want via natural language.
+          </p>
+          <div class="prompt-box">
+            <code>"Hey Claw, check the RSS feed for TechCrunch every morning and summarize the AI news for me in a Slack DM."</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to automate your life?</h2>
+      <p>Deploy your own OpenClaw instance in under 1 minute.</p>
+      <a href="/simple-claw" class="btn btn-lg">Get Started with SimpleClaw</a>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+  }
+
+  .section {
+    padding: 4rem 0;
+  }
+
+  .use-cases-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 2rem;
+  }
+
+  .category-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 2rem;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .category-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+  }
+
+  .category-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+  }
+
+  .icon {
+    font-size: 2rem;
+  }
+
+  .category-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+
+  .use-case-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .use-case-list li {
+    padding: 0.5rem 0;
+    padding-left: 1.5rem;
+    position: relative;
+    color: var(--text-secondary);
+  }
+
+  .use-case-list li::before {
+    content: '•';
+    color: var(--accent);
+    position: absolute;
+    left: 0;
+    font-weight: bold;
+    font-size: 1.25rem;
+    line-height: 1;
+    top: 0.4rem;
+  }
+
+  .custom-card {
+    background: linear-gradient(135deg, var(--bg-alt) 0%, rgba(59, 130, 246, 0.1) 100%);
+    border-color: var(--accent);
+  }
+
+  .prompt-box {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-top: 1rem;
+    border: 1px dashed var(--border);
+  }
+  
+  .prompt-box code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font-style: italic;
+  }
+
+  .cta-section {
+    text-align: center;
+    padding: 4rem 0 6rem;
+  }
+
+  .cta-section h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }
+  
+  .btn-lg {
+    margin-top: 2rem;
+    padding: 1rem 2rem;
+    font-size: 1.125rem;
+    border-radius: 9999px;
+  }
+
+  @media (max-width: 768px) {
+    .use-cases-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

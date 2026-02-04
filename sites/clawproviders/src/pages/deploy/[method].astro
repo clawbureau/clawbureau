@@ -1,0 +1,372 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import FAQSection from '../../components/seo/FAQSection.astro';
+import SchemaOrg from '../../components/seo/SchemaOrg.astro';
+import { getDeployments, getProviders, getChannels } from '../../lib/data/loaders';
+import { generateSEOMeta, generateBreadcrumbs, generateFAQs, generateRelatedPages } from '../../lib/content/generator';
+import type { Deployment } from '../../lib/data/types';
+
+export async function getStaticPaths() {
+  const deployments = getDeployments();
+  return deployments.map((deployment) => ({
+    params: { method: deployment.slug },
+    props: { deployment },
+  }));
+}
+
+interface Props {
+  deployment: Deployment;
+}
+
+const { deployment } = Astro.props;
+const providers = getProviders();
+const channels = getChannels();
+
+const seo = generateSEOMeta('deployment', `/deploy/${deployment.slug}/`, { deployment });
+const breadcrumbs = generateBreadcrumbs('deployment', { deployment });
+const faqs = generateFAQs('deployment', { deployment });
+const relatedPages = generateRelatedPages('deployment', { deployment }, providers, channels, getDeployments());
+
+// Helper to get difficulty from type
+function getDifficulty(type: string): string {
+  switch (type) {
+    case 'local': return 'Easy';
+    case 'vps': return 'Medium';
+    case 'cloud': return 'Medium';
+    case 'container': return 'Medium';
+    default: return 'Medium';
+  }
+}
+
+// Get steps as strings for Schema.org
+const stepStrings = deployment.steps?.map(s => s.description) || [];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <SchemaOrg
+    type="howto"
+    title={`${deployment.name} Deployment Guide for OpenClaw`}
+    description={deployment.description}
+    steps={stepStrings.map((step, i) => ({ name: `Step ${i + 1}`, text: step }))}
+  />
+
+  <section class="page-header">
+    <div class="container">
+      <h1>{deployment.name} Deployment</h1>
+      <p class="page-intro">{deployment.description}</p>
+      <span class="difficulty-badge">{getDifficulty(deployment.type)}</span>
+    </div>
+  </section>
+
+  <div class="container main-content">
+    <div class="content-grid">
+      <main class="content">
+        <section class="section">
+          <h2>Overview</h2>
+          <div class="overview-grid">
+            <div class="pros-box">
+              <h3>Advantages</h3>
+              <ul>
+                {deployment.pros.map((pro) => (
+                  <li>{pro}</li>
+                ))}
+              </ul>
+            </div>
+            <div class="cons-box">
+              <h3>Considerations</h3>
+              <ul>
+                {deployment.cons.map((con) => (
+                  <li>{con}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2>Requirements</h2>
+          <ul class="requirements-list">
+            {deployment.requirements.map((req) => (
+              <li><strong>{req.name}:</strong> {req.description}</li>
+            ))}
+          </ul>
+        </section>
+
+        <section class="section">
+          <h2>Setup Steps</h2>
+          <ol class="setup-steps">
+            {deployment.steps?.map((step) => (
+              <li>
+                <strong>{step.title}:</strong> {step.description}
+                {step.command && <pre><code>{step.command}</code></pre>}
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="section">
+          <h2>Configuration Example</h2>
+          <pre><code>{deployment.configExample}</code></pre>
+        </section>
+
+        <section class="section">
+          <h2>Deploy with AI Providers</h2>
+          <p class="text-secondary">Choose your AI provider for {deployment.name.toLowerCase()} deployment:</p>
+          <div class="grid grid-3">
+            {providers.map((provider) => (
+              <a href={`/deploy/${deployment.slug}/${provider.slug}/`} class="card provider-card">
+                <h3>{provider.name}</h3>
+                <p>{provider.shortDescription}</p>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <FAQSection faqs={faqs} />
+      </main>
+
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <h3>Quick Info</h3>
+          <p><strong>Difficulty:</strong> {getDifficulty(deployment.type)}</p>
+          <p><strong>Platform:</strong> {deployment.platform || deployment.type}</p>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Best For</h3>
+          <ul>
+            {deployment.useCases.map((useCase) => (
+              <li>{useCase}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>Related Guides</h3>
+          <ul class="related-links">
+            {relatedPages.slice(0, 5).map((page) => (
+              <li><a href={page}>{page.replace(/\//g, ' ').trim()}</a></li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .page-header {
+    background: radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+    padding: 4rem 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .page-header h1 {
+    color: var(--text);
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  .difficulty-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    text-transform: capitalize;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .main-content {
+    padding: 2rem 0;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 3rem;
+  }
+
+  .content {
+    min-width: 0;
+  }
+
+  .section {
+    margin-bottom: 3rem;
+  }
+  
+  .section h2 {
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  .pros-box,
+  .cons-box {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .pros-box h3,
+  .cons-box h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .pros-box ul,
+  .cons-box ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    color: var(--text-secondary);
+  }
+  
+  .pros-box li, .cons-box li {
+    margin-bottom: 0.25rem;
+  }
+
+  .pros-box li::before {
+    content: '+ ';
+    color: var(--success);
+  }
+
+  .cons-box li::before {
+    content: '- ';
+    color: var(--error);
+  }
+
+  .requirements-list {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    list-style: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .requirements-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-steps li {
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .setup-steps li:last-child {
+    border-bottom: none;
+  }
+
+  .setup-steps pre {
+    margin-top: 0.5rem;
+  }
+
+  .provider-card {
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .provider-card h3 {
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+    font-size: 1.125rem;
+  }
+
+  .provider-card p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 100px;
+    align-self: start;
+  }
+
+  .sidebar-section {
+    background: var(--bg-alt);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-section h3 {
+    margin: 0 0 1rem;
+    font-size: 0.9375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+
+  .sidebar-section p {
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .sidebar-section li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-section li:last-child {
+    border-bottom: none;
+  }
+
+  .related-links a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .related-links a:hover {
+    text-decoration: underline;
+  }
+
+  @media (max-width: 968px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .overview-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+    }
+  }
+</style>

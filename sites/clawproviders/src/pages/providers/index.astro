@@ -1,0 +1,242 @@
+---
+import BaseLayout from '../../components/layout/BaseLayout.astro';
+import { getProviders, getChannels } from '../../lib/data/loaders';
+import type { SEOMeta, Breadcrumb } from '../../lib/data/types';
+
+const providers = getProviders();
+const channels = getChannels();
+
+const seo: SEOMeta = {
+  title: 'AI Providers - OpenClaw Integration Guides',
+  description: 'Complete setup guides for all AI providers supported by OpenClaw. Configure Claude, GPT, Gemini, Ollama, and more for your AI assistant.',
+  canonical: 'https://clawproviders.com/providers/',
+  keywords: ['AI providers', 'Claude', 'GPT', 'Gemini', 'Ollama', 'OpenClaw'],
+};
+
+const breadcrumbs: Breadcrumb[] = [
+  { name: 'Home', url: '/' },
+  { name: 'Providers', url: '/providers/' },
+];
+---
+
+<BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
+  <section class="page-header">
+    <div class="container">
+      <h1>AI Providers</h1>
+      <p class="page-intro">
+        Choose your AI model provider. Each provider offers different models, pricing, and capabilities.
+        OpenClaw supports automatic failover between providers.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="grid grid-2">
+        {providers.map((provider) => (
+          <a href={`/providers/${provider.slug}/`} class="provider-card card">
+            <div class="provider-header">
+              <h2>{provider.name}</h2>
+              <span class="model-count">{provider.models.length} models</span>
+            </div>
+            <p>{provider.description}</p>
+
+            <div class="provider-details">
+              <div class="detail-section">
+                <h4>Models</h4>
+                <ul class="model-list">
+                  {provider.models.slice(0, 3).map((model) => (
+                    <li>
+                      <span class="model-name">{model.name}</span>
+                      {model.contextWindow && (
+                        <span class="model-context">{(model.contextWindow / 1000).toFixed(0)}K ctx</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div class="detail-section">
+                <h4>Authentication</h4>
+                <div class="auth-methods">
+                  {provider.authMethods.map((auth) => (
+                    <span class="badge">{auth.type}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div class="provider-features">
+              {provider.features.slice(0, 4).map((feature) => (
+                <span class="feature-tag">{feature}</span>
+              ))}
+            </div>
+
+            <div class="channel-links">
+              <span class="label">Quick setup with:</span>
+              <div class="channel-list">
+                {channels.slice(0, 4).map((channel) => (
+                  <span class="channel-link-wrapper" onclick={`event.stopPropagation(); window.location.href='/providers/${provider.slug}/${channel.slug}/'`}>
+                    {channel.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .page-header {
+    padding-bottom: 3rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+  }
+
+  .page-intro {
+    max-width: 700px;
+    margin: 0 auto;
+    color: var(--text-secondary);
+    font-size: 1.125rem;
+  }
+
+  .section {
+    padding-bottom: 6rem;
+  }
+
+  .provider-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    height: 100%;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .provider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .provider-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text);
+  }
+
+  .model-count {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+  }
+
+  .provider-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    padding: 1.25rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+
+  .detail-section h4 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    margin-bottom: 0.75rem;
+  }
+
+  .model-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .model-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    margin: 0;
+    color: var(--text-secondary);
+  }
+
+  .model-context {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+  }
+
+  .auth-methods {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .provider-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .feature-tag {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+  }
+
+  .channel-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.875rem;
+    margin-top: auto;
+  }
+
+  .channel-links .label {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  
+  .channel-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .channel-link-wrapper {
+    color: var(--accent);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s;
+  }
+
+  .channel-link-wrapper:hover {
+    background: rgba(59, 130, 246, 0.1);
+  }
+  
+  @media (max-width: 640px) {
+    .provider-details {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
