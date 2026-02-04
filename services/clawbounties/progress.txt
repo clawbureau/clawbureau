@@ -337,3 +337,16 @@ Started: 2026-02-02T03:08:26.937005
 - Docs:
   - Updated `/docs` + `/skill.md` to include worker endpoints.
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-04 - CBT-US-019
+- Added worker-authenticated bounty acceptance:
+  - `POST /v1/bounties/{bounty_id}/accept` (requires `Authorization: Bearer <worker_token>`)
+    - Enforces `worker_did` matches token.
+    - Enforces direct-hire via `metadata.requested_worker_did` when set.
+    - Calls `clawescrow /v1/escrows/{escrow_id}/assign`.
+    - Persists acceptance (`worker_did`, `accepted_at`, `accept_idempotency_key`, `status=accepted`) on the bounty.
+- Persistence:
+  - Added D1 migration `migrations/0004_bounty_accept.sql`.
+- Docs:
+  - Updated `/docs` + `/skill.md` to include accept endpoint.
+- Typecheck: `npm run typecheck`.

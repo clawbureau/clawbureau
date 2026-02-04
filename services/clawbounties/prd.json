@@ -263,6 +263,22 @@
       "priority": 18,
       "passes": true,
       "notes": "Implemented worker registry endpoints with D1 persistence and hashed auth tokens, plus listing and self endpoints for discovery and token validation."
+    },
+    {
+      "id": "CBT-US-019",
+      "title": "Bounty accept (worker auth + escrow assign)",
+      "description": "As a worker, I want to accept a bounty so that I can be assigned in escrow and begin work.",
+      "acceptanceCriteria": [
+        "POST /v1/bounties/{bounty_id}/accept requires worker bearer token auth",
+        "Enforces worker_did matches the authenticated worker token",
+        "Enforces direct-hire (metadata.requested_worker_did) when set",
+        "Calls clawescrow /v1/escrows/{escrow_id}/assign",
+        "Persists acceptance (worker_did, accepted_at, status=accepted) in D1",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Added worker-authenticated bounty accept endpoint that assigns the escrow worker, records acceptance in D1, and returns an acceptance receipt."
     }
   ]
 }
