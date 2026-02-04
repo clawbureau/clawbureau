@@ -312,3 +312,15 @@ Started: 2026-02-02T03:08:26.937005
   - Secrets set (prod + staging):
     - `BOUNTIES_ADMIN_KEY`
     - `ESCROW_SERVICE_KEY` (uses clawescrow admin key)
+
+## 2026-02-04 - CBT-US-017 (v2 API upgrade)
+- Breaking upgrade: switched clawbounties marketplace API to **schema v2** shapes (no backwards compatibility).
+  - Post bounty request uses `reward.amount_minor` + `closure_type` + `difficulty_scalar`.
+  - Job “flavor” modeled via `is_code_bounty` + `tags[]` (no legacy `job_type`).
+  - Direct hire modeled via `metadata.requested_worker_did`.
+- Updated integration:
+  - clawcuts `/v1/fees/simulate` called with `params.is_code_bounty + params.closure_type`.
+  - Stores fee policy snapshot + all-in cost breakdown on the bounty record.
+- Persistence:
+  - Added D1 migration `migrations/0002_bounties_v2.sql` (drops & recreates `bounties` table with v2 columns).
+- Typecheck: `npm run typecheck`.

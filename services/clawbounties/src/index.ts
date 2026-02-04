@@ -2,7 +2,7 @@
  * clawbounties.com worker
  *
  * - Public discovery endpoints (landing/docs/skill/health/robots/sitemap/security)
- * - Admin-gated marketplace API (MVP): post + list bounties
+ * - Admin-gated marketplace API (MVP): post + list + get bounties (schema v2 aligned)
  */
 
 export interface Env {
@@ -25,8 +25,9 @@ export interface Env {
   BOUNTIES_DB: D1Database;
 }
 
-type JobType = 'code' | 'research' | 'agent_pack';
 type ClosureType = 'test' | 'requester' | 'quorum';
+type BountyStatus = 'open' | 'accepted' | 'pending_review' | 'approved' | 'rejected' | 'disputed' | 'cancelled';
+type ProofTier = 'self' | 'gateway' | 'sandbox';
 
 type FeePayer = 'buyer' | 'worker';
 
@@ -66,41 +67,72 @@ interface EscrowFeeQuoteSnapshot {
   fees: FeeItem[];
 }
 
-interface PostBountyResponseBody {
+interface RewardV2 {
+  amount_minor: string;
+  currency: 'USD';
+}
+
+interface AllInCostV2 {
+  principal_minor: string;
+  platform_fee_minor: string;
+  total_minor: string;
+  currency: 'USD';
+}
+
+interface PostBountyResponseV2 {
+  schema_version: '2';
   bounty_id: string;
   escrow_id: string;
   status: 'open';
-  fee_quote: {
-    principal_minor: string;
-    buyer_total_minor: string;
-    policy_id: string;
-    policy_version: string;
-    policy_hash_b64u: string;
-  };
-}
-
-interface BountyListItem {
-  bounty_id: string;
-  buyer_did: string;
-  job_type: JobType;
-  closure_type: ClosureType;
-  title: string;
-  reward_minor: string;
-  currency: 'USD';
-  status: string;
+  all_in_cost: AllInCostV2;
+  fee_policy_version: string;
   created_at: string;
-  escrow_id: string;
 }
 
-interface BountyRecord extends BountyListItem {
-  create_idempotency_key: string;
-  requested_worker_did: string | null;
-  worker_did: string | null;
+interface BountyV2 {
+  schema_version: '2';
+  bounty_id: string;
+  requester_did: string;
+  title: string;
   description: string;
+  reward: RewardV2;
+  closure_type: ClosureType;
+  difficulty_scalar: number;
+  escrow_id: string;
+  status: BountyStatus;
+  created_at: string;
+
+  // recommended/common
+  is_code_bounty: boolean;
+  tags: string[];
+  min_proof_tier: ProofTier;
+  require_owner_verified_votes: boolean;
+  test_harness_id: string | null;
+  metadata: Record<string, unknown>;
+  idempotency_key: string;
+
+  fee_policy_version: string;
+  all_in_cost: AllInCostV2;
+
+  // internal
   fee_quote: CutsSimulateResponse;
   updated_at: string;
-  test_spec: Record<string, unknown> | null;
-  deliverable_spec: Record<string, unknown> | null;
+}
+
+interface BountyListItemV2 {
+  schema_version: '2';
+  bounty_id: string;
+  requester_did: string;
+  title: string;
+  reward: RewardV2;
+  closure_type: ClosureType;
+  difficulty_scalar: number;
+  status: BountyStatus;
+  created_at: string;
+  escrow_id: string;
+  is_code_bounty: boolean;
+  tags: string[];
+  min_proof_tier: ProofTier;
 }
 
 function escapeHtml(input: string): string {
@@ -165,6 +197,69 @@ function parsePositiveMinor(input: unknown): bigint | null {
   }
 }
 
+function parseDifficultyScalar(input: unknown): number | null {
+  if (typeof input !== 'number' || !Number.isFinite(input)) return null;
+  if (input < 0.1 || input > 10.0) return null;
+  return input;
+}
+
+function parseClosureType(input: unknown): ClosureType | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'test' || v === 'requester' || v === 'quorum') return v;
+  return null;
+}
+
+function parseProofTier(input: unknown): ProofTier | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'self' || v === 'gateway' || v === 'sandbox') return v;
+  return null;
+}
+
+function parseBountyStatus(input: unknown): BountyStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (
+    v === 'open' ||
+    v === 'accepted' ||
+    v === 'pending_review' ||
+    v === 'approved' ||
+    v === 'rejected' ||
+    v === 'disputed' ||
+    v === 'cancelled'
+  ) {
+    return v;
+  }
+  return null;
+}
+
+function parseTags(input: unknown): string[] | null {
+  if (input === undefined) return [];
+  if (!Array.isArray(input)) return null;
+
+  const tags: string[] = [];
+  for (const raw of input) {
+    if (!isNonEmptyString(raw)) return null;
+    const t = raw.trim();
+    if (t.length > 50) return null;
+    tags.push(t);
+  }
+
+  if (tags.length > 10) return null;
+
+  // Deduplicate while preserving order.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const t of tags) {
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+
+  return out;
+}
+
 function getBearerToken(header: string | null): string | null {
   if (!header) return null;
   const trimmed = header.trim();
@@ -190,6 +285,30 @@ function requireAdmin(request: Request, env: Env, version: string): Response | n
   return null;
 }
 
+function requireRequesterDid(request: Request, version: string): { requester_did: string } | { error: Response } {
+  const didHeader = request.headers.get('x-requester-did');
+  if (!didHeader || didHeader.trim().length === 0) {
+    return {
+      error: errorResponse(
+        'REQUESTER_DID_REQUIRED',
+        'Missing requester DID. Provide header: x-requester-did: did:key:... (until CST auth is wired).',
+        400,
+        undefined,
+        version
+      ),
+    };
+  }
+
+  const requester_did = didHeader.trim();
+  if (!requester_did.startsWith('did:')) {
+    return {
+      error: errorResponse('INVALID_REQUEST', 'x-requester-did must be a DID string', 400, undefined, version),
+    };
+  }
+
+  return { requester_did };
+}
+
 async function parseJsonBody(request: Request): Promise<unknown | null> {
   try {
     return await request.json();
@@ -210,7 +329,17 @@ function resolveEscrowBaseUrl(env: Env): string {
   return 'https://clawescrow.com';
 }
 
-async function cutsSimulateFees(env: Env, params: { job_type: JobType; closure_type: ClosureType; amount_minor: string }): Promise<CutsSimulateResponse> {
+async function cutsSimulateFees(
+  env: Env,
+  params: {
+    requester_did: string;
+    amount_minor: string;
+    closure_type: ClosureType;
+    is_code_bounty: boolean;
+    min_proof_tier: ProofTier;
+    tags: string[];
+  }
+): Promise<CutsSimulateResponse> {
   const url = `${resolveCutsBaseUrl(env)}/v1/fees/simulate`;
   const response = await fetch(url, {
     method: 'POST',
@@ -223,8 +352,11 @@ async function cutsSimulateFees(env: Env, params: { job_type: JobType; closure_t
       amount_minor: params.amount_minor,
       currency: 'USD',
       params: {
-        job_type: params.job_type,
+        requester_did: params.requester_did,
+        is_code_bounty: params.is_code_bounty,
         closure_type: params.closure_type,
+        min_proof_tier: params.min_proof_tier,
+        tags: params.tags,
       },
     }),
   });
@@ -261,7 +393,6 @@ async function cutsSimulateFees(env: Env, params: { job_type: JobType; closure_t
     throw new Error('CUTS_INVALID_RESPONSE');
   }
 
-  // Shallow validate fees array.
   const fees: FeeItem[] = [];
   for (const item of quote.fees) {
     if (!isRecord(item)) throw new Error('CUTS_INVALID_RESPONSE');
@@ -304,8 +435,7 @@ async function escrowCreateHold(
     buyer_did: string;
     amount_minor: string;
     fee_quote: EscrowFeeQuoteSnapshot;
-    dispute_window_seconds?: number;
-    metadata?: Record<string, unknown>;
+    metadata: Record<string, unknown>;
   }
 ): Promise<{ escrow_id: string }> {
   if (!env.ESCROW_SERVICE_KEY || env.ESCROW_SERVICE_KEY.trim().length === 0) {
@@ -326,7 +456,6 @@ async function escrowCreateHold(
       currency: 'USD',
       amount_minor: params.amount_minor,
       fee_quote: params.fee_quote,
-      dispute_window_seconds: params.dispute_window_seconds,
       metadata: params.metadata,
     }),
   });
@@ -351,6 +480,86 @@ async function escrowCreateHold(
   return { escrow_id: json.escrow_id };
 }
 
+function parseNonNegativeMinor(input: unknown): bigint | null {
+  if (typeof input !== 'string') return null;
+  const s = input.trim();
+  if (!/^[0-9]+$/.test(s)) return null;
+  try {
+    const n = BigInt(s);
+    if (n < 0n) return null;
+    return n;
+  } catch {
+    return null;
+  }
+}
+
+function sumFeesMinor(items: FeeItem[]): bigint {
+  let total = 0n;
+  for (const item of items) {
+    const n = parseNonNegativeMinor(item.amount_minor);
+    if (n === null) throw new Error('INVALID_FEE_ITEM_AMOUNT');
+    total += n;
+  }
+  return total;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null) return 'null';
+
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => stableStringify(v)).join(',')}]`;
+  }
+
+  switch (typeof value) {
+    case 'string':
+      return JSON.stringify(value);
+    case 'number': {
+      if (!Number.isFinite(value)) throw new Error('Non-finite number');
+      return JSON.stringify(value);
+    }
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'bigint':
+      return JSON.stringify(value.toString());
+    case 'object': {
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      return `{${keys
+        .map((k) => {
+          const v = obj[k];
+          return `${JSON.stringify(k)}:${stableStringify(v)}`;
+        })
+        .join(',')}}`;
+    }
+    default:
+      return 'null';
+  }
+}
+
+function base64UrlEncode(bytes: Uint8Array): string {
+  // btoa expects a binary string.
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  const base64 = btoa(binary);
+  return base64.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+async function sha256B64uUtf8(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function deriveIdempotencyKey(requester_did: string, body: Record<string, unknown>): Promise<string> {
+  const canonical = stableStringify({
+    schema: 'clawbounties.post_bounty.v2',
+    requester_did,
+    body,
+  });
+  const hash = await sha256B64uUtf8(canonical);
+  return `postbounty:auto:${hash}`;
+}
+
 function d1String(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'string') return value;
@@ -358,47 +567,100 @@ function d1String(value: unknown): string | null {
   return null;
 }
 
-function parseBountyRow(row: Record<string, unknown>): BountyRecord | null {
+function d1Number(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return n;
+  }
+  return null;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!isRecord(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonStringArray(text: string): string[] | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const out: string[] = [];
+    for (const v of parsed) {
+      if (typeof v !== 'string') return null;
+      out.push(v);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const bounty_id = d1String(row.bounty_id);
   const create_idempotency_key = d1String(row.create_idempotency_key);
-  const buyer_did = d1String(row.buyer_did);
-  const job_type = d1String(row.job_type);
-  const closure_type = d1String(row.closure_type);
+  const requester_did = d1String(row.requester_did);
   const title = d1String(row.title);
   const description = d1String(row.description);
-  const reward_minor = d1String(row.reward_minor);
-  const currency = d1String(row.currency);
-  const fee_quote_json = d1String(row.fee_quote_json);
+
+  const reward_amount_minor = d1String(row.reward_amount_minor);
+  const reward_currency = d1String(row.reward_currency);
+
+  const closure_type = parseClosureType(d1String(row.closure_type));
+  const difficulty_scalar = d1Number(row.difficulty_scalar);
+
   const escrow_id = d1String(row.escrow_id);
-  const status = d1String(row.status);
+  const status = parseBountyStatus(d1String(row.status));
+
   const created_at = d1String(row.created_at);
   const updated_at = d1String(row.updated_at);
+
+  const is_code_bounty_num = d1Number(row.is_code_bounty);
+  const tags_json = d1String(row.tags_json);
+  const min_proof_tier = parseProofTier(d1String(row.min_proof_tier));
+  const require_owner_verified_votes_num = d1Number(row.require_owner_verified_votes);
+  const test_harness_id = d1String(row.test_harness_id);
+
+  const metadata_json = d1String(row.metadata_json);
+  const fee_quote_json = d1String(row.fee_quote_json);
+  const fee_policy_version = d1String(row.fee_policy_version);
+  const all_in_cost_json = d1String(row.all_in_cost_json);
 
   if (
     !bounty_id ||
     !create_idempotency_key ||
-    !buyer_did ||
-    !job_type ||
-    !closure_type ||
+    !requester_did ||
     !title ||
     !description ||
-    !reward_minor ||
-    currency !== 'USD' ||
-    !fee_quote_json ||
+    !reward_amount_minor ||
+    reward_currency !== 'USD' ||
+    !closure_type ||
+    difficulty_scalar === null ||
     !escrow_id ||
     !status ||
     !created_at ||
-    !updated_at
+    !updated_at ||
+    is_code_bounty_num === null ||
+    !tags_json ||
+    !min_proof_tier ||
+    require_owner_verified_votes_num === null ||
+    !metadata_json ||
+    !fee_quote_json ||
+    !fee_policy_version ||
+    !all_in_cost_json
   ) {
     return null;
   }
 
-  const job = job_type as JobType;
-  if (job !== 'code' && job !== 'research' && job !== 'agent_pack') return null;
-
-  const closure = closure_type as ClosureType;
-  if (closure !== 'test' && closure !== 'requester' && closure !== 'quorum') return null;
-
+  const tags = parseJsonStringArray(tags_json);
+  const metadata = parseJsonObject(metadata_json);
   let fee_quote: CutsSimulateResponse;
   try {
     fee_quote = JSON.parse(fee_quote_json) as CutsSimulateResponse;
@@ -406,151 +668,213 @@ function parseBountyRow(row: Record<string, unknown>): BountyRecord | null {
     return null;
   }
 
-  const test_spec = row.test_spec_json ? (JSON.parse(d1String(row.test_spec_json) ?? 'null') as Record<string, unknown> | null) : null;
-  const deliverable_spec = row.deliverable_spec_json
-    ? (JSON.parse(d1String(row.deliverable_spec_json) ?? 'null') as Record<string, unknown> | null)
-    : null;
+  let all_in_cost: AllInCostV2;
+  try {
+    const parsed = JSON.parse(all_in_cost_json) as unknown;
+    if (!isRecord(parsed)) return null;
+
+    const principal_minor = parsed.principal_minor;
+    const platform_fee_minor = parsed.platform_fee_minor;
+    const total_minor = parsed.total_minor;
+    const currency = parsed.currency;
+
+    if (!isNonEmptyString(principal_minor) || !isNonEmptyString(platform_fee_minor) || !isNonEmptyString(total_minor) || currency !== 'USD') {
+      return null;
+    }
+
+    all_in_cost = {
+      principal_minor: principal_minor.trim(),
+      platform_fee_minor: platform_fee_minor.trim(),
+      total_minor: total_minor.trim(),
+      currency: 'USD',
+    };
+  } catch {
+    return null;
+  }
+
+  if (!tags || !metadata) return null;
 
   return {
+    schema_version: '2',
     bounty_id,
-    create_idempotency_key,
-    buyer_did,
-    requested_worker_did: d1String(row.requested_worker_did),
-    worker_did: d1String(row.worker_did),
-    job_type: job,
-    closure_type: closure,
+    requester_did,
     title,
     description,
-    reward_minor,
-    currency: 'USD',
-    fee_quote,
+    reward: {
+      amount_minor: reward_amount_minor,
+      currency: 'USD',
+    },
+    closure_type,
+    difficulty_scalar,
     escrow_id,
     status,
     created_at,
+
+    is_code_bounty: Boolean(is_code_bounty_num),
+    tags,
+    min_proof_tier,
+    require_owner_verified_votes: Boolean(require_owner_verified_votes_num),
+    test_harness_id,
+    metadata,
+    idempotency_key: create_idempotency_key,
+
+    fee_policy_version,
+    all_in_cost,
+
+    fee_quote,
     updated_at,
-    test_spec,
-    deliverable_spec,
   };
 }
 
-async function getBountyByIdempotencyKey(db: D1Database, key: string): Promise<BountyRecord | null> {
+async function getBountyByIdempotencyKey(db: D1Database, key: string): Promise<BountyV2 | null> {
   const row = await db.prepare('SELECT * FROM bounties WHERE create_idempotency_key = ?').bind(key).first();
   if (!row || !isRecord(row)) return null;
   return parseBountyRow(row);
 }
 
-async function getBountyById(db: D1Database, bountyId: string): Promise<BountyRecord | null> {
+async function getBountyById(db: D1Database, bountyId: string): Promise<BountyV2 | null> {
   const row = await db.prepare('SELECT * FROM bounties WHERE bounty_id = ?').bind(bountyId).first();
   if (!row || !isRecord(row)) return null;
   return parseBountyRow(row);
 }
 
-async function insertBounty(db: D1Database, record: BountyRecord): Promise<void> {
+async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
   await db
     .prepare(
       `INSERT INTO bounties (
         bounty_id,
         create_idempotency_key,
-        buyer_did,
-        requested_worker_did,
-        worker_did,
-        job_type,
-        closure_type,
+        requester_did,
         title,
         description,
-        reward_minor,
-        currency,
+        reward_amount_minor,
+        reward_currency,
+        closure_type,
+        difficulty_scalar,
+        is_code_bounty,
+        tags_json,
+        min_proof_tier,
+        require_owner_verified_votes,
+        test_harness_id,
+        metadata_json,
         fee_quote_json,
+        fee_policy_version,
+        all_in_cost_json,
         escrow_id,
         status,
         created_at,
-        updated_at,
-        test_spec_json,
-        deliverable_spec_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.bounty_id,
-      record.create_idempotency_key,
-      record.buyer_did,
-      record.requested_worker_did,
-      record.worker_did,
-      record.job_type,
-      record.closure_type,
+      record.idempotency_key,
+      record.requester_did,
       record.title,
       record.description,
-      record.reward_minor,
-      record.currency,
+      record.reward.amount_minor,
+      record.reward.currency,
+      record.closure_type,
+      record.difficulty_scalar,
+      record.is_code_bounty ? 1 : 0,
+      JSON.stringify(record.tags),
+      record.min_proof_tier,
+      record.require_owner_verified_votes ? 1 : 0,
+      record.test_harness_id,
+      JSON.stringify(record.metadata),
       JSON.stringify(record.fee_quote),
+      record.fee_policy_version,
+      JSON.stringify(record.all_in_cost),
       record.escrow_id,
       record.status,
       record.created_at,
-      record.updated_at,
-      record.test_spec ? JSON.stringify(record.test_spec) : null,
-      record.deliverable_spec ? JSON.stringify(record.deliverable_spec) : null
+      record.updated_at
     )
     .run();
 }
 
-async function listBounties(db: D1Database, filters: { status?: string; job_type?: JobType }, limit = 50): Promise<BountyListItem[]> {
-  const status = filters.status ?? 'open';
-  const job = filters.job_type;
+async function listBounties(
+  db: D1Database,
+  filters: { status: BountyStatus; is_code_bounty?: boolean; tags?: string[] },
+  limit = 50
+): Promise<BountyListItemV2[]> {
+  const status = filters.status;
+  const isCode = filters.is_code_bounty;
 
-  if (job) {
-    const results = await db
-      .prepare(
-        `SELECT bounty_id, buyer_did, job_type, closure_type, title, reward_minor, currency, status, created_at, escrow_id
-         FROM bounties
-         WHERE status = ? AND job_type = ?
-         ORDER BY created_at DESC
-         LIMIT ?`
-      )
-      .bind(status, job, limit)
-      .all();
+  let query =
+    'SELECT bounty_id, requester_did, title, reward_amount_minor, reward_currency, closure_type, difficulty_scalar, status, created_at, escrow_id, is_code_bounty, tags_json, min_proof_tier FROM bounties WHERE status = ?';
+  const bindings: unknown[] = [status];
 
-    return (results.results ?? [])
-      .filter(isRecord)
-      .map((row) => ({
-        bounty_id: d1String(row.bounty_id) ?? '',
-        buyer_did: d1String(row.buyer_did) ?? '',
-        job_type: row.job_type as JobType,
-        closure_type: row.closure_type as ClosureType,
-        title: d1String(row.title) ?? '',
-        reward_minor: d1String(row.reward_minor) ?? '',
-        currency: 'USD' as const,
-        status: d1String(row.status) ?? '',
-        created_at: d1String(row.created_at) ?? '',
-        escrow_id: d1String(row.escrow_id) ?? '',
-      }))
-      .filter((b) => b.bounty_id.length > 0);
+  if (isCode !== undefined) {
+    query += ' AND is_code_bounty = ?';
+    bindings.push(isCode ? 1 : 0);
   }
 
-  const results = await db
-    .prepare(
-      `SELECT bounty_id, buyer_did, job_type, closure_type, title, reward_minor, currency, status, created_at, escrow_id
-       FROM bounties
-       WHERE status = ?
-       ORDER BY created_at DESC
-       LIMIT ?`
-    )
-    .bind(status, limit)
-    .all();
+  query += ' ORDER BY created_at DESC LIMIT ?';
+  bindings.push(limit);
 
-  return (results.results ?? [])
-    .filter(isRecord)
-    .map((row) => ({
-      bounty_id: d1String(row.bounty_id) ?? '',
-      buyer_did: d1String(row.buyer_did) ?? '',
-      job_type: row.job_type as JobType,
-      closure_type: row.closure_type as ClosureType,
-      title: d1String(row.title) ?? '',
-      reward_minor: d1String(row.reward_minor) ?? '',
-      currency: 'USD' as const,
-      status: d1String(row.status) ?? '',
-      created_at: d1String(row.created_at) ?? '',
-      escrow_id: d1String(row.escrow_id) ?? '',
-    }))
-    .filter((b) => b.bounty_id.length > 0);
+  const results = await db.prepare(query).bind(...bindings).all();
+
+  const parsed: BountyListItemV2[] = [];
+  for (const raw of results.results ?? []) {
+    if (!isRecord(raw)) continue;
+
+    const bounty_id = d1String(raw.bounty_id);
+    const requester_did = d1String(raw.requester_did);
+    const title = d1String(raw.title);
+    const reward_amount_minor = d1String(raw.reward_amount_minor);
+    const reward_currency = d1String(raw.reward_currency);
+    const closure_type = parseClosureType(d1String(raw.closure_type));
+    const difficulty_scalar = d1Number(raw.difficulty_scalar);
+    const statusParsed = parseBountyStatus(d1String(raw.status));
+    const created_at = d1String(raw.created_at);
+    const escrow_id = d1String(raw.escrow_id);
+    const is_code_bounty_num = d1Number(raw.is_code_bounty);
+    const tags_json = d1String(raw.tags_json);
+    const min_proof_tier = parseProofTier(d1String(raw.min_proof_tier));
+
+    if (
+      !bounty_id ||
+      !requester_did ||
+      !title ||
+      !reward_amount_minor ||
+      reward_currency !== 'USD' ||
+      !closure_type ||
+      difficulty_scalar === null ||
+      !statusParsed ||
+      !created_at ||
+      !escrow_id ||
+      is_code_bounty_num === null ||
+      !tags_json ||
+      !min_proof_tier
+    ) {
+      continue;
+    }
+
+    const tags = parseJsonStringArray(tags_json);
+    if (!tags) continue;
+
+    parsed.push({
+      schema_version: '2',
+      bounty_id,
+      requester_did,
+      title,
+      reward: { amount_minor: reward_amount_minor, currency: 'USD' },
+      closure_type,
+      difficulty_scalar,
+      status: statusParsed,
+      created_at,
+      escrow_id,
+      is_code_bounty: Boolean(is_code_bounty_num),
+      tags,
+      min_proof_tier,
+    });
+  }
+
+  const wantedTags = filters.tags ?? [];
+  if (wantedTags.length === 0) return parsed;
+
+  return parsed.filter((b) => wantedTags.some((t) => b.tags.includes(t)));
 }
 
 function landingPage(origin: string, env: Env): string {
@@ -580,6 +904,8 @@ function landingPage(origin: string, env: Env): string {
 }
 
 function docsPage(origin: string): string {
+  const o = escapeHtml(origin);
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -602,14 +928,38 @@ function docsPage(origin: string): string {
 
       <h2>Marketplace API (admin)</h2>
       <p>All <code>/v1/*</code> endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>.</p>
+      <p><strong>Until CST auth is wired</strong>, posting a bounty requires an extra header:
+        <code>x-requester-did: did:key:...</code>
+      </p>
+
       <ul>
-        <li><code>POST /v1/bounties</code> — post a bounty (calls clawcuts + clawescrow)</li>
-        <li><code>GET /v1/bounties?status=open&amp;job_type=code</code> — list bounties</li>
+        <li><code>POST /v1/bounties</code> — post a bounty (schema v2; calls clawcuts + clawescrow)</li>
+        <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list bounties</li>
         <li><code>GET /v1/bounties/{bounty_id}</code> — fetch a bounty</li>
       </ul>
 
+      <h3>POST /v1/bounties (v2)</h3>
+      <pre>curl -sS \
+  -X POST "${o}/v1/bounties" \
+  -H "Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;" \
+  -H "x-requester-did: did:key:z..." \
+  -H 'content-type: application/json' \
+  -d '{
+    "title": "Fix failing unit tests",
+    "description": "...",
+    "reward": {"amount_minor": "5000", "currency": "USD"},
+    "closure_type": "test",
+    "difficulty_scalar": 1.0,
+    "is_code_bounty": true,
+    "test_harness_id": "th_123",
+    "min_proof_tier": "self",
+    "tags": ["typescript", "testing"],
+    "idempotency_key": "post:example:001",
+    "metadata": {"requested_worker_did": "did:key:zWorker..."}
+  }'</pre>
+
       <p style="margin-top: 24px;">Quick start:</p>
-      <pre>curl -sS "${escapeHtml(origin)}/skill.md"</pre>
+      <pre>curl -sS "${o}/skill.md"</pre>
     </main>
   </body>
 </html>`;
@@ -629,7 +979,7 @@ function skillMarkdown(origin: string): string {
   };
 
   // OpenClaw requirement: metadata must be a single-line JSON object string
-  const md = `---
+  return `---
 metadata: '${JSON.stringify(metadata)}'
 ---
 
@@ -639,8 +989,6 @@ Developer discovery + minimal marketplace API.
 
 - Docs: ${origin}/docs
 `;
-
-  return md;
 }
 
 function robotsTxt(origin: string): string {
@@ -667,73 +1015,27 @@ function securityTxt(origin: string): string {
 }
 
 async function handlePostBounty(request: Request, env: Env, version: string): Promise<Response> {
+  const requesterHeader = requireRequesterDid(request, version);
+  if ('error' in requesterHeader) return requesterHeader.error;
+
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
   }
 
-  const idempotency_key = bodyRaw.idempotency_key;
-  const buyer_did = bodyRaw.buyer_did;
-  const requested_worker_did = bodyRaw.requested_worker_did;
-  const job_type = bodyRaw.job_type;
-  const closure_type = bodyRaw.closure_type;
   const title = bodyRaw.title;
   const description = bodyRaw.description;
-  const reward_minor = bodyRaw.reward_minor;
-  const currency = bodyRaw.currency;
-  const test_spec = bodyRaw.test_spec;
-  const deliverable_spec = bodyRaw.deliverable_spec;
-  const dispute_window_seconds = bodyRaw.dispute_window_seconds;
+  const reward = bodyRaw.reward;
+  const closure_type_raw = bodyRaw.closure_type;
+  const difficulty_raw = bodyRaw.difficulty_scalar;
 
-  if (!isNonEmptyString(idempotency_key)) {
-    return errorResponse('INVALID_REQUEST', 'Missing required field: idempotency_key', 400, undefined, version);
-  }
-
-  const existing = await getBountyByIdempotencyKey(env.BOUNTIES_DB, idempotency_key.trim());
-  if (existing) {
-    const response: PostBountyResponseBody = {
-      bounty_id: existing.bounty_id,
-      escrow_id: existing.escrow_id,
-      status: 'open',
-      fee_quote: {
-        principal_minor: existing.fee_quote.quote.principal_minor,
-        buyer_total_minor: existing.fee_quote.quote.buyer_total_minor,
-        policy_id: existing.fee_quote.policy.id,
-        policy_version: existing.fee_quote.policy.version,
-        policy_hash_b64u: existing.fee_quote.policy.hash_b64u,
-      },
-    };
-    return jsonResponse(response, 200, version);
-  }
-
-  if (!isNonEmptyString(buyer_did) || !buyer_did.trim().startsWith('did:')) {
-    return errorResponse('INVALID_REQUEST', 'buyer_did must be a DID string', 400, undefined, version);
-  }
-
-  if (requested_worker_did !== undefined) {
-    if (requested_worker_did !== null && (!isNonEmptyString(requested_worker_did) || !requested_worker_did.trim().startsWith('did:'))) {
-      return errorResponse('INVALID_REQUEST', 'requested_worker_did must be a DID string', 400, undefined, version);
-    }
-  }
-
-  if (currency !== 'USD') {
-    return errorResponse('UNSUPPORTED_CURRENCY', 'Only USD is supported', 400, undefined, version);
-  }
-
-  const reward = parsePositiveMinor(reward_minor);
-  if (reward === null) {
-    return errorResponse('INVALID_REQUEST', 'reward_minor must be a positive integer string', 400, undefined, version);
-  }
-
-  const job = job_type as JobType;
-  if (job !== 'code' && job !== 'research' && job !== 'agent_pack') {
-    return errorResponse('INVALID_REQUEST', 'job_type must be one of code|research|agent_pack', 400, undefined, version);
-  }
-
-  const closure = closure_type as ClosureType;
-  if (closure !== 'test' && closure !== 'requester' && closure !== 'quorum') {
-    return errorResponse('INVALID_REQUEST', 'closure_type must be one of test|requester|quorum', 400, undefined, version);
-  }
+  const is_code_bounty_raw = bodyRaw.is_code_bounty;
+  const tags_raw = bodyRaw.tags;
+  const min_proof_tier_raw = bodyRaw.min_proof_tier;
+  const require_owner_verified_votes_raw = bodyRaw.require_owner_verified_votes;
+  const test_harness_id_raw = bodyRaw.test_harness_id;
+  const idempotency_key_raw = bodyRaw.idempotency_key;
+  const metadata_raw = bodyRaw.metadata;
 
   if (!isNonEmptyString(title)) {
     return errorResponse('INVALID_REQUEST', 'title is required', 400, undefined, version);
@@ -743,34 +1045,138 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     return errorResponse('INVALID_REQUEST', 'description is required', 400, undefined, version);
   }
 
-  if (test_spec !== undefined && test_spec !== null && !isRecord(test_spec)) {
-    return errorResponse('INVALID_REQUEST', 'test_spec must be an object', 400, undefined, version);
+  if (!isRecord(reward)) {
+    return errorResponse('INVALID_REQUEST', 'reward must be an object', 400, undefined, version);
   }
 
-  if (deliverable_spec !== undefined && deliverable_spec !== null && !isRecord(deliverable_spec)) {
-    return errorResponse('INVALID_REQUEST', 'deliverable_spec must be an object', 400, undefined, version);
+  const amount_minor_raw = reward.amount_minor;
+  const currency_raw = reward.currency;
+
+  const amountMinor = parsePositiveMinor(amount_minor_raw);
+  if (amountMinor === null) {
+    return errorResponse('INVALID_REQUEST', 'reward.amount_minor must be a positive integer string', 400, undefined, version);
   }
 
-  let disputeWindowSeconds: number | undefined;
-  if (dispute_window_seconds !== undefined) {
-    if (typeof dispute_window_seconds !== 'number' || !Number.isFinite(dispute_window_seconds) || dispute_window_seconds <= 0) {
-      return errorResponse('INVALID_REQUEST', 'dispute_window_seconds must be a positive number', 400, undefined, version);
+  if (currency_raw !== 'USD') {
+    return errorResponse('UNSUPPORTED_CURRENCY', 'Only USD is supported', 400, undefined, version);
+  }
+
+  const closure_type = parseClosureType(closure_type_raw);
+  if (!closure_type) {
+    return errorResponse('INVALID_REQUEST', 'closure_type must be one of test|requester|quorum', 400, undefined, version);
+  }
+
+  const difficulty_scalar = parseDifficultyScalar(difficulty_raw);
+  if (difficulty_scalar === null) {
+    return errorResponse('INVALID_REQUEST', 'difficulty_scalar must be a number between 0.1 and 10.0', 400, undefined, version);
+  }
+
+  let is_code_bounty = false;
+  if (is_code_bounty_raw !== undefined) {
+    if (typeof is_code_bounty_raw !== 'boolean') {
+      return errorResponse('INVALID_REQUEST', 'is_code_bounty must be a boolean', 400, undefined, version);
     }
-    disputeWindowSeconds = Math.floor(dispute_window_seconds);
+    is_code_bounty = is_code_bounty_raw;
+  }
+
+  const tags = parseTags(tags_raw);
+  if (tags === null) {
+    return errorResponse('INVALID_REQUEST', 'tags must be an array of non-empty strings (max 10)', 400, undefined, version);
+  }
+
+  const min_proof_tier = parseProofTier(min_proof_tier_raw) ?? 'self';
+
+  let require_owner_verified_votes = false;
+  if (require_owner_verified_votes_raw !== undefined) {
+    if (typeof require_owner_verified_votes_raw !== 'boolean') {
+      return errorResponse('INVALID_REQUEST', 'require_owner_verified_votes must be a boolean', 400, undefined, version);
+    }
+    require_owner_verified_votes = require_owner_verified_votes_raw;
+  }
+
+  let test_harness_id: string | null = null;
+  if (test_harness_id_raw !== undefined) {
+    if (test_harness_id_raw !== null && !isNonEmptyString(test_harness_id_raw)) {
+      return errorResponse('INVALID_REQUEST', 'test_harness_id must be a string', 400, undefined, version);
+    }
+    test_harness_id = test_harness_id_raw === null || test_harness_id_raw === undefined ? null : test_harness_id_raw.trim();
+  }
+
+  if (closure_type === 'test') {
+    if (!is_code_bounty) {
+      return errorResponse('INVALID_REQUEST', 'closure_type=test requires is_code_bounty=true', 400, undefined, version);
+    }
+    if (!test_harness_id) {
+      return errorResponse('INVALID_REQUEST', 'test_harness_id is required when closure_type=test', 400, undefined, version);
+    }
+  }
+
+  const metadata = metadata_raw === undefined || metadata_raw === null ? {} : metadata_raw;
+  if (!isRecord(metadata)) {
+    return errorResponse('INVALID_REQUEST', 'metadata must be an object', 400, undefined, version);
+  }
+
+  const requested_worker_did = metadata.requested_worker_did;
+  if (requested_worker_did !== undefined) {
+    if (requested_worker_did !== null && (!isNonEmptyString(requested_worker_did) || !requested_worker_did.trim().startsWith('did:'))) {
+      return errorResponse('INVALID_REQUEST', 'metadata.requested_worker_did must be a DID string when provided', 400, undefined, version);
+    }
+  }
+
+  let idempotency_key: string;
+  if (idempotency_key_raw !== undefined && idempotency_key_raw !== null) {
+    if (!isNonEmptyString(idempotency_key_raw)) {
+      return errorResponse('INVALID_REQUEST', 'idempotency_key must be a non-empty string', 400, undefined, version);
+    }
+    idempotency_key = idempotency_key_raw.trim();
+  } else {
+    idempotency_key = await deriveIdempotencyKey(requesterHeader.requester_did, bodyRaw);
+  }
+
+  const existing = await getBountyByIdempotencyKey(env.BOUNTIES_DB, idempotency_key);
+  if (existing) {
+    const response: PostBountyResponseV2 = {
+      schema_version: '2',
+      bounty_id: existing.bounty_id,
+      escrow_id: existing.escrow_id,
+      status: 'open',
+      all_in_cost: existing.all_in_cost,
+      fee_policy_version: existing.fee_policy_version,
+      created_at: existing.created_at,
+    };
+    return jsonResponse(response, 200, version);
   }
 
   // 1) Fee quote (clawcuts)
   let feeQuote: CutsSimulateResponse;
   try {
     feeQuote = await cutsSimulateFees(env, {
-      job_type: job,
-      closure_type: closure,
-      amount_minor: reward.toString(),
+      requester_did: requesterHeader.requester_did,
+      amount_minor: amountMinor.toString(),
+      closure_type,
+      is_code_bounty,
+      min_proof_tier,
+      tags,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('CUTS_FAILED', message, 502, undefined, version);
   }
+
+  const buyerFees = feeQuote.quote.fees.filter((f) => f.payer === 'buyer');
+  let platformFeeMinor: string;
+  try {
+    platformFeeMinor = sumFeesMinor(buyerFees).toString();
+  } catch {
+    return errorResponse('CUTS_INVALID_RESPONSE', 'Invalid fee item amounts in cuts response', 502, undefined, version);
+  }
+
+  const all_in_cost: AllInCostV2 = {
+    principal_minor: feeQuote.quote.principal_minor,
+    platform_fee_minor: platformFeeMinor,
+    total_minor: feeQuote.quote.buyer_total_minor,
+    currency: 'USD',
+  };
 
   // 2) Create escrow hold (clawescrow)
   const bounty_id = `bty_${crypto.randomUUID()}`;
@@ -787,14 +1193,25 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   let escrow_id: string;
   try {
     const escrow = await escrowCreateHold(env, {
-      idempotency_key: `bounty:${idempotency_key.trim()}:escrow`,
-      buyer_did: buyer_did.trim(),
-      amount_minor: reward.toString(),
+      idempotency_key: `bounty:${idempotency_key}:escrow`,
+      buyer_did: requesterHeader.requester_did,
+      amount_minor: amountMinor.toString(),
       fee_quote: escrowFeeSnapshot,
-      dispute_window_seconds: disputeWindowSeconds,
       metadata: {
         product: 'clawbounties',
+        schema_version: '2',
         bounty_id,
+        closure_type,
+        difficulty_scalar,
+        is_code_bounty,
+        tags,
+        min_proof_tier,
+        requested_worker_did: requested_worker_did ?? null,
+        fee_policy: {
+          id: feeQuote.policy.id,
+          version: feeQuote.policy.version,
+          hash_b64u: feeQuote.policy.hash_b64u,
+        },
       },
     });
     escrow_id = escrow.escrow_id;
@@ -805,43 +1222,47 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
 
   const now = new Date().toISOString();
 
-  const record: BountyRecord = {
+  const record: BountyV2 = {
+    schema_version: '2',
     bounty_id,
-    create_idempotency_key: idempotency_key.trim(),
-    buyer_did: buyer_did.trim(),
-    requested_worker_did: requested_worker_did ? (requested_worker_did as string).trim() : null,
-    worker_did: null,
-    job_type: job,
-    closure_type: closure,
+    requester_did: requesterHeader.requester_did,
     title: title.trim(),
     description: description.trim(),
-    reward_minor: reward.toString(),
-    currency: 'USD',
-    fee_quote: feeQuote,
+    reward: { amount_minor: amountMinor.toString(), currency: 'USD' },
+    closure_type,
+    difficulty_scalar,
     escrow_id,
     status: 'open',
     created_at: now,
+
+    is_code_bounty,
+    tags,
+    min_proof_tier,
+    require_owner_verified_votes,
+    test_harness_id,
+    metadata,
+    idempotency_key,
+
+    fee_policy_version: feeQuote.policy.version,
+    all_in_cost,
+
+    fee_quote: feeQuote,
     updated_at: now,
-    test_spec: test_spec ? (test_spec as Record<string, unknown>) : null,
-    deliverable_spec: deliverable_spec ? (deliverable_spec as Record<string, unknown>) : null,
   };
 
   try {
     await insertBounty(env.BOUNTIES_DB, record);
   } catch (err) {
-    const existingAfter = await getBountyByIdempotencyKey(env.BOUNTIES_DB, idempotency_key.trim());
+    const existingAfter = await getBountyByIdempotencyKey(env.BOUNTIES_DB, idempotency_key);
     if (existingAfter) {
-      const response: PostBountyResponseBody = {
+      const response: PostBountyResponseV2 = {
+        schema_version: '2',
         bounty_id: existingAfter.bounty_id,
         escrow_id: existingAfter.escrow_id,
         status: 'open',
-        fee_quote: {
-          principal_minor: existingAfter.fee_quote.quote.principal_minor,
-          buyer_total_minor: existingAfter.fee_quote.quote.buyer_total_minor,
-          policy_id: existingAfter.fee_quote.policy.id,
-          policy_version: existingAfter.fee_quote.policy.version,
-          policy_hash_b64u: existingAfter.fee_quote.policy.hash_b64u,
-        },
+        all_in_cost: existingAfter.all_in_cost,
+        fee_policy_version: existingAfter.fee_policy_version,
+        created_at: existingAfter.created_at,
       };
       return jsonResponse(response, 200, version);
     }
@@ -850,36 +1271,39 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
-  const response: PostBountyResponseBody = {
+  const response: PostBountyResponseV2 = {
+    schema_version: '2',
     bounty_id,
     escrow_id,
     status: 'open',
-    fee_quote: {
-      principal_minor: feeQuote.quote.principal_minor,
-      buyer_total_minor: feeQuote.quote.buyer_total_minor,
-      policy_id: feeQuote.policy.id,
-      policy_version: feeQuote.policy.version,
-      policy_hash_b64u: feeQuote.policy.hash_b64u,
-    },
+    all_in_cost,
+    fee_policy_version: feeQuote.policy.version,
+    created_at: now,
   };
 
   return jsonResponse(response, 201, version);
 }
 
 async function handleListBounties(url: URL, env: Env, version: string): Promise<Response> {
-  const status = url.searchParams.get('status') ?? 'open';
-  const jobType = url.searchParams.get('job_type');
-
-  let job: JobType | undefined;
-  if (jobType) {
-    const jt = jobType.trim() as JobType;
-    if (jt !== 'code' && jt !== 'research' && jt !== 'agent_pack') {
-      return errorResponse('INVALID_REQUEST', 'job_type must be code|research|agent_pack', 400, undefined, version);
-    }
-    job = jt;
+  const statusRaw = url.searchParams.get('status') ?? 'open';
+  const status = parseBountyStatus(statusRaw);
+  if (!status) {
+    return errorResponse('INVALID_REQUEST', 'status must be open|accepted|pending_review|approved|rejected|disputed|cancelled', 400, undefined, version);
   }
 
-  const bounties = await listBounties(env.BOUNTIES_DB, { status: status.trim(), job_type: job }, 100);
+  const isCodeRaw = url.searchParams.get('is_code_bounty');
+  let is_code_bounty: boolean | undefined;
+  if (isCodeRaw !== null) {
+    const v = isCodeRaw.trim().toLowerCase();
+    if (v !== 'true' && v !== 'false') {
+      return errorResponse('INVALID_REQUEST', 'is_code_bounty must be true|false', 400, undefined, version);
+    }
+    is_code_bounty = v === 'true';
+  }
+
+  const tags = url.searchParams.getAll('tag').map((t) => t.trim()).filter((t) => t.length > 0);
+
+  const bounties = await listBounties(env.BOUNTIES_DB, { status, is_code_bounty, tags }, 100);
   return jsonResponse({ bounties }, 200, version);
 }
 
@@ -889,29 +1313,7 @@ async function handleGetBounty(bountyId: string, env: Env, version: string): Pro
     return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
   }
 
-  return jsonResponse(
-    {
-      bounty_id: bounty.bounty_id,
-      escrow_id: bounty.escrow_id,
-      status: bounty.status,
-      buyer_did: bounty.buyer_did,
-      requested_worker_did: bounty.requested_worker_did,
-      worker_did: bounty.worker_did,
-      job_type: bounty.job_type,
-      closure_type: bounty.closure_type,
-      title: bounty.title,
-      description: bounty.description,
-      reward_minor: bounty.reward_minor,
-      currency: bounty.currency,
-      fee_quote: bounty.fee_quote,
-      created_at: bounty.created_at,
-      updated_at: bounty.updated_at,
-      test_spec: bounty.test_spec,
-      deliverable_spec: bounty.deliverable_spec,
-    },
-    200,
-    version
-  );
+  return jsonResponse(bounty, 200, version);
 }
 
 export default {
