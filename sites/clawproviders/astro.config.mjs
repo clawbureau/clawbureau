@@ -1,11 +1,11 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import cloudflare from '@astrojs/cloudflare';
 
 // https://astro.build/config
 export default defineConfig({
   output: 'static',
   site: 'https://clawproviders.com',
+  trailingSlash: 'always',
   build: {
     format: 'directory',
   },

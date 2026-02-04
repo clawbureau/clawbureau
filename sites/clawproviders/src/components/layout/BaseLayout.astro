@@ -44,6 +44,7 @@ const { seo, breadcrumbs = [] } = Astro.props;
     /* Color Palette */
     --bg: #0a0a0b;
     --bg-secondary: #141416;
+    --bg-alt: #141416;
     --bg-tertiary: #1c1c1f;
     --border: rgba(255, 255, 255, 0.08);
     --border-hover: rgba(255, 255, 255, 0.15);
@@ -53,6 +54,10 @@ const { seo, breadcrumbs = [] } = Astro.props;
     --accent: #3b82f6;
     --accent-hover: #60a5fa;
     --accent-glow: rgba(59, 130, 246, 0.5);
+
+    /* Legacy variable aliases (some pages still reference these) */
+    --primary: var(--accent);
+    --text-light: var(--text-secondary);
     --success: #22c55e;
     --warning: #eab308;
     --error: #ef4444;

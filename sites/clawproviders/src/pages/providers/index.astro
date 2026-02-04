@@ -34,9 +34,9 @@ const breadcrumbs: Breadcrumb[] = [
     <div class="container">
       <div class="grid grid-2">
         {providers.map((provider) => (
-          <a href={`/providers/${provider.slug}/`} class="provider-card card">
+          <div class="provider-card card">
             <div class="provider-header">
-              <h2>{provider.name}</h2>
+              <h2><a class="provider-title-link" href={`/providers/${provider.slug}/`}>{provider.name}</a></h2>
               <span class="model-count">{provider.models.length} models</span>
             </div>
             <p>{provider.description}</p>
@@ -76,13 +76,13 @@ const breadcrumbs: Breadcrumb[] = [
               <span class="label">Quick setup with:</span>
               <div class="channel-list">
                 {channels.slice(0, 4).map((channel) => (
-                  <span class="channel-link-wrapper" onclick={`event.stopPropagation(); window.location.href='/providers/${provider.slug}/${channel.slug}/'`}>
+                  <a class="channel-link-wrapper" href={`/providers/${provider.slug}/${channel.slug}/`}>
                     {channel.name}
-                  </span>
+                  </a>
                 ))}
               </div>
             </div>
-          </a>
+          </div>
         ))}
       </div>
     </div>
@@ -222,9 +222,19 @@ const breadcrumbs: Breadcrumb[] = [
     gap: 0.5rem;
   }
 
+  .provider-title-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .provider-title-link:hover {
+    color: var(--accent);
+  }
+
   .channel-link-wrapper {
     color: var(--accent);
-    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
     padding: 0.25rem 0.5rem;
     border-radius: var(--radius-sm);
     transition: background 0.2s;

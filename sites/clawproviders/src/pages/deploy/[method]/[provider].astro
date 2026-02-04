@@ -63,6 +63,23 @@ function getDifficulty(type: string): string {
     default: return 'Medium';
   }
 }
+
+const providerConfig = JSON.parse(provider.configExample);
+
+const openclawConfig = {
+  agents: {
+    defaults: {
+      model: {
+        primary: `${provider.id}/${provider.defaultModel}`,
+      },
+    },
+  },
+  models: {
+    providers: {
+      [provider.id]: providerConfig?.models?.providers?.[provider.id] ?? {},
+    },
+  },
+};
 ---
 
 <BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
@@ -156,20 +173,7 @@ function getDifficulty(type: string): string {
         <section class="section">
           <h2>Step 3: Configuration</h2>
           <p class="text-secondary">Create your <code>openclaw.json</code> configuration:</p>
-          <pre><code>{`{
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "${provider.id}/${provider.defaultModel}"
-      }
-    }
-  },
-  "models": {
-    "providers": {
-      "${provider.id}": ${provider.configExample.match(/\{[\s\S]*?\}/)?.[0] || '{}'}
-    }
-  }
-}`}</code></pre>
+          <pre><code>{JSON.stringify(openclawConfig, null, 2)}</code></pre>
         </section>
 
         <section class="section">

@@ -10,7 +10,8 @@
  */
 
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 interface Provider {
   id: string;
@@ -41,6 +42,9 @@ interface Deployment {
 }
 
 // Load data
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const dataDir = join(__dirname, '../src/data/extracted');
 const providers: Provider[] = JSON.parse(
   readFileSync(join(dataDir, 'providers.json'), 'utf-8')

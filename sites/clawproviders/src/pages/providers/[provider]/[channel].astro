@@ -41,6 +41,26 @@ const combinedSteps = [
   'Start the OpenClaw gateway with "openclaw gateway start"',
   'Send a test message to verify the integration',
 ];
+
+// Build a combined config snippet without regex-parsing nested JSON.
+const providerConfig = JSON.parse(provider.configExample);
+const channelConfig = JSON.parse(channel.configExample);
+
+const combinedConfig = {
+  agents: {
+    defaults: {
+      model: {
+        primary: `${provider.id}/${provider.defaultModel}`,
+      },
+    },
+  },
+  models: {
+    providers: {
+      [provider.id]: providerConfig?.models?.providers?.[provider.id] ?? {},
+    },
+  },
+  channels: channelConfig?.channels ?? {},
+};
 ---
 
 <BaseLayout seo={seo} breadcrumbs={breadcrumbs}>
@@ -118,21 +138,7 @@ const combinedSteps = [
         <section class="section">
           <h2>Step 3: Combined Configuration</h2>
           <p class="text-secondary">Add both configurations to your <code>openclaw.json</code>:</p>
-          <pre><code>{`{
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "${provider.id}/${provider.defaultModel}"
-      }
-    }
-  },
-  "models": {
-    "providers": {
-      "${provider.id}": ${provider.configExample.match(/\{[\s\S]*?\}/)?.[0] || '{}'}
-    }
-  },
-  "channels": ${channel.configExample.match(/"channels":\s*(\{[\s\S]*\})/)?.[1] || channel.configExample}
-}`}</code></pre>
+          <pre><code>{JSON.stringify(combinedConfig, null, 2)}</code></pre>
         </section>
 
         <section class="section">

@@ -45,9 +45,9 @@ function getDifficulty(type: string): string {
     <div class="container">
       <div class="deployments-grid">
         {deployments.map((deployment) => (
-          <a href={`/deploy/${deployment.slug}/`} class="deployment-card card">
+          <div class="deployment-card card">
             <div class="deployment-header">
-              <h2>{deployment.name}</h2>
+              <h2><a class="deployment-title-link" href={`/deploy/${deployment.slug}/`}>{deployment.name}</a></h2>
               <span class={`difficulty-badge ${getDifficulty(deployment.type).toLowerCase()}`}>{getDifficulty(deployment.type)}</span>
             </div>
             <p>{deployment.description}</p>
@@ -84,13 +84,13 @@ function getDifficulty(type: string): string {
               <span class="label">Setup guides:</span>
               <div class="provider-list">
                 {providers.slice(0, 4).map((provider) => (
-                  <span class="provider-link-wrapper" onclick={`event.stopPropagation(); window.location.href='/deploy/${deployment.slug}/${provider.slug}/'`}>
+                  <a class="provider-link-wrapper" href={`/deploy/${deployment.slug}/${provider.slug}/`}>
                     {provider.name}
-                  </span>
+                  </a>
                 ))}
               </div>
             </div>
-          </a>
+          </div>
         ))}
       </div>
     </div>
@@ -323,9 +323,19 @@ function getDifficulty(type: string): string {
     gap: 0.5rem;
   }
   
+  .deployment-title-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .deployment-title-link:hover {
+    color: var(--accent);
+  }
+
   .provider-link-wrapper {
     color: var(--accent);
-    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
     padding: 0.25rem 0.5rem;
     border-radius: var(--radius-sm);
     transition: background 0.2s;

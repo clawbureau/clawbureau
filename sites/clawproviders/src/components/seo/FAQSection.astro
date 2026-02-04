@@ -23,7 +23,7 @@ const { faqs, title = 'Frequently Asked Questions' } = Astro.props;
               <span class="question-text">{faq.question}</span>
               <span class="icon" aria-hidden="true">+</span>
             </summary>
-            <div class="faq-answer" set:html={faq.answer} />
+            <div class="faq-answer">{faq.answer}</div>
           </details>
         ))}
       </div>

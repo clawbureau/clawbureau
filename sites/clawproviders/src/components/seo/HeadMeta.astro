@@ -21,6 +21,12 @@ const {
 
 const siteName = 'ClawProviders';
 const fullTitle = `${title} | ${siteName}`;
+
+// Social crawlers are much more reliable with absolute image URLs.
+const canonicalUrl = new URL(canonical);
+const ogImageUrl = ogImage.startsWith('http')
+  ? ogImage
+  : new URL(ogImage, canonicalUrl.origin).toString();
 ---
 
 <!-- Primary Meta Tags -->
@@ -36,7 +42,7 @@ const fullTitle = `${title} | ${siteName}`;
 <meta property="og:url" content={canonical} />
 <meta property="og:title" content={ogTitle} />
 <meta property="og:description" content={ogDescription} />
-<meta property="og:image" content={ogImage} />
+<meta property="og:image" content={ogImageUrl} />
 <meta property="og:site_name" content={siteName} />
 
 <!-- Twitter -->
@@ -44,7 +50,7 @@ const fullTitle = `${title} | ${siteName}`;
 <meta property="twitter:url" content={canonical} />
 <meta property="twitter:title" content={ogTitle} />
 <meta property="twitter:description" content={ogDescription} />
-<meta property="twitter:image" content={ogImage} />
+<meta property="twitter:image" content={ogImageUrl} />
 
 <!-- Additional Meta -->
 <meta name="author" content="ClawProviders" />
