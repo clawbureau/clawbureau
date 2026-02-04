@@ -41,14 +41,17 @@ interface FeeSimulateResponse {
   quote: FeeQuote;
 }
 
-interface BountiesV1Params {
-  job_type: 'code' | 'research' | 'agent_pack' | string;
+interface BountiesV2Params {
   closure_type: 'test' | 'requester' | 'quorum' | string;
+  is_code_bounty: boolean;
 }
 
+type CodeSelector = 'true' | 'false' | '*';
+type ClosureSelector = 'test' | 'requester' | 'quorum' | '*';
+
 interface FeeRule {
-  job_type: string;
-  closure_type: string;
+  is_code_bounty: CodeSelector;
+  closure_type: ClosureSelector;
   buyer_fee_bps: number;
   worker_fee_bps: number;
   min_fee_minor: string;
@@ -145,11 +148,9 @@ function policyCacheKey(product: string, policy_id: string): string {
 function getBuiltInPolicy(product: string, policy_id: string): FeePolicy | null {
   if (product === 'clawbounties' && policy_id === 'bounties_v1') {
     const rules: FeeRule[] = [
-      { job_type: 'code', closure_type: 'test', buyer_fee_bps: 500, worker_fee_bps: 0, min_fee_minor: '0' },
-      { job_type: 'code', closure_type: 'requester', buyer_fee_bps: 750, worker_fee_bps: 0, min_fee_minor: '25' },
-      { job_type: 'research', closure_type: 'requester', buyer_fee_bps: 750, worker_fee_bps: 0, min_fee_minor: '25' },
-      { job_type: 'agent_pack', closure_type: 'requester', buyer_fee_bps: 750, worker_fee_bps: 0, min_fee_minor: '25' },
-      { job_type: '*', closure_type: 'quorum', buyer_fee_bps: 750, worker_fee_bps: 0, min_fee_minor: '25' },
+      { is_code_bounty: 'true', closure_type: 'test', buyer_fee_bps: 500, worker_fee_bps: 0, min_fee_minor: '0' },
+      { is_code_bounty: '*', closure_type: 'requester', buyer_fee_bps: 750, worker_fee_bps: 0, min_fee_minor: '25' },
+      { is_code_bounty: '*', closure_type: 'quorum', buyer_fee_bps: 750, worker_fee_bps: 0, min_fee_minor: '25' },
     ];
 
     return {
@@ -162,7 +163,7 @@ function getBuiltInPolicy(product: string, policy_id: string): FeePolicy | null 
 
   if (product === 'clawtips' && policy_id === 'tips_v1') {
     const rules: FeeRule[] = [
-      { job_type: '*', closure_type: '*', buyer_fee_bps: 0, worker_fee_bps: 0, min_fee_minor: '0' },
+      { is_code_bounty: '*', closure_type: '*', buyer_fee_bps: 0, worker_fee_bps: 0, min_fee_minor: '0' },
     ];
 
     return {
@@ -189,7 +190,7 @@ async function getPolicyWithHash(product: string, policy_id: string): Promise<{ 
 
     // Deterministic policy hash over a stable JSON representation.
     const canonical = stableStringify({
-      schema: 'clawcuts.policy.v1',
+      schema: 'clawcuts.policy.v2',
       product: policy.product,
       policy_id: policy.policy_id,
       version: policy.version,
@@ -208,22 +209,16 @@ async function getPolicyWithHash(product: string, policy_id: string): Promise<{ 
   }
 }
 
-function selectBountiesRule(params: BountiesV1Params, policy: FeePolicy): FeeRule | null {
-  // Fail-closed rule selection. Only support job/closure combos defined by the spec.
-  const job = params.job_type;
+function selectBountiesRule(params: BountiesV2Params, policy: FeePolicy): FeeRule | null {
+  // Fail-closed rule selection. Only support closure types defined by the spec.
   const closure = params.closure_type;
+  const code: CodeSelector = params.is_code_bounty ? 'true' : 'false';
 
-  if (closure === 'quorum') {
-    return policy.rules.find((r) => r.closure_type === 'quorum' && r.job_type === '*') ?? null;
-  }
+  const exact = policy.rules.find((r) => r.closure_type === closure && r.is_code_bounty === code) ?? null;
+  if (exact) return exact;
 
-  if (closure === 'test') {
-    return policy.rules.find((r) => r.closure_type === 'test' && r.job_type === 'code') ?? null;
-  }
-
-  if (closure === 'requester') {
-    return policy.rules.find((r) => r.closure_type === 'requester' && r.job_type === job) ?? null;
-  }
+  const wildcard = policy.rules.find((r) => r.closure_type === closure && r.is_code_bounty === '*') ?? null;
+  if (wildcard) return wildcard;
 
   return null;
 }
@@ -260,7 +255,7 @@ export default {
         ],
       };
 
-      const md = `---\nmetadata: '${JSON.stringify(metadata)}'\n---\n\n# clawcuts\n\nEndpoints:\n- GET /health\n- POST /v1/fees/simulate\n\nExample (bounties):\n\n\`\`\`bash\ncurl -sS \\\n  -X POST "${url.origin}/v1/fees/simulate" \\\n  -H 'content-type: application/json' \\\n  -d '{"product":"clawbounties","policy_id":"bounties_v1","amount_minor":"5000","currency":"USD","params":{"job_type":"code","closure_type":"test"}}'\n\`\`\`\n\n`;
+      const md = `---\nmetadata: '${JSON.stringify(metadata)}'\n---\n\n# clawcuts\n\nEndpoints:\n- GET /health\n- POST /v1/fees/simulate\n\nExample (bounties):\n\n\`\`\`bash\ncurl -sS \\\n  -X POST "${url.origin}/v1/fees/simulate" \\\n  -H 'content-type: application/json' \\\n  -d '{"product":"clawbounties","policy_id":"bounties_v1","amount_minor":"5000","currency":"USD","params":{"is_code_bounty":true,"closure_type":"test"}}'\n\`\`\`\n\n`;
 
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.CUTS_VERSION);
     }
@@ -321,30 +316,34 @@ export default {
           return errorResponse('INVALID_REQUEST', 'params must be an object for bounties_v1', 400);
         }
 
-        const job_type = paramsRaw.job_type;
         const closure_type = paramsRaw.closure_type;
-        if (!isNonEmptyString(job_type)) {
-          return errorResponse('INVALID_REQUEST', 'params.job_type is required for bounties_v1', 400);
-        }
         if (!isNonEmptyString(closure_type)) {
           return errorResponse('INVALID_REQUEST', 'params.closure_type is required for bounties_v1', 400);
         }
 
-        rule = selectBountiesRule(
-          { job_type: job_type.trim(), closure_type: closure_type.trim() },
-          policy
-        );
+        const closure = closure_type.trim();
+        const allowedClosures = new Set(['test', 'requester', 'quorum']);
+        if (!allowedClosures.has(closure)) {
+          return errorResponse('INVALID_REQUEST', 'params.closure_type must be one of test|requester|quorum for bounties_v1', 400);
+        }
+
+        const is_code_bounty_raw = paramsRaw.is_code_bounty;
+        let is_code_bounty = false;
+        if (is_code_bounty_raw !== undefined) {
+          if (typeof is_code_bounty_raw !== 'boolean') {
+            return errorResponse('INVALID_REQUEST', 'params.is_code_bounty must be a boolean when provided', 400);
+          }
+          is_code_bounty = is_code_bounty_raw;
+        }
+
+        if (closure === 'test' && !is_code_bounty) {
+          return errorResponse('INVALID_REQUEST', 'closure_type=test requires params.is_code_bounty=true', 400);
+        }
+
+        rule = selectBountiesRule({ closure_type: closure, is_code_bounty }, policy);
 
         if (!rule) {
           return errorResponse('RULE_NOT_FOUND', 'No fee rule matches the provided params', 400);
-        }
-
-        // Fail closed: enforce known job types for requester lane.
-        if (rule.closure_type === 'requester') {
-          const known = new Set(['code', 'research', 'agent_pack']);
-          if (!known.has(rule.job_type)) {
-            return errorResponse('INVALID_REQUEST', 'Unsupported job_type for requester closure', 400);
-          }
         }
       } else if (policy.product === 'clawtips' && policy.policy_id === 'tips_v1') {
         rule = policy.rules[0] ?? null;
