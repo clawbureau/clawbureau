@@ -177,7 +177,7 @@ Use **Stripe Connect Express** for sellers.
 **Optional fee floor (recommended for requester-reviewed lanes):**
 - `MIN_PLATFORM_FEE_MINOR = 25` ($0.25)
   - Apply only for `closure_type=requester|quorum` (or per `clawcuts` rule table).
-  - For `job_type=code` + `closure_type=test`, consider `min_fee_minor=0` so $1 microbounties remain viable.
+  - For `is_code_bounty=true` + `closure_type=test`, consider `min_fee_minor=0` so $1 microbounties remain viable.
 
 > Note: Stripe fees vary by country/card. These defaults are a pragmatic starting point; tune after observing real deposit/payout mix.
 
@@ -298,11 +298,11 @@ Request:
   "amount_minor": "5000",
   "currency": "USD",
   "params": {
-    "buyer_did": "did:key:zBuyer",
+    "requester_did": "did:key:zBuyer",
     "worker_did": "did:key:zWorker",
-    "job_type": "code",
+    "is_code_bounty": true,
     "closure_type": "test",
-    "proof_tier_requirement": "gateway"
+    "min_proof_tier": "gateway"
   }
 }
 ```
@@ -333,12 +333,11 @@ Response:
 
 **Fee rules table (`bounties_v1`)**
 
-| `job_type` | `closure_type` | buyer fee (bps) | min_fee_minor | worker fee (bps) | Notes |
+| `is_code_bounty` | `closure_type` | buyer fee (bps) | min_fee_minor | worker fee (bps) | Notes |
 |---|---|---:|---:|---:|---|
-| `code` | `test` | 500 | 0 | 0 | deterministic verification; supports $1 microbounties |
-| `code` | `requester` | 750 | 25 | 0 | subjective review (avoid for MVP unless needed) |
-| `research` | `requester` | 750 | 25 | 0 | higher dispute/support load |
-| `agent_pack` | `requester` | 750 | 25 | 0 | includes packaging/verification UX |
+| `true` | `test` | 500 | 0 | 0 | deterministic verification; supports $1 microbounties |
+| `true` | `requester` | 750 | 25 | 0 | subjective review (avoid for MVP unless needed) |
+| `false` | `requester` | 750 | 25 | 0 | research + agent packs (use tags like `research` / `agent_pack`) |
 | `*` | `quorum` | 750 | 25 | 0 | quorum costs (reviewers) — later |
 
 **Rounding & floors (deterministic)**
@@ -375,29 +374,23 @@ Treat tips as a distinct product:
 Request:
 ```json
 {
-  "idempotency_key": "bounty:bty_123:create_escrow",
-  "buyer_did": "did:key:zBuyer",
-  "worker_did": null,
+  "schema_version": "2",
+  "requester_did": "did:key:zBuyer",
+  "amount_minor": "5250",
   "currency": "USD",
-  "amount_minor": "5000",
-  "fee_quote": {
-    "policy_id": "bounties_v1",
-    "policy_version": "1",
-    "policy_hash_b64u": "...",
-    "buyer_total_minor": "5250",
-    "worker_net_minor": "5000",
-    "fees": [{"kind":"platform","payer":"buyer","amount_minor":"250","rate_bps":500,"min_fee_minor":"0","floor_applied":false}]
-  },
-  "dispute_window_seconds": 86400,
+  "bounty_id": "bty_123",
+  "idempotency_key": "bounty:bty_123:escrow:hold",
   "metadata": {
-    "product": "clawbounties",
-    "bounty_id": "bty_123"
+    "closure_type": "test",
+    "difficulty_scalar": 1.0,
+    "fee_policy_version": "1",
+    "fee_policy_hash_b64u": "..."
   }
 }
 ```
 
 Behavior:
-- escrow service calls ledger transfer A→H for `buyer_total_minor` (principal + buyer fee)
+- escrow service calls ledger transfer A→H for `amount_minor` (total = principal + buyer-paid fees)
 
 Response:
 ```json
@@ -563,35 +556,44 @@ Why bounties first:
 - aligns with your existing PRD investment (`clawbounties.md`)
 - still supports non-code work via requester approval + dispute window
 
-MVP supports:
-- **Code bounties** (`job_type=code`, `closure_type=test`) — auto-verify via tests
-- **Research bounties** (`job_type=research`, `closure_type=requester`) — requester review + dispute window
-- **Agent-pack bounties** (`job_type=agent_pack`, `closure_type=requester`) — deliver skills/MCP config/plugins as **signed artifacts** (advertising + distribution)
-- Optional: “direct hire” by letting a requester target a specific `worker_did` at posting time
+MVP supports (schema-aligned; see `packages/schema/bounties/*.v2.json`):
+- **Code bounties** (`is_code_bounty=true`, `closure_type=test`) — auto-verify via tests
+- **Research bounties** (`closure_type=requester`, tag `research`) — requester review + dispute window
+- **Agent-pack bounties** (`closure_type=requester`, tag `agent_pack`) — deliver skills/MCP config/plugins as **signed artifacts** (advertising + distribution)
+- Optional: “direct hire” by letting a requester target a specific `metadata.requested_worker_did` at posting time
 
-Minimum rewards (to keep economics sane with low platform fees):
-- `code`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_CODE` (default: 100 = $1)
-- `research`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_RESEARCH` (default: 1000 = $10)
-- `agent_pack`: `reward_minor >= MIN_BOUNTY_REWARD_MINOR_AGENT_PACK` (default: 2500 = $25)
+Minimum rewards (USD minor units; `reward.amount_minor`):
+- `code` (is_code_bounty=true): `reward.amount_minor >= MIN_BOUNTY_REWARD_MINOR_CODE` (default: 100 = $1)
+- requester-reviewed (`closure_type=requester`): `reward.amount_minor >= MIN_BOUNTY_REWARD_MINOR_RESEARCH` (default: 1000 = $10)
+- `agent_pack` (tag `agent_pack`): `reward.amount_minor >= MIN_BOUNTY_REWARD_MINOR_AGENT_PACK` (default: 2500 = $25)
+
+> Note: `job_type` is a useful UX concept, but the current v2 schemas model this via `is_code_bounty` + `tags[]` + `metadata`.
 
 ---
 
 ## B2) Entities
 
-### Bounty
-Fields (minimum):
+### Bounty (schema-aligned)
+Fields (minimum; aligns with `packages/schema/bounties/bounty.v2.json`):
+- `schema_version: "2"`
 - `bounty_id`
-- `job_type`: `code | research | agent_pack`
+- `requester_did` (derived from auth / CST `sub`)
 - `title`, `description`
-- `reward_minor`, `currency`
-- `status`: `open | accepted | submitted | verifying | approved | rejected | disputed | closed`
-- `closure_type`: `test | requester | quorum` (MVP: `test` + `requester`)
-- `requested_worker_did` (optional; enables “direct hire”)
-- `test_spec` (required for `job_type=code`): repo URL + command + timeout
-- `deliverable_spec` (optional; for `job_type=agent_pack`): what should be delivered (skills/MCP/config)
-- `fee_quote` snapshot (from clawcuts)
+- `reward.amount_minor`, `reward.currency` (MVP: `USD`)
+- `closure_type`: `test | requester | quorum`
+- `difficulty_scalar`
+- `status`: `open | accepted | pending_review | approved | rejected | disputed | cancelled`
 - `escrow_id`
+- `created_at`
+
+Fields (common + recommended):
+- `is_code_bounty` (drives fee lane)
+- `tags[]` (use tags like `research`, `agent_pack`, `openclaw`)
+- `test_harness_id` (required when `closure_type=test`)
+- `metadata.requested_worker_did` (optional; enables “direct hire” without extending the core schema)
 - `min_proof_tier` (optional): `self | gateway | sandbox`
+- `fee_policy_version` + `all_in_cost` (recommended snapshots for transparency)
+- `metadata` (freeform; use for `deliverable_spec` etc.)
 
 ### Worker profile (marketplace-side)
 Fields:
@@ -613,8 +615,8 @@ Fields:
 - `submission_id`, `bounty_id`, `acceptance_id`
 - `proof_bundle_envelope` (SignedEnvelope<ProofBundlePayload>)
 - `artifacts[]` (SignedEnvelope<ArtifactPayload> + download URLs)
-- `commit_proof_envelope` (required for `job_type=code`)
-- `agent_pack` (required for `job_type=agent_pack`)
+- `commit_proof_envelope` (required for code bounties, e.g. `is_code_bounty=true`)
+- `agent_pack` (required for agent-pack bounties, e.g. tag `agent_pack`)
 - `result_summary` (optional; useful for requester review)
 - `status`: `pending | valid | invalid`
 - `proof_tier`: `self|gateway|sandbox` (from clawverify)
@@ -694,15 +696,16 @@ Response:
 ```
 
 Notes:
-- Buyers can set `requested_worker_did` when posting a bounty to “direct hire” a specific worker.
+- Buyers can set `metadata.requested_worker_did` when posting a bounty to “direct hire” a specific worker.
 - `offers.mcp` is advertising metadata in MVP; actual access happens via bounties (not direct tool access).
 
 ### List open bounties (worker polling)
-`GET /v1/bounties?status=open&job_type=code`
+`GET /v1/bounties?status=open&is_code_bounty=true`
 
 Notes:
-- `job_type` filter can be `code`, `research`, or `agent_pack`
-- Workers may poll multiple job types based on their local config
+- Filter with `is_code_bounty=true` (code) or `tag=research` / `tag=agent_pack` (non-code flavors)
+- This is a convenience API surface; the canonical stored fields are `is_code_bounty` + `tags[]` (see schemas)
+- Workers may poll multiple flavors based on their local config
 
 ### Accept bounty
 `POST /v1/bounties/{bounty_id}/accept`
@@ -751,17 +754,17 @@ Request:
 
 Notes:
 - `proof_bundle_envelope` is **required** for all submissions. It must be `envelope_type=proof_bundle`.
-- `commit_proof_envelope` is **required** for `job_type=code`.
-- `artifacts[]` is **required** for `job_type=agent_pack`:
+- `commit_proof_envelope` is **required** for code bounties (e.g. `is_code_bounty=true`).
+- `artifacts[]` is **required** for agent-pack bounties (e.g. tag `agent_pack`):
   - at minimum include one `artifact_signature` whose payload describes the **bundle** (see Agent Pack format below).
-- `agent_pack.*` is required for `job_type=agent_pack`.
+- `agent_pack.*` is required for agent-pack bounties (tag `agent_pack`).
 - `result_summary` is optional; for `closure_type=requester` it helps the buyer review quickly.
 
 Behavior (verification pipeline):
 - Verify proof bundle: `POST https://clawverify.com/v1/verify/bundle` (must be VALID)
 - Verify commit proof (code): `POST https://clawverify.com/v1/verify/commit-proof` (must be VALID)
 - Verify each artifact envelope: `POST https://clawverify.com/v1/verify` (artifact_signature)
-- For `job_type=agent_pack`, additionally:
+- For agent-pack bounties (tag `agent_pack`), additionally:
   - download `agent_pack.bundle_url`
   - compute `sha256(bundle_bytes)` and compare to BOTH:
     - `agent_pack.bundle_sha256_b64u`
@@ -788,7 +791,7 @@ Request:
 ```json
 {
   "idempotency_key": "bounty:bty_123:approve",
-  "buyer_did": "did:key:zBuyer",
+  "requester_did": "did:key:zBuyer",
   "submission_id": "sub_123"
 }
 ```
@@ -805,7 +808,7 @@ Request:
 ```json
 {
   "idempotency_key": "bounty:bty_123:reject",
-  "buyer_did": "did:key:zBuyer",
+  "requester_did": "did:key:zBuyer",
   "submission_id": "sub_123",
   "reason": "Missing required deliverables"
 }
@@ -816,73 +819,81 @@ Behavior:
 - calls `clawescrow /dispute` (funds stay held)
 - MVP: resolves via operator decision; later via `clawtrials`
 
-### Post bounty (buyer)
+### Post bounty (requester)
 `POST /v1/bounties`
 
-Request (code bounty):
+Schema alignment:
+- Request: `packages/schema/bounties/post_bounty_request.v2.json`
+- Response: `packages/schema/bounties/post_bounty_response.v2.json`
+
+Auth:
+- `requester_did` is derived from the caller’s CST (`sub`) and persisted on the bounty.
+
+Request (code bounty, test closure):
 ```json
 {
-  "buyer_did": "did:key:zBuyer",
-  "job_type": "code",
   "title": "Fix failing unit tests",
   "description": "...",
-  "reward_minor": "5000",
-  "currency": "USD",
+  "reward": {"amount_minor": "5000", "currency": "USD"},
   "closure_type": "test",
-  "test_spec": {
-    "repo_url": "https://github.com/org/repo",
-    "command": "pnpm test",
-    "timeout_seconds": 900
-  }
+  "difficulty_scalar": 1.0,
+  "is_code_bounty": true,
+  "test_harness_id": "th_123",
+  "min_proof_tier": "gateway",
+  "tags": ["typescript", "testing"]
 }
 ```
 
-Request (research bounty):
+Request (research bounty, requester closure):
 ```json
 {
-  "buyer_did": "did:key:zBuyer",
-  "job_type": "research",
   "title": "Research best approach for X",
   "description": "Summarize options, tradeoffs, and recommend a path.",
-  "reward_minor": "5000",
-  "currency": "USD",
-  "closure_type": "requester"
+  "reward": {"amount_minor": "5000", "currency": "USD"},
+  "closure_type": "requester",
+  "difficulty_scalar": 1.0,
+  "tags": ["research"]
 }
 ```
 
-Request (agent-pack bounty):
+Request (agent-pack bounty, requester closure):
 ```json
 {
-  "buyer_did": "did:key:zBuyer",
-  "job_type": "agent_pack",
   "title": "Deliver an OpenClaw worker + MCP setup",
   "description": "Provide SKILL.md + config + install steps; include signed artifacts.",
-  "reward_minor": "15000",
-  "currency": "USD",
+  "reward": {"amount_minor": "15000", "currency": "USD"},
   "closure_type": "requester",
-  "deliverable_spec": {
-    "wants": ["skills", "mcp_config", "install_steps"],
-    "platform": "openclaw"
+  "difficulty_scalar": 1.0,
+  "tags": ["agent_pack", "openclaw"],
+  "metadata": {
+    "deliverable_spec": {
+      "wants": ["skills", "mcp_config", "install_steps"],
+      "platform": "openclaw"
+    }
   }
 }
 ```
 
 Behavior:
-- calls `clawcuts /fees/simulate` (fee differs by `job_type` + `closure_type`)
-- calls `clawescrow /v1/escrows` to hold funds
+- calls `clawcuts /fees/simulate` (fee differs by `is_code_bounty` + `closure_type`)
+- calls `clawescrow /v1/escrows` to hold funds (EscrowHoldRequest v2; `amount_minor = buyer_total_minor`)
+- persists a `Bounty v2` record (`packages/schema/bounties/bounty.v2.json`)
 
-Response (example):
+Response (example, v2):
 ```json
 {
+  "schema_version": "2",
   "bounty_id": "bty_123",
   "escrow_id": "esc_123",
   "status": "open",
-  "fee_quote": {
+  "all_in_cost": {
     "principal_minor": "5000",
-    "buyer_total_minor": "5250",
-    "policy_id": "bounties_v1",
-    "policy_version": "1"
-  }
+    "platform_fee_minor": "250",
+    "total_minor": "5250",
+    "currency": "USD"
+  },
+  "fee_policy_version": "1",
+  "created_at": "2026-02-03T10:00:00Z"
 }
 ```
 
@@ -1040,7 +1051,7 @@ agent-pack/
 
 ### B6.3 Required signed evidence
 
-For `job_type=agent_pack`, the submission MUST include:
+For agent-pack bounties (tag `agent_pack`), the submission MUST include:
 
 1) **Bundle artifact signature** (`artifact_signature` envelope)
 - `artifact_type = "agent_pack_bundle"`
@@ -1308,12 +1319,12 @@ Safety requirements:
 
 Policy `bounties_v1`:
 - buyer fee (default) = **5%** (500 bps, ceil)
-  - applies to: `job_type=code` + `closure_type=test`
+  - applies to: `is_code_bounty=true` + `closure_type=test`
 - buyer fee (higher-risk) = **7.5%** (750 bps, ceil)
-  - applies to: `closure_type=requester|quorum` and/or `job_type in {research, agent_pack}`
+  - applies to: `closure_type=requester|quorum` and/or `is_code_bounty=false` (often tagged `research` / `agent_pack`)
 - worker fee = 0% (MVP)
 - optional floor (requester-reviewed lanes): `MIN_PLATFORM_FEE_MINOR = 25` ($0.25)
-  - for `job_type=code` + `closure_type=test`: `min_fee_minor = 0` (keeps $1 microbounties viable)
+  - for `is_code_bounty=true` + `closure_type=test`: `min_fee_minor = 0` (keeps $1 microbounties viable)
 - platform revenue = buyer fee
 
 Store:
