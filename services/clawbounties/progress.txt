@@ -324,3 +324,16 @@ Started: 2026-02-02T03:08:26.937005
 - Persistence:
   - Added D1 migration `migrations/0002_bounties_v2.sql` (drops & recreates `bounties` table with v2 columns).
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-04 - CBT-US-018
+- Added worker registry endpoints (OpenClaw Worker plugin bootstrap):
+  - `POST /v1/workers/register` (public) upserts worker record and issues a short-lived bearer token.
+    - Token is stored as `sha256(token)` (hex) in D1; plaintext token is never persisted.
+    - Re-register rotates the token.
+  - `GET /v1/workers?job_type=code&tag=typescript` lists workers for discovery.
+  - `GET /v1/workers/self` returns the caller worker record (requires `Authorization: Bearer <token>`).
+- Persistence:
+  - Added D1 migration `migrations/0003_workers.sql` (workers table + token hash index).
+- Docs:
+  - Updated `/docs` + `/skill.md` to include worker endpoints.
+- Typecheck: `npm run typecheck`.

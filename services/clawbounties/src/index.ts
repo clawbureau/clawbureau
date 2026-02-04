@@ -21,6 +21,9 @@ export interface Env {
   /** Base URL for clawescrow (defaults to https://clawescrow.com). */
   ESCROW_BASE_URL?: string;
 
+  /** Worker auth token TTL in seconds for /v1/workers/register (defaults to 86400). */
+  WORKER_TOKEN_TTL_SECONDS?: string;
+
   /** D1 database binding */
   BOUNTIES_DB: D1Database;
 }
@@ -135,6 +138,75 @@ interface BountyListItemV2 {
   min_proof_tier: ProofTier;
 }
 
+type WorkerStatus = 'online' | 'offline' | 'paused';
+type WorkerAuthMode = 'token';
+type WorkerAvailabilityMode = 'manual' | 'auto';
+
+interface WorkerListingV1 {
+  name: string;
+  headline: string;
+  tags: string[];
+}
+
+interface WorkerCapabilitiesV1 {
+  job_types: string[];
+  languages: string[];
+  max_minutes: number;
+}
+
+interface WorkerOfferMcpV1 {
+  name: string;
+  description: string;
+}
+
+interface WorkerOffersV1 {
+  skills: string[];
+  mcp: WorkerOfferMcpV1[];
+}
+
+interface WorkerPricingV1 {
+  price_floor_minor: string;
+}
+
+interface WorkerAvailabilityV1 {
+  mode: WorkerAvailabilityMode;
+  paused: boolean;
+}
+
+interface WorkerRecordV1 {
+  worker_id: string;
+  worker_did: string;
+  status: WorkerStatus;
+  worker_version: string;
+  listing: WorkerListingV1;
+  capabilities: WorkerCapabilitiesV1;
+  offers: WorkerOffersV1;
+  pricing: WorkerPricingV1;
+  availability: WorkerAvailabilityV1;
+  auth_mode: WorkerAuthMode;
+  auth_token_hash_hex: string;
+  auth_token_prefix: string;
+  auth_token_created_at: string;
+  auth_token_expires_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RegisterWorkerResponseV1 {
+  worker_id: string;
+  auth: { mode: WorkerAuthMode; token: string };
+}
+
+interface WorkerListItemV1 {
+  worker_id: string;
+  worker_did: string;
+  status: WorkerStatus;
+  listing: WorkerListingV1;
+  capabilities: WorkerCapabilitiesV1;
+  offers: WorkerOffersV1;
+  pricing: WorkerPricingV1;
+}
+
 function escapeHtml(input: string): string {
   return input
     .replaceAll('&', '&amp;')
@@ -234,6 +306,20 @@ function parseBountyStatus(input: unknown): BountyStatus | null {
   return null;
 }
 
+function parseWorkerStatus(input: unknown): WorkerStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'online' || v === 'offline' || v === 'paused') return v;
+  return null;
+}
+
+function parseWorkerAvailabilityMode(input: unknown): WorkerAvailabilityMode | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'manual' || v === 'auto') return v;
+  return null;
+}
+
 function parseTags(input: unknown): string[] | null {
   if (input === undefined) return [];
   if (!Array.isArray(input)) return null;
@@ -260,6 +346,133 @@ function parseTags(input: unknown): string[] | null {
   return out;
 }
 
+function parseStringList(input: unknown, maxItems: number, maxLen: number, allowUndefined = false): string[] | null {
+  if (input === undefined) return allowUndefined ? [] : null;
+  if (!Array.isArray(input)) return null;
+
+  const items: string[] = [];
+  for (const raw of input) {
+    if (!isNonEmptyString(raw)) return null;
+    const v = raw.trim();
+    if (v.length > maxLen) return null;
+    items.push(v);
+  }
+
+  if (items.length > maxItems) return null;
+
+  // Deduplicate while preserving order.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of items) {
+    if (seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+
+  return out;
+}
+
+function parseWorkerListing(input: unknown): WorkerListingV1 | null {
+  if (!isRecord(input)) return null;
+
+  const nameRaw = input.name;
+  const headlineRaw = input.headline;
+  const tagsRaw = input.tags;
+
+  if (!isNonEmptyString(nameRaw)) return null;
+  if (!isNonEmptyString(headlineRaw)) return null;
+
+  const name = nameRaw.trim();
+  const headline = headlineRaw.trim();
+
+  if (name.length > 100) return null;
+  if (headline.length > 200) return null;
+
+  const tags = parseTags(tagsRaw);
+  if (!tags) return null;
+
+  return { name, headline, tags };
+}
+
+function parseWorkerCapabilities(input: unknown): WorkerCapabilitiesV1 | null {
+  if (!isRecord(input)) return null;
+
+  const jobTypes = parseStringList(input.job_types, 20, 32);
+  const languages = parseStringList(input.languages, 20, 16);
+
+  const maxMinutesRaw = input.max_minutes;
+  if (typeof maxMinutesRaw !== 'number' || !Number.isFinite(maxMinutesRaw) || !Number.isInteger(maxMinutesRaw)) return null;
+  if (maxMinutesRaw < 1 || maxMinutesRaw > 240) return null;
+
+  if (!jobTypes || jobTypes.length === 0) return null;
+  if (!languages) return null;
+
+  return {
+    job_types: jobTypes,
+    languages,
+    max_minutes: maxMinutesRaw,
+  };
+}
+
+function parseWorkerOffers(input: unknown): WorkerOffersV1 | null {
+  if (!isRecord(input)) return null;
+
+  const skills = parseStringList(input.skills, 50, 64, true);
+  if (!skills) return null;
+
+  const mcpRaw = input.mcp;
+  const mcp: WorkerOfferMcpV1[] = [];
+
+  if (mcpRaw !== undefined) {
+    if (!Array.isArray(mcpRaw)) return null;
+    if (mcpRaw.length > 25) return null;
+
+    for (const entry of mcpRaw) {
+      if (!isRecord(entry)) return null;
+
+      const nameRaw = entry.name;
+      const descriptionRaw = entry.description;
+
+      if (!isNonEmptyString(nameRaw) || !isNonEmptyString(descriptionRaw)) return null;
+
+      const name = nameRaw.trim();
+      const description = descriptionRaw.trim();
+
+      if (name.length > 64) return null;
+      if (description.length > 256) return null;
+
+      mcp.push({ name, description });
+    }
+  }
+
+  return { skills, mcp };
+}
+
+function parseWorkerPricing(input: unknown): WorkerPricingV1 | null {
+  if (!isRecord(input)) return null;
+
+  const floorRaw = input.price_floor_minor;
+  const floor = parsePositiveMinor(floorRaw);
+  if (floor === null) return null;
+
+  return { price_floor_minor: String(floorRaw).trim() };
+}
+
+function parseWorkerAvailability(input: unknown): WorkerAvailabilityV1 | null {
+  if (!isRecord(input)) return null;
+
+  const mode = parseWorkerAvailabilityMode(input.mode);
+  if (!mode) return null;
+
+  let paused = false;
+  if (input.paused !== undefined) {
+    if (typeof input.paused !== 'boolean') return null;
+    paused = input.paused;
+  }
+
+  return { mode, paused };
+}
+
 function getBearerToken(header: string | null): string | null {
   if (!header) return null;
   const trimmed = header.trim();
@@ -283,6 +496,27 @@ function requireAdmin(request: Request, env: Env, version: string): Response | n
   }
 
   return null;
+}
+
+async function requireWorker(request: Request, env: Env, version: string): Promise<{ worker: WorkerRecordV1 } | { error: Response }> {
+  const token = getBearerToken(request.headers.get('authorization'));
+  if (!token) {
+    return { error: errorResponse('UNAUTHORIZED', 'Missing worker token', 401, undefined, version) };
+  }
+
+  let worker: WorkerRecordV1 | null;
+  try {
+    worker = await getWorkerByAuthToken(env.BOUNTIES_DB, token);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return { error: errorResponse('DB_READ_FAILED', message, 500, undefined, version) };
+  }
+
+  if (!worker) {
+    return { error: errorResponse('UNAUTHORIZED', 'Invalid or expired worker token', 401, undefined, version) };
+  }
+
+  return { worker };
 }
 
 function requireRequesterDid(request: Request, version: string): { requester_did: string } | { error: Response } {
@@ -327,6 +561,27 @@ function resolveEscrowBaseUrl(env: Env): string {
   const v = env.ESCROW_BASE_URL?.trim();
   if (v && v.length > 0) return v;
   return 'https://clawescrow.com';
+}
+
+function resolveWorkerTokenTtlSeconds(env: Env): number {
+  const raw = env.WORKER_TOKEN_TTL_SECONDS?.trim();
+  if (!raw) return 24 * 60 * 60;
+
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 24 * 60 * 60;
+
+  const ttl = Math.floor(n);
+  // Refuse absurd values; keep the surface predictable.
+  if (ttl < 60) return 24 * 60 * 60;
+  if (ttl > 30 * 24 * 60 * 60) return 24 * 60 * 60;
+
+  return ttl;
+}
+
+function generateWorkerToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
 }
 
 async function cutsSimulateFees(
@@ -542,6 +797,18 @@ function base64UrlEncode(bytes: Uint8Array): string {
   for (const b of bytes) binary += String.fromCharCode(b);
   const base64 = btoa(binary);
   return base64.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function hexEncode(bytes: Uint8Array): string {
+  let out = '';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out;
+}
+
+async function sha256HexUtf8(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return hexEncode(new Uint8Array(digest));
 }
 
 async function sha256B64uUtf8(input: string): Promise<string> {
@@ -877,6 +1144,190 @@ async function listBounties(
   return parsed.filter((b) => wantedTags.some((t) => b.tags.includes(t)));
 }
 
+function parseWorkerRow(row: Record<string, unknown>): WorkerRecordV1 | null {
+  const worker_id = d1String(row.worker_id);
+  const worker_did = d1String(row.worker_did);
+  const status = parseWorkerStatus(d1String(row.status));
+  const worker_version = d1String(row.worker_version);
+
+  const listing_json = d1String(row.listing_json);
+  const capabilities_json = d1String(row.capabilities_json);
+  const offers_json = d1String(row.offers_json);
+  const price_floor_minor = d1String(row.price_floor_minor);
+  const availability_json = d1String(row.availability_json);
+
+  const auth_mode_raw = d1String(row.auth_mode);
+  const auth_mode: WorkerAuthMode | null = auth_mode_raw === 'token' ? 'token' : null;
+
+  const auth_token_hash_hex = d1String(row.auth_token_hash_hex);
+  const auth_token_prefix = d1String(row.auth_token_prefix);
+  const auth_token_created_at = d1String(row.auth_token_created_at);
+  const auth_token_expires_at = d1String(row.auth_token_expires_at);
+
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !worker_id ||
+    !worker_did ||
+    !status ||
+    !worker_version ||
+    !listing_json ||
+    !capabilities_json ||
+    !offers_json ||
+    !price_floor_minor ||
+    !availability_json ||
+    !auth_mode ||
+    !auth_token_hash_hex ||
+    !auth_token_prefix ||
+    !auth_token_created_at ||
+    !auth_token_expires_at ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  if (parsePositiveMinor(price_floor_minor) === null) return null;
+
+  const listingObj = parseJsonObject(listing_json);
+  const capabilitiesObj = parseJsonObject(capabilities_json);
+  const offersObj = parseJsonObject(offers_json);
+  const availabilityObj = parseJsonObject(availability_json);
+
+  if (!listingObj || !capabilitiesObj || !offersObj || !availabilityObj) return null;
+
+  const listing = parseWorkerListing(listingObj);
+  const capabilities = parseWorkerCapabilities(capabilitiesObj);
+  const offers = parseWorkerOffers(offersObj);
+  const availability = parseWorkerAvailability(availabilityObj);
+
+  if (!listing || !capabilities || !offers || !availability) return null;
+
+  return {
+    worker_id,
+    worker_did,
+    status,
+    worker_version,
+    listing,
+    capabilities,
+    offers,
+    pricing: { price_floor_minor: price_floor_minor.trim() },
+    availability,
+    auth_mode,
+    auth_token_hash_hex,
+    auth_token_prefix,
+    auth_token_created_at,
+    auth_token_expires_at,
+    created_at,
+    updated_at,
+  };
+}
+
+function workerToListItem(worker: WorkerRecordV1): WorkerListItemV1 {
+  return {
+    worker_id: worker.worker_id,
+    worker_did: worker.worker_did,
+    status: worker.status,
+    listing: worker.listing,
+    capabilities: worker.capabilities,
+    offers: worker.offers,
+    pricing: worker.pricing,
+  };
+}
+
+async function getWorkerByDid(db: D1Database, workerDid: string): Promise<WorkerRecordV1 | null> {
+  const row = await db.prepare('SELECT * FROM workers WHERE worker_did = ?').bind(workerDid).first();
+  if (!row || !isRecord(row)) return null;
+  return parseWorkerRow(row);
+}
+
+async function getWorkerByAuthToken(db: D1Database, token: string): Promise<WorkerRecordV1 | null> {
+  const hash = await sha256HexUtf8(token);
+  const row = await db.prepare('SELECT * FROM workers WHERE auth_token_hash_hex = ?').bind(hash).first();
+  if (!row || !isRecord(row)) return null;
+
+  const worker = parseWorkerRow(row);
+  if (!worker) return null;
+
+  const exp = Date.parse(worker.auth_token_expires_at);
+  if (!Number.isFinite(exp)) return null;
+  if (exp <= Date.now()) return null;
+
+  return worker;
+}
+
+async function upsertWorker(db: D1Database, record: WorkerRecordV1): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO workers (
+        worker_id,
+        worker_did,
+        status,
+        worker_version,
+        listing_json,
+        capabilities_json,
+        offers_json,
+        price_floor_minor,
+        availability_json,
+        auth_mode,
+        auth_token_hash_hex,
+        auth_token_prefix,
+        auth_token_created_at,
+        auth_token_expires_at,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(worker_did) DO UPDATE SET
+        status = excluded.status,
+        worker_version = excluded.worker_version,
+        listing_json = excluded.listing_json,
+        capabilities_json = excluded.capabilities_json,
+        offers_json = excluded.offers_json,
+        price_floor_minor = excluded.price_floor_minor,
+        availability_json = excluded.availability_json,
+        auth_mode = excluded.auth_mode,
+        auth_token_hash_hex = excluded.auth_token_hash_hex,
+        auth_token_prefix = excluded.auth_token_prefix,
+        auth_token_created_at = excluded.auth_token_created_at,
+        auth_token_expires_at = excluded.auth_token_expires_at,
+        updated_at = excluded.updated_at`
+    )
+    .bind(
+      record.worker_id,
+      record.worker_did,
+      record.status,
+      record.worker_version,
+      JSON.stringify(record.listing),
+      JSON.stringify(record.capabilities),
+      JSON.stringify(record.offers),
+      record.pricing.price_floor_minor,
+      JSON.stringify(record.availability),
+      record.auth_mode,
+      record.auth_token_hash_hex,
+      record.auth_token_prefix,
+      record.auth_token_created_at,
+      record.auth_token_expires_at,
+      record.created_at,
+      record.updated_at
+    )
+    .run();
+}
+
+async function listWorkers(db: D1Database, limit = 50): Promise<WorkerListItemV1[]> {
+  const results = await db.prepare('SELECT * FROM workers ORDER BY updated_at DESC LIMIT ?').bind(limit).all();
+
+  const out: WorkerListItemV1[] = [];
+  for (const raw of results.results ?? []) {
+    if (!isRecord(raw)) continue;
+    const worker = parseWorkerRow(raw);
+    if (!worker) continue;
+    out.push(workerToListItem(worker));
+  }
+
+  return out;
+}
+
 function landingPage(origin: string, env: Env): string {
   const environment = escapeHtml(env.ENVIRONMENT ?? 'unknown');
   const version = escapeHtml(env.BOUNTIES_VERSION ?? '0.1.0');
@@ -926,8 +1377,31 @@ function docsPage(origin: string): string {
         <li><code>GET /health</code> — health check</li>
       </ul>
 
-      <h2>Marketplace API (admin)</h2>
-      <p>All <code>/v1/*</code> endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>.</p>
+      <h2>Marketplace API</h2>
+
+      <h3>Worker API (public bootstrap + token auth)</h3>
+      <ul>
+        <li><code>POST /v1/workers/register</code> — register a worker and receive an auth token (MVP)</li>
+        <li><code>GET /v1/workers?job_type=code&amp;tag=typescript</code> — list workers</li>
+        <li><code>GET /v1/workers/self</code> — show your worker record (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
+      </ul>
+
+      <h3>POST /v1/workers/register</h3>
+      <pre>curl -sS \
+  -X POST "${o}/v1/workers/register" \
+  -H 'content-type: application/json' \
+  -d '{
+    "worker_did": "did:key:zWorker...",
+    "worker_version": "openclaw-worker/0.1.0",
+    "listing": {"name": "Example worker", "headline": "Fast TypeScript fixes + reliable tests", "tags": ["typescript", "openclaw"]},
+    "capabilities": {"job_types": ["code"], "languages": ["ts"], "max_minutes": 20},
+    "offers": {"skills": ["did-work"], "mcp": [{"name": "github", "description": "Read repos/issues/PRs via MCP"}]},
+    "pricing": {"price_floor_minor": "500"},
+    "availability": {"mode": "manual", "paused": false}
+  }'</pre>
+
+      <h3>Bounties API (admin)</h3>
+      <p>All bounty <code>/v1/bounties*</code> endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>.</p>
       <p><strong>Until CST auth is wired</strong>, posting a bounty requires an extra header:
         <code>x-requester-did: did:key:...</code>
       </p>
@@ -975,6 +1449,9 @@ function skillMarkdown(origin: string): string {
       { method: 'GET', path: '/docs' },
       { method: 'GET', path: '/skill.md' },
       { method: 'GET', path: '/health' },
+      { method: 'POST', path: '/v1/workers/register' },
+      { method: 'GET', path: '/v1/workers' },
+      { method: 'GET', path: '/v1/workers/self' },
     ],
   };
 
@@ -987,7 +1464,16 @@ metadata: '${JSON.stringify(metadata)}'
 
 Developer discovery + minimal marketplace API.
 
-- Docs: ${origin}/docs
+Public worker endpoints:
+- POST ${origin}/v1/workers/register
+- GET ${origin}/v1/workers?job_type=code&tag=typescript
+- GET ${origin}/v1/workers/self (requires Authorization: Bearer <token>)
+
+Admin bounty endpoints (require BOUNTIES_ADMIN_KEY):
+- POST ${origin}/v1/bounties
+- GET ${origin}/v1/bounties
+
+Docs: ${origin}/docs
 `;
 }
 
@@ -1012,6 +1498,177 @@ ${urlset}
 function securityTxt(origin: string): string {
   const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   return `Contact: mailto:security@clawbounties.com\nPreferred-Languages: en\nExpires: ${expires}\nCanonical: ${origin}/.well-known/security.txt\n`;
+}
+
+async function handleRegisterWorker(request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const worker_did_raw = bodyRaw.worker_did;
+  const worker_version_raw = bodyRaw.worker_version;
+  const listing_raw = bodyRaw.listing;
+  const capabilities_raw = bodyRaw.capabilities;
+  const offers_raw = bodyRaw.offers;
+  const pricing_raw = bodyRaw.pricing;
+  const availability_raw = bodyRaw.availability;
+
+  if (!isNonEmptyString(worker_did_raw)) {
+    return errorResponse('INVALID_REQUEST', 'worker_did is required', 400, undefined, version);
+  }
+
+  const worker_did = worker_did_raw.trim();
+  if (!worker_did.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(worker_version_raw)) {
+    return errorResponse('INVALID_REQUEST', 'worker_version is required', 400, undefined, version);
+  }
+  const worker_version = worker_version_raw.trim();
+  if (worker_version.length > 80) {
+    return errorResponse('INVALID_REQUEST', 'worker_version is too long', 400, undefined, version);
+  }
+
+  const listing = parseWorkerListing(listing_raw);
+  if (!listing) {
+    return errorResponse('INVALID_REQUEST', 'listing is invalid', 400, undefined, version);
+  }
+
+  const capabilities = parseWorkerCapabilities(capabilities_raw);
+  if (!capabilities) {
+    return errorResponse('INVALID_REQUEST', 'capabilities is invalid', 400, undefined, version);
+  }
+
+  const offers = parseWorkerOffers(offers_raw);
+  if (!offers) {
+    return errorResponse('INVALID_REQUEST', 'offers is invalid', 400, undefined, version);
+  }
+
+  const pricing = parseWorkerPricing(pricing_raw);
+  if (!pricing) {
+    return errorResponse('INVALID_REQUEST', 'pricing is invalid', 400, undefined, version);
+  }
+
+  const availability = parseWorkerAvailability(availability_raw);
+  if (!availability) {
+    return errorResponse('INVALID_REQUEST', 'availability is invalid', 400, undefined, version);
+  }
+
+  const now = new Date().toISOString();
+
+  let existing: WorkerRecordV1 | null;
+  try {
+    existing = await getWorkerByDid(env.BOUNTIES_DB, worker_did);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  const worker_id = existing?.worker_id ?? `wrk_${crypto.randomUUID()}`;
+  const created_at = existing?.created_at ?? now;
+
+  const authToken = generateWorkerToken();
+  const auth_token_hash_hex = await sha256HexUtf8(authToken);
+  const ttlSeconds = resolveWorkerTokenTtlSeconds(env);
+  const auth_token_expires_at = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+
+  const record: WorkerRecordV1 = {
+    worker_id,
+    worker_did,
+    status: availability.paused ? 'paused' : 'online',
+    worker_version,
+    listing,
+    capabilities,
+    offers,
+    pricing,
+    availability,
+    auth_mode: 'token',
+    auth_token_hash_hex,
+    auth_token_prefix: authToken.slice(0, 8),
+    auth_token_created_at: now,
+    auth_token_expires_at,
+    created_at,
+    updated_at: now,
+  };
+
+  try {
+    await upsertWorker(env.BOUNTIES_DB, record);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  const response: RegisterWorkerResponseV1 = {
+    worker_id,
+    auth: { mode: 'token', token: authToken },
+  };
+
+  return jsonResponse(response, existing ? 200 : 201, version);
+}
+
+async function handleListWorkers(url: URL, env: Env, version: string): Promise<Response> {
+  const jobTypeRaw = url.searchParams.get('job_type');
+  const job_type = jobTypeRaw?.trim().length ? jobTypeRaw.trim() : null;
+
+  const tags = url.searchParams
+    .getAll('tag')
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+
+  let limit = 50;
+  const limitRaw = url.searchParams.get('limit');
+  if (limitRaw !== null) {
+    const n = Number(limitRaw);
+    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 100) {
+      return errorResponse('INVALID_REQUEST', 'limit must be an integer between 1 and 100', 400, undefined, version);
+    }
+    limit = n;
+  }
+
+  let workers: WorkerListItemV1[];
+  try {
+    workers = await listWorkers(env.BOUNTIES_DB, limit);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (job_type) {
+    workers = workers.filter((w) => w.capabilities.job_types.includes(job_type));
+  }
+
+  if (tags.length > 0) {
+    workers = workers.filter((w) => tags.some((t) => w.listing.tags.includes(t)));
+  }
+
+  return jsonResponse({ workers }, 200, version);
+}
+
+async function handleGetWorkerSelf(request: Request, env: Env, version: string): Promise<Response> {
+  const auth = await requireWorker(request, env, version);
+  if ('error' in auth) return auth.error;
+
+  const w = auth.worker;
+  return jsonResponse(
+    {
+      worker_id: w.worker_id,
+      worker_did: w.worker_did,
+      status: w.status,
+      worker_version: w.worker_version,
+      listing: w.listing,
+      capabilities: w.capabilities,
+      offers: w.offers,
+      pricing: w.pricing,
+      availability: w.availability,
+      auth: { mode: w.auth_mode, expires_at: w.auth_token_expires_at },
+      created_at: w.created_at,
+      updated_at: w.updated_at,
+    },
+    200,
+    version
+  );
 }
 
 async function handlePostBounty(request: Request, env: Env, version: string): Promise<Response> {
@@ -1348,8 +2005,22 @@ export default {
       if (path === '/.well-known/security.txt') return textResponse(securityTxt(origin), 'text/plain; charset=utf-8', 200, version);
     }
 
-    // API (admin)
+    // API
     if (path.startsWith('/v1/')) {
+      // Worker API (public)
+      if (path === '/v1/workers/register' && method === 'POST') {
+        return handleRegisterWorker(request, env, version);
+      }
+
+      if (path === '/v1/workers' && method === 'GET') {
+        return handleListWorkers(url, env, version);
+      }
+
+      if (path === '/v1/workers/self' && method === 'GET') {
+        return handleGetWorkerSelf(request, env, version);
+      }
+
+      // Bounties API (admin)
       const adminError = requireAdmin(request, env, version);
       if (adminError) return adminError;
 

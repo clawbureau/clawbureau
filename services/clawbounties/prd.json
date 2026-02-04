@@ -248,6 +248,21 @@
       "priority": 17,
       "passes": true,
       "notes": "Upgraded clawbounties post/list API to schema v2 shapes (reward object, is_code_bounty + tags) and updated cuts integration to v2 params; persists D1 records and creates escrow holds." 
+    },
+    {
+      "id": "CBT-US-018",
+      "title": "Worker registry + token auth (MVP)",
+      "description": "As an OpenClaw worker, I want to register and receive an auth token so that I can safely participate in the marketplace loop.",
+      "acceptanceCriteria": [
+        "POST /v1/workers/register issues a short-lived bearer token (stored hashed)",
+        "GET /v1/workers lists workers (filters: job_type, tag)",
+        "GET /v1/workers/self validates the token and returns the worker record",
+        "D1 persistence + token rotation on re-register",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Implemented worker registry endpoints with D1 persistence and hashed auth tokens, plus listing and self endpoints for discovery and token validation."
     }
   ]
 }
