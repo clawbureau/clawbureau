@@ -1,0 +1,17 @@
+name = "clawescrow-lite"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-04"
+
+routes = [
+  { pattern = "usdc-testnet.clawescrow.com/*", zone_name = "clawescrow.com" }
+]
+
+[vars]
+LEDGER_URL = "https://usdc-testnet.clawledger.com"
+FEE_DID = "clearing:clawcuts"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "clawescrow-lite"
+database_id = "7adc5591-b61b-4e82-bcc7-b02ce5479294"

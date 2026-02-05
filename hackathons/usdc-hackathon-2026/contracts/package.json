@@ -1,0 +1,14 @@
+{
+  "name": "clawdeposit-intent-registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "node scripts/compile.mjs",
+    "deploy": "node scripts/compile.mjs && node scripts/deploy.mjs"
+  },
+  "dependencies": {
+    "ethers": "^6.11.1",
+    "solc": "^0.8.24"
+  }
+}
