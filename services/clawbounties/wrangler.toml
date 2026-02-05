@@ -15,10 +15,12 @@ database_id = "cfdc9fe2-cbed-4d13-9362-67363a8857df"
 
 [vars]
 ENVIRONMENT = "production"
-BOUNTIES_VERSION = "0.6.1"
+BOUNTIES_VERSION = "0.7.0"
 CUTS_BASE_URL = "https://clawcuts.com"
 ESCROW_BASE_URL = "https://clawescrow.com"
 VERIFY_BASE_URL = "https://clawverify.com"
+TEST_HARNESS_BASE_URL = "https://clawtrials.com"
+TEST_HARNESS_TIMEOUT_MS = "120000"
 
 [env.staging]
 name = "clawbounties-staging"
@@ -33,7 +35,9 @@ database_id = "6b04a8f1-75ba-414f-afd8-36067db109a1"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-BOUNTIES_VERSION = "0.6.1"
+BOUNTIES_VERSION = "0.7.0"
 CUTS_BASE_URL = "https://staging.clawcuts.com"
 ESCROW_BASE_URL = "https://staging.clawescrow.com"
 VERIFY_BASE_URL = "https://staging.clawverify.com"
+TEST_HARNESS_BASE_URL = "https://staging.clawtrials.com"
+TEST_HARNESS_TIMEOUT_MS = "120000"
