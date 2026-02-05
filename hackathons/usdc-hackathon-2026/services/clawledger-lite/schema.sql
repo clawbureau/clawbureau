@@ -23,5 +23,20 @@ CREATE TABLE IF NOT EXISTS events (
   from_bucket TEXT,
   to_bucket TEXT,
   metadata_json TEXT,
+  event_hash TEXT,
+  event_sig TEXT,
+  event_sig_alg TEXT,
+  event_sig_did TEXT,
+  event_sig_pubkey TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS anchors (
+  anchor_id TEXT PRIMARY KEY,
+  root_hash TEXT NOT NULL,
+  from_created_at TEXT NOT NULL,
+  to_created_at TEXT NOT NULL,
+  event_count INTEGER NOT NULL,
+  tx_hash TEXT,
   created_at TEXT NOT NULL
 );

@@ -10,6 +10,7 @@ Status: **shipped** on Base Sepolia with live endpoints, proof receipts, and a r
 - **Ledger:** https://usdc-testnet.clawledger.com
 - **Escrow:** https://usdc-testnet.clawescrow.com
 - **Registry contract:** 0x7c7c4E64DD0B81C3faAc8029a9d665F3f8F6256C
+- **Ledger anchor contract:** 0x5cE94B3d7f3330215acc9A746d84f216530E1988
 
 ## Milestones (completed)
 ### Day 1 — Chain viability + invariants ✅
@@ -34,6 +35,8 @@ Status: **shipped** on Base Sepolia with live endpoints, proof receipts, and a r
 - **Payout tx:** https://sepolia.basescan.org/tx/0xb08e81f347642d000205fe4e85f247c89a52b2d989c700dfb0b9060ee1173edf
 - **Ledger event:** 019a05f6-a723-4b53-b4eb-8be6a6d507dc
 - **Registry contract:** https://sepolia.basescan.org/address/0x7c7c4E64DD0B81C3faAc8029a9d665F3f8F6256C
+- **Ledger anchor contract:** https://sepolia.basescan.org/address/0x5cE94B3d7f3330215acc9A746d84f216530E1988
+- **Anchor tx:** https://sepolia.basescan.org/tx/0xf58ea7bd67e63a6641a7a5f4065eacbf84b41e78ca81c6ea318559af108c43fe
 
 Full reproduction steps: [../PROOF.md](../PROOF.md)
 

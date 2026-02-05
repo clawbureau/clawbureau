@@ -122,6 +122,49 @@
 }
 ```
 
+## Signed ledger receipt proof (ed25519)
+- Event id: **c69b44a6-9e97-4807-82f7-cff24fa3c11a**
+- Event hash (sha256): **818db3ccf671efec1944352bb6a1cd0768467d1c41ce64b8a9ee0eedccfb38b4**
+- Signature: **ccHgUGVmor9oT4xsY6847ogyE3ojh6/ZNhBDdzV1KRbkl4KvPLXF6ooM9PkcT1RsE6cpWyYo97aPzEmg/ZatBQ==**
+- Signature alg: **ed25519-sha256**
+- Signing DID: **did:key:z6Mko4NPMeoPKpt5sYUFuJLvT9URrdg8sWZDo4X7rKwunoL8**
+- Public key (hex): **7fdbfe47831119712f3b41082280af582a44d939b79121a2125d077d22a651d5**
+
+Receipt response example:
+```json
+{
+  "success": true,
+  "event": {
+    "event_id": "c69b44a6-9e97-4807-82f7-cff24fa3c11a",
+    "idempotency_key": "receipt-demo:001",
+    "type": "transfer",
+    "from_did": "clearing:clawsettle",
+    "to_did": "did:key:deposit-demo",
+    "amount_minor": "25",
+    "currency": "USD",
+    "from_bucket": "A",
+    "to_bucket": "A",
+    "metadata_json": "{\"note\":\"receipt demo\"}",
+    "created_at": "2026-02-05T02:58:47.489Z"
+  },
+  "receipt": {
+    "event_hash": "818db3ccf671efec1944352bb6a1cd0768467d1c41ce64b8a9ee0eedccfb38b4",
+    "event_sig": "ccHgUGVmor9oT4xsY6847ogyE3ojh6/ZNhBDdzV1KRbkl4KvPLXF6ooM9PkcT1RsE6cpWyYo97aPzEmg/ZatBQ==",
+    "event_sig_alg": "ed25519-sha256",
+    "event_sig_did": "did:key:z6Mko4NPMeoPKpt5sYUFuJLvT9URrdg8sWZDo4X7rKwunoL8",
+    "event_sig_pubkey": "7fdbfe47831119712f3b41082280af582a44d939b79121a2125d077d22a651d5"
+  }
+}
+```
+
+## Merkle root anchor proof (audit checkpoint)
+- Anchor contract: **0x5cE94B3d7f3330215acc9A746d84f216530E1988**
+- Deployment tx: https://sepolia.basescan.org/tx/0x55cefc0e8e039c5e188bb960e7b1dc2799232cad04183de10e97bafce456b4e6
+- Anchor tx: https://sepolia.basescan.org/tx/0xf58ea7bd67e63a6641a7a5f4065eacbf84b41e78ca81c6ea318559af108c43fe
+- Root hash: **b0aca75732bb03d7cbecc6154701caef60e56c1d4b359b86653af724aa773177**
+- Event count: **3**
+- Gas used: **27,074** (0x69c2)
+
 ## Optimality proof (minimal on-chain overhead)
 - The two receipts above are **plain USDC transfers** with gas used **62,159** and **45,059** (total **107,218**).
 - These values are the **baseline cost of settlement** — just the USDC transfer, no extra contract storage writes.
