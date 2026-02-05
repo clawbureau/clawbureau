@@ -1,18 +1,29 @@
 # API (Testnet Connector) — Minimal Spec
 
-> ⚠️ Testnet only. No mainnet. No real funds.
+> ⚠️ **Testnet only.** No mainnet. No real funds.
 
-**Current testnet:** Base Sepolia (chainId 84532)
-- USDC: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
-- Explorer: https://sepolia.basescan.org
+## Base URLs
+- **Settle (USDC connector):** https://usdc-testnet.clawsettle.com
+- **Ledger:** https://usdc-testnet.clawledger.com
+- **Escrow:** https://usdc-testnet.clawescrow.com
 
-## Common
-- All amounts are **integer strings** in **USD cents** (`amount_minor`).
-- Idempotency required for all money-affecting operations.
+## Conventions
+- `amount_minor` is an **integer string** in **USD cents**.
+- `idempotency_key` is required for all money‑affecting operations **in the JSON body**.
+- `currency` must be `"USD"`.
 
-### Headers
-- `Idempotency-Key: <string>`
-- `Content-Type: application/json`
+### Response shape
+Success:
+```json
+{ "success": true, "...": "..." }
+```
+Errors:
+```json
+{ "success": false, "error": "message", "details": "..." }
+```
+
+## Health
+- `GET /health` → `{ "status": "ok" }`
 
 ---
 
@@ -32,26 +43,41 @@ Moves balances between buckets. Idempotent.
   "currency": "USD",
   "from_bucket": "A",
   "to_bucket": "H",
-  "idempotency_key": "transfer:..."
+  "idempotency_key": "transfer:...",
+  "metadata": { "note": "optional" }
 }
 ```
 
 ---
 
-## Escrow (ledger-native)
+## Escrow (ledger‑native)
 
 ### POST /v1/escrows
 Creates an escrow hold (A → H). Fee snapshot stored at creation.
 
+```json
+{
+  "buyer_did": "did:key:...",
+  "amount_minor": "500",
+  "fee_minor": "25",
+  "currency": "USD",
+  "idempotency_key": "escrow:create:..."
+}
+```
+
 ### POST /v1/escrows/{id}/assign
-Assigns the worker for escrow release.
+Assigns a worker for escrow release.
+
+```json
+{ "worker_did": "did:key:..." }
+```
 
 ### POST /v1/escrows/{id}/release
 Releases from H → worker A and H → fee pool F using stored fee snapshot.
 
 ---
 
-## USDC Testnet Connector (clawsettle test mode)
+## USDC Testnet Connector (ClawSettle)
 
 ### POST /v1/usdc/deposit-intents
 Creates a deposit intent and returns a platform deposit address + claim secret.
@@ -105,6 +131,7 @@ Transfers USDC from platform testnet wallet to destination.
 **Response**
 ```json
 {
+  "success": true,
   "tx_hash": "0x...",
   "status": "submitted"
 }
@@ -115,4 +142,4 @@ Transfers USDC from platform testnet wallet to destination.
 ## Safety rules
 - Reject any chainId not in the allowed testnet list.
 - Never accept private keys. Only accept public addresses.
-- Fail-closed on any verification mismatch.
+- Fail‑closed on any verification mismatch.

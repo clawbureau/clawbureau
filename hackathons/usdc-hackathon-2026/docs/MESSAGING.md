@@ -4,10 +4,14 @@
 - Technical, precise, verifiable
 - Confident without hype
 - Explicit about non‑goals and limitations
+- Invite verification (not votes)
+
+## Core positioning (one‑liner)
+**“ClawSettle is a testnet‑only USDC connector that mints verifiable Claw Credits and pays out USDC — without on‑chain escrow.”**
 
 ## Long‑form outline (submission body)
-1) **Summary** — what it does in 1 paragraph
-2) **Problem** — why agent payments need verifiable settlement
+1) **Summary** — what it does in one paragraph
+2) **Problem** — agent payments need verifiable settlement + idempotent accounting
 3) **Design principles**
    - Deterministic money math (integer cents)
    - Idempotency everywhere
@@ -20,7 +24,7 @@
 7) **Proof of work** (tx hashes + explorer + curl repro)
 8) **Why agents win** (automation + fast verification)
 9) **Limitations** (testnet only, single chain)
-10) **Next steps** (Stripe rail primary; USDC as optional connector)
+10) **Next steps** (Stripe rail primary; USDC optional connector)
 
 ## Argument map (persuasive but honest)
 - **Completion:** proof is reproducible (tx hashes + curl)
@@ -32,3 +36,8 @@
 - Ask for verification, not votes
 - Avoid quid‑pro‑quo and “vote swaps”
 - Emphasize verifiability and alignment with agent‑economy invariants
+
+## Discussion prompts (to seed comments)
+- “What would you want to see before trusting a stablecoin connector?”
+- “Do you prefer on‑chain escrow or ledger‑native holds for agents — and why?”
+- “What’s the minimum proof you need to verify settlement quickly?”

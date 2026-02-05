@@ -1,98 +1,70 @@
 ---
 name: clawsettle-usdc-testnet
-description: Testnet USDC settlement connector that mints Claw Credits and pays out USDC via verifiable on-chain transfers (hackathon prototype).
-metadata: {"openclaw": {"emoji": "🦞", "homepage": "https://usdc-testnet.clawsettle.com"}}
+description: Testnet USDC settlement connector for OpenClaw agents. Create deposit intents, verify on-chain transfers, mint ledger credits, and request USDC payouts. Use for hackathon/testnet verification only.
 ---
 
-# ClawSettle — USDC Testnet Connector (Hackathon Prototype)
+# ClawSettle — USDC Testnet Connector
 
-**⚠️ Testnet only. No mainnet. No real funds.**
+**Testnet only. No mainnet. No real funds.**
 
-This skill lets an agent:
-1) Create a **deposit intent** (receive a deposit address + claim secret)
-2) Send USDC testnet to that address
-3) **Claim** the deposit by providing tx hash + secret
-4) Receive **Claw Credits** in the internal ledger
-5) Request **USDC testnet payout** to a destination address
+Use this skill to verify USDC transfers on Base Sepolia, mint ledger credits, and request USDC payouts — without on‑chain escrow.
 
-This is a **test-mode connector** for `clawsettle`. It does **not** replace Stripe rails in the MVP. It does **not** implement on-chain escrow.
-
----
-
-## Safety rules
-- Never share or request private keys.
-- Only accept testnet addresses.
-- Verify tx receipts and USDC Transfer logs.
-- Fail-closed on any mismatch.
-
----
-
-## Testnet configuration (current)
-- Chain: **Base Sepolia** (chainId 84532)
-- USDC: **0x036CbD53842c5426634e7929541eC2318f3dCF7e**
-- Explorer: https://sepolia.basescan.org
-
----
-
-## Endpoints
-
-Settle URL: `https://usdc-testnet.clawsettle.com`
-Ledger URL: `https://usdc-testnet.clawledger.com`
-
+## Quick start
 ```bash
 export SETTLE_URL="https://usdc-testnet.clawsettle.com"
 export LEDGER_URL="https://usdc-testnet.clawledger.com"
 ```
 
-### Create deposit intent
+## Workflow (sequential)
+1) **Create deposit intent** → get `deposit_address` + `claim_secret`.
+2) **Send USDC testnet** to `deposit_address`.
+3) **Claim deposit** with `intent_id` + `claim_secret` + `tx_hash`.
+4) **Check balances** to confirm mint.
+5) **Request payout** to a destination address.
+
+### 1) Create deposit intent
 ```bash
 curl -s -X POST "$SETTLE_URL/v1/usdc/deposit-intents" \
   -H "Content-Type: application/json" \
-  -d '{
-    "buyer_did": "did:key:...",
-    "amount_minor": "500",
-    "currency": "USD"
-  }'
+  -d '{"buyer_did":"did:key:...","amount_minor":"500","currency":"USD"}'
 ```
 
-### Claim deposit
+### 2) Claim deposit
 ```bash
 curl -s -X POST "$SETTLE_URL/v1/usdc/deposits/claim" \
   -H "Content-Type: application/json" \
-  -d '{
-    "intent_id": "...",
-    "claim_secret": "...",
-    "tx_hash": "0x..."
-  }'
+  -d '{"intent_id":"...","claim_secret":"...","tx_hash":"0x..."}'
 ```
 
-### Check balances
+### 3) Check balances
 ```bash
 curl -s "$LEDGER_URL/v1/balances?did=did:key:..."
 ```
 
-### Request payout
+### 4) Request payout
 ```bash
 curl -s -X POST "$SETTLE_URL/v1/usdc/payouts" \
   -H "Content-Type: application/json" \
-  -d '{
-    "worker_did": "did:key:...",
-    "amount_minor": "100",
-    "destination_address": "0x...",
-    "idempotency_key": "payout:demo:001"
-  }'
+  -d '{"worker_did":"did:key:...","amount_minor":"100","destination_address":"0x...","idempotency_key":"payout:demo:001"}'
 ```
 
----
+## Verification checklist
+- Verify the **USDC Transfer** log to the deposit address for the exact amount.
+- Confirm ledger mint matches `amount_minor`.
+- Verify payout Transfer to destination address.
 
-## Verification checklist (for other agents)
-1. Open explorer link for deposit tx and confirm USDC Transfer to the deposit address for exact amount.
-2. Call `/v1/balances?did=...` and confirm ledger mint matches.
-3. Request payout and verify Transfer event to destination address.
+## Safety rules
+- Never request or store private keys.
+- Reject mainnet chain IDs.
+- Fail‑closed on any verification mismatch.
+- Treat `claim_secret` as sensitive.
 
----
+## Resources
+- Repro scripts: `../scripts/curl/`
+- API spec: `../docs/API.md`
+- Proof bundle: `../PROOF.md`
 
-## Non-goals
+## Non‑goals
+- No on‑chain escrow
 - No mainnet support
-- No on-chain escrow
 - No CCTP unless explicitly added later

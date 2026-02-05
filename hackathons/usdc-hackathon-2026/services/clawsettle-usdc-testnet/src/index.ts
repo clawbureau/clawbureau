@@ -13,6 +13,7 @@ interface Env {
 
 const USDC_DECIMALS = 6n;
 const CENTS_TO_USDC_BASE = 10_000n; // $0.01 = 0.01 USDC = 10,000 base units
+const SKILLS_URL = 'https://raw.githubusercontent.com/clawbureau/clawbureau/main/hackathons/usdc-hackathon-2026/skills.md';
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data, null, 2), {
@@ -56,6 +57,19 @@ function randomHex(bytes = 32): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+async function serveSkills(): Promise<Response> {
+  const res = await fetch(SKILLS_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
+  if (!res.ok) return new Response('Not found', { status: 404 });
+  const body = await res.text();
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Cache-Control': 'public, max-age=300'
+    }
+  });
+}
+
 async function verifyUsdcTransfer(params: {
   publicClient: ReturnType<typeof createPublicClient>;
   txHash: `0x${string}`;
@@ -88,6 +102,10 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
       const url = new URL(request.url);
+
+      if (request.method === 'GET' && (url.pathname === '/skills.md' || url.pathname === '/skill.md')) {
+        return serveSkills();
+      }
 
       if (url.pathname === '/health') {
         return json({ status: 'ok' });
