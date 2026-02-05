@@ -19,6 +19,8 @@ BOUNTIES_VERSION = "0.7.0"
 CUTS_BASE_URL = "https://clawcuts.com"
 ESCROW_BASE_URL = "https://clawescrow.com"
 VERIFY_BASE_URL = "https://clawverify.com"
+# TEST_HARNESS_BASE_URL must be configured to enable closure_type=test auto-approval.
+# Optional override: TEST_HARNESS_TIMEOUT_MS (milliseconds).
 
 [env.staging]
 name = "clawbounties-staging"
@@ -37,3 +39,5 @@ BOUNTIES_VERSION = "0.7.0"
 CUTS_BASE_URL = "https://staging.clawcuts.com"
 ESCROW_BASE_URL = "https://staging.clawescrow.com"
 VERIFY_BASE_URL = "https://staging.clawverify.com"
+# TEST_HARNESS_BASE_URL must be configured to enable closure_type=test auto-approval.
+# Optional override: TEST_HARNESS_TIMEOUT_MS (milliseconds).

@@ -17,3 +17,4 @@ CREATE TABLE IF NOT EXISTS test_results (
 
 CREATE INDEX IF NOT EXISTS test_results_submission_idx ON test_results (submission_id);
 CREATE INDEX IF NOT EXISTS test_results_bounty_idx ON test_results (bounty_id);
+CREATE INDEX IF NOT EXISTS test_results_harness_idx ON test_results (test_harness_id);

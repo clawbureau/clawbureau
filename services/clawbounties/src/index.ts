@@ -1818,61 +1818,6 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
   };
 }
 
-function parseTestResultRow(row: Record<string, unknown>): TestResultRecord | null {
-  const test_result_id = d1String(row.test_result_id);
-  const submission_id = d1String(row.submission_id);
-  const bounty_id = d1String(row.bounty_id);
-  const test_harness_id = d1String(row.test_harness_id);
-  const passed_num = d1Number(row.passed);
-  const total_tests = d1Number(row.total_tests);
-  const passed_tests = d1Number(row.passed_tests);
-  const failed_tests = d1Number(row.failed_tests);
-  const execution_time_ms = d1Number(row.execution_time_ms);
-  const completed_at = d1String(row.completed_at);
-  const error = d1String(row.error);
-  const test_results_json = d1String(row.test_results_json);
-  const created_at = d1String(row.created_at);
-  const updated_at = d1String(row.updated_at);
-
-  if (
-    !test_result_id ||
-    !submission_id ||
-    !bounty_id ||
-    !test_harness_id ||
-    passed_num === null ||
-    total_tests === null ||
-    passed_tests === null ||
-    failed_tests === null ||
-    execution_time_ms === null ||
-    !completed_at ||
-    !test_results_json ||
-    !created_at ||
-    !updated_at
-  ) {
-    return null;
-  }
-
-  const test_results = parseJsonUnknownArray(test_results_json);
-  if (!test_results) return null;
-
-  return {
-    test_result_id: test_result_id.trim(),
-    submission_id: submission_id.trim(),
-    bounty_id: bounty_id.trim(),
-    test_harness_id: test_harness_id.trim(),
-    passed: passed_num === 1,
-    total_tests,
-    passed_tests,
-    failed_tests,
-    execution_time_ms,
-    completed_at: completed_at.trim(),
-    error: error ? error.trim() : null,
-    test_results,
-    created_at,
-    updated_at,
-  };
-}
-
 async function getBountyByIdempotencyKey(db: D1Database, key: string): Promise<BountyV2 | null> {
   const row = await db.prepare('SELECT * FROM bounties WHERE create_idempotency_key = ?').bind(key).first();
   if (!row || !isRecord(row)) return null;
@@ -2140,15 +2085,6 @@ async function insertTestResult(db: D1Database, record: TestResultRecord): Promi
     .run();
 }
 
-async function getTestResultBySubmissionId(db: D1Database, submissionId: string): Promise<TestResultRecord | null> {
-  const row = await db
-    .prepare('SELECT * FROM test_results WHERE submission_id = ? ORDER BY created_at DESC LIMIT 1')
-    .bind(submissionId)
-    .first();
-  if (!row || !isRecord(row)) return null;
-  return parseTestResultRow(row);
-}
-
 async function getSubmissionById(db: D1Database, submissionId: string): Promise<SubmissionRecord | null> {
   const row = await db.prepare('SELECT * FROM submissions WHERE submission_id = ?').bind(submissionId).first();
   if (!row || !isRecord(row)) return null;
@@ -2261,14 +2197,15 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
   const now = new Date().toISOString();
   const testResultId = `tst_${crypto.randomUUID()}`;
   const harnessError = isNonEmptyString(testResponse.error);
-  const passed = testResponse.passed && !harnessError;
+  const passed = Boolean(testResponse.passed);
+  const recordPassed = harnessError ? false : passed;
 
   const testRecord: TestResultRecord = {
     test_result_id: testResultId,
     submission_id: submission.submission_id,
     bounty_id: bounty.bounty_id,
     test_harness_id,
-    passed,
+    passed: recordPassed,
     total_tests: testResponse.total_tests,
     passed_tests: testResponse.passed_tests,
     failed_tests: testResponse.failed_tests,
@@ -2293,10 +2230,12 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
   }
 
   if (passed) {
+    const approveKey = `auto-approve:${submission.submission_id}`;
+
     try {
       await escrowRelease(env, {
         escrow_id: bounty.escrow_id,
-        idempotency_key: `auto-approve:${submission.submission_id}`,
+        idempotency_key: approveKey,
         approved_by: bounty.requester_did,
         verification: {
           submission_id: submission.submission_id,
@@ -2322,12 +2261,28 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     }
 
     try {
-      await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'approved', now, 'pending_review');
+      await updateBountyApproved(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        idempotency_key: approveKey,
+        approved_at: now,
+        now,
+      });
     } catch (err) {
       try {
         const updated = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
         if (!updated || updated.status !== 'approved') {
           throw err;
+        }
+
+        if (updated.approve_idempotency_key && updated.approve_idempotency_key !== approveKey) {
+          console.error(`Auto-approval idempotency key mismatch for bounty ${bounty.bounty_id}`);
+          return false;
+        }
+
+        if (updated.approved_submission_id && updated.approved_submission_id !== submission.submission_id) {
+          console.error(`Auto-approval submission mismatch for bounty ${bounty.bounty_id}`);
+          return false;
         }
       } catch (lookupErr) {
         const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
@@ -2354,17 +2309,55 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     return true;
   }
 
+  const rejectKey = `auto-test-failure:${submission.submission_id}`;
+
   try {
-    await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'rejected', now, 'pending_review');
+    await escrowDispute(env, {
+      escrow_id: bounty.escrow_id,
+      idempotency_key: rejectKey,
+      disputed_by: bounty.requester_did,
+      reason: 'Auto-rejected: test harness failed',
+    });
+  } catch (err) {
+    const parsed = parseEscrowFailedError(err);
+    if (parsed) {
+      const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
+      const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
+      console.error(`Escrow dispute failed for ${bounty.escrow_id}: ${code} ${message}`);
+    } else {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`Escrow dispute failed for ${bounty.escrow_id}: ${message}`);
+    }
+    return false;
+  }
+
+  try {
+    await updateBountyRejected(env.BOUNTIES_DB, {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      idempotency_key: rejectKey,
+      rejected_at: now,
+      now,
+    });
   } catch (err) {
     try {
       const updated = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
-      if (!updated || updated.status !== 'rejected') {
+      if (!updated || updated.status !== 'disputed') {
         throw err;
+      }
+
+      if (updated.reject_idempotency_key && updated.reject_idempotency_key !== rejectKey) {
+        console.error(`Auto-rejection idempotency key mismatch for bounty ${bounty.bounty_id}`);
+        return false;
+      }
+
+      if (updated.rejected_submission_id && updated.rejected_submission_id !== submission.submission_id) {
+        console.error(`Auto-rejection submission mismatch for bounty ${bounty.bounty_id}`);
+        return false;
       }
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
-      console.error(`Failed to mark bounty rejected: ${message}`);
+      console.error(`Failed to mark bounty disputed: ${message}`);
       return false;
     }
   }
