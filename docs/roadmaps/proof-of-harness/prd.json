@@ -1,0 +1,126 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/proof-of-harness-adapters",
+  "description": "Proof-of-harness adapters & specs — tie OpenClaw + external harnesses (Claude Code, Codex, Pi, Opencode, Factory Droid, scripts) into verifiable URM/event-chain/receipt proof bundles.",
+  "userStories": [
+    {
+      "id": "POH-US-001",
+      "title": "Proof-of-Harness Adapter Spec v1",
+      "description": "As a platform engineer, I want a canonical harness adapter spec so that different runtimes emit compatible proof bundles.",
+      "acceptanceCriteria": [
+        "Document URM + event-chain + receipt binding requirements",
+        "Define required harness metadata fields (id/version/config_hash/runtime)",
+        "Specify receipt binding headers (run_id/event_hash/idempotency)",
+        "Document event types + hashing rules",
+        "Spec includes examples for OpenClaw + CLI harnesses"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "New design doc that becomes the reference for all adapters."
+    },
+    {
+      "id": "POH-US-002",
+      "title": "Proof-of-Harness schemas",
+      "description": "As a verifier, I want versioned schemas for URM/event-chain/proof-bundle/attestation so that validation is deterministic.",
+      "acceptanceCriteria": [
+        "Add JSON schemas for URM, event_chain, proof_bundle, execution_attestation",
+        "Register schemas in clawverify allowlist",
+        "Update schema README / index",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Extends packages/schema/poh beyond commit_proof.v1.json."
+    },
+    {
+      "id": "POH-US-003",
+      "title": "Clawverify proof-bundle validation",
+      "description": "As a marketplace, I want clawverify to validate harness proofs fail-closed so that trust tiers are reliable.",
+      "acceptanceCriteria": [
+        "Validate proof_bundle payload against schema",
+        "Verify receipt envelopes with clawproxy DID",
+        "Verify event-chain hash linkage",
+        "Return trust tier based on validated components",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Aligns verify-proof-bundle with new schemas + receipt verification." 
+    },
+    {
+      "id": "POH-US-004",
+      "title": "Receipt binding + harness metadata",
+      "description": "As a verifier, I want receipts bound to runs/harness metadata so that LLM calls are traceable.",
+      "acceptanceCriteria": [
+        "Define and document standard binding headers",
+        "Attach run_id/event_hash/idempotency fields to receipts",
+        "Include harness metadata in receipt binding or proof bundle",
+        "Update clawproxy docs/skill.md",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Builds on existing X-Run-Id/X-Event-Hash support in clawproxy." 
+    },
+    {
+      "id": "POH-US-005",
+      "title": "OpenClaw clawproxy provider plugin",
+      "description": "As an OpenClaw user, I want model calls routed through clawproxy with run bindings so that receipts are automatic.",
+      "acceptanceCriteria": [
+        "Provider plugin routes all model calls via clawproxy",
+        "Inject binding headers (run_id/event_hash/idempotency)",
+        "Attach receipts into run log/artifacts",
+        "Configurable base URL + token",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Implements the reference harness adapter for OpenClaw." 
+    },
+    {
+      "id": "POH-US-006",
+      "title": "OpenClaw harness recorder",
+      "description": "As a worker, I want OpenClaw to emit URM + event chain + proof bundle so that submissions are verifiable.",
+      "acceptanceCriteria": [
+        "Capture tool + model events into hash-linked chain",
+        "Generate URM with harness config hash",
+        "Assemble proof bundle with receipts + event chain",
+        "Sign proof bundle with DID-work",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Recorder used by worker plugin + manual exports." 
+    },
+    {
+      "id": "POH-US-007",
+      "title": "External harness adapters",
+      "description": "As an operator, I want adapters for Claude Code/Codex/Pi/Opencode/Factory Droid so that external runs are verifiable.",
+      "acceptanceCriteria": [
+        "Provide wrapper scripts for each harness",
+        "Route LLM calls through clawproxy",
+        "Emit event chain + URM + proof bundle",
+        "Publish usage docs + examples",
+        "Typecheck passes"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Wrappers should be opt-in and non-invasive." 
+    },
+    {
+      "id": "POH-US-008",
+      "title": "clawproof SDK for API scripts",
+      "description": "As a developer, I want a small SDK to emit proof bundles from scripts so that API workloads are auditable.",
+      "acceptanceCriteria": [
+        "SDK records event chain + URM",
+        "SDK collects receipts via clawproxy",
+        "SDK outputs proof bundle + DID signature",
+        "Provide minimal Node.js example",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Enables integrations outside OpenClaw." 
+    }
+  ]
+}

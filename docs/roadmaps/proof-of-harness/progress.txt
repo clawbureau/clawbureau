@@ -1,0 +1,23 @@
+## Codebase Patterns
+- Roadmap workstreams can be tracked with a Ralph-style `prd.json` + `progress.txt` under `docs/roadmaps/<topic>/`.
+- Proof-of-harness (PoH) in this repo is modeled as: URM reference + hash-linked event chain + gateway receipts + optional attestations.
+- clawbounties should gate automation (auto-approval, lower stake) on PoH tiers, not on self-asserted harness metadata.
+- clawproxy already supports receipt binding headers: X-Run-Id, X-Event-Hash, X-Idempotency-Key.
+
+# Ralph Progress Log
+Started: 2026-02-05T21:49:28Z
+---
+
+## 2026-02-05T21:49:28Z - POH-US-001 (planning)
+- What was implemented
+  - Added a new roadmap PRD at `docs/roadmaps/proof-of-harness/prd.json`.
+  - Created `docs/roadmaps/proof-of-harness/progress.txt` for tracking.
+  - Drafted the Proof-of-Harness Adapter Spec v1 (see `ADAPTER_SPEC_v1.md`).
+- Files changed
+  - docs/roadmaps/proof-of-harness/prd.json
+  - docs/roadmaps/proof-of-harness/progress.txt
+  - docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md
+- **Learnings for future iterations:**
+  - Current `clawverify` ProofBundlePayload exists as TypeScript types but the corresponding JSON schema files are not yet in `packages/schema/poh/`.
+  - Current `clawproxy` receipt format is not yet the same as `clawverify`'s `SignedEnvelope<GatewayReceiptPayload>`; we need to reconcile formats before we can claim `gateway` tier end-to-end.
+---
