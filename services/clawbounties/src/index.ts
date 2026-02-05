@@ -1201,6 +1201,11 @@ async function escrowGetReleased(env: Env, escrow_id: string): Promise<EscrowRel
     throw new Error('ESCROW_INVALID_RESPONSE');
   }
 
+  const escrowId = typeof json.escrow_id === 'string' ? json.escrow_id : null;
+  if (!escrowId) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
   const ledgerRefs = json.ledger_refs as Record<string, unknown>;
   const workerTransfer = typeof ledgerRefs.worker_transfer === 'string' ? ledgerRefs.worker_transfer : null;
   const feeTransfers = Array.isArray(ledgerRefs.fee_transfers) ? ledgerRefs.fee_transfers : null;
@@ -1210,7 +1215,7 @@ async function escrowGetReleased(env: Env, escrow_id: string): Promise<EscrowRel
   }
 
   return {
-    escrow_id: json.escrow_id.trim(),
+    escrow_id: escrowId.trim(),
     status: 'released',
     ledger_refs: {
       worker_transfer: workerTransfer,
@@ -1225,10 +1230,16 @@ async function escrowGetDisputed(env: Env, escrow_id: string): Promise<EscrowDis
     throw new Error('ESCROW_INVALID_RESPONSE');
   }
 
+  const escrowId = typeof json.escrow_id === 'string' ? json.escrow_id : null;
+  const disputeWindow = typeof json.dispute_window_ends_at === 'string' ? json.dispute_window_ends_at : null;
+  if (!escrowId || !disputeWindow) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
   return {
-    escrow_id: json.escrow_id.trim(),
+    escrow_id: escrowId.trim(),
     status: 'frozen',
-    dispute_window_ends_at: json.dispute_window_ends_at.trim(),
+    dispute_window_ends_at: disputeWindow.trim(),
   };
 }
 
@@ -4576,12 +4587,20 @@ export default {
 
       const approveMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/approve$/);
       if (approveMatch && method === 'POST') {
-        return handleApproveBounty(approveMatch[1], request, env, version);
+        const bountyId = approveMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleApproveBounty(bountyId, request, env, version);
       }
 
       const rejectMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/reject$/);
       if (rejectMatch && method === 'POST') {
-        return handleRejectBounty(rejectMatch[1], request, env, version);
+        const bountyId = rejectMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleRejectBounty(bountyId, request, env, version);
       }
 
       const bountyMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)$/);
