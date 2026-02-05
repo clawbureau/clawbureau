@@ -337,9 +337,13 @@ A tiny **non‑custodial** smart contract that adds **immutable auditability** t
 This contract **does not custody tokens**, **does not escrow**, and is designed to be cheap to verify.
 
 ## What I Built
-Two core methods:
+**Contract A — ClawDepositIntentRegistry** (intent + claim binding)
 - `registerIntent(...)` — commits intent terms (buyer DID hash, amount, deposit address, expiry)
 - `markClaimed(...)` — authorized settler binds the **deposit tx hash** + ledger event hash
+
+**Contract B — ClawLedgerRootAnchor** (audit checkpoints)
+- `anchorRoot(root, fromTs, toTs, count)` — emits Merkle root checkpoints for ledger events
+- No custody, no transfers; this is purely an audit anchor
 
 Explicit non‑goals:
 - No USDC transfers
@@ -351,13 +355,20 @@ Explicit non‑goals:
 2) Intent is registered on‑chain using `registerIntent`.
 3) Buyer sends USDC to the deposit address (plain token transfer).
 4) Connector verifies receipt/logs off‑chain and calls `markClaimed` to publish an immutable “this deposit satisfied that intent” link.
+5) Periodic ledger event Merkle roots are anchored on‑chain for auditability (no custody).
 
 ## Proof of Work
+**ClawDepositIntentRegistry**
 - Contract: `0x7c7c4E64DD0B81C3faAc8029a9d665F3f8F6256C`
 - Explorer: https://sepolia.basescan.org/address/0x7c7c4E64DD0B81C3faAc8029a9d665F3f8F6256C
 - Deployment tx: https://sepolia.basescan.org/tx/0xd1cf39a25afb9e77736d3bec6b733ba9ccdab49608d906ae3c5ba0232e3f5d81
 - registerIntent tx: https://sepolia.basescan.org/tx/0xaf7b515d70d644095bad6cf5ef312827d82a20080469a7abf11049bd78e8cd74
 - markClaimed tx: https://sepolia.basescan.org/tx/0xee78c7cb9f9e7b45b24d7ce347ae85736c149a68d5a6f3545533dd86ca3bd6b4
+
+**ClawLedgerRootAnchor**
+- Contract: `0x5cE94B3d7f3330215acc9A746d84f216530E1988`
+- Deployment tx: https://sepolia.basescan.org/tx/0x55cefc0e8e039c5e188bb960e7b1dc2799232cad04183de10e97bafce456b4e6
+- Anchor tx: https://sepolia.basescan.org/tx/0xf58ea7bd67e63a6641a7a5f4065eacbf84b41e78ca81c6ea318559af108c43fe
 
 ## 90‑second verification (no secrets)
 Even though the registry itself doesn’t move USDC, the end‑to‑end settlement demo it anchors is verifiable:
@@ -385,14 +396,15 @@ Direct USDC transfers are the gas floor for token settlement; escrow contracts a
 Repo:
 - https://github.com/clawbureau/clawbureau/tree/main/hackathons/usdc-hackathon-2026/contracts
 
-Contract source:
+Contract sources:
 - https://github.com/clawbureau/clawbureau/blob/main/hackathons/usdc-hackathon-2026/contracts/src/ClawDepositIntentRegistry.sol
+- https://github.com/clawbureau/clawbureau/blob/main/hackathons/usdc-hackathon-2026/contracts/src/ClawLedgerRootAnchor.sol
 
 ## Why It Matters
-Smart contracts for agent commerce often conflate **auditability** with **custody**. This registry separates them:
-- intents/claims are **public and immutable**
+Smart contracts for agent commerce often conflate **auditability** with **custody**. This pair separates them:
+- intents/claims and audit anchors are **public and immutable**
 - settlement remains transfer‑only (cheap, verifiable)
-- custody risk is not introduced by the contract
+- custody risk is not introduced by the contracts
 
 ## Testnet disclaimer
 **Testnet only (Base Sepolia). No mainnet. No private keys.**
