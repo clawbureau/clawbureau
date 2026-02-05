@@ -294,6 +294,23 @@
       "priority": 20,
       "passes": true,
       "notes": "Added worker-authenticated bounty listing that only returns open bounties and filters direct-hire assignments to the requesting worker."
+    },
+    {
+      "id": "CBT-US-021",
+      "title": "Submit work (clawverify pipeline)",
+      "description": "As a worker, I want to submit my work with proof bundles so that it can be verified and reviewed.",
+      "acceptanceCriteria": [
+        "POST /v1/bounties/{bounty_id}/submit requires worker bearer token auth",
+        "Requires proof_bundle_envelope; commit_proof_envelope required for code bounties",
+        "Calls clawverify /v1/verify/bundle (fail-closed)",
+        "Calls clawverify /v1/verify/commit-proof for code bounties",
+        "Persists submissions with verification status + proof_tier",
+        "Moves accepted bounties to pending_review on valid submission",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Added worker-authenticated submission endpoint that verifies proof bundles (and commit proofs for code bounties), persists submission records, and advances accepted bounties to pending_review when valid."
     }
   ]
 }

@@ -21,6 +21,9 @@ export interface Env {
   /** Base URL for clawescrow (defaults to https://clawescrow.com). */
   ESCROW_BASE_URL?: string;
 
+  /** Base URL for clawverify (defaults to https://clawverify.com). */
+  VERIFY_BASE_URL?: string;
+
   /** Worker auth token TTL in seconds for /v1/workers/register (defaults to 86400). */
   WORKER_TOKEN_TTL_SECONDS?: string;
 
@@ -31,6 +34,8 @@ export interface Env {
 type ClosureType = 'test' | 'requester' | 'quorum';
 type BountyStatus = 'open' | 'accepted' | 'pending_review' | 'approved' | 'rejected' | 'disputed' | 'cancelled';
 type ProofTier = 'self' | 'gateway' | 'sandbox';
+type SubmissionStatus = 'pending_review' | 'invalid';
+type VerificationStatus = 'VALID' | 'INVALID';
 
 type FeePayer = 'buyer' | 'worker';
 
@@ -155,6 +160,90 @@ interface WorkerBountyListItemV2 {
   is_code_bounty: boolean;
   tags: string[];
   min_proof_tier: ProofTier;
+}
+
+interface VerifyBundleComponentResults {
+  envelope_valid: boolean;
+  receipts_valid?: boolean;
+  attestations_valid?: boolean;
+}
+
+interface VerifyBundleResult {
+  status: VerificationStatus;
+  reason: string;
+  verified_at: string;
+  trust_tier?: string;
+  component_results?: VerifyBundleComponentResults;
+}
+
+interface VerifyBundleResponse {
+  result: VerifyBundleResult;
+  trust_tier?: string;
+  error?: { code: string; message: string; field?: string };
+}
+
+interface VerifyCommitProofResult {
+  status: VerificationStatus;
+  reason: string;
+  verified_at: string;
+}
+
+interface VerifyCommitProofResponse {
+  result: VerifyCommitProofResult;
+  repository?: string;
+  commit_sha?: string;
+  repo_claim_id?: string;
+  error?: { code: string; message: string; field?: string };
+}
+
+interface SubmissionRecord {
+  submission_id: string;
+  bounty_id: string;
+  worker_did: string;
+  status: SubmissionStatus;
+  idempotency_key: string | null;
+
+  proof_bundle_envelope: Record<string, unknown>;
+  proof_bundle_hash_b64u: string | null;
+  proof_verify_status: 'valid' | 'invalid';
+  proof_verify_reason: string | null;
+  proof_verified_at: string | null;
+  proof_tier: ProofTier | null;
+
+  commit_proof_envelope: Record<string, unknown> | null;
+  commit_proof_hash_b64u: string | null;
+  commit_sha: string | null;
+  repo_url: string | null;
+  repo_claim_id: string | null;
+  commit_proof_verify_status: 'valid' | 'invalid' | null;
+  commit_proof_verify_reason: string | null;
+  commit_proof_verified_at: string | null;
+
+  artifacts: unknown[] | null;
+  agent_pack: Record<string, unknown> | null;
+  result_summary: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
+interface SubmitBountyResponseV1 {
+  submission_id: string;
+  bounty_id: string;
+  status: SubmissionStatus;
+  verification: {
+    proof_bundle: {
+      status: 'valid' | 'invalid';
+      reason?: string;
+      verified_at?: string;
+      tier?: ProofTier | null;
+    };
+    commit_proof?: {
+      status: 'valid' | 'invalid';
+      reason?: string;
+      verified_at?: string;
+    };
+  };
 }
 
 type WorkerStatus = 'online' | 'offline' | 'paused';
@@ -316,6 +405,23 @@ function parseProofTier(input: unknown): ProofTier | null {
   const v = input.trim();
   if (v === 'self' || v === 'gateway' || v === 'sandbox') return v;
   return null;
+}
+
+function parseSubmissionStatus(input: unknown): SubmissionStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'pending_review' || v === 'invalid') return v;
+  return null;
+}
+
+function parseJsonUnknownArray(text: string): unknown[] | null {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 function parseBountyStatus(input: unknown): BountyStatus | null {
@@ -599,6 +705,12 @@ function resolveEscrowBaseUrl(env: Env): string {
   return 'https://clawescrow.com';
 }
 
+function resolveVerifyBaseUrl(env: Env): string {
+  const v = env.VERIFY_BASE_URL?.trim();
+  if (v && v.length > 0) return v;
+  return 'https://clawverify.com';
+}
+
 function resolveWorkerTokenTtlSeconds(env: Env): number {
   const raw = env.WORKER_TOKEN_TTL_SECONDS?.trim();
   if (!raw) return 24 * 60 * 60;
@@ -814,6 +926,116 @@ async function escrowAssignWorker(
   }
 
   return { escrow_id: json.escrow_id.trim(), status: json.status.trim(), worker_did: json.worker_did.trim() };
+}
+
+async function verifyProofBundle(env: Env, envelope: unknown): Promise<VerifyBundleResponse> {
+  const url = `${resolveVerifyBaseUrl(env)}/v1/verify/bundle`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ envelope }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.result)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  const result = json.result as Record<string, unknown>;
+  if (!isNonEmptyString(result.status) || !isNonEmptyString(result.reason) || !isNonEmptyString(result.verified_at)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  return json as unknown as VerifyBundleResponse;
+}
+
+async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCommitProofResponse> {
+  const url = `${resolveVerifyBaseUrl(env)}/v1/verify/commit-proof`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ envelope }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.result)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  const result = json.result as Record<string, unknown>;
+  if (!isNonEmptyString(result.status) || !isNonEmptyString(result.reason) || !isNonEmptyString(result.verified_at)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  return json as unknown as VerifyCommitProofResponse;
+}
+
+function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
+  if (result.status !== 'VALID') return null;
+  if (result.component_results?.receipts_valid) return 'gateway';
+  if (result.component_results?.attestations_valid) return 'sandbox';
+  return 'self';
+}
+
+function proofTierRank(tier: ProofTier): number {
+  switch (tier) {
+    case 'self':
+      return 1;
+    case 'sandbox':
+      return 2;
+    case 'gateway':
+      return 3;
+  }
+}
+
+function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
+  const response: SubmitBountyResponseV1 = {
+    submission_id: record.submission_id,
+    bounty_id: record.bounty_id,
+    status: record.status,
+    verification: {
+      proof_bundle: {
+        status: record.proof_verify_status,
+        reason: record.proof_verify_reason ?? undefined,
+        verified_at: record.proof_verified_at ?? undefined,
+        tier: record.proof_tier ?? undefined,
+      },
+    },
+  };
+
+  if (record.commit_proof_verify_status) {
+    response.verification.commit_proof = {
+      status: record.commit_proof_verify_status,
+      reason: record.commit_proof_verify_reason ?? undefined,
+      verified_at: record.commit_proof_verified_at ?? undefined,
+    };
+  }
+
+  return response;
 }
 
 function parseNonNegativeMinor(input: unknown): bigint | null {
@@ -1082,6 +1304,98 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   };
 }
 
+function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | null {
+  const submission_id = d1String(row.submission_id);
+  const bounty_id = d1String(row.bounty_id);
+  const worker_did = d1String(row.worker_did);
+  const status = parseSubmissionStatus(d1String(row.status));
+  const idempotency_key = d1String(row.idempotency_key);
+
+  const proof_bundle_envelope_json = d1String(row.proof_bundle_envelope_json);
+  const proof_bundle_hash_b64u = d1String(row.proof_bundle_hash_b64u);
+  const proof_verify_status_raw = d1String(row.proof_verify_status);
+  const proof_verify_reason = d1String(row.proof_verify_reason);
+  const proof_verified_at = d1String(row.proof_verified_at);
+  const proof_tier = parseProofTier(d1String(row.proof_tier));
+
+  const commit_proof_envelope_json = d1String(row.commit_proof_envelope_json);
+  const commit_proof_hash_b64u = d1String(row.commit_proof_hash_b64u);
+  const commit_sha = d1String(row.commit_sha);
+  const repo_url = d1String(row.repo_url);
+  const repo_claim_id = d1String(row.repo_claim_id);
+  const commit_proof_verify_status_raw = d1String(row.commit_proof_verify_status);
+  const commit_proof_verify_reason = d1String(row.commit_proof_verify_reason);
+  const commit_proof_verified_at = d1String(row.commit_proof_verified_at);
+
+  const artifacts_json = d1String(row.artifacts_json);
+  const agent_pack_json = d1String(row.agent_pack_json);
+  const result_summary = d1String(row.result_summary);
+
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (!submission_id || !bounty_id || !worker_did || !status || !proof_bundle_envelope_json || !proof_verify_status_raw || !created_at || !updated_at) {
+    return null;
+  }
+
+  const proof_verify_status = proof_verify_status_raw === 'valid' ? 'valid' : proof_verify_status_raw === 'invalid' ? 'invalid' : null;
+  if (!proof_verify_status) return null;
+
+  const proof_bundle_envelope = parseJsonObject(proof_bundle_envelope_json);
+  if (!proof_bundle_envelope) return null;
+
+  let commit_proof_envelope: Record<string, unknown> | null = null;
+  if (commit_proof_envelope_json) {
+    commit_proof_envelope = parseJsonObject(commit_proof_envelope_json);
+    if (!commit_proof_envelope) return null;
+  }
+
+  let commit_proof_verify_status: 'valid' | 'invalid' | null = null;
+  if (commit_proof_verify_status_raw) {
+    commit_proof_verify_status = commit_proof_verify_status_raw === 'valid' ? 'valid' : commit_proof_verify_status_raw === 'invalid' ? 'invalid' : null;
+    if (!commit_proof_verify_status) return null;
+  }
+
+  let artifacts: unknown[] | null = null;
+  if (artifacts_json) {
+    artifacts = parseJsonUnknownArray(artifacts_json);
+    if (!artifacts) return null;
+  }
+
+  let agent_pack: Record<string, unknown> | null = null;
+  if (agent_pack_json) {
+    agent_pack = parseJsonObject(agent_pack_json);
+    if (!agent_pack) return null;
+  }
+
+  return {
+    submission_id,
+    bounty_id,
+    worker_did,
+    status,
+    idempotency_key: idempotency_key ? idempotency_key.trim() : null,
+    proof_bundle_envelope,
+    proof_bundle_hash_b64u: proof_bundle_hash_b64u ? proof_bundle_hash_b64u.trim() : null,
+    proof_verify_status,
+    proof_verify_reason: proof_verify_reason ? proof_verify_reason.trim() : null,
+    proof_verified_at: proof_verified_at ? proof_verified_at.trim() : null,
+    proof_tier: proof_tier ?? null,
+    commit_proof_envelope,
+    commit_proof_hash_b64u: commit_proof_hash_b64u ? commit_proof_hash_b64u.trim() : null,
+    commit_sha: commit_sha ? commit_sha.trim() : null,
+    repo_url: repo_url ? repo_url.trim() : null,
+    repo_claim_id: repo_claim_id ? repo_claim_id.trim() : null,
+    commit_proof_verify_status,
+    commit_proof_verify_reason: commit_proof_verify_reason ? commit_proof_verify_reason.trim() : null,
+    commit_proof_verified_at: commit_proof_verified_at ? commit_proof_verified_at.trim() : null,
+    artifacts,
+    agent_pack,
+    result_summary: result_summary ? result_summary.trim() : null,
+    created_at,
+    updated_at,
+  };
+}
+
 async function getBountyByIdempotencyKey(db: D1Database, key: string): Promise<BountyV2 | null> {
   const row = await db.prepare('SELECT * FROM bounties WHERE create_idempotency_key = ?').bind(key).first();
   if (!row || !isRecord(row)) return null;
@@ -1179,6 +1493,102 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
       record.updated_at
     )
     .run();
+}
+
+async function insertSubmission(db: D1Database, record: SubmissionRecord): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO submissions (
+        submission_id,
+        bounty_id,
+        worker_did,
+        status,
+        idempotency_key,
+        proof_bundle_envelope_json,
+        proof_bundle_hash_b64u,
+        proof_verify_status,
+        proof_verify_reason,
+        proof_verified_at,
+        proof_tier,
+        commit_proof_envelope_json,
+        commit_proof_hash_b64u,
+        commit_sha,
+        repo_url,
+        repo_claim_id,
+        commit_proof_verify_status,
+        commit_proof_verify_reason,
+        commit_proof_verified_at,
+        artifacts_json,
+        agent_pack_json,
+        result_summary,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      record.submission_id,
+      record.bounty_id,
+      record.worker_did,
+      record.status,
+      record.idempotency_key,
+      JSON.stringify(record.proof_bundle_envelope),
+      record.proof_bundle_hash_b64u,
+      record.proof_verify_status,
+      record.proof_verify_reason,
+      record.proof_verified_at,
+      record.proof_tier,
+      record.commit_proof_envelope ? JSON.stringify(record.commit_proof_envelope) : null,
+      record.commit_proof_hash_b64u,
+      record.commit_sha,
+      record.repo_url,
+      record.repo_claim_id,
+      record.commit_proof_verify_status,
+      record.commit_proof_verify_reason,
+      record.commit_proof_verified_at,
+      record.artifacts ? JSON.stringify(record.artifacts) : null,
+      record.agent_pack ? JSON.stringify(record.agent_pack) : null,
+      record.result_summary,
+      record.created_at,
+      record.updated_at
+    )
+    .run();
+}
+
+async function getSubmissionByIdempotencyKey(
+  db: D1Database,
+  key: string,
+  workerDid: string,
+  bountyId: string
+): Promise<{ record: SubmissionRecord } | { conflict: SubmissionRecord } | null> {
+  const row = await db.prepare('SELECT * FROM submissions WHERE idempotency_key = ?').bind(key).first();
+  if (!row || !isRecord(row)) return null;
+  const record = parseSubmissionRow(row);
+  if (!record) return null;
+  if (record.worker_did !== workerDid || record.bounty_id !== bountyId) {
+    return { conflict: record };
+  }
+  return { record };
+}
+
+async function updateBountyStatus(
+  db: D1Database,
+  bountyId: string,
+  status: BountyStatus,
+  now: string,
+  expectedCurrentStatus?: BountyStatus
+): Promise<void> {
+  let sql = 'UPDATE bounties SET status = ?, updated_at = ? WHERE bounty_id = ?';
+  const bindings: unknown[] = [status, now, bountyId];
+
+  if (expectedCurrentStatus) {
+    sql += ' AND status = ?';
+    bindings.push(expectedCurrentStatus);
+  }
+
+  const result = await db.prepare(sql).bind(...bindings).run();
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_STATUS_UPDATE_FAILED');
+  }
 }
 
 async function listBounties(
@@ -1600,6 +2010,7 @@ function docsPage(origin: string): string {
         <li><code>GET /v1/workers/self</code> — show your worker record (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list open bounties (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>POST /v1/bounties/{bounty_id}/accept</code> — accept a bounty (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
+        <li><code>POST /v1/bounties/{bounty_id}/submit</code> — submit work (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
       </ul>
 
       <h3>POST /v1/workers/register</h3>
@@ -1628,6 +2039,19 @@ function docsPage(origin: string): string {
   -d '{
     "idempotency_key": "bounty:bty_123:accept:did:key:zWorker",
     "worker_did": "did:key:zWorker..."
+  }'</pre>
+
+      <h3>POST /v1/bounties/{bounty_id}/submit</h3>
+      <pre>curl -sS \
+  -X POST "${o}/v1/bounties/bty_.../submit" \
+  -H "Authorization: Bearer &lt;WORKER_TOKEN&gt;" \
+  -H 'content-type: application/json' \
+  -d '{
+    "worker_did": "did:key:zWorker...",
+    "proof_bundle_envelope": {"...": "..."},
+    "commit_proof_envelope": {"...": "..."},
+    "artifacts": [],
+    "result_summary": "Short summary of the work"
   }'</pre>
 
       <h3>Bounties API (admin)</h3>
@@ -1684,6 +2108,7 @@ function skillMarkdown(origin: string): string {
       { method: 'GET', path: '/v1/workers/self' },
       { method: 'GET', path: '/v1/bounties' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/accept' },
+      { method: 'POST', path: '/v1/bounties/{bounty_id}/submit' },
     ],
   };
 
@@ -1702,6 +2127,7 @@ Public worker endpoints:
 - GET ${origin}/v1/workers/self (requires Authorization: Bearer <token>)
 - GET ${origin}/v1/bounties?status=open&is_code_bounty=true&tag=typescript (requires Authorization: Bearer <token>)
 - POST ${origin}/v1/bounties/{bounty_id}/accept (requires Authorization: Bearer <token>)
+- POST ${origin}/v1/bounties/{bounty_id}/submit (requires Authorization: Bearer <token>)
 
 Admin bounty endpoints (require BOUNTIES_ADMIN_KEY):
 - POST ${origin}/v1/bounties
@@ -2112,6 +2538,249 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
   return jsonResponse(response, 201, version);
 }
 
+async function handleSubmitBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const auth = await requireWorker(request, env, version);
+  if ('error' in auth) return auth.error;
+
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const worker_did_raw = bodyRaw.worker_did;
+  const idempotency_key_raw = bodyRaw.idempotency_key;
+  const proof_bundle_envelope_raw = bodyRaw.proof_bundle_envelope;
+  const commit_proof_envelope_raw = bodyRaw.commit_proof_envelope;
+  const artifacts_raw = bodyRaw.artifacts;
+  const agent_pack_raw = bodyRaw.agent_pack;
+  const result_summary_raw = bodyRaw.result_summary;
+
+  if (!isNonEmptyString(worker_did_raw) || !worker_did_raw.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
+  }
+
+  const worker_did = worker_did_raw.trim();
+  if (worker_did !== auth.worker.worker_did) {
+    return errorResponse('UNAUTHORIZED', 'worker_did must match authenticated worker', 401, undefined, version);
+  }
+
+  if (!isRecord(proof_bundle_envelope_raw)) {
+    return errorResponse('INVALID_REQUEST', 'proof_bundle_envelope is required', 400, undefined, version);
+  }
+
+  if (commit_proof_envelope_raw !== undefined && commit_proof_envelope_raw !== null && !isRecord(commit_proof_envelope_raw)) {
+    return errorResponse('INVALID_REQUEST', 'commit_proof_envelope must be an object', 400, undefined, version);
+  }
+
+  if (artifacts_raw !== undefined && artifacts_raw !== null && !Array.isArray(artifacts_raw)) {
+    return errorResponse('INVALID_REQUEST', 'artifacts must be an array', 400, undefined, version);
+  }
+
+  if (agent_pack_raw !== undefined && agent_pack_raw !== null && !isRecord(agent_pack_raw)) {
+    return errorResponse('INVALID_REQUEST', 'agent_pack must be an object', 400, undefined, version);
+  }
+
+  if (result_summary_raw !== undefined && result_summary_raw !== null && typeof result_summary_raw !== 'string') {
+    return errorResponse('INVALID_REQUEST', 'result_summary must be a string', 400, undefined, version);
+  }
+
+  let idempotency_key: string;
+  if (isNonEmptyString(idempotency_key_raw)) {
+    idempotency_key = idempotency_key_raw.trim();
+    if (idempotency_key.length > 200) {
+      return errorResponse('INVALID_REQUEST', 'idempotency_key is too long', 400, undefined, version);
+    }
+  } else {
+    const derived = await sha256B64uUtf8(
+      stableStringify({
+        schema: 'clawbounties.submit.v1',
+        bounty_id: bountyId,
+        worker_did,
+        proof_bundle_envelope: proof_bundle_envelope_raw,
+        commit_proof_envelope: commit_proof_envelope_raw ?? null,
+        artifacts: artifacts_raw ?? null,
+        agent_pack: agent_pack_raw ?? null,
+        result_summary: result_summary_raw ?? null,
+      })
+    );
+    idempotency_key = `submit:auto:${derived}`;
+  }
+
+  try {
+    const existing = await getSubmissionByIdempotencyKey(env.BOUNTIES_DB, idempotency_key, worker_did, bountyId);
+    if (existing) {
+      if ('conflict' in existing) {
+        return errorResponse(
+          'IDEMPOTENCY_CONFLICT',
+          'idempotency_key already used for a different submission',
+          409,
+          { submission_id: existing.conflict.submission_id },
+          version
+        );
+      }
+      const response = buildSubmitResponse(existing.record);
+      return jsonResponse(response, 200, version);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  let bounty: BountyV2 | null;
+  try {
+    bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
+  }
+
+  if (bounty.status !== 'accepted') {
+    return errorResponse('INVALID_STATUS', `Cannot submit bounty in status '${bounty.status}'`, 409, undefined, version);
+  }
+
+  if (!bounty.worker_did) {
+    return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
+  }
+
+  if (bounty.worker_did !== worker_did) {
+    return errorResponse('BOUNTY_ALREADY_ACCEPTED', 'Bounty already accepted by another worker', 409, { worker_did: bounty.worker_did }, version);
+  }
+
+  if (bounty.is_code_bounty && !commit_proof_envelope_raw) {
+    return errorResponse('INVALID_REQUEST', 'commit_proof_envelope is required for code bounties', 400, undefined, version);
+  }
+
+  const now = new Date().toISOString();
+
+  let proofBundleResponse: VerifyBundleResponse;
+  try {
+    proofBundleResponse = await verifyProofBundle(env, proof_bundle_envelope_raw);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('VERIFY_FAILED', message, 502, undefined, version);
+  }
+
+  let proofStatus: 'valid' | 'invalid' = proofBundleResponse.result.status === 'VALID' ? 'valid' : 'invalid';
+  let proofReason = proofBundleResponse.result.reason.trim();
+  const proofTier = deriveProofTier(proofBundleResponse.result);
+
+  const minProofTierOk = proofTier !== null && proofTierRank(proofTier) >= proofTierRank(bounty.min_proof_tier);
+  if (proofStatus === 'valid' && !minProofTierOk) {
+    proofStatus = 'invalid';
+    proofReason = `proof tier '${proofTier ?? 'unknown'}' does not meet min_proof_tier '${bounty.min_proof_tier}'`;
+  }
+
+  let commitProofResponse: VerifyCommitProofResponse | null = null;
+  let commitStatus: 'valid' | 'invalid' | null = null;
+  if (commit_proof_envelope_raw) {
+    try {
+      commitProofResponse = await verifyCommitProof(env, commit_proof_envelope_raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('VERIFY_FAILED', message, 502, undefined, version);
+    }
+
+    commitStatus = commitProofResponse.result.status === 'VALID' ? 'valid' : 'invalid';
+  }
+
+  const isValid = proofStatus === 'valid' && (commitStatus ?? 'valid') === 'valid';
+  const submissionStatus: SubmissionStatus = isValid ? 'pending_review' : 'invalid';
+
+  const proof_bundle_hash_b64u = isRecord(proof_bundle_envelope_raw) ? d1String(proof_bundle_envelope_raw.payload_hash_b64u) : null;
+  const commit_proof_hash_b64u = isRecord(commit_proof_envelope_raw) ? d1String(commit_proof_envelope_raw.payload_hash_b64u) : null;
+
+  let commit_sha: string | null = null;
+  let repo_url: string | null = null;
+  let repo_claim_id: string | null = null;
+
+  if (isRecord(commit_proof_envelope_raw) && isRecord(commit_proof_envelope_raw.payload)) {
+    const payload = commit_proof_envelope_raw.payload as Record<string, unknown>;
+    commit_sha = isNonEmptyString(payload.commit_sha) ? payload.commit_sha.trim() : null;
+    repo_url = isNonEmptyString(payload.repo_url) ? payload.repo_url.trim() : isNonEmptyString(payload.repository) ? payload.repository.trim() : null;
+    repo_claim_id = isNonEmptyString(payload.repo_claim_id) ? payload.repo_claim_id.trim() : null;
+  }
+
+  if (commitProofResponse) {
+    if (isNonEmptyString(commitProofResponse.commit_sha)) commit_sha = commitProofResponse.commit_sha.trim();
+    if (isNonEmptyString(commitProofResponse.repository)) repo_url = commitProofResponse.repository.trim();
+    if (isNonEmptyString(commitProofResponse.repo_claim_id)) repo_claim_id = commitProofResponse.repo_claim_id.trim();
+  }
+
+  const submission_id = `sub_${crypto.randomUUID()}`;
+
+  const record: SubmissionRecord = {
+    submission_id,
+    bounty_id: bounty.bounty_id,
+    worker_did,
+    status: submissionStatus,
+    idempotency_key,
+    proof_bundle_envelope: proof_bundle_envelope_raw,
+    proof_bundle_hash_b64u: proof_bundle_hash_b64u ? proof_bundle_hash_b64u.trim() : null,
+    proof_verify_status: proofStatus,
+    proof_verify_reason: proofReason,
+    proof_verified_at: proofBundleResponse.result.verified_at.trim(),
+    proof_tier: proofTier,
+    commit_proof_envelope: isRecord(commit_proof_envelope_raw) ? commit_proof_envelope_raw : null,
+    commit_proof_hash_b64u: commit_proof_hash_b64u ? commit_proof_hash_b64u.trim() : null,
+    commit_sha,
+    repo_url,
+    repo_claim_id,
+    commit_proof_verify_status: commitStatus,
+    commit_proof_verify_reason: commitProofResponse ? commitProofResponse.result.reason.trim() : null,
+    commit_proof_verified_at: commitProofResponse ? commitProofResponse.result.verified_at.trim() : null,
+    artifacts: Array.isArray(artifacts_raw) ? artifacts_raw : null,
+    agent_pack: isRecord(agent_pack_raw) ? agent_pack_raw : null,
+    result_summary: isNonEmptyString(result_summary_raw) ? result_summary_raw.trim() : null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  try {
+    await insertSubmission(env.BOUNTIES_DB, record);
+  } catch (err) {
+    try {
+      const existing = await getSubmissionByIdempotencyKey(env.BOUNTIES_DB, idempotency_key, worker_did, bounty.bounty_id);
+      if (existing) {
+        if ('conflict' in existing) {
+          return errorResponse(
+            'IDEMPOTENCY_CONFLICT',
+            'idempotency_key already used for a different submission',
+            409,
+            { submission_id: existing.conflict.submission_id },
+            version
+          );
+        }
+        const response = buildSubmitResponse(existing.record);
+        return jsonResponse(response, 200, version);
+      }
+    } catch (lookupErr) {
+      const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  if (isValid) {
+    try {
+      await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'pending_review', now, 'accepted');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(
+        `Failed to update bounty status to 'pending_review' for bounty ${bounty.bounty_id} after submission ${submission_id}: ${message}`
+      );
+    }
+  }
+
+  const response = buildSubmitResponse(record);
+  return jsonResponse(response, isValid ? 201 : 422, version);
+}
+
 async function handlePostBounty(request: Request, env: Env, version: string): Promise<Response> {
   const requesterHeader = requireRequesterDid(request, version);
   if ('error' in requesterHeader) return requesterHeader.error;
@@ -2513,6 +3182,15 @@ export default {
           return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
         }
         return handleAcceptBounty(bountyId, request, env, version);
+      }
+
+      const submitMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/submit$/);
+      if (submitMatch && method === 'POST') {
+        const bountyId = submitMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleSubmitBounty(bountyId, request, env, version);
       }
 
       if (path === '/v1/bounties' && method === 'GET') {
