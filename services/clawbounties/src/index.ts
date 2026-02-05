@@ -34,7 +34,7 @@ export interface Env {
 type ClosureType = 'test' | 'requester' | 'quorum';
 type BountyStatus = 'open' | 'accepted' | 'pending_review' | 'approved' | 'rejected' | 'disputed' | 'cancelled';
 type ProofTier = 'self' | 'gateway' | 'sandbox';
-type SubmissionStatus = 'pending_review' | 'invalid';
+type SubmissionStatus = 'pending_review' | 'invalid' | 'approved' | 'rejected';
 type VerificationStatus = 'VALID' | 'INVALID';
 
 type FeePayer = 'buyer' | 'worker';
@@ -114,6 +114,14 @@ interface BountyV2 {
   worker_did: string | null;
   accept_idempotency_key: string | null;
   accepted_at: string | null;
+
+  // requester decision (approve/reject)
+  approved_submission_id: string | null;
+  approve_idempotency_key: string | null;
+  approved_at: string | null;
+  rejected_submission_id: string | null;
+  reject_idempotency_key: string | null;
+  rejected_at: string | null;
 
   // recommended/common
   is_code_bounty: boolean;
@@ -244,6 +252,37 @@ interface SubmitBountyResponseV1 {
       verified_at?: string;
     };
   };
+}
+
+interface EscrowReleaseResponse {
+  escrow_id: string;
+  status: 'released';
+  ledger_refs: {
+    worker_transfer: string;
+    fee_transfers: string[];
+  };
+}
+
+interface EscrowDisputeResponse {
+  escrow_id: string;
+  status: 'frozen';
+  dispute_window_ends_at: string;
+}
+
+interface ApproveBountyResponseV1 {
+  bounty_id: string;
+  submission_id: string;
+  status: 'approved';
+  escrow: EscrowReleaseResponse;
+  decided_at: string;
+}
+
+interface RejectBountyResponseV1 {
+  bounty_id: string;
+  submission_id: string;
+  status: 'disputed';
+  escrow: EscrowDisputeResponse;
+  decided_at: string;
 }
 
 type WorkerStatus = 'online' | 'offline' | 'paused';
@@ -410,7 +449,7 @@ function parseProofTier(input: unknown): ProofTier | null {
 function parseSubmissionStatus(input: unknown): SubmissionStatus | null {
   if (!isNonEmptyString(input)) return null;
   const v = input.trim();
-  if (v === 'pending_review' || v === 'invalid') return v;
+  if (v === 'pending_review' || v === 'invalid' || v === 'approved' || v === 'rejected') return v;
   return null;
 }
 
@@ -928,6 +967,205 @@ async function escrowAssignWorker(
   return { escrow_id: json.escrow_id.trim(), status: json.status.trim(), worker_did: json.worker_did.trim() };
 }
 
+async function escrowRelease(
+  env: Env,
+  params: {
+    escrow_id: string;
+    idempotency_key: string;
+    approved_by: string;
+    verification?: Record<string, unknown> | null;
+  }
+): Promise<EscrowReleaseResponse> {
+  if (!env.ESCROW_SERVICE_KEY || env.ESCROW_SERVICE_KEY.trim().length === 0) {
+    throw new Error('ESCROW_SERVICE_KEY_NOT_CONFIGURED');
+  }
+
+  const url = `${resolveEscrowBaseUrl(env)}/v1/escrows/${params.escrow_id}/release`;
+  const body: Record<string, unknown> = {
+    idempotency_key: params.idempotency_key,
+    approved_by: params.approved_by,
+  };
+  if (params.verification !== undefined) {
+    body.verification = params.verification;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${env.ESCROW_SERVICE_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`ESCROW_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isNonEmptyString(json.escrow_id) || !isNonEmptyString(json.status)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  if (json.status !== 'released' || !isRecord(json.ledger_refs)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  const ledgerRefs = json.ledger_refs as Record<string, unknown>;
+  const workerTransfer = typeof ledgerRefs.worker_transfer === 'string' ? ledgerRefs.worker_transfer : null;
+  const feeTransfers = Array.isArray(ledgerRefs.fee_transfers) ? ledgerRefs.fee_transfers : null;
+
+  if (workerTransfer === null || !feeTransfers || !feeTransfers.every((item) => typeof item === 'string')) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  return {
+    escrow_id: json.escrow_id.trim(),
+    status: 'released',
+    ledger_refs: {
+      worker_transfer: workerTransfer,
+      fee_transfers: feeTransfers as string[],
+    },
+  };
+}
+
+async function escrowDispute(
+  env: Env,
+  params: {
+    escrow_id: string;
+    idempotency_key: string;
+    disputed_by: string;
+    reason?: string | null;
+  }
+): Promise<EscrowDisputeResponse> {
+  if (!env.ESCROW_SERVICE_KEY || env.ESCROW_SERVICE_KEY.trim().length === 0) {
+    throw new Error('ESCROW_SERVICE_KEY_NOT_CONFIGURED');
+  }
+
+  const url = `${resolveEscrowBaseUrl(env)}/v1/escrows/${params.escrow_id}/dispute`;
+  const body: Record<string, unknown> = {
+    idempotency_key: params.idempotency_key,
+    disputed_by: params.disputed_by,
+  };
+  if (params.reason) {
+    body.reason = params.reason;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${env.ESCROW_SERVICE_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`ESCROW_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isNonEmptyString(json.escrow_id) || !isNonEmptyString(json.status)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  if (json.status !== 'frozen' || !isNonEmptyString(json.dispute_window_ends_at)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  return {
+    escrow_id: json.escrow_id.trim(),
+    status: 'frozen',
+    dispute_window_ends_at: json.dispute_window_ends_at.trim(),
+  };
+}
+
+async function escrowGet(env: Env, escrow_id: string): Promise<Record<string, unknown>> {
+  if (!env.ESCROW_SERVICE_KEY || env.ESCROW_SERVICE_KEY.trim().length === 0) {
+    throw new Error('ESCROW_SERVICE_KEY_NOT_CONFIGURED');
+  }
+
+  const url = `${resolveEscrowBaseUrl(env)}/v1/escrows/${escrow_id}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${env.ESCROW_SERVICE_KEY}`,
+    },
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`ESCROW_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isNonEmptyString(json.escrow_id) || !isNonEmptyString(json.status)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  return json;
+}
+
+async function escrowGetReleased(env: Env, escrow_id: string): Promise<EscrowReleaseResponse> {
+  const json = await escrowGet(env, escrow_id);
+  if (json.status !== 'released' || !isRecord(json.ledger_refs)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  const ledgerRefs = json.ledger_refs as Record<string, unknown>;
+  const workerTransfer = typeof ledgerRefs.worker_transfer === 'string' ? ledgerRefs.worker_transfer : null;
+  const feeTransfers = Array.isArray(ledgerRefs.fee_transfers) ? ledgerRefs.fee_transfers : null;
+
+  if (workerTransfer === null || !feeTransfers || !feeTransfers.every((item) => typeof item === 'string')) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  return {
+    escrow_id: json.escrow_id.trim(),
+    status: 'released',
+    ledger_refs: {
+      worker_transfer: workerTransfer,
+      fee_transfers: feeTransfers as string[],
+    },
+  };
+}
+
+async function escrowGetDisputed(env: Env, escrow_id: string): Promise<EscrowDisputeResponse> {
+  const json = await escrowGet(env, escrow_id);
+  if (json.status !== 'frozen' || !isNonEmptyString(json.dispute_window_ends_at)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  return {
+    escrow_id: json.escrow_id.trim(),
+    status: 'frozen',
+    dispute_window_ends_at: json.dispute_window_ends_at.trim(),
+  };
+}
+
 async function verifyProofBundle(env: Env, envelope: unknown): Promise<VerifyBundleResponse> {
   const url = `${resolveVerifyBaseUrl(env)}/v1/verify/bundle`;
   const response = await fetch(url, {
@@ -1196,6 +1434,13 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const accept_idempotency_key = d1String(row.accept_idempotency_key);
   const accepted_at = d1String(row.accepted_at);
 
+  const approved_submission_id = d1String(row.approved_submission_id);
+  const approve_idempotency_key = d1String(row.approve_idempotency_key);
+  const approved_at = d1String(row.approved_at);
+  const rejected_submission_id = d1String(row.rejected_submission_id);
+  const reject_idempotency_key = d1String(row.reject_idempotency_key);
+  const rejected_at = d1String(row.rejected_at);
+
   const is_code_bounty_num = d1Number(row.is_code_bounty);
   const tags_json = d1String(row.tags_json);
   const min_proof_tier = parseProofTier(d1String(row.min_proof_tier));
@@ -1287,6 +1532,13 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     worker_did: worker_did && worker_did.trim().startsWith('did:') ? worker_did.trim() : null,
     accept_idempotency_key: accept_idempotency_key ? accept_idempotency_key.trim() : null,
     accepted_at: accepted_at ? accepted_at.trim() : null,
+
+    approved_submission_id: approved_submission_id ? approved_submission_id.trim() : null,
+    approve_idempotency_key: approve_idempotency_key ? approve_idempotency_key.trim() : null,
+    approved_at: approved_at ? approved_at.trim() : null,
+    rejected_submission_id: rejected_submission_id ? rejected_submission_id.trim() : null,
+    reject_idempotency_key: reject_idempotency_key ? reject_idempotency_key.trim() : null,
+    rejected_at: rejected_at ? rejected_at.trim() : null,
 
     is_code_bounty: Boolean(is_code_bounty_num),
     tags,
@@ -1440,6 +1692,76 @@ async function updateBountyAccepted(
     .run();
 }
 
+async function updateBountyApproved(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    submission_id: string;
+    idempotency_key: string;
+    approved_at: string;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+         SET status = 'approved',
+             approved_submission_id = COALESCE(approved_submission_id, ?),
+             approve_idempotency_key = COALESCE(approve_idempotency_key, ?),
+             approved_at = COALESCE(approved_at, ?),
+             updated_at = ?
+       WHERE bounty_id = ?
+         AND status = 'pending_review'`
+    )
+    .bind(
+      params.submission_id,
+      params.idempotency_key,
+      params.approved_at,
+      params.now,
+      params.bounty_id
+    )
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_DECISION_UPDATE_FAILED');
+  }
+}
+
+async function updateBountyRejected(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    submission_id: string;
+    idempotency_key: string;
+    rejected_at: string;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+         SET status = 'disputed',
+             rejected_submission_id = COALESCE(rejected_submission_id, ?),
+             reject_idempotency_key = COALESCE(reject_idempotency_key, ?),
+             rejected_at = COALESCE(rejected_at, ?),
+             updated_at = ?
+       WHERE bounty_id = ?
+         AND status = 'pending_review'`
+    )
+    .bind(
+      params.submission_id,
+      params.idempotency_key,
+      params.rejected_at,
+      params.now,
+      params.bounty_id
+    )
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_DECISION_UPDATE_FAILED');
+  }
+}
+
 async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
   await db
     .prepare(
@@ -1554,6 +1876,12 @@ async function insertSubmission(db: D1Database, record: SubmissionRecord): Promi
     .run();
 }
 
+async function getSubmissionById(db: D1Database, submissionId: string): Promise<SubmissionRecord | null> {
+  const row = await db.prepare('SELECT * FROM submissions WHERE submission_id = ?').bind(submissionId).first();
+  if (!row || !isRecord(row)) return null;
+  return parseSubmissionRow(row);
+}
+
 async function getSubmissionByIdempotencyKey(
   db: D1Database,
   key: string,
@@ -1588,6 +1916,27 @@ async function updateBountyStatus(
   const result = await db.prepare(sql).bind(...bindings).run();
   if (!result || !result.success || !result.meta || result.meta.changes === 0) {
     throw new Error('BOUNTY_STATUS_UPDATE_FAILED');
+  }
+}
+
+async function updateSubmissionStatus(
+  db: D1Database,
+  submissionId: string,
+  status: SubmissionStatus,
+  now: string,
+  expectedCurrentStatus?: SubmissionStatus
+): Promise<void> {
+  let sql = 'UPDATE submissions SET status = ?, updated_at = ? WHERE submission_id = ?';
+  const bindings: unknown[] = [status, now, submissionId];
+
+  if (expectedCurrentStatus) {
+    sql += ' AND status = ?';
+    bindings.push(expectedCurrentStatus);
+  }
+
+  const result = await db.prepare(sql).bind(...bindings).run();
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('SUBMISSION_STATUS_UPDATE_FAILED');
   }
 }
 
@@ -2056,7 +2405,7 @@ function docsPage(origin: string): string {
 
       <h3>Bounties API (admin)</h3>
       <p>Requester/admin bounty endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>. Admin auth also allows listing any status via <code>GET /v1/bounties</code>. Worker tokens may list open bounties and accept assignments.</p>
-      <p><strong>Until CST auth is wired</strong>, posting a bounty requires an extra header:
+      <p><strong>Until CST auth is wired</strong>, posting or approving/rejecting a bounty requires an extra header:
         <code>x-requester-did: did:key:...</code>
       </p>
 
@@ -2064,6 +2413,8 @@ function docsPage(origin: string): string {
         <li><code>POST /v1/bounties</code> — post a bounty (schema v2; calls clawcuts + clawescrow)</li>
         <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list bounties</li>
         <li><code>GET /v1/bounties/{bounty_id}</code> — fetch a bounty</li>
+        <li><code>POST /v1/bounties/{bounty_id}/approve</code> — approve requester-closure bounty (release escrow)</li>
+        <li><code>POST /v1/bounties/{bounty_id}/reject</code> — reject requester-closure bounty (dispute escrow)</li>
       </ul>
 
       <h3>POST /v1/bounties (v2)</h3>
@@ -2084,6 +2435,31 @@ function docsPage(origin: string): string {
     "tags": ["typescript", "testing"],
     "idempotency_key": "post:example:001",
     "metadata": {"requested_worker_did": "did:key:zWorker..."}
+  }'</pre>
+
+      <h3>POST /v1/bounties/{bounty_id}/approve</h3>
+      <pre>curl -sS \
+  -X POST "${o}/v1/bounties/bty_.../approve" \
+  -H "Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;" \
+  -H "x-requester-did: did:key:z..." \
+  -H 'content-type: application/json' \
+  -d '{
+    "idempotency_key": "bounty:bty_123:approve",
+    "requester_did": "did:key:zRequester",
+    "submission_id": "sub_123"
+  }'</pre>
+
+      <h3>POST /v1/bounties/{bounty_id}/reject</h3>
+      <pre>curl -sS \
+  -X POST "${o}/v1/bounties/bty_.../reject" \
+  -H "Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;" \
+  -H "x-requester-did: did:key:z..." \
+  -H 'content-type: application/json' \
+  -d '{
+    "idempotency_key": "bounty:bty_123:reject",
+    "requester_did": "did:key:zRequester",
+    "submission_id": "sub_123",
+    "reason": "Missing required deliverables"
   }'</pre>
 
       <p style="margin-top: 24px;">Quick start:</p>
@@ -2109,6 +2485,8 @@ function skillMarkdown(origin: string): string {
       { method: 'GET', path: '/v1/bounties' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/accept' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/submit' },
+      { method: 'POST', path: '/v1/bounties/{bounty_id}/approve' },
+      { method: 'POST', path: '/v1/bounties/{bounty_id}/reject' },
     ],
   };
 
@@ -2132,6 +2510,8 @@ Public worker endpoints:
 Admin bounty endpoints (require BOUNTIES_ADMIN_KEY):
 - POST ${origin}/v1/bounties
 - GET ${origin}/v1/bounties
+- POST ${origin}/v1/bounties/{bounty_id}/approve (requires x-requester-did)
+- POST ${origin}/v1/bounties/{bounty_id}/reject (requires x-requester-did)
 
 Docs: ${origin}/docs
 `;
@@ -2781,6 +3161,524 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   return jsonResponse(response, isValid ? 201 : 422, version);
 }
 
+async function handleApproveBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const requesterHeader = requireRequesterDid(request, version);
+  if ('error' in requesterHeader) return requesterHeader.error;
+
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const requester_did_raw = bodyRaw.requester_did;
+  const submission_id_raw = bodyRaw.submission_id;
+  const idempotency_key_raw = bodyRaw.idempotency_key;
+
+  if (!isNonEmptyString(requester_did_raw) || !requester_did_raw.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'requester_did must be a DID string', 400, undefined, version);
+  }
+
+  const requester_did = requester_did_raw.trim();
+  if (requester_did !== requesterHeader.requester_did) {
+    return errorResponse('UNAUTHORIZED', 'requester_did must match x-requester-did header', 401, undefined, version);
+  }
+
+  if (!isNonEmptyString(submission_id_raw)) {
+    return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(idempotency_key_raw)) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, undefined, version);
+  }
+
+  const submission_id = submission_id_raw.trim();
+  const idempotency_key = idempotency_key_raw.trim();
+
+  if (idempotency_key.length > 200) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is too long', 400, undefined, version);
+  }
+
+  let bounty: BountyV2 | null;
+  try {
+    bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
+  }
+
+  if (bounty.closure_type !== 'requester') {
+    return errorResponse('INVALID_STATUS', 'Bounty closure_type must be requester', 409, undefined, version);
+  }
+
+  if (bounty.requester_did !== requester_did) {
+    return errorResponse('UNAUTHORIZED', 'requester_did does not match bounty requester', 401, undefined, version);
+  }
+
+  if (!bounty.worker_did) {
+    return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
+  }
+
+  const alreadyApproved = bounty.status === 'approved';
+  if (alreadyApproved) {
+    if (bounty.approve_idempotency_key && bounty.approve_idempotency_key !== idempotency_key) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used for a different approval',
+        409,
+        { approve_idempotency_key: bounty.approve_idempotency_key },
+        version
+      );
+    }
+
+    if (bounty.approved_submission_id && bounty.approved_submission_id !== submission_id) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'submission_id does not match approved submission',
+        409,
+        { submission_id: bounty.approved_submission_id },
+        version
+      );
+    }
+
+    let escrowResponse: EscrowReleaseResponse;
+    try {
+      escrowResponse = await escrowGetReleased(env, bounty.escrow_id);
+    } catch (err) {
+      const parsed = parseEscrowFailedError(err);
+      if (parsed) {
+        const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
+        const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
+        return errorResponse(code, message, parsed.status, undefined, version);
+      }
+
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
+    }
+
+    const now = new Date().toISOString();
+    const resolvedSubmissionId = bounty.approved_submission_id ?? submission_id;
+
+    try {
+      await updateSubmissionStatus(env.BOUNTIES_DB, resolvedSubmissionId, 'approved', now, 'pending_review');
+    } catch (err) {
+      try {
+        const existing = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
+        if (!existing || existing.status !== 'approved') {
+          throw err;
+        }
+      } catch (lookupErr) {
+        const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+        return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+      }
+    }
+
+    const response: ApproveBountyResponseV1 = {
+      bounty_id: bounty.bounty_id,
+      submission_id: resolvedSubmissionId,
+      status: 'approved',
+      escrow: escrowResponse,
+      decided_at: bounty.approved_at ?? bounty.updated_at,
+    };
+
+    return jsonResponse(response, 200, version);
+  }
+
+  if (bounty.status !== 'pending_review') {
+    return errorResponse('INVALID_STATUS', `Cannot approve bounty in status '${bounty.status}'`, 409, undefined, version);
+  }
+
+  let submission: SubmissionRecord | null;
+  try {
+    submission = await getSubmissionById(env.BOUNTIES_DB, submission_id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!submission) {
+    return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id }, version);
+  }
+
+  if (submission.bounty_id !== bounty.bounty_id) {
+    return errorResponse('INVALID_REQUEST', 'submission_id does not belong to bounty', 400, undefined, version);
+  }
+
+  if (submission.worker_did !== bounty.worker_did) {
+    return errorResponse('INVALID_REQUEST', 'submission worker does not match bounty worker', 400, undefined, version);
+  }
+
+  if (submission.status !== 'pending_review') {
+    return errorResponse('INVALID_STATUS', `Submission status is '${submission.status}'`, 409, undefined, version);
+  }
+
+  if (submission.proof_verify_status !== 'valid') {
+    return errorResponse('SUBMISSION_INVALID', 'Submission proof bundle is invalid', 422, undefined, version);
+  }
+
+  if (submission.commit_proof_verify_status === 'invalid') {
+    return errorResponse('SUBMISSION_INVALID', 'Submission commit proof is invalid', 422, undefined, version);
+  }
+
+  if (bounty.is_code_bounty && submission.commit_proof_verify_status !== 'valid') {
+    return errorResponse('SUBMISSION_INVALID', 'Submission commit proof is required for code bounties', 422, undefined, version);
+  }
+
+  const verification: Record<string, unknown> = {
+    submission_id: submission.submission_id,
+    proof_bundle_hash_b64u: submission.proof_bundle_hash_b64u ?? undefined,
+    proof_tier: submission.proof_tier ?? undefined,
+    commit_sha: submission.commit_sha ?? undefined,
+    repo_url: submission.repo_url ?? undefined,
+    repo_claim_id: submission.repo_claim_id ?? undefined,
+  };
+
+  let escrowResponse: EscrowReleaseResponse;
+  try {
+    escrowResponse = await escrowRelease(env, {
+      escrow_id: bounty.escrow_id,
+      idempotency_key,
+      approved_by: requester_did,
+      verification,
+    });
+  } catch (err) {
+    const parsed = parseEscrowFailedError(err);
+    if (parsed) {
+      const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
+      const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
+      return errorResponse(code, message, parsed.status, undefined, version);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
+  }
+
+  const now = new Date().toISOString();
+  let decidedAt = now;
+
+  try {
+    await updateBountyApproved(env.BOUNTIES_DB, {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      idempotency_key,
+      approved_at: now,
+      now,
+    });
+  } catch (err) {
+    try {
+      const updated = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
+      if (!updated || updated.status !== 'approved') {
+        throw err;
+      }
+
+      if (updated.approve_idempotency_key && updated.approve_idempotency_key !== idempotency_key) {
+        return errorResponse(
+          'IDEMPOTENCY_CONFLICT',
+          'idempotency_key already used for a different approval',
+          409,
+          { approve_idempotency_key: updated.approve_idempotency_key },
+          version
+        );
+      }
+
+      if (updated.approved_submission_id && updated.approved_submission_id !== submission.submission_id) {
+        return errorResponse(
+          'IDEMPOTENCY_CONFLICT',
+          'submission_id does not match approved submission',
+          409,
+          { submission_id: updated.approved_submission_id },
+          version
+        );
+      }
+
+      decidedAt = updated.approved_at ?? updated.updated_at;
+    } catch (lookupErr) {
+      const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  try {
+    await updateSubmissionStatus(env.BOUNTIES_DB, submission.submission_id, 'approved', now, 'pending_review');
+  } catch (err) {
+    try {
+      const existing = await getSubmissionById(env.BOUNTIES_DB, submission.submission_id);
+      if (!existing || existing.status !== 'approved') {
+        throw err;
+      }
+    } catch (lookupErr) {
+      const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  const response: ApproveBountyResponseV1 = {
+    bounty_id: bounty.bounty_id,
+    submission_id: submission.submission_id,
+    status: 'approved',
+    escrow: escrowResponse,
+    decided_at: decidedAt,
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
+async function handleRejectBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const requesterHeader = requireRequesterDid(request, version);
+  if ('error' in requesterHeader) return requesterHeader.error;
+
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const requester_did_raw = bodyRaw.requester_did;
+  const submission_id_raw = bodyRaw.submission_id;
+  const idempotency_key_raw = bodyRaw.idempotency_key;
+  const reason_raw = bodyRaw.reason;
+
+  if (!isNonEmptyString(requester_did_raw) || !requester_did_raw.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'requester_did must be a DID string', 400, undefined, version);
+  }
+
+  const requester_did = requester_did_raw.trim();
+  if (requester_did !== requesterHeader.requester_did) {
+    return errorResponse('UNAUTHORIZED', 'requester_did must match x-requester-did header', 401, undefined, version);
+  }
+
+  if (!isNonEmptyString(submission_id_raw)) {
+    return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(idempotency_key_raw)) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, undefined, version);
+  }
+
+  if (reason_raw !== undefined && reason_raw !== null && typeof reason_raw !== 'string') {
+    return errorResponse('INVALID_REQUEST', 'reason must be a string', 400, undefined, version);
+  }
+
+  const submission_id = submission_id_raw.trim();
+  const idempotency_key = idempotency_key_raw.trim();
+  const reason = isNonEmptyString(reason_raw) ? reason_raw.trim() : null;
+
+  if (idempotency_key.length > 200) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is too long', 400, undefined, version);
+  }
+
+  let bounty: BountyV2 | null;
+  try {
+    bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
+  }
+
+  if (bounty.closure_type !== 'requester') {
+    return errorResponse('INVALID_STATUS', 'Bounty closure_type must be requester', 409, undefined, version);
+  }
+
+  if (bounty.requester_did !== requester_did) {
+    return errorResponse('UNAUTHORIZED', 'requester_did does not match bounty requester', 401, undefined, version);
+  }
+
+  if (!bounty.worker_did) {
+    return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
+  }
+
+  const alreadyDisputed = bounty.status === 'disputed';
+  if (alreadyDisputed) {
+    if (bounty.reject_idempotency_key && bounty.reject_idempotency_key !== idempotency_key) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used for a different rejection',
+        409,
+        { reject_idempotency_key: bounty.reject_idempotency_key },
+        version
+      );
+    }
+
+    if (bounty.rejected_submission_id && bounty.rejected_submission_id !== submission_id) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'submission_id does not match rejected submission',
+        409,
+        { submission_id: bounty.rejected_submission_id },
+        version
+      );
+    }
+
+    let escrowResponse: EscrowDisputeResponse;
+    try {
+      escrowResponse = await escrowGetDisputed(env, bounty.escrow_id);
+    } catch (err) {
+      const parsed = parseEscrowFailedError(err);
+      if (parsed) {
+        const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
+        const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
+        return errorResponse(code, message, parsed.status, undefined, version);
+      }
+
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
+    }
+
+    const now = new Date().toISOString();
+    const resolvedSubmissionId = bounty.rejected_submission_id ?? submission_id;
+
+    try {
+      await updateSubmissionStatus(env.BOUNTIES_DB, resolvedSubmissionId, 'rejected', now, 'pending_review');
+    } catch (err) {
+      try {
+        const existing = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
+        if (!existing || existing.status !== 'rejected') {
+          throw err;
+        }
+      } catch (lookupErr) {
+        const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+        return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+      }
+    }
+
+    const response: RejectBountyResponseV1 = {
+      bounty_id: bounty.bounty_id,
+      submission_id: resolvedSubmissionId,
+      status: 'disputed',
+      escrow: escrowResponse,
+      decided_at: bounty.rejected_at ?? bounty.updated_at,
+    };
+
+    return jsonResponse(response, 200, version);
+  }
+
+  if (bounty.status !== 'pending_review') {
+    return errorResponse('INVALID_STATUS', `Cannot reject bounty in status '${bounty.status}'`, 409, undefined, version);
+  }
+
+  let submission: SubmissionRecord | null;
+  try {
+    submission = await getSubmissionById(env.BOUNTIES_DB, submission_id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!submission) {
+    return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id }, version);
+  }
+
+  if (submission.bounty_id !== bounty.bounty_id) {
+    return errorResponse('INVALID_REQUEST', 'submission_id does not belong to bounty', 400, undefined, version);
+  }
+
+  if (submission.worker_did !== bounty.worker_did) {
+    return errorResponse('INVALID_REQUEST', 'submission worker does not match bounty worker', 400, undefined, version);
+  }
+
+  if (submission.status !== 'pending_review') {
+    return errorResponse('INVALID_STATUS', `Submission status is '${submission.status}'`, 409, undefined, version);
+  }
+
+  // Rejection is allowed even if proofs are invalid; the requester can dispute any submission.
+
+  const now = new Date().toISOString();
+
+  let escrowResponse: EscrowDisputeResponse;
+  try {
+    escrowResponse = await escrowDispute(env, {
+      escrow_id: bounty.escrow_id,
+      idempotency_key,
+      disputed_by: requester_did,
+      reason,
+    });
+  } catch (err) {
+    const parsed = parseEscrowFailedError(err);
+    if (parsed) {
+      const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
+      const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
+      return errorResponse(code, message, parsed.status, undefined, version);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
+  }
+
+  let decidedAt = now;
+
+  try {
+    await updateBountyRejected(env.BOUNTIES_DB, {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      idempotency_key,
+      rejected_at: now,
+      now,
+    });
+  } catch (err) {
+    try {
+      const updated = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
+      if (!updated || updated.status !== 'disputed') {
+        throw err;
+      }
+
+      if (updated.reject_idempotency_key && updated.reject_idempotency_key !== idempotency_key) {
+        return errorResponse(
+          'IDEMPOTENCY_CONFLICT',
+          'idempotency_key already used for a different rejection',
+          409,
+          { reject_idempotency_key: updated.reject_idempotency_key },
+          version
+        );
+      }
+
+      if (updated.rejected_submission_id && updated.rejected_submission_id !== submission.submission_id) {
+        return errorResponse(
+          'IDEMPOTENCY_CONFLICT',
+          'submission_id does not match rejected submission',
+          409,
+          { submission_id: updated.rejected_submission_id },
+          version
+        );
+      }
+
+      decidedAt = updated.rejected_at ?? updated.updated_at;
+    } catch (lookupErr) {
+      const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  try {
+    await updateSubmissionStatus(env.BOUNTIES_DB, submission.submission_id, 'rejected', now, 'pending_review');
+  } catch (err) {
+    try {
+      const existing = await getSubmissionById(env.BOUNTIES_DB, submission.submission_id);
+      if (!existing || existing.status !== 'rejected') {
+        throw err;
+      }
+    } catch (lookupErr) {
+      const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  const response: RejectBountyResponseV1 = {
+    bounty_id: bounty.bounty_id,
+    submission_id: submission.submission_id,
+    status: 'disputed',
+    escrow: escrowResponse,
+    decided_at: decidedAt,
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
 async function handlePostBounty(request: Request, env: Env, version: string): Promise<Response> {
   const requesterHeader = requireRequesterDid(request, version);
   if ('error' in requesterHeader) return requesterHeader.error;
@@ -3006,6 +3904,13 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     accept_idempotency_key: null,
     accepted_at: null,
 
+    approved_submission_id: null,
+    approve_idempotency_key: null,
+    approved_at: null,
+    rejected_submission_id: null,
+    reject_idempotency_key: null,
+    rejected_at: null,
+
     is_code_bounty,
     tags,
     min_proof_tier,
@@ -3206,6 +4111,16 @@ export default {
 
       if (path === '/v1/bounties' && method === 'POST') {
         return handlePostBounty(request, env, version);
+      }
+
+      const approveMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/approve$/);
+      if (approveMatch && method === 'POST') {
+        return handleApproveBounty(approveMatch[1], request, env, version);
+      }
+
+      const rejectMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/reject$/);
+      if (rejectMatch && method === 'POST') {
+        return handleRejectBounty(rejectMatch[1], request, env, version);
       }
 
       const bountyMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)$/);
