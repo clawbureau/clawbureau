@@ -35,3 +35,4 @@ CREATE TABLE IF NOT EXISTS submissions (
 CREATE INDEX IF NOT EXISTS submissions_bounty_idx ON submissions(bounty_id);
 CREATE INDEX IF NOT EXISTS submissions_worker_idx ON submissions(worker_did);
 CREATE INDEX IF NOT EXISTS submissions_idempotency_idx ON submissions(idempotency_key);
+CREATE UNIQUE INDEX IF NOT EXISTS submissions_idempotency_uniq ON submissions(idempotency_key) WHERE idempotency_key IS NOT NULL;

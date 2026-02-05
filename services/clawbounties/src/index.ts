@@ -944,6 +944,11 @@ async function verifyProofBundle(env: Env, envelope: unknown): Promise<VerifyBun
     json = null;
   }
 
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
   if (!isRecord(json) || !isRecord(json.result)) {
     throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
   }
@@ -972,6 +977,11 @@ async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCom
     json = null;
   }
 
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
   if (!isRecord(json) || !isRecord(json.result)) {
     throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
   }
@@ -987,7 +997,19 @@ async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCom
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
   if (result.status !== 'VALID') return null;
   if (result.component_results?.receipts_valid) return 'gateway';
+  if (result.component_results?.attestations_valid) return 'sandbox';
   return 'self';
+}
+
+function proofTierRank(tier: ProofTier): number {
+  switch (tier) {
+    case 'self':
+      return 1;
+    case 'sandbox':
+      return 2;
+    case 'gateway':
+      return 3;
+  }
 }
 
 function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
@@ -1532,17 +1554,41 @@ async function insertSubmission(db: D1Database, record: SubmissionRecord): Promi
     .run();
 }
 
-async function getSubmissionByIdempotencyKey(db: D1Database, key: string): Promise<SubmissionRecord | null> {
+async function getSubmissionByIdempotencyKey(
+  db: D1Database,
+  key: string,
+  workerDid: string,
+  bountyId: string
+): Promise<{ record: SubmissionRecord } | { conflict: SubmissionRecord } | null> {
   const row = await db.prepare('SELECT * FROM submissions WHERE idempotency_key = ?').bind(key).first();
   if (!row || !isRecord(row)) return null;
-  return parseSubmissionRow(row);
+  const record = parseSubmissionRow(row);
+  if (!record) return null;
+  if (record.worker_did !== workerDid || record.bounty_id !== bountyId) {
+    return { conflict: record };
+  }
+  return { record };
 }
 
-async function updateBountyStatus(db: D1Database, bountyId: string, status: BountyStatus, now: string): Promise<void> {
-  await db
-    .prepare('UPDATE bounties SET status = ?, updated_at = ? WHERE bounty_id = ?')
-    .bind(status, now, bountyId)
-    .run();
+async function updateBountyStatus(
+  db: D1Database,
+  bountyId: string,
+  status: BountyStatus,
+  now: string,
+  expectedCurrentStatus?: BountyStatus
+): Promise<void> {
+  let sql = 'UPDATE bounties SET status = ?, updated_at = ? WHERE bounty_id = ?';
+  const bindings: unknown[] = [status, now, bountyId];
+
+  if (expectedCurrentStatus) {
+    sql += ' AND status = ?';
+    bindings.push(expectedCurrentStatus);
+  }
+
+  const result = await db.prepare(sql).bind(...bindings).run();
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_STATUS_UPDATE_FAILED');
+  }
 }
 
 async function listBounties(
@@ -2563,9 +2609,18 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   }
 
   try {
-    const existing = await getSubmissionByIdempotencyKey(env.BOUNTIES_DB, idempotency_key);
+    const existing = await getSubmissionByIdempotencyKey(env.BOUNTIES_DB, idempotency_key, worker_did, bountyId);
     if (existing) {
-      const response = buildSubmitResponse(existing);
+      if ('conflict' in existing) {
+        return errorResponse(
+          'IDEMPOTENCY_CONFLICT',
+          'idempotency_key already used for a different submission',
+          409,
+          { submission_id: existing.conflict.submission_id },
+          version
+        );
+      }
+      const response = buildSubmitResponse(existing.record);
       return jsonResponse(response, 200, version);
     }
   } catch (err) {
@@ -2585,12 +2640,16 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
   }
 
-  if (bounty.worker_did && bounty.worker_did !== worker_did) {
-    return errorResponse('BOUNTY_ALREADY_ACCEPTED', 'Bounty already accepted by another worker', 409, { worker_did: bounty.worker_did }, version);
-  }
-
   if (bounty.status !== 'accepted') {
     return errorResponse('INVALID_STATUS', `Cannot submit bounty in status '${bounty.status}'`, 409, undefined, version);
+  }
+
+  if (!bounty.worker_did) {
+    return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
+  }
+
+  if (bounty.worker_did !== worker_did) {
+    return errorResponse('BOUNTY_ALREADY_ACCEPTED', 'Bounty already accepted by another worker', 409, { worker_did: bounty.worker_did }, version);
   }
 
   if (bounty.is_code_bounty && !commit_proof_envelope_raw) {
@@ -2607,8 +2666,15 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('VERIFY_FAILED', message, 502, undefined, version);
   }
 
-  const proofStatus: 'valid' | 'invalid' = proofBundleResponse.result.status === 'VALID' ? 'valid' : 'invalid';
+  let proofStatus: 'valid' | 'invalid' = proofBundleResponse.result.status === 'VALID' ? 'valid' : 'invalid';
+  let proofReason = proofBundleResponse.result.reason.trim();
   const proofTier = deriveProofTier(proofBundleResponse.result);
+
+  const minProofTierOk = proofTier !== null && proofTierRank(proofTier) >= proofTierRank(bounty.min_proof_tier);
+  if (proofStatus === 'valid' && !minProofTierOk) {
+    proofStatus = 'invalid';
+    proofReason = `proof tier '${proofTier ?? 'unknown'}' does not meet min_proof_tier '${bounty.min_proof_tier}'`;
+  }
 
   let commitProofResponse: VerifyCommitProofResponse | null = null;
   let commitStatus: 'valid' | 'invalid' | null = null;
@@ -2657,7 +2723,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     proof_bundle_envelope: proof_bundle_envelope_raw,
     proof_bundle_hash_b64u: proof_bundle_hash_b64u ? proof_bundle_hash_b64u.trim() : null,
     proof_verify_status: proofStatus,
-    proof_verify_reason: proofBundleResponse.result.reason.trim(),
+    proof_verify_reason: proofReason,
     proof_verified_at: proofBundleResponse.result.verified_at.trim(),
     proof_tier: proofTier,
     commit_proof_envelope: isRecord(commit_proof_envelope_raw) ? commit_proof_envelope_raw : null,
@@ -2678,16 +2744,38 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   try {
     await insertSubmission(env.BOUNTIES_DB, record);
   } catch (err) {
+    try {
+      const existing = await getSubmissionByIdempotencyKey(env.BOUNTIES_DB, idempotency_key, worker_did, bounty.bounty_id);
+      if (existing) {
+        if ('conflict' in existing) {
+          return errorResponse(
+            'IDEMPOTENCY_CONFLICT',
+            'idempotency_key already used for a different submission',
+            409,
+            { submission_id: existing.conflict.submission_id },
+            version
+          );
+        }
+        const response = buildSubmitResponse(existing.record);
+        return jsonResponse(response, 200, version);
+      }
+    } catch (lookupErr) {
+      const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
   if (isValid) {
     try {
-      await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'pending_review', now);
+      await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'pending_review', now, 'accepted');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+      console.error(
+        `Failed to update bounty status to 'pending_review' for bounty ${bounty.bounty_id} after submission ${submission_id}: ${message}`
+      );
     }
   }
 
