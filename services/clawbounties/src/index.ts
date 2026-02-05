@@ -2416,7 +2416,13 @@ async function handleListBountiesForWorker(request: Request, url: URL, env: Env,
   const statusRaw = url.searchParams.get('status') ?? 'open';
   const status = parseBountyStatus(statusRaw);
   if (!status) {
-    return errorResponse('INVALID_REQUEST', 'status must be open', 400, undefined, version);
+    return errorResponse(
+      'INVALID_REQUEST',
+      'status must be open|accepted|pending_review|approved|rejected|disputed|cancelled',
+      400,
+      undefined,
+      version
+    );
   }
 
   if (status !== 'open') {
