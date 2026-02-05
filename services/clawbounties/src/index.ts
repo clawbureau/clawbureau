@@ -2596,10 +2596,8 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
         schema: 'clawbounties.submit.v1',
         bounty_id: bountyId,
         worker_did,
-        proof_bundle_hash_b64u: isRecord(proof_bundle_envelope_raw)
-          ? d1String(proof_bundle_envelope_raw.payload_hash_b64u)
-          : null,
-        commit_payload: isRecord(commit_proof_envelope_raw) ? commit_proof_envelope_raw.payload ?? null : null,
+        proof_bundle_envelope: proof_bundle_envelope_raw,
+        commit_proof_envelope: commit_proof_envelope_raw ?? null,
         artifacts: artifacts_raw ?? null,
         agent_pack: agent_pack_raw ?? null,
         result_summary: result_summary_raw ?? null,
