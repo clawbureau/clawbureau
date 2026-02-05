@@ -14,6 +14,11 @@ ANCHOR_CONTRACT_ADDRESS = "0x5cE94B3d7f3330215acc9A746d84f216530E1988"
 ANCHOR_CHAIN_ID = "84532"
 ANCHOR_RPC_URL = "https://sepolia.base.org"
 
+# NOTE: Set these via `wrangler secret put` (do NOT commit private keys):
+# - LEDGER_SIGNING_PRIVATE_KEY
+# - ANCHOR_ADMIN_KEY
+# - ANCHOR_PRIVATE_KEY
+
 [[d1_databases]]
 binding = "DB"
 database_name = "clawledger-lite"

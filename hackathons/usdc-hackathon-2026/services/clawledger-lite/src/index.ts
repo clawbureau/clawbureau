@@ -1,7 +1,7 @@
 import * as ed from '@noble/ed25519';
 import { sha512 } from '@noble/hashes/sha512';
 import { concatBytes } from '@noble/hashes/utils';
-import { createWalletClient, http, getAddress } from 'viem';
+import { createWalletClient, createPublicClient, http, getAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 ed.etc.sha512Sync = (...m) => sha512(concatBytes(...m));
@@ -77,7 +77,9 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
+  // Avoid `String.fromCharCode(...bytes)` which can overflow the stack on large inputs.
+  // (ed25519 signatures are 64 bytes today, but keep this safe for future changes.)
+  return btoa(Array.from(bytes).map(b => String.fromCharCode(b)).join(''));
 }
 
 async function sha256Bytes(data: Uint8Array): Promise<Uint8Array> {
@@ -90,6 +92,9 @@ async function sha256Hex(data: Uint8Array): Promise<string> {
 }
 
 function canonicalEventPayload(event: Record<string, unknown>): string {
+  // NOTE: This relies on ES2015+ stable object property enumeration order for
+  // deterministic signing (all keys here are non-integer and are inserted in this literal order).
+  // If we ever need cross-language canonicalization, switch to a formal JSON canonicalization scheme.
   return JSON.stringify({
     event_id: event.event_id,
     idempotency_key: event.idempotency_key,
@@ -145,6 +150,7 @@ async function computeMerkleRootHex(hashes: string[]): Promise<string> {
     const next: Uint8Array[] = [];
     for (let i = 0; i < level.length; i += 2) {
       const left = level[i];
+      // If the level has an odd number of nodes, duplicate the last node (common Merkle convention).
       const right = level[i + 1] ?? level[i];
       const combined = new Uint8Array(left.length + right.length);
       combined.set(left, 0);
@@ -247,45 +253,62 @@ export default {
 
       const hashes: string[] = [];
 
-      for (const row of rows) {
-        if (!row.event_hash || !row.event_sig) {
-          const receipt = await signEvent(env, row);
-          await env.DB.prepare(
-            `UPDATE events SET event_hash = ?, event_sig = ?, event_sig_alg = ?, event_sig_did = ?, event_sig_pubkey = ? WHERE event_id = ?`
-          ).bind(
-            receipt.event_hash,
-            receipt.event_sig,
-            receipt.event_sig_alg,
-            receipt.event_sig_did,
-            receipt.event_sig_pubkey,
-            row.event_id
-          ).run();
-          row.event_hash = receipt.event_hash;
-          row.event_sig = receipt.event_sig;
-          row.event_sig_alg = receipt.event_sig_alg;
-          row.event_sig_did = receipt.event_sig_did;
-          row.event_sig_pubkey = receipt.event_sig_pubkey;
+      // Sign any unsigned events before anchoring.
+      // Use a DB transaction so we don't end up with a partially-signed range if the request fails mid-way.
+      await env.DB.exec('BEGIN');
+      try {
+        for (const row of rows) {
+          if (!row.event_hash || !row.event_sig) {
+            const receipt = await signEvent(env, row);
+            await env.DB.prepare(
+              `UPDATE events SET event_hash = ?, event_sig = ?, event_sig_alg = ?, event_sig_did = ?, event_sig_pubkey = ? WHERE event_id = ?`
+            ).bind(
+              receipt.event_hash,
+              receipt.event_sig,
+              receipt.event_sig_alg,
+              receipt.event_sig_did,
+              receipt.event_sig_pubkey,
+              row.event_id
+            ).run();
+            row.event_hash = receipt.event_hash;
+            row.event_sig = receipt.event_sig;
+            row.event_sig_alg = receipt.event_sig_alg;
+            row.event_sig_did = receipt.event_sig_did;
+            row.event_sig_pubkey = receipt.event_sig_pubkey;
+          }
+          hashes.push(row.event_hash);
         }
-        hashes.push(row.event_hash);
+        await env.DB.exec('COMMIT');
+      } catch (err) {
+        await env.DB.exec('ROLLBACK');
+        throw err;
       }
 
       const rootHex = await computeMerkleRootHex(hashes);
       const fromCreatedAt = rows[0].created_at;
       const toCreatedAt = rows[rows.length - 1].created_at;
 
-      const privateKey = assertEnv(env, 'ANCHOR_PRIVATE_KEY') as `0x${string}`;
+      const rawPrivateKey = assertEnv(env, 'ANCHOR_PRIVATE_KEY');
+      const privateKey = (rawPrivateKey.startsWith('0x') ? rawPrivateKey : `0x${rawPrivateKey}`) as `0x${string}`;
       const account = privateKeyToAccount(privateKey);
       const chainId = Number(assertEnv(env, 'ANCHOR_CHAIN_ID'));
       const rpcUrl = assertEnv(env, 'ANCHOR_RPC_URL');
 
+      const chain = {
+        id: chainId,
+        name: 'Base Sepolia',
+        nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } }
+      } as const;
+
       const walletClient = createWalletClient({
         account,
-        chain: {
-          id: chainId,
-          name: 'Base Sepolia',
-          nativeCurrency: { name: 'Sepolia ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: { default: { http: [rpcUrl] } }
-        },
+        chain,
+        transport: http(rpcUrl)
+      });
+
+      const publicClient = createPublicClient({
+        chain,
         transport: http(rpcUrl)
       });
 
@@ -300,6 +323,9 @@ export default {
           rows.length
         ]
       });
+
+      // Ensure the tx succeeded before persisting the anchor record.
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
 
       const anchorId = crypto.randomUUID();
       await env.DB.prepare(

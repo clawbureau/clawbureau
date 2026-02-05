@@ -36,7 +36,7 @@ if (output.errors) {
 
 fs.mkdirSync(outDir, { recursive: true });
 
-for (const [fileName, contracts] of Object.entries(output.contracts)) {
+for (const contracts of Object.values(output.contracts)) {
   for (const [contractName, contract] of Object.entries(contracts)) {
     const binPath = path.join(outDir, `${contractName}.bin`);
     const abiPath = path.join(outDir, `${contractName}.abi.json`);
