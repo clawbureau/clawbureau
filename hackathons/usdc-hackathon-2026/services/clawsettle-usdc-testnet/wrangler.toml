@@ -4,7 +4,9 @@ main = "src/index.ts"
 compatibility_date = "2026-02-04"
 
 routes = [
-  { pattern = "usdc-testnet.clawsettle.com/*", zone_name = "clawsettle.com" }
+  { pattern = "usdc-testnet.clawsettle.com/*", zone_name = "clawsettle.com" },
+  { pattern = "clawsettle.com/skills.md", zone_name = "clawsettle.com" },
+  { pattern = "clawsettle.com/skill.md", zone_name = "clawsettle.com" }
 ]
 
 [vars]
