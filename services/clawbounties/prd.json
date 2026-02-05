@@ -279,6 +279,21 @@
       "priority": 19,
       "passes": true,
       "notes": "Added worker-authenticated bounty accept endpoint that assigns the escrow worker, records acceptance in D1, and returns an acceptance receipt."
+    },
+    {
+      "id": "CBT-US-020",
+      "title": "Worker bounty list (polling)",
+      "description": "As a worker, I want to list open bounties so that I can find work to accept.",
+      "acceptanceCriteria": [
+        "GET /v1/bounties?status=open requires worker bearer token auth",
+        "Filters by is_code_bounty and tag query params",
+        "Direct-hire bounties only appear for the requested worker",
+        "Response omits requester/admin-only fields",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Added worker-authenticated bounty listing that only returns open bounties and filters direct-hire assignments to the requesting worker."
     }
   ]
 }
