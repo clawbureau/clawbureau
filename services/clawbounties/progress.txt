@@ -360,3 +360,16 @@ Started: 2026-02-02T03:08:26.937005
 - Docs:
   - Updated `/docs` + `/skill.md` to include worker bounty listing.
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-04 - CBT-US-021
+- Added worker-authenticated submission endpoint:
+  - `POST /v1/bounties/{bounty_id}/submit` (requires `Authorization: Bearer <worker_token>`).
+  - Requires `proof_bundle_envelope`; `commit_proof_envelope` required for code bounties.
+  - Calls clawverify `/v1/verify/bundle` (fail-closed) and `/v1/verify/commit-proof` for code bounties.
+  - Persists submission records with verification status + proof_tier.
+  - Valid submissions move bounty status to `pending_review`.
+- Persistence:
+  - Added D1 migration `migrations/0005_bounty_submissions.sql`.
+- Docs:
+  - Updated `/docs` + `/skill.md` to include submit endpoint.
+- Typecheck: `npm run typecheck`.
