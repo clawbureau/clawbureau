@@ -21,3 +21,11 @@ package-lock.json
 
 # local scratch
 .tmp-main-required-pr-reviews.json
+
+# hackathon / analysis scratch
+hackathons/**/analysis/
+
+# wrangler local state
+.wrangler/
+.dev.vars
+wrangler-state/

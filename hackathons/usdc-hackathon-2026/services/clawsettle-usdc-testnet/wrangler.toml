@@ -1,0 +1,20 @@
+name = "clawsettle-usdc-testnet"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-04"
+
+routes = [
+  { pattern = "usdc-testnet.clawsettle.com/*", zone_name = "clawsettle.com" }
+]
+
+[vars]
+CHAIN_ID = "84532"
+USDC_TOKEN_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+DEPOSIT_ADDRESS = "0xe6Fb9eaE850a01B4FbFa186449793Bccf3cbDB10"
+RPC_URL = "https://sepolia.base.org"
+LEDGER_URL = "https://usdc-testnet.clawledger.com"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "clawsettle-usdc-testnet"
+database_id = "eb02055b-a93c-4e8e-afca-6b3d13d3a696"
