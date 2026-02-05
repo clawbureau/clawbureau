@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "compile": "node scripts/compile.mjs",
-    "deploy": "node scripts/compile.mjs && node scripts/deploy.mjs"
+    "deploy": "node scripts/compile.mjs && node scripts/deploy.mjs",
+    "deploy:anchor": "node scripts/compile.mjs && node scripts/deploy-anchor.mjs"
   },
   "dependencies": {
     "ethers": "^6.11.1",

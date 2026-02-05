@@ -2,14 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import solc from 'solc';
 
-const srcPath = path.resolve('src/ClawDepositIntentRegistry.sol');
-const source = fs.readFileSync(srcPath, 'utf8');
+const srcDir = path.resolve('src');
+const outDir = path.resolve('out');
+
+const sources = {};
+for (const file of fs.readdirSync(srcDir)) {
+  if (!file.endsWith('.sol')) continue;
+  const filePath = path.join(srcDir, file);
+  sources[file] = { content: fs.readFileSync(filePath, 'utf8') };
+}
 
 const input = {
   language: 'Solidity',
-  sources: {
-    'ClawDepositIntentRegistry.sol': { content: source }
-  },
+  sources,
   settings: {
     optimizer: { enabled: true, runs: 200 },
     outputSelection: {
@@ -29,11 +34,15 @@ if (output.errors) {
   }
 }
 
-const contract = output.contracts['ClawDepositIntentRegistry.sol']['ClawDepositIntentRegistry'];
-const outDir = path.resolve('out');
 fs.mkdirSync(outDir, { recursive: true });
 
-fs.writeFileSync(path.join(outDir, 'ClawDepositIntentRegistry.bin'), contract.evm.bytecode.object);
-fs.writeFileSync(path.join(outDir, 'ClawDepositIntentRegistry.abi.json'), JSON.stringify(contract.abi, null, 2));
+for (const [fileName, contracts] of Object.entries(output.contracts)) {
+  for (const [contractName, contract] of Object.entries(contracts)) {
+    const binPath = path.join(outDir, `${contractName}.bin`);
+    const abiPath = path.join(outDir, `${contractName}.abi.json`);
 
-console.log('Compiled:', path.join(outDir, 'ClawDepositIntentRegistry.bin'));
+    fs.writeFileSync(binPath, contract.evm.bytecode.object);
+    fs.writeFileSync(abiPath, JSON.stringify(contract.abi, null, 2));
+    console.log('Compiled:', binPath);
+  }
+}

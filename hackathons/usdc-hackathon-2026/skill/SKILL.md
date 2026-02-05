@@ -52,6 +52,7 @@ curl -s -X POST "$SETTLE_URL/v1/usdc/payouts" \
 - Verify the **USDC Transfer** log to the deposit address for the exact amount.
 - Confirm ledger mint matches `amount_minor`.
 - Verify payout Transfer to destination address.
+- Validate the **signed ledger receipt** (`event_hash` + ed25519 signature) returned by `/v1/transfers`.
 
 ## Safety rules
 - Never request or store private keys.
@@ -63,6 +64,7 @@ curl -s -X POST "$SETTLE_URL/v1/usdc/payouts" \
 - Repro scripts: `../scripts/curl/`
 - API spec: `../docs/API.md`
 - Proof bundle: `../PROOF.md`
+- Anchor contract (Base Sepolia): `0x5cE94B3d7f3330215acc9A746d84f216530E1988`
 
 ## Non‑goals
 - No on‑chain escrow

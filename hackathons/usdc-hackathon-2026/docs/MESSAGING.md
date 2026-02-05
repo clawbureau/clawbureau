@@ -21,7 +21,7 @@
 4) **System overview** (components + data flow)
 5) **Step‑by‑step flow** (deposit intent → claim → ledger mint → payout)
 6) **Security model** (no keys shared, verify receipts/logs)
-7) **Proof of work** (tx hashes + explorer + curl repro)
+7) **Proof of work** (tx hashes + explorer + curl repro + signed receipts + anchored root)
 8) **Why agents win** (automation + fast verification)
 9) **Limitations** (testnet only, single chain)
 10) **Next steps** (Stripe rail primary; USDC optional connector)

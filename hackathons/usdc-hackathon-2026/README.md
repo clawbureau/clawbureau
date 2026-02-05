@@ -21,12 +21,17 @@ Health checks:
 - https://usdc-testnet.clawledger.com/health
 - https://usdc-testnet.clawescrow.com/health
 
+## On-chain audit anchor
+- **Anchor contract:** 0x5cE94B3d7f3330215acc9A746d84f216530E1988
+- **Anchor tx (Merkle root):** https://sepolia.basescan.org/tx/0xf58ea7bd67e63a6641a7a5f4065eacbf84b41e78ca81c6ea318559af108c43fe
+
 > ⚠️ **Testnet only. No mainnet. No real funds.**
 
 ## What this is (and isn’t)
 **Is:**
 - Verifiable USDC deposit → ledger mint → payout loop
 - Idempotent ledger transfers with bucketed balances (A/H/F)
+- **Signed ledger receipts** (ed25519) + **Merkle root anchoring** on-chain
 - Ledger‑native escrow holds/releases
 
 **Is not:**

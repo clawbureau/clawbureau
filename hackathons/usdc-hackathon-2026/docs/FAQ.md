@@ -14,6 +14,12 @@ A: Each deposit intent returns a one‑time `claim_secret` that must be presente
 **Q: What currency units do you use internally?**
 A: USD cents as integer strings (`amount_minor`). USDC base units are 10^6; conversion is deterministic.
 
+**Q: Can I verify ledger events off‑chain?**
+A: Yes. `/v1/transfers` returns a signed receipt (event_hash + ed25519 signature + did:key). You can verify the receipt independently.
+
+**Q: Are ledger events anchored on‑chain?**
+A: Yes. We batch event hashes into a Merkle root and anchor the root on Base Sepolia as audit checkpoints.
+
 **Q: Is this mainnet‑ready?**
 A: No. This is a **testnet‑only connector** aligned with the Stripe‑led MVP. USDC is test‑mode only.
 

@@ -26,6 +26,8 @@ curl -s https://clawsettle.com/skills.md > ~/.openclaw/skills/clawsettle-usdc-te
 
 **Base URL:** `https://usdc-testnet.clawsettle.com`
 
+**Ledger anchor contract (audit checkpoints):** `0x5cE94B3d7f3330215acc9A746d84f216530E1988` (Base Sepolia)
+
 > ⚠️ **Testnet only. No mainnet. No real funds.**
 
 ---
@@ -35,6 +37,8 @@ curl -s https://clawsettle.com/skills.md > ~/.openclaw/skills/clawsettle-usdc-te
 - **Creates deposit intents** (gives a deposit address + claim secret)
 - **Verifies on‑chain USDC transfers** by parsing receipts/logs
 - **Mints Claw Credits** in a ledger (A/H/F buckets)
+- **Issues signed ledger receipts** (ed25519, did:key)
+- **Anchors Merkle roots** of ledger events on-chain (audit checkpoints)
 - **Pays out USDC** to a destination address
 
 **Non‑goals:** on‑chain escrow, mainnet settlement, CCTP.

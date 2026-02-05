@@ -7,6 +7,13 @@ routes = [
   { pattern = "usdc-testnet.clawledger.com/*", zone_name = "clawledger.com" }
 ]
 
+[vars]
+LEDGER_SIGNING_DID = "did:key:z6Mko4NPMeoPKpt5sYUFuJLvT9URrdg8sWZDo4X7rKwunoL8"
+LEDGER_SIGNING_PUBLIC_KEY = "7fdbfe47831119712f3b41082280af582a44d939b79121a2125d077d22a651d5"
+ANCHOR_CONTRACT_ADDRESS = "0x5cE94B3d7f3330215acc9A746d84f216530E1988"
+ANCHOR_CHAIN_ID = "84532"
+ANCHOR_RPC_URL = "https://sepolia.base.org"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "clawledger-lite"

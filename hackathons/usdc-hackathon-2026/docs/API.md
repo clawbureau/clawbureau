@@ -48,6 +48,37 @@ Moves balances between buckets. Idempotent.
 }
 ```
 
+**Response (includes signed receipt)**
+```json
+{
+  "success": true,
+  "event": { "event_id": "...", "created_at": "..." },
+  "receipt": {
+    "event_hash": "...",
+    "signature": "...",
+    "alg": "ed25519-sha256",
+    "did": "did:key:...",
+    "public_key": "..."
+  }
+}
+```
+
+### GET /v1/events/{event_id}
+Returns a single event plus its signed receipt.
+
+### GET /v1/anchors
+Lists anchored Merkle roots (audit checkpoints).
+
+### POST /v1/anchors (admin)
+Anchors a Merkle root for new events.
+
+**Headers**
+```
+Authorization: Bearer <ANCHOR_ADMIN_KEY>
+```
+
+**Anchor contract:** `0x5cE94B3d7f3330215acc9A746d84f216530E1988` (Base Sepolia)
+
 ---
 
 ## Escrow (ledger‑native)
