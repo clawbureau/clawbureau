@@ -22,6 +22,11 @@ import { isValidDidFormat } from './schema-registry';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
 import { verifyProofBundle } from './verify-proof-bundle';
 
+export interface VerifyAgentOptions {
+  /** Allowlisted gateway receipt signer DIDs (did:key:...). */
+  allowlistedReceiptSignerDids?: readonly string[];
+}
+
 function trustTierToPoHTier(trustTier: TrustTier): number {
   switch (trustTier) {
     case 'unknown':
@@ -91,7 +96,10 @@ function computePolicyCompliance(
   };
 }
 
-export async function verifyAgent(body: unknown): Promise<VerifyAgentResponse> {
+export async function verifyAgent(
+  body: unknown,
+  options: VerifyAgentOptions = {}
+): Promise<VerifyAgentResponse> {
   const now = new Date().toISOString();
 
   // Basic request validation
@@ -221,7 +229,9 @@ export async function verifyAgent(body: unknown): Promise<VerifyAgentResponse> {
   let proofBundleEnvelope: SignedEnvelope<ProofBundlePayload> | undefined;
 
   if (req.proof_bundle_envelope !== undefined) {
-    const bundleVerification = await verifyProofBundle(req.proof_bundle_envelope);
+    const bundleVerification = await verifyProofBundle(req.proof_bundle_envelope, {
+      allowlistedReceiptSignerDids: options.allowlistedReceiptSignerDids,
+    });
 
     components.proof_bundle = {
       status: bundleVerification.result.status,

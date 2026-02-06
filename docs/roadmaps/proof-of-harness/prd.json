@@ -128,9 +128,25 @@
       "passes": true,
       "notes": "Enables integrations outside OpenClaw.",
       "completionNotes": "Completed by agent"
+    },
+    {
+      "id": "POH-US-009",
+      "title": "Canonical gateway receipts + signer allowlist",
+      "description": "As a marketplace, I want clawproxy to emit canonical signed receipt envelopes and clawverify to fail-closed verify only allowlisted gateway signers so that gateway-tier proofs are non-forgeable end-to-end.",
+      "acceptanceCriteria": [
+        "clawproxy returns `_receipt_envelope` as SignedEnvelope<GatewayReceiptPayload> for /v1/proxy/:provider",
+        "Receipt signer_did is did:key derived from PROXY_SIGNING_KEY public key",
+        "clawverify requires GATEWAY_RECEIPT_SIGNER_DIDS allowlist for receipt verification (fail-closed when missing)",
+        "verify/bundle, verify/batch, and verify/agent propagate allowlist into receipt verification",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Completes the end-to-end gateway tier path by making receipts verifiable and non-forgeable.",
+      "completionNotes": "Implemented canonical gateway receipt envelopes in clawproxy and fail-closed signer allowlisting in clawverify."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-06T02:52:02.477Z"
+    "updatedAt": "2026-02-06T22:54:35.000Z"
   }
 }

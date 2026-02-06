@@ -217,6 +217,12 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     const responseBody = await res.json() as Record<string, unknown>;
     let receipt: ReceiptArtifact | undefined;
 
+    const maybeEnvelope = responseBody._receipt_envelope;
+    const receiptEnvelope =
+      maybeEnvelope && typeof maybeEnvelope === 'object'
+        ? (maybeEnvelope as SignedEnvelope<GatewayReceiptPayload>)
+        : undefined;
+
     // Extract receipt from _receipt field
     if (responseBody._receipt) {
       const rawReceipt = responseBody._receipt as ClawproxyReceipt;
@@ -225,6 +231,7 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
         collectedAt: new Date().toISOString(),
         model: params.model,
         receipt: rawReceipt,
+        receiptEnvelope,
       };
       addReceipt(receipt);
     }
@@ -263,6 +270,13 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     // 4. Bridge receipts to SignedEnvelope<GatewayReceiptPayload>
     const bridgedReceipts: SignedEnvelope<GatewayReceiptPayload>[] = [];
     for (const artifact of receipts) {
+      // Prefer canonical `_receipt_envelope` emitted by clawproxy when present.
+      if (artifact.receiptEnvelope) {
+        bridgedReceipts.push(artifact.receiptEnvelope);
+        continue;
+      }
+
+      // Fallback: bridge legacy `_receipt` into envelope shape (non-verifiable signature).
       const envelope = bridgeReceipt(artifact, artifact.receipt.proxyDid ?? agentDid);
       envelope.payload_hash_b64u = await hashJsonB64u(envelope.payload);
       bridgedReceipts.push(envelope);

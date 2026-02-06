@@ -9,8 +9,19 @@ import type {
   ReceiptPayment,
   ReceiptPrivacyMode,
   EncryptedPayload,
+  GatewayReceiptBinding,
+  GatewayReceiptPayload,
+  SignedEnvelope,
 } from './types';
-import { sha256, signEd25519, encryptAes256Gcm, type Ed25519KeyPair, type AesEncryptedPayload } from './crypto';
+import {
+  sha256,
+  sha256B64u,
+  sha256HexToB64u,
+  signEd25519,
+  encryptAes256Gcm,
+  type Ed25519KeyPair,
+  type AesEncryptedPayload,
+} from './crypto';
 
 export interface ReceiptInput {
   provider: Provider;
@@ -30,8 +41,12 @@ export interface ReceiptInput {
 
 export interface SigningContext {
   keyPair: Ed25519KeyPair;
+  /** did:web:... for legacy receipts */
   did: string;
+  /** key id used by did:web doc */
   kid: string;
+  /** did:key:... for canonical receipt envelopes */
+  didKey: string;
 }
 
 export interface EncryptionContext {
@@ -207,5 +222,82 @@ export function attachReceipt<T extends object>(
   return {
     ...response,
     _receipt: receipt,
+  };
+}
+
+function toGatewayBinding(binding: ReceiptBinding | undefined): GatewayReceiptBinding | undefined {
+  if (!binding) return undefined;
+
+  const out: GatewayReceiptBinding = {};
+  if (binding.runId) out.run_id = binding.runId;
+  if (binding.eventHash) out.event_hash_b64u = binding.eventHash;
+  if (binding.nonce) out.nonce = binding.nonce;
+  if (binding.policyHash) out.policy_hash = binding.policyHash;
+  if (binding.tokenScopeHashB64u) out.token_scope_hash_b64u = binding.tokenScopeHashB64u;
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export interface ReceiptEnvelopeOptions {
+  gatewayId: string;
+  receiptId?: string;
+  tokensInput?: number;
+  tokensOutput?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Generate a canonical SignedEnvelope<GatewayReceiptPayload> for PoH.
+ *
+ * This is the receipt format verified by clawverify (/v1/verify/receipt) and
+ * the format expected inside proof bundles.
+ */
+export async function generateReceiptEnvelope(
+  receipt: Receipt,
+  signingContext: SigningContext,
+  options: ReceiptEnvelopeOptions
+): Promise<SignedEnvelope<GatewayReceiptPayload>> {
+  const receiptId = options.receiptId ?? `rcpt_${crypto.randomUUID()}`;
+  const model = receipt.model && receipt.model.trim().length > 0 ? receipt.model : 'unknown';
+
+  const payload: GatewayReceiptPayload = {
+    receipt_version: '1',
+    receipt_id: receiptId,
+    gateway_id: options.gatewayId,
+    provider: receipt.provider,
+    model,
+    request_hash_b64u: sha256HexToB64u(receipt.requestHash),
+    response_hash_b64u: sha256HexToB64u(receipt.responseHash),
+    tokens_input: options.tokensInput ?? 0,
+    tokens_output: options.tokensOutput ?? 0,
+    latency_ms: receipt.latencyMs,
+    timestamp: receipt.timestamp,
+    binding: toGatewayBinding(receipt.binding),
+    metadata: options.metadata,
+  };
+
+  const payloadHashB64u = await sha256B64u(JSON.stringify(payload));
+  const signatureB64u = await signEd25519(signingContext.keyPair.privateKey, payloadHashB64u);
+
+  return {
+    envelope_version: '1',
+    envelope_type: 'gateway_receipt',
+    payload,
+    payload_hash_b64u: payloadHashB64u,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: signatureB64u,
+    algorithm: 'Ed25519',
+    signer_did: signingContext.didKey,
+    issued_at: receipt.timestamp,
+  };
+}
+
+export function attachReceiptEnvelope<T extends object>(
+  response: T & { _receipt: Receipt },
+  envelope: SignedEnvelope<GatewayReceiptPayload>
+): T & { _receipt: Receipt; _receipt_envelope: SignedEnvelope<GatewayReceiptPayload> } {
+  return {
+    ...response,
+    _receipt_envelope: envelope,
   };
 }

@@ -77,6 +77,12 @@ export interface DeploymentMetadata {
   region?: string;
   /** Service name */
   service: string;
+
+  /**
+   * did:key signer DID used for canonical gateway receipt envelopes.
+   * This is derived from PROXY_SIGNING_KEY public key and is safe to expose.
+   */
+  receiptSignerDidKey?: string;
 }
 
 /**
@@ -208,13 +214,60 @@ export interface Receipt {
 }
 
 /**
+ * Canonical gateway receipt binding fields (snake_case).
+ * Mirrors packages/schema/poh/receipt_binding.v1.json.
+ */
+export interface GatewayReceiptBinding {
+  run_id?: string;
+  event_hash_b64u?: string;
+  nonce?: string;
+  policy_hash?: string;
+  token_scope_hash_b64u?: string;
+}
+
+/**
+ * Canonical gateway receipt payload (snake_case).
+ * This shape is verified by clawverify (SignedEnvelope<GatewayReceiptPayload>).
+ */
+export interface GatewayReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  gateway_id: string;
+  provider: Provider;
+  model: string;
+  request_hash_b64u: string;
+  response_hash_b64u: string;
+  tokens_input: number;
+  tokens_output: number;
+  latency_ms: number;
+  timestamp: string;
+  binding?: GatewayReceiptBinding;
+  metadata?: Record<string, unknown>;
+}
+
+/** Signed envelope structure (matches clawverify SignedEnvelope). */
+export interface SignedEnvelope<T = unknown> {
+  envelope_version: '1';
+  envelope_type: string;
+  payload: T;
+  payload_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
+  issued_at: string;
+}
+
+/**
  * Proxy response wrapper
  */
 export interface ProxyResponse {
   /** Original provider response */
   [key: string]: unknown;
-  /** Attached receipt */
+  /** Attached legacy receipt (v1.0). */
   _receipt: Receipt;
+  /** Attached canonical receipt envelope (v1). */
+  _receipt_envelope?: SignedEnvelope<GatewayReceiptPayload>;
 }
 
 /**

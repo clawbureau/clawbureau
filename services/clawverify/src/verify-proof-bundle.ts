@@ -42,6 +42,11 @@ import {
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
 
+export interface ProofBundleVerifierOptions {
+  /** Allowlisted gateway receipt signer DIDs (did:key:...). */
+  allowlistedReceiptSignerDids?: readonly string[];
+}
+
 /**
  * Validate envelope structure for proof bundle
  */
@@ -294,7 +299,8 @@ function validateAttestation(
  * Returns the verification result including provider/model/gateway_id on success.
  */
 async function verifyReceiptEnvelope(
-  receipt: unknown
+  receipt: unknown,
+  allowlistedSignerDids: readonly string[] | undefined
 ): Promise<{
   valid: boolean;
   provider?: string;
@@ -303,7 +309,7 @@ async function verifyReceiptEnvelope(
   signer_did?: string;
   error?: string;
 }> {
-  const verification = await verifyReceipt(receipt);
+  const verification = await verifyReceipt(receipt, { allowlistedSignerDids });
 
   if (verification.result.status !== 'VALID') {
     return {
@@ -375,7 +381,8 @@ function computeTrustTier(components: {
  * - Return computed trust tier
  */
 export async function verifyProofBundle(
-  envelope: unknown
+  envelope: unknown,
+  options: ProofBundleVerifierOptions = {}
 ): Promise<{ result: ProofBundleVerificationResult; error?: VerificationError }> {
   const now = new Date().toISOString();
 
@@ -703,7 +710,9 @@ export async function verifyProofBundle(
   // signature verification — not just structural validation.
   if (payload.receipts !== undefined && payload.receipts.length > 0) {
     const receiptResults = await Promise.all(
-      payload.receipts.map((r) => verifyReceiptEnvelope(r))
+      payload.receipts.map((r) =>
+        verifyReceiptEnvelope(r, options.allowlistedReceiptSignerDids)
+      )
     );
     const validCount = receiptResults.filter((r) => r.valid).length;
     componentResults.receipts_valid = validCount === payload.receipts.length;

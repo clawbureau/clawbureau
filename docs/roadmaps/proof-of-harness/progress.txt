@@ -107,3 +107,33 @@ Started: 2026-02-05T21:49:28Z
 - Files changed
   - packages/clawproof-sdk/*
 ---
+
+## 2026-02-06T22:54:35Z - POH-US-009
+- What was implemented
+  - Updated `clawproxy` to emit canonical `_receipt_envelope` (SignedEnvelope<GatewayReceiptPayload>) alongside the legacy `_receipt`.
+  - Receipt signer DID is now deterministic `did:key` derived from the `PROXY_SIGNING_KEY` public key and exposed via `/v1/did`.
+  - Updated `clawverify` receipt verification to require a fail-closed signer allowlist (`GATEWAY_RECEIPT_SIGNER_DIDS`) and propagated it through:
+    - POST /v1/verify/receipt
+    - POST /v1/verify/bundle
+    - POST /v1/verify/batch
+    - POST /v1/verify/agent
+  - Updated the OpenClaw provider and the `clawproof` SDK/adapters to prefer `_receipt_envelope` when present (fallback to legacy bridging).
+- Files changed
+  - services/clawproxy/src/crypto.ts
+  - services/clawproxy/src/receipt.ts
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/src/index.ts
+  - services/clawverify/src/verify-receipt.ts
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/src/verify-batch.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/wrangler.toml
+  - packages/openclaw-provider-clawproxy/src/provider.ts
+  - packages/openclaw-provider-clawproxy/src/recorder.ts
+  - packages/openclaw-provider-clawproxy/src/types.ts
+  - packages/clawproof-sdk/src/run.ts
+  - packages/clawproof-sdk/src/types.ts
+  - packages/clawproof-adapters/src/session.ts
+  - packages/clawproof-adapters/src/types.ts
+---

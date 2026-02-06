@@ -87,8 +87,10 @@ export interface ReceiptArtifact {
   collectedAt: string;
   /** Model that was called. */
   model: string;
-  /** The raw receipt from clawproxy. */
+  /** The raw legacy receipt from clawproxy (`_receipt`, version 1.0). */
   receipt: ClawproxyReceipt;
+  /** Canonical receipt envelope from clawproxy (`_receipt_envelope`, version 1). */
+  receiptEnvelope?: SignedEnvelope<GatewayReceiptPayload>;
 }
 
 // ---------------------------------------------------------------------------

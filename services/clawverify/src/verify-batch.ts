@@ -14,6 +14,11 @@ import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
 
+export interface BatchVerifierOptions {
+  /** Allowlisted gateway receipt signer DIDs (did:key:...). */
+  allowlistedReceiptSignerDids?: readonly string[];
+}
+
 /**
  * Validate batch request structure
  */
@@ -70,7 +75,8 @@ function detectEnvelopeType(envelope: unknown): EnvelopeType | null {
  */
 async function verifyItem(
   item: BatchItem,
-  index: number
+  index: number,
+  options: BatchVerifierOptions
 ): Promise<BatchItemResult> {
   const itemId = item.id ?? index.toString();
   const envelopeType = detectEnvelopeType(item.envelope);
@@ -100,7 +106,9 @@ async function verifyItem(
     }
 
     case 'gateway_receipt': {
-      const result = await verifyReceipt(item.envelope);
+      const result = await verifyReceipt(item.envelope, {
+        allowlistedSignerDids: options.allowlistedReceiptSignerDids,
+      });
       return {
         id: itemId,
         envelope_type: envelopeType,
@@ -147,7 +155,8 @@ async function verifyItem(
  * - Limit batch size to prevent abuse
  */
 export async function verifyBatch(
-  body: unknown
+  body: unknown,
+  options: BatchVerifierOptions = {}
 ): Promise<VerifyBatchResponse | { error: string }> {
   // Validate request structure
   const validation = validateBatchRequest(body);
@@ -160,7 +169,7 @@ export async function verifyBatch(
 
   // Verify all items concurrently
   const results = await Promise.all(
-    items.map((item, index) => verifyItem(item, index))
+    items.map((item, index) => verifyItem(item, index, options))
   );
 
   // Calculate summary counts

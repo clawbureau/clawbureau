@@ -12,6 +12,8 @@ import type {
   ReceiptArtifact,
   StreamEvent,
   StreamOptions,
+  SignedEnvelope,
+  GatewayReceiptPayload,
 } from './types';
 
 // ── Binding header names (must match clawproxy/src/idempotency.ts) ──────────
@@ -101,6 +103,29 @@ function extractReceipt(
 }
 
 /**
+ * Extract the `_receipt_envelope` (canonical SignedEnvelope<GatewayReceiptPayload>)
+ * from a clawproxy JSON response.
+ */
+function extractReceiptEnvelope(
+  body: Record<string, unknown>,
+): SignedEnvelope<GatewayReceiptPayload> | undefined {
+  const raw = body['_receipt_envelope'];
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const env = raw as SignedEnvelope<GatewayReceiptPayload>;
+  if (env.envelope_version !== '1') return undefined;
+  if (env.envelope_type !== 'gateway_receipt') return undefined;
+  if (!env.payload || typeof env.payload !== 'object') return undefined;
+
+  const p = env.payload as GatewayReceiptPayload;
+  if (p.receipt_version !== '1') return undefined;
+  if (typeof p.request_hash_b64u !== 'string') return undefined;
+  if (typeof p.response_hash_b64u !== 'string') return undefined;
+
+  return env;
+}
+
+/**
  * Create the provider implementation that proxies through clawproxy.
  */
 export function createClawproxyProvider(
@@ -178,12 +203,14 @@ export function createClawproxyProvider(
 
       // Collect receipt
       const receipt = extractReceipt(parsed);
+      const receiptEnvelope = extractReceiptEnvelope(parsed);
       if (receipt) {
         const artifact: ReceiptArtifact = {
           type: 'clawproxy_receipt',
           collectedAt: new Date().toISOString(),
           model,
           receipt,
+          receiptEnvelope: receiptEnvelope ?? undefined,
         };
         collectedReceipts.push(artifact);
         deps.logger.debug(

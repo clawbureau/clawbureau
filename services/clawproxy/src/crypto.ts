@@ -12,7 +12,103 @@ export async function sha256(data: string | ArrayBuffer): Promise<string> {
 
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Compute SHA-256 hash of data and return as base64url (no padding)
+ */
+export async function sha256B64u(
+  data: string | ArrayBuffer | Uint8Array
+): Promise<string> {
+  const buffer =
+    typeof data === 'string'
+      ? new TextEncoder().encode(data)
+      : data instanceof Uint8Array
+        ? data
+        : new Uint8Array(data);
+
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  return base64urlEncode(new Uint8Array(hashBuffer));
+}
+
+export function hexToBytes(hex: string): Uint8Array {
+  const normalized = hex.startsWith('0x') ? hex.slice(2) : hex;
+
+  if (normalized.length % 2 !== 0) {
+    throw new Error(`Invalid hex string length: ${normalized.length}`);
+  }
+
+  const bytes = new Uint8Array(normalized.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = normalized.slice(i * 2, i * 2 + 2);
+    const value = Number.parseInt(byte, 16);
+    if (Number.isNaN(value)) {
+      throw new Error(`Invalid hex byte: ${byte}`);
+    }
+    bytes[i] = value;
+  }
+
+  return bytes;
+}
+
+/** Convert a hex-encoded SHA-256 hash to base64url (no padding). */
+export function sha256HexToB64u(hashHex: string): string {
+  return base64urlEncode(hexToBytes(hashHex));
+}
+
+// ---------------------------------------------------------------------------
+// Base58btc / did:key
+// ---------------------------------------------------------------------------
+
+const BASE58_ALPHABET =
+  '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+export function base58Encode(bytes: Uint8Array): string {
+  // Count leading zeros
+  let leadingZeros = 0;
+  for (const b of bytes) {
+    if (b !== 0) break;
+    leadingZeros++;
+  }
+
+  const digits: number[] = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i]! << 8;
+      digits[i] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+
+  let result = '';
+  for (let i = 0; i < leadingZeros; i++) {
+    result += '1';
+  }
+  for (let i = digits.length - 1; i >= 0; i--) {
+    result += BASE58_ALPHABET[digits[i]!];
+  }
+
+  return result;
+}
+
+/**
+ * Derive a did:key DID for an Ed25519 public key.
+ * Format: did:key:z<base58btc(0xed01 + rawPublicKeyBytes)>
+ */
+export function didKeyFromEd25519PublicKeyBytes(publicKeyBytes: Uint8Array): string {
+  // Ed25519 multicodec prefix is 0xed 0x01
+  const multicodec = new Uint8Array(2 + publicKeyBytes.length);
+  multicodec[0] = 0xed;
+  multicodec[1] = 0x01;
+  multicodec.set(publicKeyBytes, 2);
+
+  return `did:key:z${base58Encode(multicodec)}`;
 }
 
 /**
