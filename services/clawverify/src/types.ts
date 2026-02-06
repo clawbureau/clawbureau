@@ -439,9 +439,13 @@ export interface ProofBundleVerificationResult {
     envelope_valid: boolean;
     urm_valid?: boolean;
     event_chain_valid?: boolean;
+    /** Root hash of the event chain (first event's hash) */
+    chain_root_hash?: string;
     receipts_valid?: boolean;
     attestations_valid?: boolean;
     receipts_count?: number;
+    /** Number of receipts that passed cryptographic verification */
+    receipts_verified_count?: number;
     attestations_count?: number;
   };
 }

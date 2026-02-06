@@ -1,7 +1,7 @@
 {
-  "project": "clawbureau",
-  "branchName": "ralph/proof-of-harness-adapters",
+  "name": "clawbureau",
   "description": "Proof-of-harness adapters & specs — tie OpenClaw + external harnesses (Claude Code, Codex, Pi, Opencode, Factory Droid, scripts) into verifiable URM/event-chain/receipt proof bundles.",
+  "branchName": "ralph/proof-of-harness-adapters",
   "userStories": [
     {
       "id": "POH-US-001",
@@ -44,8 +44,9 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Aligns verify-proof-bundle with new schemas + receipt verification." 
+      "passes": true,
+      "notes": "Implemented: payload validation aligned with PoH proof_bundle.v1 schema, cryptographic receipt verification via verifyReceipt(), event-chain hash linkage with chain_root_hash, trust tier computation.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-004",
@@ -60,7 +61,7 @@
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Builds on existing X-Run-Id/X-Event-Hash support in clawproxy." 
+      "notes": "Builds on existing X-Run-Id/X-Event-Hash support in clawproxy."
     },
     {
       "id": "POH-US-005",
@@ -75,7 +76,7 @@
       ],
       "priority": 5,
       "passes": false,
-      "notes": "Implements the reference harness adapter for OpenClaw." 
+      "notes": "Implements the reference harness adapter for OpenClaw."
     },
     {
       "id": "POH-US-006",
@@ -90,7 +91,7 @@
       ],
       "priority": 6,
       "passes": false,
-      "notes": "Recorder used by worker plugin + manual exports." 
+      "notes": "Recorder used by worker plugin + manual exports."
     },
     {
       "id": "POH-US-007",
@@ -105,7 +106,7 @@
       ],
       "priority": 7,
       "passes": false,
-      "notes": "Wrappers should be opt-in and non-invasive." 
+      "notes": "Wrappers should be opt-in and non-invasive."
     },
     {
       "id": "POH-US-008",
@@ -120,7 +121,10 @@
       ],
       "priority": 8,
       "passes": false,
-      "notes": "Enables integrations outside OpenClaw." 
+      "notes": "Enables integrations outside OpenClaw."
     }
-  ]
+  ],
+  "metadata": {
+    "updatedAt": "2026-02-06T02:09:13.787Z"
+  }
 }
