@@ -124,11 +124,12 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "Enables integrations outside OpenClaw."
+      "passes": true,
+      "notes": "Enables integrations outside OpenClaw.",
+      "completionNotes": "Completed by agent"
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-06T02:44:49.330Z"
+    "updatedAt": "2026-02-06T02:52:02.477Z"
   }
 }
