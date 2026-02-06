@@ -1,7 +1,8 @@
 {
+  "name": "clawbureau",
   "project": "clawbureau",
-  "branchName": "ralph/proof-of-harness-adapters",
   "description": "Proof-of-harness adapters & specs — tie OpenClaw + external harnesses (Claude Code, Codex, Pi, Opencode, Factory Droid, scripts) into verifiable URM/event-chain/receipt proof bundles.",
+  "branchName": "ralph/proof-of-harness-adapters",
   "userStories": [
     {
       "id": "POH-US-001",
@@ -44,8 +45,9 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Aligns verify-proof-bundle with new schemas + receipt verification." 
+      "passes": true,
+      "notes": "Implemented: payload validation aligned with PoH proof_bundle.v1 schema, cryptographic receipt verification via verifyReceipt(), event-chain hash linkage with chain_root_hash, trust tier computation.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-004",
@@ -59,8 +61,9 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "Builds on existing X-Run-Id/X-Event-Hash support in clawproxy." 
+      "passes": true,
+      "notes": "Builds on existing X-Run-Id/X-Event-Hash support in clawproxy.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-005",
@@ -74,8 +77,9 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Implements the reference harness adapter for OpenClaw." 
+      "passes": true,
+      "notes": "Implements the reference harness adapter for OpenClaw.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-006",
@@ -89,8 +93,9 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "Recorder used by worker plugin + manual exports." 
+      "passes": true,
+      "notes": "Recorder used by worker plugin + manual exports.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-007",
@@ -104,8 +109,9 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Wrappers should be opt-in and non-invasive." 
+      "passes": true,
+      "notes": "Wrappers should be opt-in and non-invasive.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-008",
@@ -119,8 +125,12 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "Enables integrations outside OpenClaw." 
+      "passes": true,
+      "notes": "Enables integrations outside OpenClaw.",
+      "completionNotes": "Completed by agent"
     }
-  ]
+  ],
+  "metadata": {
+    "updatedAt": "2026-02-06T02:52:02.477Z"
+  }
 }

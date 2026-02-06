@@ -1,0 +1,37 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Receipt Binding v1",
+  "description": "Standard binding fields that tie a gateway receipt to a specific run, event, and idempotency scope. Harnesses attach these via HTTP headers (X-Run-Id, X-Event-Hash, X-Idempotency-Key) when routing LLM calls through clawproxy.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Run identifier correlating this receipt to a specific agent run. Sent via X-Run-Id header."
+    },
+    "event_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Hash of the event in the chain that triggered this LLM call (base64url). Sent via X-Event-Hash header."
+    },
+    "nonce": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Idempotency nonce to prevent duplicate receipt issuance. Sent via X-Idempotency-Key header."
+    },
+    "policy_hash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Work Policy Contract hash, injected by the proxy when a policy is enforced."
+    },
+    "token_scope_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Hash of the scoped token (CST) claims, injected by the proxy when a CST is validated."
+    }
+  }
+}

@@ -1,14 +1,19 @@
 /**
  * Proof Bundle Verification
  * CVF-US-007: Verify proof bundles for trust tier computation
+ * POH-US-003: Validate proof bundles against PoH schema, verify receipts
+ *             with clawproxy DID, verify event-chain hash linkage, and
+ *             return trust tier based on validated components.
  *
  * Validates:
- * - URM (Universal Resource Manifest)
- * - Event chains
- * - Gateway receipts
+ * - Proof bundle payload against PoH schema (proof_bundle.v1)
+ * - URM (Universal Resource Manifest) structure
+ * - Event chain hash linkage and run_id consistency
+ * - Gateway receipt envelopes (cryptographic verification)
  * - Attestations
  *
  * Computes trust tier based on which components are present and valid.
+ * Fail-closed: unknown or malformed payloads always result in 'unknown' tier.
  */
 
 import type {
@@ -19,7 +24,6 @@ import type {
   TrustTier,
   URMReference,
   AttestationReference,
-  GatewayReceiptPayload,
 } from './types';
 import {
   isAllowedVersion,
@@ -36,6 +40,7 @@ import {
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
+import { verifyReceipt } from './verify-receipt';
 
 /**
  * Validate envelope structure for proof bundle
@@ -63,33 +68,62 @@ function validateEnvelopeStructure(
 }
 
 /**
- * Validate proof bundle payload structure
+ * Validate proof bundle payload structure against PoH schema (proof_bundle.v1).
+ *
+ * Schema constraints enforced:
+ * - bundle_version: const "1"
+ * - bundle_id: string, minLength 1
+ * - agent_did: string, pattern ^did:
+ * - At least one of: urm, event_chain, receipts, attestations
  */
 function validateBundlePayload(
   payload: unknown
-): payload is ProofBundlePayload {
+): { valid: boolean; error?: string } {
   if (typeof payload !== 'object' || payload === null) {
-    return false;
+    return { valid: false, error: 'Payload must be an object' };
   }
 
   const p = payload as Record<string, unknown>;
 
-  // Required fields
-  if (p.bundle_version !== '1') return false;
-  if (typeof p.bundle_id !== 'string' || p.bundle_id.length === 0) return false;
-  if (typeof p.agent_did !== 'string') return false;
+  // Required fields per schema
+  if (p.bundle_version !== '1') {
+    return { valid: false, error: 'bundle_version must be "1"' };
+  }
+  if (typeof p.bundle_id !== 'string' || p.bundle_id.length === 0) {
+    return { valid: false, error: 'bundle_id is required and must be non-empty' };
+  }
+  if (typeof p.agent_did !== 'string' || !/^did:/.test(p.agent_did)) {
+    return { valid: false, error: 'agent_did must be a string starting with "did:"' };
+  }
 
-  // At least one component must be present
+  // At least one component must be present (schema anyOf)
   const hasUrm = p.urm !== undefined;
-  const hasEventChain = Array.isArray(p.event_chain);
-  const hasReceipts = Array.isArray(p.receipts);
-  const hasAttestations = Array.isArray(p.attestations);
+  const hasEventChain = Array.isArray(p.event_chain) && p.event_chain.length > 0;
+  const hasReceipts = Array.isArray(p.receipts) && p.receipts.length > 0;
+  const hasAttestations = Array.isArray(p.attestations) && p.attestations.length > 0;
 
-  return hasUrm || hasEventChain || hasReceipts || hasAttestations;
+  if (!hasUrm && !hasEventChain && !hasReceipts && !hasAttestations) {
+    return { valid: false, error: 'At least one of urm, event_chain, receipts, or attestations is required' };
+  }
+
+  return { valid: true };
 }
 
 /**
- * Validate URM reference structure
+ * Type guard helper (thin wrapper for backward compatibility)
+ */
+function isBundlePayload(payload: unknown): payload is ProofBundlePayload {
+  return validateBundlePayload(payload).valid;
+}
+
+/**
+ * Validate URM reference structure per PoH schema (proof_bundle.v1 → urm).
+ *
+ * Schema constraints:
+ * - urm_version: const "1"
+ * - urm_id: string, minLength 1
+ * - resource_type: string, minLength 1
+ * - resource_hash_b64u: base64url string, minLength 8
  */
 function validateURM(urm: unknown): urm is URMReference {
   if (typeof urm !== 'object' || urm === null) return false;
@@ -99,46 +133,64 @@ function validateURM(urm: unknown): urm is URMReference {
   return (
     u.urm_version === '1' &&
     typeof u.urm_id === 'string' &&
+    u.urm_id.length >= 1 &&
     typeof u.resource_type === 'string' &&
+    u.resource_type.length >= 1 &&
     typeof u.resource_hash_b64u === 'string' &&
+    u.resource_hash_b64u.length >= 8 &&
     isValidBase64Url(u.resource_hash_b64u)
   );
 }
 
 /**
- * Validate event chain entries and hash chain integrity
+ * Validate event chain entries and hash chain integrity per PoH schema.
+ *
+ * Schema constraints per event_chain.v1 / proof_bundle.v1:
+ * - event_id, run_id, event_type: string, minLength 1
+ * - timestamp: ISO 8601 date-time
+ * - payload_hash_b64u, event_hash_b64u: base64url, minLength 8
+ * - prev_hash_b64u: base64url (minLength 8) or null for the first event
+ * - Hash chain: first event has null prev_hash, subsequent events link
+ * - run_id consistency across all events
  */
 function validateEventChain(
   events: unknown[]
-): { valid: boolean; error?: string } {
+): { valid: boolean; chain_root_hash?: string; error?: string } {
   if (events.length === 0) {
     return { valid: false, error: 'Empty event chain' };
   }
 
   let prevHash: string | null = null;
   let expectedRunId: string | null = null;
+  let chainRootHash: string | null = null;
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i] as Record<string, unknown>;
 
-    // Validate required fields
-    if (typeof event.event_id !== 'string') {
-      return { valid: false, error: `Event ${i}: missing event_id` };
+    // Validate required fields with minLength constraints
+    if (typeof event.event_id !== 'string' || event.event_id.length < 1) {
+      return { valid: false, error: `Event ${i}: missing or empty event_id` };
     }
-    if (typeof event.run_id !== 'string') {
-      return { valid: false, error: `Event ${i}: missing run_id` };
+    if (typeof event.run_id !== 'string' || event.run_id.length < 1) {
+      return { valid: false, error: `Event ${i}: missing or empty run_id` };
     }
-    if (typeof event.event_type !== 'string') {
-      return { valid: false, error: `Event ${i}: missing event_type` };
+    if (typeof event.event_type !== 'string' || event.event_type.length < 1) {
+      return { valid: false, error: `Event ${i}: missing or empty event_type` };
     }
     if (!isValidIsoDate(event.timestamp)) {
       return { valid: false, error: `Event ${i}: invalid timestamp` };
     }
-    if (!isValidBase64Url(event.payload_hash_b64u)) {
-      return { valid: false, error: `Event ${i}: invalid payload_hash_b64u` };
+    if (
+      !isValidBase64Url(event.payload_hash_b64u) ||
+      (event.payload_hash_b64u as string).length < 8
+    ) {
+      return { valid: false, error: `Event ${i}: invalid payload_hash_b64u (must be base64url, minLength 8)` };
     }
-    if (!isValidBase64Url(event.event_hash_b64u)) {
-      return { valid: false, error: `Event ${i}: invalid event_hash_b64u` };
+    if (
+      !isValidBase64Url(event.event_hash_b64u) ||
+      (event.event_hash_b64u as string).length < 8
+    ) {
+      return { valid: false, error: `Event ${i}: invalid event_hash_b64u (must be base64url, minLength 8)` };
     }
 
     // Enforce run_id consistency
@@ -156,14 +208,25 @@ function validateEventChain(
     if (i === 0) {
       // First event should have null prev_hash
       if (eventPrevHash !== null && eventPrevHash !== '') {
-        // Allow empty string for first entry
         return {
           valid: false,
           error: 'First event should have null prev_hash_b64u',
         };
       }
+      chainRootHash = event.event_hash_b64u as string;
     } else {
-      // Subsequent events should link to previous
+      // Non-first events: prev_hash must be base64url, minLength 8
+      if (
+        typeof eventPrevHash !== 'string' ||
+        !isValidBase64Url(eventPrevHash) ||
+        eventPrevHash.length < 8
+      ) {
+        return {
+          valid: false,
+          error: `Event ${i}: invalid prev_hash_b64u (must be base64url, minLength 8)`,
+        };
+      }
+      // Must link to previous event's hash
       if (eventPrevHash !== prevHash) {
         return {
           valid: false,
@@ -175,11 +238,19 @@ function validateEventChain(
     prevHash = event.event_hash_b64u as string;
   }
 
-  return { valid: true };
+  return { valid: true, chain_root_hash: chainRootHash ?? undefined };
 }
 
 /**
- * Validate attestation references
+ * Validate attestation references per PoH schema (proof_bundle.v1 → attestations).
+ *
+ * Schema constraints:
+ * - attestation_id: string, minLength 1
+ * - attestation_type: enum ["owner", "third_party"]
+ * - attester_did: string, pattern ^did:
+ * - subject_did: string, pattern ^did:
+ * - signature_b64u: base64url, minLength 8
+ * - expires_at: optional ISO 8601 date-time
  */
 function validateAttestation(
   attestation: unknown
@@ -188,20 +259,24 @@ function validateAttestation(
 
   const a = attestation as Record<string, unknown>;
 
-  // Check required fields
-  if (typeof a.attestation_id !== 'string') return false;
+  // Check required fields with schema constraints
+  if (typeof a.attestation_id !== 'string' || a.attestation_id.length < 1) return false;
   if (a.attestation_type !== 'owner' && a.attestation_type !== 'third_party')
     return false;
   if (!isValidDidFormat(a.attester_did)) return false;
   if (!isValidDidFormat(a.subject_did)) return false;
-  if (!isValidBase64Url(a.signature_b64u)) return false;
+  if (
+    !isValidBase64Url(a.signature_b64u) ||
+    (a.signature_b64u as string).length < 8
+  )
+    return false;
 
   // Check expiry if present
   if (a.expires_at !== undefined) {
     if (!isValidIsoDate(a.expires_at)) return false;
     const expiryDate = new Date(a.expires_at as string);
     if (expiryDate < new Date()) {
-      return false; // Expired
+      return false; // Expired — fail closed
     }
   }
 
@@ -209,28 +284,41 @@ function validateAttestation(
 }
 
 /**
- * Validate gateway receipt envelope structure (minimal check)
+ * Verify a gateway receipt envelope cryptographically.
+ *
+ * POH-US-003: Receipt envelopes are verified with the signer DID (clawproxy DID)
+ * using the same full verification pipeline as the standalone /v1/verify/receipt
+ * endpoint. This ensures receipt signatures are validated, not just structurally
+ * checked.
+ *
+ * Returns the verification result including provider/model/gateway_id on success.
  */
-function validateReceiptEnvelope(
+async function verifyReceiptEnvelope(
   receipt: unknown
-): receipt is SignedEnvelope<GatewayReceiptPayload> {
-  if (typeof receipt !== 'object' || receipt === null) return false;
+): Promise<{
+  valid: boolean;
+  provider?: string;
+  model?: string;
+  gateway_id?: string;
+  signer_did?: string;
+  error?: string;
+}> {
+  const verification = await verifyReceipt(receipt);
 
-  const r = receipt as Record<string, unknown>;
+  if (verification.result.status !== 'VALID') {
+    return {
+      valid: false,
+      error: verification.error?.message ?? verification.result.reason,
+    };
+  }
 
-  if (r.envelope_type !== 'gateway_receipt') return false;
-  if (!isAllowedVersion(r.envelope_version)) return false;
-
-  const payload = r.payload as Record<string, unknown> | undefined;
-  if (!payload) return false;
-
-  return (
-    payload.receipt_version === '1' &&
-    typeof payload.receipt_id === 'string' &&
-    typeof payload.gateway_id === 'string' &&
-    typeof payload.provider === 'string' &&
-    typeof payload.model === 'string'
-  );
+  return {
+    valid: true,
+    provider: verification.provider,
+    model: verification.model,
+    gateway_id: verification.gateway_id,
+    signer_did: verification.result.signer_did,
+  };
 }
 
 /**
@@ -450,8 +538,25 @@ export async function verifyProofBundle(
     };
   }
 
-  // 10. Validate proof bundle payload structure
-  if (!validateBundlePayload(envelope.payload)) {
+  // 10. Validate proof bundle payload structure against PoH schema
+  const payloadValidation = validateBundlePayload(envelope.payload);
+  if (!payloadValidation.valid) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `Invalid proof bundle payload: ${payloadValidation.error}`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: payloadValidation.error ?? 'Proof bundle payload is missing required fields or has no components',
+        field: 'payload',
+      },
+    };
+  }
+
+  // Type assertion after schema validation
+  if (!isBundlePayload(envelope.payload)) {
     return {
       result: {
         status: 'INVALID',
@@ -460,8 +565,7 @@ export async function verifyProofBundle(
       },
       error: {
         code: 'MALFORMED_ENVELOPE',
-        message:
-          'Proof bundle payload is missing required fields or has no components',
+        message: 'Proof bundle payload failed type guard after schema validation',
         field: 'payload',
       },
     };
@@ -585,17 +689,26 @@ export async function verifyProofBundle(
     componentResults.urm_valid = validateURM(payload.urm);
   }
 
-  // Validate event chain if present
+  // Validate event chain if present (verify hash linkage per POH-US-003)
   if (payload.event_chain !== undefined && payload.event_chain.length > 0) {
     const chainResult = validateEventChain(payload.event_chain);
     componentResults.event_chain_valid = chainResult.valid;
+    if (chainResult.chain_root_hash) {
+      componentResults.chain_root_hash = chainResult.chain_root_hash;
+    }
   }
 
-  // Validate receipts if present
+  // Verify receipt envelopes cryptographically (POH-US-003)
+  // Each receipt is verified with its signer DID (clawproxy DID) using full
+  // signature verification — not just structural validation.
   if (payload.receipts !== undefined && payload.receipts.length > 0) {
-    const validReceipts = payload.receipts.filter(validateReceiptEnvelope);
-    componentResults.receipts_valid = validReceipts.length === payload.receipts.length;
+    const receiptResults = await Promise.all(
+      payload.receipts.map((r) => verifyReceiptEnvelope(r))
+    );
+    const validCount = receiptResults.filter((r) => r.valid).length;
+    componentResults.receipts_valid = validCount === payload.receipts.length;
     componentResults.receipts_count = payload.receipts.length;
+    componentResults.receipts_verified_count = validCount;
   }
 
   // Validate attestations if present
@@ -606,7 +719,7 @@ export async function verifyProofBundle(
     componentResults.attestations_count = payload.attestations.length;
   }
 
-  // 16. Compute trust tier
+  // 16. Compute trust tier based on validated components (POH-US-003)
   const trustTier = computeTrustTier(componentResults);
 
   // 17. Return success with trust tier

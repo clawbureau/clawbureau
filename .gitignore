@@ -9,6 +9,8 @@ node_modules
 
 # pi / ralph artifacts
 .pi/
+.ralph-tui/
+.ralph-output/
 .last-branch
 ralph.out
 ralph.pid
