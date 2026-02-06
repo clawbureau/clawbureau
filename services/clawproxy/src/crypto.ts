@@ -102,6 +102,12 @@ export function base58Encode(bytes: Uint8Array): string {
  * Format: did:key:z<base58btc(0xed01 + rawPublicKeyBytes)>
  */
 export function didKeyFromEd25519PublicKeyBytes(publicKeyBytes: Uint8Array): string {
+  if (publicKeyBytes.length !== 32) {
+    throw new Error(
+      `Ed25519 public key must be 32 bytes (raw), got ${publicKeyBytes.length}`
+    );
+  }
+
   // Ed25519 multicodec prefix is 0xed 0x01
   const multicodec = new Uint8Array(2 + publicKeyBytes.length);
   multicodec[0] = 0xed;

@@ -506,7 +506,10 @@ async function handleProxy(
   providerParam: string
 ): Promise<Response> {
   const startTime = Date.now();
-  const gatewayId = new URL(request.url).host;
+
+  // Use a stable, server-defined gateway identifier for signed receipts.
+  // Do NOT derive this from request host headers, which can be user-controlled.
+  const gatewayId = PROXY_DID;
 
   // Check rate limit before processing
   const rateLimitInfo = await checkRateLimit(request, env);
