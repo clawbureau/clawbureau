@@ -108,8 +108,9 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Wrappers should be opt-in and non-invasive."
+      "passes": true,
+      "notes": "Wrappers should be opt-in and non-invasive.",
+      "completionNotes": "Completed by agent"
     },
     {
       "id": "POH-US-008",
@@ -128,6 +129,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-06T02:32:52.482Z"
+    "updatedAt": "2026-02-06T02:44:49.330Z"
   }
 }
