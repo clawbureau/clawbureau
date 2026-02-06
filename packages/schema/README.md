@@ -33,5 +33,6 @@ Shared JSON schemas for Claw Bureau services.
 - `commit_proof.v1.json`
 - `proof_bundle.v1.json`
 - `event_chain.v1.json`
+- `receipt_binding.v1.json`
 - `urm.v1.json`
 - `execution_attestation.v1.json`

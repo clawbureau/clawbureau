@@ -187,6 +187,22 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 - GET /v1/did
 - POST /v1/verify-receipt
 
+## Receipt Binding Headers
+
+Harnesses SHOULD send these headers when routing LLM calls through the proxy to bind receipts to runs and events:
+
+| Header | Description | Example |
+|--------|-------------|---------|
+| X-Run-Id | Run identifier correlating receipts to a specific agent run | \`run_abc123\` |
+| X-Event-Hash | Base64url hash of the event-chain entry that triggered this call | \`dGVzdA\` |
+| X-Idempotency-Key | Unique nonce to prevent duplicate receipt issuance | \`nonce_xyz\` |
+
+Binding fields are embedded in the signed receipt and are tamper-proof. The proxy also injects:
+- \`policy_hash\`: Work Policy Contract hash (when a WPC is enforced)
+- \`token_scope_hash_b64u\`: CST token scope hash (when a scoped token is validated)
+
+See: receipt_binding.v1.json schema for the full specification.
+
 ## Notes
 
 - Receipts are signed with the proxy Ed25519 key; retrieve the public key from /v1/did.

@@ -113,6 +113,40 @@ export interface MessagePayload {
 }
 
 /**
+ * Receipt binding fields — tie a gateway receipt to a specific run, event, and idempotency scope.
+ * Mirrors the receipt_binding.v1.json schema.
+ * Harnesses attach these via HTTP headers when routing LLM calls through clawproxy:
+ *   X-Run-Id, X-Event-Hash, X-Idempotency-Key
+ */
+export interface ReceiptBinding {
+  /** Run ID correlating this receipt to an agent run (from X-Run-Id header) */
+  run_id?: string;
+  /** Event hash linking this receipt to an event chain entry (from X-Event-Hash header) */
+  event_hash_b64u?: string;
+  /** Idempotency nonce preventing duplicate receipt issuance (from X-Idempotency-Key header) */
+  nonce?: string;
+  /** Work Policy Contract hash injected by the proxy */
+  policy_hash?: string;
+  /** CST token scope hash injected by the proxy */
+  token_scope_hash_b64u?: string;
+}
+
+/**
+ * Harness metadata identifying the runtime that produced a proof bundle or receipt.
+ * Matches the harness object in urm.v1.json and proof_bundle.v1.json metadata.
+ */
+export interface HarnessMetadata {
+  /** Harness identifier (e.g. openclaw, pi, claude-code, codex, opencode, factory-droid, script) */
+  id: string;
+  /** Harness version string */
+  version: string;
+  /** Execution environment (host, docker, clawea, tee) */
+  runtime?: string;
+  /** SHA-256 hash of the harness config inputs (base64url, no padding) */
+  config_hash_b64u?: string;
+}
+
+/**
  * Gateway receipt payload - represents a proxy receipt for proof-of-harness
  * Used by marketplaces to validate that requests were routed through a trusted gateway
  */
@@ -128,6 +162,8 @@ export interface GatewayReceiptPayload {
   tokens_output: number;
   latency_ms: number;
   timestamp: string;
+  /** Binding fields tying this receipt to a run/event (set by clawproxy from headers) */
+  binding?: ReceiptBinding;
   metadata?: Record<string, unknown>;
 }
 
@@ -412,6 +448,14 @@ export interface AttestationReference {
   signature_b64u: string;
 }
 
+/** Proof bundle metadata with optional harness information */
+export interface ProofBundleMetadata {
+  /** Harness metadata identifying the runtime that produced this bundle */
+  harness?: HarnessMetadata;
+  /** Additional metadata (non-normative) */
+  [key: string]: unknown;
+}
+
 /** Proof bundle payload structure */
 export interface ProofBundlePayload {
   bundle_version: '1';
@@ -421,7 +465,7 @@ export interface ProofBundlePayload {
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
   attestations?: AttestationReference[];
-  metadata?: Record<string, unknown>;
+  metadata?: ProofBundleMetadata;
 }
 
 /** Trust tiers computed from proof bundle contents */

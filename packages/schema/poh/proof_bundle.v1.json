@@ -139,6 +139,25 @@
               "tokens_output": { "type": "number", "minimum": 0 },
               "latency_ms": { "type": "number", "minimum": 0 },
               "timestamp": { "type": "string", "format": "date-time" },
+              "binding": {
+                "type": "object",
+                "description": "Receipt binding fields tying this receipt to a run/event. See receipt_binding.v1.json.",
+                "properties": {
+                  "run_id": { "type": "string", "minLength": 1 },
+                  "event_hash_b64u": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "minLength": 8
+                  },
+                  "nonce": { "type": "string", "minLength": 1 },
+                  "policy_hash": { "type": "string", "minLength": 1 },
+                  "token_scope_hash_b64u": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "minLength": 8
+                  }
+                }
+              },
               "metadata": { "type": "object" }
             }
           },
@@ -199,7 +218,36 @@
     },
     "metadata": {
       "type": "object",
-      "description": "Optional bundle metadata (e.g., harness info)."
+      "description": "Optional bundle metadata. SHOULD include harness info for auditability.",
+      "properties": {
+        "harness": {
+          "type": "object",
+          "description": "Harness metadata identifying the runtime that produced this bundle.",
+          "required": ["id", "version"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Harness identifier (e.g. openclaw, pi, claude-code, codex, opencode, factory-droid, script)."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Harness version string."
+            },
+            "runtime": {
+              "type": "string",
+              "description": "Execution environment (host, docker, clawea, tee)."
+            },
+            "config_hash_b64u": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "minLength": 8,
+              "description": "Hash of the harness config inputs, base64url (no padding)."
+            }
+          }
+        }
+      }
     }
   },
   "anyOf": [

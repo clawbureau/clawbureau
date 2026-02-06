@@ -154,13 +154,26 @@ The exact event payloads can be harness-specific; only the **payload hash** must
 
 ### 5.1 Binding headers
 
-When the harness routes an LLM call through clawproxy, it SHOULD provide:
+When the harness routes an LLM call through clawproxy, it SHOULD provide these HTTP headers to bind the resulting receipt to the run and event chain:
 
-- `X-Run-Id: <run_id>`
-- `X-Event-Hash: <event_hash_b64u>`
-- `X-Idempotency-Key: <nonce>`
+| Header | Binding field | Description |
+|--------|--------------|-------------|
+| `X-Run-Id` | `run_id` | Run identifier — correlates all receipts in a single agent run |
+| `X-Event-Hash` | `event_hash_b64u` | Base64url hash of the event-chain entry that triggered this LLM call |
+| `X-Idempotency-Key` | `nonce` | Unique nonce to prevent duplicate receipt issuance (5-min TTL) |
 
-This is supported today in `services/clawproxy/src/idempotency.ts`.
+The proxy additionally injects two server-side binding fields:
+
+| Binding field | Source | Description |
+|--------------|--------|-------------|
+| `policy_hash` | Work Policy Contract | Hash of the enforced WPC (when a policy header is provided) |
+| `token_scope_hash_b64u` | Scoped Token (CST) | Hash of the CST claims (when a scoped token is validated) |
+
+All binding fields are embedded in the signed receipt payload and are **tamper-proof** — any modification breaks the Ed25519 signature.
+
+**Schema reference:** `packages/schema/poh/receipt_binding.v1.json`
+
+**Implementation:** `services/clawproxy/src/idempotency.ts` (extraction) and `services/clawproxy/src/receipt.ts` (embedding + signing).
 
 ### 5.2 Receipt verification
 
@@ -246,16 +259,30 @@ interface ProofBundlePayload {
   event_chain?: EventChainEntry[]
   receipts?: SignedEnvelope<GatewayReceiptPayload>[]
   attestations?: AttestationReference[]
-  metadata?: Record<string, unknown>
+  metadata?: ProofBundleMetadata
+}
+
+interface ProofBundleMetadata {
+  harness?: HarnessMetadata
+  [key: string]: unknown
+}
+```
+
+Each `GatewayReceiptPayload` inside `receipts` may carry a `binding` field:
+
+```ts
+interface GatewayReceiptPayload {
+  // ... existing fields ...
+  binding?: ReceiptBinding  // run_id, event_hash_b64u, nonce, policy_hash, token_scope_hash_b64u
 }
 ```
 
 v1 adapters SHOULD populate:
 
-- `metadata.harness` (see §3.2)
+- `metadata.harness` (see §3.2) — identifies the runtime that produced the bundle
 - `urm`
 - `event_chain`
-- `receipts` when available
+- `receipts` when available — each receipt SHOULD contain `binding.run_id` and `binding.event_hash_b64u` for traceability
 
 ---
 
