@@ -20,6 +20,7 @@ import {
   signEd25519,
   didFromPublicKey,
   randomUUID,
+  normalizeSha256HashB64u,
 } from './crypto';
 import type {
   RecorderConfig,
@@ -76,13 +77,9 @@ async function computeEventHash(entry: {
  * Bridge a clawproxy receipt (camelCase, version '1.0') to a
  * SignedEnvelope<GatewayReceiptPayload> (snake_case, version '1').
  *
- * Note: clawproxy receipts use hex hashes while proof bundles use
- * base64url. Since clawproxy's `requestHash`/`responseHash` are
- * already hex strings from SHA-256, we pass them through as-is
- * into the base64url fields. In a production system the proxy
- * would emit base64url directly or a conversion layer would exist.
- * For now we store the raw hash strings which satisfies the
- * minLength >= 8 constraint.
+ * Note: clawproxy receipts currently emit SHA-256 hashes as hex strings.
+ * PoH schema fields use base64url naming, so we normalize hex → base64url
+ * when the input matches a 64-character hex SHA-256.
  */
 function bridgeReceipt(
   artifact: ReceiptArtifact,
@@ -96,8 +93,8 @@ function bridgeReceipt(
     gateway_id: r.proxyDid ?? 'clawproxy',
     provider: r.provider,
     model: r.model ?? artifact.model,
-    request_hash_b64u: r.requestHash,
-    response_hash_b64u: r.responseHash,
+    request_hash_b64u: normalizeSha256HashB64u(r.requestHash),
+    response_hash_b64u: normalizeSha256HashB64u(r.responseHash),
     tokens_input: 0,
     tokens_output: 0,
     latency_ms: r.latencyMs,

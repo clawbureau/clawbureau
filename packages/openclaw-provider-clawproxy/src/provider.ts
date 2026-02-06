@@ -38,7 +38,8 @@ function inferProvider(
 ): string {
   const lower = model.toLowerCase();
   if (lower.startsWith('claude') || lower.startsWith('anthropic')) return 'anthropic';
-  if (lower.startsWith('gpt') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('o4')) return 'openai';
+  // OpenAI model families (known prefixes): gpt*, o1*
+  if (lower.startsWith('gpt') || lower.startsWith('o1')) return 'openai';
   if (lower.startsWith('gemini') || lower.startsWith('models/gemini')) return 'google';
   return defaultProvider ?? 'anthropic';
 }

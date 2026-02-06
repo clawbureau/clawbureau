@@ -15,6 +15,7 @@ import {
   signEd25519,
   didFromPublicKey,
   randomUUID,
+  normalizeSha256HashB64u,
 } from './crypto';
 import type {
   AdapterConfig,
@@ -77,8 +78,8 @@ function bridgeReceipt(
     gateway_id: r.proxyDid ?? 'clawproxy',
     provider: r.provider,
     model: r.model ?? artifact.model,
-    request_hash_b64u: r.requestHash,
-    response_hash_b64u: r.responseHash,
+    request_hash_b64u: normalizeSha256HashB64u(r.requestHash),
+    response_hash_b64u: normalizeSha256HashB64u(r.responseHash),
     tokens_input: 0,
     tokens_output: 0,
     latency_ms: r.latencyMs,
@@ -194,8 +195,8 @@ export async function createSession(
       payload: { provider: params.provider, model: params.model },
     });
 
-    // Build proxy URL
-    const proxyUrl = `${config.proxyBaseUrl.replace(/\/$/, '')}/v1/${params.provider}/chat/completions`;
+    // Build proxy URL (aligned with clawproxy: POST /v1/proxy/:provider)
+    const proxyUrl = `${config.proxyBaseUrl.replace(/\/$/, '')}/v1/proxy/${params.provider}`;
 
     // Build headers with binding context
     const headers: Record<string, string> = {

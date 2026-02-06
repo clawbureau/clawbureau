@@ -21,7 +21,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createSession } from './session';
 import { getAdapter, listAdapters } from './adapters/index';
@@ -48,7 +48,17 @@ async function loadOrGenerateKeyPair(keyFile: string): Promise<Ed25519KeyPair> {
     // Key file doesn't exist — generate a new key pair
     const kp = await generateKeyPair();
     const jwk = await exportKeyPairJWK(kp);
-    await writeFile(keyFile, JSON.stringify(jwk, null, 2), 'utf-8');
+    await writeFile(keyFile, JSON.stringify(jwk, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600,
+    });
+
+    // Best-effort hardening in case the platform ignores the mode option
+    try {
+      await chmod(keyFile, 0o600);
+    } catch {
+      // ignore
+    }
     const did = await didFromPublicKey(kp.publicKey);
     process.stderr.write(`clawproof: generated new key pair → ${did}\n`);
     process.stderr.write(`clawproof: saved to ${keyFile}\n`);

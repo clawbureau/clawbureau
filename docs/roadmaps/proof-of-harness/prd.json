@@ -1,5 +1,6 @@
 {
   "name": "clawbureau",
+  "project": "clawbureau",
   "description": "Proof-of-harness adapters & specs — tie OpenClaw + external harnesses (Claude Code, Codex, Pi, Opencode, Factory Droid, scripts) into verifiable URM/event-chain/receipt proof bundles.",
   "branchName": "ralph/proof-of-harness-adapters",
   "userStories": [

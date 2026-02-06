@@ -30,6 +30,43 @@ export function base64UrlDecode(str: string): Uint8Array {
 }
 
 // ---------------------------------------------------------------------------
+// Hex → bytes / base64url (for bridging clawproxy hex hashes)
+// ---------------------------------------------------------------------------
+
+export function hexToBytes(hex: string): Uint8Array {
+  const normalized = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (normalized.length % 2 !== 0) {
+    throw new Error(`Invalid hex string length: ${normalized.length}`);
+  }
+
+  const bytes = new Uint8Array(normalized.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    const byte = normalized.slice(i * 2, i * 2 + 2);
+    const value = Number.parseInt(byte, 16);
+    if (Number.isNaN(value)) {
+      throw new Error(`Invalid hex byte: ${byte}`);
+    }
+    bytes[i] = value;
+  }
+  return bytes;
+}
+
+/**
+ * Normalize a SHA-256 hash string into base64url (no padding).
+ *
+ * clawproxy currently emits hex-encoded SHA-256 hashes (64 chars). PoH schemas
+ * use *_hash_b64u naming. This helper converts when needed and otherwise
+ * returns the input unchanged.
+ */
+export function normalizeSha256HashB64u(hash: string): string {
+  const normalized = hash.startsWith('0x') ? hash.slice(2) : hash;
+  if (/^[a-f0-9]{64}$/i.test(normalized)) {
+    return base64UrlEncode(hexToBytes(normalized));
+  }
+  return hash;
+}
+
+// ---------------------------------------------------------------------------
 // Base58btc (Bitcoin alphabet)
 // ---------------------------------------------------------------------------
 
