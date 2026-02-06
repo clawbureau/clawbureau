@@ -123,7 +123,10 @@ export interface ReceiptArtifact {
   type: 'clawproxy_receipt';
   collectedAt: string;
   model: string;
+  /** Legacy clawproxy receipt (`_receipt`, version 1.0). */
   receipt: ClawproxyReceipt;
+  /** Canonical clawproxy receipt envelope (`_receipt_envelope`, version 1). */
+  receiptEnvelope?: SignedEnvelope<GatewayReceiptPayload>;
 }
 
 // ---------------------------------------------------------------------------

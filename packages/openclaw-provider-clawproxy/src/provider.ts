@@ -12,6 +12,8 @@ import type {
   ReceiptArtifact,
   StreamEvent,
   StreamOptions,
+  SignedEnvelope,
+  GatewayReceiptPayload,
 } from './types';
 
 // ── Binding header names (must match clawproxy/src/idempotency.ts) ──────────
@@ -101,6 +103,50 @@ function extractReceipt(
 }
 
 /**
+ * Extract the `_receipt_envelope` (canonical SignedEnvelope<GatewayReceiptPayload>)
+ * from a clawproxy JSON response.
+ */
+function extractReceiptEnvelope(
+  body: Record<string, unknown>,
+): SignedEnvelope<GatewayReceiptPayload> | undefined {
+  const raw = body['_receipt_envelope'];
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const isB64u = (value: unknown): value is string =>
+    typeof value === 'string' &&
+    value.length > 0 &&
+    /^[A-Za-z0-9_-]+$/.test(value);
+
+  const env = raw as Partial<SignedEnvelope<GatewayReceiptPayload>>;
+
+  // Envelope-level checks (avoid undefined payload_hash_b64u silently corrupting root hashes)
+  if (env.envelope_version !== '1') return undefined;
+  if (env.envelope_type !== 'gateway_receipt') return undefined;
+  if (env.algorithm !== 'Ed25519') return undefined;
+  if (env.hash_algorithm !== 'SHA-256') return undefined;
+
+  if (!isB64u(env.payload_hash_b64u)) return undefined;
+  if (!isB64u(env.signature_b64u)) return undefined;
+  if (typeof env.signer_did !== 'string' || !env.signer_did.startsWith('did:key:'))
+    return undefined;
+  if (typeof env.issued_at !== 'string' || env.issued_at.length === 0) return undefined;
+  if (!env.payload || typeof env.payload !== 'object') return undefined;
+
+  // Payload-level checks
+  const p = env.payload as Partial<GatewayReceiptPayload>;
+  if (p.receipt_version !== '1') return undefined;
+  if (typeof p.receipt_id !== 'string' || p.receipt_id.length === 0) return undefined;
+  if (typeof p.gateway_id !== 'string' || p.gateway_id.length === 0) return undefined;
+  if (typeof p.provider !== 'string' || p.provider.length === 0) return undefined;
+  if (typeof p.model !== 'string' || p.model.length === 0) return undefined;
+  if (!isB64u(p.request_hash_b64u)) return undefined;
+  if (!isB64u(p.response_hash_b64u)) return undefined;
+  if (typeof p.timestamp !== 'string' || p.timestamp.length === 0) return undefined;
+
+  return raw as SignedEnvelope<GatewayReceiptPayload>;
+}
+
+/**
  * Create the provider implementation that proxies through clawproxy.
  */
 export function createClawproxyProvider(
@@ -178,12 +224,14 @@ export function createClawproxyProvider(
 
       // Collect receipt
       const receipt = extractReceipt(parsed);
+      const receiptEnvelope = extractReceiptEnvelope(parsed);
       if (receipt) {
         const artifact: ReceiptArtifact = {
           type: 'clawproxy_receipt',
           collectedAt: new Date().toISOString(),
           model,
           receipt,
+          receiptEnvelope: receiptEnvelope ?? undefined,
         };
         collectedReceipts.push(artifact);
         deps.logger.debug(

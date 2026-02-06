@@ -109,6 +109,44 @@ function bridgeReceipt(
   };
 }
 
+function extractReceiptEnvelope(
+  body: Record<string, unknown>,
+): SignedEnvelope<GatewayReceiptPayload> | undefined {
+  const raw = body['_receipt_envelope'];
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const isB64u = (value: unknown): value is string =>
+    typeof value === 'string' &&
+    value.length > 0 &&
+    /^[A-Za-z0-9_-]+$/.test(value);
+
+  const env = raw as Partial<SignedEnvelope<GatewayReceiptPayload>>;
+
+  if (env.envelope_version !== '1') return undefined;
+  if (env.envelope_type !== 'gateway_receipt') return undefined;
+  if (env.algorithm !== 'Ed25519') return undefined;
+  if (env.hash_algorithm !== 'SHA-256') return undefined;
+
+  if (!isB64u(env.payload_hash_b64u)) return undefined;
+  if (!isB64u(env.signature_b64u)) return undefined;
+  if (typeof env.signer_did !== 'string' || !env.signer_did.startsWith('did:key:'))
+    return undefined;
+  if (typeof env.issued_at !== 'string' || env.issued_at.length === 0) return undefined;
+  if (!env.payload || typeof env.payload !== 'object') return undefined;
+
+  const p = env.payload as Partial<GatewayReceiptPayload>;
+  if (p.receipt_version !== '1') return undefined;
+  if (typeof p.receipt_id !== 'string' || p.receipt_id.length === 0) return undefined;
+  if (typeof p.gateway_id !== 'string' || p.gateway_id.length === 0) return undefined;
+  if (typeof p.provider !== 'string' || p.provider.length === 0) return undefined;
+  if (typeof p.model !== 'string' || p.model.length === 0) return undefined;
+  if (!isB64u(p.request_hash_b64u)) return undefined;
+  if (!isB64u(p.response_hash_b64u)) return undefined;
+  if (typeof p.timestamp !== 'string' || p.timestamp.length === 0) return undefined;
+
+  return raw as SignedEnvelope<GatewayReceiptPayload>;
+}
+
 // ---------------------------------------------------------------------------
 // Resource descriptor conversion (camelCase → snake_case)
 // ---------------------------------------------------------------------------
@@ -217,6 +255,8 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     const responseBody = await res.json() as Record<string, unknown>;
     let receipt: ReceiptArtifact | undefined;
 
+    const receiptEnvelope = extractReceiptEnvelope(responseBody);
+
     // Extract receipt from _receipt field
     if (responseBody._receipt) {
       const rawReceipt = responseBody._receipt as ClawproxyReceipt;
@@ -225,6 +265,7 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
         collectedAt: new Date().toISOString(),
         model: params.model,
         receipt: rawReceipt,
+        receiptEnvelope,
       };
       addReceipt(receipt);
     }
@@ -263,6 +304,13 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     // 4. Bridge receipts to SignedEnvelope<GatewayReceiptPayload>
     const bridgedReceipts: SignedEnvelope<GatewayReceiptPayload>[] = [];
     for (const artifact of receipts) {
+      // Prefer canonical `_receipt_envelope` emitted by clawproxy when present.
+      if (artifact.receiptEnvelope) {
+        bridgedReceipts.push(artifact.receiptEnvelope);
+        continue;
+      }
+
+      // Fallback: bridge legacy `_receipt` into envelope shape (non-verifiable signature).
       const envelope = bridgeReceipt(artifact, artifact.receipt.proxyDid ?? agentDid);
       envelope.payload_hash_b64u = await hashJsonB64u(envelope.payload);
       bridgedReceipts.push(envelope);

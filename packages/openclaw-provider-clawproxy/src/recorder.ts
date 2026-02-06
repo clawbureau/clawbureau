@@ -269,6 +269,14 @@ export async function createRecorder(
       // 4. Bridge receipts to SignedEnvelope<GatewayReceiptPayload>
       const bridgedReceipts: SignedEnvelope<GatewayReceiptPayload>[] = [];
       for (const artifact of receipts) {
+        // Prefer the canonical `_receipt_envelope` emitted by clawproxy when present.
+        // This allows clawverify to cryptographically validate the receipt signature.
+        if (artifact.receiptEnvelope) {
+          bridgedReceipts.push(artifact.receiptEnvelope);
+          continue;
+        }
+
+        // Fallback: bridge legacy `_receipt` into envelope shape (non-verifiable signature).
         const envelope = bridgeReceipt(artifact, artifact.receipt.proxyDid ?? agentDid);
         envelope.payload_hash_b64u = await hashJsonB64u(envelope.payload);
         bridgedReceipts.push(envelope);

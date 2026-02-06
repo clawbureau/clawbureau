@@ -11,6 +11,11 @@ routes = [
 [vars]
 ENVIRONMENT = "production"
 
+# Comma-separated allowlist of trusted gateway receipt signer DIDs (did:key:...)
+# Required for fail-closed receipt verification.
+# Set this via Cloudflare dashboard or wrangler vars/secrets.
+# GATEWAY_RECEIPT_SIGNER_DIDS = "did:key:..."
+
 [[d1_databases]]
 binding = "AUDIT_LOG_DB"
 database_name = "clawverify-audit-log"

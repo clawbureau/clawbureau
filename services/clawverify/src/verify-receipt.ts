@@ -25,6 +25,15 @@ import {
   verifySignature,
 } from './crypto';
 
+export interface ReceiptVerifierOptions {
+  /**
+   * Allowlisted gateway signer DIDs (did:key:...).
+   * Fail-closed: if empty or missing, receipts are treated as INVALID.
+   */
+  allowlistedSignerDids?: readonly string[];
+}
+
+
 /**
  * Validate envelope structure before cryptographic verification
  * Fail-closed: reject any unknown or missing fields
@@ -97,7 +106,10 @@ function validateReceiptPayload(
  * - Check receipt schema
  * - Return verified provider/model
  */
-export async function verifyReceipt(envelope: unknown): Promise<{
+export async function verifyReceipt(
+  envelope: unknown,
+  options: ReceiptVerifierOptions = {}
+): Promise<{
   result: VerificationResult;
   provider?: string;
   model?: string;
@@ -213,6 +225,42 @@ export async function verifyReceipt(envelope: unknown): Promise<{
         code: 'INVALID_DID_FORMAT',
         message:
           'Signer DID does not match expected format (did:key:... or did:web:...)',
+        field: 'signer_did',
+      },
+    };
+  }
+
+  // 7.5 Fail-closed: require allowlisted gateway signer DID(s)
+  if (!options.allowlistedSignerDids || options.allowlistedSignerDids.length === 0) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: 'Gateway receipt signer allowlist not configured',
+        envelope_type: envelope.envelope_type,
+        signer_did: envelope.signer_did,
+        verified_at: now,
+      },
+      error: {
+        code: 'DEPENDENCY_NOT_CONFIGURED',
+        message:
+          'Gateway receipt signer allowlist is not configured. Set GATEWAY_RECEIPT_SIGNER_DIDS to enable receipt verification.',
+        field: 'env.GATEWAY_RECEIPT_SIGNER_DIDS',
+      },
+    };
+  }
+
+  if (!options.allowlistedSignerDids.includes(envelope.signer_did)) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: 'Receipt signer DID is not allowlisted',
+        envelope_type: envelope.envelope_type,
+        signer_did: envelope.signer_did,
+        verified_at: now,
+      },
+      error: {
+        code: 'CLAIM_NOT_FOUND',
+        message: `Signer DID '${envelope.signer_did}' is not in the allowlisted gateway signer list`,
         field: 'signer_did',
       },
     };

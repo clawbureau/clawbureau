@@ -18,8 +18,23 @@ import type {
   VerifyReceiptResponse,
 } from './types';
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
-import { generateReceipt, attachReceipt, createSigningPayload, type SigningContext, type EncryptionContext } from './receipt';
-import { importEd25519Key, computeKeyId, base64urlEncode, verifyEd25519, importAesKey } from './crypto';
+import {
+  generateReceipt,
+  attachReceipt,
+  createSigningPayload,
+  generateReceiptEnvelope,
+  attachReceiptEnvelope,
+  type SigningContext,
+  type EncryptionContext,
+} from './receipt';
+import {
+  importEd25519Key,
+  computeKeyId,
+  base64urlEncode,
+  verifyEd25519,
+  importAesKey,
+  didKeyFromEd25519PublicKeyBytes,
+} from './crypto';
 import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing, logConfidentialRequest, logTokenUsed } from './logging';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
 import { extractBindingFromHeaders, checkIdempotency, recordNonce } from './idempotency';
@@ -56,11 +71,13 @@ async function initSigningContext(env: Env): Promise<SigningContext | null> {
 
   const keyPair = await importEd25519Key(env.PROXY_SIGNING_KEY);
   const kid = await computeKeyId(keyPair.publicKeyBytes);
+  const didKey = didKeyFromEd25519PublicKeyBytes(keyPair.publicKeyBytes);
 
   cachedSigningContext = {
     keyPair,
     did: PROXY_DID,
     kid,
+    didKey,
   };
 
   return cachedSigningContext;
@@ -139,7 +156,7 @@ export default {
 
       <h2>Endpoints</h2>
       <ul>
-        <li><code>POST /v1/proxy/:provider</code> — Proxy a request to a provider and return provider response + <code>_receipt</code>.</li>
+        <li><code>POST /v1/proxy/:provider</code> — Proxy a request to a provider and return provider response + <code>_receipt</code> (legacy) + <code>_receipt_envelope</code> (canonical).</li>
         <li><code>GET /v1/did</code> — DID document (public key material for receipt verification).</li>
         <li><code>POST /v1/verify-receipt</code> — Verify a receipt signature and return claims.</li>
         <li><code>GET /health</code> — Health check.</li>
@@ -328,6 +345,7 @@ async function handleDidEndpoint(env: Env, request: Request): Promise<Response> 
       runtime: 'cloudflare-workers',
       region: cfColo,
       service: 'clawproxy',
+      receiptSignerDidKey: signingContext.didKey,
     },
   };
 
@@ -488,6 +506,10 @@ async function handleProxy(
   providerParam: string
 ): Promise<Response> {
   const startTime = Date.now();
+
+  // Use a stable, server-defined gateway identifier for signed receipts.
+  // Do NOT derive this from request host headers, which can be user-controlled.
+  const gatewayId = PROXY_DID;
 
   // Check rate limit before processing
   const rateLimitInfo = await checkRateLimit(request, env);
@@ -822,6 +844,10 @@ async function handleProxy(
     encryptionContext ?? undefined
   );
 
+  const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
+    gatewayId,
+  });
+
   // Log token hash with receipt metadata (never log token itself)
   if (validatedCst) {
     logTokenUsed(request, {
@@ -845,9 +871,9 @@ async function handleProxy(
       errorObj = { raw: responseBody };
     }
 
-    const withReceipt = attachReceipt(
-      { error: errorObj, status: providerResponse.status },
-      receipt
+    const withReceipt = attachReceiptEnvelope(
+      attachReceipt({ error: errorObj, status: providerResponse.status }, receipt),
+      receiptEnvelope
     );
 
     // Record nonce for idempotency (even for provider errors)
@@ -865,7 +891,10 @@ async function handleProxy(
     responseObj = { data: responseBody };
   }
 
-  const withReceipt = attachReceipt(responseObj, receipt);
+  const withReceipt = attachReceiptEnvelope(
+    attachReceipt(responseObj, receipt),
+    receiptEnvelope
+  );
 
   // Record nonce for idempotency enforcement (if provided)
   recordNonce(binding?.nonce, withReceipt);

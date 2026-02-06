@@ -43,6 +43,12 @@ export interface Env {
   AUDIT_LOG_DB: AuditLogDB;
 
   /**
+   * Comma-separated list of trusted gateway receipt signer DIDs (did:key:...).
+   * Used for fail-closed receipt verification (POH gateway tier).
+   */
+  GATEWAY_RECEIPT_SIGNER_DIDS?: string;
+
+  /**
    * Comma-separated list of repo claim IDs that exist in clawclaim.
    * Used for CVF-US-011 commit proof verification.
    */
@@ -227,8 +233,14 @@ async function handleVerifyReceipt(
 
   const { envelope } = body as { envelope: unknown };
 
+  const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
+    env.GATEWAY_RECEIPT_SIGNER_DIDS
+  );
+
   // Verify the receipt signature
-  const verification = await verifyReceipt(envelope);
+  const verification = await verifyReceipt(envelope, {
+    allowlistedSignerDids: gatewaySignerAllowlist,
+  });
 
   // Write audit log entry
   let auditReceipt: AuditLogReceipt | undefined;
@@ -383,7 +395,7 @@ async function handleIntrospectScopedToken(
 /**
  * Handle POST /v1/verify/agent - One-call agent verification
  */
-async function handleVerifyAgent(request: Request): Promise<Response> {
+async function handleVerifyAgent(request: Request, env: Env): Promise<Response> {
   let body: unknown;
   try {
     body = await request.json();
@@ -395,7 +407,13 @@ async function handleVerifyAgent(request: Request): Promise<Response> {
     return errorResponse('Request must be an object', 400);
   }
 
-  const verification = await verifyAgent(body);
+  const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
+    env.GATEWAY_RECEIPT_SIGNER_DIDS
+  );
+
+  const verification = await verifyAgent(body, {
+    allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+  });
   const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(verification as VerifyAgentResponse, status);
 }
@@ -470,8 +488,14 @@ async function handleVerifyBatch(
     return errorResponse('Invalid JSON in request body', 400);
   }
 
+  const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
+    env.GATEWAY_RECEIPT_SIGNER_DIDS
+  );
+
   // Verify the batch
-  const result = await verifyBatch(body);
+  const result = await verifyBatch(body, {
+    allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+  });
 
   // If validation error, return 400
   if ('error' in result && typeof result.error === 'string') {
@@ -544,7 +568,13 @@ async function handleVerifyBundle(
   const { envelope } = body as { envelope: unknown };
 
   // Verify the proof bundle
-  const verification = await verifyProofBundle(envelope);
+  const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
+    env.GATEWAY_RECEIPT_SIGNER_DIDS
+  );
+
+  const verification = await verifyProofBundle(envelope, {
+    allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+  });
 
   // Write audit log entry
   let auditReceipt: AuditLogReceipt | undefined;
@@ -988,7 +1018,7 @@ Canonical: ${url.origin}/.well-known/security.txt
 
     // POST /v1/verify/agent - One-call agent verification
     if (url.pathname === '/v1/verify/agent' && method === 'POST') {
-      return handleVerifyAgent(request);
+      return handleVerifyAgent(request, env);
     }
 
     // POST /v1/verify/commit-proof - Commit proof verification
