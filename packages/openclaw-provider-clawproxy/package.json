@@ -1,0 +1,24 @@
+{
+  "name": "@openclaw/provider-clawproxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw provider plugin that routes model calls through clawproxy with run bindings for automatic receipts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "slots": ["provider"]
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.1.26"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT"
+}
