@@ -16,6 +16,7 @@ export const ENVELOPE_TYPES = [
   'event_chain',
   'owner_attestation',
   'commit_proof',
+  'execution_attestation',
   'scoped_token',
 ] as const;
 export type EnvelopeType = (typeof ENVELOPE_TYPES)[number];
