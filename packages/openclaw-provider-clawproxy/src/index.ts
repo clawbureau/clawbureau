@@ -19,9 +19,29 @@ import type {
   PluginDeps,
   ProviderImplementation,
   ReceiptArtifact,
+  RecorderConfig,
+  FinalizeOptions,
+  FinalizeResult,
+  HarnessConfig,
+  ResourceDescriptor,
 } from './types';
 
-export type { ClawproxyProviderConfig, ReceiptArtifact };
+export type {
+  ClawproxyProviderConfig,
+  ReceiptArtifact,
+  RecorderConfig,
+  FinalizeOptions,
+  FinalizeResult,
+  HarnessConfig,
+  ResourceDescriptor,
+};
+
+// Recorder exports
+export { createRecorder } from './recorder';
+export type { HarnessRecorder } from './recorder';
+
+// Crypto utilities for key management
+export { generateKeyPair, didFromPublicKey, hashJsonB64u } from './crypto';
 
 // ── Plugin definition ───────────────────────────────────────────────────────
 
