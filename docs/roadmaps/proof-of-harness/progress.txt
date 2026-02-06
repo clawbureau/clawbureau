@@ -21,3 +21,25 @@ Started: 2026-02-05T21:49:28Z
   - Current `clawverify` ProofBundlePayload exists as TypeScript types but the corresponding JSON schema files are not yet in `packages/schema/poh/`.
   - Current `clawproxy` receipt format is not yet the same as `clawverify`'s `SignedEnvelope<GatewayReceiptPayload>`; we need to reconcile formats before we can claim `gateway` tier end-to-end.
 ---
+
+## 2026-02-05T22:10:00Z - POH-US-002
+- What was implemented
+  - Added PoH payload schemas under `packages/schema/poh/`:
+    - proof_bundle.v1.json
+    - event_chain.v1.json
+    - urm.v1.json
+    - execution_attestation.v1.json
+  - Updated `packages/schema/README.md` to list the new PoH schemas.
+- Files changed
+  - packages/schema/poh/proof_bundle.v1.json
+  - packages/schema/poh/event_chain.v1.json
+  - packages/schema/poh/urm.v1.json
+  - packages/schema/poh/execution_attestation.v1.json
+  - packages/schema/README.md
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/schema-registry.ts
+  - services/clawverify/src/schema-docs.ts
+  - proofs/ralph/proof-of-harness-schemas/commit.sig.json
+- **Learnings for future iterations:**
+  - The JSON schemas encode the *intended* receipt envelope shape (SignedEnvelope<GatewayReceiptPayload>), but clawproxy currently emits a different receipt structure; POH-US-003/004 must reconcile this before we can derive `gateway` tier deterministically.
+---

@@ -657,6 +657,132 @@ const SCHEMA_DEFINITIONS: SchemaDefinition[] = [
     },
   },
   {
+    id: 'execution_attestation',
+    name: 'Execution Attestation',
+    description:
+      'Attestation that a run executed in a specific isolation environment (sandbox/TEE).',
+    version: '1',
+    status: 'active',
+    fields: {
+      envelope: COMMON_ENVELOPE_FIELDS,
+      payload: [
+        {
+          name: 'attestation_version',
+          type: 'string',
+          required: true,
+          description: 'Version of the execution attestation payload format',
+          allowedValues: ['1'],
+        },
+        {
+          name: 'attestation_id',
+          type: 'string',
+          required: true,
+          description: 'Unique identifier for the attestation',
+        },
+        {
+          name: 'execution_type',
+          type: 'string',
+          required: true,
+          description: 'Type of execution guarantee',
+          allowedValues: ['sandbox_execution', 'tee_execution'],
+        },
+        {
+          name: 'agent_did',
+          type: 'string',
+          required: true,
+          description: 'Agent DID that was executed',
+        },
+        {
+          name: 'attester_did',
+          type: 'string',
+          required: true,
+          description: 'Attester DID (sandbox/TEE authority)',
+        },
+        {
+          name: 'run_id',
+          type: 'string',
+          required: false,
+          description: 'Optional run identifier being attested',
+        },
+        {
+          name: 'proof_bundle_hash_b64u',
+          type: 'string',
+          required: false,
+          description: 'Optional base64url hash binding to a proof bundle',
+        },
+        {
+          name: 'harness',
+          type: 'object',
+          required: false,
+          description: 'Optional harness metadata observed by the attester',
+        },
+        {
+          name: 'runtime_metadata',
+          type: 'object',
+          required: false,
+          description:
+            'Optional environment claims (image hash, resource limits, network policy)',
+        },
+        {
+          name: 'issued_at',
+          type: 'string',
+          required: true,
+          description: 'ISO 8601 timestamp when the attestation was issued',
+        },
+        {
+          name: 'expires_at',
+          type: 'string',
+          required: false,
+          description: 'ISO 8601 expiration timestamp',
+        },
+        {
+          name: 'metadata',
+          type: 'object',
+          required: false,
+          description: 'Optional metadata',
+        },
+      ],
+    },
+    failClosedRules: [
+      ...GLOBAL_FAIL_CLOSED_RULES,
+      'Invalid attestation_version: REJECTED',
+      'Missing attestation_id: REJECTED',
+      'Unknown execution_type: REJECTED',
+      'Invalid agent_did format: REJECTED',
+      'Invalid attester_did format: REJECTED',
+    ],
+    example: {
+      envelope_version: '1',
+      envelope_type: 'execution_attestation',
+      payload: {
+        attestation_version: '1',
+        attestation_id: 'execatt_abc123',
+        execution_type: 'sandbox_execution',
+        agent_did: 'did:key:z6MkAgent...',
+        attester_did: 'did:key:z6MkAttester...',
+        run_id: 'run_abc123',
+        proof_bundle_hash_b64u: 'LCa0a2j_xo_5m0U8HTBBNBNCLXBkg7-g-YpeiGJm564',
+        issued_at: '2026-02-02T12:00:00Z',
+        expires_at: '2027-02-02T12:00:00Z',
+        harness: {
+          id: 'openclaw',
+          version: '0.1.0',
+          runtime: 'docker',
+          config_hash_b64u: 'aB1cD2eF3gH4iJ5kL6mN7oP8qR9sT0uV1wX2yZ3aB4c',
+        },
+        runtime_metadata: {
+          image_hash: 'sha256:...',
+        },
+      },
+      payload_hash_b64u: 'example_hash',
+      hash_algorithm: 'SHA-256',
+      signature_b64u: 'example_signature',
+      algorithm: 'Ed25519',
+      signer_did: 'did:key:example',
+      issued_at: '2026-02-02T12:00:00Z',
+    },
+  },
+  {
     id: 'commit_proof',
     name: 'Commit Proof',
     description:
@@ -894,7 +1020,7 @@ export function getSchemaAllowlist(): SchemaAllowlistResponse {
 
   return {
     version: '1',
-    updated_at: '2026-02-02T00:00:00Z',
+    updated_at: '2026-02-06T00:00:00Z',
     total_schemas: schemasWithExamples.length,
     schemas: schemasWithExamples,
     validation_rules: [

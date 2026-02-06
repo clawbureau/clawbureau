@@ -1,0 +1,119 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.urm.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Universal Run Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["urm_version", "urm_id", "run_id", "agent_did", "issued_at", "harness", "inputs", "outputs"],
+  "properties": {
+    "urm_version": {
+      "const": "1",
+      "description": "URM payload version."
+    },
+    "urm_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this manifest."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Run identifier used to correlate events and receipts."
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Agent DID. Must start with 'did:'."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the URM was produced (ISO 8601)."
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Harness identifier (e.g. openclaw, pi, codex)." },
+        "version": { "type": "string", "minLength": 1, "description": "Harness version string." },
+        "runtime": { "type": "string", "description": "Execution environment (host|docker|clawea|tee)." },
+        "config_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8,
+          "description": "Hash of the harness config inputs, base64url (no padding)."
+        },
+        "metadata": { "type": "object", "description": "Optional harness metadata." }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Input resources for the run (bounty spec, repo state, prompts).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "hash_b64u"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Content hash of the resource bytes, base64url (no padding)."
+          },
+          "content_type": { "type": "string" },
+          "uri": { "type": "string", "format": "uri" },
+          "path": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "description": "Output artifacts produced by the run (patches, test results).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "hash_b64u"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Content hash of the artifact bytes, base64url (no padding)."
+          },
+          "content_type": { "type": "string" },
+          "uri": { "type": "string", "format": "uri" },
+          "path": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "metadata": { "type": "object" }
+        }
+      }
+    },
+    "event_chain_root_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Optional root hash of the event chain (base64url)."
+    },
+    "receipts_root_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Optional composite hash (or Merkle root) over all receipts (base64url)."
+    },
+    "proof_bundle_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Optional hash of the proof bundle envelope payload_hash_b64u this URM is referenced from."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional additional metadata for auditability (non-normative)."
+    }
+  }
+}

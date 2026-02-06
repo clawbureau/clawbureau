@@ -1,0 +1,55 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.event_chain.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Event Chain v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["chain_version", "chain_id", "run_id", "events"],
+  "properties": {
+    "chain_version": { "const": "1" },
+    "chain_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "run_id",
+          "event_type",
+          "timestamp",
+          "payload_hash_b64u",
+          "prev_hash_b64u",
+          "event_hash_b64u"
+        ],
+        "properties": {
+          "event_id": { "type": "string", "minLength": 1 },
+          "run_id": { "type": "string", "minLength": 1 },
+          "event_type": { "type": "string", "minLength": 1 },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "payload_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Hash of the event payload bytes, base64url (no padding)."
+          },
+          "prev_hash_b64u": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Previous event hash (base64url) or null for the first event."
+          },
+          "event_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Hash of this event header (canonical JSON), base64url (no padding)."
+          }
+        }
+      }
+    },
+    "metadata": { "type": "object" }
+  }
+}

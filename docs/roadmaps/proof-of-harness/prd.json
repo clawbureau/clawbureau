@@ -15,8 +15,8 @@
         "Spec includes examples for OpenClaw + CLI harnesses"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "New design doc that becomes the reference for all adapters."
+      "passes": true,
+      "notes": "Implemented: adapter spec draft + roadmap scaffolding."
     },
     {
       "id": "POH-US-002",
@@ -29,8 +29,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Extends packages/schema/poh beyond commit_proof.v1.json."
+      "passes": true,
+      "notes": "Implemented: added PoH payload schemas (proof_bundle, event_chain, urm, execution_attestation) + updated schema README."
     },
     {
       "id": "POH-US-003",

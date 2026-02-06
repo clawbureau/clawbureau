@@ -1,0 +1,211 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.proof_bundle.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proof Bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bundle_version", "bundle_id", "agent_did"],
+  "properties": {
+    "bundle_version": {
+      "const": "1",
+      "description": "Proof bundle payload version."
+    },
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this proof bundle payload."
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Agent DID. Must start with 'did:'."
+    },
+    "urm": {
+      "type": "object",
+      "description": "Universal Resource Manifest (URM) reference. The URM document itself is content-addressed and can be fetched separately.",
+      "additionalProperties": false,
+      "required": ["urm_version", "urm_id", "resource_type", "resource_hash_b64u"],
+      "properties": {
+        "urm_version": { "const": "1" },
+        "urm_id": { "type": "string", "minLength": 1 },
+        "resource_type": { "type": "string", "minLength": 1 },
+        "resource_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8,
+          "description": "SHA-256 hash of the URM bytes, base64url (no padding)."
+        },
+        "metadata": { "type": "object", "description": "Optional URM reference metadata." }
+      }
+    },
+    "event_chain": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Hash-chained event log entries for this run (tamper-evident).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "run_id",
+          "event_type",
+          "timestamp",
+          "payload_hash_b64u",
+          "prev_hash_b64u",
+          "event_hash_b64u"
+        ],
+        "properties": {
+          "event_id": { "type": "string", "minLength": 1 },
+          "run_id": { "type": "string", "minLength": 1 },
+          "event_type": { "type": "string", "minLength": 1 },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "payload_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Hash of the event payload bytes, base64url (no padding)."
+          },
+          "prev_hash_b64u": {
+            "type": ["string", "null"],
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Previous event hash (base64url) or null for the first event."
+          },
+          "event_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Hash of the canonical event header, base64url (no padding)."
+          }
+        }
+      }
+    },
+    "receipts": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Gateway receipt envelopes (proof-of-harness). Expected to be SignedEnvelope<GatewayReceiptPayload>.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "envelope_version",
+          "envelope_type",
+          "payload",
+          "payload_hash_b64u",
+          "hash_algorithm",
+          "signature_b64u",
+          "algorithm",
+          "signer_did",
+          "issued_at"
+        ],
+        "properties": {
+          "envelope_version": { "const": "1" },
+          "envelope_type": { "const": "gateway_receipt" },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "receipt_version",
+              "receipt_id",
+              "gateway_id",
+              "provider",
+              "model",
+              "request_hash_b64u",
+              "response_hash_b64u",
+              "tokens_input",
+              "tokens_output",
+              "latency_ms",
+              "timestamp"
+            ],
+            "properties": {
+              "receipt_version": { "const": "1" },
+              "receipt_id": { "type": "string", "minLength": 1 },
+              "gateway_id": { "type": "string", "minLength": 1 },
+              "provider": { "type": "string", "minLength": 1 },
+              "model": { "type": "string", "minLength": 1 },
+              "request_hash_b64u": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "minLength": 8,
+                "description": "SHA-256 hash of request bytes, base64url (no padding)."
+              },
+              "response_hash_b64u": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "minLength": 8,
+                "description": "SHA-256 hash of response bytes, base64url (no padding)."
+              },
+              "tokens_input": { "type": "number", "minimum": 0 },
+              "tokens_output": { "type": "number", "minimum": 0 },
+              "latency_ms": { "type": "number", "minimum": 0 },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "metadata": { "type": "object" }
+            }
+          },
+          "payload_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8
+          },
+          "hash_algorithm": {
+            "type": "string",
+            "enum": ["SHA-256", "BLAKE3"]
+          },
+          "signature_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8
+          },
+          "algorithm": {
+            "type": "string",
+            "enum": ["Ed25519"]
+          },
+          "signer_did": {
+            "type": "string",
+            "pattern": "^did:",
+            "description": "Receipt signer DID. Must start with 'did:'."
+          },
+          "issued_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "attestations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Attestation references used for trust tier computation.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attestation_id",
+          "attestation_type",
+          "attester_did",
+          "subject_did",
+          "signature_b64u"
+        ],
+        "properties": {
+          "attestation_id": { "type": "string", "minLength": 1 },
+          "attestation_type": { "type": "string", "enum": ["owner", "third_party"] },
+          "attester_did": { "type": "string", "pattern": "^did:" },
+          "subject_did": { "type": "string", "pattern": "^did:" },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "signature_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional bundle metadata (e.g., harness info)."
+    }
+  },
+  "anyOf": [
+    { "required": ["urm"] },
+    { "required": ["event_chain"] },
+    { "required": ["receipts"] },
+    { "required": ["attestations"] }
+  ]
+}

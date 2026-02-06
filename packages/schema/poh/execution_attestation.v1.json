@@ -1,0 +1,61 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.execution_attestation.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Execution Attestation v1",
+  "type": "object",
+  "description": "Attestation that a run executed in a specific isolation environment (sandbox/TEE).",
+  "additionalProperties": false,
+  "required": [
+    "attestation_version",
+    "attestation_id",
+    "execution_type",
+    "agent_did",
+    "attester_did",
+    "issued_at"
+  ],
+  "properties": {
+    "attestation_version": { "const": "1" },
+    "attestation_id": { "type": "string", "minLength": 1 },
+    "execution_type": {
+      "type": "string",
+      "enum": ["sandbox_execution", "tee_execution"],
+      "description": "Type of execution guarantee."
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Agent DID that was executed. Must start with 'did:'."
+    },
+    "attester_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Attester DID (sandbox/TEE authority). Must start with 'did:'."
+    },
+    "run_id": { "type": "string", "description": "Optional binding to a specific run_id." },
+    "proof_bundle_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Optional binding to a proof bundle hash (base64url)."
+    },
+    "harness": {
+      "type": "object",
+      "description": "Optional harness metadata (id/version/runtime/config hash) observed by the attester.",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "runtime": { "type": "string" },
+        "config_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" }
+      }
+    },
+    "runtime_metadata": {
+      "type": "object",
+      "description": "Optional environment claims (e.g. image hash, resource limits, network policy).",
+      "additionalProperties": true
+    },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  }
+}
