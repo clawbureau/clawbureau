@@ -31,6 +31,7 @@ import {
   importEd25519Key,
   computeKeyId,
   base64urlEncode,
+  base64urlDecode,
   verifyEd25519,
   importAesKey,
   didKeyFromEd25519PublicKeyBytes,
@@ -109,13 +110,42 @@ function stripBearer(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return trimmed.startsWith('Bearer ') ? trimmed.slice(7).trim() : trimmed;
+
+  const m = trimmed.match(/^Bearer\s+/i);
+  return m ? trimmed.slice(m[0].length).trim() : trimmed;
 }
 
+const JWT_TOKEN_MAX_LEN = 8192;
+const JWT_HEADER_B64U_MAX_LEN = 2048;
+
 function looksLikeJwt(token: string): boolean {
-  // JWT (JWS compact) has 3 dot-separated parts.
+  // Minimal strict JWT (JWS compact) check (cheap + UTF-8 correct):
+  // - cap token length (avoid expensive parsing work)
+  // - 3 dot-separated parts
+  // - header part base64url-decodes
+  // - header bytes decode as UTF-8 JSON with string "alg"
+  if (token.length > JWT_TOKEN_MAX_LEN) return false;
+
   const parts = token.split('.');
-  return parts.length === 3 && parts.every((p) => p.length > 0);
+  if (parts.length !== 3) return false;
+  const [headerB64u] = parts;
+  if (!headerB64u) return false;
+  if (headerB64u.length > JWT_HEADER_B64U_MAX_LEN) return false;
+
+  let headerBytes: Uint8Array;
+  try {
+    headerBytes = base64urlDecode(headerB64u);
+  } catch {
+    return false;
+  }
+
+  try {
+    const headerJson = new TextDecoder('utf-8', { fatal: false }).decode(headerBytes);
+    const header = JSON.parse(headerJson) as { alg?: unknown };
+    return typeof header.alg === 'string' && header.alg.trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export default {

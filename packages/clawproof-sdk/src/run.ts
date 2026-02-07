@@ -259,14 +259,18 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
 
     if (typeof providerAuth === 'string' && providerAuth.trim().length > 0) {
       const raw = providerAuth.trim();
-      const key = raw.startsWith('Bearer ') ? raw.slice(7).trim() : raw;
+      const m = raw.match(/^Bearer\s+/i);
+      const key = (m ? raw.slice(m[0].length) : raw).trim();
       headers['X-Provider-API-Key'] = key;
     }
 
     // Copy through other headers (Authorization is reserved for proxy auth)
     for (const [k, v] of Object.entries(extra)) {
-      if (k.toLowerCase() === 'authorization') continue;
-      if (k.toLowerCase() === 'x-provider-api-key') continue;
+      const lowerK = k.toLowerCase();
+      if (lowerK === 'authorization') continue;
+      if (lowerK === 'x-provider-api-key') continue;
+      if (lowerK === 'x-provider-key') continue;
+      if (lowerK === 'x-provider-authorization') continue;
       headers[k] = v;
     }
 
