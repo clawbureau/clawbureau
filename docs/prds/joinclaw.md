@@ -1,8 +1,25 @@
+> **Type:** PRD
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PRD intent (no active execution tracker yet)
+>
+> **Scope:**
+> - Product requirements for `joinclaw.com`.
+> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+
 # joinclaw.com (Onboarding) — PRD
 
 **Domain:** joinclaw.com  
 **Pillar:** Community & Growth  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Service:** `services/joinclaw/` exists, but there is no service-level tracker yet (`prd.json` + `progress.txt`).
+- **Tracking:** add a service tracker under `services/joinclaw/` (preferred once implementation starts), or a roadmap under `docs/roadmaps/`.
 
 ---
 

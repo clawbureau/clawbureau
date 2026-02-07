@@ -191,19 +191,21 @@ Receipts MUST be verifiable by an allowlisted verification method:
 - either `clawverify /v1/verify/receipt` (preferred long-term)
 - or `clawproxy /v1/verify-receipt` (current implementation)
 
-### 5.3 Current gap (important)
+### 5.3 Canonical receipt envelope (resolved)
 
-**Today** there is a format mismatch:
+This gap is now closed (POH-US-009 + POH-US-010):
 
-- `clawproxy` currently emits a custom `Receipt` object (`services/clawproxy/src/types.ts`) signed by `did:web:clawproxy.com`.
-- `clawverify`’s `verifyReceipt` expects a `SignedEnvelope<GatewayReceiptPayload>` whose signer DID is `did:key` (it extracts keys via `extractPublicKeyFromDidKey`).
+- `clawproxy` emits a canonical `_receipt_envelope` as `SignedEnvelope<GatewayReceiptPayload>` (schema-aligned).
+  - It may also return a legacy `_receipt` object for backwards compatibility.
+  - Receipt signer DID is `did:key` derived from the `PROXY_SIGNING_KEY` public key (see `GET /v1/did`).
+- `clawverify` verifies receipts **fail-closed** against an allowlist of trusted gateway signer DIDs (`GATEWAY_RECEIPT_SIGNER_DIDS`).
+- When verifying a proof bundle, `clawverify` only counts gateway receipts toward `gateway` tier when they are:
+  1) signature-valid, **and**
+  2) bound to the bundle’s event chain via `binding.run_id` + `binding.event_hash_b64u`.
 
-We must pick one of these paths:
-
-1. **Make clawproxy emit `SignedEnvelope<GatewayReceiptPayload>`** (and decide DID method: `did:key` or `did:web` with DID-doc fetch).
-2. **Teach clawverify to verify the existing clawproxy receipt format**.
-
-Until this is resolved, the marketplace cannot safely claim `gateway` tier from proof bundles alone.
+Therefore, marketplaces can safely derive `gateway` tier from proof bundles as long as:
+- the receipt signer allowlist is configured, and
+- the proof bundle includes a valid event chain that the receipts bind to.
 
 ---
 
@@ -369,7 +371,7 @@ A verifier MUST:
 
 - validate envelope allowlist (version/type/algo/hash)
 - verify proof bundle signature
-- verify receipts (once format is reconciled)
+- verify receipts (SignedEnvelope<GatewayReceiptPayload> from allowlisted gateway signer DIDs)
 - recompute event hashes and enforce linkage
 - compute trust tier deterministically
 
@@ -392,19 +394,27 @@ This spec is implemented via `docs/roadmaps/proof-of-harness/prd.json`:
 
 ## 12) Open questions / decisions to make
 
-1) **Receipt format unification**
-- Do we migrate clawproxy to `SignedEnvelope<GatewayReceiptPayload>`?
-- Or extend clawverify to accept clawproxy’s current receipt format?
+### Resolved (PoH v1)
 
-2) **Proxy DID method**
-- Keep `did:web:clawproxy.com` (requires DID-doc fetch to verify)
-- Or switch to a `did:key` signer for receipts
+- **Receipt envelope format + DID method**: resolved by POH-US-009.
+  - `clawproxy` emits canonical `_receipt_envelope` as `SignedEnvelope<GatewayReceiptPayload>`.
+  - Receipts are signed by a `did:key` derived from `PROXY_SIGNING_KEY` (see `GET /v1/did`).
 
-3) **Canonical JSON**
+### Still open
+
+1) **Event hash recomputation in clawverify**
+- Spec defines event hashes, but verifier currently validates linkage without recomputing `event_hash_b64u`.
+- Tracked in Trust vNext (see `docs/roadmaps/trust-vnext/prd.json` CVF-US-021).
+
+2) **Canonical JSON / hashing rules beyond PoH**
 - Adopt RFC 8785 everywhere (recommended)
 - Or define per-object stable stringify rules
 
-4) **Execution attestation authority**
+3) **Execution attestation authority**
 - clawea design and key distribution
+
+4) **Streaming support for external harness shims**
+- The external-harness shim used by `@clawbureau/clawproof-adapters` is currently not streaming/SSE safe.
+- Decide how to support streaming while still extracting receipts deterministically.
 
 ---

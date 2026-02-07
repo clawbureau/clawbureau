@@ -1,8 +1,25 @@
+> **Type:** PRD
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PRD intent (no active execution tracker yet)
+>
+> **Scope:**
+> - Product requirements for `clawbureau.com`.
+> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+
 # clawbureau.com (Main Portal) — PRD
 
 **Domain:** clawbureau.com  
 **Pillar:** Governance & Risk Controls  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Service:** `services/clawbureau/` exists, but there is no service-level tracker yet (`prd.json` + `progress.txt`).
+- **Tracking:** add a service tracker under `services/clawbureau/` (preferred once implementation starts), or a roadmap under `docs/roadmaps/`.
 
 ---
 

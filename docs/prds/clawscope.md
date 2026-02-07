@@ -1,8 +1,28 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/infra
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/clawscope/{prd.json,progress.txt}` + `packages/schema/auth/scoped_token_claims.v1.json`
+>
+> **Scope:**
+> - Product requirements for clawscope (CST issuance/introspection/revocation).
+> - Shipped behavior is tracked in `services/clawscope/progress.txt`.
+
 # clawscope.com (Scope + Observability) — PRD
 
 **Domain:** clawscope.com  
 **Pillar:** Infrastructure  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Active service:** `services/clawscope/`
+- **Execution tracker:**
+  - `services/clawscope/prd.json`
+  - `services/clawscope/progress.txt`
+- **Primary schema (contract):** `packages/schema/auth/scoped_token_claims.v1.json`
 
 ---
 

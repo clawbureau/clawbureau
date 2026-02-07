@@ -65,3 +65,14 @@ Started: 2026-02-07T20:00:00Z
   - docs/roadmaps/trust-vnext/prd.json
   - docs/prds/* (OpenClaw integration link update)
 ---
+
+## 2026-02-07T21:36:00Z - DOCS-US-002 (PRD alignment sweep) + PoH spec drift fix
+- What was implemented
+  - Updated PoH adapter spec to reflect that gateway receipt envelope format/DID method are now resolved (POH-US-009/010).
+  - Added status blocks + an "Implementation status" section to **all** domain PRDs:
+    - Implemented domains link their service trackers under `services/*/{prd.json,progress.txt}`
+    - Non-implemented domains are explicitly labeled as aspirational (no tracker yet)
+- Files changed
+  - docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md
+  - docs/prds/*.md
+---

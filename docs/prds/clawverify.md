@@ -1,3 +1,13 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/clawverify/{prd.json,progress.txt}` + `packages/schema/**`
+>
+> **Scope:**
+> - Product requirements for clawverify (fail-closed verification service).
+> - Shipped behavior is tracked in `services/clawverify/progress.txt`.
+
 # clawverify.com (Verification API) — PRD
 
 **Domain:** clawverify.com  
@@ -5,6 +15,29 @@
 **Status:** Draft  
 
 ---
+
+## Implementation status (current)
+
+- **Active service:** `services/clawverify/`
+- **Execution tracker:**
+  - `services/clawverify/prd.json`
+  - `services/clawverify/progress.txt`
+- **Primary schemas (contracts):**
+  - PoH bundles/receipts: `packages/schema/poh/*`
+  - Owner attestations: `packages/schema/identity/owner_attestation.v1.json`
+  - Commit proofs: `packages/schema/poh/commit_proof.v1.json`
+
+---
+
+## Tier semantics (current outputs)
+
+- `POST /v1/verify/bundle` returns `trust_tier` in: `unknown | basic | verified | attested | full`.
+  - This is derived from which proof-bundle components verified (envelope, event chain, receipts, attestations, URM).
+- `POST /v1/verify/agent` returns both:
+  - `trust_tier` (same enum), and
+  - `poh_tier` (a numeric mapping 0..4; see `trustTierToPoHTier()` in `services/clawverify/src/verify-agent.ts`).
+
+**Important:** Marketplace-facing tier naming (`self | gateway | sandbox | ...`) is being aligned in Trust vNext (see `docs/roadmaps/trust-vnext/` story `POH-US-013`). Until then, treat `poh_tier` as a compatibility signal, not a final public contract.
 
 ## 0) OpenClaw Fit (primary design target)
 OpenClaw is the reference harness for Claw Bureau verification workflows.

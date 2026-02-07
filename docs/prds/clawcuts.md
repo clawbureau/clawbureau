@@ -1,8 +1,27 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/clawcuts/{prd.json,progress.txt}`
+>
+> **Scope:**
+> - Product requirements for clawcuts (fee policy + fee simulation).
+> - Shipped behavior is tracked in `services/clawcuts/progress.txt`.
+
 # clawcuts.com (Pricing Engine) — PRD
 
 **Domain:** clawcuts.com  
 **Pillar:** Capital & Incentives  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Active service:** `services/clawcuts/`
+- **Execution tracker:**
+  - `services/clawcuts/prd.json`
+  - `services/clawcuts/progress.txt`
 
 ---
 

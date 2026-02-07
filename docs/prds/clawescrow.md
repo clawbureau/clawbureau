@@ -1,8 +1,28 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/economy
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/escrow/{prd.json,progress.txt}` + `packages/schema/escrow/*`
+>
+> **Scope:**
+> - Product requirements for escrow holds/releases.
+> - Shipped behavior is tracked in `services/escrow/progress.txt`.
+
 # clawescrow.com (Escrow) — PRD
 
 **Domain:** clawescrow.com  
 **Pillar:** Economy & Settlement  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Active service:** `services/escrow/`
+- **Execution tracker:**
+  - `services/escrow/prd.json`
+  - `services/escrow/progress.txt`
+- **Primary schema (contract):** `packages/schema/escrow/escrow.v2.json` (v1 retained for compatibility)
 
 ---
 
