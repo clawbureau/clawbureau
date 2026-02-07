@@ -242,9 +242,39 @@ export async function createSession(
       'X-Run-Id': binding.runId,
       ...(binding.eventHash ? { 'X-Event-Hash': binding.eventHash } : {}),
       ...(binding.nonce ? { 'X-Idempotency-Key': binding.nonce } : {}),
-      ...(config.proxyToken ? { Authorization: `Bearer ${config.proxyToken}` } : {}),
-      ...params.headers,
     };
+
+    const extra = params.headers ?? {};
+
+    // Upstream provider API key (recommended: X-Provider-API-Key; legacy: Authorization)
+    const providerAuth =
+      extra['X-Provider-API-Key'] ??
+      extra['x-provider-api-key'] ??
+      extra['X-Provider-Key'] ??
+      extra['x-provider-key'] ??
+      extra['X-Provider-Authorization'] ??
+      extra['x-provider-authorization'] ??
+      extra['Authorization'] ??
+      extra['authorization'];
+
+    if (typeof providerAuth === 'string' && providerAuth.trim().length > 0) {
+      const raw = providerAuth.trim();
+      const key = raw.startsWith('Bearer ') ? raw.slice(7).trim() : raw;
+      headers['X-Provider-API-Key'] = key;
+    }
+
+    // Copy through other headers (Authorization is reserved for proxy auth)
+    for (const [k, v] of Object.entries(extra)) {
+      if (k.toLowerCase() === 'authorization') continue;
+      if (k.toLowerCase() === 'x-provider-api-key') continue;
+      headers[k] = v;
+    }
+
+    // Proxy auth token (CST or other gateway token)
+    if (config.proxyToken) {
+      headers['Authorization'] = `Bearer ${config.proxyToken}`;
+    }
+
 
     // Make the proxied request
     const res = await fetch(proxyUrl, {

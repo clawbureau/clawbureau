@@ -105,6 +105,19 @@ async function initEncryptionContext(env: Env): Promise<EncryptionContext | null
   return cachedEncryptionContext;
 }
 
+function stripBearer(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.startsWith('Bearer ') ? trimmed.slice(7).trim() : trimmed;
+}
+
+function looksLikeJwt(token: string): boolean {
+  // JWT (JWS compact) has 3 dot-separated parts.
+  const parts = token.split('.');
+  return parts.length === 3 && parts.every((p) => p.length > 0);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -163,7 +176,15 @@ export default {
       </ul>
 
       <h2>Quick start</h2>
-      <pre>curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
+      <pre># Recommended (proxy auth via CST + BYOK provider key)
+curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
+  -H "Authorization: Bearer $CST_TOKEN" \
+  -H "X-Provider-API-Key: $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
+
+# Legacy (provider key in Authorization)
+curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
@@ -203,6 +224,17 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 - POST /v1/proxy/:provider
 - GET /v1/did
 - POST /v1/verify-receipt
+
+## Authentication
+
+### Proxy auth (CST)
+- \`Authorization: Bearer <CST>\` (recommended)
+- \`X-CST: <CST>\` or \`X-Scoped-Token: <CST>\` (alternate)
+- When \`X-Client-DID\` is set, a valid CST token is required (fail-closed).
+
+### BYOK provider keys
+- Recommended: \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
+- Legacy: \`Authorization: Bearer <provider api key>\` (only when Authorization is not used for CST)
 
 ## Receipt Binding Headers
 
@@ -526,8 +558,16 @@ async function handleProxy(
   // "Authenticated" calls are those that provide X-Client-DID (used for rate limiting)
   // Fail closed: if X-Client-DID is present, a valid CST must also be present.
   const clientDidHeader = request.headers.get('X-Client-DID');
+  const authorizationHeader = request.headers.get('Authorization');
+
   const rawCstHeader = request.headers.get('X-CST') ?? request.headers.get('X-Scoped-Token');
-  const cstToken = rawCstHeader?.startsWith('Bearer ') ? rawCstHeader.slice(7) : rawCstHeader;
+  const explicitCstToken = stripBearer(rawCstHeader);
+  const authToken = stripBearer(authorizationHeader);
+
+  // Prefer explicit X-CST/X-Scoped-Token. Fall back to Authorization when it looks like a JWT.
+  const authorizationIsCst = !explicitCstToken && !!authToken && looksLikeJwt(authToken);
+
+  const cstToken = explicitCstToken ?? (authorizationIsCst ? authToken : undefined);
 
   let validatedCst:
     | {
@@ -544,7 +584,7 @@ async function handleProxy(
   if (clientDidHeader && !cstToken) {
     return errorResponseWithRateLimit(
       'TOKEN_REQUIRED',
-      'X-CST header required for authenticated requests (when X-Client-DID is set)',
+      'CST token required for authenticated requests (when X-Client-DID is set). Provide Authorization: Bearer <CST> or X-CST.',
       401,
       rateLimitInfo
     );
@@ -662,32 +702,33 @@ async function handleProxy(
   const config = getProviderConfig(provider);
 
   // CPX-US-013: Platform-paid inference mode (reserve-backed)
-  // If Authorization is present, treat as user-paid (proxy does not spend reserve credits).
-  // If Authorization is missing, allow platform-paid routing ONLY when explicitly enabled.
-  const authHeader = request.headers.get('Authorization');
+  // Provider API keys are accepted via:
+  // - X-Provider-API-Key / X-Provider-Authorization (recommended)
+  // - Authorization (legacy BYOK mode, when Authorization is NOT used for CST)
+  const providerApiKeyHeader =
+    request.headers.get('X-Provider-API-Key') ??
+    request.headers.get('X-Provider-Key') ??
+    request.headers.get('X-Provider-Authorization');
+
+  const explicitProviderApiKey = stripBearer(providerApiKeyHeader);
+
+  // Back-compat: if Authorization is not being used as CST, treat it as a legacy provider API key.
+  const legacyProviderApiKey =
+    !explicitProviderApiKey && !authorizationIsCst ? authToken : undefined;
+
+  const apiKeyCandidate = explicitProviderApiKey ?? legacyProviderApiKey;
 
   let apiKey: string;
   let payment: ReceiptPayment;
 
-  if (authHeader && authHeader.trim().length > 0) {
-    // Parse API key (supports both "Bearer <key>" and raw key formats)
-    apiKey = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-
-    if (!apiKey) {
-      return errorResponseWithRateLimit(
-        'UNAUTHORIZED',
-        'API key not provided',
-        401,
-        rateLimitInfo
-      );
-    }
-
+  if (apiKeyCandidate) {
+    apiKey = apiKeyCandidate;
     payment = { mode: 'user', paid: false };
   } else {
     if (env.PLATFORM_PAID_ENABLED !== 'true') {
       return errorResponseWithRateLimit(
         'UNAUTHORIZED',
-        'Authorization header required (platform-paid mode is disabled)',
+        'Provider API key required (set X-Provider-API-Key or legacy Authorization). Platform-paid mode is disabled.',
         401,
         rateLimitInfo
       );

@@ -46,11 +46,52 @@ function inferProvider(
   return defaultProvider ?? 'anthropic';
 }
 
+const PROVIDER_API_KEY_HEADER = 'X-Provider-API-Key';
+
+function stripBearer(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return trimmed.toLowerCase().startsWith('bearer ') ? trimmed.slice(7).trim() : trimmed;
+}
+
+function extractProviderApiKey(
+  upstreamProvider: string,
+  auth: Record<string, string> | undefined,
+): string | undefined {
+  if (!auth) return undefined;
+
+  const lower = Object.fromEntries(
+    Object.entries(auth).map(([k, v]) => [k.toLowerCase(), v]),
+  ) as Record<string, string>;
+
+  // Allow callers to pass the explicit header directly.
+  const direct =
+    lower['x-provider-api-key'] ??
+    lower['x-provider-key'] ??
+    lower['x-provider-authorization'];
+  if (direct) return stripBearer(direct);
+
+  // Common upstream auth headers.
+  if (upstreamProvider === 'openai') {
+    return stripBearer(lower['authorization']);
+  }
+  if (upstreamProvider === 'anthropic') {
+    return stripBearer(lower['x-api-key'] ?? lower['anthropic-api-key']);
+  }
+  if (upstreamProvider === 'google') {
+    return stripBearer(lower['x-goog-api-key']);
+  }
+
+  return undefined;
+}
+
 /**
  * Build request headers for a proxied model call.
  */
 function buildHeaders(
   config: ClawproxyProviderConfig,
+  upstreamProvider: string,
   auth: Record<string, string> | undefined,
   binding: BindingContext | undefined,
 ): Headers {
@@ -59,11 +100,17 @@ function buildHeaders(
     Accept: 'application/json',
   });
 
-  // Auth: prefer plugin-level token, fall back to per-call auth
+  // Proxy auth: prefer plugin-level token (CST or other gateway token)
   if (config.token) {
     headers.set('Authorization', `Bearer ${config.token}`);
-  } else if (auth) {
-    // Forward provider-specific auth headers
+  }
+
+  // Upstream provider key: extract from per-call auth and send via X-Provider-API-Key.
+  const providerApiKey = extractProviderApiKey(upstreamProvider, auth);
+  if (providerApiKey) {
+    headers.set(PROVIDER_API_KEY_HEADER, providerApiKey);
+  } else if (!config.token && auth) {
+    // Back-compat: if no plugin token is set, fall back to forwarding auth headers.
     for (const [key, value] of Object.entries(auth)) {
       headers.set(key, value);
     }
@@ -178,7 +225,7 @@ export function createClawproxyProvider(
       const providerPath = PROVIDER_PATHS[upstreamProvider] ?? PROVIDER_PATHS['anthropic'];
       const url = `${config.baseUrl.replace(/\/+$/, '')}${providerPath}`;
 
-      const headers = buildHeaders(config, options?.auth, options?.binding);
+      const headers = buildHeaders(config, upstreamProvider, options?.auth, options?.binding);
       const body = JSON.stringify({ model, messages });
 
       deps.logger.debug(
