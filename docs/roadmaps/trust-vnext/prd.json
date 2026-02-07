@@ -27,7 +27,8 @@
         "Add tests for mismatch cases"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented fail-closed check in services/clawverify/src/verify-proof-bundle.ts: envelope.signer_did must equal payload.agent_did. Added unit test coverage."
     },
     {
       "id": "CVF-US-023",
@@ -255,7 +256,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T23:19:57Z",
+    "updatedAt": "2026-02-07T23:22:57Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

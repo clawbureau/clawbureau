@@ -705,6 +705,22 @@ export async function verifyProofBundle(
     };
   }
 
+  // CVF-US-022: Enforce envelope signer DID equals payload agent DID
+  if (envelope.signer_did !== envelope.payload.agent_did) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: 'Proof bundle signer_did must match payload.agent_did',
+        verified_at: now,
+      },
+      error: {
+        code: 'INVALID_DID_FORMAT',
+        message: 'envelope.signer_did must equal payload.agent_did',
+        field: 'signer_did',
+      },
+    };
+  }
+
   // 12. Recompute hash and verify it matches
   try {
     const computedHash = await computeHash(

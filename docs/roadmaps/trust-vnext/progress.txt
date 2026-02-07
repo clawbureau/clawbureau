@@ -32,3 +32,17 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
+
+## 2026-02-07T23:22:57Z - CVF-US-022
+- What was implemented
+  - Enforced proof bundle authorship binding:
+    - `envelope.signer_did` MUST equal `payload.agent_did`
+  - Added unit test coverage to ensure a signature-valid bundle cannot claim a different `agent_did`.
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/test/proof-bundle-event-hash.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---

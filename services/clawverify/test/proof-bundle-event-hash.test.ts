@@ -201,4 +201,57 @@ describe('verifyProofBundle: CVF-US-021 recompute event_hash_b64u', () => {
     expect(out.result.status).toBe('INVALID');
     expect(out.error?.code).toBe('HASH_MISMATCH');
   });
+
+  it('rejects if envelope.signer_did does not equal payload.agent_did (CVF-US-022)', async () => {
+    const agent = await makeDidKeyEd25519();
+    const signer = await makeDidKeyEd25519();
+
+    const runId = 'run_test_003';
+
+    const e1PayloadHash = await computeHash({ type: 'run_start' }, 'SHA-256');
+    const e1Header = {
+      event_id: 'evt_201',
+      run_id: runId,
+      event_type: 'run_start',
+      timestamp: '2026-02-07T00:00:00Z',
+      payload_hash_b64u: e1PayloadHash,
+      prev_hash_b64u: null as string | null,
+    };
+    const e1Hash = await computeHash(e1Header, 'SHA-256');
+
+    const payload: any = {
+      bundle_version: '1',
+      bundle_id: 'bundle_test_003',
+      agent_did: agent.did,
+      event_chain: [
+        {
+          ...e1Header,
+          event_hash_b64u: e1Hash,
+        },
+      ],
+    };
+
+    const payloadHash = await computeHash(payload, 'SHA-256');
+    const sigMsg = new TextEncoder().encode(payloadHash);
+
+    const signature = new Uint8Array(
+      await crypto.subtle.sign('Ed25519', signer.privateKey, sigMsg)
+    );
+
+    const envelope: any = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload,
+      payload_hash_b64u: payloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: base64UrlEncode(signature),
+      algorithm: 'Ed25519',
+      signer_did: signer.did,
+      issued_at: '2026-02-07T00:00:02Z',
+    };
+
+    const out = await verifyProofBundle(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('INVALID_DID_FORMAT');
+  });
 });
