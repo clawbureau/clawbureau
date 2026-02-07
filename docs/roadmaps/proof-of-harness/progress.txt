@@ -148,3 +148,14 @@ Started: 2026-02-05T21:49:28Z
   - docs/roadmaps/proof-of-harness/prd.json
   - docs/roadmaps/proof-of-harness/progress.txt
 ---
+
+## 2026-02-07T16:06:00Z - POH-US-011
+- What was implemented
+  - Wired commit proof verification for code bounties by documenting + configuring the `CLAWCLAIM_REPO_CLAIM_ALLOWLIST` allowlist.
+  - Added a minimal smoke script to generate a `commit_proof` envelope and verify it via `POST /v1/verify/commit-proof`.
+- Files changed
+  - services/clawverify/wrangler.toml
+  - packages/schema/poh/commit_proof.v1.json
+  - docs/roadmaps/proof-of-harness/prd.json
+  - docs/roadmaps/proof-of-harness/progress.txt
+---

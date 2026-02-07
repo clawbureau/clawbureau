@@ -6,17 +6,16 @@
   "additionalProperties": false,
   "required": [
     "proof_version",
+    "repo_claim_id",
     "commit_sha",
-    "repo_url",
-    "agent_did",
-    "issued_at"
+    "repository"
   ],
   "properties": {
     "proof_version": { "const": "1" },
-    "commit_sha": { "type": "string" },
-    "repo_url": { "type": "string", "format": "uri" },
-    "agent_did": { "type": "string" },
-    "issued_at": { "type": "string", "format": "date-time" },
+    "repo_claim_id": { "type": "string", "minLength": 1 },
+    "commit_sha": { "type": "string", "pattern": "^[a-fA-F0-9]{7,64}$" },
+    "repository": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string" },
     "run_id": { "type": "string" },
     "proof_bundle_hash_b64u": { "type": "string" },
     "harness": {
