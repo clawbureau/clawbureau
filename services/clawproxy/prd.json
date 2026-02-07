@@ -201,6 +201,22 @@
       "priority": 14,
       "passes": true,
       "notes": "Added GET /, /docs, /skill.md, /robots.txt, /sitemap.xml, and /.well-known/security.txt to the clawproxy worker. /skill.md uses OpenClaw frontmatter with metadata as a single-line JSON object string."
+    },
+    {
+      "id": "CPX-US-015",
+      "title": "Auth header hardening (CST-first)",
+      "description": "As an integrator, I want proxy authentication to be unambiguous (CST in Authorization) and provider API keys to be passed explicitly so that platform-paid + BYOK modes work safely.",
+      "acceptanceCriteria": [
+        "Accept CST tokens via Authorization: Bearer <token> (JWT) in addition to X-CST",
+        "Accept provider API keys via X-Provider-API-Key / X-Provider-Authorization (recommended)",
+        "Keep legacy BYOK support: Authorization is treated as provider key when it is not used for CST",
+        "Platform-paid mode works when Authorization carries CST and provider key is omitted",
+        "Update docs and SDK/client headers",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Updated clawproxy request parsing so Authorization can carry CST while provider keys are supplied separately. Updated docs and SDK/adapters to set X-Provider-API-Key and keep Authorization reserved for proxy auth."
     }
   ]
 }

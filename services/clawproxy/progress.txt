@@ -289,3 +289,25 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks
   - cd services/clawproxy && npm run typecheck
 ---
+
+## 2026-02-07 - CPX-US-015
+- What was implemented
+  - Hardened clawproxy auth header semantics (CST-first):
+    - CST tokens can be supplied via `Authorization: Bearer <JWT>` (in addition to `X-CST`/`X-Scoped-Token`).
+    - BYOK provider API keys can be supplied via `X-Provider-API-Key` / `X-Provider-Authorization` (recommended).
+    - Legacy BYOK is preserved: `Authorization` is treated as the provider key only when it is **not** being used for CST.
+  - Updated `/docs` and `/skill.md` examples to document the new header scheme.
+  - Updated OpenClaw provider + clawproof SDK/adapters to set `X-Provider-API-Key` (and keep `Authorization` reserved for proxy auth).
+- Files changed
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/prd.json
+  - services/clawproxy/progress.txt
+  - packages/openclaw-provider-clawproxy/src/provider.ts
+  - packages/clawproof-sdk/src/run.ts
+  - packages/clawproof-adapters/src/session.ts
+- Quality checks
+  - cd services/clawproxy && npm run typecheck
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck
+  - cd packages/clawproof-sdk && npm run typecheck
+  - cd packages/clawproof-adapters && npm run typecheck
+---
