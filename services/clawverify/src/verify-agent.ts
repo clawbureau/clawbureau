@@ -17,10 +17,12 @@ import type {
   TrustTier,
   VerifyAgentRequest,
   VerifyAgentResponse,
+  DidRotationCertificate,
 } from './types';
 import { isValidDidFormat } from './schema-registry';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
 import { verifyProofBundle } from './verify-proof-bundle';
+import { verifyDidRotation } from './verify-did-rotation';
 
 export interface VerifyAgentOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
@@ -96,6 +98,49 @@ function computePolicyCompliance(
   };
 }
 
+const DID_ROTATION_CERT_LIMIT = 20;
+
+function buildDidRotationGraph(
+  certs: readonly DidRotationCertificate[]
+): Map<string, string[]> {
+  const graph = new Map<string, string[]>();
+
+  for (const cert of certs) {
+    const next = graph.get(cert.old_did) ?? [];
+    next.push(cert.new_did);
+    graph.set(cert.old_did, next);
+  }
+
+  return graph;
+}
+
+function canRotateDidTo(
+  fromDid: string,
+  toDid: string,
+  graph: Map<string, string[]> | null
+): boolean {
+  if (fromDid === toDid) return true;
+  if (!graph) return false;
+
+  const visited = new Set<string>();
+  const queue: string[] = [fromDid];
+  visited.add(fromDid);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const nexts = graph.get(current) ?? [];
+
+    for (const next of nexts) {
+      if (next === toDid) return true;
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push(next);
+    }
+  }
+
+  return false;
+}
+
 export async function verifyAgent(
   body: unknown,
   options: VerifyAgentOptions = {}
@@ -159,6 +204,88 @@ export async function verifyAgent(
 
   const components: VerifyAgentResponse['components'] = {};
 
+  // Optional DID rotation certificates (fail-closed if provided)
+  let didRotationGraph: Map<string, string[]> | null = null;
+
+  if (req.did_rotation_certificates !== undefined) {
+    if (!Array.isArray(req.did_rotation_certificates)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'did_rotation_certificates must be an array when provided',
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        poh_tier: trustTierToPoHTier(trustTier),
+        components,
+        risk_flags: [...riskFlags, 'DID_ROTATION_CERTS_MALFORMED'],
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'did_rotation_certificates must be an array',
+          field: 'did_rotation_certificates',
+        },
+      };
+    }
+
+    if (req.did_rotation_certificates.length > DID_ROTATION_CERT_LIMIT) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Too many did_rotation_certificates (max ${DID_ROTATION_CERT_LIMIT})`,
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        poh_tier: trustTierToPoHTier(trustTier),
+        components,
+        risk_flags: [...riskFlags, 'DID_ROTATION_CERTS_TOO_MANY'],
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: `did_rotation_certificates length exceeds limit (${DID_ROTATION_CERT_LIMIT})`,
+          field: 'did_rotation_certificates',
+        },
+      };
+    }
+
+    for (let i = 0; i < req.did_rotation_certificates.length; i++) {
+      const cert = req.did_rotation_certificates[i];
+      const rotationVerification = await verifyDidRotation(cert);
+
+      if (rotationVerification.result.status !== 'VALID') {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'DID rotation certificate verification failed',
+            verified_at: now,
+          },
+          agent_did: agentDid,
+          did_valid: didValid,
+          owner_status: ownerStatus,
+          trust_tier: trustTier,
+          poh_tier: trustTierToPoHTier(trustTier),
+          components,
+          risk_flags: [...riskFlags, 'DID_ROTATION_CERT_INVALID'],
+          error:
+            rotationVerification.error ??
+            ({
+              code: 'SIGNATURE_INVALID',
+              message: 'Rotation certificate verification failed',
+              field: `did_rotation_certificates[${i}]`,
+            } as const),
+        };
+      }
+    }
+
+    didRotationGraph = buildDidRotationGraph(
+      req.did_rotation_certificates as DidRotationCertificate[]
+    );
+  }
+
   // Verify owner attestation if provided
   if (req.owner_attestation_envelope !== undefined) {
     const ownerVerification = await verifyOwnerAttestation(req.owner_attestation_envelope);
@@ -170,30 +297,40 @@ export async function verifyAgent(
 
     ownerStatus = ownerVerification.owner_status ?? 'unknown';
 
-    // Ensure the owner attestation is for the requested agent DID
+    // Ensure the owner attestation is for the requested agent DID (or rotates to it)
     if (
       ownerVerification.subject_did &&
       ownerVerification.subject_did !== agentDid
     ) {
-      return {
-        result: {
-          status: 'INVALID',
-          reason: 'Owner attestation subject_did does not match agent_did',
-          verified_at: now,
-        },
-        agent_did: agentDid,
-        did_valid: didValid,
-        owner_status: ownerStatus,
-        trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
-        components,
-        risk_flags: [...riskFlags, 'OWNER_ATTESTATION_SUBJECT_MISMATCH'],
-        error: {
-          code: 'INVALID_DID_FORMAT',
-          message: 'owner_attestation.subject_did does not match requested agent_did',
-          field: 'owner_attestation_envelope.payload.subject_did',
-        },
-      };
+      const canRotate = canRotateDidTo(
+        ownerVerification.subject_did,
+        agentDid,
+        didRotationGraph
+      );
+
+      if (!canRotate) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Owner attestation subject_did does not match agent_did',
+            verified_at: now,
+          },
+          agent_did: agentDid,
+          did_valid: didValid,
+          owner_status: ownerStatus,
+          trust_tier: trustTier,
+          poh_tier: trustTierToPoHTier(trustTier),
+          components,
+          risk_flags: [...riskFlags, 'OWNER_ATTESTATION_SUBJECT_MISMATCH'],
+          error: {
+            code: 'INVALID_DID_FORMAT',
+            message: 'owner_attestation.subject_did does not match requested agent_did',
+            field: 'owner_attestation_envelope.payload.subject_did',
+          },
+        };
+      }
+
+      riskFlags.push('OWNER_ATTESTATION_SUBJECT_ROTATED');
     }
 
     if (ownerVerification.result.status !== 'VALID') {
@@ -265,26 +402,36 @@ export async function verifyAgent(
     // Subject binding: bundle must be for the requested agent
     proofBundleEnvelope = req.proof_bundle_envelope as SignedEnvelope<ProofBundlePayload>;
     if (proofBundleEnvelope?.payload?.agent_did && proofBundleEnvelope.payload.agent_did !== agentDid) {
-      riskFlags.push('PROOF_BUNDLE_AGENT_MISMATCH');
-      return {
-        result: {
-          status: 'INVALID',
-          reason: 'Proof bundle agent_did does not match agent_did',
-          verified_at: now,
-        },
-        agent_did: agentDid,
-        did_valid: didValid,
-        owner_status: ownerStatus,
-        trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
-        components,
-        risk_flags: riskFlags,
-        error: {
-          code: 'INVALID_DID_FORMAT',
-          message: 'proof_bundle.agent_did does not match requested agent_did',
-          field: 'proof_bundle_envelope.payload.agent_did',
-        },
-      };
+      const canRotate = canRotateDidTo(
+        proofBundleEnvelope.payload.agent_did,
+        agentDid,
+        didRotationGraph
+      );
+
+      if (!canRotate) {
+        riskFlags.push('PROOF_BUNDLE_AGENT_MISMATCH');
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Proof bundle agent_did does not match agent_did',
+            verified_at: now,
+          },
+          agent_did: agentDid,
+          did_valid: didValid,
+          owner_status: ownerStatus,
+          trust_tier: trustTier,
+          poh_tier: trustTierToPoHTier(trustTier),
+          components,
+          risk_flags: riskFlags,
+          error: {
+            code: 'INVALID_DID_FORMAT',
+            message: 'proof_bundle.agent_did does not match requested agent_did',
+            field: 'proof_bundle_envelope.payload.agent_did',
+          },
+        };
+      }
+
+      riskFlags.push('PROOF_BUNDLE_AGENT_ROTATED');
     }
   } else {
     riskFlags.push('MISSING_PROOF_BUNDLE');

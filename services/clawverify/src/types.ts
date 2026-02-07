@@ -28,6 +28,17 @@ export interface VerifyAgentRequest {
   agent_did: string;
   owner_attestation_envelope?: SignedEnvelope<OwnerAttestationPayload>;
   proof_bundle_envelope?: SignedEnvelope<ProofBundlePayload>;
+
+  /**
+   * Optional DID rotation certificates.
+   *
+   * When present, clawverify may accept proof components (owner attestations / bundles)
+   * whose subject DID is an *older* DID that rotates forward to agent_did.
+   *
+   * Fail-closed rule: if any certificate is provided, it MUST verify.
+   */
+  did_rotation_certificates?: DidRotationCertificate[];
+
   /** Optional Work Policy Contract hash. If provided, receipts must match this policy hash. */
   policy_hash?: string;
 }

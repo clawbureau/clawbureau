@@ -272,3 +272,20 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
+
+## 2026-02-07T23:13:45Z - CVF-US-017
+- What was implemented
+  - Added rotation-aware subject binding to the one-call agent verifier:
+    - `VerifyAgentRequest.did_rotation_certificates?: DidRotationCertificate[]`
+  - Fail-closed behavior:
+    - if rotation certs are provided, **all** must verify
+    - owner attestation / proof bundle mismatches are only accepted when they rotate forward to agent_did
+- Files changed
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/test/verify-agent-rotation.test.ts
+  - services/clawverify/prd.json
+  - services/clawverify/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---

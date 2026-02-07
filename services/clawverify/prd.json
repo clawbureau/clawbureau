@@ -230,6 +230,21 @@
       "priority": 16,
       "passes": true,
       "notes": "Implemented did_rotation certificate verification (dual signatures) with a small RFC 8785 JCS canonicalizer, plus vitest coverage for valid/tampered/unknown-field cases. Added endpoint to docs and /skill.md metadata."
+    },
+    {
+      "id": "CVF-US-017",
+      "title": "Rotation-aware /v1/verify/agent",
+      "description": "As a platform, I want /v1/verify/agent to accept DID rotation certificates so older proof components can be used after key rotation without lowering security.",
+      "acceptanceCriteria": [
+        "VerifyAgentRequest accepts did_rotation_certificates[]",
+        "Fail closed if any provided rotation certificate is invalid",
+        "Allow owner attestation subject_did mismatch only when it rotates forward to agent_did",
+        "Allow proof bundle agent_did mismatch only when it rotates forward to agent_did",
+        "Add tests for rotation and no-rotation mismatch cases"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old→new rotation is proven. Added vitest coverage for rotated owner attestations."
     }
   ]
 }
