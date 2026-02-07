@@ -271,6 +271,10 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
       if (lowerK === 'x-provider-api-key') continue;
       if (lowerK === 'x-provider-key') continue;
       if (lowerK === 'x-provider-authorization') continue;
+      // Do not allow caller-supplied proxy auth headers to override config.proxyToken.
+      if (lowerK === 'x-cst') continue;
+      if (lowerK === 'x-scoped-token') continue;
+      if (lowerK === 'x-client-did') continue;
       headers[k] = v;
     }
 

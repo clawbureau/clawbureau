@@ -271,6 +271,10 @@ export async function createSession(
       if (lowerK === 'x-provider-api-key') continue;
       if (lowerK === 'x-provider-key') continue;
       if (lowerK === 'x-provider-authorization') continue;
+      // Prevent caller from overriding proxy auth headers.
+      if (lowerK === 'x-cst') continue;
+      if (lowerK === 'x-scoped-token') continue;
+      if (lowerK === 'x-client-did') continue;
       headers[k] = v;
     }
 
