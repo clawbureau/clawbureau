@@ -1,0 +1,40 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.identity.did_rotation.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DID Rotation Certificate v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rotation_version",
+    "rotation_id",
+    "old_did",
+    "new_did",
+    "issued_at",
+    "reason",
+    "signature_old_b64u",
+    "signature_new_b64u"
+  ],
+  "properties": {
+    "rotation_version": { "const": "1" },
+    "rotation_id": { "type": "string", "minLength": 1 },
+    "old_did": { "type": "string", "minLength": 1 },
+    "new_did": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable reason for rotation (e.g. operator_rotation)."
+    },
+    "signature_old_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Signature by old_did over the canonical rotation statement (signature fields blanked during canonicalization)."
+    },
+    "signature_new_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Signature by new_did over the canonical rotation statement (signature fields blanked during canonicalization)."
+    },
+    "metadata": { "type": "object" }
+  }
+}

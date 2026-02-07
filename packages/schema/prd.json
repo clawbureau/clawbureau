@@ -16,6 +16,20 @@
       "priority": 1,
       "passes": true,
       "notes": "Added v2 schema files for bounties + escrow using USD-only currency and integer-string minor-unit fields (e.g. amount_minor). Introduced min_proof_tier enum (self|gateway|sandbox) and marked legacy min_poh_tier as deprecated."
+    },
+    {
+      "id": "AEM-US-002",
+      "title": "Identity rotation schema + golden vector fixture",
+      "description": "As a verifier/integrator, I want a standard DID rotation certificate schema and an authoritative golden vector fixture so identity primitives are testable and cross-implementation compatible.",
+      "acceptanceCriteria": [
+        "Add packages/schema/identity/did_rotation.v1.json with new $id and strict additionalProperties:false",
+        "Add packages/schema/fixtures/protocol-m-golden-vector.v1.json as a stable test vector reference",
+        "Update packages/schema/README.md to list the new identity schema",
+        "JSON files are valid (draft 2020-12 for schema)"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Added did_rotation v1 schema and imported the Protocol M golden vector as a fixture for automated verification tests."
     }
   ]
 }

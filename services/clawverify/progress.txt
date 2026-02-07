@@ -236,3 +236,18 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks
   - cd services/clawverify && npm run typecheck && npm run lint
 ---
+
+## 2026-02-07T22:03:55Z - CVF-US-015
+- What was implemented
+  - Added a crypto correctness gate test using the archived Protocol M golden vector (as a fixture under `packages/schema/fixtures/`).
+  - Test verifies:
+    - did:key extraction (base58btc decode + 0xed01 multicodec prefix)
+    - RFC 8785-style JCS canonicalization for a known payload
+    - Ed25519 signature verification over canonical UTF-8 bytes
+    - tamper-negative case
+- Files changed
+  - services/clawverify/test/protocol-m-golden-vector.test.ts
+  - services/clawverify/prd.json
+- Quality checks
+  - cd services/clawverify && npm test
+---

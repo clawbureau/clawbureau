@@ -201,6 +201,21 @@
       "priority": 14,
       "passes": true,
       "notes": "Added public endpoints to clawverify worker: GET /, /docs, /skill.md (OpenClaw frontmatter with metadata as single-line JSON object string), /robots.txt, /sitemap.xml, and /.well-known/security.txt."
+    },
+    {
+      "id": "CVF-US-015",
+      "title": "Golden vector crypto correctness gate",
+      "description": "As a platform engineer, I want an authoritative golden vector test so did:key derivation, JCS canonicalization, and Ed25519 signature verification remain compatible across implementations.",
+      "acceptanceCriteria": [
+        "Load the protocol-m golden vector fixture from packages/schema/fixtures",
+        "Verify did:key extraction yields the expected public key",
+        "Verify RFC 8785-style JCS canonicalization yields the expected canonical string",
+        "Verify Ed25519 signature over the canonical UTF-8 bytes",
+        "Test suite passes"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Added vitest coverage using packages/schema/fixtures/protocol-m-golden-vector.v1.json. Test validates did:key extraction, JCS canonicalization, and Ed25519 signature verification, plus a tamper-negative case."
     }
   ]
 }
