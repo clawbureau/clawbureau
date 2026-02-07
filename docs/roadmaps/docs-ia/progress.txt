@@ -76,3 +76,14 @@ Started: 2026-02-07T20:00:00Z
   - docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md
   - docs/prds/*.md
 ---
+
+## 2026-02-07T21:40:00Z - DOCS-US-002 (archive Protocol M planning bundle)
+- What was implemented
+  - Archived the sibling planning-only `protocol-m` folder into the monorepo archive:
+    - `docs/archive/protocol-m-phase-1/`
+  - Added an archive note pointing to the current plan-of-record (PoH + Trust vNext + schemas).
+- Files changed
+  - docs/archive/protocol-m-phase-1/*
+  - docs/ecosystem/STRATEGIC_PLAN.md
+  - docs/archive/README.md
+---

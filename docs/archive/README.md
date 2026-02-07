@@ -9,3 +9,5 @@
 > - Prefer linking to active roadmaps/specs instead.
 
 # Archive
+
+- `docs/archive/protocol-m-phase-1/` — archived Protocol M Phase 1 planning bundle

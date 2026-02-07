@@ -1,0 +1,47 @@
+{
+  "comment": "Protocol M Phase 1 - Golden Vector - AUTHORITATIVE",
+  "version": "m1",
+  "purpose": "This vector gates CI and ensures cross-implementation compatibility",
+  "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+  "public_key_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+  "did": "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+  "did_derivation": {
+    "comment": "did:key = 'did:key:z' + base58btc(0xed01 || public_key_bytes)",
+    "multicodec_prefix": "ed01",
+    "multibase": "z (base58btc)"
+  },
+  "test_artifact": {
+    "file_bytes_utf8": "hello world\n",
+    "file_size": 12,
+    "sha256_hex": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
+  },
+  "signature_envelope": {
+    "version": "m1",
+    "type": "artifact_signature",
+    "algo": "ed25519",
+    "did": "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+    "hash": {
+      "algo": "sha256",
+      "value": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
+    },
+    "artifact": {
+      "name": "hello.txt",
+      "size": 12
+    },
+    "createdAt": "2026-01-30T00:00:00Z",
+    "metadata": {},
+    "signature": ""
+  },
+  "canonical_jcs": "{\"algo\":\"ed25519\",\"artifact\":{\"name\":\"hello.txt\",\"size\":12},\"createdAt\":\"2026-01-30T00:00:00Z\",\"did\":\"did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw\",\"hash\":{\"algo\":\"sha256\",\"value\":\"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447\"},\"metadata\":{},\"signature\":\"\",\"type\":\"artifact_signature\",\"version\":\"m1\"}",
+  "signature_base64": "c7rSjOQf44/8l6+TqMSB1NYprlhsEwLoY+0IhJVzA/PP+QQkHN+qXXndMthL3CeMTZQVqYuPdEy9O1kjCCk5Aw==",
+  "signature_hex": "73bad28ce41fe38ffc97af93a8c481d4d629ae586c1302e863ed088495730bf3cff904241cdfaa5d79dd32d84bdc278c4d9415a98b8f744cbd3b592308293903",
+  "verification_steps": [
+    "1. Parse envelope and extract signature field",
+    "2. Set signature field to empty string",
+    "3. Canonicalize via RFC 8785 JCS",
+    "4. Verify canonical bytes match canonical_jcs above",
+    "5. Compute sha256 of file bytes and verify against envelope.hash.value",
+    "6. Extract public key from DID (base58btc decode, strip 0xed01 prefix)",
+    "7. Verify Ed25519 signature over canonical UTF-8 bytes"
+  ]
+}

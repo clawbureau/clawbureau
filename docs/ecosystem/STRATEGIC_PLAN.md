@@ -26,6 +26,8 @@ We have **three interconnected assets**:
 | **Protocol M** (moltbook/) | Rust crypto + server implementation | Partial impl, 160+ user stories |
 | **Claw Bureau** | 31 domains for ecosystem services | Registered, no deployments |
 
+> **Note (2026-02-07):** The standalone Protocol M Phase 1 planning folder (`/Users/gfw/clawd/02-Projects/protocol-m/`) is now archived in this repo at `docs/archive/protocol-m-phase-1/`. Active work-of-record for identity/proofs is PoH + Trust vNext + `packages/schema/**`.
+
 **The strategic question:** How do we turn these into a coherent contribution to OpenClaw and the agent economy?
 
 ---
