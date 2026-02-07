@@ -216,6 +216,20 @@
       "priority": 15,
       "passes": true,
       "notes": "Added vitest coverage using packages/schema/fixtures/protocol-m-golden-vector.v1.json. Test validates did:key extraction, JCS canonicalization, and Ed25519 signature verification, plus a tamper-negative case."
+    },
+    {
+      "id": "CVF-US-016",
+      "title": "Verify DID rotation certificates",
+      "description": "As a platform, I want to verify dual-signed DID rotation certificates so trust can survive key rotation without weakening the threat model.",
+      "acceptanceCriteria": [
+        "Add POST /v1/verify/did-rotation endpoint",
+        "Verify both old and new did:key Ed25519 signatures over RFC 8785 JCS canonical bytes (signatures blanked during canonicalization)",
+        "Fail closed on unknown fields and malformed certificates",
+        "Test suite passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Implemented did_rotation certificate verification (dual signatures) with a small RFC 8785 JCS canonicalizer, plus vitest coverage for valid/tampered/unknown-field cases. Added endpoint to docs and /skill.md metadata."
     }
   ]
 }

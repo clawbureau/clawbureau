@@ -10,6 +10,7 @@ import { verifyBatch } from './verify-batch';
 import { verifyProofBundle } from './verify-proof-bundle';
 import { verifyEventChain } from './verify-event-chain';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
+import { verifyDidRotation } from './verify-did-rotation';
 import { verifyCommitProof } from './verify-commit-proof';
 import { verifyAgent } from './verify-agent';
 import { verifyScopedToken } from './verify-scoped-token';
@@ -31,6 +32,7 @@ import type {
   VerifyBundleResponse,
   VerifyEventChainResponse,
   VerifyOwnerAttestationResponse,
+  VerifyDidRotationResponse,
   VerifyCommitProofResponse,
   VerifyAgentResponse,
   IntrospectScopedTokenResponse,
@@ -315,6 +317,38 @@ async function handleVerifyOwnerAttestation(
   // Return 200 for valid, 422 for invalid
   const status = verification.result.status === 'VALID' ? 200 : 422;
 
+  return jsonResponse(response, status);
+}
+
+/**
+ * Handle POST /v1/verify/did-rotation - Verify DID rotation certificates
+ */
+async function handleVerifyDidRotation(
+  request: Request,
+  _env: Env
+): Promise<Response> {
+  // Parse request body
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  // Validate request structure
+  if (typeof body !== 'object' || body === null || !('certificate' in body)) {
+    return errorResponse('Request must contain a "certificate" field', 400);
+  }
+
+  const { certificate } = body as { certificate: unknown };
+
+  const verification = await verifyDidRotation(certificate);
+
+  const response: VerifyDidRotationResponse = {
+    ...verification,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(response, status);
 }
 
@@ -876,6 +910,7 @@ export default {
         <li><code>POST /v1/verify/message</code> — message_signature verification</li>
         <li><code>POST /v1/verify/receipt</code> — gateway_receipt verification</li>
         <li><code>POST /v1/verify/owner-attestation</code> — owner_attestation verification</li>
+        <li><code>POST /v1/verify/did-rotation</code> — did_rotation certificate verification</li>
         <li><code>POST /v1/verify/commit-proof</code> — commit_proof verification</li>
         <li><code>POST /v1/verify/batch</code> — batch verification</li>
         <li><code>POST /v1/verify/bundle</code> — proof bundle verification (trust tier)</li>
@@ -914,6 +949,7 @@ export default {
             { method: 'POST', path: '/v1/verify/message' },
             { method: 'POST', path: '/v1/verify/receipt' },
             { method: 'POST', path: '/v1/verify/owner-attestation' },
+            { method: 'POST', path: '/v1/verify/did-rotation' },
             { method: 'POST', path: '/v1/verify/commit-proof' },
             { method: 'POST', path: '/v1/verify/batch' },
             { method: 'POST', path: '/v1/verify/bundle' },
@@ -1009,6 +1045,11 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/verify/owner-attestation - Owner attestation verification
     if (url.pathname === '/v1/verify/owner-attestation' && method === 'POST') {
       return handleVerifyOwnerAttestation(request, env);
+    }
+
+    // POST /v1/verify/did-rotation - DID rotation certificate verification
+    if (url.pathname === '/v1/verify/did-rotation' && method === 'POST') {
+      return handleVerifyDidRotation(request, env);
     }
 
     // POST /v1/introspect/scoped-token - Scoped token introspection

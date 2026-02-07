@@ -270,6 +270,36 @@ export interface VerifyOwnerAttestationResponse {
 }
 
 /**
+ * DID Rotation Certificate types
+ * CVF-US-016: Verify DID rotation certificates
+ */
+export interface DidRotationCertificate {
+  rotation_version: '1';
+  rotation_id: string;
+  old_did: string;
+  new_did: string;
+  issued_at: string;
+  reason: string;
+  signature_old_b64u: string;
+  signature_new_b64u: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyDidRotationRequest {
+  certificate: DidRotationCertificate;
+}
+
+export interface VerifyDidRotationResponse {
+  result: VerificationResult;
+  rotation_id?: string;
+  old_did?: string;
+  new_did?: string;
+  issued_at?: string;
+  reason?: string;
+  error?: VerificationError;
+}
+
+/**
  * Commit Proof types
  * CVF-US-011: Verify commit proofs
  */
