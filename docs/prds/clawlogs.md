@@ -13,7 +13,7 @@ Primary OpenClaw integration points:
 - forward `clawproxy` receipts (hash-only) + correlation fields (`agentId`, `sessionKey`, `model`)
 - export bundles for third-party audits without giving full OpenClaw workspace access
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

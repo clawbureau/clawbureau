@@ -11,7 +11,7 @@ OpenClaw is the reference harness for Claw Bureau verification workflows.
 
 `clawverify` should be consumable from OpenClaw as a **tool plugin** (and/or as an internal library), so OpenClaw can validate receipts/proof bundles during runs (or during post-run audits) without bespoke glue.
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

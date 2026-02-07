@@ -11,7 +11,7 @@ OpenClaw is the reference harness for Claw Bureau proof-of-harness.
 
 `clawproxy` is designed to be consumed primarily as an OpenClaw **provider plugin** (provider slot), so that OpenClaw model traffic is proxied + receipted automatically (no “LLM manually calls HTTP proxy” patterns).
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

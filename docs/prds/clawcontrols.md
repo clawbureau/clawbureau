@@ -12,7 +12,7 @@ OpenClaw already has a strong local policy system (tool allow/deny profiles + sa
 - providing a translation layer so OpenClaw can map WPC → tool policy restrictions deterministically
 - hosting token policy tiers used by `clawscope`
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

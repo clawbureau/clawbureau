@@ -18,26 +18,26 @@ This `docs/` folder is the canonical, reviewable documentation for the Claw Bure
 
 ## Core indexes
 
-- Ecosystem / strategy (context, not binding implementation truth):
-  - `docs/ecosystem/README.md`
-- PRDs (requirements/intent):
-  - `docs/PRD_INDEX.md`
-  - `docs/prds/`
-- Roadmaps (execution trackers; Ralph compatible):
-  - `docs/roadmaps/README.md`
-- OpenClaw integration constraints (upstream mirror):
-  - `docs/openclaw/README.md`
-- Oracle outputs (research inputs, not canonical):
-  - `docs/oracle/README.md`
+- **Foundations (binding repo-level invariants):** `docs/foundations/README.md`
+- **Specs (cross-domain implementation specs):** `docs/specs/README.md`
+- **Integration (cross-system docs):** `docs/integration/README.md`
+- **PRDs (requirements/intent):** `docs/PRD_INDEX.md`
+- **Roadmaps (execution trackers; Ralph compatible):** `docs/roadmaps/README.md`
+- **Ecosystem / strategy (context; not binding implementation truth):** `docs/ecosystem/README.md`
+- **Plans (marketing/launch; non-binding):** `docs/plans/README.md`
+- **OpenClaw mirror (upstream reference):** `docs/openclaw/README.md`
+- **Oracle outputs (research inputs, not canonical):** `docs/oracle/README.md`
 
 ## Core “current truth” docs
 
 These are the docs most likely to matter when making code changes:
 
-- `docs/INTERCONNECTION.md` — cross-service contracts + schema policy
-- `docs/GIT_STRATEGY.md` — branch naming + proof requirements
-- `docs/AGENT_ECONOMY_MVP_SPEC.md` — marketplace trust/economy spec (implementation-grade, but still evolves)
-- `docs/OPENCLAW_INTEGRATION.md` — OpenClaw-first integration constraints
+- `docs/foundations/INTERCONNECTION.md` — cross-service contracts + schema policy
+- `docs/foundations/GIT_STRATEGY.md` — branch naming + proof requirements
+- `docs/specs/agent-economy/MVP.md` — marketplace trust/economy spec (implementation-grade, but still evolves)
+- `docs/integration/OPENCLAW_INTEGRATION.md` — OpenClaw-first integration constraints
+
+(Old paths like `docs/INTERCONNECTION.md` and `docs/OPENCLAW_INTEGRATION.md` are now **redirect stubs** to preserve links.)
 
 ## Roadmaps (active)
 

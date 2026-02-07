@@ -19,7 +19,11 @@ ralph.out
 ralph.pid
 fleet.out
 fleet*.out
+
+# NOTE: we want to keep a docs-level archive tracked, so only ignore generic archive dirs
 archive/
+!docs/archive/
+!docs/archive/**
 
 # locks (prefer pnpm/yarn if needed; avoid committing npm locks from agent runs)
 package-lock.json

@@ -72,7 +72,7 @@
       "acceptanceCriteria": [
         "Define canonical tier labels (self, gateway-receipted, sandbox-attested, tee-attested, witnessed-web)",
         "clawverify outputs the canonical tier (or components + derived tier)",
-        "docs/AGENT_ECONOMY_MVP_SPEC.md references the same tier definitions"
+        "docs/specs/agent-economy/MVP.md references the same tier definitions"
       ],
       "priority": 6,
       "passes": false
@@ -207,7 +207,7 @@
       "acceptanceCriteria": [
         "Separate a trusted IdentityRoot (bootstrap/personality/skills) from an untrusted JobRoot (buyer repo/files)",
         "Disable bootstrap/skills auto-discovery for untrusted mounts in sensitive profiles",
-        "Document the Airlock pattern in docs/OPENCLAW_INTEGRATION.md"
+        "Document the Airlock pattern in docs/integration/OPENCLAW_INTEGRATION.md"
       ],
       "priority": 17,
       "passes": false,

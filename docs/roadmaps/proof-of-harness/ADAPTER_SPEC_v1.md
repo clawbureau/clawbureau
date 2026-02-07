@@ -318,7 +318,7 @@ For the up-to-date harness list + per-harness operational best practices, see:
 
 ### 9.1 OpenClaw (reference)
 
-Recommended components (aligns with `docs/OPENCLAW_INTEGRATION.md` and `docs/openclaw/10.4-claw-marketplace-integration.md`):
+Recommended components (aligns with `docs/integration/OPENCLAW_INTEGRATION.md` and `docs/openclaw/10.4-claw-marketplace-integration.md`):
 
 1. **Provider plugin** that routes model calls through `clawproxy`.
 2. **Recorder tool plugin** that:

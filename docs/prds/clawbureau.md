@@ -14,7 +14,7 @@ Claw Bureau should feel “native” to OpenClaw users.
 - OpenClaw skills (`SKILL.md` workflows)
 - configuration snippets (`openclaw.json`) for safe defaults
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

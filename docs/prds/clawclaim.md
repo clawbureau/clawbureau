@@ -11,7 +11,7 @@ OpenClaw is the reference harness for Claw Bureau identity and trust flows.
 
 `clawclaim` provides DID binding + external account claims in a form that an OpenClaw gateway (and its plugins/skills) can drive via challenge/response.
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

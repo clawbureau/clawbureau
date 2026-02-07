@@ -11,7 +11,7 @@ OpenClaw is the **reference harness** for Claw Bureau services.
 
 `clawscope` is the **central scoped-token issuer** (CST) used by OpenClaw extensions (tool/provider plugins) to authenticate to Claw Bureau services such as `clawproxy`.
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

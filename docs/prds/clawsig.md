@@ -14,7 +14,7 @@ OpenClaw already supports cryptographic identity patterns (device pairing, skill
 - enterprise custody / policy-managed keys
 - bridging hardware-backed keys to Claw Bureau schemas
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

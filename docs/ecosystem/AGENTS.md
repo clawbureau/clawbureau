@@ -38,20 +38,23 @@ Strategic overview:
 - `docs/ecosystem/STRATEGIC_PLAN.md`
 - `README.md`
 
-Product + architecture:
-- `docs/ARCHITECTURE.md`
-- `docs/INTERCONNECTION.md`
+Product + architecture (foundations/specs):
+- `docs/foundations/ARCHITECTURE.md`
+- `docs/foundations/INTERCONNECTION.md`
 - `docs/PRD_INDEX.md`
-- `docs/PARALLEL_EXECUTION.md`
+- `docs/foundations/PARALLEL_EXECUTION.md`
 
 Agent economy spec:
-- `docs/AGENT_ECONOMY_MVP_SPEC.md`
+- `docs/specs/agent-economy/MVP.md`
+
+OpenClaw integration:
+- `docs/integration/OPENCLAW_INTEGRATION.md`
 
 Clawbounties PRD (current work):
 - `docs/prds/clawbounties.md`
 
 Git + proof rules:
-- `docs/GIT_STRATEGY.md`
+- `docs/foundations/GIT_STRATEGY.md`
 - `CONTRIBUTING.md`
 
 ---

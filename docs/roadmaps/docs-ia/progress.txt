@@ -16,3 +16,52 @@ Started: 2026-02-07T20:00:00Z
   - docs/roadmaps/docs-ia/prd.json
   - docs/roadmaps/docs-ia/progress.txt
 ---
+
+## 2026-02-07T20:13:00Z - DOCS-US-001 (oracle audits)
+- What was implemented
+  - Generated an inventory of the current `docs/` tree:
+    - docs/roadmaps/docs-ia/oracle/2026-02-07/DOCS_INVENTORY.md
+  - Ran Oracle audits to propose an IA + status convention + reading maps:
+    - docs/roadmaps/docs-ia/oracle/2026-02-07/docs-ia-audit.google-gemini-3-pro-preview.md
+    - docs/roadmaps/docs-ia/oracle/2026-02-07/docs-ia-audit.gpt-5.2-pro.md
+- Files changed
+  - docs/roadmaps/docs-ia/oracle/2026-02-07/*
+---
+
+## 2026-02-07T20:55:00Z - DOCS-US-003 / DOCS-US-004 (status + "what to read")
+- What was implemented
+  - Added docs templates:
+    - docs/_templates/STATUS_BLOCK.md
+    - docs/_templates/DOC_RULES.md
+  - Added reading paths by audience:
+    - docs/WHAT_TO_READ.md
+  - Added status banners across key hubs/specs/roadmaps so it’s clearer what is canonical vs planning.
+- Files changed
+  - docs/README.md
+  - docs/WHAT_TO_READ.md
+  - docs/_templates/*
+  - many `docs/**/README.md` + core docs
+---
+
+## 2026-02-07T21:27:00Z - DOCS-US-001 (IA scaffolding + minimal-disruption moves)
+- What was implemented
+  - Introduced IA subfolders:
+    - docs/foundations/
+    - docs/specs/
+    - docs/integration/
+    - docs/plans/
+    - docs/archive/
+  - Moved core docs out of the root into the new structure and added redirect stubs at the old paths to preserve links.
+  - Updated key references to point at the new canonical paths (while leaving stubs for compatibility).
+- Files changed
+  - docs/foundations/*
+  - docs/specs/agent-economy/MVP.md
+  - docs/integration/OPENCLAW_INTEGRATION.md
+  - docs/plans/*
+  - docs/README.md
+  - docs/WHAT_TO_READ.md
+  - docs/ecosystem/AGENTS.md
+  - docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/prds/* (OpenClaw integration link update)
+---
