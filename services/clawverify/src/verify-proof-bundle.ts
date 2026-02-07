@@ -24,6 +24,7 @@ import type {
   TrustTier,
   URMReference,
   AttestationReference,
+  GatewayReceiptPayload,
 } from './types';
 import {
   isAllowedVersion,
@@ -288,21 +289,37 @@ function validateAttestation(
   return true;
 }
 
+interface ReceiptBindingContext {
+  expectedRunId: string;
+  allowedEventHashes: ReadonlySet<string>;
+}
+
 /**
- * Verify a gateway receipt envelope cryptographically.
+ * Verify a gateway receipt envelope cryptographically *and* ensure it is bound
+ * to the proof bundle's event chain.
  *
- * POH-US-003: Receipt envelopes are verified with the signer DID (clawproxy DID)
- * using the same full verification pipeline as the standalone /v1/verify/receipt
- * endpoint. This ensures receipt signatures are validated, not just structurally
- * checked.
+ * Security note (POH-US-010):
+ * - A receipt that is signature-valid but not bound to this bundle's run/event
+ *   chain MUST NOT count toward gateway-tier trust. Otherwise, receipts can be
+ *   replayed across bundles.
  *
- * Returns the verification result including provider/model/gateway_id on success.
+ * Binding rules (fail-closed for counting):
+ * - Proof bundle must include a valid event_chain
+ * - receipt.payload.binding.run_id must equal the bundle run_id
+ * - receipt.payload.binding.event_hash_b64u must reference an event_hash_b64u
+ *   present in the bundle event_chain
  */
 async function verifyReceiptEnvelope(
   receipt: unknown,
-  allowlistedSignerDids: readonly string[] | undefined
+  allowlistedSignerDids: readonly string[] | undefined,
+  bindingContext: ReceiptBindingContext | null
 ): Promise<{
+  /** Whether the receipt counts as verified for gateway-tier (signature + binding). */
   valid: boolean;
+  /** Whether the receipt signature+payload hash verified. */
+  signature_valid: boolean;
+  /** Whether the receipt was bound to the proof bundle's event chain. */
+  binding_valid: boolean;
   provider?: string;
   model?: string;
   gateway_id?: string;
@@ -314,12 +331,106 @@ async function verifyReceiptEnvelope(
   if (verification.result.status !== 'VALID') {
     return {
       valid: false,
+      signature_valid: false,
+      binding_valid: false,
       error: verification.error?.message ?? verification.result.reason,
+    };
+  }
+
+  if (!bindingContext) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      provider: verification.provider,
+      model: verification.model,
+      gateway_id: verification.gateway_id,
+      signer_did: verification.result.signer_did,
+      error:
+        'Receipt binding cannot be verified: proof bundle event_chain is missing or invalid',
+    };
+  }
+
+  const env = receipt as SignedEnvelope<GatewayReceiptPayload>;
+  const binding = env.payload.binding;
+
+  if (!binding || typeof binding !== 'object') {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      provider: verification.provider,
+      model: verification.model,
+      gateway_id: verification.gateway_id,
+      signer_did: verification.result.signer_did,
+      error: 'Receipt is missing binding (expected run_id + event_hash_b64u)',
+    };
+  }
+
+  const runId = (binding as Record<string, unknown>).run_id;
+  const eventHash = (binding as Record<string, unknown>).event_hash_b64u;
+
+  if (typeof runId !== 'string' || runId.trim().length === 0) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      provider: verification.provider,
+      model: verification.model,
+      gateway_id: verification.gateway_id,
+      signer_did: verification.result.signer_did,
+      error: 'Receipt binding.run_id is missing or invalid',
+    };
+  }
+
+  if (runId !== bindingContext.expectedRunId) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      provider: verification.provider,
+      model: verification.model,
+      gateway_id: verification.gateway_id,
+      signer_did: verification.result.signer_did,
+      error: 'Receipt binding.run_id does not match proof bundle run_id',
+    };
+  }
+
+  if (
+    typeof eventHash !== 'string' ||
+    eventHash.length < 8 ||
+    !isValidBase64Url(eventHash)
+  ) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      provider: verification.provider,
+      model: verification.model,
+      gateway_id: verification.gateway_id,
+      signer_did: verification.result.signer_did,
+      error: 'Receipt binding.event_hash_b64u is missing or invalid',
+    };
+  }
+
+  if (!bindingContext.allowedEventHashes.has(eventHash)) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      provider: verification.provider,
+      model: verification.model,
+      gateway_id: verification.gateway_id,
+      signer_did: verification.result.signer_did,
+      error:
+        'Receipt binding.event_hash_b64u does not reference an event in the proof bundle event chain',
     };
   }
 
   return {
     valid: true,
+    signature_valid: true,
+    binding_valid: true,
     provider: verification.provider,
     model: verification.model,
     gateway_id: verification.gateway_id,
@@ -709,15 +820,39 @@ export async function verifyProofBundle(
   // Each receipt is verified with its signer DID (clawproxy DID) using full
   // signature verification — not just structural validation.
   if (payload.receipts !== undefined && payload.receipts.length > 0) {
+    // POH-US-010: Require receipts to be bound to this bundle's event chain.
+    // Without binding, a signature-valid receipt could be replayed across bundles.
+    const bindingContext =
+      componentResults.event_chain_valid &&
+      payload.event_chain !== undefined &&
+      payload.event_chain.length > 0
+        ? {
+            expectedRunId: payload.event_chain[0].run_id,
+            allowedEventHashes: new Set(
+              payload.event_chain.map((e) => e.event_hash_b64u)
+            ),
+          }
+        : null;
+
     const receiptResults = await Promise.all(
       payload.receipts.map((r) =>
-        verifyReceiptEnvelope(r, options.allowlistedReceiptSignerDids)
+        verifyReceiptEnvelope(
+          r,
+          options.allowlistedReceiptSignerDids,
+          bindingContext
+        )
       )
     );
-    const validCount = receiptResults.filter((r) => r.valid).length;
-    componentResults.receipts_valid = validCount === payload.receipts.length;
+
+    const signatureValidCount = receiptResults.filter(
+      (r) => r.signature_valid
+    ).length;
+    const boundValidCount = receiptResults.filter((r) => r.valid).length;
+
+    componentResults.receipts_valid = boundValidCount === payload.receipts.length;
     componentResults.receipts_count = payload.receipts.length;
-    componentResults.receipts_verified_count = validCount;
+    componentResults.receipts_signature_verified_count = signatureValidCount;
+    componentResults.receipts_verified_count = boundValidCount;
   }
 
   // Validate attestations if present

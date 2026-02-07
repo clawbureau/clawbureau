@@ -137,3 +137,14 @@ Started: 2026-02-05T21:49:28Z
   - packages/clawproof-adapters/src/session.ts
   - packages/clawproof-adapters/src/types.ts
 ---
+
+## 2026-02-07T15:52:00Z - POH-US-010
+- What was implemented
+  - Hardened clawverify proof-bundle receipt verification: gateway receipts now only count if they are cryptographically valid AND bound to the bundle’s event chain (`binding.run_id` + `binding.event_hash_b64u`).
+  - This prevents signature-valid receipts from being replayed across unrelated bundles to obtain gateway tier.
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/types.ts
+  - docs/roadmaps/proof-of-harness/prd.json
+  - docs/roadmaps/proof-of-harness/progress.txt
+---

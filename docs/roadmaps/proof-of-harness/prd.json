@@ -144,9 +144,25 @@
       "passes": true,
       "notes": "Completes the end-to-end gateway tier path by making receipts verifiable and non-forgeable.",
       "completionNotes": "Implemented canonical gateway receipt envelopes in clawproxy and fail-closed signer allowlisting in clawverify."
+    },
+    {
+      "id": "POH-US-010",
+      "title": "Receipt binding enforcement for gateway tier",
+      "description": "As a verifier, I want gateway receipts to be required to bind to the proof bundle event chain so that signature-valid receipts cannot be replayed across unrelated bundles to obtain gateway tier.",
+      "acceptanceCriteria": [
+        "When verifying a proof bundle, receipts only count as verified if they are signature-valid AND have binding.run_id + binding.event_hash_b64u",
+        "binding.run_id must match the bundle event_chain run_id",
+        "binding.event_hash_b64u must reference an event_hash_b64u present in the bundle event_chain",
+        "If event_chain is missing or invalid, receipts must not count toward gateway tier (fail-closed)",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Hardens gateway-tier derivation against receipt replay by requiring binding linkage to the event chain.",
+      "completionNotes": "Implemented in clawverify proof-bundle verification."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-06T22:54:35.000Z"
+    "updatedAt": "2026-02-07T15:52:00.000Z"
   }
 }
