@@ -1,3 +1,14 @@
+> **Type:** Reference
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** Cloudflare Registrar UI export
+>
+> **Scope:**
+> - Snapshot list of registered claw* domains.
+
+# Claw domains (Cloudflare Registrar)
+
 | Domain | Status  The registration status for the domain. Note that this can differ from the . | Auto-renew | Expires | Manage |
 | --- | --- | --- | --- | --- |
 | clawadvisory.com | Active |  | Feb 1, 2027 | [Manage](https://dash.cloudflare.com/b8f2c66f1848dff476faa874282d781e/registrar/domain/clawadvisory.com) |

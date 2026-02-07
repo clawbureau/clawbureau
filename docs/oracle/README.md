@@ -1,10 +1,20 @@
+> **Type:** Index
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** oracle run outputs (non-canonical)
+>
+> **Scope:**
+> - Oracle-generated research artifacts.
+> - Inputs to planning; **not** canonical system truth.
+
 # Oracle Outputs
 
 This folder contains **Oracle-generated research** and planning artifacts.
 
-## Roadmaps (oracle-generated)
+## Roadmaps (oracle-generated; archive)
 
-- `docs/oracle/roadmaps/` — older oracle-generated roadmaps ("remaining stories", launch sprints, merge plans, etc.)
+- `docs/oracle/roadmaps/` — older oracle-generated roadmaps (“remaining stories”, launch sprints, merge plans, etc.)
 
 ## PoH / Trust research
 

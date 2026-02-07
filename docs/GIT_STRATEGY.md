@@ -1,3 +1,12 @@
+> **Type:** Spec
+> **Status:** CANONICAL
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `CONTRIBUTING.md` + repo conventions
+>
+> **Scope:**
+> - Git workflow rules: branch naming, PR requirements, proof requirements.
+
 # Claw Bureau Git Strategy
 
 This repo is designed for **multi-agent, multi-domain parallel development** with explicit trust and fairness guarantees.

@@ -1,3 +1,12 @@
+> **Type:** Index
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** oracle outputs in this folder
+>
+> **Scope:**
+> - Index of oracle runs used as inputs to PoH/Trust planning.
+
 # PoH Oracle Runs — 2026-02-07
 
 This folder contains prompts + outputs from Oracle research runs.

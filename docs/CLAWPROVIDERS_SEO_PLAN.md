@@ -1,3 +1,12 @@
+> **Type:** Plan
+> **Status:** DRAFT
+> **Owner:** @clawbureau/growth
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** marketing intent only (not implementation truth)
+>
+> **Scope:**
+> - Programmatic SEO plan for clawproviders.com.
+
 # ClawProviders.com — Programmatic SEO Strategy
 
 **Domain:** clawproviders.com  

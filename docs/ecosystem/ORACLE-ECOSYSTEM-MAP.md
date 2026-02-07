@@ -1,3 +1,13 @@
+> **Type:** Reference
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** oracle snapshot / brainstorming (not canonical)
+>
+> **Scope:**
+> - Oracle-generated ecosystem map variant.
+> - Keep for context; treat as non-binding.
+
 # Claw Bureau — Master Ecosystem Architecture (31-domain ASP Conglomerate)
 
 Claw Bureau should be built as a **trust + execution + settlement** backbone for the Agent Economy: OpenClaw provides cryptographic identity and portable proofs; Claw Bureau provides **market rails (bounties/escrow/settlement), verification, reputation, and secure execution**. The attached notes strongly converge on a "**Proof-of-Harness via gateway receipts + tamper-evident logs + trust tiers**" design (see `chat-ideas.md`) and a Cloudflare "**Worker control plane + sandbox execution plane + R2 persistence + Access auth + AI Gateway**" execution substrate (see `cloudflare-moltworker.md`). Moltbook/Protocol M's implemented stack (Axum + SQLx + PostgreSQL, Next.js 14) is a practical baseline for Claw Bureau's service layer and early integrations (see `moltbook/progress.txt`, `moltbook/prd.json`).

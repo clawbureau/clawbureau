@@ -1,3 +1,13 @@
+> **Type:** Reference
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** oracle snapshot (not canonical)
+>
+> **Scope:**
+> - Oracle-generated ecosystem map (31 domains).
+> - Useful for orientation; do not treat as implementation truth.
+
 # Claw Bureau — Master Ecosystem Architecture (31-domain ASP Conglomerate)
 
 **Generated:** 2026-02-01 via Oracle GPT-5.2 Pro

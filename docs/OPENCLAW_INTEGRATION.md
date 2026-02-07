@@ -1,3 +1,13 @@
+> **Type:** Integration
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/openclaw/*` (constraints) + Claw Bureau service PRDs
+>
+> **Scope:**
+> - How Claw Bureau services map onto OpenClaw plugins/skills.
+> - Constraint doc; does not imply features are already shipped.
+
 # Claw Bureau ↔ OpenClaw Integration Plan
 
 ## Why this document exists

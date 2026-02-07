@@ -1,3 +1,15 @@
+> **Type:** Reference
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** Cloudflare blog / moltworker project (copied reference)
+>
+> **Scope:**
+> - Reference material about running an agent on Cloudflare (Sandbox SDK + Workers).
+> - Not a Claw Bureau spec; used as background for `clawea`/runner discussions.
+
+# Cloudflare moltworker reference
+
 2026-01-29
 
 9 min read

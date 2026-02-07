@@ -1,3 +1,12 @@
+> **Type:** Spec
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PoH roadmap + schemas under `packages/schema/poh/*`
+>
+> **Scope:**
+> - PoH adapter spec v1 (draft, but implementation-aligned).
+
 # Proof-of-Harness Adapter Spec v1 (PoH)
 
 **Status:** Draft (roadmap)

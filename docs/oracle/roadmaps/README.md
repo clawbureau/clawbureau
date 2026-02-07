@@ -1,3 +1,13 @@
+> **Type:** Index
+> **Status:** ARCHIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** oracle run outputs (historical)
+>
+> **Scope:**
+> - Archived oracle-generated roadmaps.
+> - Not a live story tracker (use `docs/roadmaps/*` instead).
+
 # Oracle Roadmaps (archive)
 
 These documents are **oracle-generated roadmaps** used for planning.

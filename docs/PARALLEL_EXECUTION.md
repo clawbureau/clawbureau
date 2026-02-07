@@ -1,3 +1,12 @@
+> **Type:** Guide
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `scripts/ralph/*` + actual team practice
+>
+> **Scope:**
+> - How to run Ralph + Pi in parallel across domains.
+
 # Parallel Execution Plan (Pi + Ralph)
 
 ## Goal

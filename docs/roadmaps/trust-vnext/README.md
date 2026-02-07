@@ -1,3 +1,13 @@
+> **Type:** Roadmap
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/roadmaps/trust-vnext/prd.json` + `progress.txt`
+>
+> **Scope:**
+> - PoH vNext hardening + confidential consulting + prompt integrity + witnessed-web.
+> - Seeded from oracle synthesis; becomes execution truth as stories complete.
+
 # Trust vNext Roadmap
 
 This roadmap tracks the **next building blocks** after PoH v1:

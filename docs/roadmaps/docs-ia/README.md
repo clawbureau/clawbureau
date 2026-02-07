@@ -1,3 +1,12 @@
+> **Type:** Roadmap
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/roadmaps/docs-ia/prd.json` + `progress.txt`
+>
+> **Scope:**
+> - Documentation IA + freshness cleanup.
+
 # Docs IA / Scope Cleanup Roadmap
 
 This roadmap exists because `docs/` has grown to the point where it’s hard to answer:

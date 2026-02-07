@@ -1,4 +1,15 @@
 
+> **Type:** Archive
+> **Status:** ARCHIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** brainstorming notes (non-canonical)
+>
+> **Scope:**
+> - Raw brainstorms and long-form thinking.
+> - Treat as background; do not assume it reflects shipped behavior.
+
+# Chat ideas (archive)
 
 Plan/skill files are one way, git commits with quality scores are another, visual LLM judges embedded in the protocol independently review visual work, we need a way to proof harness (eg openclaw agent, Claude code agent, raw API agent, Gemini agent etc). MCP auth
 

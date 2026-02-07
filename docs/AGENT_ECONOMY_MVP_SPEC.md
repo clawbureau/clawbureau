@@ -1,3 +1,13 @@
+> **Type:** Spec
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/prds/*` + `docs/roadmaps/*` + `packages/schema/*`
+>
+> **Scope:**
+> - Implementation-grade spec for the Agent Economy MVP.
+> - Still a draft; do not assume shipped behavior unless a roadmap story is complete.
+
 # Agent Economy MVP Spec (Payments + Marketplace)
 
 **Date:** 2026-02-03  

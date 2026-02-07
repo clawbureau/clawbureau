@@ -1,3 +1,13 @@
+> **Type:** Roadmap
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/roadmaps/proof-of-harness/prd.json` + `progress.txt`
+>
+> **Scope:**
+> - PoH v1 spec + harness registry + tracking.
+> - For PoH vNext (hardening/consulting/witnessed-web), see `docs/roadmaps/trust-vnext/`.
+
 # Proof-of-Harness (PoH)
 
 PoH is the evidence model that lets the marketplace verify **which harness** performed a run and that model/tool calls happened through an **allowlisted gateway** (via signed receipts), with a tamper-evident event chain.

@@ -1,3 +1,13 @@
+> **Type:** Reference
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/roadmaps/proof-of-harness/harnesses.mjs` (generated)
+>
+> **Scope:**
+> - Registry of supported/planned PoH harnesses.
+> - Generated file; edit the canonical registry module.
+
 # PoH Harness Registry
 
 This file is **generated** from `docs/roadmaps/proof-of-harness/harnesses.mjs`.

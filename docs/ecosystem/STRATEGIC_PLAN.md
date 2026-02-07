@@ -1,3 +1,13 @@
+> **Type:** Plan
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** planning doc (not implementation truth)
+>
+> **Scope:**
+> - Ecosystem strategy and sequencing.
+> - Treat as intent; verify implementation status via roadmaps.
+
 # Claw Ecosystem Strategic Plan
 ## From Protocol M → OpenClaw Contribution → Agent Economy
 

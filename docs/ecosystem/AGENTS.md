@@ -1,3 +1,13 @@
+> **Type:** Guide
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** repo structure + deployed services; may become stale quickly
+>
+> **Scope:**
+> - Workspace quick-start + how to work in this repo.
+> - Some “current status” notes may drift; treat as operational hints, not hard truth.
+
 # Workspace Guide (Claw Bureau)
 
 This document is the **workspace quick-start** for Claw Bureau.

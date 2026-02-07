@@ -1,3 +1,13 @@
+> **Type:** Spec
+> **Status:** CANONICAL
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `packages/schema/` + service integrations
+>
+> **Scope:**
+> - Cross-service dependency and schema/versioning policy.
+> - Binding guidance for all services.
+
 # Interconnection & Dependency Policy
 
 This repo is a **federated monorepo**. Domains are independent, but share core contracts.
