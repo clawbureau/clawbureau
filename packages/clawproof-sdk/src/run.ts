@@ -16,7 +16,7 @@ import {
   didFromPublicKey,
   randomUUID,
   normalizeSha256HashB64u,
-} from './crypto';
+} from './crypto.js';
 import type {
   ClawproofConfig,
   ClawproofRun,
@@ -37,7 +37,7 @@ import type {
   SignedEnvelope,
   URMDocument,
   URMReference,
-} from './types';
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Event hash computation (deterministic key order per adapter spec §4.2)

@@ -8,7 +8,8 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:node": "npm run build && node scripts/smoke-node.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.2.1",
