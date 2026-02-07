@@ -52,7 +52,8 @@ function stripBearer(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return trimmed.toLowerCase().startsWith('bearer ') ? trimmed.slice(7).trim() : trimmed;
+  const m = trimmed.match(/^Bearer\s+/i);
+  return m ? trimmed.slice(m[0].length).trim() : trimmed;
 }
 
 function extractProviderApiKey(
