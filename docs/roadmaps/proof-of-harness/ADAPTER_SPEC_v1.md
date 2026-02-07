@@ -304,6 +304,9 @@ We will add a schema placeholder (`execution_attestation.v1.json`) and include i
 
 ## 9) Harness adapter implementations
 
+For the up-to-date harness list + per-harness operational best practices, see:
+- `HARNESS_REGISTRY.md`
+
 ### 9.1 OpenClaw (reference)
 
 Recommended components (aligns with `docs/OPENCLAW_INTEGRATION.md` and `docs/openclaw/10.4-claw-marketplace-integration.md`):

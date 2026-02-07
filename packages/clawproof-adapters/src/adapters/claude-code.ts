@@ -27,17 +27,15 @@ export const HARNESS: HarnessConfig = {
  * Environment variables to set when launching Claude Code
  * so that LLM calls are routed through clawproxy.
  */
-export function getProxyEnv(proxyBaseUrl: string, proxyToken?: string): Record<string, string> {
+export function getProxyEnv(proxyBaseUrl: string, _proxyToken?: string): Record<string, string> {
   const env: Record<string, string> = {
     // Claude Code uses the Anthropic SDK which respects ANTHROPIC_BASE_URL
     ANTHROPIC_BASE_URL: `${proxyBaseUrl.replace(/\/$/, '')}/v1/anthropic`,
   };
 
-  // If a proxy token is provided, set it as the API key.
-  // Clawproxy will validate this token and forward to the real Anthropic API.
-  if (proxyToken) {
-    env.ANTHROPIC_API_KEY = proxyToken;
-  }
+  // Note: we do NOT override ANTHROPIC_API_KEY here.
+  // In shim mode the harness still uses its normal upstream provider key.
+  // Proxy auth (if any) is handled between the shim and clawproxy.
 
   return env;
 }

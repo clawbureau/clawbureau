@@ -1,6 +1,9 @@
 # deps
 node_modules
 
+# build artifacts
+**/dist/
+
 # env
 .env
 
