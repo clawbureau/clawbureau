@@ -47,13 +47,15 @@ After the run completes, proof artifacts are written to `.clawproof/`:
 
 ## How It Works
 
-1. **Proxy routing**: The wrapper sets provider base URL env vars (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`) to point to clawproxy. The harness CLI uses these transparently.
+1. **Shim routing**: The wrapper starts a local shim HTTP server and sets provider base URL env vars (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`) to point to it. The harness CLI talks to the shim using normal OpenAI/Anthropic SDK requests.
 
-2. **Receipt collection**: clawproxy attaches a signed `_receipt` to each LLM response. The adapter collects these receipts and includes them in the proof bundle.
+2. **Gateway forwarding + PoH binding**: The shim forwards each request to `clawproxy` via the shared session runtime (`session.proxyLLMCall()`), which injects PoH binding headers (`X-Run-Id`, `X-Event-Hash`, `X-Idempotency-Key`).
 
-3. **Event chain**: The adapter records `run_start`, `tool_call`, and `run_end` events into a hash-linked event chain (SHA-256, deterministic key order per PoH Adapter Spec §4.2).
+3. **Receipt collection**: `clawproxy` returns canonical signed `_receipt_envelope` objects. The shim extracts and stores these receipts so they can be included in the proof bundle.
 
-4. **Proof bundle**: On completion, the adapter assembles a `SignedEnvelope<ProofBundlePayload>` containing the event chain, bridged receipts (camelCase → snake_case), URM reference, and harness metadata — signed with the agent's Ed25519 DID key.
+4. **Event chain**: The adapter records `run_start`/`tool_call`/`run_end` plus one `llm_call` event per model request into a hash-linked event chain (SHA-256, deterministic key order per PoH Adapter Spec §4.2).
+
+5. **Proof bundle**: On completion, the adapter assembles a `SignedEnvelope<ProofBundlePayload>` containing the event chain, receipts, URM reference, and harness metadata — signed with the agent's Ed25519 DID key.
 
 ## Environment Variables
 
@@ -121,6 +123,7 @@ packages/clawproof-adapters/
 │   ├── types.ts                   # All type definitions
 │   ├── crypto.ts                  # Ed25519, SHA-256, DID, JWK utilities
 │   ├── session.ts                 # Core adapter session runtime
+│   ├── shim.ts                    # Local shim HTTP server for base URL overrides
 │   ├── cli.ts                     # CLI runner (orchestrates lifecycle)
 │   └── adapters/
 │       ├── index.ts               # Adapter registry
