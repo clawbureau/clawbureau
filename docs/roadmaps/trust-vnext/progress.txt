@@ -18,3 +18,17 @@ Started: 2026-02-07T19:53:07Z
   - docs/roadmaps/trust-vnext/prd.json
   - docs/roadmaps/trust-vnext/progress.txt
 ---
+
+## 2026-02-07T23:19:57Z - CVF-US-021
+- What was implemented
+  - Hardened proof bundle verification by recomputing `event_hash_b64u` for every event using the canonical event header key order (ADAPTER_SPEC_v1 §4.2).
+  - Fail-closed: proof bundles are rejected when any `event_hash_b64u` mismatches the recomputed value.
+  - Added unit tests to ensure tampering is detected even if the chain links are internally consistent.
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/test/proof-bundle-event-hash.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---

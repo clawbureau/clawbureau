@@ -810,7 +810,71 @@ export async function verifyProofBundle(
   // Validate event chain if present (verify hash linkage per POH-US-003)
   if (payload.event_chain !== undefined && payload.event_chain.length > 0) {
     const chainResult = validateEventChain(payload.event_chain);
-    componentResults.event_chain_valid = chainResult.valid;
+
+    if (!chainResult.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: chainResult.error ?? 'Event chain validation failed',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: chainResult.error ?? 'Invalid event_chain',
+          field: 'payload.event_chain',
+        },
+      };
+    }
+
+    // CVF-US-021: Recompute event_hash_b64u from canonical event headers (fail-closed)
+    // Canonical header key order per ADAPTER_SPEC_v1 §4.2.
+    for (let i = 0; i < payload.event_chain.length; i++) {
+      const e = payload.event_chain[i];
+
+      const canonical = {
+        event_id: e.event_id,
+        run_id: e.run_id,
+        event_type: e.event_type,
+        timestamp: e.timestamp,
+        payload_hash_b64u: e.payload_hash_b64u,
+        prev_hash_b64u: e.prev_hash_b64u ?? null,
+      };
+
+      let expectedHash: string;
+      try {
+        expectedHash = await computeHash(canonical, 'SHA-256');
+      } catch (err) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `Event ${i}: event hash recomputation failed`,
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: `Failed to recompute event hash: ${err instanceof Error ? err.message : 'unknown error'}`,
+            field: `payload.event_chain[${i}]`,
+          },
+        };
+      }
+
+      if (expectedHash !== e.event_hash_b64u) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `Event ${i}: event_hash_b64u mismatch`,
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: 'event_hash_b64u does not match SHA-256 hash of the canonical event header',
+            field: `payload.event_chain[${i}].event_hash_b64u`,
+          },
+        };
+      }
+    }
+
+    componentResults.event_chain_valid = true;
     if (chainResult.chain_root_hash) {
       componentResults.chain_root_hash = chainResult.chain_root_hash;
     }

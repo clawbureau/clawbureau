@@ -15,7 +15,8 @@
         "Add unit tests covering tamper cases"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented recomputation of event_hash_b64u from canonical headers in services/clawverify/src/verify-proof-bundle.ts and added vitest coverage for tamper cases."
     },
     {
       "id": "CVF-US-022",
@@ -254,7 +255,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T19:53:07Z",
+    "updatedAt": "2026-02-07T23:19:57Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
