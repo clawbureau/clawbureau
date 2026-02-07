@@ -105,12 +105,31 @@ function buildHeaders(
     headers.set('Authorization', `Bearer ${config.token}`);
   }
 
-  // Upstream provider key: extract from per-call auth and send via X-Provider-API-Key.
+  // Upstream provider key: extract from per-call auth.
   const providerApiKey = extractProviderApiKey(upstreamProvider, auth);
-  if (providerApiKey) {
-    headers.set(PROVIDER_API_KEY_HEADER, providerApiKey);
-  } else if (!config.token && auth) {
-    // Back-compat: if no plugin token is set, fall back to forwarding auth headers.
+
+  if (config.token) {
+    // CST-first mode: keep Authorization reserved for proxy auth and pass provider key explicitly.
+    if (providerApiKey) {
+      headers.set(PROVIDER_API_KEY_HEADER, providerApiKey);
+    }
+
+    // Forward non-secret per-call provider headers (e.g., OpenAI-Organization, anthropic-version)
+    if (auth) {
+      for (const [key, value] of Object.entries(auth)) {
+        const lowerK = key.toLowerCase();
+        if (lowerK === 'authorization') continue;
+        if (lowerK === 'x-api-key') continue;
+        if (lowerK === 'anthropic-api-key') continue;
+        if (lowerK === 'x-goog-api-key') continue;
+        if (lowerK === 'x-provider-api-key') continue;
+        if (lowerK === 'x-provider-key') continue;
+        if (lowerK === 'x-provider-authorization') continue;
+        headers.set(key, value);
+      }
+    }
+  } else if (auth) {
+    // Legacy mode: forward auth headers as-is (provider key in Authorization, etc.)
     for (const [key, value] of Object.entries(auth)) {
       headers.set(key, value);
     }

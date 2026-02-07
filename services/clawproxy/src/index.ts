@@ -109,13 +109,43 @@ function stripBearer(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  return trimmed.startsWith('Bearer ') ? trimmed.slice(7).trim() : trimmed;
+  const match = trimmed.match(/^Bearer\s+/i);
+  return match ? trimmed.slice(match[0].length).trim() : trimmed;
+}
+
+function isBase64Url(value: string): boolean {
+  return value.length > 0 && /^[A-Za-z0-9_-]+$/.test(value);
+}
+
+function safeBase64UrlDecode(value: string): string | null {
+  let base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  base64 += '='.repeat((4 - (base64.length % 4)) % 4);
+  try {
+    return atob(base64);
+  } catch {
+    return null;
+  }
 }
 
 function looksLikeJwt(token: string): boolean {
-  // JWT (JWS compact) has 3 dot-separated parts.
+  // JWT (JWS compact) has 3 dot-separated base64url parts.
   const parts = token.split('.');
-  return parts.length === 3 && parts.every((p) => p.length > 0);
+  if (parts.length !== 3) return false;
+  if (!parts.every((p) => isBase64Url(p))) return false;
+
+  // Minimal header parse to reduce false positives.
+  const headerJson = safeBase64UrlDecode(parts[0]!);
+  if (!headerJson) return false;
+
+  try {
+    const header = JSON.parse(headerJson) as unknown;
+    if (typeof header !== 'object' || header === null) return false;
+    const alg = (header as Record<string, unknown>).alg;
+    if (typeof alg !== 'string' || alg.length === 0) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export default {
