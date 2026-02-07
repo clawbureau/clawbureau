@@ -125,6 +125,7 @@ function buildHeaders(
         if (lowerK === 'x-provider-api-key') continue;
         if (lowerK === 'x-provider-key') continue;
         if (lowerK === 'x-provider-authorization') continue;
+
         // Do not allow per-call auth to override clawproxy auth/binding headers in CST-first mode.
         if (lowerK === 'x-cst') continue;
         if (lowerK === 'x-scoped-token') continue;
