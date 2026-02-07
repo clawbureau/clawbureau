@@ -160,9 +160,24 @@
       "passes": true,
       "notes": "Hardens gateway-tier derivation against receipt replay by requiring binding linkage to the event chain.",
       "completionNotes": "Implemented in clawverify proof-bundle verification."
+    },
+    {
+      "id": "POH-US-011",
+      "title": "Commit proof allowlist wiring for code bounties",
+      "description": "As a marketplace, I want code bounties to verify commit proofs without DEPENDENCY_NOT_CONFIGURED so that code-based submissions can be trusted and auto-approval can run safely.",
+      "acceptanceCriteria": [
+        "clawverify commit-proof verification is enabled by configuring CLAWCLAIM_REPO_CLAIM_ALLOWLIST in staging + prod",
+        "Document the expected repo_claim_id values for the initial allowlist",
+        "Provide a minimal smoke script that generates a commit_proof envelope and verifies it against /v1/verify/commit-proof",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Operational wiring + documentation so code bounties can use commit proofs with fail-closed verification.",
+      "completionNotes": "Configured clawverify allowlist and added docs/smoke tooling."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T15:52:00.000Z"
+    "updatedAt": "2026-02-07T16:06:00.000Z"
   }
 }
