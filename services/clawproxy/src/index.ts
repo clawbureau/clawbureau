@@ -31,6 +31,7 @@ import {
   importEd25519Key,
   computeKeyId,
   base64urlEncode,
+  base64urlDecode,
   verifyEd25519,
   importAesKey,
   didKeyFromEd25519PublicKeyBytes,
@@ -114,31 +115,32 @@ function stripBearer(value: string | null | undefined): string | undefined {
   return m ? trimmed.slice(m[0].length).trim() : trimmed;
 }
 
-function decodeBase64UrlToString(input: string): string | null {
-  if (!/^[A-Za-z0-9_-]+$/.test(input)) return null;
-  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
-  try {
-    return atob(base64 + pad);
-  } catch {
-    return null;
-  }
-}
+const JWT_TOKEN_MAX_LEN = 8192;
+const JWT_HEADER_B64U_MAX_LEN = 2048;
 
 function looksLikeJwt(token: string): boolean {
-  // Minimal strict JWT (JWS compact) check:
+  // Minimal strict JWT (JWS compact) check (cheap + UTF-8 correct):
+  // - cap token length (avoid expensive parsing work)
   // - 3 dot-separated parts
-  // - header part is base64url
-  // - header decodes to JSON with string "alg"
+  // - header part base64url-decodes
+  // - header bytes decode as UTF-8 JSON with string "alg"
+  if (token.length > JWT_TOKEN_MAX_LEN) return false;
+
   const parts = token.split('.');
   if (parts.length !== 3) return false;
-  const [headerB64] = parts;
-  if (!headerB64) return false;
+  const [headerB64u] = parts;
+  if (!headerB64u) return false;
+  if (headerB64u.length > JWT_HEADER_B64U_MAX_LEN) return false;
 
-  const headerJson = decodeBase64UrlToString(headerB64);
-  if (!headerJson) return false;
+  let headerBytes: Uint8Array;
+  try {
+    headerBytes = base64urlDecode(headerB64u);
+  } catch {
+    return false;
+  }
 
   try {
+    const headerJson = new TextDecoder('utf-8', { fatal: false }).decode(headerBytes);
     const header = JSON.parse(headerJson) as { alg?: unknown };
     return typeof header.alg === 'string' && header.alg.trim().length > 0;
   } catch {
