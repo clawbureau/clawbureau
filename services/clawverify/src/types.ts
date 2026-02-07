@@ -488,8 +488,10 @@ export interface ProofBundleVerificationResult {
     receipts_valid?: boolean;
     attestations_valid?: boolean;
     receipts_count?: number;
-    /** Number of receipts that passed cryptographic verification */
+    /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */
     receipts_verified_count?: number;
+    /** Number of receipts that passed cryptographic signature+hash verification (regardless of binding). */
+    receipts_signature_verified_count?: number;
     attestations_count?: number;
   };
 }
