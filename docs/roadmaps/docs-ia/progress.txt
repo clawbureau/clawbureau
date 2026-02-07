@@ -1,0 +1,18 @@
+## Codebase Patterns
+- Prefer adding **indexes/READMEs** over dumping more standalone docs.
+- Archive rather than delete; preserve history.
+- Make “current state” vs “future intent” explicit.
+
+# Ralph Progress Log
+Started: 2026-02-07T20:00:00Z
+---
+
+## 2026-02-07T20:00:00Z - DOCS-US-001 (planning)
+- What was implemented
+  - Created `docs/roadmaps/docs-ia/` to track documentation IA + scope cleanup.
+  - Added initial PRD + progress log.
+- Files changed
+  - docs/roadmaps/docs-ia/README.md
+  - docs/roadmaps/docs-ia/prd.json
+  - docs/roadmaps/docs-ia/progress.txt
+---

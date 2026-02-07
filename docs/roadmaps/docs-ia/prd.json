@@ -1,0 +1,60 @@
+{
+  "name": "docs-ia",
+  "project": "clawbureau",
+  "description": "Documentation information architecture + scope cleanup: make docs navigable, mark freshness, archive outdated materials, and define what is canonical.",
+  "branchName": "ralph/docs-ia",
+  "userStories": [
+    {
+      "id": "DOCS-US-001",
+      "title": "Oracle-assisted docs audit + IA proposal",
+      "description": "As a contributor, I want a single proposal for docs IA, canonical reading paths, and archiving rules so it’s obvious what to read and what to ignore.",
+      "acceptanceCriteria": [
+        "Produce a written IA proposal (folders, naming, indices)",
+        "Classify existing docs into canonical/active/draft/archive",
+        "Provide reading paths for core workflows (marketplace, PoH, OpenClaw integration)",
+        "List concrete move/rename actions"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "DOCS-US-002",
+      "title": "Archive or mark outdated docs",
+      "description": "As a reader, I want outdated docs clearly marked or moved into an archive so I don’t mistake them for current state.",
+      "acceptanceCriteria": [
+        "Outdated docs are moved to an archive folder or get an explicit status banner",
+        "Indexes link only to canonical/current docs by default",
+        "No broken internal links after moves"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "DOCS-US-003",
+      "title": "Docs status/freshness convention",
+      "description": "As a contributor, I want a lightweight status/freshness template so important docs signal whether they are current, draft, or archived.",
+      "acceptanceCriteria": [
+        "Define a standard header block for key docs (Status, Owner, Last updated, Canonical links)",
+        "Apply it to the docs hub + a few key specs/roadmaps",
+        "Add guidance to docs/README.md"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "DOCS-US-004",
+      "title": "Add a \"What to read\" index per audience",
+      "description": "As a new engineer, I want a 5-minute reading list tailored to what I’m doing so I can start without guessing.",
+      "acceptanceCriteria": [
+        "Add a concise list for: marketplace dev, PoH dev, OpenClaw integration dev, ecosystem/strategy",
+        "Each list links to <= 8 docs",
+        "Lists are kept up to date as part of roadmap updates"
+      ],
+      "priority": 4,
+      "passes": false
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-02-07T20:00:00Z"
+  }
+}
