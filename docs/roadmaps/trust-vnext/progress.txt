@@ -1,0 +1,20 @@
+## Codebase Patterns
+- Trust vNext work is expected to span multiple services: clawverify, clawproxy, clawea, clwbounties/marketplace, and OpenClaw integration points.
+- “Replay” should mean **evidence re-validation** + deterministic checks, not bit-identical LLM output reproduction.
+- High trust tiers must be **fail-closed** and should not rely on trusting a worker’s local machine.
+
+# Ralph Progress Log
+Started: 2026-02-07T19:53:07Z
+---
+
+## 2026-02-07T19:53:07Z - Roadmap seeded (planning)
+- What was implemented
+  - Added a new roadmap folder: `docs/roadmaps/trust-vnext/`.
+  - Seeded `prd.json` from the synthesis oracle:
+    - `docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md`
+  - Created this `progress.txt` for append-only progress tracking (Ralph compatible).
+- Files changed
+  - docs/roadmaps/trust-vnext/README.md
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+---

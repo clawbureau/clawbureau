@@ -1,0 +1,260 @@
+{
+  "name": "clawbureau-trust-vnext",
+  "project": "clawbureau",
+  "description": "Trust vNext: verifier hardening, anti-replay, prompt integrity commitments, confidential consulting contracts/policies, sandbox attestations, and witnessed-web strategy.",
+  "branchName": "ralph/trust-vnext",
+  "userStories": [
+    {
+      "id": "CVF-US-021",
+      "title": "Recompute event hashes in clawverify (fail-closed)",
+      "description": "As a verifier, I want clawverify to recompute event hashes from canonical event headers so that tampered event chains cannot be used to claim higher trust tiers.",
+      "acceptanceCriteria": [
+        "For every event in event_chain, recompute event_hash_b64u per docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md",
+        "Reject proof bundles where any event_hash_b64u mismatches the recomputed value",
+        "Reject proof bundles where chain root no longer matches after recomputation",
+        "Add unit tests covering tamper cases"
+      ],
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "CVF-US-022",
+      "title": "Enforce envelope signer DID equals payload agent DID",
+      "description": "As a verifier, I want the proof bundle envelope signer DID to match payload.agent_did so authorship/accountability cannot be swapped.",
+      "acceptanceCriteria": [
+        "If envelope.signer_did !== payload.agent_did, verification fails",
+        "Add tests for mismatch cases"
+      ],
+      "priority": 2,
+      "passes": false
+    },
+    {
+      "id": "CVF-US-023",
+      "title": "Disable attestation tier uplift until signatures are verified",
+      "description": "As a marketplace, I want attestations to only affect trust tiers when they are cryptographically verified against an allowlist of attesters.",
+      "acceptanceCriteria": [
+        "If attestations are present but not signature-verified, they do not increase trust tier",
+        "Add an allowlist mechanism for attester DIDs (similar to gateway receipt signer allowlist)",
+        "Add tests for shape-only attestations"
+      ],
+      "priority": 3,
+      "passes": false
+    },
+    {
+      "id": "CVF-US-024",
+      "title": "Strict JSON schema validation (Ajv) for proof bundles + receipts",
+      "description": "As a verifier, I want strict schema validation so unknown fields, missing required fields, and type mismatches fail closed.",
+      "acceptanceCriteria": [
+        "Validate proof bundles, receipts, URM, and attestations using Ajv against schemas in packages/schema",
+        "Fail closed on additionalProperties violations",
+        "Return deterministic error codes for schema failures"
+      ],
+      "priority": 4,
+      "passes": false
+    },
+    {
+      "id": "CVF-US-025",
+      "title": "Receipt numeric + size hardening",
+      "description": "As a verifier, I want receipt fields to be strictly validated (finite numbers, bounded sizes) so attackers cannot bypass checks with NaN/Infinity or DoS the verifier.",
+      "acceptanceCriteria": [
+        "Reject NaN/Infinity/non-finite numeric fields (tokens, latency, etc.)",
+        "Enforce max counts and byte-size limits for events/receipts/metadata",
+        "Enforce uniqueness constraints for event_id and receipt_id within a bundle",
+        "Add tests for edge cases"
+      ],
+      "priority": 5,
+      "passes": false
+    },
+    {
+      "id": "POH-US-013",
+      "title": "Align trust tier semantics across PoH + marketplace",
+      "description": "As a platform, I want consistent tier naming/meaning across clawverify outputs and marketplace requirements so automation gates are coherent.",
+      "acceptanceCriteria": [
+        "Define canonical tier labels (self, gateway-receipted, sandbox-attested, tee-attested, witnessed-web)",
+        "clawverify outputs the canonical tier (or components + derived tier)",
+        "docs/AGENT_ECONOMY_MVP_SPEC.md references the same tier definitions"
+      ],
+      "priority": 6,
+      "passes": false
+    },
+    {
+      "id": "CPX-US-031",
+      "title": "Durable idempotency store for clawproxy",
+      "description": "As a gateway, I want idempotency to be durable across instances so receipts cannot be replayed or duplicated across deploys.",
+      "acceptanceCriteria": [
+        "Replace in-memory idempotency with durable storage (KV/DO/D1/etc.)",
+        "Same nonce returns same response/receipt only if request fingerprint matches",
+        "Same nonce with different fingerprint fails closed",
+        "Add tests for cross-instance semantics"
+      ],
+      "priority": 7,
+      "passes": false
+    },
+    {
+      "id": "POH-US-014",
+      "title": "Marketplace replay database",
+      "description": "As a marketplace, I want to reject duplicate submissions that reuse run_id or receipt_id so trust tiers cannot be inflated via replay.",
+      "acceptanceCriteria": [
+        "Persist seen (agent_did, run_id) pairs and reject duplicates",
+        "Persist seen (receipt_signer_did, receipt_id) pairs and reject duplicates",
+        "Return deterministic error codes for replay rejection"
+      ],
+      "priority": 8,
+      "passes": false
+    },
+    {
+      "id": "POH-US-015",
+      "title": "URM materialization + CAS retrieval contract",
+      "description": "As a verifier, I want URM bytes to be retrievable and hash-verified so URM references are meaningful and fail-closed.",
+      "acceptanceCriteria": [
+        "Verification either includes URM bytes or fetches them by URI",
+        "Verifier computes resource_hash_b64u and compares to proof bundle reference",
+        "Fail closed if URM bytes are missing/unfetchable"
+      ],
+      "priority": 9,
+      "passes": false
+    },
+    {
+      "id": "POH-US-016",
+      "title": "Prompt commitment evidence (OpenClaw)",
+      "description": "As a marketplace/verifier, I want prompt-pack commitments and per-call rendered system prompt hashes so replay means evidence re-validation (not token reproduction) and prompt injection risk is reduced.",
+      "acceptanceCriteria": [
+        "Compute a prompt_root_hash_b64u over prompt-pack inputs",
+        "Record rendered_system_prompt_hash_b64u per llm_call",
+        "Persist commitments in URM and/or proof bundle metadata",
+        "Add tests for determinism of hashing/canonicalization"
+      ],
+      "priority": 10,
+      "passes": false
+    },
+    {
+      "id": "POH-US-017",
+      "title": "New schema: system_prompt_report / prompt_pack",
+      "description": "As a platform, I want versioned schemas for prompt commitments so they are verifiable and evolve safely.",
+      "acceptanceCriteria": [
+        "Add new schema(s) under packages/schema for prompt commitment objects",
+        "Register schemas in clawverify schema registry",
+        "Verifier validates prompt commitment objects when present"
+      ],
+      "priority": 11,
+      "passes": false
+    },
+    {
+      "id": "CPX-US-032",
+      "title": "Strict auth header mode (CST vs provider keys)",
+      "description": "As a gateway, I want unambiguous header rules so CSTs and provider API keys cannot be confused or exploited.",
+      "acceptanceCriteria": [
+        "Define a strict mode where CST must be in a canonical header (e.g. X-CST)",
+        "Provider keys must be in X-Provider-API-Key",
+        "Reject ambiguous/mixed Authorization usages in strict mode",
+        "Document behavior in docs/prds/clawproxy.md"
+      ],
+      "priority": 12,
+      "passes": false
+    },
+    {
+      "id": "CCO-US-021",
+      "title": "Work Policy Contract (WPC) registry API (signed policies)",
+      "description": "As a platform, I want a signed policy registry so jobs can pin a WPC hash and gateways/verifiers can enforce it.",
+      "acceptanceCriteria": [
+        "Define a canonical WPC JSON shape + hashing (JCS + SHA-256)",
+        "Implement create/read endpoints that return signed WPC envelopes",
+        "Document how policy_hash is computed and validated"
+      ],
+      "priority": 13,
+      "passes": false
+    },
+    {
+      "id": "CWC-US-001",
+      "title": "Confidential Work Contract (CWC) schema + signing",
+      "description": "As a buyer and worker, I want a contract that pins tier requirements, egress limits, and policy hashes so confidential consulting is enforceable and verifiable.",
+      "acceptanceCriteria": [
+        "Define a versioned CWC schema (buyer signs, worker countersigns)",
+        "CWC includes required tier, wpc_hash, disclosure/privacy mode, dispute terms",
+        "Marketplace stores and enforces CWC hash at job post + submission time"
+      ],
+      "priority": 14,
+      "passes": false
+    },
+    {
+      "id": "CEA-US-010",
+      "title": "clawea sandbox attestation MVP",
+      "description": "As a verifier, I want allowlisted sandbox attestations so sandbox-enforced runs can lift trust tiers beyond gateway receipts.",
+      "acceptanceCriteria": [
+        "Produce a signed execution attestation object bound to run_id",
+        "Verifier validates signature and attester DID allowlist",
+        "Tier uplift only happens when attestation is valid"
+      ],
+      "priority": 15,
+      "passes": false
+    },
+    {
+      "id": "POH-US-018",
+      "title": "Witnessed-web receipts for subscription/web auth",
+      "description": "As a platform, I want a credible path for subscription-web usage evidence (ChatGPT/Claude/Gemini web) that does not rely on a worker’s local machine.",
+      "acceptanceCriteria": [
+        "Define a web_receipt schema and signed envelope type",
+        "Introduce an allowlisted witness service that can sign web receipts",
+        "Verifier recognizes web_receipt but does not equate it to gateway API receipts by default"
+      ],
+      "priority": 16,
+      "passes": false
+    },
+    {
+      "id": "OCL-US-001",
+      "title": "OpenClaw Airlock: trusted vs untrusted context partition",
+      "description": "As a harness, I want buyer repos/uploads to be treated as untrusted data so they cannot modify system-prompt-authoritative context (bootstrap/skills/policy).",
+      "acceptanceCriteria": [
+        "Separate a trusted IdentityRoot (bootstrap/personality/skills) from an untrusted JobRoot (buyer repo/files)",
+        "Disable bootstrap/skills auto-discovery for untrusted mounts in sensitive profiles",
+        "Document the Airlock pattern in docs/OPENCLAW_INTEGRATION.md"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "May require upstream OpenClaw changes or an extension/plugin that enforces mount/path allowlists."
+    },
+    {
+      "id": "OCL-US-002",
+      "title": "OpenClaw: role-based directive authorization (buyer cannot change security)",
+      "description": "As an operator, I want directives (/elevated, /exec, /model, etc.) to be applied only by authorized roles so buyers cannot downgrade security posture via prompt injection.",
+      "acceptanceCriteria": [
+        "Introduce directive authorization by role (operator vs buyer)",
+        "Buyer messages cannot apply directives that affect tool/sandbox/security",
+        "Add regression tests for directive parsing and authorization"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "See docs/openclaw/9.3-directives.md + prompt-injection oracle outputs."
+    },
+    {
+      "id": "OCL-US-003",
+      "title": "OpenClaw: Sensitive Consulting Profile preset",
+      "description": "As a worker, I want a one-click preset for sensitive consulting that is safe-by-default (sandboxed, minimal tools, no network) and produces verifiable evidence.",
+      "acceptanceCriteria": [
+        "Ship a preset that sets sandbox.mode=all and minimal tool profile",
+        "Disable skill binary auto-allow (autoAllowBins) in the sensitive profile",
+        "Default deny browser/web/tools/sessions/message and raw network",
+        "Document the preset + intended trust tier mapping"
+      ],
+      "priority": 19,
+      "passes": false
+    },
+    {
+      "id": "POH-US-019",
+      "title": "Streaming-safe shim for external harness CLIs",
+      "description": "As an operator, I want the clawproof shim proxy to support streaming/SSE so external harnesses can reliably produce gateway-tier bundles.",
+      "acceptanceCriteria": [
+        "Shim forwards streaming responses without buffering entire bodies",
+        "Receipts are extracted/attached in a deterministic way (e.g. final event or trailer object)",
+        "Header injection (run_id/event_hash/idempotency) works for streaming flows",
+        "Add smoke test coverage for at least one streaming harness/provider"
+      ],
+      "priority": 20,
+      "passes": false
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-02-07T19:53:07Z",
+    "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
+  }
+}
