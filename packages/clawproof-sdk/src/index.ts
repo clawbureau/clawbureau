@@ -21,7 +21,8 @@
  */
 
 // Core SDK
-export { createRun } from './run';
+// NOTE: Use explicit `.js` extensions so the built SDK works under plain Node ESM.
+export { createRun } from './run.js';
 
 // Crypto utilities
 export {
@@ -31,7 +32,7 @@ export {
   sha256B64u,
   exportKeyPairJWK,
   importKeyPairJWK,
-} from './crypto';
+} from './crypto.js';
 
 // Types
 export type {
@@ -56,4 +57,4 @@ export type {
   URMDocument,
   EventChainEntry,
   GatewayReceiptPayload,
-} from './types';
+} from './types.js';

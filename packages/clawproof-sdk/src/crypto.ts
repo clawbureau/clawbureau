@@ -5,7 +5,7 @@
  * Uses the Web Crypto API (Node 20+, Deno, Workers).
  */
 
-import type { Ed25519KeyPair } from './types';
+import type { Ed25519KeyPair } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Base64url
