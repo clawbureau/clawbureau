@@ -213,7 +213,8 @@ function validateEventChain(
     const eventPrevHash = event.prev_hash_b64u;
     if (i === 0) {
       // First event should have null prev_hash
-      if (eventPrevHash !== null && eventPrevHash !== '') {
+      // POH schema: first prev_hash_b64u must be null (empty string is invalid).
+      if (eventPrevHash !== null) {
         return {
           valid: false,
           error: 'First event should have null prev_hash_b64u',
