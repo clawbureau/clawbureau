@@ -45,16 +45,47 @@ export function isSchemaValidationReady(): boolean {
   return true;
 }
 
+const IDENTIFIER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function decodeJsonPointerSegment(seg: string): string {
+  // RFC 6901: ~1 -> '/', ~0 -> '~'
+  return seg.replace(/~1/g, '/').replace(/~0/g, '~');
+}
+
+function appendInstancePathSegment(base: string, seg: string): string {
+  // Ajv uses JSON Pointer in instancePath; for arrays the segment is the index.
+  if (/^\d+$/.test(seg)) {
+    return `${base}[${seg}]`;
+  }
+
+  if (IDENTIFIER_RE.test(seg)) {
+    return base.length === 0 ? seg : `${base}.${seg}`;
+  }
+
+  const q = JSON.stringify(seg);
+  return base.length === 0 ? `[${q}]` : `${base}[${q}]`;
+}
+
+function appendPropertySegment(base: string, prop: string): string {
+  // missingProperty/additionalProperty are object property names (not array indices).
+  if (IDENTIFIER_RE.test(prop)) {
+    return base.length === 0 ? prop : `${base}.${prop}`;
+  }
+
+  const q = JSON.stringify(prop);
+  return base.length === 0 ? `[${q}]` : `${base}[${q}]`;
+}
+
 function instancePathToField(instancePath: string): string {
   if (!instancePath) return '';
-  const parts = instancePath.split('/').filter(Boolean);
+  const parts = instancePath
+    .split('/')
+    .filter(Boolean)
+    .map(decodeJsonPointerSegment);
+
   let out = '';
   for (const part of parts) {
-    if (/^\d+$/.test(part)) {
-      out += `[${part}]`;
-    } else {
-      out += out.length === 0 ? part : `.${part}`;
-    }
+    out = appendInstancePathSegment(out, part);
   }
   return out;
 }
@@ -68,12 +99,26 @@ function additionalPropertyFromParams(
   return typeof ap === 'string' ? ap : undefined;
 }
 
+function missingPropertyFromParams(
+  params: ErrorObject['params']
+): string | undefined {
+  if (!params || typeof params !== 'object') return undefined;
+  const p = params as Record<string, unknown>;
+  const mp = p.missingProperty;
+  return typeof mp === 'string' ? mp : undefined;
+}
+
 function fieldFromAjvError(err: ErrorObject): string | undefined {
   const base = instancePathToField(err.instancePath);
 
   if (err.keyword === 'additionalProperties') {
     const ap = additionalPropertyFromParams(err.params);
-    if (ap) return base ? `${base}.${ap}` : ap;
+    if (ap) return appendPropertySegment(base, ap);
+  }
+
+  if (err.keyword === 'required') {
+    const mp = missingPropertyFromParams(err.params);
+    if (mp) return appendPropertySegment(base, mp);
   }
 
   return base.length > 0 ? base : undefined;

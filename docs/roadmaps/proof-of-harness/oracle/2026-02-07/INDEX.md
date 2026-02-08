@@ -21,7 +21,7 @@ This folder contains prompts + outputs from Oracle research runs.
   - Output: `first-principles.gpt-5.2-pro.md`
   - Focus: PoH evidence model + threat model + roadmap
 
-- `poh-subscripti-auth` (gpt-5.2-pro)
+- `poh-subscription-auth` (gpt-5.2-pro)
   - Output: `subscription-auth.gpt-5.2-pro.md`
   - Focus: subscription auth (ChatGPT/Gemini/Claude web) vs verifiable receipts
 
@@ -29,7 +29,7 @@ This folder contains prompts + outputs from Oracle research runs.
   - Output: `redteam.gpt-5.2-pro.md`
   - Focus: anti-gaming red-team list + verifier hardening
 
-- `poh-harness-enforcemen` (google/gemini-3-pro-preview)
+- `poh-harness-enforcement` (google/gemini-3-pro-preview)
   - Output: `harness-enforcement.google-gemini-3-pro-preview.md`
   - Focus: harness enforcement points (plugins/extensions vs wrappers) + compatibility matrix
 

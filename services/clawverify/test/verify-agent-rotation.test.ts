@@ -173,4 +173,70 @@ describe('verifyAgent: rotation-aware subject binding', () => {
     expect(res.result.status).toBe('INVALID');
     expect(res.error?.code).toBe('INVALID_DID_FORMAT');
   });
+
+  it('fails closed on ambiguous/branching rotation certificates (old_did repeated)', async () => {
+    const oldAgent = await makeDidKeyEd25519();
+    const newAgent1 = await makeDidKeyEd25519();
+    const newAgent2 = await makeDidKeyEd25519();
+
+    const makeRotationCert = async (
+      rotationId: string,
+      oldDid: string,
+      oldKey: CryptoKey,
+      newDid: string,
+      newKey: CryptoKey
+    ) => {
+      const cert: any = {
+        rotation_version: '1',
+        rotation_id: rotationId,
+        old_did: oldDid,
+        new_did: newDid,
+        issued_at: '2026-02-07T00:00:00Z',
+        reason: 'operator_rotation',
+        signature_old_b64u: '',
+        signature_new_b64u: '',
+      };
+
+      const canonical = jcsCanonicalize({
+        ...cert,
+        signature_old_b64u: '',
+        signature_new_b64u: '',
+      });
+      const msg = new TextEncoder().encode(canonical);
+
+      cert.signature_old_b64u = base64UrlEncode(
+        new Uint8Array(await crypto.subtle.sign('Ed25519', oldKey, msg))
+      );
+      cert.signature_new_b64u = base64UrlEncode(
+        new Uint8Array(await crypto.subtle.sign('Ed25519', newKey, msg))
+      );
+
+      return cert;
+    };
+
+    const cert1 = await makeRotationCert(
+      'rot_amb_1',
+      oldAgent.did,
+      oldAgent.privateKey,
+      newAgent1.did,
+      newAgent1.privateKey
+    );
+
+    const cert2 = await makeRotationCert(
+      'rot_amb_2',
+      oldAgent.did,
+      oldAgent.privateKey,
+      newAgent2.did,
+      newAgent2.privateKey
+    );
+
+    const res = await verifyAgent({
+      agent_did: newAgent1.did,
+      did_rotation_certificates: [cert1, cert2],
+    });
+
+    expect(res.result.status).toBe('INVALID');
+    expect(res.error?.code).toBe('MALFORMED_ENVELOPE');
+    expect(res.risk_flags ?? []).toContain('DID_ROTATION_CERTS_AMBIGUOUS');
+  });
 });

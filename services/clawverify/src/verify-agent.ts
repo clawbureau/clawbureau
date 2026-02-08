@@ -103,42 +103,77 @@ function computePolicyCompliance(
 
 const DID_ROTATION_CERT_LIMIT = 20;
 
-function buildDidRotationGraph(
-  certs: readonly DidRotationCertificate[]
-): Map<string, string[]> {
-  const graph = new Map<string, string[]>();
+type DidRotationMap = Map<string, string>;
 
+function buildDidRotationMapStrict(
+  certs: readonly DidRotationCertificate[]
+): { map: DidRotationMap; error?: string } {
+  const map: DidRotationMap = new Map();
+  const incoming = new Map<string, string>();
+
+  // Fail-closed: disallow ambiguous/branching rotation sets.
+  // - Each old_did may rotate to exactly one new_did.
+  // - Each new_did may have at most one incoming edge.
   for (const cert of certs) {
-    const next = graph.get(cert.old_did) ?? [];
-    next.push(cert.new_did);
-    graph.set(cert.old_did, next);
+    if (map.has(cert.old_did)) {
+      return {
+        map,
+        error: `Ambiguous rotation: old_did appears more than once (${cert.old_did})`,
+      };
+    }
+
+    if (incoming.has(cert.new_did)) {
+      return {
+        map,
+        error: `Ambiguous rotation: new_did has multiple incoming edges (${cert.new_did})`,
+      };
+    }
+
+    map.set(cert.old_did, cert.new_did);
+    incoming.set(cert.new_did, cert.old_did);
   }
 
-  return graph;
+  // Fail-closed: disallow cycles (prevents "rotate backwards" sets like A→B and B→A).
+  for (const start of map.keys()) {
+    const visiting = new Set<string>();
+    let current = start;
+    while (map.has(current)) {
+      if (visiting.has(current)) {
+        return {
+          map,
+          error: 'Ambiguous rotation: rotation certificates contain a cycle',
+        };
+      }
+      visiting.add(current);
+      current = map.get(current)!;
+    }
+  }
+
+  return { map };
 }
 
 function canRotateDidTo(
   fromDid: string,
   toDid: string,
-  graph: Map<string, string[]> | null
+  map: DidRotationMap | null
 ): boolean {
   if (fromDid === toDid) return true;
-  if (!graph) return false;
+  if (!map) return false;
 
+  // Functional graph: follow the chain from `fromDid` forward.
   const visited = new Set<string>();
-  const queue: string[] = [fromDid];
-  visited.add(fromDid);
+  let current = fromDid;
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const nexts = graph.get(current) ?? [];
+  // Bound traversal by the max cert count to avoid pathological chains.
+  for (let steps = 0; steps < DID_ROTATION_CERT_LIMIT + 1; steps++) {
+    if (visited.has(current)) return false;
+    visited.add(current);
 
-    for (const next of nexts) {
-      if (next === toDid) return true;
-      if (visited.has(next)) continue;
-      visited.add(next);
-      queue.push(next);
-    }
+    const next = map.get(current);
+    if (!next) return false;
+    if (next === toDid) return true;
+
+    current = next;
   }
 
   return false;
@@ -208,7 +243,7 @@ export async function verifyAgent(
   const components: VerifyAgentResponse['components'] = {};
 
   // Optional DID rotation certificates (fail-closed if provided)
-  let didRotationGraph: Map<string, string[]> | null = null;
+  let didRotationMap: DidRotationMap | null = null;
 
   if (req.did_rotation_certificates !== undefined) {
     if (!Array.isArray(req.did_rotation_certificates)) {
@@ -284,9 +319,33 @@ export async function verifyAgent(
       }
     }
 
-    didRotationGraph = buildDidRotationGraph(
+    const built = buildDidRotationMapStrict(
       req.did_rotation_certificates as DidRotationCertificate[]
     );
+
+    if (built.error) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: built.error,
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        poh_tier: trustTierToPoHTier(trustTier),
+        components,
+        risk_flags: [...riskFlags, 'DID_ROTATION_CERTS_AMBIGUOUS'],
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: built.error,
+          field: 'did_rotation_certificates',
+        },
+      };
+    }
+
+    didRotationMap = built.map;
   }
 
   // Verify owner attestation if provided
@@ -308,7 +367,7 @@ export async function verifyAgent(
       const canRotate = canRotateDidTo(
         ownerVerification.subject_did,
         agentDid,
-        didRotationGraph
+        didRotationMap
       );
 
       if (!canRotate) {
@@ -409,7 +468,7 @@ export async function verifyAgent(
       const canRotate = canRotateDidTo(
         proofBundleEnvelope.payload.agent_did,
         agentDid,
-        didRotationGraph
+        didRotationMap
       );
 
       if (!canRotate) {
