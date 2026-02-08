@@ -295,6 +295,26 @@ v1 adapters SHOULD populate:
 - `event_chain`
 - `receipts` when available — each receipt SHOULD contain `binding.run_id` and `binding.event_hash_b64u` for traceability
 
+### 7.3 Attestations (signature + allowlist)
+
+`ProofBundlePayload.attestations` is an array of `AttestationReference` objects.
+
+**Important security rule:** attestations MUST NOT uplift trust tiers unless they are:
+- cryptographically signature-verified, **and**
+- signed by an **allowlisted** attester DID.
+
+**Signature rule (v1):**
+- `attester_did` MUST be a `did:key` encoding an Ed25519 public key.
+- Signed bytes are the UTF-8 bytes of **RFC 8785 JCS canonicalization** of the attestation object with:
+  - `signature_b64u` set to the empty string (`""`) during canonicalization.
+- `signature_b64u` is the Ed25519 signature over those canonical bytes, encoded as **base64url**.
+
+**Binding rule (v1):**
+- `subject_did` MUST equal the proof bundle `agent_did` (the attestation is about this agent/run).
+
+**Verifier config (clawverify):**
+- `ATTESTATION_SIGNER_DIDS` — comma-separated allowlist of trusted attester DIDs.
+
 ---
 
 ## 8) Execution attestations (future, but plan now)
