@@ -996,10 +996,21 @@ OpenClaw rejects unknown top-level keys, so plugin config must live under `plugi
   - tests passing (executed in sandbox)
   - commit proof envelope (required)
 
-### Trust tiers (MVP minimal)
-- `self` proof tier = agent-signed artifacts only
-- `gateway` tier = includes at least one valid clawproxy receipt
-- `sandbox` tier = reserved for clawea attestations later
+### Proof tiers (canonical)
+
+These are the **marketplace-facing** tiers used for `min_proof_tier`.
+
+- `unknown` — no verified evidence
+- `self` — agent-signed evidence only (no gateway receipts, no sandbox attestations)
+- `gateway` — includes ≥1 valid `clawproxy` gateway receipt **bound to the bundle event chain**
+- `sandbox` — includes ≥1 valid allowlisted sandbox/execution attestation (future: `clawea`)
+- `tee` — reserved (future)
+- `witnessed_web` — reserved (future; subscription/web auth only counts when witnessed)
+
+`clawverify` outputs both:
+- `proof_tier` (string enum above)
+- `poh_tier` numeric mapping:
+  - `unknown=0, self=1, gateway=2, sandbox=3, tee=4, witnessed_web=5`
 
 Marketplace can initially set `min_proof_tier = self` and move up as infra matures.
 

@@ -15,6 +15,7 @@ import type {
   ProofBundlePayload,
   SignedEnvelope,
   TrustTier,
+  ProofTier,
   VerifyAgentRequest,
   VerifyAgentResponse,
   DidRotationCertificate,
@@ -32,18 +33,20 @@ export interface VerifyAgentOptions {
   allowlistedAttesterDids?: readonly string[];
 }
 
-function trustTierToPoHTier(trustTier: TrustTier): number {
-  switch (trustTier) {
+function proofTierToPoHTier(proofTier: ProofTier): number {
+  switch (proofTier) {
     case 'unknown':
       return 0;
-    case 'basic':
+    case 'self':
       return 1;
-    case 'verified':
+    case 'gateway':
       return 2;
-    case 'attested':
+    case 'sandbox':
       return 3;
-    case 'full':
+    case 'tee':
       return 4;
+    case 'witnessed_web':
+      return 5;
   }
 }
 
@@ -197,6 +200,7 @@ export async function verifyAgent(
       did_valid: false,
       owner_status: 'unknown',
       trust_tier: 'unknown',
+      proof_tier: 'unknown',
       poh_tier: 0,
       error: {
         code: 'PARSE_ERROR',
@@ -218,6 +222,7 @@ export async function verifyAgent(
       did_valid: false,
       owner_status: 'unknown',
       trust_tier: 'unknown',
+      proof_tier: 'unknown',
       poh_tier: 0,
       error: {
         code: 'MISSING_REQUIRED_FIELD',
@@ -238,6 +243,7 @@ export async function verifyAgent(
   // Default semantic values
   let ownerStatus: OwnerAttestationStatus = 'unknown';
   let trustTier: TrustTier = 'unknown';
+  let proofTier: ProofTier = 'unknown';
   let policyCompliance: PolicyComplianceResult | undefined;
 
   const components: VerifyAgentResponse['components'] = {};
@@ -257,7 +263,8 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
         components,
         risk_flags: [...riskFlags, 'DID_ROTATION_CERTS_MALFORMED'],
         error: {
@@ -279,7 +286,8 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
         components,
         risk_flags: [...riskFlags, 'DID_ROTATION_CERTS_TOO_MANY'],
         error: {
@@ -305,7 +313,8 @@ export async function verifyAgent(
           did_valid: didValid,
           owner_status: ownerStatus,
           trust_tier: trustTier,
-          poh_tier: trustTierToPoHTier(trustTier),
+          proof_tier: proofTier,
+          poh_tier: proofTierToPoHTier(proofTier),
           components,
           risk_flags: [...riskFlags, 'DID_ROTATION_CERT_INVALID'],
           error:
@@ -334,7 +343,8 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
         components,
         risk_flags: [...riskFlags, 'DID_ROTATION_CERTS_AMBIGUOUS'],
         error: {
@@ -381,7 +391,8 @@ export async function verifyAgent(
           did_valid: didValid,
           owner_status: ownerStatus,
           trust_tier: trustTier,
-          poh_tier: trustTierToPoHTier(trustTier),
+          proof_tier: proofTier,
+          poh_tier: proofTierToPoHTier(proofTier),
           components,
           risk_flags: [...riskFlags, 'OWNER_ATTESTATION_SUBJECT_MISMATCH'],
           error: {
@@ -410,7 +421,8 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
         components,
         risk_flags: riskFlags,
         error: ownerVerification.error,
@@ -437,10 +449,12 @@ export async function verifyAgent(
       status: bundleVerification.result.status,
       reason: bundleVerification.result.reason,
       trust_tier: bundleVerification.result.trust_tier,
+      proof_tier: bundleVerification.result.proof_tier,
       error: bundleVerification.error,
     };
 
     trustTier = bundleVerification.result.trust_tier ?? 'unknown';
+    proofTier = bundleVerification.result.proof_tier ?? 'unknown';
 
     // Fail closed: if caller provided a bundle, it must verify
     if (bundleVerification.result.status !== 'VALID') {
@@ -455,7 +469,8 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
-        poh_tier: trustTierToPoHTier(trustTier),
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
         components,
         risk_flags: riskFlags,
         error: bundleVerification.error,
@@ -483,7 +498,8 @@ export async function verifyAgent(
           did_valid: didValid,
           owner_status: ownerStatus,
           trust_tier: trustTier,
-          poh_tier: trustTierToPoHTier(trustTier),
+          proof_tier: proofTier,
+          poh_tier: proofTierToPoHTier(proofTier),
           components,
           risk_flags: riskFlags,
           error: {
@@ -500,8 +516,8 @@ export async function verifyAgent(
     riskFlags.push('MISSING_PROOF_BUNDLE');
   }
 
-  // Compute PoH tier
-  const pohTier = trustTierToPoHTier(trustTier);
+  // Compute PoH tier (canonical numeric mapping of proof_tier)
+  const pohTier = proofTierToPoHTier(proofTier);
   if (pohTier < 2) {
     riskFlags.push('LOW_POH_TIER');
   }
@@ -525,6 +541,7 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
+        proof_tier: proofTier,
         poh_tier: pohTier,
         policy_compliance: policyCompliance,
         components,
@@ -549,6 +566,7 @@ export async function verifyAgent(
         did_valid: didValid,
         owner_status: ownerStatus,
         trust_tier: trustTier,
+        proof_tier: proofTier,
         poh_tier: pohTier,
         policy_compliance: policyCompliance,
         components,
@@ -573,6 +591,7 @@ export async function verifyAgent(
       did_valid: didValid,
       owner_status: ownerStatus,
       trust_tier: trustTier,
+      proof_tier: proofTier,
       poh_tier: pohTier,
       policy_compliance: policyCompliance,
       components,
@@ -596,6 +615,7 @@ export async function verifyAgent(
     did_valid: didValid,
     owner_status: ownerStatus,
     trust_tier: trustTier,
+    proof_tier: proofTier,
     poh_tier: pohTier,
     policy_compliance: policyCompliance,
     components,

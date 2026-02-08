@@ -55,6 +55,7 @@ export interface VerifyAgentResponse {
   did_valid: boolean;
   owner_status: OwnerAttestationStatus;
   trust_tier: TrustTier;
+  proof_tier: ProofTier;
   poh_tier: number;
   policy_compliance?: PolicyComplianceResult;
   risk_flags?: string[];
@@ -68,6 +69,7 @@ export interface VerifyAgentResponse {
       status: VerificationStatus;
       reason: string;
       trust_tier?: TrustTier;
+      proof_tier?: ProofTier;
       error?: VerificationError;
     };
   };
@@ -510,8 +512,27 @@ export interface ProofBundlePayload {
   metadata?: ProofBundleMetadata;
 }
 
-/** Trust tiers computed from proof bundle contents */
+/** Trust tiers computed from proof bundle contents (verifier-internal). */
 export type TrustTier = 'unknown' | 'basic' | 'verified' | 'attested' | 'full';
+
+/**
+ * Canonical proof tiers (marketplace-facing) derived from verified components.
+ *
+ * Ordering (low → high):
+ * - unknown: no verified evidence
+ * - self: agent-signed evidence only
+ * - gateway: includes at least one valid gateway receipt bound to the bundle event chain
+ * - sandbox: includes at least one valid sandbox/execution attestation (allowlisted + signature verified)
+ * - tee: reserved (future)
+ * - witnessed_web: reserved (future; subscription/web auth only counts when witnessed)
+ */
+export type ProofTier =
+  | 'unknown'
+  | 'self'
+  | 'gateway'
+  | 'sandbox'
+  | 'tee'
+  | 'witnessed_web';
 
 /** Proof bundle verification result */
 export interface ProofBundleVerificationResult {
@@ -521,6 +542,7 @@ export interface ProofBundleVerificationResult {
   bundle_id?: string;
   agent_did?: string;
   trust_tier?: TrustTier;
+  proof_tier?: ProofTier;
   component_results?: {
     envelope_valid: boolean;
     urm_valid?: boolean;
@@ -551,6 +573,7 @@ export interface VerifyBundleRequest {
 export interface VerifyBundleResponse {
   result: ProofBundleVerificationResult;
   trust_tier?: TrustTier;
+  proof_tier?: ProofTier;
   error?: VerificationError;
 }
 

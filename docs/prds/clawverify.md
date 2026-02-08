@@ -31,13 +31,27 @@
 
 ## Tier semantics (current outputs)
 
-- `POST /v1/verify/bundle` returns `trust_tier` in: `unknown | basic | verified | attested | full`.
-  - This is derived from which proof-bundle components verified (envelope, event chain, receipts, attestations, URM).
-- `POST /v1/verify/agent` returns both:
-  - `trust_tier` (same enum), and
-  - `poh_tier` (a numeric mapping 0..4; see `trustTierToPoHTier()` in `services/clawverify/src/verify-agent.ts`).
+`clawverify` exposes **two related tier concepts**:
 
-**Important:** Marketplace-facing tier naming (`self | gateway | sandbox | ...`) is being aligned in Trust vNext (see `docs/roadmaps/trust-vnext/` story `POH-US-013`). Until then, treat `poh_tier` as a compatibility signal, not a final public contract.
+1) `proof_tier` (canonical, marketplace-facing)
+- Enum: `unknown | self | gateway | sandbox | tee | witnessed_web`
+- Derived strictly from *verified* proof-bundle components (receipts + attestations).
+- This is the tier that should align with marketplace `min_proof_tier` semantics.
+
+2) `trust_tier` (verifier-internal)
+- Enum: `unknown | basic | verified | attested | full`
+- Derived from envelope validity + which components validated (URM/event_chain/receipts/attestations).
+- Important nuance: an `event_chain`-only bundle may be `trust_tier=verified` but `proof_tier=self`.
+
+**Endpoints:**
+- `POST /v1/verify/bundle`
+  - returns `result.trust_tier` and `result.proof_tier`
+  - mirrors them at top-level as `trust_tier` and `proof_tier`
+- `POST /v1/verify/agent` returns:
+  - `trust_tier` (verifier-internal)
+  - `proof_tier` (canonical)
+  - `poh_tier` (numeric mapping of `proof_tier`):
+    - `unknown=0, self=1, gateway=2, sandbox=3, tee=4, witnessed_web=5`
 
 ## 0) OpenClaw Fit (primary design target)
 OpenClaw is the reference harness for Claw Bureau verification workflows.
