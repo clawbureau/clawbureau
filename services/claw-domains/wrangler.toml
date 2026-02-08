@@ -1,0 +1,83 @@
+name = "claw-domains"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-01"
+
+# ── Routes: all parked / candidate domains ─────────────────────────
+# Domains with their own active Workers (bounties, escrow, etc.)
+# are NOT listed here.
+
+routes = [
+  # For-sale candidates
+  { pattern = "clawinsure.com/*",    zone_name = "clawinsure.com" },
+  { pattern = "www.clawinsure.com/*", zone_name = "clawinsure.com" },
+  { pattern = "clawsettle.com/*",    zone_name = "clawsettle.com" },
+  { pattern = "www.clawsettle.com/*", zone_name = "clawsettle.com" },
+  { pattern = "clawportfolio.com/*", zone_name = "clawportfolio.com" },
+  { pattern = "www.clawportfolio.com/*", zone_name = "clawportfolio.com" },
+  { pattern = "clawadvisory.com/*",  zone_name = "clawadvisory.com" },
+  { pattern = "www.clawadvisory.com/*", zone_name = "clawadvisory.com" },
+  { pattern = "clawcareers.com/*",   zone_name = "clawcareers.com" },
+  { pattern = "www.clawcareers.com/*", zone_name = "clawcareers.com" },
+
+  # Coming-soon ecosystem domains
+  { pattern = "clawrep.com/*",       zone_name = "clawrep.com" },
+  { pattern = "www.clawrep.com/*",   zone_name = "clawrep.com" },
+  { pattern = "clawsig.com/*",       zone_name = "clawsig.com" },
+  { pattern = "www.clawsig.com/*",   zone_name = "clawsig.com" },
+  { pattern = "clawea.com/*",        zone_name = "clawea.com" },
+  { pattern = "www.clawea.com/*",    zone_name = "clawea.com" },
+  { pattern = "clawsilo.com/*",      zone_name = "clawsilo.com" },
+  { pattern = "www.clawsilo.com/*",  zone_name = "clawsilo.com" },
+  { pattern = "clawdelegate.com/*",  zone_name = "clawdelegate.com" },
+  { pattern = "www.clawdelegate.com/*", zone_name = "clawdelegate.com" },
+  { pattern = "clawintel.com/*",     zone_name = "clawintel.com" },
+  { pattern = "www.clawintel.com/*", zone_name = "clawintel.com" },
+  { pattern = "clawtrials.com/*",    zone_name = "clawtrials.com" },
+  { pattern = "www.clawtrials.com/*", zone_name = "clawtrials.com" },
+  { pattern = "clawcontrols.com/*",  zone_name = "clawcontrols.com" },
+  { pattern = "www.clawcontrols.com/*", zone_name = "clawcontrols.com" },
+  { pattern = "clawmanage.com/*",    zone_name = "clawmanage.com" },
+  { pattern = "www.clawmanage.com/*", zone_name = "clawmanage.com" },
+  { pattern = "clawlogs.com/*",      zone_name = "clawlogs.com" },
+  { pattern = "www.clawlogs.com/*",  zone_name = "clawlogs.com" },
+  { pattern = "clawforhire.com/*",   zone_name = "clawforhire.com" },
+  { pattern = "www.clawforhire.com/*", zone_name = "clawforhire.com" },
+  { pattern = "clawproviders.com/*", zone_name = "clawproviders.com" },
+  { pattern = "www.clawproviders.com/*", zone_name = "clawproviders.com" },
+  { pattern = "clawsupply.com/*",    zone_name = "clawsupply.com" },
+  { pattern = "www.clawsupply.com/*", zone_name = "clawsupply.com" },
+  { pattern = "clawincome.com/*",    zone_name = "clawincome.com" },
+  { pattern = "www.clawincome.com/*", zone_name = "clawincome.com" },
+  { pattern = "clawgrant.com/*",     zone_name = "clawgrant.com" },
+  { pattern = "www.clawgrant.com/*", zone_name = "clawgrant.com" },
+  { pattern = "clawgang.com/*",      zone_name = "clawgang.com" },
+  { pattern = "www.clawgang.com/*",  zone_name = "clawgang.com" },
+  { pattern = "clawmerch.com/*",     zone_name = "clawmerch.com" },
+  { pattern = "www.clawmerch.com/*", zone_name = "clawmerch.com" },
+]
+
+# ── D1 database for inquiry capture ────────────────────────────────
+[[d1_databases]]
+binding = "INQUIRIES_DB"
+database_name = "claw-domains"
+database_id = "ad0e6754-1f04-481d-89b9-70900b726e57"
+
+# ── Analytics Engine for cross-domain visit tracking ───────────────
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "claw_domain_visits"
+
+# ── Environment variables ──────────────────────────────────────────
+[vars]
+ENVIRONMENT = "production"
+CF_WEB_ANALYTICS_TOKEN = ""
+INQUIRY_FORWARD_EMAIL = "domains@clawbureau.com"
+
+# ADMIN_TOKEN — set via `wrangler secret put ADMIN_TOKEN`
+# Used for GET /api/inquiries and GET /api/analytics
+
+# ── Staging ────────────────────────────────────────────────────────
+# For staging, deploy manually with --env staging pointed at
+# staging subdomains (e.g. staging.clawinsure.com) or use
+# `wrangler dev` for local testing.
