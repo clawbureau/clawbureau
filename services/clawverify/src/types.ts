@@ -534,6 +534,10 @@ export interface ProofBundleVerificationResult {
     /** Number of receipts that passed cryptographic signature+hash verification (regardless of binding). */
     receipts_signature_verified_count?: number;
     attestations_count?: number;
+    /** Number of attestations that passed cryptographic signature verification (regardless of allowlist/subject binding). */
+    attestations_signature_verified_count?: number;
+    /** Number of attestations that counted for tier uplift (signature + allowlist + subject binding). */
+    attestations_verified_count?: number;
   };
 }
 

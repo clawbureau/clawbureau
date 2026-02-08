@@ -46,3 +46,21 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
+
+## 2026-02-08T00:07:01Z - CVF-US-023
+- What was implemented
+  - Prevented fake/shape-only attestations from uplifting trust tiers.
+  - Proof bundle attestations now only count when:
+    - the attester DID is allowlisted (`ATTESTATION_SIGNER_DIDS`)
+    - the signature verifies (Ed25519 over RFC8785 JCS canonical bytes with signature field blanked)
+    - the attestation is bound to the bundle subject (`subject_did === payload.agent_did`)
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/src/types.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---

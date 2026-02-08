@@ -55,6 +55,15 @@ export interface Env {
    * Used for CVF-US-011 commit proof verification.
    */
   CLAWCLAIM_REPO_CLAIM_ALLOWLIST?: string;
+
+  /**
+   * Comma-separated list of trusted attester DIDs (did:key:...) that are
+   * allowed to sign proof bundle attestations.
+   *
+   * CVF-US-023: Attestations do not uplift trust tiers unless the attester is
+   * allowlisted and the signature verifies.
+   */
+  ATTESTATION_SIGNER_DIDS?: string;
 }
 
 /**
@@ -445,8 +454,13 @@ async function handleVerifyAgent(request: Request, env: Env): Promise<Response> 
     env.GATEWAY_RECEIPT_SIGNER_DIDS
   );
 
+  const attesterAllowlist = parseCommaSeparatedAllowlist(
+    env.ATTESTATION_SIGNER_DIDS
+  );
+
   const verification = await verifyAgent(body, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+    allowlistedAttesterDids: attesterAllowlist,
   });
   const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(verification as VerifyAgentResponse, status);
@@ -606,8 +620,13 @@ async function handleVerifyBundle(
     env.GATEWAY_RECEIPT_SIGNER_DIDS
   );
 
+  const attesterAllowlist = parseCommaSeparatedAllowlist(
+    env.ATTESTATION_SIGNER_DIDS
+  );
+
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+    allowlistedAttesterDids: attesterAllowlist,
   });
 
   // Write audit log entry

@@ -42,10 +42,14 @@ import {
   verifySignature,
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
+import { jcsCanonicalize } from './jcs';
 
 export interface ProofBundleVerifierOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
   allowlistedReceiptSignerDids?: readonly string[];
+
+  /** Allowlisted attester DIDs for proof bundle attestations (did:key:...). */
+  allowlistedAttesterDids?: readonly string[];
 }
 
 /**
@@ -265,6 +269,19 @@ function validateAttestation(
 
   const a = attestation as Record<string, unknown>;
 
+  // Fail-closed: reject unknown fields (schemas use additionalProperties:false)
+  const allowedKeys = new Set([
+    'attestation_id',
+    'attestation_type',
+    'attester_did',
+    'subject_did',
+    'expires_at',
+    'signature_b64u',
+  ]);
+  for (const k of Object.keys(a)) {
+    if (!allowedKeys.has(k)) return false;
+  }
+
   // Check required fields with schema constraints
   if (typeof a.attestation_id !== 'string' || a.attestation_id.length < 1) return false;
   if (a.attestation_type !== 'owner' && a.attestation_type !== 'third_party')
@@ -287,6 +304,129 @@ function validateAttestation(
   }
 
   return true;
+}
+
+async function verifyAttestationReference(
+  attestation: AttestationReference,
+  expectedSubjectDid: string,
+  allowlistedAttesterDids: readonly string[] | undefined
+): Promise<{
+  /** Whether the attestation counts for tier uplift (allowlisted + subject-bound + signature-verified). */
+  valid: boolean;
+  /** Whether the attestation signature verified (regardless of allowlist/subject binding). */
+  signature_valid: boolean;
+  /** Whether attester_did is in the allowlist. */
+  allowlisted: boolean;
+  /** Whether subject_did matches the bundle agent_did. */
+  subject_valid: boolean;
+  attester_did: string;
+  error?: string;
+}> {
+  const allowlisted =
+    Array.isArray(allowlistedAttesterDids) &&
+    allowlistedAttesterDids.includes(attestation.attester_did);
+
+  const subjectValid = attestation.subject_did === expectedSubjectDid;
+
+  const pub = extractPublicKeyFromDidKey(attestation.attester_did);
+  if (!pub) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Unable to extract Ed25519 public key from attester_did (expected did:key with 0xed01 multicodec prefix)',
+    };
+  }
+
+  let canonical: string;
+  try {
+    const canonicalObject: AttestationReference = {
+      ...attestation,
+      signature_b64u: '',
+    };
+    canonical = jcsCanonicalize(canonicalObject);
+  } catch (err) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: `Attestation canonicalization failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+    };
+  }
+
+  let signatureValid = false;
+  try {
+    const sigBytes = base64UrlDecode(attestation.signature_b64u);
+    if (sigBytes.length !== 64) {
+      return {
+        valid: false,
+        signature_valid: false,
+        allowlisted,
+        subject_valid: subjectValid,
+        attester_did: attestation.attester_did,
+        error: 'Invalid attestation signature length (expected 64 bytes for Ed25519)',
+      };
+    }
+
+    const msgBytes = new TextEncoder().encode(canonical);
+    signatureValid = await verifySignature('Ed25519', pub, sigBytes, msgBytes);
+  } catch (err) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: `Attestation signature verification error: ${err instanceof Error ? err.message : 'unknown error'}`,
+    };
+  }
+
+  const valid = signatureValid && allowlisted && subjectValid;
+
+  if (!signatureValid) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Attestation signature verification failed',
+    };
+  }
+
+  if (!allowlisted) {
+    return {
+      valid: false,
+      signature_valid: true,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Attester DID is not allowlisted',
+    };
+  }
+
+  if (!subjectValid) {
+    return {
+      valid: false,
+      signature_valid: true,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Attestation subject_did does not match proof bundle agent_did',
+    };
+  }
+
+  return {
+    valid,
+    signature_valid: signatureValid,
+    allowlisted,
+    subject_valid: subjectValid,
+    attester_did: attestation.attester_did,
+  };
 }
 
 interface ReceiptBindingContext {
@@ -445,7 +585,7 @@ async function verifyReceiptEnvelope(
  * - unknown: No valid components
  * - basic: Valid envelope signature only
  * - verified: Valid event chain or receipts
- * - attested: Valid owner attestation
+ * - attested: Valid allowlisted signature-verified attestations
  * - full: All components valid (URM + events + receipts + attestations)
  */
 function computeTrustTier(components: {
@@ -935,12 +1075,38 @@ export async function verifyProofBundle(
     componentResults.receipts_verified_count = boundValidCount;
   }
 
-  // Validate attestations if present
+  // Validate + verify attestations if present
+  // CVF-US-023: Attestations MUST be signature-verified AND attester_did allowlisted
+  //             before they can uplift trust tier.
   if (payload.attestations !== undefined && payload.attestations.length > 0) {
-    const validAttestations = payload.attestations.filter(validateAttestation);
-    componentResults.attestations_valid =
-      validAttestations.length === payload.attestations.length;
+    const attestationResults = await Promise.all(
+      payload.attestations.map(async (a) => {
+        if (!validateAttestation(a)) {
+          return {
+            valid: false,
+            signature_valid: false,
+          };
+        }
+
+        return verifyAttestationReference(
+          a,
+          payload.agent_did,
+          options.allowlistedAttesterDids
+        );
+      })
+    );
+
+    const signatureVerifiedCount = attestationResults.filter(
+      (r) => r.signature_valid
+    ).length;
+    const verifiedCount = attestationResults.filter((r) => r.valid).length;
+
     componentResults.attestations_count = payload.attestations.length;
+    componentResults.attestations_signature_verified_count = signatureVerifiedCount;
+    componentResults.attestations_verified_count = verifiedCount;
+
+    // Strict: all attestations must verify to count this component as valid.
+    componentResults.attestations_valid = verifiedCount === payload.attestations.length;
   }
 
   // 16. Compute trust tier based on validated components (POH-US-003)

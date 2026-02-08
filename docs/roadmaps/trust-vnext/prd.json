@@ -40,7 +40,8 @@
         "Add tests for shape-only attestations"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented allowlisted signature verification for proof bundle attestations (attester allowlist + JCS canonicalization + Ed25519). Added Env config ATTESTATION_SIGNER_DIDS and unit tests to ensure shape-only attestations do not uplift trust_tier."
     },
     {
       "id": "CVF-US-024",
@@ -256,7 +257,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T23:22:57Z",
+    "updatedAt": "2026-02-08T00:07:01Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

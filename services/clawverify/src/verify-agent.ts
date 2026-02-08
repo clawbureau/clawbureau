@@ -27,6 +27,9 @@ import { verifyDidRotation } from './verify-did-rotation';
 export interface VerifyAgentOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
   allowlistedReceiptSignerDids?: readonly string[];
+
+  /** Allowlisted attester DIDs for proof bundle attestations. */
+  allowlistedAttesterDids?: readonly string[];
 }
 
 function trustTierToPoHTier(trustTier: TrustTier): number {
@@ -368,6 +371,7 @@ export async function verifyAgent(
   if (req.proof_bundle_envelope !== undefined) {
     const bundleVerification = await verifyProofBundle(req.proof_bundle_envelope, {
       allowlistedReceiptSignerDids: options.allowlistedReceiptSignerDids,
+      allowlistedAttesterDids: options.allowlistedAttesterDids,
     });
 
     components.proof_bundle = {
