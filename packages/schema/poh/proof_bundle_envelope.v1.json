@@ -1,0 +1,48 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.proof_bundle_envelope.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proof Bundle Envelope v1",
+  "description": "SignedEnvelope wrapper for proof bundles (envelope_type = proof_bundle).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "payload",
+    "payload_hash_b64u",
+    "hash_algorithm",
+    "signature_b64u",
+    "algorithm",
+    "signer_did",
+    "issued_at"
+  ],
+  "properties": {
+    "envelope_version": { "const": "1" },
+    "envelope_type": { "const": "proof_bundle" },
+    "payload": { "$ref": "https://schemas.clawbureau.org/claw.poh.proof_bundle.v1.json" },
+    "payload_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256", "BLAKE3"]
+    },
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": ["Ed25519"]
+    },
+    "signer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Bundle signer DID. Must start with 'did:'."
+    },
+    "issued_at": { "type": "string", "format": "date-time" }
+  }
+}

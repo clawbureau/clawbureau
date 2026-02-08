@@ -43,6 +43,7 @@ import {
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
 import { jcsCanonicalize } from './jcs';
+import { validateProofBundleEnvelopeV1 } from './schema-validation';
 
 export interface ProofBundleVerifierOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
@@ -792,6 +793,24 @@ export async function verifyProofBundle(
         code: 'MALFORMED_ENVELOPE',
         message: 'signature_b64u must be a valid base64url string',
         field: 'signature_b64u',
+      },
+    };
+  }
+
+  // 9.75 Strict JSON schema validation (Ajv) for envelope + payload
+  // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
+  const schemaResult = validateProofBundleEnvelopeV1(envelope);
+  if (!schemaResult.valid) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: schemaResult.message,
+        verified_at: now,
+      },
+      error: {
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: schemaResult.message,
+        field: schemaResult.field,
       },
     };
   }

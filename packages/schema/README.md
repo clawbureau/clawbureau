@@ -33,7 +33,10 @@ Shared JSON schemas for Claw Bureau services.
 
 ### `poh/`
 - `commit_proof.v1.json`
+- `gateway_receipt.v1.json`
+- `gateway_receipt_envelope.v1.json`
 - `proof_bundle.v1.json`
+- `proof_bundle_envelope.v1.json`
 - `event_chain.v1.json`
 - `receipt_binding.v1.json`
 - `urm.v1.json`

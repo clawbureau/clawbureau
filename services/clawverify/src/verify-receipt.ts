@@ -24,6 +24,7 @@ import {
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
+import { validateGatewayReceiptEnvelopeV1 } from './schema-validation';
 
 export interface ReceiptVerifierOptions {
   /**
@@ -209,6 +210,26 @@ export async function verifyReceipt(
         code: 'UNKNOWN_HASH_ALGORITHM',
         message: `Hash algorithm "${envelope.hash_algorithm}" is not in the allowlist`,
         field: 'hash_algorithm',
+      },
+    };
+  }
+
+  // 6.5 Strict JSON schema validation (Ajv) for envelope + payload
+  // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
+  const schemaResult = validateGatewayReceiptEnvelopeV1(envelope);
+  if (!schemaResult.valid) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: schemaResult.message,
+        envelope_type: envelope.envelope_type,
+        signer_did: envelope.signer_did,
+        verified_at: now,
+      },
+      error: {
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: schemaResult.message,
+        field: schemaResult.field,
       },
     };
   }

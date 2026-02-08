@@ -139,25 +139,7 @@
               "tokens_output": { "type": "number", "minimum": 0 },
               "latency_ms": { "type": "number", "minimum": 0 },
               "timestamp": { "type": "string", "format": "date-time" },
-              "binding": {
-                "type": "object",
-                "description": "Receipt binding fields tying this receipt to a run/event. See receipt_binding.v1.json.",
-                "properties": {
-                  "run_id": { "type": "string", "minLength": 1 },
-                  "event_hash_b64u": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]+$",
-                    "minLength": 8
-                  },
-                  "nonce": { "type": "string", "minLength": 1 },
-                  "policy_hash": { "type": "string", "minLength": 1 },
-                  "token_scope_hash_b64u": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]+$",
-                    "minLength": 8
-                  }
-                }
-              },
+              "binding": { "$ref": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json" },
               "metadata": { "type": "object" }
             }
           },

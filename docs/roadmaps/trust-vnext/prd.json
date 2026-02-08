@@ -53,7 +53,8 @@
         "Return deterministic error codes for schema failures"
       ],
       "priority": 4,
-      "passes": false
+      "passes": true,
+      "notes": "Added Ajv (draft 2020-12) schema validation for proof bundle envelopes and gateway receipt envelopes using schemas in packages/schema. Verifier now fails closed with SCHEMA_VALIDATION_FAILED on additionalProperties/missing fields/type mismatches, and includes field paths derived from Ajv errors. Added unit tests for unknown-field rejection."
     },
     {
       "id": "CVF-US-025",
@@ -257,7 +258,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-08T00:07:01Z",
+    "updatedAt": "2026-02-08T00:48:02Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

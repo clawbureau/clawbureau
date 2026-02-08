@@ -64,3 +64,38 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
+
+## 2026-02-08T00:48:02Z - CVF-US-024
+- What was implemented
+  - Added Ajv (draft 2020-12) schema validation gates for:
+    - proof bundle envelopes
+    - gateway receipt envelopes
+  - Fail-closed behavior:
+    - schema mismatches (including additionalProperties:false) return `SCHEMA_VALIDATION_FAILED`
+    - response includes a deterministic `field` path derived from Ajv errors
+  - Added/updated PoH schemas to support strict validation:
+    - `packages/schema/poh/proof_bundle_envelope.v1.json`
+    - `packages/schema/poh/gateway_receipt.v1.json`
+    - `packages/schema/poh/gateway_receipt_envelope.v1.json`
+    - tightened `proof_bundle.v1` receipt binding via `$ref` to `receipt_binding.v1.json`
+  - Added unit tests to ensure unknown fields are rejected.
+- Files changed
+  - services/clawverify/src/schema-validation.ts
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/verify-receipt.ts
+  - services/clawverify/src/types.ts
+  - services/clawverify/test/ajv-schema-validation.test.ts
+  - packages/schema/poh/proof_bundle.v1.json
+  - packages/schema/poh/gateway_receipt.v1.json
+  - packages/schema/poh/gateway_receipt_envelope.v1.json
+  - packages/schema/poh/proof_bundle_envelope.v1.json
+  - packages/schema/README.md
+  - packages/schema/prd.json
+  - packages/schema/progress.txt
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+  - services/clawverify/package.json
+  - services/clawverify/package-lock.json
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---
