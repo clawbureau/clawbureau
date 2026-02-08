@@ -1,21 +1,18 @@
 /**
- * Strict JSON Schema validation (Ajv)
+ * Strict JSON Schema validation (Ajv) — Workers-safe
  * CVF-US-024
  *
- * Notes:
- * - Schemas live in packages/schema and are draft 2020-12.
- * - We fail closed on any schema validation error (including additionalProperties:false).
+ * Cloudflare Workers disallow runtime code generation (new Function/eval).
+ * Ajv normally compiles schemas using generated functions, so we use Ajv
+ * "standalone" output generated ahead-of-time:
+ *   services/clawverify/src/schema-validators.generated.ts
  */
 
-import Ajv2020, { type ErrorObject, type ValidateFunction } from 'ajv/dist/2020';
-import addFormats from 'ajv-formats';
-
-// PoH schemas
-import receiptBindingSchema from '../../../packages/schema/poh/receipt_binding.v1.json';
-import gatewayReceiptPayloadSchema from '../../../packages/schema/poh/gateway_receipt.v1.json';
-import gatewayReceiptEnvelopeSchema from '../../../packages/schema/poh/gateway_receipt_envelope.v1.json';
-import proofBundlePayloadSchema from '../../../packages/schema/poh/proof_bundle.v1.json';
-import proofBundleEnvelopeSchema from '../../../packages/schema/poh/proof_bundle_envelope.v1.json';
+import type { ErrorObject } from 'ajv';
+import {
+  validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
+  validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
+} from './schema-validators.generated';
 
 export interface SchemaValidationFailure {
   valid: false;
@@ -29,62 +26,23 @@ export type SchemaValidationResult =
   | { valid: true }
   | SchemaValidationFailure;
 
-let initError: string | null = null;
-let validateProofBundleEnvelopeV1Fn: ValidateFunction | null = null;
-let validateGatewayReceiptEnvelopeV1Fn: ValidateFunction | null = null;
+type StandaloneValidateFunction = ((data: unknown) => boolean) & {
+  errors?: ErrorObject[] | null;
+};
 
-try {
-  const ajv = new Ajv2020({
-    allErrors: true,
-    strict: true,
-    // Our schemas use `anyOf: [{required:["..."]}]` patterns which are valid JSON Schema
-    // but trip Ajv's strictRequired heuristic. Disable strictRequired while keeping strict mode.
-    strictRequired: false,
-    allowUnionTypes: true,
-  });
+const validateProofBundleEnvelopeV1Fn =
+  validateProofBundleEnvelopeV1Generated as StandaloneValidateFunction;
 
-  addFormats(ajv);
-
-  // Add referenced schemas first.
-  ajv.addSchema(receiptBindingSchema);
-
-  // Add PoH payload/envelope schemas.
-  ajv.addSchema(gatewayReceiptPayloadSchema);
-  ajv.addSchema(gatewayReceiptEnvelopeSchema);
-  ajv.addSchema(proofBundlePayloadSchema);
-  ajv.addSchema(proofBundleEnvelopeSchema);
-
-  validateProofBundleEnvelopeV1Fn =
-    (ajv.getSchema(
-      'https://schemas.clawbureau.org/claw.poh.proof_bundle_envelope.v1.json'
-    ) as ValidateFunction | undefined) ?? null;
-
-  validateGatewayReceiptEnvelopeV1Fn =
-    (ajv.getSchema(
-      'https://schemas.clawbureau.org/claw.poh.gateway_receipt_envelope.v1.json'
-    ) as ValidateFunction | undefined) ?? null;
-
-  if (!validateProofBundleEnvelopeV1Fn) {
-    validateProofBundleEnvelopeV1Fn = ajv.compile(proofBundleEnvelopeSchema);
-  }
-
-  if (!validateGatewayReceiptEnvelopeV1Fn) {
-    validateGatewayReceiptEnvelopeV1Fn = ajv.compile(gatewayReceiptEnvelopeSchema);
-  }
-} catch (err) {
-  initError = err instanceof Error ? err.message : 'unknown schema init error';
-}
+const validateGatewayReceiptEnvelopeV1Fn =
+  validateGatewayReceiptEnvelopeV1Generated as StandaloneValidateFunction;
 
 export function getSchemaValidationInitError(): string | null {
-  return initError;
+  // Standalone validators are generated at build/commit time.
+  return null;
 }
 
 export function isSchemaValidationReady(): boolean {
-  return (
-    initError === null &&
-    validateProofBundleEnvelopeV1Fn !== null &&
-    validateGatewayReceiptEnvelopeV1Fn !== null
-  );
+  return true;
 }
 
 function instancePathToField(instancePath: string): string {
@@ -122,7 +80,6 @@ function fieldFromAjvError(err: ErrorObject): string | undefined {
 }
 
 function messageFromAjvError(err: ErrorObject): string {
-  // Example: "must have required property 'foo'" / "must NOT have additional properties"
   const keyword = err.keyword ? `[${err.keyword}] ` : '';
   const msg = err.message ?? 'schema validation error';
 
@@ -135,17 +92,10 @@ function messageFromAjvError(err: ErrorObject): string {
 }
 
 function validateWith(
-  fn: ValidateFunction | null,
+  fn: StandaloneValidateFunction,
   value: unknown,
   label: string
 ): SchemaValidationResult {
-  if (!fn) {
-    return {
-      valid: false,
-      message: `Schema validator unavailable for ${label}`,
-    };
-  }
-
   const ok = fn(value);
   if (ok) return { valid: true };
 
@@ -162,14 +112,9 @@ function validateWith(
   };
 }
 
-export function validateProofBundleEnvelopeV1(envelope: unknown): SchemaValidationResult {
-  if (initError) {
-    return {
-      valid: false,
-      message: `Schema validation not initialized: ${initError}`,
-    };
-  }
-
+export function validateProofBundleEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
   return validateWith(
     validateProofBundleEnvelopeV1Fn,
     envelope,
@@ -177,14 +122,9 @@ export function validateProofBundleEnvelopeV1(envelope: unknown): SchemaValidati
   );
 }
 
-export function validateGatewayReceiptEnvelopeV1(envelope: unknown): SchemaValidationResult {
-  if (initError) {
-    return {
-      valid: false,
-      message: `Schema validation not initialized: ${initError}`,
-    };
-  }
-
+export function validateGatewayReceiptEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
   return validateWith(
     validateGatewayReceiptEnvelopeV1Fn,
     envelope,

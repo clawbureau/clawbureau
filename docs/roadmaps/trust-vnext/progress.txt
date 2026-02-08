@@ -67,7 +67,7 @@ Started: 2026-02-07T19:53:07Z
 
 ## 2026-02-08T00:48:02Z - CVF-US-024
 - What was implemented
-  - Added Ajv (draft 2020-12) schema validation gates for:
+  - Added Workers-safe Ajv (draft 2020-12) schema validation gates (standalone validators; no runtime codegen) for:
     - proof bundle envelopes
     - gateway receipt envelopes
   - Fail-closed behavior:
@@ -81,6 +81,8 @@ Started: 2026-02-07T19:53:07Z
   - Added unit tests to ensure unknown fields are rejected.
 - Files changed
   - services/clawverify/src/schema-validation.ts
+  - services/clawverify/src/schema-validators.generated.ts
+  - services/clawverify/scripts/generate-schema-validators.mjs
   - services/clawverify/src/verify-proof-bundle.ts
   - services/clawverify/src/verify-receipt.ts
   - services/clawverify/src/types.ts

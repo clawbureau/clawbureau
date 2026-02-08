@@ -54,7 +54,7 @@
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Added Ajv (draft 2020-12) schema validation for proof bundle envelopes and gateway receipt envelopes using schemas in packages/schema. Verifier now fails closed with SCHEMA_VALIDATION_FAILED on additionalProperties/missing fields/type mismatches, and includes field paths derived from Ajv errors. Added unit tests for unknown-field rejection."
+      "notes": "Added Ajv (draft 2020-12) schema validation for proof bundle envelopes and gateway receipt envelopes using schemas in packages/schema. Implemented Workers-safe Ajv *standalone* validators (no runtime new Function) and fail-closed SCHEMA_VALIDATION_FAILED errors with field paths derived from Ajv errors. Added unit tests for unknown-field rejection."
     },
     {
       "id": "CVF-US-025",
@@ -258,7 +258,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-08T00:48:02Z",
+    "updatedAt": "2026-02-08T00:57:51Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
