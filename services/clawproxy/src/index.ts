@@ -38,7 +38,17 @@ import {
 } from './crypto';
 import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing, logConfidentialRequest, logTokenUsed } from './logging';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
-import { extractBindingFromHeaders, checkIdempotency, recordNonce } from './idempotency';
+import {
+  extractBindingFromHeaders,
+  computeIdempotencyFingerprint,
+  checkIdempotencyAndLock,
+  commitIdempotency,
+  releaseIdempotency,
+} from './idempotency';
+
+// Durable Object export (wrangler binding class_name = "IdempotencyDurableObject")
+export { IdempotencyDurableObject } from './idempotency';
+
 import { validateScopedToken } from './scoped-token';
 import {
   extractPolicyFromHeaders,
@@ -140,7 +150,10 @@ function looksLikeJwt(token: string): boolean {
   }
 
   try {
-    const headerJson = new TextDecoder('utf-8', { fatal: false }).decode(headerBytes);
+    const headerJson = new TextDecoder('utf-8', {
+      fatal: false,
+      ignoreBOM: true,
+    }).decode(headerBytes);
     const header = JSON.parse(headerJson) as { alg?: unknown };
     return typeof header.alg === 'string' && header.alg.trim().length > 0;
   } catch {
@@ -682,12 +695,6 @@ async function handleProxy(
     };
   }
 
-  // Check idempotency if nonce is provided
-  const idempotencyCheck = checkIdempotency(binding?.nonce);
-  if (idempotencyCheck.isDuplicate) {
-    // Return previously issued receipt for duplicate request
-    return jsonResponseWithRateLimit(idempotencyCheck.existingReceipt, 200, rateLimitInfo);
-  }
 
   // Extract policy information for WPC enforcement
   const policyResult = extractPolicyFromHeaders(request);
@@ -859,6 +866,84 @@ async function handleProxy(
     return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);
   }
 
+  // Extend binding with policy hash and CST token scope hash (when present)
+  const finalBinding = {
+    ...binding,
+    policyHash: policyResult.policyHash,
+    tokenScopeHashB64u: validatedCst?.claims.token_scope_hash_b64u,
+  };
+
+  // CPX-US-031: durable idempotency (nonce-based) with request fingerprinting
+  let idempotency: { nonce: string; fingerprint: string } | null = null;
+
+  if (typeof binding?.nonce === 'string' && binding.nonce.trim().length > 0) {
+    const nonce = binding.nonce;
+
+    let fingerprint: string;
+    try {
+      fingerprint = await computeIdempotencyFingerprint({
+        provider,
+        provider_url: providerUrl,
+        model: model ?? null,
+        request_body: finalRequestBody,
+        binding: {
+          run_id: finalBinding.runId ?? null,
+          event_hash_b64u: finalBinding.eventHash ?? null,
+          policy_hash: finalBinding.policyHash ?? null,
+          token_scope_hash_b64u: finalBinding.tokenScopeHashB64u ?? null,
+        },
+        payment: {
+          mode: payment?.mode ?? null,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'IDEMPOTENCY_FINGERPRINT_ERROR',
+        `Failed to compute idempotency fingerprint: ${message}`,
+        500,
+        rateLimitInfo
+      );
+    }
+
+    let check;
+    try {
+      check = await checkIdempotencyAndLock(env, nonce, fingerprint);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'IDEMPOTENCY_STORE_ERROR',
+        `Idempotency store error: ${message}`,
+        503,
+        rateLimitInfo
+      );
+    }
+
+    if (check.kind === 'replay') {
+      return jsonResponseWithRateLimit(check.receipt, 200, rateLimitInfo);
+    }
+
+    if (check.kind === 'mismatch') {
+      return errorResponseWithRateLimit(
+        'IDEMPOTENCY_FINGERPRINT_MISMATCH',
+        'Idempotency key was reused with a different request fingerprint',
+        409,
+        rateLimitInfo
+      );
+    }
+
+    if (check.kind === 'inflight') {
+      return errorResponseWithRateLimit(
+        'IDEMPOTENCY_KEY_IN_USE',
+        'Idempotency key is currently in use for an in-flight request. Retry later.',
+        409,
+        rateLimitInfo
+      );
+    }
+
+    idempotency = { nonce, fingerprint };
+  }
+
   // Forward request to provider (with redacted body if policy requires)
   let providerResponse: Response;
   try {
@@ -871,53 +956,103 @@ async function handleProxy(
       body: finalRequestBody,
     });
   } catch (err) {
+    if (idempotency) {
+      try {
+        await releaseIdempotency(
+          env,
+          idempotency.nonce,
+          idempotency.fingerprint
+        );
+      } catch (releaseErr) {
+        const msg =
+          releaseErr instanceof Error ? releaseErr.message : 'unknown error';
+        return errorResponseWithRateLimit(
+          'IDEMPOTENCY_STORE_ERROR',
+          `Idempotency store release failed: ${msg}`,
+          503,
+          rateLimitInfo
+        );
+      }
+    }
+
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return errorResponseWithRateLimit('PROVIDER_ERROR', `Failed to reach provider: ${message}`, 502, rateLimitInfo);
+    return errorResponseWithRateLimit(
+      'PROVIDER_ERROR',
+      `Failed to reach provider: ${message}`,
+      502,
+      rateLimitInfo
+    );
   }
 
-  // Read provider response
-  const responseBody = await providerResponse.text();
-
-  // Extend binding with policy hash and CST token scope hash (when present)
-  const finalBinding = {
-    ...binding,
-    policyHash: policyResult.policyHash,
-    tokenScopeHashB64u: validatedCst?.claims.token_scope_hash_b64u,
-  };
-
-  // Initialize encryption context for encrypted receipts (if privacy mode requests it)
+  let responseBody: string;
   let encryptionContext: EncryptionContext | null = null;
-  if (policyResult.privacyMode === 'encrypted') {
-    encryptionContext = await initEncryptionContext(env);
-    // If encryption requested but not available, fall back to hash_only
-    // This ensures receipts are never left without privacy protection
+  let receipt: Awaited<ReturnType<typeof generateReceipt>>;
+  let receiptEnvelope: Awaited<ReturnType<typeof generateReceiptEnvelope>>;
+
+  try {
+    // Read provider response
+    responseBody = await providerResponse.text();
+
+    // Initialize encryption context for encrypted receipts (if privacy mode requests it)
+    if (policyResult.privacyMode === 'encrypted') {
+      encryptionContext = await initEncryptionContext(env);
+      // If encryption requested but not available, fall back to hash_only
+      // This ensures receipts are never left without privacy protection
+    }
+
+    // Log confidential requests WITHOUT plaintext (only metadata)
+    if (policyResult.confidentialMode) {
+      logConfidentialRequest(request, provider, model, policyResult.policyHash);
+    }
+
+    // Generate signed receipt with binding fields and privacy mode
+    // Note: requestBody here is the final (possibly redacted) body sent to provider
+    receipt = await generateReceipt(
+      {
+        provider,
+        model,
+        requestBody: finalRequestBody,
+        responseBody,
+        startTime,
+        binding: finalBinding,
+        payment,
+        privacyMode: encryptionContext ? policyResult.privacyMode : 'hash_only',
+      },
+      signingContext,
+      encryptionContext ?? undefined
+    );
+
+    receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
+      gatewayId,
+    });
+  } catch (err) {
+    if (idempotency) {
+      try {
+        await releaseIdempotency(
+          env,
+          idempotency.nonce,
+          idempotency.fingerprint
+        );
+      } catch (releaseErr) {
+        const msg =
+          releaseErr instanceof Error ? releaseErr.message : 'unknown error';
+        return errorResponseWithRateLimit(
+          'IDEMPOTENCY_STORE_ERROR',
+          `Idempotency store release failed: ${msg}`,
+          503,
+          rateLimitInfo
+        );
+      }
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponseWithRateLimit(
+      'PROXY_ERROR',
+      `Failed to process provider response: ${message}`,
+      502,
+      rateLimitInfo
+    );
   }
-
-  // Log confidential requests WITHOUT plaintext (only metadata)
-  if (policyResult.confidentialMode) {
-    logConfidentialRequest(request, provider, model, policyResult.policyHash);
-  }
-
-  // Generate signed receipt with binding fields and privacy mode
-  // Note: requestBody here is the final (possibly redacted) body sent to provider
-  const receipt = await generateReceipt(
-    {
-      provider,
-      model,
-      requestBody: finalRequestBody,
-      responseBody,
-      startTime,
-      binding: finalBinding,
-      payment,
-      privacyMode: encryptionContext ? policyResult.privacyMode : 'hash_only',
-    },
-    signingContext,
-    encryptionContext ?? undefined
-  );
-
-  const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
-    gatewayId,
-  });
 
   // Log token hash with receipt metadata (never log token itself)
   if (validatedCst) {
@@ -947,8 +1082,25 @@ async function handleProxy(
       receiptEnvelope
     );
 
-    // Record nonce for idempotency (even for provider errors)
-    recordNonce(binding?.nonce, withReceipt);
+    // CPX-US-031: commit idempotency (even for provider errors)
+    if (idempotency) {
+      try {
+        await commitIdempotency(
+          env,
+          idempotency.nonce,
+          idempotency.fingerprint,
+          withReceipt
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'unknown error';
+        return errorResponseWithRateLimit(
+          'IDEMPOTENCY_STORE_ERROR',
+          `Idempotency store commit failed: ${message}`,
+          503,
+          rateLimitInfo
+        );
+      }
+    }
 
     return jsonResponseWithRateLimit(withReceipt, providerResponse.status, rateLimitInfo);
   }
@@ -967,8 +1119,25 @@ async function handleProxy(
     receiptEnvelope
   );
 
-  // Record nonce for idempotency enforcement (if provided)
-  recordNonce(binding?.nonce, withReceipt);
+  // CPX-US-031: commit idempotency
+  if (idempotency) {
+    try {
+      await commitIdempotency(
+        env,
+        idempotency.nonce,
+        idempotency.fingerprint,
+        withReceipt
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'IDEMPOTENCY_STORE_ERROR',
+        `Idempotency store commit failed: ${message}`,
+        503,
+        rateLimitInfo
+      );
+    }
+  }
 
   return jsonResponseWithRateLimit(withReceipt, 200, rateLimitInfo);
 }
