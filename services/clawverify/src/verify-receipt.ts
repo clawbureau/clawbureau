@@ -34,6 +34,9 @@ export interface ReceiptVerifierOptions {
   allowlistedSignerDids?: readonly string[];
 }
 
+// CVF-US-025: Receipt numeric hardening (finite numbers + reasonable upper bounds)
+const MAX_RECEIPT_TOKENS = 10_000_000;
+const MAX_RECEIPT_LATENCY_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Validate envelope structure before cryptographic verification
@@ -91,9 +94,32 @@ function validateReceiptPayload(
     !isValidBase64Url(p.response_hash_b64u)
   )
     return false;
-  if (typeof p.tokens_input !== 'number' || p.tokens_input < 0) return false;
-  if (typeof p.tokens_output !== 'number' || p.tokens_output < 0) return false;
-  if (typeof p.latency_ms !== 'number' || p.latency_ms < 0) return false;
+  if (
+    typeof p.tokens_input !== 'number' ||
+    !Number.isFinite(p.tokens_input) ||
+    !Number.isInteger(p.tokens_input) ||
+    p.tokens_input < 0 ||
+    p.tokens_input > MAX_RECEIPT_TOKENS
+  )
+    return false;
+
+  if (
+    typeof p.tokens_output !== 'number' ||
+    !Number.isFinite(p.tokens_output) ||
+    !Number.isInteger(p.tokens_output) ||
+    p.tokens_output < 0 ||
+    p.tokens_output > MAX_RECEIPT_TOKENS
+  )
+    return false;
+
+  if (
+    typeof p.latency_ms !== 'number' ||
+    !Number.isFinite(p.latency_ms) ||
+    !Number.isInteger(p.latency_ms) ||
+    p.latency_ms < 0 ||
+    p.latency_ms > MAX_RECEIPT_LATENCY_MS
+  )
+    return false;
   if (!isValidIsoDate(p.timestamp)) return false;
 
   return true;

@@ -101,3 +101,24 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
+
+## 2026-02-08T04:29:24Z - CVF-US-025
+- What was implemented
+  - Receipt numeric hardening in clawverify:
+    - Reject non-finite numbers (NaN/Infinity) and non-integer counts for tokens/latency
+    - Added reasonable upper bounds for tokens and latency
+  - Proof bundle hardening:
+    - Enforced max counts for event_chain/receipts/attestations
+    - Enforced byte-size limits for metadata blobs (bundle metadata, URM metadata, receipt metadata)
+    - Enforced uniqueness of event_id and receipt_id within a bundle (fail-closed)
+  - Added unit tests for edge cases.
+- Files changed
+  - services/clawverify/src/verify-receipt.ts
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/test/receipt-numeric-hardening.test.ts
+  - services/clawverify/test/proof-bundle-hardening.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---

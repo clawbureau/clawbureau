@@ -53,6 +53,21 @@ export interface ProofBundleVerifierOptions {
   allowlistedAttesterDids?: readonly string[];
 }
 
+// CVF-US-025: size/count hardening
+const MAX_EVENT_CHAIN_ENTRIES = 1000;
+const MAX_RECEIPTS = 1000;
+const MAX_ATTESTATIONS = 100;
+const MAX_METADATA_BYTES = 16 * 1024;
+
+function jsonByteSize(value: unknown): number {
+  try {
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    return bytes.byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 /**
  * Validate envelope structure for proof bundle
  */
@@ -846,6 +861,150 @@ export async function verifyProofBundle(
         field: 'payload',
       },
     };
+  }
+
+  // CVF-US-025: enforce count/size limits and uniqueness constraints (fail-closed)
+  const p = envelope.payload;
+
+  if (p.event_chain && p.event_chain.length > MAX_EVENT_CHAIN_ENTRIES) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `event_chain exceeds max length (${MAX_EVENT_CHAIN_ENTRIES})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.event_chain length exceeds limit (${MAX_EVENT_CHAIN_ENTRIES})`,
+        field: 'payload.event_chain',
+      },
+    };
+  }
+
+  if (p.receipts && p.receipts.length > MAX_RECEIPTS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `receipts exceeds max length (${MAX_RECEIPTS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.receipts length exceeds limit (${MAX_RECEIPTS})`,
+        field: 'payload.receipts',
+      },
+    };
+  }
+
+  if (p.attestations && p.attestations.length > MAX_ATTESTATIONS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `attestations exceeds max length (${MAX_ATTESTATIONS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.attestations length exceeds limit (${MAX_ATTESTATIONS})`,
+        field: 'payload.attestations',
+      },
+    };
+  }
+
+  // Metadata byte-size limits (metadata objects are intentionally flexible; bound size to prevent DoS)
+  if (p.metadata && jsonByteSize(p.metadata) > MAX_METADATA_BYTES) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `payload.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        field: 'payload.metadata',
+      },
+    };
+  }
+
+  if (p.urm?.metadata && jsonByteSize(p.urm.metadata) > MAX_METADATA_BYTES) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `payload.urm.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.urm.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        field: 'payload.urm.metadata',
+      },
+    };
+  }
+
+  if (p.receipts) {
+    for (let i = 0; i < p.receipts.length; i++) {
+      const md = p.receipts[i].payload.metadata;
+      if (md !== undefined && jsonByteSize(md) > MAX_METADATA_BYTES) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `payload.receipts[${i}].payload.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: `receipt metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+            field: `payload.receipts[${i}].payload.metadata`,
+          },
+        };
+      }
+    }
+  }
+
+  // Uniqueness constraints within a bundle
+  if (p.event_chain) {
+    const seenEventIds = new Set<string>();
+    for (let i = 0; i < p.event_chain.length; i++) {
+      const id = p.event_chain[i].event_id;
+      if (seenEventIds.has(id)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate event_id in payload.event_chain',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'event_id must be unique within payload.event_chain',
+            field: `payload.event_chain[${i}].event_id`,
+          },
+        };
+      }
+      seenEventIds.add(id);
+    }
+  }
+
+  if (p.receipts) {
+    const seenReceiptIds = new Set<string>();
+    for (let i = 0; i < p.receipts.length; i++) {
+      const rid = p.receipts[i].payload.receipt_id;
+      if (seenReceiptIds.has(rid)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate receipt_id in payload.receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be unique within payload.receipts',
+            field: `payload.receipts[${i}].payload.receipt_id`,
+          },
+        };
+      }
+      seenReceiptIds.add(rid);
+    }
   }
 
   // 11. Validate agent_did in payload matches expected format

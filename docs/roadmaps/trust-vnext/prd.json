@@ -67,7 +67,8 @@
         "Add tests for edge cases"
       ],
       "priority": 5,
-      "passes": false
+      "passes": true,
+      "notes": "Hardened receipt numeric validation (finite + integer + bounds) and proof bundle validation (max counts, metadata byte-size limits, and uniqueness checks for event_id + receipt_id). Added unit tests for Infinity/non-integer receipts, duplicate IDs, and oversized metadata."
     },
     {
       "id": "POH-US-013",
@@ -258,7 +259,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-08T00:57:51Z",
+    "updatedAt": "2026-02-08T04:29:24Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
