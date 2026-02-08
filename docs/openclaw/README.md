@@ -1,3 +1,14 @@
+> **Type:** Reference
+> **Status:** REFERENCE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** upstream OpenClaw documentation (mirrored here)
+>
+> **Scope:**
+> - A local mirror of upstream OpenClaw docs.
+> - Treated as reference constraints for Claw Bureau integration work.
+> - Not a description of Claw Bureau’s current runtime behavior.
+
 # OpenClaw Docs Mirror
 
 This directory is a **local mirror** of OpenClaw documentation.

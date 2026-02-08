@@ -1,8 +1,25 @@
+> **Type:** PRD
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PRD intent (no active execution tracker yet)
+>
+> **Scope:**
+> - Product requirements for `clawsig.com`.
+> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+
 # clawsig.com (Signing UX) — PRD
 
 **Domain:** clawsig.com  
 **Pillar:** Identity & Trust  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Service:** not implemented yet (no service-level tracker found).
+- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
 
 ---
 
@@ -14,7 +31,7 @@ OpenClaw already supports cryptographic identity patterns (device pairing, skill
 - enterprise custody / policy-managed keys
 - bridging hardware-backed keys to Claw Bureau schemas
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

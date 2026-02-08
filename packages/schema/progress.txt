@@ -6,3 +6,19 @@ Started: 2026-02-03
 - Added v2 schemas for bounties and escrow using `currency: "USD"` and integer-string `*_minor` fields.
 - Added `min_proof_tier` enum (`self|gateway|sandbox`) and marked legacy `min_poh_tier`.
 - Preserved all v1 schemas unchanged.
+
+## AEM-US-002 — Identity rotation schema + golden vector fixture
+- Added DID rotation certificate schema:
+  - `packages/schema/identity/did_rotation.v1.json`
+- Imported the Protocol M Phase 1 golden vector as a stable fixture for automated verification tests:
+  - `packages/schema/fixtures/protocol-m-golden-vector.v1.json`
+- Updated `packages/schema/README.md` to list the new identity schema.
+
+## AEM-US-003 — PoH envelope schemas for strict verification
+- Added PoH schemas for strict envelope/payload validation:
+  - `packages/schema/poh/gateway_receipt.v1.json`
+  - `packages/schema/poh/gateway_receipt_envelope.v1.json`
+  - `packages/schema/poh/proof_bundle_envelope.v1.json`
+- Tightened receipt binding validation inside proof bundles:
+  - `packages/schema/poh/proof_bundle.v1.json` now references `receipt_binding.v1.json`.
+- Updated `packages/schema/README.md` to list the new PoH schemas.

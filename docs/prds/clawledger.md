@@ -1,8 +1,27 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/economy
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/ledger/{prd.json,progress.txt}`
+>
+> **Scope:**
+> - Product requirements for the ledger service.
+> - Shipped behavior is tracked in `services/ledger/progress.txt`.
+
 # clawledger.com (Ledger) — PRD
 
 **Domain:** clawledger.com  
 **Pillar:** Economy & Settlement  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Active service:** `services/ledger/`
+- **Execution tracker:**
+  - `services/ledger/prd.json`
+  - `services/ledger/progress.txt`
 
 ---
 

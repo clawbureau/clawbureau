@@ -175,9 +175,25 @@
       "passes": true,
       "notes": "Operational wiring + documentation so code bounties can use commit proofs with fail-closed verification.",
       "completionNotes": "Configured clawverify allowlist and added docs/smoke tooling."
+    },
+    {
+      "id": "POH-US-012",
+      "title": "External harness shim proxy + harness registry",
+      "description": "As a platform engineer, I want external harness CLIs to produce gateway-tier PoH bundles and I want a single registry of supported harnesses so the system stays coherent as we add more runtimes.",
+      "acceptanceCriteria": [
+        "External harness wrappers capture canonical _receipt_envelope receipts and inject PoH binding headers",
+        "Add a canonical harness registry file that lists supported harness IDs + connection patterns",
+        "Generate a markdown registry doc from the canonical registry",
+        "Add validation + CI checks to keep docs in sync",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Inspired by vercel-labs/skills agent registry + sync scripts; keeps our PoH harness map centralized.",
+      "completionNotes": "Implemented a local shim server in clawproof-adapters + added a PoH harness registry + sync/validate scripts + CI workflow."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T16:06:00.000Z"
+    "updatedAt": "2026-02-07T18:52:44.000Z"
   }
 }

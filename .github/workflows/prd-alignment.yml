@@ -1,0 +1,39 @@
+name: PRD Alignment
+
+on:
+  pull_request:
+    paths:
+      - "docs/prds/**"
+      - "services/**/prd.json"
+      - "services/**/progress.txt"
+      - "packages/schema/**"
+      - "scripts/docs/lint-prds.mjs"
+      - "docs/_templates/**"
+  push:
+    branches: [main]
+    paths:
+      - "docs/prds/**"
+      - "services/**/prd.json"
+      - "services/**/progress.txt"
+      - "packages/schema/**"
+      - "scripts/docs/lint-prds.mjs"
+      - "docs/_templates/**"
+
+concurrency:
+  group: prd-alignment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Lint PRDs
+        run: node scripts/docs/lint-prds.mjs

@@ -1,6 +1,9 @@
 # deps
 node_modules
 
+# build artifacts
+**/dist/
+
 # env
 .env
 
@@ -16,10 +19,18 @@ ralph.out
 ralph.pid
 fleet.out
 fleet*.out
+
+# NOTE: we want to keep a docs-level archive tracked, so only ignore generic archive dirs
 archive/
+!docs/archive/
+!docs/archive/**
 
 # locks (prefer pnpm/yarn if needed; avoid committing npm locks from agent runs)
 package-lock.json
+!packages/bounties/package-lock.json
+!services/clawproxy/package-lock.json
+!services/clawverify/package-lock.json
+!services/claw-domains/package-lock.json
 
 # local scratch
 .tmp-main-required-pr-reviews.json

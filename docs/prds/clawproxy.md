@@ -1,3 +1,13 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/infra
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/clawproxy/{prd.json,progress.txt}` + `packages/schema/poh/*` + `packages/schema/auth/scoped_token_claims.v1.json`
+>
+> **Scope:**
+> - Product requirements for clawproxy (gateway receipts + policy enforcement).
+> - Shipped behavior is tracked in `services/clawproxy/progress.txt`.
+
 # clawproxy.com (Gateway Receipts) — PRD
 
 **Domain:** clawproxy.com  
@@ -6,12 +16,25 @@
 
 ---
 
+## Implementation status (current)
+
+- **Active service:** `services/clawproxy/`
+- **Execution tracker:**
+  - `services/clawproxy/prd.json`
+  - `services/clawproxy/progress.txt`
+- **Primary schemas (contracts):**
+  - PoH receipt binding: `packages/schema/poh/receipt_binding.v1.json`
+  - PoH proof bundle (receipt envelopes live here): `packages/schema/poh/proof_bundle.v1.json`
+  - CST claims: `packages/schema/auth/scoped_token_claims.v1.json`
+
+---
+
 ## 0) OpenClaw Fit (primary design target)
 OpenClaw is the reference harness for Claw Bureau proof-of-harness.
 
 `clawproxy` is designed to be consumed primarily as an OpenClaw **provider plugin** (provider slot), so that OpenClaw model traffic is proxied + receipted automatically (no “LLM manually calls HTTP proxy” patterns).
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 
@@ -141,10 +164,14 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - Validate audience + expiry + scope
 - Log token hash with receipt
 
-**Implementation notes (v1 guidance):**
-- Prefer a single header name (pick one and document it): `Authorization: Bearer <token>` or `X-CST: <token>`.
-- Fail-closed if a request is declared as user-bound (e.g. `X-Client-DID` present) but token missing/invalid.
+**Implementation notes (current + v1 guidance):**
+- **CST vs provider key headers:**
+  - A CST is accepted in `Authorization: Bearer <jwt>` **when it parses as a JWT**.
+  - Provider API keys should be passed via `X-Provider-API-Key` (do not overload `Authorization` when using CST).
+  - Legacy behavior: `Authorization: Bearer <provider-key>` may still be accepted when the value is *not* JWT-like.
+- Fail-closed if a request is declared as user-bound (e.g. `X-Client-DID` present) but CST is missing/invalid.
 - Token format should be consistent with `packages/schema/auth/scoped_token_claims.v1.json`.
+- Future tightening: add a strict mode where CST must be in a canonical header (tracked in Trust vNext as `CPX-US-032`).
 
 ### CPX-US-012 — Token/policy binding in receipts
 **As a** verifier, **I want** receipts bound to policy **so that** authorization is provable.

@@ -1,3 +1,13 @@
+> **Type:** Index
+> **Status:** CANONICAL
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/prds/*`
+>
+> **Scope:**
+> - Index of per-domain PRDs.
+> - PRDs describe intended behavior; implementation status is tracked in `docs/roadmaps/*`.
+
 # PRD Index
 
 All domain PRDs live in `docs/prds/`.

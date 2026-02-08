@@ -24,6 +24,7 @@ import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createSession } from './session';
+import { startShim } from './shim';
 import { getAdapter, listAdapters } from './adapters/index';
 import {
   generateKeyPair,
@@ -146,43 +147,62 @@ export async function main(argv: string[]): Promise<void> {
     },
   });
 
-  // Compute proxy env vars
-  const proxyEnv = adapter.getProxyEnv(proxyUrl, proxyToken);
-
-  // Spawn the harness subprocess with proxy env vars injected
-  const childEnv = { ...process.env, ...proxyEnv };
-
-  const exitCode = await new Promise<number>((resolve) => {
-    let stdout = '';
-    const child = spawn(command[0], command.slice(1), {
-      env: childEnv,
-      stdio: ['inherit', 'pipe', 'inherit'],
-    });
-
-    child.stdout.on('data', (data: Buffer) => {
-      const chunk = data.toString();
-      stdout += chunk;
-      process.stdout.write(chunk);
-    });
-
-    child.on('close', async (code: number | null) => {
-      // Parse tool events from output
-      const toolEvents = adapter.parseToolEvents(stdout);
-      for (const te of toolEvents) {
-        await session.recordEvent({
-          eventType: 'tool_call',
-          payload: te,
-        });
-      }
-
-      resolve(code ?? 1);
-    });
-
-    child.on('error', (err: Error) => {
-      process.stderr.write(`clawproof: failed to spawn "${command[0]}": ${err.message}\n`);
-      resolve(127);
-    });
+  // Start a local shim server for provider-compatible base URL overrides.
+  // The shim forwards requests to clawproxy via session.proxyLLMCall(), which:
+  //   - records llm_call events into the event chain
+  //   - injects PoH binding headers
+  //   - extracts and stores canonical gateway receipt envelopes
+  const shim = await startShim({
+    session,
+    log: (msg) => process.stderr.write(`clawproof: ${msg}\n`),
   });
+
+  let exitCode: number;
+  try {
+    // Compute proxy env vars (point the harness at the local shim)
+    const proxyEnv = adapter.getProxyEnv(shim.baseUrl, proxyToken);
+
+    // Spawn the harness subprocess with shim env vars injected
+    const childEnv = { ...process.env, ...proxyEnv };
+
+    exitCode = await new Promise<number>((resolve) => {
+      let stdout = '';
+      const child = spawn(command[0], command.slice(1), {
+        env: childEnv,
+        stdio: ['inherit', 'pipe', 'inherit'],
+      });
+
+      child.stdout.on('data', (data: Buffer) => {
+        const chunk = data.toString();
+        stdout += chunk;
+        process.stdout.write(chunk);
+      });
+
+      child.on('close', async (code: number | null) => {
+        // Parse tool events from output
+        const toolEvents = adapter.parseToolEvents(stdout);
+        for (const te of toolEvents) {
+          await session.recordEvent({
+            eventType: 'tool_call',
+            payload: te,
+          });
+        }
+
+        resolve(code ?? 1);
+      });
+
+      child.on('error', (err: Error) => {
+        process.stderr.write(`clawproof: failed to spawn "${command[0]}": ${err.message}\n`);
+        resolve(127);
+      });
+    });
+  } finally {
+    try {
+      await shim.close();
+    } catch {
+      // ignore
+    }
+  }
 
   // Record run_end event
   await session.recordEvent({

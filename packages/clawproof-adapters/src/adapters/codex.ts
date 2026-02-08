@@ -26,15 +26,14 @@ export const HARNESS: HarnessConfig = {
  * Environment variables to set when launching Codex
  * so that LLM calls are routed through clawproxy.
  */
-export function getProxyEnv(proxyBaseUrl: string, proxyToken?: string): Record<string, string> {
+export function getProxyEnv(proxyBaseUrl: string, _proxyToken?: string): Record<string, string> {
   const env: Record<string, string> = {
     // Codex uses the OpenAI SDK which respects OPENAI_BASE_URL
     OPENAI_BASE_URL: `${proxyBaseUrl.replace(/\/$/, '')}/v1/openai`,
   };
 
-  if (proxyToken) {
-    env.OPENAI_API_KEY = proxyToken;
-  }
+  // Note: we do NOT override OPENAI_API_KEY here.
+  // In shim mode the harness still uses its normal upstream provider key.
 
   return env;
 }

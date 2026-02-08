@@ -27,7 +27,7 @@ export const HARNESS: HarnessConfig = {
  * Environment variables to set when launching Opencode
  * so that LLM calls are routed through clawproxy.
  */
-export function getProxyEnv(proxyBaseUrl: string, proxyToken?: string): Record<string, string> {
+export function getProxyEnv(proxyBaseUrl: string, _proxyToken?: string): Record<string, string> {
   const base = proxyBaseUrl.replace(/\/$/, '');
   const env: Record<string, string> = {
     // Opencode supports multiple providers — override all known base URLs
@@ -35,10 +35,7 @@ export function getProxyEnv(proxyBaseUrl: string, proxyToken?: string): Record<s
     OPENAI_BASE_URL: `${base}/v1/openai`,
   };
 
-  if (proxyToken) {
-    env.ANTHROPIC_API_KEY = proxyToken;
-    env.OPENAI_API_KEY = proxyToken;
-  }
+  // Note: we do NOT override provider API keys here.
 
   return env;
 }

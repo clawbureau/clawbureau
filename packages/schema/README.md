@@ -8,6 +8,7 @@ Shared JSON schemas for Claw Bureau services.
 - `escrow/` — escrow record schemas.
 - `identity/` — ownership/attestation schemas.
 - `poh/` — proof-of-harness schemas.
+- `fixtures/` — non-schema fixtures/test vectors (used by verifiers/tests).
 
 ## Money conventions
 - **v2** schemas use **USD** only (`currency: "USD"`) and represent monetary values as **integer strings in minor units** (e.g. cents) using `*_minor` fields.
@@ -28,10 +29,14 @@ Shared JSON schemas for Claw Bureau services.
 
 ### `identity/`
 - `owner_attestation.v1.json`
+- `did_rotation.v1.json`
 
 ### `poh/`
 - `commit_proof.v1.json`
+- `gateway_receipt.v1.json`
+- `gateway_receipt_envelope.v1.json`
 - `proof_bundle.v1.json`
+- `proof_bundle_envelope.v1.json`
 - `event_chain.v1.json`
 - `receipt_binding.v1.json`
 - `urm.v1.json`

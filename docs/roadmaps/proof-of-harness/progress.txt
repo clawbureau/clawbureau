@@ -161,3 +161,23 @@ Started: 2026-02-05T21:49:28Z
   - scripts/poh/smoke-commit-proof.mjs
   - proofs/fix/poh/POH-US-011-commit-proof-allowlist/commit.sig.json
 ---
+
+## 2026-02-07T18:54:04Z - POH-US-012
+- What was implemented
+  - Added a local shim HTTP server to `@clawbureau/clawproof-adapters` so external harness CLIs can point provider base URLs at localhost while the shim forwards requests to `clawproxy` with PoH binding headers.
+  - Updated external harness adapters to **not** overwrite upstream provider API keys with proxy tokens (the shim extracts upstream keys and forwards them via `X-Provider-API-Key`).
+  - Added a canonical PoH harness registry (`docs/roadmaps/proof-of-harness/harnesses.mjs`) and a generated markdown doc (`HARNESS_REGISTRY.md`).
+  - Added sync + validation scripts and a GitHub Actions workflow to keep the generated doc in sync.
+- Files changed
+  - packages/clawproof-adapters/src/shim.ts
+  - packages/clawproof-adapters/src/cli.ts
+  - packages/clawproof-adapters/src/adapters/*
+  - docs/roadmaps/proof-of-harness/harnesses.mjs
+  - docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md
+  - scripts/poh/sync-harness-registry.mjs
+  - scripts/poh/validate-harness-registry.mjs
+  - .github/workflows/poh-harness-registry.yml
+  - docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md
+  - docs/roadmaps/proof-of-harness/prd.json
+  - .gitignore
+---

@@ -1,0 +1,124 @@
+## Codebase Patterns
+- Trust vNext work is expected to span multiple services: clawverify, clawproxy, clawea, clwbounties/marketplace, and OpenClaw integration points.
+- “Replay” should mean **evidence re-validation** + deterministic checks, not bit-identical LLM output reproduction.
+- High trust tiers must be **fail-closed** and should not rely on trusting a worker’s local machine.
+
+# Ralph Progress Log
+Started: 2026-02-07T19:53:07Z
+---
+
+## 2026-02-07T19:53:07Z - Roadmap seeded (planning)
+- What was implemented
+  - Added a new roadmap folder: `docs/roadmaps/trust-vnext/`.
+  - Seeded `prd.json` from the synthesis oracle:
+    - `docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md`
+  - Created this `progress.txt` for append-only progress tracking (Ralph compatible).
+- Files changed
+  - docs/roadmaps/trust-vnext/README.md
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+---
+
+## 2026-02-07T23:19:57Z - CVF-US-021
+- What was implemented
+  - Hardened proof bundle verification by recomputing `event_hash_b64u` for every event using the canonical event header key order (ADAPTER_SPEC_v1 §4.2).
+  - Fail-closed: proof bundles are rejected when any `event_hash_b64u` mismatches the recomputed value.
+  - Added unit tests to ensure tampering is detected even if the chain links are internally consistent.
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/test/proof-bundle-event-hash.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---
+
+## 2026-02-07T23:22:57Z - CVF-US-022
+- What was implemented
+  - Enforced proof bundle authorship binding:
+    - `envelope.signer_did` MUST equal `payload.agent_did`
+  - Added unit test coverage to ensure a signature-valid bundle cannot claim a different `agent_did`.
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/test/proof-bundle-event-hash.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---
+
+## 2026-02-08T00:07:01Z - CVF-US-023
+- What was implemented
+  - Prevented fake/shape-only attestations from uplifting trust tiers.
+  - Proof bundle attestations now only count when:
+    - the attester DID is allowlisted (`ATTESTATION_SIGNER_DIDS`)
+    - the signature verifies (Ed25519 over RFC8785 JCS canonical bytes with signature field blanked)
+    - the attestation is bound to the bundle subject (`subject_did === payload.agent_did`)
+- Files changed
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/src/types.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---
+
+## 2026-02-08T00:48:02Z - CVF-US-024
+- What was implemented
+  - Added Workers-safe Ajv (draft 2020-12) schema validation gates (standalone validators; no runtime codegen) for:
+    - proof bundle envelopes
+    - gateway receipt envelopes
+  - Fail-closed behavior:
+    - schema mismatches (including additionalProperties:false) return `SCHEMA_VALIDATION_FAILED`
+    - response includes a deterministic `field` path derived from Ajv errors
+  - Added/updated PoH schemas to support strict validation:
+    - `packages/schema/poh/proof_bundle_envelope.v1.json`
+    - `packages/schema/poh/gateway_receipt.v1.json`
+    - `packages/schema/poh/gateway_receipt_envelope.v1.json`
+    - tightened `proof_bundle.v1` receipt binding via `$ref` to `receipt_binding.v1.json`
+  - Added unit tests to ensure unknown fields are rejected.
+- Files changed
+  - services/clawverify/src/schema-validation.ts
+  - services/clawverify/src/schema-validators.generated.ts
+  - services/clawverify/scripts/generate-schema-validators.mjs
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/verify-receipt.ts
+  - services/clawverify/src/types.ts
+  - services/clawverify/test/ajv-schema-validation.test.ts
+  - packages/schema/poh/proof_bundle.v1.json
+  - packages/schema/poh/gateway_receipt.v1.json
+  - packages/schema/poh/gateway_receipt_envelope.v1.json
+  - packages/schema/poh/proof_bundle_envelope.v1.json
+  - packages/schema/README.md
+  - packages/schema/prd.json
+  - packages/schema/progress.txt
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+  - services/clawverify/package.json
+  - services/clawverify/package-lock.json
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---
+
+## 2026-02-08T04:29:24Z - CVF-US-025
+- What was implemented
+  - Receipt numeric hardening in clawverify:
+    - Reject non-finite numbers (NaN/Infinity) and non-integer counts for tokens/latency
+    - Added reasonable upper bounds for tokens and latency
+  - Proof bundle hardening:
+    - Enforced max counts for event_chain/receipts/attestations
+    - Enforced byte-size limits for metadata blobs (bundle metadata, URM metadata, receipt metadata)
+    - Enforced uniqueness of event_id and receipt_id within a bundle (fail-closed)
+  - Added unit tests for edge cases.
+- Files changed
+  - services/clawverify/src/verify-receipt.ts
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/test/receipt-numeric-hardening.test.ts
+  - services/clawverify/test/proof-bundle-hardening.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+---

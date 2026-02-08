@@ -1,8 +1,25 @@
+> **Type:** PRD
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PRD intent (no active execution tracker yet)
+>
+> **Scope:**
+> - Product requirements for `clawadvisory.com`.
+> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+
 # clawadvisory.com (Governance) — PRD
 
 **Domain:** clawadvisory.com  
 **Pillar:** Governance & Risk Controls  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Service:** not implemented yet (no service-level tracker found).
+- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
 
 ---
 

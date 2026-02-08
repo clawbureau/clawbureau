@@ -1,8 +1,25 @@
+> **Type:** PRD
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PRD intent (no active execution tracker yet)
+>
+> **Scope:**
+> - Product requirements for `clawlogs.com`.
+> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+
 # clawlogs.com (Audit Logs) — PRD
 
 **Domain:** clawlogs.com  
 **Pillar:** Identity & Trust  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Service:** not implemented yet (no service-level tracker found).
+- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
 
 ---
 
@@ -13,7 +30,7 @@ Primary OpenClaw integration points:
 - forward `clawproxy` receipts (hash-only) + correlation fields (`agentId`, `sessionKey`, `model`)
 - export bundles for third-party audits without giving full OpenClaw workspace access
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

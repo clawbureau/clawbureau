@@ -1,8 +1,25 @@
+> **Type:** PRD
+> **Status:** DRAFT
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** PRD intent (no active execution tracker yet)
+>
+> **Scope:**
+> - Product requirements for `clawcontrols.com`.
+> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+
 # clawcontrols.com (Policy Controls) — PRD
 
 **Domain:** clawcontrols.com  
 **Pillar:** Governance & Risk Controls  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Service:** not implemented yet (no service-level tracker found).
+- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
 
 ---
 
@@ -12,7 +29,7 @@ OpenClaw already has a strong local policy system (tool allow/deny profiles + sa
 - providing a translation layer so OpenClaw can map WPC → tool policy restrictions deterministically
 - hosting token policy tiers used by `clawscope`
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

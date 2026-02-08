@@ -1,14 +1,13 @@
-# Claw Bureau Architecture (Monorepo)
+> **Type:** Redirect
+> **Status:** ARCHIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `docs/foundations/ARCHITECTURE.md`
+>
+> **Scope:**
+> - This file is a stub to preserve old links.
 
-This repo implements the Claw Bureau ecosystem as a unified trust + execution + settlement layer.
+# Moved
 
-Key architectural pillars:
-- Identity & Trust Fabric
-- Economy & Settlement Rails
-- Labor & Delegation Market
-- Governance & Risk Controls
-- Core Infrastructure
-- Community & Growth
-- Capital & Incentives
-
-Each domain has its own PRD in `docs/prds/`.
+This document moved to:
+- `docs/foundations/ARCHITECTURE.md`

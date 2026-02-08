@@ -28,6 +28,17 @@ export interface VerifyAgentRequest {
   agent_did: string;
   owner_attestation_envelope?: SignedEnvelope<OwnerAttestationPayload>;
   proof_bundle_envelope?: SignedEnvelope<ProofBundlePayload>;
+
+  /**
+   * Optional DID rotation certificates.
+   *
+   * When present, clawverify may accept proof components (owner attestations / bundles)
+   * whose subject DID is an *older* DID that rotates forward to agent_did.
+   *
+   * Fail-closed rule: if any certificate is provided, it MUST verify.
+   */
+  did_rotation_certificates?: DidRotationCertificate[];
+
   /** Optional Work Policy Contract hash. If provided, receipts must match this policy hash. */
   policy_hash?: string;
 }
@@ -191,6 +202,7 @@ export type VerificationErrorCode =
   | 'HASH_MISMATCH'
   | 'SIGNATURE_INVALID'
   | 'MALFORMED_ENVELOPE'
+  | 'SCHEMA_VALIDATION_FAILED'
   | 'MISSING_REQUIRED_FIELD'
   | 'INVALID_DID_FORMAT'
   | 'EXPIRED'
@@ -266,6 +278,36 @@ export interface VerifyOwnerAttestationResponse {
   subject_did?: string;
   provider_ref?: string;
   expires_at?: string;
+  error?: VerificationError;
+}
+
+/**
+ * DID Rotation Certificate types
+ * CVF-US-016: Verify DID rotation certificates
+ */
+export interface DidRotationCertificate {
+  rotation_version: '1';
+  rotation_id: string;
+  old_did: string;
+  new_did: string;
+  issued_at: string;
+  reason: string;
+  signature_old_b64u: string;
+  signature_new_b64u: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyDidRotationRequest {
+  certificate: DidRotationCertificate;
+}
+
+export interface VerifyDidRotationResponse {
+  result: VerificationResult;
+  rotation_id?: string;
+  old_did?: string;
+  new_did?: string;
+  issued_at?: string;
+  reason?: string;
   error?: VerificationError;
 }
 
@@ -493,6 +535,10 @@ export interface ProofBundleVerificationResult {
     /** Number of receipts that passed cryptographic signature+hash verification (regardless of binding). */
     receipts_signature_verified_count?: number;
     attestations_count?: number;
+    /** Number of attestations that passed cryptographic signature verification (regardless of allowlist/subject binding). */
+    attestations_signature_verified_count?: number;
+    /** Number of attestations that counted for tier uplift (signature + allowlist + subject binding). */
+    attestations_verified_count?: number;
   };
 }
 

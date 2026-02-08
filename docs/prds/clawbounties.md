@@ -1,8 +1,33 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/labor
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/clawbounties/{prd.json,progress.txt}` + `packages/schema/bounties/*.v2.json`
+>
+> **Scope:**
+> - Product requirements for the Clawbounties marketplace.
+> - “What is shipped” is tracked in `services/clawbounties/progress.txt`.
+
 # clawbounties.com (Bounty Marketplace) — PRD
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
 **Status:** Draft  
+
+---
+
+## Implementation status (current)
+
+- **Active service:** `services/clawbounties/`
+- **Execution tracker:**
+  - `services/clawbounties/prd.json`
+  - `services/clawbounties/progress.txt`
+- **Primary schemas (contracts):**
+  - Bounties API + records: `packages/schema/bounties/*.(v1|v2).json` (v2 is USD minor-unit strings)
+  - Escrow hold request: `packages/schema/bounties/escrow_hold_request.v2.json`
+  - PoH evidence referenced by marketplace:
+    - `packages/schema/poh/proof_bundle.v1.json`
+    - `packages/schema/poh/commit_proof.v1.json`
 
 ---
 

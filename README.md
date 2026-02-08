@@ -33,4 +33,4 @@ monorepo/
 
 ---
 
-See `docs/PRD_INDEX.md` for all domain PRDs.
+See `docs/README.md` for the docs hub, and `docs/PRD_INDEX.md` for all domain PRDs.

@@ -42,10 +42,30 @@ import {
   verifySignature,
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
+import { jcsCanonicalize } from './jcs';
+import { validateProofBundleEnvelopeV1 } from './schema-validation';
 
 export interface ProofBundleVerifierOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
   allowlistedReceiptSignerDids?: readonly string[];
+
+  /** Allowlisted attester DIDs for proof bundle attestations (did:key:...). */
+  allowlistedAttesterDids?: readonly string[];
+}
+
+// CVF-US-025: size/count hardening
+const MAX_EVENT_CHAIN_ENTRIES = 1000;
+const MAX_RECEIPTS = 1000;
+const MAX_ATTESTATIONS = 100;
+const MAX_METADATA_BYTES = 16 * 1024;
+
+function jsonByteSize(value: unknown): number {
+  try {
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    return bytes.byteLength;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
 
 /**
@@ -265,6 +285,19 @@ function validateAttestation(
 
   const a = attestation as Record<string, unknown>;
 
+  // Fail-closed: reject unknown fields (schemas use additionalProperties:false)
+  const allowedKeys = new Set([
+    'attestation_id',
+    'attestation_type',
+    'attester_did',
+    'subject_did',
+    'expires_at',
+    'signature_b64u',
+  ]);
+  for (const k of Object.keys(a)) {
+    if (!allowedKeys.has(k)) return false;
+  }
+
   // Check required fields with schema constraints
   if (typeof a.attestation_id !== 'string' || a.attestation_id.length < 1) return false;
   if (a.attestation_type !== 'owner' && a.attestation_type !== 'third_party')
@@ -287,6 +320,129 @@ function validateAttestation(
   }
 
   return true;
+}
+
+async function verifyAttestationReference(
+  attestation: AttestationReference,
+  expectedSubjectDid: string,
+  allowlistedAttesterDids: readonly string[] | undefined
+): Promise<{
+  /** Whether the attestation counts for tier uplift (allowlisted + subject-bound + signature-verified). */
+  valid: boolean;
+  /** Whether the attestation signature verified (regardless of allowlist/subject binding). */
+  signature_valid: boolean;
+  /** Whether attester_did is in the allowlist. */
+  allowlisted: boolean;
+  /** Whether subject_did matches the bundle agent_did. */
+  subject_valid: boolean;
+  attester_did: string;
+  error?: string;
+}> {
+  const allowlisted =
+    Array.isArray(allowlistedAttesterDids) &&
+    allowlistedAttesterDids.includes(attestation.attester_did);
+
+  const subjectValid = attestation.subject_did === expectedSubjectDid;
+
+  const pub = extractPublicKeyFromDidKey(attestation.attester_did);
+  if (!pub) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Unable to extract Ed25519 public key from attester_did (expected did:key with 0xed01 multicodec prefix)',
+    };
+  }
+
+  let canonical: string;
+  try {
+    const canonicalObject: AttestationReference = {
+      ...attestation,
+      signature_b64u: '',
+    };
+    canonical = jcsCanonicalize(canonicalObject);
+  } catch (err) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: `Attestation canonicalization failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+    };
+  }
+
+  let signatureValid = false;
+  try {
+    const sigBytes = base64UrlDecode(attestation.signature_b64u);
+    if (sigBytes.length !== 64) {
+      return {
+        valid: false,
+        signature_valid: false,
+        allowlisted,
+        subject_valid: subjectValid,
+        attester_did: attestation.attester_did,
+        error: 'Invalid attestation signature length (expected 64 bytes for Ed25519)',
+      };
+    }
+
+    const msgBytes = new TextEncoder().encode(canonical);
+    signatureValid = await verifySignature('Ed25519', pub, sigBytes, msgBytes);
+  } catch (err) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: `Attestation signature verification error: ${err instanceof Error ? err.message : 'unknown error'}`,
+    };
+  }
+
+  const valid = signatureValid && allowlisted && subjectValid;
+
+  if (!signatureValid) {
+    return {
+      valid: false,
+      signature_valid: false,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Attestation signature verification failed',
+    };
+  }
+
+  if (!allowlisted) {
+    return {
+      valid: false,
+      signature_valid: true,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Attester DID is not allowlisted',
+    };
+  }
+
+  if (!subjectValid) {
+    return {
+      valid: false,
+      signature_valid: true,
+      allowlisted,
+      subject_valid: subjectValid,
+      attester_did: attestation.attester_did,
+      error: 'Attestation subject_did does not match proof bundle agent_did',
+    };
+  }
+
+  return {
+    valid,
+    signature_valid: signatureValid,
+    allowlisted,
+    subject_valid: subjectValid,
+    attester_did: attestation.attester_did,
+  };
 }
 
 interface ReceiptBindingContext {
@@ -445,7 +601,7 @@ async function verifyReceiptEnvelope(
  * - unknown: No valid components
  * - basic: Valid envelope signature only
  * - verified: Valid event chain or receipts
- * - attested: Valid owner attestation
+ * - attested: Valid allowlisted signature-verified attestations
  * - full: All components valid (URM + events + receipts + attestations)
  */
 function computeTrustTier(components: {
@@ -656,6 +812,24 @@ export async function verifyProofBundle(
     };
   }
 
+  // 9.75 Strict JSON schema validation (Ajv) for envelope + payload
+  // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
+  const schemaResult = validateProofBundleEnvelopeV1(envelope);
+  if (!schemaResult.valid) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: schemaResult.message,
+        verified_at: now,
+      },
+      error: {
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: schemaResult.message,
+        field: schemaResult.field,
+      },
+    };
+  }
+
   // 10. Validate proof bundle payload structure against PoH schema
   const payloadValidation = validateBundlePayload(envelope.payload);
   if (!payloadValidation.valid) {
@@ -689,6 +863,150 @@ export async function verifyProofBundle(
     };
   }
 
+  // CVF-US-025: enforce count/size limits and uniqueness constraints (fail-closed)
+  const p = envelope.payload;
+
+  if (p.event_chain && p.event_chain.length > MAX_EVENT_CHAIN_ENTRIES) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `event_chain exceeds max length (${MAX_EVENT_CHAIN_ENTRIES})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.event_chain length exceeds limit (${MAX_EVENT_CHAIN_ENTRIES})`,
+        field: 'payload.event_chain',
+      },
+    };
+  }
+
+  if (p.receipts && p.receipts.length > MAX_RECEIPTS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `receipts exceeds max length (${MAX_RECEIPTS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.receipts length exceeds limit (${MAX_RECEIPTS})`,
+        field: 'payload.receipts',
+      },
+    };
+  }
+
+  if (p.attestations && p.attestations.length > MAX_ATTESTATIONS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `attestations exceeds max length (${MAX_ATTESTATIONS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.attestations length exceeds limit (${MAX_ATTESTATIONS})`,
+        field: 'payload.attestations',
+      },
+    };
+  }
+
+  // Metadata byte-size limits (metadata objects are intentionally flexible; bound size to prevent DoS)
+  if (p.metadata && jsonByteSize(p.metadata) > MAX_METADATA_BYTES) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `payload.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        field: 'payload.metadata',
+      },
+    };
+  }
+
+  if (p.urm?.metadata && jsonByteSize(p.urm.metadata) > MAX_METADATA_BYTES) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `payload.urm.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.urm.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+        field: 'payload.urm.metadata',
+      },
+    };
+  }
+
+  if (p.receipts) {
+    for (let i = 0; i < p.receipts.length; i++) {
+      const md = p.receipts[i].payload.metadata;
+      if (md !== undefined && jsonByteSize(md) > MAX_METADATA_BYTES) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `payload.receipts[${i}].payload.metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: `receipt metadata exceeds max size (${MAX_METADATA_BYTES} bytes)`,
+            field: `payload.receipts[${i}].payload.metadata`,
+          },
+        };
+      }
+    }
+  }
+
+  // Uniqueness constraints within a bundle
+  if (p.event_chain) {
+    const seenEventIds = new Set<string>();
+    for (let i = 0; i < p.event_chain.length; i++) {
+      const id = p.event_chain[i].event_id;
+      if (seenEventIds.has(id)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate event_id in payload.event_chain',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'event_id must be unique within payload.event_chain',
+            field: `payload.event_chain[${i}].event_id`,
+          },
+        };
+      }
+      seenEventIds.add(id);
+    }
+  }
+
+  if (p.receipts) {
+    const seenReceiptIds = new Set<string>();
+    for (let i = 0; i < p.receipts.length; i++) {
+      const rid = p.receipts[i].payload.receipt_id;
+      if (seenReceiptIds.has(rid)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate receipt_id in payload.receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be unique within payload.receipts',
+            field: `payload.receipts[${i}].payload.receipt_id`,
+          },
+        };
+      }
+      seenReceiptIds.add(rid);
+    }
+  }
+
   // 11. Validate agent_did in payload matches expected format
   if (!isValidDidFormat(envelope.payload.agent_did)) {
     return {
@@ -701,6 +1019,22 @@ export async function verifyProofBundle(
         code: 'INVALID_DID_FORMAT',
         message: 'agent_did does not match expected DID format',
         field: 'payload.agent_did',
+      },
+    };
+  }
+
+  // CVF-US-022: Enforce envelope signer DID equals payload agent DID
+  if (envelope.signer_did !== envelope.payload.agent_did) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: 'Proof bundle signer_did must match payload.agent_did',
+        verified_at: now,
+      },
+      error: {
+        code: 'INVALID_DID_FORMAT',
+        message: 'envelope.signer_did must equal payload.agent_did',
+        field: 'signer_did',
       },
     };
   }
@@ -810,7 +1144,71 @@ export async function verifyProofBundle(
   // Validate event chain if present (verify hash linkage per POH-US-003)
   if (payload.event_chain !== undefined && payload.event_chain.length > 0) {
     const chainResult = validateEventChain(payload.event_chain);
-    componentResults.event_chain_valid = chainResult.valid;
+
+    if (!chainResult.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: chainResult.error ?? 'Event chain validation failed',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: chainResult.error ?? 'Invalid event_chain',
+          field: 'payload.event_chain',
+        },
+      };
+    }
+
+    // CVF-US-021: Recompute event_hash_b64u from canonical event headers (fail-closed)
+    // Canonical header key order per ADAPTER_SPEC_v1 §4.2.
+    for (let i = 0; i < payload.event_chain.length; i++) {
+      const e = payload.event_chain[i];
+
+      const canonical = {
+        event_id: e.event_id,
+        run_id: e.run_id,
+        event_type: e.event_type,
+        timestamp: e.timestamp,
+        payload_hash_b64u: e.payload_hash_b64u,
+        prev_hash_b64u: e.prev_hash_b64u ?? null,
+      };
+
+      let expectedHash: string;
+      try {
+        expectedHash = await computeHash(canonical, 'SHA-256');
+      } catch (err) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `Event ${i}: event hash recomputation failed`,
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: `Failed to recompute event hash: ${err instanceof Error ? err.message : 'unknown error'}`,
+            field: `payload.event_chain[${i}]`,
+          },
+        };
+      }
+
+      if (expectedHash !== e.event_hash_b64u) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: `Event ${i}: event_hash_b64u mismatch`,
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: 'event_hash_b64u does not match SHA-256 hash of the canonical event header',
+            field: `payload.event_chain[${i}].event_hash_b64u`,
+          },
+        };
+      }
+    }
+
+    componentResults.event_chain_valid = true;
     if (chainResult.chain_root_hash) {
       componentResults.chain_root_hash = chainResult.chain_root_hash;
     }
@@ -855,12 +1253,38 @@ export async function verifyProofBundle(
     componentResults.receipts_verified_count = boundValidCount;
   }
 
-  // Validate attestations if present
+  // Validate + verify attestations if present
+  // CVF-US-023: Attestations MUST be signature-verified AND attester_did allowlisted
+  //             before they can uplift trust tier.
   if (payload.attestations !== undefined && payload.attestations.length > 0) {
-    const validAttestations = payload.attestations.filter(validateAttestation);
-    componentResults.attestations_valid =
-      validAttestations.length === payload.attestations.length;
+    const attestationResults = await Promise.all(
+      payload.attestations.map(async (a) => {
+        if (!validateAttestation(a)) {
+          return {
+            valid: false,
+            signature_valid: false,
+          };
+        }
+
+        return verifyAttestationReference(
+          a,
+          payload.agent_did,
+          options.allowlistedAttesterDids
+        );
+      })
+    );
+
+    const signatureVerifiedCount = attestationResults.filter(
+      (r) => r.signature_valid
+    ).length;
+    const verifiedCount = attestationResults.filter((r) => r.valid).length;
+
     componentResults.attestations_count = payload.attestations.length;
+    componentResults.attestations_signature_verified_count = signatureVerifiedCount;
+    componentResults.attestations_verified_count = verifiedCount;
+
+    // Strict: all attestations must verify to count this component as valid.
+    componentResults.attestations_valid = verifiedCount === payload.attestations.length;
   }
 
   // 16. Compute trust tier based on validated components (POH-US-003)

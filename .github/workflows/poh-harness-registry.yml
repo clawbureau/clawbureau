@@ -1,0 +1,38 @@
+name: PoH Harness Registry
+
+on:
+  pull_request:
+    paths:
+      - "docs/roadmaps/proof-of-harness/harnesses.mjs"
+      - "docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md"
+      - "scripts/poh/sync-harness-registry.mjs"
+      - "scripts/poh/validate-harness-registry.mjs"
+  push:
+    branches: [main]
+    paths:
+      - "docs/roadmaps/proof-of-harness/harnesses.mjs"
+      - "docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md"
+      - "scripts/poh/sync-harness-registry.mjs"
+      - "scripts/poh/validate-harness-registry.mjs"
+
+concurrency:
+  group: poh-harness-registry-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Validate harness registry
+        run: node scripts/poh/validate-harness-registry.mjs
+
+      - name: Check generated markdown is up to date
+        run: node scripts/poh/sync-harness-registry.mjs --check

@@ -1,3 +1,13 @@
+> **Type:** PRD
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/core
+> **Last reviewed:** 2026-02-07
+> **Source of truth:** `services/clawclaim/{prd.json,progress.txt}` + `packages/schema/identity/*`
+>
+> **Scope:**
+> - Product requirements for clawclaim (DID binding + claims).
+> - Shipped behavior is tracked in `services/clawclaim/progress.txt`.
+
 # clawclaim.com (DID Binding) — PRD
 
 **Domain:** clawclaim.com  
@@ -6,12 +16,24 @@
 
 ---
 
+## Implementation status (current)
+
+- **Active service:** `services/clawclaim/`
+- **Execution tracker:**
+  - `services/clawclaim/prd.json`
+  - `services/clawclaim/progress.txt`
+- **Related schemas (where applicable):**
+  - Owner attestation: `packages/schema/identity/owner_attestation.v1.json`
+  - Commit proof (for repo claims via clawverify): `packages/schema/poh/commit_proof.v1.json`
+
+---
+
 ## 0) OpenClaw Fit (primary design target)
 OpenClaw is the reference harness for Claw Bureau identity and trust flows.
 
 `clawclaim` provides DID binding + external account claims in a form that an OpenClaw gateway (and its plugins/skills) can drive via challenge/response.
 
-See: `docs/OPENCLAW_INTEGRATION.md`.
+See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ---
 

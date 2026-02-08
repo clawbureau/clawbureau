@@ -1,0 +1,46 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.gateway_receipt.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gateway Receipt v1",
+  "description": "Gateway receipt payload (proof-of-harness). Signed as part of a SignedEnvelope<GatewayReceiptPayload>.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "gateway_id",
+    "provider",
+    "model",
+    "request_hash_b64u",
+    "response_hash_b64u",
+    "tokens_input",
+    "tokens_output",
+    "latency_ms",
+    "timestamp"
+  ],
+  "properties": {
+    "receipt_version": { "const": "1" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "gateway_id": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "request_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash of request bytes, base64url (no padding)."
+    },
+    "response_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash of response bytes, base64url (no padding)."
+    },
+    "tokens_input": { "type": "number", "minimum": 0 },
+    "tokens_output": { "type": "number", "minimum": 0 },
+    "latency_ms": { "type": "number", "minimum": 0 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "binding": { "$ref": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json" },
+    "metadata": { "type": "object" }
+  }
+}
