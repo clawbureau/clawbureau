@@ -360,6 +360,10 @@ export class IdempotencyDurableObject {
       return this.handleCommit(body as Record<string, unknown>);
     }
 
+    if (url.pathname === '/receipt') {
+      return this.handleReceipt(body as Record<string, unknown>);
+    }
+
     if (url.pathname === '/release') {
       return this.handleRelease(body as Record<string, unknown>);
     }
@@ -422,7 +426,50 @@ export class IdempotencyDurableObject {
     });
   }
 
-  private async handleCommit(body: Record<string, unknown>): Promise<Response> {
+  private async handleReceipt(body: Record<string, unknown>): Promise<Response> {
+    const fingerprint = body.fingerprint;
+    const fp = isNonEmptyString(fingerprint) ? fingerprint.trim() : undefined;
+
+    return this.state.blockConcurrencyWhile(async () => {
+      const nowMs = Date.now();
+
+      let existing = (await this.state.storage.get(ENTRY_KEY)) as
+        | StoredEntry
+        | undefined;
+
+      if (existing && existing.expires_at_ms <= nowMs) {
+        await this.state.storage.deleteAll();
+        existing = undefined;
+      }
+
+      if (!existing) {
+        return json({ ok: true, kind: 'missing' } as const);
+      }
+
+      if (fp && existing.fingerprint !== fp) {
+        return json({ ok: true, kind: 'mismatch' } as const);
+      }
+
+      if (existing.status === 'complete') {
+        try {
+          const receipt = await readStoredReceipt(this.state.storage, existing);
+          return json({
+            ok: true,
+            kind: 'receipt',
+            receipt,
+            truncated: existing.receipt_truncated,
+          } as const);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'unknown error';
+          return json({ ok: false, error: `failed to read stored receipt: ${message}` }, 500);
+        }
+      }
+
+      return json({ ok: true, kind: 'inflight' } as const);
+    });
+  }
+
+  private async handleCommit(body: Record<string, unknown>): Promise<Response> {  
     const fingerprint = body.fingerprint;
     if (!isNonEmptyString(fingerprint)) {
       return json({ ok: false, error: 'fingerprint is required' }, 400);
@@ -544,6 +591,12 @@ export type IdempotencyCheckResult =
   | { kind: 'inflight' }
   | { kind: 'mismatch' };
 
+export type IdempotencyReceiptResult =
+  | { kind: 'missing' }
+  | { kind: 'inflight' }
+  | { kind: 'mismatch' }
+  | { kind: 'receipt'; receipt: unknown; truncated: boolean };
+
 function getIdempotencyStub(env: Env, nonce: string): DurableObjectStub {
   if (!env.IDEMPOTENCY) {
     throw new Error('IDEMPOTENCY binding is missing');
@@ -590,6 +643,53 @@ export async function checkIdempotencyAndLock(
   if (kind === 'mismatch') return { kind: 'mismatch' };
 
   throw new Error(`Unexpected idempotency check response kind: ${String(kind)}`);
+}
+
+export async function readIdempotencyReceipt(
+  env: Env,
+  nonce: string,
+  opts?: { fingerprint?: string }
+): Promise<IdempotencyReceiptResult> {
+  const stub = getIdempotencyStub(env, nonce);
+
+  const fingerprint = opts?.fingerprint;
+  const payload = isNonEmptyString(fingerprint) ? { fingerprint: fingerprint.trim() } : {};
+
+  const res = await stub.fetch('https://idempotency/receipt', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Idempotency receipt read failed with status ${res.status}`);
+  }
+
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('Idempotency receipt read returned a non-JSON response');
+  }
+
+  if (data?.ok !== true) {
+    throw new Error(`Idempotency receipt read failed: ${String(data?.error ?? 'unknown error')}`);
+  }
+
+  const kind = data?.kind;
+
+  if (kind === 'missing') return { kind: 'missing' };
+  if (kind === 'inflight') return { kind: 'inflight' };
+  if (kind === 'mismatch') return { kind: 'mismatch' };
+  if (kind === 'receipt') {
+    return {
+      kind: 'receipt',
+      receipt: data.receipt,
+      truncated: data.truncated === true,
+    };
+  }
+
+  throw new Error(`Unexpected idempotency receipt response kind: ${String(kind)}`);
 }
 
 export async function commitIdempotency(

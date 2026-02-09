@@ -15,7 +15,8 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     contentType: 'application/json',
   },
   openai: {
-    baseUrl: 'https://api.openai.com/v1/chat/completions',
+    // Base URL for OpenAI APIs. The final path is selected by buildProviderUrl().
+    baseUrl: 'https://api.openai.com/v1',
     authHeader: 'Authorization',
     contentType: 'application/json',
   },
@@ -71,10 +72,25 @@ export function buildAuthHeader(
 }
 
 /**
- * Build the full provider URL
- * Most providers use a static URL, but Google Gemini requires model in the path
+ * OpenAI upstream API selection.
+ *
+ * - chat_completions → POST /v1/chat/completions
+ * - responses → POST /v1/responses
  */
-export function buildProviderUrl(provider: Provider, model?: string): string {
+export type OpenAIUpstreamApi = 'chat_completions' | 'responses';
+
+/**
+ * Build the full provider URL.
+ *
+ * Most providers use a static URL, but:
+ * - Google Gemini requires the model in the path
+ * - OpenAI has multiple top-level endpoints (chat completions vs responses)
+ */
+export function buildProviderUrl(
+  provider: Provider,
+  model?: string,
+  opts?: { openaiApi?: OpenAIUpstreamApi }
+): string {
   const config = PROVIDERS[provider];
 
   if (provider === 'google') {
@@ -83,6 +99,14 @@ export function buildProviderUrl(provider: Provider, model?: string): string {
     }
     // Gemini URL format: {baseUrl}/{model}:generateContent
     return `${config.baseUrl}/${model}:generateContent`;
+  }
+
+  if (provider === 'openai') {
+    const api = opts?.openaiApi ?? 'chat_completions';
+    if (api === 'responses') {
+      return `${config.baseUrl}/responses`;
+    }
+    return `${config.baseUrl}/chat/completions`;
   }
 
   return config.baseUrl;
