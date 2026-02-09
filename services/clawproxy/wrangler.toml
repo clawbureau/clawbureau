@@ -9,6 +9,15 @@ routes = [
   { pattern = "www.clawproxy.com/*", zone_name = "clawproxy.com" }
 ]
 
+# CPX-US-031: Durable idempotency store
+[[durable_objects.bindings]]
+name = "IDEMPOTENCY"
+class_name = "IdempotencyDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["IdempotencyDurableObject"]
+
 [vars]
 PROXY_VERSION = "0.1.0"
 

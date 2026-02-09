@@ -94,7 +94,8 @@
         "Add tests for cross-instance semantics"
       ],
       "priority": 7,
-      "passes": false
+      "passes": true,
+      "notes": "Replaced in-memory nonce cache with a per-nonce Durable Object idempotency store. Requests compute a stable fingerprint (provider URL + request body + binding fields + payment mode). Same nonce+fingerprint replays the stored response; different fingerprints fail closed; concurrent in-flight reuse returns 409. Added unit tests exercising lock/commit/replay/mismatch and simulated restart persistence."
     },
     {
       "id": "POH-US-014",
@@ -260,7 +261,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-08T23:25:48Z",
+    "updatedAt": "2026-02-08T23:44:30Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

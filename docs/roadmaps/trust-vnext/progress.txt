@@ -147,4 +147,23 @@ Started: 2026-02-07T19:53:07Z
   - docs/roadmaps/trust-vnext/progress.txt
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
+## 2026-02-08T23:44:30Z - CPX-US-031
+- What was implemented
+  - Replaced clawproxy in-memory nonce cache with a **durable idempotency store** using Durable Objects (one DO per nonce).
+  - Enforced nonce fingerprinting:
+    - same nonce + same fingerprint => replay stored response/receipt
+    - same nonce + different fingerprint => fail closed
+    - same nonce while in-flight => 409 (retry later)
+  - Added a `wrangler.toml` DO binding + migration and wired `Env.IDEMPOTENCY`.
+  - Added unit tests covering lock/commit/replay/mismatch and simulated restart persistence.
+- Files changed
+  - services/clawproxy/src/idempotency.ts
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/wrangler.toml
+  - services/clawproxy/test/idempotency-do.test.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
 ---

@@ -99,7 +99,7 @@
       ],
       "priority": 7,
       "passes": true,
-      "notes": "Added X-Run-Id, X-Event-Hash, X-Idempotency-Key header extraction. Binding fields embedded in receipt and signed. In-memory nonce cache for idempotency (production should use Durable Objects or KV)."
+      "notes": "Added X-Run-Id, X-Event-Hash, X-Idempotency-Key header extraction. Binding fields embedded in receipt and signed. Durable Object-backed idempotency store (per nonce) with request fingerprinting (CPX-US-031)."
     },
     {
       "id": "CPX-US-008",
