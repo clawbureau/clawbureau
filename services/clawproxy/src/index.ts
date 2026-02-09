@@ -292,7 +292,13 @@ curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
 
-# Legacy (provider key in Authorization)
+# BYOK (no proxy auth; strict-mode compatible)
+curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
+  -H "X-Provider-API-Key: $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
+
+# Legacy (non-strict mode only; provider key in Authorization)
 curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -H "Content-Type: application/json" \
