@@ -648,14 +648,15 @@ function computeTrustTier(components: {
  */
 function computeProofTier(components: {
   envelope_valid: boolean;
-  receipts_valid?: boolean;
-  attestations_valid?: boolean;
+  receipts_verified_count?: number;
+  attestations_verified_count?: number;
 }): ProofTier {
   if (!components.envelope_valid) return 'unknown';
 
-  // Higher tiers win
-  if (components.attestations_valid) return 'sandbox';
-  if (components.receipts_valid) return 'gateway';
+  // Higher tiers win. Proof tiers are based on *at least one* verified component,
+  // not on the all-or-nothing `*_valid` booleans.
+  if ((components.attestations_verified_count ?? 0) > 0) return 'sandbox';
+  if ((components.receipts_verified_count ?? 0) > 0) return 'gateway';
 
   return 'self';
 }
