@@ -613,7 +613,7 @@ async function handleVerifyBundle(
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
-  const { envelope } = body as { envelope: unknown };
+  const { envelope, urm } = body as { envelope: unknown; urm?: unknown };
 
   // Verify the proof bundle
   const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
@@ -627,6 +627,7 @@ async function handleVerifyBundle(
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
+    urm,
   });
 
   // Write audit log entry

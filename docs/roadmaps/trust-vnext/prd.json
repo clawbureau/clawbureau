@@ -120,7 +120,8 @@
         "Fail closed if URM bytes are missing/unfetchable"
       ],
       "priority": 9,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented URM materialization verification in clawverify: /v1/verify/bundle now accepts an optional `urm` document and fail-closed rejects bundles that contain a URM reference without providing the URM bytes. The verifier validates the URM against the strict schema (Ajv standalone), recomputes the SHA-256 hash (base64url), enforces binding (urm_id + agent_did + run_id when event_chain is valid), and compares to payload.urm.resource_hash_b64u. Marketplace (clawbounties) now forwards `urm` to clawverify and requires it when proof_bundle_envelope.payload.urm is present."
     },
     {
       "id": "POH-US-016",

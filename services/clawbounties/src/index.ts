@@ -1365,12 +1365,12 @@ async function runTestHarness(env: Env, request: TestHarnessRunRequest): Promise
   }
 }
 
-async function verifyProofBundle(env: Env, envelope: unknown): Promise<VerifyBundleResponse> {
+async function verifyProofBundle(env: Env, envelope: unknown, urm?: unknown): Promise<VerifyBundleResponse> {
   const url = `${resolveVerifyBaseUrl(env)}/v1/verify/bundle`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ envelope }),
+    body: JSON.stringify({ envelope, urm: urm ?? undefined }),
   });
 
   const text = await response.text();
@@ -1381,7 +1381,8 @@ async function verifyProofBundle(env: Env, envelope: unknown): Promise<VerifyBun
     json = null;
   }
 
-  if (!response.ok) {
+  // Treat 5xx as dependency failure; allow 422 verification results to be parsed.
+  if (response.status >= 500) {
     const details = isRecord(json) ? json : { raw: text };
     throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
   }
@@ -1414,7 +1415,8 @@ async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCom
     json = null;
   }
 
-  if (!response.ok) {
+  // Treat 5xx as dependency failure; allow 422 verification results to be parsed.
+  if (response.status >= 500) {
     const details = isRecord(json) ? json : { raw: text };
     throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
   }
@@ -1447,7 +1449,8 @@ async function verifyGatewayReceipt(env: Env, envelope: unknown): Promise<Verify
     json = null;
   }
 
-  if (!response.ok) {
+  // Treat 5xx as dependency failure; allow 422 verification results to be parsed.
+  if (response.status >= 500) {
     const details = isRecord(json) ? json : { raw: text };
     throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
   }
@@ -3147,6 +3150,7 @@ function docsPage(origin: string): string {
   -d '{
     "worker_did": "did:key:zWorker...",
     "proof_bundle_envelope": {"...": "..."},
+    "urm": {"...": "..."},
     "commit_proof_envelope": {"...": "..."},
     "artifacts": [],
     "result_summary": "Short summary of the work"
@@ -3679,6 +3683,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   const worker_did_raw = bodyRaw.worker_did;
   const idempotency_key_raw = bodyRaw.idempotency_key;
   const proof_bundle_envelope_raw = bodyRaw.proof_bundle_envelope;
+  const urm_raw = bodyRaw.urm;
   const commit_proof_envelope_raw = bodyRaw.commit_proof_envelope;
   const artifacts_raw = bodyRaw.artifacts;
   const agent_pack_raw = bodyRaw.agent_pack;
@@ -3695,6 +3700,23 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
 
   if (!isRecord(proof_bundle_envelope_raw)) {
     return errorResponse('INVALID_REQUEST', 'proof_bundle_envelope is required', 400, undefined, version);
+  }
+
+  if (urm_raw !== undefined && urm_raw !== null && !isRecord(urm_raw)) {
+    return errorResponse('INVALID_REQUEST', 'urm must be an object', 400, undefined, version);
+  }
+
+  // POH-US-015: URM materialization is required when the proof bundle includes a URM reference.
+  const proofPayload = (proof_bundle_envelope_raw as Record<string, unknown>).payload;
+  const hasUrmRef = isRecord(proofPayload) && proofPayload.urm !== undefined && proofPayload.urm !== null;
+  if (hasUrmRef && (urm_raw === undefined || urm_raw === null)) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'urm is required when proof_bundle_envelope.payload.urm is present',
+      400,
+      undefined,
+      version
+    );
   }
 
   if (commit_proof_envelope_raw !== undefined && commit_proof_envelope_raw !== null && !isRecord(commit_proof_envelope_raw)) {
@@ -3787,7 +3809,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
 
   let proofBundleResponse: VerifyBundleResponse;
   try {
-    proofBundleResponse = await verifyProofBundle(env, proof_bundle_envelope_raw);
+    proofBundleResponse = await verifyProofBundle(env, proof_bundle_envelope_raw, urm_raw);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('VERIFY_FAILED', message, 502, undefined, version);

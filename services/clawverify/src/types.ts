@@ -28,6 +28,8 @@ export interface VerifyAgentRequest {
   agent_did: string;
   owner_attestation_envelope?: SignedEnvelope<OwnerAttestationPayload>;
   proof_bundle_envelope?: SignedEnvelope<ProofBundlePayload>;
+  /** Optional materialized URM document for the provided proof_bundle_envelope (POH-US-015). */
+  urm?: URMDocument;
 
   /**
    * Optional DID rotation certificates.
@@ -202,6 +204,8 @@ export type VerificationErrorCode =
   | 'UNKNOWN_ALGORITHM'
   | 'UNKNOWN_HASH_ALGORITHM'
   | 'HASH_MISMATCH'
+  | 'URM_MISSING'
+  | 'URM_MISMATCH'
   | 'SIGNATURE_INVALID'
   | 'MALFORMED_ENVELOPE'
   | 'SCHEMA_VALIDATION_FAILED'
@@ -462,12 +466,48 @@ export interface ProvenanceResponse {
  * CVF-US-007: Verify proof bundles for trust tier computation
  */
 
-/** Universal Resource Manifest (URM) - minimal structure for proof bundles */
+/** Universal Resource Manifest (URM) reference embedded in a proof bundle. */
 export interface URMReference {
   urm_version: '1';
   urm_id: string;
   resource_type: string;
   resource_hash_b64u: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Resource item in a URM (inputs/outputs). */
+export interface URMResourceItem {
+  type: string;
+  hash_b64u: string;
+  content_type?: string;
+  uri?: string;
+  path?: string;
+  size_bytes?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/** Harness descriptor embedded in a URM. */
+export interface URMHarness {
+  id: string;
+  version: string;
+  runtime?: string;
+  config_hash_b64u?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Universal Run Manifest (URM) document (materialized bytes). */
+export interface URMDocument {
+  urm_version: '1';
+  urm_id: string;
+  run_id: string;
+  agent_did: string;
+  issued_at: string;
+  harness: URMHarness;
+  inputs: URMResourceItem[];
+  outputs: URMResourceItem[];
+  event_chain_root_hash_b64u?: string;
+  receipts_root_hash_b64u?: string;
+  proof_bundle_hash_b64u?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -567,6 +607,8 @@ export interface ProofBundleVerificationResult {
 /** Verify bundle request */
 export interface VerifyBundleRequest {
   envelope: SignedEnvelope<ProofBundlePayload>;
+  /** Optional materialized URM document bytes (JSON object). */
+  urm?: URMDocument;
 }
 
 /** Verify bundle response */

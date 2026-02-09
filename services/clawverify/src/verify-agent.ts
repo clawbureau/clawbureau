@@ -443,6 +443,7 @@ export async function verifyAgent(
     const bundleVerification = await verifyProofBundle(req.proof_bundle_envelope, {
       allowlistedReceiptSignerDids: options.allowlistedReceiptSignerDids,
       allowlistedAttesterDids: options.allowlistedAttesterDids,
+      urm: req.urm,
     });
 
     components.proof_bundle = {
