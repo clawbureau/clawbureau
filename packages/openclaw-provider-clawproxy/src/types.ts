@@ -284,6 +284,44 @@ export interface TrustPulseDocument {
   files: TrustPulseFile[];
 }
 
+// ---------------------------------------------------------------------------
+// Prompt commitments (POH-US-016/017)
+// ---------------------------------------------------------------------------
+
+export interface PromptPackEntry {
+  entry_id: string;
+  content_hash_b64u: string;
+  content_type?: string;
+  size_bytes?: number;
+}
+
+export interface PromptPackDocument {
+  prompt_pack_version: '1';
+  prompt_pack_id: string;
+  hash_algorithm: 'SHA-256';
+  prompt_root_hash_b64u: string;
+  entries: PromptPackEntry[];
+}
+
+export interface SystemPromptReportCall {
+  event_id: string;
+  event_hash_b64u?: string;
+  provider?: string;
+  model?: string;
+  rendered_system_prompt_hash_b64u: string;
+}
+
+export interface SystemPromptReportDocument {
+  system_prompt_report_version: '1';
+  report_id: string;
+  run_id: string;
+  agent_did: string;
+  issued_at: string;
+  hash_algorithm: 'SHA-256';
+  prompt_root_hash_b64u?: string;
+  calls: SystemPromptReportCall[];
+}
+
 /** Event chain entry in snake_case (matches proof_bundle.v1.json / clawverify types). */
 export interface EventChainEntry {
   event_id: string;
@@ -355,6 +393,10 @@ export interface ProofBundlePayload {
       runtime?: string;
       config_hash_b64u?: string;
     };
+    /** Optional prompt pack commitment (POH-US-016/017). */
+    prompt_pack?: PromptPackDocument;
+    /** Optional per-run system prompt report (POH-US-016/017). */
+    system_prompt_report?: SystemPromptReportDocument;
     [key: string]: unknown;
   };
 }
@@ -367,6 +409,9 @@ export interface FinalizeOptions {
   outputs: ResourceDescriptor[];
   /** Additional URM metadata. */
   urmMetadata?: Record<string, unknown>;
+
+  /** Optional prompt pack entries (hash-only) used to compute prompt_root_hash_b64u. */
+  promptPackEntries?: PromptPackEntry[];
 }
 
 /** Result of finalizing a run — contains the signed proof bundle envelope and URM. */

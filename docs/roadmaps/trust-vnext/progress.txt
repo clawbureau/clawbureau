@@ -318,3 +318,31 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawbounties && npm run typecheck
 ---
+
+## 2026-02-09T17:16:38Z - POH-US-016/017 Prompt commitments (prompt_pack + system_prompt_report)
+- What was implemented
+  - Added prompt commitment evidence (hash-only, non-tier) to reduce prompt injection ambiguity:
+    - `prompt_pack` (commitment over prompt-pack input hashes) with `prompt_root_hash_b64u`.
+    - `system_prompt_report` (per-llm_call `rendered_system_prompt_hash_b64u`), bound to the proof bundle event chain.
+  - OpenClaw recorder (`@openclaw/provider-clawproxy`) now:
+    - Computes `rendered_system_prompt_hash_b64u` for llm_call events from the exact system prompt string.
+    - Strips prompt plaintext from the hashed event payload (stores only the hash).
+    - Optionally computes + embeds a `prompt_pack` from `promptPackEntries` at finalize time.
+    - Embeds both objects into proof bundle `payload.metadata`.
+  - clawverify now validates these objects when present (fail-closed):
+    - Schema validation via Workers-safe Ajv standalone validators.
+    - Recomputes + enforces `prompt_root_hash_b64u` against canonical entry list.
+    - Enforces system_prompt_report bindings to (run_id + agent_did) and llm_call event references.
+- Files changed
+  - packages/schema/poh/prompt_pack.v1.json
+  - packages/schema/poh/system_prompt_report.v1.json
+  - packages/schema/README.md
+  - packages/openclaw-provider-clawproxy/src/{types.ts,index.ts,recorder.ts}
+  - services/clawverify/src/{verify-proof-bundle.ts,schema-validation.ts,schema-registry.ts,schema-validators.generated.ts,types.ts}
+  - services/clawverify/scripts/generate-schema-validators.mjs
+  - services/clawverify/test/prompt-commitments.test.ts
+  - docs/roadmaps/trust-vnext/{prd.json,progress.txt}
+- Quality checks
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck
+  - cd services/clawverify && npm run typecheck && npm test
+---

@@ -1,0 +1,94 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.system_prompt_report.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "System Prompt Report v1",
+  "description": "A per-run, hash-only report of rendered system prompts used for each LLM call. This does not include prompt plaintext; it is intended to reduce prompt-injection ambiguity and make replays/verifications checkable via hash commitments.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "system_prompt_report_version",
+    "report_id",
+    "run_id",
+    "agent_did",
+    "issued_at",
+    "hash_algorithm",
+    "calls"
+  ],
+  "properties": {
+    "system_prompt_report_version": {
+      "const": "1",
+      "description": "System prompt report schema version."
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this report."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Run identifier (should match proof bundle event_chain[0].run_id and URM.run_id)."
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Agent DID (should match proof bundle agent_did and URM.agent_did)."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the report was produced (ISO 8601)."
+    },
+    "hash_algorithm": {
+      "const": "SHA-256",
+      "description": "Hash algorithm used for rendered_system_prompt_hash_b64u commitments (v1 fixed to SHA-256)."
+    },
+    "prompt_root_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Optional prompt pack root hash this report is associated with."
+    },
+    "calls": {
+      "type": "array",
+      "description": "Per-llm_call entries mapping an event to the rendered system prompt hash.",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event_id", "rendered_system_prompt_hash_b64u"],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Event ID of the associated llm_call entry in the proof bundle event_chain."
+          },
+          "event_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "Optional event hash (payload.event_chain[i].event_hash_b64u)."
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Optional provider name (openai|anthropic|google|...)."
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Optional model identifier."
+          },
+          "rendered_system_prompt_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "SHA-256 hash of the exact rendered system prompt bytes for this call, base64url (no padding)."
+          }
+        }
+      }
+    }
+  }
+}

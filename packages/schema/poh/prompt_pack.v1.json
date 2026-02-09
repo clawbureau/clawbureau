@@ -1,0 +1,69 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.prompt_pack.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prompt Pack v1",
+  "description": "A prompt-pack is a commitment to the inputs that materially influence an agent's rendered system prompt (workspace/bootstrap files, skills, policies, etc.). It is intended to make 'replay' mean evidence re-validation (hash bindings), not token-identical model output reproduction.\n\nCanonical prompt_root_hash_b64u (v1): SHA-256 base64url of JSON.stringify({ prompt_pack_version: '1', entries: entries_sorted.map(({entry_id, content_hash_b64u}) => ({entry_id, content_hash_b64u})) }) where entries_sorted is sorted lexicographically by entry_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prompt_pack_version",
+    "hash_algorithm",
+    "prompt_root_hash_b64u",
+    "entries"
+  ],
+  "properties": {
+    "prompt_pack_version": {
+      "const": "1",
+      "description": "Prompt pack schema version."
+    },
+    "prompt_pack_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional unique identifier for this prompt pack document."
+    },
+    "hash_algorithm": {
+      "const": "SHA-256",
+      "description": "Hash algorithm used for the prompt_root_hash_b64u commitment (v1 fixed to SHA-256)."
+    },
+    "prompt_root_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Root commitment hash of the prompt pack inputs (SHA-256, base64url, no padding)."
+    },
+    "entries": {
+      "type": "array",
+      "description": "Prompt pack entry commitments (hash-only).",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entry_id", "content_hash_b64u"],
+        "properties": {
+          "entry_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Stable identifier for the entry (e.g. 'AGENTS.md', 'skill:ai-sdk', 'policy:tools')."
+          },
+          "content_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "SHA-256 hash of the entry bytes, base64url (no padding)."
+          },
+          "content_type": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Optional MIME type of the entry bytes."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Optional size of the entry bytes."
+          }
+        }
+      }
+    }
+  }
+}

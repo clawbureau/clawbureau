@@ -32,6 +32,10 @@ const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
 const proofBundleEnvelope = readJson('packages/schema/poh/proof_bundle_envelope.v1.json');
 const urm = readJson('packages/schema/poh/urm.v1.json');
 
+// POH-US-017: prompt commitment schemas
+const promptPack = readJson('packages/schema/poh/prompt_pack.v1.json');
+const systemPromptReport = readJson('packages/schema/poh/system_prompt_report.v1.json');
+
 const ajv = new Ajv2020({
   allErrors: true,
   // This is about schema correctness warnings, not validation strictness.
@@ -57,10 +61,16 @@ ajv.addSchema(proofBundleEnvelope);
 // PoH artifact schemas (URM materialization)
 ajv.addSchema(urm);
 
+// Prompt commitment schemas
+ajv.addSchema(promptPack);
+ajv.addSchema(systemPromptReport);
+
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
   validateUrmV1: urm.$id,
+  validatePromptPackV1: promptPack.$id,
+  validateSystemPromptReportV1: systemPromptReport.$id,
 });
 
 const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node services/clawverify/scripts/generate-schema-validators.mjs\n\n`;

@@ -41,4 +41,6 @@ Shared JSON schemas for Claw Bureau services.
 - `receipt_binding.v1.json`
 - `urm.v1.json`
 - `execution_attestation.v1.json`
+- `prompt_pack.v1.json`
+- `system_prompt_report.v1.json`
 - `trust_pulse.v1.json` (self-reported UX artifact; non-tier)
