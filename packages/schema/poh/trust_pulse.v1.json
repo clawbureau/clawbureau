@@ -1,0 +1,111 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Trust Pulse v1 (self-reported, non-tier)",
+  "description": "A small, redacted, self-reported summary of a run (tools + file touches) intended for UX and local reporting. MUST NOT uplift proof tier.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "trust_pulse_version",
+    "run_id",
+    "agent_did",
+    "issued_at",
+    "evidence_class",
+    "tier_uplift",
+    "tools",
+    "files"
+  ],
+  "properties": {
+    "trust_pulse_version": {
+      "const": "1",
+      "description": "Trust pulse schema version."
+    },
+    "trust_pulse_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional unique identifier for this trust pulse document."
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Run identifier (should match URM.run_id)."
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Agent DID (should match URM.agent_did)."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the trust pulse was produced (ISO 8601)."
+    },
+    "evidence_class": {
+      "const": "self_reported",
+      "description": "Explicitly self-reported evidence class (not cryptographically verifiable by itself)."
+    },
+    "tier_uplift": {
+      "const": false,
+      "description": "Must be false. Trust pulse documents must never uplift proof tiers."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional coarse-grained start timestamp for the run."
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional coarse-grained end timestamp for the run."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional coarse duration in milliseconds."
+    },
+    "tools": {
+      "type": "array",
+      "description": "Tool names observed during the run (self-reported) with call counts.",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "calls"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "calls": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Relative file paths touched during the run (self-reported).",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "touches"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^(?!/)(?!~)(?!.*\\\\)(?!.*(?:^|/)\\.\\.(?:/|$)).+$",
+            "description": "Must be a safe relative path (no leading '/', no '~', no '..' path segments, no backslashes)."
+          },
+          "touches": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

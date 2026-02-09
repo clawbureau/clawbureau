@@ -255,6 +255,35 @@ export interface URMDocument {
   metadata?: Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Trust Pulse (self-reported UX artifact; non-tier)
+// ---------------------------------------------------------------------------
+
+export interface TrustPulseTool {
+  name: string;
+  calls: number;
+}
+
+export interface TrustPulseFile {
+  path: string;
+  touches: number;
+}
+
+export interface TrustPulseDocument {
+  trust_pulse_version: '1';
+  trust_pulse_id: string;
+  run_id: string;
+  agent_did: string;
+  issued_at: string;
+  evidence_class: 'self_reported';
+  tier_uplift: false;
+  started_at?: string;
+  ended_at?: string;
+  duration_ms?: number;
+  tools: TrustPulseTool[];
+  files: TrustPulseFile[];
+}
+
 /** Event chain entry in snake_case (matches proof_bundle.v1.json / clawverify types). */
 export interface EventChainEntry {
   event_id: string;
@@ -346,4 +375,6 @@ export interface FinalizeResult {
   envelope: SignedEnvelope<ProofBundlePayload>;
   /** The URM document (for separate storage/retrieval). */
   urm: URMDocument;
+  /** Self-reported UX artifact (non-tier). */
+  trustPulse: TrustPulseDocument;
 }

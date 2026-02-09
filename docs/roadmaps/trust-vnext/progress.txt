@@ -237,3 +237,50 @@ Started: 2026-02-07T19:53:07Z
   - cd services/clawproxy && npm test && npm run typecheck
   - cd packages/clawproof-adapters && npm run typecheck
 ---
+
+## 2026-02-09T16:25:00Z - POH-US-020
+- What was implemented
+  - Added pre-hash redaction middleware (ported from agentlog/redact.py) to prevent secrets/PII from entering immutable PoH hashes:
+    - `packages/clawproof-adapters` now redacts event payloads before computing `payload_hash_b64u` / `event_hash_b64u`.
+    - OpenClaw harness recorder (`@openclaw/provider-clawproxy`) now redacts event payloads before hashing.
+  - URM `metadata` is redacted and bounded to 16KB to avoid fail-closed verifier rejection.
+- Files changed
+  - packages/clawproof-adapters/src/redact.ts
+  - packages/clawproof-adapters/src/session.ts
+  - packages/clawproof-adapters/test/redact-and-trust-pulse.test.ts
+  - packages/openclaw-provider-clawproxy/src/redact.ts
+  - packages/openclaw-provider-clawproxy/src/recorder.ts
+  - packages/openclaw-provider-clawproxy/src/types.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd packages/clawproof-adapters && npm run typecheck && npm test
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck
+---
+
+## 2026-02-09T16:26:00Z - OCL-US-004
+- What was implemented
+  - Implemented a small **Trust Pulse** artifact (self-reported, non-tier) that summarizes:
+    - tool names used + counts
+    - relative file paths touched + touch counts
+  - Trust Pulse is:
+    - redacted
+    - bounded
+    - explicitly marked `tier_uplift=false`
+  - Producers attach a pointer to the Trust Pulse hash in `URM.metadata.trust_pulse`.
+  - Added a versioned schema for the Trust Pulse document.
+- Files changed
+  - packages/schema/poh/trust_pulse.v1.json
+  - packages/schema/README.md
+  - packages/clawproof-adapters/src/session.ts
+  - packages/clawproof-adapters/src/types.ts
+  - packages/clawproof-adapters/src/cli.ts
+  - packages/clawproof-adapters/test/redact-and-trust-pulse.test.ts
+  - packages/openclaw-provider-clawproxy/src/types.ts
+  - packages/openclaw-provider-clawproxy/src/recorder.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd packages/clawproof-adapters && npm run typecheck && npm test
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck
+---

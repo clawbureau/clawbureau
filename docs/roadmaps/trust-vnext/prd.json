@@ -261,10 +261,52 @@
       "priority": 20,
       "passes": true,
       "notes": "Implemented streaming pass-through in clawproxy + SSE trailer receipt comments; shim forwards SSE without buffering and captures receipts (with idempotency replay fallback)."
+    },
+    {
+      "id": "POH-US-020",
+      "title": "Pre-hash redaction middleware in PoH recorders/adapters",
+      "description": "As a platform, we must redact secrets/PII before hashing event payloads or embedding URM metadata so proofs are safe to store/share and cannot leak credentials via future materialization/debugging.",
+      "acceptanceCriteria": [
+        "Implement a redaction utility (regex-based) ported from agentlog/redact.py",
+        "clawproof-adapters recordEvent() redacts payload before computing payload_hash_b64u and event_hash_b64u",
+        "OpenClaw recorder recordEvent() redacts payload before hashing",
+        "URM metadata is redacted and bounded to verifier metadata limits",
+        "Add unit tests covering common secret patterns (JWT, Bearer, sk-*, ghp_*, etc.)"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Implemented pre-hash redaction in packages/clawproof-adapters and packages/openclaw-provider-clawproxy (recorder). Added redaction utility modules and vitest coverage in clawproof-adapters. URM metadata is redacted and bounded to 16KB to avoid fail-closed verifier rejection."
+    },
+    {
+      "id": "OCL-US-004",
+      "title": "OpenClaw: Trust Pulse artifact + URM pointer (non-tier)",
+      "description": "As a buyer and worker, I want a small, redacted, derived summary of run actions (tool names + file touches) visible for UX without exposing transcripts, and explicitly not affecting proof tiers.",
+      "acceptanceCriteria": [
+        "Generate a trust_pulse.v1 document (tools + relative file touches) as a self-reported artifact",
+        "Attach a small pointer (schema + artifact hash + non-tier flags) into URM.metadata.trust_pulse",
+        "Ensure no absolute paths or traversal segments are included in file paths",
+        "Ensure trust pulse is bounded and redacted",
+        "Verifier/marketplace must ignore trust pulse fields for proof tier computation"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Added packages/schema/poh/trust_pulse.v1.json. The clawproof adapter session + OpenClaw recorder now generate a Trust Pulse document, attach a trust_pulse pointer in URM metadata, and include the trust pulse hash as a URM output resource (self-reported, tier_uplift=false)."
+    },
+    {
+      "id": "AGL-US-001",
+      "title": "agentlog: local PoH verification badge (verify command)",
+      "description": "As an OpenClaw user, I want a local command that tells me whether a run is verifiably gateway-tier (or not) using PoH artifacts (bundle+URM+receipts), without uploading transcripts.",
+      "acceptanceCriteria": [
+        "Add an agentlog verify subcommand that verifies a proof bundle + URM against clawverify",
+        "Fail closed when URM is missing, receipts are untrusted, or bindings are invalid",
+        "Output derived-only status (no transcript content)"
+      ],
+      "priority": 23,
+      "passes": false
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-09T13:07:00Z",
+    "updatedAt": "2026-02-09T16:15:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
