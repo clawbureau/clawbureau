@@ -25,11 +25,60 @@ async function main() {
   const stateDir = path.join(tmpRoot, 'state');
 
   const storedByNonce = new Map();
+  let receiptLookupHits = 0;
   let lastHeaders = null;
 
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+
+      if (req.method === 'GET' && url.pathname.startsWith('/v1/receipt/')) {
+        receiptLookupHits++;
+
+        const nonce = decodeURIComponent(url.pathname.slice('/v1/receipt/'.length));
+        const stored = storedByNonce.get(nonce);
+
+        if (!stored) {
+          res.statusCode = 404;
+          res.setHeader('content-type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ ok: false, error: 'RECEIPT_NOT_FOUND' }));
+          return;
+        }
+
+        const expectedRunId = url.searchParams.get('run_id') ?? '';
+        const expectedEventHash = url.searchParams.get('event_hash_b64u') ?? '';
+
+        const binding = stored?._receipt_envelope?.payload?.binding ?? {};
+
+        if (expectedRunId && binding.run_id !== expectedRunId) {
+          res.statusCode = 409;
+          res.setHeader('content-type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ ok: false, error: 'RECEIPT_BINDING_MISMATCH' }));
+          return;
+        }
+
+        if (expectedEventHash && binding.event_hash_b64u !== expectedEventHash) {
+          res.statusCode = 409;
+          res.setHeader('content-type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ ok: false, error: 'RECEIPT_BINDING_MISMATCH' }));
+          return;
+        }
+
+        res.statusCode = 200;
+        res.setHeader('content-type', 'application/json; charset=utf-8');
+        res.end(
+          JSON.stringify({
+            ok: true,
+            nonce,
+            status: 200,
+            truncated: false,
+            receipt_envelope: stored._receipt_envelope,
+            receipt: stored._receipt,
+          }),
+        );
+        return;
+      }
+
       if (req.method !== 'POST' || url.pathname !== '/v1/proxy/openai') {
         res.statusCode = 404;
         res.end('not found');
@@ -45,12 +94,14 @@ async function main() {
       const eventHash = req.headers['x-event-hash'];
       const nonce = req.headers['x-idempotency-key'];
       const providerKey = req.headers['x-provider-api-key'];
+      const openaiApi = req.headers['x-openai-api'];
 
       lastHeaders = {
         runId,
         eventHash,
         nonce,
         providerKey,
+        openaiApi,
         accept: req.headers['accept'],
       };
 
@@ -122,17 +173,23 @@ async function main() {
         const stored = { streaming: true, _receipt: legacyReceipt, _receipt_envelope: envelope };
         storedByNonce.set(nonce, stored);
 
+        const omitTrailer = body.noTrailer === true;
+
         res.statusCode = 200;
         res.setHeader('content-type', 'text/event-stream; charset=utf-8');
 
         res.write(`data: {"ok":true}\n\n`);
         res.write(`data: [DONE]\n\n`);
 
-        // Append clawproxy-style trailer comments.
-        const trailer =
-          `:clawproxy_receipt_envelope_b64u=${b64uJson(envelope)}\n` +
-          `:clawproxy_receipt_b64u=${b64uJson(legacyReceipt)}\n\n`;
-        res.end(trailer);
+        if (!omitTrailer) {
+          // Append clawproxy-style trailer comments.
+          const trailer =
+            `:clawproxy_receipt_envelope_b64u=${b64uJson(envelope)}\n` +
+            `:clawproxy_receipt_b64u=${b64uJson(legacyReceipt)}\n\n`;
+          res.end(trailer);
+        } else {
+          res.end();
+        }
         return;
       }
 
@@ -268,6 +325,69 @@ async function main() {
     assert.ok(md?.system_prompt_report, 'expected system_prompt_report');
 
     assert.ok(Array.isArray(envelope.payload?.receipts) && envelope.payload.receipts.length >= 1);
+    assert.equal(lastHeaders?.openaiApi, 'chat_completions');
+  }
+
+  // --- Non-stream OpenAI Responses API run ---
+  {
+    const workspaceDir = path.join(tmpRoot, 'ws-responses');
+    const sessionKey = 'agent:main:test:3';
+
+    const bootstrapHandler = internalHooks.get('agent:bootstrap');
+    await bootstrapHandler({
+      type: 'agent',
+      action: 'bootstrap',
+      sessionKey,
+      context: {
+        sessionKey,
+        workspaceDir,
+        bootstrapFiles: [{ name: 'AGENTS.md', content: 'hello bootstrap 3' }],
+      },
+      timestamp: new Date(),
+      messages: [],
+    });
+
+    const beforeAgentStart = hooks.get('before_agent_start');
+    await beforeAgentStart(
+      { prompt: 'responses', messages: [] },
+      { agentId: 'main', sessionKey, workspaceDir },
+    );
+
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer sk-test',
+      },
+      body: JSON.stringify({
+        model: 'gpt-test',
+        instructions: 'SYS_PROMPT_RESP',
+        input: [{ role: 'user', content: 'hi' }],
+      }),
+    });
+
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.ok(json && typeof json === 'object');
+    assert.ok(!('_receipt' in json));
+    assert.ok(!('_receipt_envelope' in json));
+
+    assert.equal(lastHeaders?.openaiApi, 'responses');
+
+    const agentEnd = hooks.get('agent_end');
+    await agentEnd(
+      { messages: [], success: true, durationMs: 5 },
+      { agentId: 'main', sessionKey, workspaceDir },
+    );
+
+    const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
+    const files = await readdir(outDir);
+    const bundle = files.find((f) => f.endsWith('-bundle.json'));
+    assert.ok(bundle);
+
+    const envelope = JSON.parse(await readFile(path.join(outDir, bundle), 'utf8'));
+    const md = envelope.payload?.metadata;
+    assert.ok(md?.system_prompt_report, 'expected system_prompt_report for responses run');
+    assert.ok(Array.isArray(envelope.payload?.receipts) && envelope.payload.receipts.length >= 1);
   }
 
   // --- Streaming run (cancel early; receipts must still be captured) ---
@@ -321,6 +441,72 @@ async function main() {
       { messages: [], success: true, durationMs: 5 },
       { agentId: 'main', sessionKey, workspaceDir },
     );
+
+    const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
+    const files = await readdir(outDir);
+    const bundle = files.find((f) => f.endsWith('-bundle.json'));
+    assert.ok(bundle);
+
+    const envelope = JSON.parse(await readFile(path.join(outDir, bundle), 'utf8'));
+    assert.ok(Array.isArray(envelope.payload?.receipts) && envelope.payload.receipts.length >= 1);
+  }
+
+  // --- Streaming run without trailers (receipt lookup fallback) ---
+  {
+    const workspaceDir = path.join(tmpRoot, 'ws-stream-lookup');
+    const sessionKey = 'agent:main:test:4';
+
+    const bootstrapHandler = internalHooks.get('agent:bootstrap');
+    await bootstrapHandler({
+      type: 'agent',
+      action: 'bootstrap',
+      sessionKey,
+      context: {
+        sessionKey,
+        workspaceDir,
+        bootstrapFiles: [{ name: 'AGENTS.md', content: 'hello bootstrap 4' }],
+      },
+      timestamp: new Date(),
+      messages: [],
+    });
+
+    const beforeAgentStart = hooks.get('before_agent_start');
+    await beforeAgentStart(
+      { prompt: 'stream lookup', messages: [] },
+      { agentId: 'main', sessionKey, workspaceDir },
+    );
+
+    const beforeHits = receiptLookupHits;
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer sk-test',
+        accept: 'text/event-stream',
+      },
+      body: JSON.stringify({
+        model: 'gpt-test',
+        stream: true,
+        noTrailer: true,
+        messages: [{ role: 'system', content: 'SYS_PROMPT_STREAM_LOOKUP' }, { role: 'user', content: 'hi' }],
+      }),
+    });
+
+    assert.equal(res.status, 200);
+    assert.ok(res.body);
+
+    // Read one chunk and cancel.
+    const reader = res.body.getReader();
+    await reader.read();
+    await reader.cancel();
+
+    const agentEnd = hooks.get('agent_end');
+    await agentEnd(
+      { messages: [], success: true, durationMs: 5 },
+      { agentId: 'main', sessionKey, workspaceDir },
+    );
+
+    assert.ok(receiptLookupHits > beforeHits, 'expected GET /v1/receipt/:nonce lookup');
 
     const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
     const files = await readdir(outDir);

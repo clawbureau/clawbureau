@@ -216,10 +216,27 @@ function inferProviderFromUrl(url: URL): InterceptProvider | null {
   const pathLower = url.pathname.toLowerCase();
 
   // Strict host allowlist by default (avoid accidentally proxying openai-compatible endpoints).
-  if (host === 'api.openai.com' && pathLower.endsWith('/chat/completions')) return 'openai';
+  if (
+    host === 'api.openai.com' &&
+    (pathLower.endsWith('/chat/completions') || pathLower.endsWith('/responses'))
+  ) {
+    return 'openai';
+  }
   if (host === 'api.anthropic.com' && pathLower.endsWith('/v1/messages')) return 'anthropic';
   if (host === 'generativelanguage.googleapis.com' && pathLower.includes(':generatecontent')) return 'google';
 
+  return null;
+}
+
+type OpenAiApi = 'chat_completions' | 'responses';
+
+function inferOpenAiApiFromUrl(url: URL): OpenAiApi | null {
+  const host = url.hostname.toLowerCase();
+  if (host !== 'api.openai.com') return null;
+
+  const p = url.pathname.toLowerCase();
+  if (p.endsWith('/responses')) return 'responses';
+  if (p.endsWith('/chat/completions')) return 'chat_completions';
   return null;
 }
 
@@ -274,40 +291,85 @@ function decodeB64uJson(value: string): unknown {
   return JSON.parse(text) as unknown;
 }
 
-function extractOpenAiSystemPrompt(body: Record<string, unknown>): string | undefined {
-  const messages = body.messages;
-  if (!Array.isArray(messages)) return undefined;
+function extractOpenAiTextContent(content: unknown): string | undefined {
+  if (typeof content === 'string') {
+    const out = content;
+    return out.length > 0 ? out : undefined;
+  }
 
-  const parts: string[] = [];
+  if (Array.isArray(content)) {
+    // OpenAI content parts:
+    // - Chat Completions: [{type:'text', text:'...'}, {type:'image_url', image_url:{url:'...'}}]
+    // - Responses API: [{type:'input_text', text:'...'}, ...]
+    const textParts: string[] = [];
+    for (const p of content) {
+      const po = asObject(p);
+      if (!po) continue;
 
-  for (const msg of messages) {
-    const m = asObject(msg);
-    if (!m) continue;
-    const role = typeof m.role === 'string' ? m.role : undefined;
-    if (role !== 'system' && role !== 'developer') continue;
-
-    const content = m.content;
-    if (typeof content === 'string') {
-      parts.push(content);
-      continue;
-    }
-
-    if (Array.isArray(content)) {
-      // OpenAI content parts: [{type:'text', text:'...'}, {type:'image_url', image_url:{url:'...'}}]
-      const textParts: string[] = [];
-      for (const p of content) {
-        const po = asObject(p);
-        if (!po) continue;
-        if (po.type === 'text' && typeof po.text === 'string') {
-          textParts.push(po.text);
-        }
+      const type = typeof po.type === 'string' ? po.type : undefined;
+      if ((type === 'text' || type === 'input_text' || type === 'output_text') && typeof po.text === 'string') {
+        textParts.push(po.text);
       }
-      if (textParts.length > 0) parts.push(textParts.join(''));
+    }
+    const out = textParts.join('');
+    return out.length > 0 ? out : undefined;
+  }
+
+  const po = asObject(content);
+  if (po) {
+    const type = typeof po.type === 'string' ? po.type : undefined;
+    if ((type === 'text' || type === 'input_text' || type === 'output_text') && typeof po.text === 'string') {
+      const out = po.text;
+      return out.length > 0 ? out : undefined;
     }
   }
 
-  const out = parts.join('\n\n');
-  return out.length > 0 ? out : undefined;
+  return undefined;
+}
+
+function extractOpenAiSystemPrompt(body: Record<string, unknown>): string | undefined {
+  // OpenAI Responses API: prefer explicit instructions field if present.
+  const instructions = body.instructions;
+  if (typeof instructions === 'string' && instructions.trim().length > 0) {
+    return instructions;
+  }
+
+  const extractFromItems = (items: unknown[]): string | undefined => {
+    const parts: string[] = [];
+
+    for (const msg of items) {
+      const m = asObject(msg);
+      if (!m) continue;
+      const role = typeof m.role === 'string' ? m.role : undefined;
+      if (role !== 'system' && role !== 'developer') continue;
+
+      const text = extractOpenAiTextContent(m.content);
+      if (text) parts.push(text);
+    }
+
+    const out = parts.join('\n\n');
+    return out.length > 0 ? out : undefined;
+  };
+
+  // OpenAI Chat Completions API: messages array.
+  const messages = body.messages;
+  if (Array.isArray(messages)) {
+    const out = extractFromItems(messages);
+    if (out) return out;
+  }
+
+  // OpenAI Responses API: input array of messages.
+  const input = body.input;
+  if (Array.isArray(input)) {
+    return extractFromItems(input);
+  }
+
+  const inputObj = asObject(input);
+  if (inputObj) {
+    return extractFromItems([inputObj]);
+  }
+
+  return undefined;
 }
 
 function extractAnthropicSystemPrompt(body: Record<string, unknown>): string | undefined {
@@ -567,7 +629,6 @@ async function captureStreamingReceipt(params: {
   model: string;
   proxyUrl: string;
   proxyHeaders: Headers;
-  proxyBodyText: string;
   baseFetch: typeof fetch;
   recorder: HarnessRecorder;
   logger: Logger;
@@ -585,25 +646,56 @@ async function captureStreamingReceipt(params: {
   }
 
   if (!receiptLegacy || !receiptEnvelope) {
-    // Deterministic fallback: replay via idempotency DO to fetch stored receipt JSON.
-    try {
-      const replayHeaders = new Headers(params.proxyHeaders);
-      replayHeaders.set('accept', 'application/json');
+    // Deterministic fallback: fetch stored receipts by nonce (no full-body replay).
+    const nonce = params.proxyHeaders.get('X-Idempotency-Key')?.trim();
+    const runId = params.proxyHeaders.get('X-Run-Id')?.trim();
+    const eventHash = params.proxyHeaders.get('X-Event-Hash')?.trim();
 
-      const replayRes = await params.baseFetch(params.proxyUrl, {
-        method: 'POST',
-        headers: replayHeaders,
-        body: params.proxyBodyText,
-      });
+    if (nonce) {
+      try {
+        const proxyUrl = new URL(params.proxyUrl);
+        const idx = proxyUrl.pathname.indexOf('/v1/');
+        const prefix = idx >= 0 ? proxyUrl.pathname.slice(0, idx) : '';
 
-      const replayJson = await replayRes.json().catch(() => null);
-      if (replayJson && typeof replayJson === 'object') {
-        const obj = replayJson as Record<string, unknown>;
-        receiptLegacy = obj['_receipt'];
-        receiptEnvelope = obj['_receipt_envelope'];
+        const receiptUrl = new URL(
+          `${prefix}/v1/receipt/${encodeURIComponent(nonce)}`,
+          proxyUrl.origin,
+        );
+
+        if (runId) receiptUrl.searchParams.set('run_id', runId);
+        if (eventHash) receiptUrl.searchParams.set('event_hash_b64u', eventHash);
+
+        const lookupHeaders = new Headers({ accept: 'application/json' });
+        const auth = params.proxyHeaders.get('Authorization');
+        if (auth) lookupHeaders.set('Authorization', auth);
+
+        for (let attempt = 0; attempt < 5 && (!receiptLegacy || !receiptEnvelope); attempt++) {
+          const res = await params.baseFetch(receiptUrl.toString(), {
+            method: 'GET',
+            headers: lookupHeaders,
+          });
+
+          if (res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data && typeof data === 'object') {
+              const obj = data as Record<string, unknown>;
+              receiptLegacy = obj['receipt'];
+              receiptEnvelope = obj['receipt_envelope'];
+            }
+            break;
+          }
+
+          // Inflight: retry briefly.
+          if (res.status === 409) {
+            await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+            continue;
+          }
+
+          break;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
   }
 
@@ -788,6 +880,14 @@ function patchFetch(params: {
     if (binding.eventHash) headers.set('X-Event-Hash', binding.eventHash);
     if (binding.nonce) headers.set('X-Idempotency-Key', binding.nonce);
 
+    // OpenAI upstream endpoint selection (chat completions vs responses)
+    if (provider === 'openai') {
+      const api = inferOpenAiApiFromUrl(url);
+      if (api) {
+        headers.set('X-OpenAI-API', api === 'responses' ? 'responses' : 'chat_completions');
+      }
+    }
+
     // Proxy auth
     if (params.proxyToken) {
       headers.set('Authorization', `Bearer ${params.proxyToken}`);
@@ -836,7 +936,6 @@ function patchFetch(params: {
         model: model ?? 'unknown',
         proxyUrl,
         proxyHeaders: new Headers(headers),
-        proxyBodyText: bodyText,
         baseFetch,
         recorder: store.recorder,
         logger: params.logger,
