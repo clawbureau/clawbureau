@@ -222,7 +222,7 @@ Started: 2026-02-07T19:53:07Z
   - Updated `@clawbureau/clawproof-adapters` shim to support streaming:
     - Detects streaming requests and forwards SSE from clawproxy without buffering.
     - Injects PoH binding headers (X-Run-Id/X-Event-Hash/X-Idempotency-Key) for streaming flows.
-    - Captures canonical `_receipt_envelope` from clawproxy SSE trailer comments, strips them before returning to the harness, and falls back to deterministic idempotency replay when needed.
+    - Captures canonical `_receipt_envelope` from clawproxy SSE trailer comments, strips them before returning to the harness, and falls back to deterministic nonce receipt lookup (`GET /v1/receipt/:nonce`) when needed.
 - Files changed
   - services/clawproxy/src/index.ts
   - services/clawproxy/src/receipt.ts

@@ -373,7 +373,7 @@ export async function startShim(options: StartShimOptions): Promise<ShimServer> 
         try {
           await pipeline(Readable.fromWeb(proxyRes.body as any), stripper, res);
         } catch {
-          // If the client disconnects mid-stream, we still attempt receipt recovery below via replay.
+          // If the client disconnects mid-stream, we still attempt receipt recovery below via nonce receipt lookup.
         }
 
         let receipt: ClawproxyReceipt | undefined;
