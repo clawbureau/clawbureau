@@ -993,11 +993,16 @@ function patchFetch(params: {
 
     const cleaned = cleanProviderResponse(proxyRes.status, json);
 
+    const outHeaders = new Headers(proxyRes.headers);
+    outHeaders.set('content-type', 'application/json; charset=utf-8');
+
+    // We re-serialize JSON after stripping receipts; drop any headers that could mismatch.
+    outHeaders.delete('content-length');
+    outHeaders.delete('content-encoding');
+
     return new Response(JSON.stringify(cleaned), {
       status: proxyRes.status,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-      },
+      headers: outHeaders,
     });
   }) as any;
 

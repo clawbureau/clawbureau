@@ -203,6 +203,8 @@ async function main() {
 
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('x-request-id', 'req_test');
+      res.setHeader('ratelimit-limit', '100');
       res.end(JSON.stringify(responseBody));
     } catch (err) {
       res.statusCode = 500;
@@ -303,6 +305,8 @@ async function main() {
     assert.ok('choices' in json);
     assert.ok(!('_receipt' in json));
     assert.ok(!('_receipt_envelope' in json));
+    assert.equal(res.headers.get('x-request-id'), 'req_test');
+    assert.equal(res.headers.get('ratelimit-limit'), '100');
 
     const agentEnd = hooks.get('agent_end');
     assert.equal(typeof agentEnd, 'function');
@@ -370,6 +374,8 @@ async function main() {
     assert.ok(json && typeof json === 'object');
     assert.ok(!('_receipt' in json));
     assert.ok(!('_receipt_envelope' in json));
+    assert.equal(res.headers.get('x-request-id'), 'req_test');
+    assert.equal(res.headers.get('ratelimit-limit'), '100');
 
     assert.equal(lastHeaders?.openaiApi, 'responses');
 
