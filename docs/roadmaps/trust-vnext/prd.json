@@ -107,7 +107,8 @@
         "Return deterministic error codes for replay rejection"
       ],
       "priority": 8,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented a marketplace replay DB in services/clawbounties: D1 migration adds replay_runs (agent_did, run_id) and replay_receipts (receipt_signer_did, receipt_id) with PK uniqueness. Submission handler reserves these keys for proof-bundle-VALID submissions and rejects duplicates with deterministic error codes (REPLAY_RUN_ID_REUSED / REPLAY_RECEIPT_ID_REUSED)."
     },
     {
       "id": "POH-US-015",
