@@ -22,6 +22,9 @@ export interface Env {
   PROXY_SIGNING_KEY?: string;
   /** Rate limiter binding for request throttling */
   PROXY_RATE_LIMITER: RateLimit;
+
+  /** CPX-US-031: durable idempotency store (Durable Objects) */
+  IDEMPOTENCY: DurableObjectNamespace;
   /** Optional AES key for encrypting receipt payloads (base64url-encoded 32-byte key) */
   PROXY_ENCRYPTION_KEY?: string;
 

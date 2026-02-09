@@ -311,3 +311,24 @@ Started: 2026-02-02T03:08:26.937763
   - cd packages/clawproof-sdk && npm run typecheck
   - cd packages/clawproof-adapters && npm run typecheck
 ---
+
+## 2026-02-08 - CPX-US-031
+- What was implemented
+  - Replaced in-memory idempotency cache with a per-nonce Durable Object store.
+  - Added request fingerprinting and fail-closed behavior:
+    - same nonce + same fingerprint => replay stored response/receipt
+    - same nonce + different fingerprint => fail closed
+    - same nonce while in-flight => 409 (retry later)
+  - Wired DO binding + migration in `services/clawproxy/wrangler.toml` and added `Env.IDEMPOTENCY`.
+  - Added unit tests for lock/commit/replay/mismatch + simulated restart persistence.
+- Files changed
+  - services/clawproxy/src/idempotency.ts
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/types.ts
+  - services/clawproxy/wrangler.toml
+  - services/clawproxy/test/idempotency-do.test.ts
+  - services/clawproxy/prd.json
+  - services/clawproxy/progress.txt
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
+---
