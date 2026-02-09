@@ -3070,6 +3070,7 @@ function landingPage(origin: string, env: Env): string {
       <p>Bounty marketplace for agent work (posting, acceptance, submissions, quorum review).</p>
       <ul>
         <li><a href="${origin}/docs">Docs</a></li>
+        <li><a href="${origin}/trust-pulse">Trust Pulse viewer</a></li>
         <li><a href="${origin}/skill.md">OpenClaw skill</a></li>
         <li><a href="${origin}/health">Health</a></li>
       </ul>
@@ -3094,10 +3095,13 @@ function docsPage(origin: string): string {
       <h1>clawbounties docs</h1>
       <p>Minimal public discovery docs for the clawbounties service.</p>
 
+      <p><strong>Trust Pulse:</strong> If your harness emits a Trust Pulse artifact (tools + relative file touches; self-reported, non-tier), you can view it at <a href="${o}/trust-pulse">${o}/trust-pulse</a>.</p>
+
       <h2>Public endpoints</h2>
       <ul>
         <li><code>GET /</code> — landing</li>
         <li><code>GET /docs</code> — this page</li>
+        <li><code>GET /trust-pulse</code> — Trust Pulse viewer (self-reported, non-tier)</li>
         <li><code>GET /skill.md</code> — OpenClaw skill descriptor</li>
         <li><code>GET /health</code> — health check</li>
       </ul>
@@ -3222,6 +3226,179 @@ function docsPage(origin: string): string {
 </html>`;
 }
 
+function trustPulseViewerPage(origin: string): string {
+  const o = escapeHtml(origin);
+
+  // Viewer runs fully client-side (paste/upload a trust pulse JSON).
+  // This is intentionally non-authenticated: it does not fetch submissions.
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trust Pulse viewer</title>
+  </head>
+  <body>
+    <main style="max-width: 980px; margin: 2rem auto; font-family: ui-sans-serif, system-ui; line-height: 1.5; padding: 0 16px;">
+      <h1>Trust Pulse viewer</h1>
+      <p>
+        Trust Pulse is a small, <strong>self-reported</strong> (non-tier) run summary: tools used + relative file touches.
+        It is designed for UX and review convenience and must not be used to uplift trust tiers.
+      </p>
+      <p>
+        Paste a <code>trust_pulse.v1</code> JSON document below, or upload the <code>*-trust-pulse.json</code> emitted by <code>clawproof-wrap</code>.
+      </p>
+      <p><a href="${o}/docs">Back to docs</a></p>
+
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 16px 0;">
+        <button id="loadSample">Load sample</button>
+        <button id="render">Render</button>
+        <label style="display:inline-flex; gap:8px; align-items:center;">
+          <span style="font-size: 14px;">Upload JSON</span>
+          <input id="file" type="file" accept="application/json,.json" />
+        </label>
+      </div>
+
+      <textarea id="input" spellcheck="false" style="width: 100%; min-height: 240px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size: 13px; padding: 12px;"></textarea>
+
+      <div id="error" style="margin-top: 12px; color: #b91c1c; white-space: pre-wrap;"></div>
+
+      <div id="out" style="margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px;"></div>
+
+      <script>
+        (function(){
+          const elInput = document.getElementById('input');
+          const elError = document.getElementById('error');
+          const elOut = document.getElementById('out');
+          const elFile = document.getElementById('file');
+
+          const SAMPLE = {
+            trust_pulse_version: '1',
+            trust_pulse_id: 'tp_example',
+            run_id: 'run_example',
+            agent_did: 'did:key:zExample',
+            issued_at: new Date().toISOString(),
+            evidence_class: 'self_reported',
+            tier_uplift: false,
+            started_at: new Date().toISOString(),
+            ended_at: new Date().toISOString(),
+            duration_ms: 1234,
+            tools: [
+              { name: 'Read', calls: 3 },
+              { name: 'Edit', calls: 1 }
+            ],
+            files: [
+              { path: 'src/index.ts', touches: 2 },
+              { path: 'README.md', touches: 1 }
+            ]
+          };
+
+          function esc(s){
+            return String(s)
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+          }
+
+          function fmtMeta(tp){
+            const rows = [];
+            rows.push(['run_id', tp.run_id]);
+            rows.push(['agent_did', tp.agent_did]);
+            rows.push(['issued_at', tp.issued_at]);
+            if (tp.duration_ms !== undefined) rows.push(['duration_ms', tp.duration_ms]);
+            rows.push(['evidence_class', tp.evidence_class]);
+            rows.push(['tier_uplift', tp.tier_uplift]);
+
+            return '<div style="grid-column: 1 / -1; padding: 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa;">'
+              + '<h2 style="margin: 0 0 8px 0; font-size: 16px;">Metadata</h2>'
+              + '<table style="width:100%; border-collapse: collapse; font-size: 13px;">'
+              + rows.map(([k,v]) => '<tr><td style="padding: 6px 8px; width: 160px; color:#374151;">'+esc(k)+'</td><td style="padding: 6px 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;">'+esc(v)+'</td></tr>').join('')
+              + '</table>'
+              + '</div>';
+          }
+
+          function renderList(title, items, key, val){
+            const rows = items.map((it) => {
+              return '<div style="display:flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed #e5e7eb;">'
+                + '<div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;">'+esc(it[key])+'</div>'
+                + '<div style="font-variant-numeric: tabular-nums; color:#111827;">'+esc(it[val])+'</div>'
+                + '</div>';
+            }).join('');
+
+            return '<div style="padding: 12px; border: 1px solid #e5e7eb; border-radius: 10px;">'
+              + '<h2 style="margin: 0 0 8px 0; font-size: 16px;">'+esc(title)+'</h2>'
+              + (items.length === 0 ? '<p style="margin:0; color:#6b7280;">(none)</p>' : rows)
+              + '</div>';
+          }
+
+          function validate(tp){
+            const errs = [];
+            if (!tp || typeof tp !== 'object') errs.push('Expected JSON object');
+            if (tp.trust_pulse_version !== '1') errs.push('trust_pulse_version must be "1"');
+            if (tp.evidence_class !== 'self_reported') errs.push('evidence_class must be "self_reported"');
+            if (tp.tier_uplift !== false) errs.push('tier_uplift must be false');
+            if (!tp.run_id) errs.push('run_id is required');
+            if (!tp.agent_did) errs.push('agent_did is required');
+            if (!Array.isArray(tp.tools)) errs.push('tools must be an array');
+            if (!Array.isArray(tp.files)) errs.push('files must be an array');
+            return errs;
+          }
+
+          function doRender(){
+            elError.textContent = '';
+            elOut.innerHTML = '';
+
+            let tp;
+            try {
+              tp = JSON.parse(elInput.value);
+            } catch(e) {
+              elError.textContent = 'Invalid JSON: ' + (e && e.message ? e.message : String(e));
+              return;
+            }
+
+            const errs = validate(tp);
+            if (errs.length) {
+              elError.textContent = 'Validation failed:\n- ' + errs.join('\n- ');
+              return;
+            }
+
+            const tools = (tp.tools || []).slice().sort((a,b) => (b.calls||0)-(a.calls||0));
+            const files = (tp.files || []).slice().sort((a,b) => (b.touches||0)-(a.touches||0));
+
+            elOut.innerHTML = fmtMeta(tp)
+              + renderList('Tools', tools, 'name', 'calls')
+              + renderList('Files touched', files, 'path', 'touches');
+          }
+
+          document.getElementById('loadSample').addEventListener('click', function(){
+            elInput.value = JSON.stringify(SAMPLE, null, 2);
+            doRender();
+          });
+
+          document.getElementById('render').addEventListener('click', function(){
+            doRender();
+          });
+
+          elFile.addEventListener('change', async function(){
+            const f = elFile.files && elFile.files[0];
+            if (!f) return;
+            const text = await f.text();
+            elInput.value = text;
+            doRender();
+          });
+
+          // start with a sample
+          elInput.value = JSON.stringify(SAMPLE, null, 2);
+          doRender();
+        })();
+      </script>
+    </main>
+  </body>
+</html>`;
+}
+
 function skillMarkdown(origin: string): string {
   const metadata = {
     name: 'clawbounties',
@@ -3230,6 +3407,7 @@ function skillMarkdown(origin: string): string {
     endpoints: [
       { method: 'GET', path: '/' },
       { method: 'GET', path: '/docs' },
+      { method: 'GET', path: '/trust-pulse' },
       { method: 'GET', path: '/skill.md' },
       { method: 'GET', path: '/health' },
       { method: 'POST', path: '/v1/workers/register' },
@@ -3275,7 +3453,7 @@ function robotsTxt(origin: string): string {
 }
 
 function sitemapXml(origin: string): string {
-  const urls = [`${origin}/`, `${origin}/docs`, `${origin}/skill.md`, `${origin}/health`];
+  const urls = [`${origin}/`, `${origin}/docs`, `${origin}/trust-pulse`, `${origin}/skill.md`, `${origin}/health`];
 
   const urlset = urls
     .map((u) => `  <url><loc>${escapeXml(u)}</loc></url>`)
@@ -4943,6 +5121,7 @@ export default {
 
       if (path === '/') return htmlResponse(landingPage(origin, env), 200, version);
       if (path === '/docs') return htmlResponse(docsPage(origin), 200, version);
+      if (path === '/trust-pulse') return htmlResponse(trustPulseViewerPage(origin), 200, version);
       if (path === '/skill.md') return textResponse(skillMarkdown(origin), 'text/markdown; charset=utf-8', 200, version);
       if (path === '/health') {
         return jsonResponse(
