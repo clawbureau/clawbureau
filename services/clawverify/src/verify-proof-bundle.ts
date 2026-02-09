@@ -44,7 +44,7 @@ import {
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
 import { jcsCanonicalize } from './jcs';
-import { validateProofBundleEnvelopeV1 } from './schema-validation';
+import { validateProofBundleEnvelopeV1, validateUrmV1 } from './schema-validation';
 
 export interface ProofBundleVerifierOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
@@ -52,6 +52,18 @@ export interface ProofBundleVerifierOptions {
 
   /** Allowlisted attester DIDs for proof bundle attestations (did:key:...). */
   allowlistedAttesterDids?: readonly string[];
+
+  /**
+   * Optional materialized URM document (JSON object).
+   *
+   * POH-US-015: If provided, clawverify will:
+   * - validate the URM against the strict schema (urm.v1)
+   * - hash it (SHA-256 over JSON bytes) and compare to payload.urm.resource_hash_b64u
+   *
+   * If the proof bundle contains a URM reference but no `urm` is provided,
+   * verification fails closed (result.status=INVALID).
+   */
+  urm?: unknown;
 }
 
 // CVF-US-025: size/count hardening
@@ -1158,11 +1170,6 @@ export async function verifyProofBundle(
     envelope_valid: true,
   };
 
-  // Validate URM if present
-  if (payload.urm !== undefined) {
-    componentResults.urm_valid = validateURM(payload.urm);
-  }
-
   // Validate event chain if present (verify hash linkage per POH-US-003)
   if (payload.event_chain !== undefined && payload.event_chain.length > 0) {
     const chainResult = validateEventChain(payload.event_chain);
@@ -1233,6 +1240,158 @@ export async function verifyProofBundle(
     componentResults.event_chain_valid = true;
     if (chainResult.chain_root_hash) {
       componentResults.chain_root_hash = chainResult.chain_root_hash;
+    }
+  }
+
+  // POH-US-015: URM materialization + hash verification.
+  // Proof bundles carry only a URM *reference* (hash). To make that meaningful,
+  // callers may provide the materialized URM document bytes (as a JSON object).
+  //
+  // Fail-closed semantics:
+  // - If URM reference is present but URM bytes are not provided, the bundle is INVALID.
+  // - If URM bytes are provided but fail schema validation, binding checks, or hash verification,
+  //   the bundle is INVALID.
+  if (payload.urm !== undefined) {
+    if (!validateURM(payload.urm)) {
+      componentResults.urm_valid = false;
+    } else if (options.urm === undefined) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'URM document is required when payload.urm is present',
+          verified_at: now,
+        },
+        error: {
+          code: 'URM_MISSING',
+          message: 'Missing URM document (provide request field: urm)',
+          field: 'urm',
+        },
+      };
+    } else {
+      const ref = payload.urm as URMReference;
+
+      const schemaResult = validateUrmV1(options.urm);
+      if (!schemaResult.valid) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: schemaResult.message,
+            verified_at: now,
+          },
+          error: {
+            code: 'SCHEMA_VALIDATION_FAILED',
+            message: schemaResult.message,
+            field: schemaResult.field ? `urm.${schemaResult.field}` : 'urm',
+          },
+        };
+      }
+
+      const u = options.urm as Record<string, unknown>;
+
+      // Binding checks (fail-closed): URM must describe the same run/agent.
+      const urmId = typeof u.urm_id === 'string' ? u.urm_id.trim() : null;
+      const agentDid = typeof u.agent_did === 'string' ? u.agent_did.trim() : null;
+      const runId = typeof u.run_id === 'string' ? u.run_id.trim() : null;
+
+      if (!urmId || urmId !== ref.urm_id) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'URM urm_id does not match proof bundle URM reference',
+            verified_at: now,
+          },
+          error: {
+            code: 'URM_MISMATCH',
+            message: 'urm.urm_id must equal payload.urm.urm_id',
+            field: 'urm.urm_id',
+          },
+        };
+      }
+
+      if (!agentDid || agentDid !== payload.agent_did) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'URM agent_did does not match proof bundle agent_did',
+            verified_at: now,
+          },
+          error: {
+            code: 'URM_MISMATCH',
+            message: 'urm.agent_did must equal payload.agent_did',
+            field: 'urm.agent_did',
+          },
+        };
+      }
+
+      if (componentResults.event_chain_valid && payload.event_chain && payload.event_chain.length > 0) {
+        const expectedRunId = payload.event_chain[0].run_id;
+        if (!runId || runId !== expectedRunId) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: 'URM run_id does not match proof bundle run_id',
+              verified_at: now,
+            },
+            error: {
+              code: 'URM_MISMATCH',
+              message: 'urm.run_id must equal payload.event_chain[0].run_id',
+              field: 'urm.run_id',
+            },
+          };
+        }
+
+        const chainRoot = componentResults.chain_root_hash;
+        const claimedRoot = typeof u.event_chain_root_hash_b64u === 'string' ? u.event_chain_root_hash_b64u.trim() : null;
+        if (chainRoot && claimedRoot && claimedRoot !== chainRoot) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: 'URM event_chain_root_hash_b64u does not match proof bundle event chain root',
+              verified_at: now,
+            },
+            error: {
+              code: 'URM_MISMATCH',
+              message: 'urm.event_chain_root_hash_b64u must match the proof bundle event chain root hash',
+              field: 'urm.event_chain_root_hash_b64u',
+            },
+          };
+        }
+      }
+
+      let computedUrmHash: string;
+      try {
+        computedUrmHash = await computeHash(options.urm, 'SHA-256');
+      } catch (err) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Failed to hash URM document',
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: `Failed to compute URM hash: ${err instanceof Error ? err.message : 'unknown error'}`,
+            field: 'urm',
+          },
+        };
+      }
+
+      if (computedUrmHash !== ref.resource_hash_b64u) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'URM hash mismatch',
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: 'Computed URM hash does not match payload.urm.resource_hash_b64u',
+            field: 'payload.urm.resource_hash_b64u',
+          },
+        };
+      }
+
+      componentResults.urm_valid = true;
     }
   }
 

@@ -186,3 +186,29 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawbounties && npm run typecheck
 ---
+
+## 2026-02-09T03:43:25Z - POH-US-015
+- What was implemented
+  - Added **URM materialization** support (fail-closed) in `clawverify` bundle verification:
+    - `POST /v1/verify/bundle` now accepts an optional `urm` document alongside the `envelope`.
+    - If the proof bundle includes `payload.urm` (a URM reference), the request MUST provide the materialized URM document (`urm`) or verification returns INVALID (`URM_MISSING`).
+    - Verifier validates URM with Workers-safe Ajv standalone validators (`urm.v1`), recomputes the URM hash (SHA-256 base64url), and compares it to `payload.urm.resource_hash_b64u`.
+    - Enforces binding: `urm.urm_id`, `urm.agent_did`, and `urm.run_id` (when event_chain is valid) must match the bundle.
+  - Updated marketplace (`clawbounties`) submission flow to forward and require URM materialization when the bundle includes a URM reference.
+  - Hardened marketplace verifier client behavior to treat 422 verification responses as normal (invalid proofs), not dependency errors.
+- Files changed
+  - services/clawverify/scripts/generate-schema-validators.mjs
+  - services/clawverify/src/schema-validators.generated.ts
+  - services/clawverify/src/schema-validation.ts
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/test/urm-materialization.test.ts
+  - services/clawbounties/src/index.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
+  - cd services/clawbounties && npm run typecheck
+---

@@ -243,6 +243,19 @@ So v1 adapters should:
 3. compute `resource_hash_b64u = sha256_b64u(urm_json_bytes)`
 4. include a `URMReference` in the proof bundle
 
+**POH-US-015 (URM materialization):** to make URM references meaningful, verifiers MUST hash-verify the URM bytes.
+
+`clawverify` supports this by accepting the materialized URM document alongside the proof bundle envelope:
+
+```json
+{
+  "envelope": { "...": "..." },
+  "urm": { "...": "..." }
+}
+```
+
+Fail closed: if the proof bundle contains `payload.urm` but the request does not provide `urm`, `clawverify` returns `INVALID` with error code `URM_MISSING`.
+
 ---
 
 ## 7) Proof bundle
