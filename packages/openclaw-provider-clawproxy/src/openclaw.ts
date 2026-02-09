@@ -443,9 +443,7 @@ class ReceiptTrailerStripper {
   private pending = '';
   private suppressNextBlank = false;
 
-  transform(chunk: Uint8Array): Uint8Array {
-    this.pending += this.decoder.decode(chunk, { stream: true });
-
+  private processPending(opts: { emit: boolean }): string {
     let out = '';
 
     while (true) {
@@ -479,13 +477,24 @@ class ReceiptTrailerStripper {
       }
       this.suppressNextBlank = false;
 
-      out += line + '\n';
+      if (opts.emit) out += line + '\n';
     }
 
+    return out;
+  }
+
+  scan(chunk: Uint8Array): void {
+    this.pending += this.decoder.decode(chunk, { stream: true });
+    this.processPending({ emit: false });
+  }
+
+  transform(chunk: Uint8Array): Uint8Array {
+    this.pending += this.decoder.decode(chunk, { stream: true });
+    const out = this.processPending({ emit: true });
     return this.encoder.encode(out);
   }
 
-  flush(): Uint8Array {
+  private finalizePending(): void {
     // Finalize decoder state and process any remaining pending bytes.
     this.pending += this.decoder.decode();
 
@@ -493,45 +502,16 @@ class ReceiptTrailerStripper {
     if (!this.pending.endsWith('\n')) {
       this.pending += '\n';
     }
+  }
 
-    let out = '';
+  flushScan(): void {
+    this.finalizePending();
+    this.processPending({ emit: false });
+  }
 
-    while (true) {
-      const idx = this.pending.indexOf('\n');
-      if (idx === -1) break;
-
-      const line = this.pending.slice(0, idx);
-      this.pending = this.pending.slice(idx + 1);
-
-      const clean = line.endsWith('\r') ? line.slice(0, -1) : line;
-
-      if (clean.startsWith(':')) {
-        const comment = clean.slice(1).trimStart();
-
-        if (comment.startsWith('clawproxy_receipt_envelope_b64u=')) {
-          this.receiptEnvelopeB64u = comment
-            .slice('clawproxy_receipt_envelope_b64u='.length)
-            .trim();
-          this.suppressNextBlank = true;
-          continue;
-        }
-
-        if (comment.startsWith('clawproxy_receipt_b64u=')) {
-          this.receiptB64u = comment.slice('clawproxy_receipt_b64u='.length).trim();
-          this.suppressNextBlank = true;
-          continue;
-        }
-      }
-
-      if (this.suppressNextBlank && clean === '') {
-        this.suppressNextBlank = false;
-        continue;
-      }
-      this.suppressNextBlank = false;
-
-      out += line + '\n';
-    }
-
+  flush(): Uint8Array {
+    this.finalizePending();
+    const out = this.processPending({ emit: true });
     return this.encoder.encode(out);
   }
 }
@@ -589,7 +569,7 @@ async function readReceiptTrailersFromStream(stream: ReadableStream<Uint8Array>)
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      if (value) stripper.transform(value);
+      if (value) stripper.scan(value);
     }
   } finally {
     try {
@@ -599,7 +579,7 @@ async function readReceiptTrailersFromStream(stream: ReadableStream<Uint8Array>)
     }
   }
 
-  stripper.flush();
+  stripper.flushScan();
 
   let receiptLegacy: unknown | undefined;
   let receiptEnvelope: unknown | undefined;
@@ -950,11 +930,11 @@ function patchFetch(params: {
       });
 
       const stripper = new ReceiptTrailerStripper();
-      const ts = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
+      const ts = new TransformStream({
+        transform(chunk: Uint8Array, controller: TransformStreamDefaultController<Uint8Array>) {
           controller.enqueue(stripper.transform(chunk));
         },
-        flush(controller) {
+        flush(controller: TransformStreamDefaultController<Uint8Array>) {
           const tail = stripper.flush();
           if (tail.byteLength > 0) controller.enqueue(tail);
         },

@@ -469,7 +469,7 @@ export class IdempotencyDurableObject {
     });
   }
 
-  private async handleCommit(body: Record<string, unknown>): Promise<Response> {  
+  private async handleCommit(body: Record<string, unknown>): Promise<Response> {
     const fingerprint = body.fingerprint;
     if (!isNonEmptyString(fingerprint)) {
       return json({ ok: false, error: 'fingerprint is required' }, 400);

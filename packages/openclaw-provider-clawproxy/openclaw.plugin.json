@@ -21,7 +21,7 @@
       },
       "keyFile": {
         "type": "string",
-        "description": "Path to persistent Ed25519 JWK key file (default: <stateDir>/clawproof/agent-key.jwk.json)"
+        "description": "Path to persistent Ed25519 JWK key file (default: <stateDir>/clawproof/keys/<agentId>.jwk.json)"
       },
       "mode": {
         "type": "string",
@@ -51,7 +51,7 @@
     "token": { "label": "clawproxy Token", "sensitive": true, "placeholder": "Bearer …" },
     "baseUrl": { "label": "clawproxy Base URL", "placeholder": "https://clawproxy.com" },
     "outputDir": { "label": "Output Directory", "placeholder": ".clawproof/openclaw" },
-    "keyFile": { "label": "Key File", "placeholder": "~/.openclaw/clawproof/agent-key.jwk.json", "advanced": true },
+    "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawproof/keys/<agentId>.jwk.json", "advanced": true },
     "mode": { "label": "Mode", "help": "Use enforce to make PoH non-optional." }
   }
 }

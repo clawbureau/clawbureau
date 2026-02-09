@@ -194,7 +194,7 @@ clawproof-wrap factory-droid -- factory-droid run --task "build feature"
 ### How it connects
 
 - OpenClaw plugin patches global fetch() to route supported provider HTTP calls through `clawproxy` (`POST /v1/proxy/:provider`).
-- Plugin hooks allocate `run_id`, emit an event chain, inject PoH binding headers per call, capture receipts (JSON or SSE trailer + idempotency replay), compute prompt commitments, generate URM + Trust Pulse, and sign the proof bundle.
+- Plugin hooks allocate `run_id`, emit an event chain, inject PoH binding headers per call, capture receipts (JSON or SSE trailer; streaming fallback recovers via `GET /v1/receipt/:nonce` without full-body replay), compute prompt commitments, generate URM + Trust Pulse, and sign the proof bundle.
 
 ### Base URL overrides
 
@@ -226,7 +226,7 @@ openclaw plugins enable provider-clawproxy
 ### Limitations
 
 - Intercepts only strict upstream endpoints by default (api.openai.com chat completions, api.anthropic.com messages; Gemini optional). OpenAI-compatible third-party baseUrls are intentionally NOT proxied.
-- OpenAI Responses API (`/v1/responses`) is not supported by clawproxy yet; runs using that endpoint will bypass gateway receipts unless upgraded.
+- OpenAI Responses API (`/v1/responses`) is supported via clawproxy; ensure provider URL selection / compat routing is enabled so these calls receive gateway receipts.
 - OpenClaw harness metadata is informative but NOT a trust tier by itself; tier is derived from verified receipts/attestations.
 
 ---
