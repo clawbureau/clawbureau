@@ -187,12 +187,15 @@ interface VerifyBundleResult {
   reason: string;
   verified_at: string;
   trust_tier?: string;
+  /** Canonical marketplace-facing proof tier from clawverify (POH-US-013). */
+  proof_tier?: string;
   component_results?: VerifyBundleComponentResults;
 }
 
 interface VerifyBundleResponse {
   result: VerifyBundleResult;
   trust_tier?: string;
+  proof_tier?: string;
   error?: { code: string; message: string; field?: string };
 }
 
@@ -1415,18 +1418,26 @@ async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCom
 
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
   if (result.status !== 'VALID') return null;
-  if (result.component_results?.receipts_valid) return 'gateway';
+
+  // Prefer canonical tier from clawverify (POH-US-013).
+  const explicit = parseProofTier(result.proof_tier);
+  if (explicit) return explicit;
+
+  // Back-compat (older clawverify): derive from component booleans.
+  // Note: sandbox is considered >= gateway (higher tier wins).
   if (result.component_results?.attestations_valid) return 'sandbox';
+  if (result.component_results?.receipts_valid) return 'gateway';
   return 'self';
 }
 
 function proofTierRank(tier: ProofTier): number {
+  // Canonical ordering: self < gateway < sandbox
   switch (tier) {
     case 'self':
       return 1;
-    case 'sandbox':
-      return 2;
     case 'gateway':
+      return 2;
+    case 'sandbox':
       return 3;
   }
 }
