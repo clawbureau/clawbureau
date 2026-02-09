@@ -645,6 +645,7 @@ async function handleVerifyBundle(
   const response: VerifyBundleResponse & { audit_receipt?: AuditLogReceipt } = {
     ...verification,
     trust_tier: verification.result.trust_tier,
+    proof_tier: verification.result.proof_tier,
     audit_receipt: auditReceipt,
   };
 

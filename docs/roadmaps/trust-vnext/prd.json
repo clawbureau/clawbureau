@@ -80,7 +80,8 @@
         "docs/specs/agent-economy/MVP.md references the same tier definitions"
       ],
       "priority": 6,
-      "passes": false
+      "passes": true,
+      "notes": "Added canonical marketplace-facing `proof_tier` to clawverify (bundle + agent endpoints) with aligned numeric `poh_tier` mapping (unknown=0, self=1, gateway=2, sandbox=3, tee=4, witnessed_web=5). Updated Agent Economy MVP spec tier definitions and added tests for gateway-tier bundles."
     },
     {
       "id": "CPX-US-031",

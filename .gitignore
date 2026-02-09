@@ -14,6 +14,7 @@ node_modules
 .pi/
 .ralph-tui/
 .ralph-output/
+.cx/
 .last-branch
 ralph.out
 ralph.pid

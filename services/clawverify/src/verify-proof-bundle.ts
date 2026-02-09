@@ -22,6 +22,7 @@ import type {
   ProofBundleVerificationResult,
   VerificationError,
   TrustTier,
+  ProofTier,
   URMReference,
   AttestationReference,
   GatewayReceiptPayload,
@@ -637,6 +638,27 @@ function computeTrustTier(components: {
 
   // Basic: envelope is valid but no strong proofs
   return 'basic';
+}
+
+/**
+ * Compute canonical proof tier (marketplace-facing) based on verified components.
+ *
+ * NOTE: This is intentionally *not* the same as trust_tier. For example, an
+ * event_chain-only bundle may be trust_tier=verified but proof_tier=self.
+ */
+function computeProofTier(components: {
+  envelope_valid: boolean;
+  receipts_verified_count?: number;
+  attestations_verified_count?: number;
+}): ProofTier {
+  if (!components.envelope_valid) return 'unknown';
+
+  // Higher tiers win. Proof tiers are based on *at least one* verified component,
+  // not on the all-or-nothing `*_valid` booleans.
+  if ((components.attestations_verified_count ?? 0) > 0) return 'sandbox';
+  if ((components.receipts_verified_count ?? 0) > 0) return 'gateway';
+
+  return 'self';
 }
 
 /**
@@ -1287,10 +1309,11 @@ export async function verifyProofBundle(
     componentResults.attestations_valid = verifiedCount === payload.attestations.length;
   }
 
-  // 16. Compute trust tier based on validated components (POH-US-003)
+  // 16. Compute tiers based on validated components
   const trustTier = computeTrustTier(componentResults);
+  const proofTier = computeProofTier(componentResults);
 
-  // 17. Return success with trust tier
+  // 17. Return success with computed tiers
   return {
     result: {
       status: 'VALID',
@@ -1299,6 +1322,7 @@ export async function verifyProofBundle(
       bundle_id: payload.bundle_id,
       agent_did: payload.agent_did,
       trust_tier: trustTier,
+      proof_tier: proofTier,
       component_results: componentResults,
     },
   };

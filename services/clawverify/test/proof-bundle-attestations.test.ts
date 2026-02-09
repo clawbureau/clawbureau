@@ -131,6 +131,7 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
 
     expect(out.result.status).toBe('VALID');
     expect(out.result.trust_tier).toBe('verified');
+    expect(out.result.proof_tier).toBe('self');
 
     expect(out.result.component_results?.attestations_count).toBe(1);
     expect(out.result.component_results?.attestations_signature_verified_count).toBe(0);
@@ -196,6 +197,7 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
 
     expect(out.result.status).toBe('VALID');
     expect(out.result.trust_tier).toBe('attested');
+    expect(out.result.proof_tier).toBe('sandbox');
 
     expect(out.result.component_results?.attestations_count).toBe(1);
     expect(out.result.component_results?.attestations_signature_verified_count).toBe(1);
@@ -261,6 +263,7 @@ describe('verifyProofBundle: CVF-US-023 attestation signatures + allowlist', () 
 
     expect(out.result.status).toBe('VALID');
     expect(out.result.trust_tier).toBe('verified');
+    expect(out.result.proof_tier).toBe('self');
 
     expect(out.result.component_results?.attestations_signature_verified_count).toBe(1);
     expect(out.result.component_results?.attestations_verified_count).toBe(0);

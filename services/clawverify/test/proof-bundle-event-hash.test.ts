@@ -130,6 +130,7 @@ describe('verifyProofBundle: CVF-US-021 recompute event_hash_b64u', () => {
     const out = await verifyProofBundle(envelope);
     expect(out.result.status).toBe('VALID');
     expect(out.result.trust_tier).toBe('verified');
+    expect(out.result.proof_tier).toBe('self');
     expect(out.result.component_results?.event_chain_valid).toBe(true);
   });
 

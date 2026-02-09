@@ -123,6 +123,30 @@ Started: 2026-02-07T19:53:07Z
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
 
+## 2026-02-08T23:25:48Z - POH-US-013
+- What was implemented
+  - Defined canonical proof tiers across verifier + marketplace docs.
+  - `clawverify` now outputs `proof_tier` (canonical, marketplace-facing) on:
+    - `POST /v1/verify/bundle`
+    - `POST /v1/verify/agent`
+  - `poh_tier` numeric mapping is now aligned to `proof_tier`:
+    - `unknown=0, self=1, gateway=2, sandbox=3, tee=4, witnessed_web=5`
+  - Updated `docs/specs/agent-economy/MVP.md` to reference the same tier definitions.
+  - Added tests for gateway-tier bundles (valid receipt + binding) and for event-chain-only bundles.
+- Files changed
+  - services/clawverify/src/types.ts
+  - services/clawverify/src/verify-proof-bundle.ts
+  - services/clawverify/src/verify-agent.ts
+  - services/clawverify/src/index.ts
+  - services/clawverify/test/proof-tier-gateway.test.ts
+  - services/clawverify/test/proof-bundle-event-hash.test.ts
+  - services/clawverify/test/proof-bundle-attestations.test.ts
+  - docs/specs/agent-economy/MVP.md
+  - docs/prds/clawverify.md
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ## 2026-02-08T23:44:30Z - CPX-US-031
 - What was implemented
   - Replaced clawproxy in-memory nonce cache with a **durable idempotency store** using Durable Objects (one DO per nonce).
