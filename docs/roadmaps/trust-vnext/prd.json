@@ -302,11 +302,12 @@
         "Output derived-only status (no transcript content)"
       ],
       "priority": 23,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented `agentlog verify` in /Users/gfw/code/agentlog/cli.py. The command discovers bundle+URM JSON artifacts (e.g. .clawproof/*-bundle.json + *-urm.json), calls clawverify /v1/verify/bundle with {envelope, urm}, and prints a derived-only VERIFIED/UNVERIFIED badge with proof_tier/trust_tier. Fail-closed on missing URM or verifier invalidation."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-09T16:15:00Z",
+    "updatedAt": "2026-02-09T16:40:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
