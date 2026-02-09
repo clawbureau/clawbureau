@@ -207,6 +207,35 @@ export interface URMDocument {
   metadata?: Record<string, unknown>;
 }
 
+// ---------------------------------------------------------------------------
+// Trust Pulse (self-reported UX artifact; non-tier)
+// ---------------------------------------------------------------------------
+
+export interface TrustPulseTool {
+  name: string;
+  calls: number;
+}
+
+export interface TrustPulseFile {
+  path: string;
+  touches: number;
+}
+
+export interface TrustPulseDocument {
+  trust_pulse_version: '1';
+  trust_pulse_id: string;
+  run_id: string;
+  agent_did: string;
+  issued_at: string;
+  evidence_class: 'self_reported';
+  tier_uplift: false;
+  started_at?: string;
+  ended_at?: string;
+  duration_ms?: number;
+  tools: TrustPulseTool[];
+  files: TrustPulseFile[];
+}
+
 export interface ResourceItem {
   type: string;
   hash_b64u: string;
@@ -258,6 +287,7 @@ export interface FinalizeOptions {
 export interface FinalizeResult {
   envelope: SignedEnvelope<ProofBundlePayload>;
   urm: URMDocument;
+  trustPulse: TrustPulseDocument;
 }
 
 // ---------------------------------------------------------------------------

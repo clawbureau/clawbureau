@@ -239,12 +239,17 @@ export async function main(argv: string[]): Promise<void> {
 
   const bundlePath = join(outputDir, `${session.runId}-bundle.json`);
   const urmPath = join(outputDir, `${session.runId}-urm.json`);
+  const trustPulsePath = join(outputDir, `${session.runId}-trust-pulse.json`);
 
   await writeFile(bundlePath, JSON.stringify(result.envelope, null, 2), 'utf-8');
   await writeFile(urmPath, JSON.stringify(result.urm, null, 2), 'utf-8');
 
+  // Write the trust pulse in a canonical JSON form (no whitespace) so the hash is stable.
+  await writeFile(trustPulsePath, JSON.stringify(result.trustPulse), 'utf-8');
+
   process.stderr.write(`\nclawproof: proof bundle → ${bundlePath}\n`);
   process.stderr.write(`clawproof: URM          → ${urmPath}\n`);
+  process.stderr.write(`clawproof: trust pulse  → ${trustPulsePath}\n`);
   process.stderr.write(
     `clawproof: run=${session.runId} events=${result.envelope.payload.event_chain?.length ?? 0} receipts=${result.envelope.payload.receipts?.length ?? 0}\n`,
   );

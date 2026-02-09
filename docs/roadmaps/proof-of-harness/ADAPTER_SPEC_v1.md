@@ -145,6 +145,12 @@ Encoding: **base64url**
 
 Canonical JSON: RFC 8785 (JCS) is preferred. If unavailable, a deterministic stable stringify is acceptable only if both producer and verifier match.
 
+**POH-US-020 (pre-hash redaction):** harnesses SHOULD redact secrets/PII in event payloads **before** computing `payload_hash_b64u`.
+
+- This prevents “toxic proofs” where credentials end up embedded in immutable hashes (and later leak via materialization/debug tooling).
+- Redaction MUST be deterministic and stable within a harness version.
+- Redaction does **not** uplift trust tiers; it is a safety measure.
+
 ### 4.3 Required event types (minimum)
 
 A harness MUST be able to emit at least:
@@ -255,6 +261,15 @@ So v1 adapters should:
 ```
 
 Fail closed: if the proof bundle contains `payload.urm` but the request does not provide `urm`, `clawverify` returns `INVALID` with error code `URM_MISSING`.
+
+**OCL-US-004 (Trust Pulse, non-tier):** harnesses MAY emit a small, redacted, self-reported “trust pulse” artifact (tools used + relative file touches) for UX.
+
+- Schema: `packages/schema/poh/trust_pulse.v1.json`
+- Pointer location: `URM.metadata.trust_pulse = { schema, artifact_hash_b64u, evidence_class: "self_reported", tier_uplift: false }`
+- Guardrails:
+  - MUST NOT affect `proof_tier` computation.
+  - MUST NOT include absolute paths or `..` traversal segments.
+  - MUST remain within verifier metadata size limits.
 
 ---
 

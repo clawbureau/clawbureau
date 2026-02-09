@@ -46,6 +46,7 @@ export type {
   BindingContext,
   FinalizeOptions,
   FinalizeResult,
+  TrustPulseDocument,
   ProxyLLMCallParams,
   ProxyLLMCallResult,
   ReceiptArtifact,

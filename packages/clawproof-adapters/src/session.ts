@@ -17,6 +17,8 @@ import {
   randomUUID,
   normalizeSha256HashB64u,
 } from './crypto';
+
+import { jsonByteSize, redactDeep, redactText } from './redact';
 import type {
   AdapterConfig,
   AdapterSession,
@@ -37,6 +39,7 @@ import type {
   SignedEnvelope,
   URMDocument,
   URMReference,
+  TrustPulseDocument,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -182,11 +185,120 @@ export async function createSession(
   const events: RecorderEvent[] = [];
   const receipts: ReceiptArtifact[] = [];
 
+  // OCL-US-004: Trust Pulse (self-reported, non-tier)
+  const trustPulseToolCounts = new Map<string, number>();
+  const trustPulseFileCounts = new Map<string, number>();
+
+  function bumpCount(map: Map<string, number>, key: string | undefined): void {
+    const k = (key ?? '').trim();
+    if (!k) return;
+    map.set(k, (map.get(k) ?? 0) + 1);
+  }
+
+  function safeRelativePath(path: string | undefined): string | undefined {
+    if (!path) return undefined;
+    const raw = path.trim();
+    if (!raw) return undefined;
+
+    // Disallow absolute paths and home shortcuts.
+    if (raw.startsWith('/') || raw.startsWith('~') || raw.startsWith('\\')) return undefined;
+
+    // Normalize separators to '/' and strip leading './'
+    const normalized = raw.replace(/\\/g, '/').replace(/^\.\//, '');
+    const parts = normalized.split('/').filter((p) => p.length > 0);
+
+    // Disallow traversal segments.
+    if (parts.some((p) => p === '..')) return undefined;
+
+    const out = parts.join('/');
+    return out.length > 0 ? out : undefined;
+  }
+
+  function extractPathsFromArgs(args: string): string[] {
+    const found = new Set<string>();
+
+    // Patterns like: file_path="..."  path="..."  file="..."
+    const kvQuoted = /(file_path|path|file|filename)\s*=\s*"([^"]+)"/gi;
+    let m: RegExpExecArray | null;
+    while ((m = kvQuoted.exec(args)) !== null) {
+      const p = safeRelativePath(m[2]);
+      if (p) found.add(p);
+    }
+
+    // JSON-ish patterns like: "file_path":"..."
+    const jsonQuoted = /"(file_path|path|file|filename)"\s*:\s*"([^"]+)"/gi;
+    while ((m = jsonQuoted.exec(args)) !== null) {
+      const p = safeRelativePath(m[2]);
+      if (p) found.add(p);
+    }
+
+    return [...found];
+  }
+
+  function observeToolCallForTrustPulse(payload: unknown): void {
+    let toolName: string | undefined;
+    let args: string | undefined;
+    const paths: string[] = [];
+
+    if (payload && typeof payload === 'object') {
+      const obj = payload as Record<string, unknown>;
+
+      const t =
+        obj['tool'] ??
+        obj['tool_name'] ??
+        obj['toolName'] ??
+        obj['name'];
+      if (typeof t === 'string') toolName = t;
+
+      const a = obj['args'] ?? obj['arguments'];
+      if (typeof a === 'string') {
+        args = a;
+      } else if (a && typeof a === 'object') {
+        try {
+          args = JSON.stringify(a);
+        } catch {
+          // ignore
+        }
+      }
+
+      for (const k of ['path', 'file_path', 'filePath', 'file', 'filename', 'old_path', 'new_path']) {
+        const v = obj[k];
+        if (typeof v === 'string') {
+          const p = safeRelativePath(v);
+          if (p) paths.push(p);
+        }
+      }
+    } else if (typeof payload === 'string') {
+      args = payload;
+    }
+
+    bumpCount(trustPulseToolCounts, toolName);
+
+    if (args) {
+      for (const p of extractPathsFromArgs(args)) {
+        bumpCount(trustPulseFileCounts, p);
+      }
+    }
+
+    for (const p of paths) {
+      bumpCount(trustPulseFileCounts, p);
+    }
+  }
+
   // Define as standalone functions to avoid `this` binding issues
   async function recordEvent(input: RecordEventInput) {
     const eventId = `evt_${randomUUID()}`;
     const timestamp = new Date().toISOString();
-    const payloadHashB64u = await hashJsonB64u(input.payload);
+
+    // POH-US-020: redact before hashing (prevents secrets/PII entering immutable hashes).
+    const redactedPayload = redactDeep(input.payload);
+
+    // OCL-US-004: capture a minimal trust pulse summary from tool_call events.
+    if (input.eventType === 'tool_call') {
+      observeToolCallForTrustPulse(redactedPayload);
+    }
+
+    const payloadHashB64u = await hashJsonB64u(redactedPayload);
 
     const prevHashB64u = events.length > 0
       ? events[events.length - 1].eventHashB64u
@@ -368,7 +480,88 @@ export async function createSession(
       receiptsRootHash = await sha256B64u(encoder.encode(concat));
     }
 
-    // 6. Generate URM
+    // 6. Generate Trust Pulse (self-reported, non-tier)
+    const startedAt = events.length > 0 ? events[0].timestamp : new Date().toISOString();
+    const endedAt = events.length > 0
+      ? events[events.length - 1].timestamp
+      : startedAt;
+
+    const durationMs = (() => {
+      const start = Date.parse(startedAt);
+      const end = Date.parse(endedAt);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+      return end - start;
+    })();
+
+    const tools = [...trustPulseToolCounts.entries()]
+      .map(([name, calls]) => ({
+        name: redactText(name).slice(0, 128),
+        calls,
+      }))
+      .sort((a, b) => b.calls - a.calls || a.name.localeCompare(b.name))
+      .slice(0, 128);
+
+    const files = [...trustPulseFileCounts.entries()]
+      .map(([path, touches]) => ({
+        path: redactText(path).slice(0, 1024),
+        touches,
+      }))
+      .sort((a, b) => b.touches - a.touches || a.path.localeCompare(b.path))
+      .slice(0, 512);
+
+    const trustPulse: TrustPulseDocument = {
+      trust_pulse_version: '1',
+      trust_pulse_id: `tp_${randomUUID()}`,
+      run_id: runId,
+      agent_did: agentDid,
+      issued_at: new Date().toISOString(),
+      evidence_class: 'self_reported',
+      tier_uplift: false,
+      started_at: startedAt,
+      ended_at: endedAt,
+      duration_ms: durationMs,
+      tools,
+      files,
+    };
+
+    const trustPulseHashB64u = await hashJsonB64u(trustPulse);
+
+    const trustPulsePointer = {
+      schema: 'https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json',
+      artifact_hash_b64u: trustPulseHashB64u,
+      evidence_class: 'self_reported',
+      tier_uplift: false,
+    };
+
+    // POH-US-020: redact + bound user-provided URM metadata before embedding.
+    let userUrmMetadata: Record<string, unknown> | undefined =
+      options.urmMetadata
+        ? (redactDeep(options.urmMetadata) as Record<string, unknown>)
+        : undefined;
+
+    const MAX_URM_METADATA_BYTES = 16 * 1024;
+    if (userUrmMetadata && jsonByteSize(userUrmMetadata) > MAX_URM_METADATA_BYTES) {
+      userUrmMetadata = undefined;
+    }
+
+    let urmMetadata: Record<string, unknown> = {
+      ...(userUrmMetadata ?? {}),
+      trust_pulse: trustPulsePointer,
+    };
+
+    // Final bound check (including trust_pulse pointer). If too big, drop user metadata.
+    if (jsonByteSize(urmMetadata) > MAX_URM_METADATA_BYTES) {
+      urmMetadata = { trust_pulse: trustPulsePointer };
+    }
+
+    const trustPulseOutput: ResourceItem = {
+      type: 'trust_pulse',
+      hash_b64u: trustPulseHashB64u,
+      content_type: 'application/json',
+      metadata: trustPulsePointer,
+    };
+
+    // 7. Generate URM
     const urmId = `urm_${randomUUID()}`;
     const urm: URMDocument = {
       urm_version: '1',
@@ -383,10 +576,10 @@ export async function createSession(
         config_hash_b64u: config.harness.configHash ?? configHash,
       },
       inputs: options.inputs.map(toResourceItem),
-      outputs: options.outputs.map(toResourceItem),
+      outputs: [...options.outputs.map(toResourceItem), trustPulseOutput],
       event_chain_root_hash_b64u: chainRootHash,
       receipts_root_hash_b64u: receiptsRootHash,
-      metadata: options.urmMetadata,
+      metadata: urmMetadata,
     };
 
     // 7. URM reference
@@ -440,7 +633,7 @@ export async function createSession(
       issued_at: new Date().toISOString(),
     };
 
-    return { envelope, urm };
+    return { envelope, urm, trustPulse };
   }
 
   return {

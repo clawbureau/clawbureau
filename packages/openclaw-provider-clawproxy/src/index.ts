@@ -22,6 +22,7 @@ import type {
   RecorderConfig,
   FinalizeOptions,
   FinalizeResult,
+  TrustPulseDocument,
   HarnessConfig,
   ResourceDescriptor,
 } from './types';
@@ -32,6 +33,7 @@ export type {
   RecorderConfig,
   FinalizeOptions,
   FinalizeResult,
+  TrustPulseDocument,
   HarnessConfig,
   ResourceDescriptor,
 };
