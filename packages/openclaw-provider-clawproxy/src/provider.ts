@@ -14,7 +14,7 @@ import type {
   StreamOptions,
   SignedEnvelope,
   GatewayReceiptPayload,
-} from './types';
+} from './types.js';
 
 // ── Binding header names (must match clawproxy/src/idempotency.ts) ──────────
 const BINDING_HEADERS = {

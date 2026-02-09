@@ -11,7 +11,7 @@ Edit the registry, then run `node scripts/poh/sync-harness-registry.mjs`.
 | Codex CLI | `codex` | external-cli | supported | clawproof-adapters starts a local shim server and points `OPENAI_BASE_URL` at it. |
 | Factory Droid | `factory-droid` | external-cli | planned | Planned: use clawproof-adapters shim routing (same as other external CLIs). |
 | Gemini CLI | `gemini-cli` | external-cli | planned | Planned: route Google Generative AI calls through clawproxy provider=google and capture receipts in a PoH bundle. |
-| OpenClaw | `openclaw` | native | supported | OpenClaw provider plugin routes model calls through `clawproxy` (`POST /v1/proxy/:provider`). |
+| OpenClaw | `openclaw` | native | supported | OpenClaw plugin patches global fetch() to route supported provider HTTP calls through `clawproxy` (`POST /v1/proxy/:provider`). |
 | OpenCode | `opencode` | external-cli | supported | clawproof-adapters starts a local shim server and points provider base URLs at it. |
 | Pi (pi-coding-agent) | `pi` | external-cli | experimental | clawproof-adapters starts a local shim server and points provider base URLs at it. |
 | Ad-hoc scripts (clawproof SDK) | `script` | sdk | supported | `@clawbureau/clawproof-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce). |
@@ -185,19 +185,21 @@ clawproof-wrap factory-droid -- factory-droid run --task "build feature"
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/openclaw-provider-clawproxy/src/provider.ts`](../../../packages/openclaw-provider-clawproxy/src/provider.ts)
+- [`packages/openclaw-provider-clawproxy/openclaw.plugin.json`](../../../packages/openclaw-provider-clawproxy/openclaw.plugin.json)
+- [`packages/openclaw-provider-clawproxy/src/openclaw.ts`](../../../packages/openclaw-provider-clawproxy/src/openclaw.ts)
 - [`packages/openclaw-provider-clawproxy/src/recorder.ts`](../../../packages/openclaw-provider-clawproxy/src/recorder.ts)
 - [`services/clawproxy/src/index.ts`](../../../services/clawproxy/src/index.ts)
 - [`services/clawverify/src/verify-proof-bundle.ts`](../../../services/clawverify/src/verify-proof-bundle.ts)
 
 ### How it connects
 
-- OpenClaw provider plugin routes model calls through `clawproxy` (`POST /v1/proxy/:provider`).
-- Recorder allocates `run_id`, emits event chain, collects `_receipt_envelope`, generates URM, and signs the proof bundle.
+- OpenClaw plugin patches global fetch() to route supported provider HTTP calls through `clawproxy` (`POST /v1/proxy/:provider`).
+- Plugin hooks allocate `run_id`, emit an event chain, inject PoH binding headers per call, capture receipts (JSON or SSE trailer + idempotency replay), compute prompt commitments, generate URM + Trust Pulse, and sign the proof bundle.
 
 ### Base URL overrides
 
-- `(openclaw plugin config)`: packages/openclaw-provider-clawproxy/src/types.ts (ClawproxyProviderConfig.baseUrl/token)
+- `plugins.entries.provider-clawproxy.config.baseUrl`: clawproxy base URL (e.g. https://clawproxy.com)
+- `plugins.entries.provider-clawproxy.config.token`: optional CST/JWT for proxy auth (platform-paid mode)
 
 ### Upstream auth
 
@@ -207,19 +209,24 @@ clawproof-wrap factory-droid -- factory-droid run --task "build feature"
 ### Recommended commands
 
 ```bash
-# OpenClaw: enable @openclaw/provider-clawproxy in your OpenClaw agent config
-# (Proof bundles are emitted by the recorder during submission; see provider/recorder docs.)
+openclaw plugins install @openclaw/provider-clawproxy
+openclaw plugins enable provider-clawproxy
+# Configure in openclaw.json:
+# plugins.entries["provider-clawproxy"].config.baseUrl = "https://clawproxy.com"
+# plugins.entries["provider-clawproxy"].config.mode = "enforce"
 ```
 
 ### Best practices
 
-- Use the OpenClaw provider plugin (not ad-hoc HTTP) so PoH binding headers are injected per call.
+- Enable the OpenClaw `provider-clawproxy` plugin so PoH binding headers are injected per LLM call (and calls cannot silently bypass receipts).
 - Ensure clawproxy emits canonical `_receipt_envelope` and clawverify is configured with an allowlist (`GATEWAY_RECEIPT_SIGNER_DIDS`).
 - For `gateway` tier, require receipts to be bound to the event chain (enforced by clawverify; POH-US-010).
 - Compute a meaningful harness `config_hash_b64u` (tool policy, provider plugins, model routing, sandbox mode).
 
 ### Limitations
 
+- Intercepts only strict upstream endpoints by default (api.openai.com chat completions, api.anthropic.com messages; Gemini optional). OpenAI-compatible third-party baseUrls are intentionally NOT proxied.
+- OpenAI Responses API (`/v1/responses`) is not supported by clawproxy yet; runs using that endpoint will bypass gateway receipts unless upgraded.
 - OpenClaw harness metadata is informative but NOT a trust tier by itself; tier is derived from verified receipts/attestations.
 
 ---

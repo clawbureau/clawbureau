@@ -13,7 +13,7 @@
  *   defaultProvider — fallback upstream provider (optional, default: anthropic)
  */
 
-import { createClawproxyProvider } from './provider';
+import { createClawproxyProvider } from './provider.js';
 import type {
   ClawproxyProviderConfig,
   PluginDeps,
@@ -28,7 +28,7 @@ import type {
   SystemPromptReportDocument,
   HarnessConfig,
   ResourceDescriptor,
-} from './types';
+} from './types.js';
 
 export type {
   ClawproxyProviderConfig,
@@ -45,11 +45,11 @@ export type {
 };
 
 // Recorder exports
-export { createRecorder } from './recorder';
-export type { HarnessRecorder } from './recorder';
+export { createRecorder } from './recorder.js';
+export type { HarnessRecorder } from './recorder.js';
 
 // Crypto utilities for key management
-export { generateKeyPair, didFromPublicKey, hashJsonB64u } from './crypto';
+export { generateKeyPair, didFromPublicKey, hashJsonB64u } from './crypto.js';
 
 // ── Plugin definition ───────────────────────────────────────────────────────
 
