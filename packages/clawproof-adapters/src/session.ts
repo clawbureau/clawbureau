@@ -446,6 +446,10 @@ export async function createSession(
   return {
     get runId() { return runId; },
     get agentDid() { return agentDid; },
+
+    get proxyBaseUrl() { return config.proxyBaseUrl; },
+    get proxyToken() { return config.proxyToken; },
+
     recordEvent,
     addReceipt,
     proxyLLMCall,
