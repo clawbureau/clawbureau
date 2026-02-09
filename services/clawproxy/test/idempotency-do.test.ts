@@ -18,6 +18,10 @@ class MockStorage {
     this.map.delete(key);
     return had;
   }
+
+  async deleteAll(): Promise<void> {
+    this.map.clear();
+  }
 }
 
 function makeDo(storage: MockStorage): IdempotencyDurableObject {

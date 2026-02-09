@@ -920,6 +920,17 @@ async function handleProxy(
     }
 
     if (check.kind === 'replay') {
+      const stored = check.receipt as any;
+      if (
+        stored &&
+        typeof stored === 'object' &&
+        typeof stored.status === 'number' &&
+        'body' in stored
+      ) {
+        return jsonResponseWithRateLimit(stored.body, stored.status, rateLimitInfo);
+      }
+
+      // Back-compat: older stored entries may have persisted only the response body.
       return jsonResponseWithRateLimit(check.receipt, 200, rateLimitInfo);
     }
 
@@ -1089,7 +1100,10 @@ async function handleProxy(
           env,
           idempotency.nonce,
           idempotency.fingerprint,
-          withReceipt
+          {
+            status: providerResponse.status,
+            body: withReceipt,
+          }
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : 'unknown error';
@@ -1126,7 +1140,10 @@ async function handleProxy(
         env,
         idempotency.nonce,
         idempotency.fingerprint,
-        withReceipt
+        {
+          status: 200,
+          body: withReceipt,
+        }
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown error';
