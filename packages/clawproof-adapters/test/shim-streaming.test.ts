@@ -55,8 +55,50 @@ function sendSse(res: ServerResponse, chunks: string[]): void {
 }
 
 function makeMockClawproxy(options: { includeTrailer: boolean }): Server {
+  const byNonce = new Map<string, { receipt: unknown; receiptEnvelope: unknown }>();
+
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+
+    // New streaming recovery helper: GET /v1/receipt/:nonce
+    if (req.method === 'GET' && url.pathname.startsWith('/v1/receipt/')) {
+      const nonce = decodeURIComponent(url.pathname.slice('/v1/receipt/'.length));
+      const entry = byNonce.get(nonce);
+
+      if (!entry) {
+        sendJson(res, 404, { ok: false, error: 'RECEIPT_NOT_FOUND' });
+        return;
+      }
+
+      const expectedRunId = url.searchParams.get('run_id') ?? '';
+      const expectedEventHash = url.searchParams.get('event_hash_b64u') ?? '';
+
+      const binding = (entry.receiptEnvelope as any)?.payload?.binding ?? {};
+
+      if (expectedRunId && binding.run_id !== expectedRunId) {
+        sendJson(res, 409, { ok: false, error: 'RECEIPT_BINDING_MISMATCH' });
+        return;
+      }
+
+      if (expectedEventHash && binding.event_hash_b64u !== expectedEventHash) {
+        sendJson(res, 409, { ok: false, error: 'RECEIPT_BINDING_MISMATCH' });
+        return;
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        nonce,
+        truncated: false,
+        status: 200,
+        receipt_envelope: entry.receiptEnvelope,
+        receipt: entry.receipt,
+        binding: {
+          run_id: binding.run_id ?? null,
+          event_hash_b64u: binding.event_hash_b64u ?? null,
+        },
+      });
+      return;
+    }
 
     if (req.method !== 'POST' || url.pathname !== '/v1/proxy/openai') {
       sendJson(res, 404, { error: 'NOT_FOUND' });
@@ -116,7 +158,11 @@ function makeMockClawproxy(options: { includeTrailer: boolean }): Server {
       issued_at: receipt.timestamp,
     };
 
-    // Replay path (shim fallback): return a compact JSON response with receipts.
+    if (binding.nonce) {
+      byNonce.set(binding.nonce, { receipt, receiptEnvelope });
+    }
+
+    // Legacy replay path (older shims): return a compact JSON response with receipts.
     if (accept.toLowerCase().includes('application/json')) {
       sendJson(res, 200, {
         streaming: true,
@@ -212,7 +258,7 @@ describe('POH-US-019: shim streaming/SSE support', () => {
     expect(proof.envelope.payload.receipts?.[0]?.envelope_type).toBe('gateway_receipt');
   });
 
-  it('falls back to deterministic idempotency replay when trailers are missing', async () => {
+  it('falls back to deterministic receipt lookup (GET /v1/receipt/:nonce) when trailers are missing', async () => {
     const mock = makeMockClawproxy({ includeTrailer: false });
     const mockListen = await listen(mock);
     toClose.push(mockListen.close);

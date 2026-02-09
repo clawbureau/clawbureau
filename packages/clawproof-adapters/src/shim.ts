@@ -391,24 +391,58 @@ export async function startShim(options: StartShimOptions): Promise<ShimServer> 
         }
 
         if (!receipt || !receiptEnvelope) {
-          // Deterministic fallback: replay the same request (idempotency store should return stored receipt JSON).
-          try {
-            const replayRes = await fetch(proxyUrl, {
-              method: 'POST',
-              headers: { ...proxyHeaders, Accept: 'application/json' },
-              body: JSON.stringify(body),
-            });
-
-            const replayJson = await replayRes.json().catch(() => null);
-            if (replayJson && typeof replayJson === 'object') {
-              const obj = replayJson as Record<string, unknown>;
-              const r = obj['_receipt'];
-              const re = obj['_receipt_envelope'];
-              if (r && typeof r === 'object') receipt = r as ClawproxyReceipt;
-              if (re && typeof re === 'object') receiptEnvelope = re as SignedEnvelope<GatewayReceiptPayload>;
+          // Deterministic fallback: fetch stored receipts by nonce (no full-body replay).
+          if (binding.nonce) {
+            const base = options.session.proxyBaseUrl.replace(/\/+$/, '');
+            const receiptUrl = new URL(
+              `${base}/v1/receipt/${encodeURIComponent(binding.nonce)}`,
+            );
+            receiptUrl.searchParams.set('run_id', binding.runId);
+            if (binding.eventHash) {
+              receiptUrl.searchParams.set('event_hash_b64u', binding.eventHash);
             }
-          } catch {
-            // ignore
+
+            const lookupHeaders: Record<string, string> = {
+              Accept: 'application/json',
+            };
+
+            // Proxy auth token (CST/JWT) if configured.
+            if (options.session.proxyToken) {
+              lookupHeaders['Authorization'] = `Bearer ${options.session.proxyToken}`;
+            }
+
+            for (let attempt = 0; attempt < 5 && (!receipt || !receiptEnvelope); attempt++) {
+              try {
+                const lookupRes = await fetch(receiptUrl.toString(), {
+                  method: 'GET',
+                  headers: lookupHeaders,
+                });
+
+                if (lookupRes.ok) {
+                  const data = await lookupRes.json().catch(() => null);
+                  if (data && typeof data === 'object') {
+                    const obj = data as Record<string, unknown>;
+                    const r = obj['receipt'];
+                    const re = obj['receipt_envelope'];
+                    if (r && typeof r === 'object') receipt = r as ClawproxyReceipt;
+                    if (re && typeof re === 'object') receiptEnvelope = re as SignedEnvelope<GatewayReceiptPayload>;
+                  }
+                  break;
+                }
+
+                // If the DO commit is still inflight, retry briefly.
+                if (lookupRes.status === 409) {
+                  await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+                  continue;
+                }
+
+                // For 404/other errors, stop trying.
+                break;
+              } catch {
+                // transient fetch error
+                await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+              }
+            }
           }
         }
 
