@@ -264,7 +264,7 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
       headers['X-Provider-API-Key'] = key;
     }
 
-    // Copy through other headers (Authorization is reserved for proxy auth)
+    // Copy through other headers (Authorization is blocked to avoid CST/provider-key ambiguity)
     for (const [k, v] of Object.entries(extra)) {
       const lowerK = k.toLowerCase();
       if (lowerK === 'authorization') continue;
@@ -274,9 +274,12 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
       headers[k] = v;
     }
 
-    // Proxy auth token (CST or other gateway token)
+    // Proxy auth token (CST)
     if (config.proxyToken) {
-      headers['Authorization'] = `Bearer ${config.proxyToken}`;
+      const raw = config.proxyToken.trim();
+      const m = raw.match(/^Bearer\s+/i);
+      const token = (m ? raw.slice(m[0].length) : raw).trim();
+      headers['X-CST'] = token;
     }
 
 
