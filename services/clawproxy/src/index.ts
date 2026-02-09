@@ -17,9 +17,12 @@ import type {
   VerifyReceiptRequest,
   VerifyReceiptResponse,
 } from './types';
+import { sha256 as nobleSha256 } from '@noble/hashes/sha256';
+import { bytesToHex } from '@noble/hashes/utils';
 import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
 import {
   generateReceipt,
+  generateReceiptFromHashes,
   attachReceipt,
   createSigningPayload,
   generateReceiptEnvelope,
@@ -32,6 +35,7 @@ import {
   computeKeyId,
   base64urlEncode,
   base64urlDecode,
+  sha256,
   verifyEd25519,
   importAesKey,
   didKeyFromEd25519PublicKeyBytes,
@@ -159,6 +163,31 @@ function looksLikeJwt(token: string): boolean {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Streaming helpers
+// ---------------------------------------------------------------------------
+
+function isStreamingRequested(body: unknown, request: Request): boolean {
+  // Prefer explicit stream flag in JSON body (OpenAI/Anthropic).
+  if (body && typeof body === 'object') {
+    const maybe = body as Record<string, unknown>;
+    if (maybe.stream === true) return true;
+  }
+
+  const accept = request.headers.get('accept');
+  return typeof accept === 'string' && accept.toLowerCase().includes('text/event-stream');
+}
+
+function isEventStreamContentType(contentType: string | null): boolean {
+  if (!contentType) return false;
+  return contentType.toLowerCase().includes('text/event-stream');
+}
+
+function base64urlEncodeJson(value: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  return base64urlEncode(bytes);
 }
 
 export default {
@@ -817,6 +846,8 @@ async function handleProxy(
     return errorResponseWithRateLimit('INVALID_REQUEST', 'Request body must be valid JSON', 400, rateLimitInfo);
   }
 
+  const streamRequested = isStreamingRequested(parsedBody, request);
+
   // Extract model for receipt
   const model = extractModel(provider, parsedBody);
 
@@ -958,12 +989,26 @@ async function handleProxy(
   // Forward request to provider (with redacted body if policy requires)
   let providerResponse: Response;
   try {
+    const providerHeaders: Record<string, string> = {
+      'Content-Type': config.contentType,
+      ...buildAuthHeader(provider, apiKey),
+    };
+
+    // For streaming requests, explicitly request SSE from the upstream provider.
+    if (streamRequested) {
+      providerHeaders['Accept'] = request.headers.get('accept') ?? 'text/event-stream';
+    }
+
+    // Anthropic requires an API version header.
+    if (provider === 'anthropic') {
+      providerHeaders['anthropic-version'] = request.headers.get('anthropic-version') ?? '2023-06-01';
+      const beta = request.headers.get('anthropic-beta');
+      if (beta) providerHeaders['anthropic-beta'] = beta;
+    }
+
     providerResponse = await fetch(providerUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': config.contentType,
-        ...buildAuthHeader(provider, apiKey),
-      },
+      headers: providerHeaders,
       body: finalRequestBody,
     });
   } catch (err) {
@@ -993,6 +1038,154 @@ async function handleProxy(
       502,
       rateLimitInfo
     );
+  }
+
+  // Streaming/SSE support (POH-US-019): do not buffer full bodies.
+  // We stream the provider response through while hashing it incrementally to
+  // produce a signed gateway receipt at the end.
+  const upstreamContentType = providerResponse.headers.get('content-type');
+  const upstreamIsEventStream = isEventStreamContentType(upstreamContentType);
+
+  if (streamRequested && providerResponse.ok && upstreamIsEventStream && providerResponse.body) {
+    let requestHash: string;
+    try {
+      requestHash = await sha256(finalRequestBody);
+    } catch (err) {
+      if (idempotency) {
+        try {
+          await releaseIdempotency(env, idempotency.nonce, idempotency.fingerprint);
+        } catch {
+          // ignore (best-effort)
+        }
+      }
+
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'RECEIPT_HASH_ERROR',
+        `Failed to hash request body: ${message}`,
+        500,
+        rateLimitInfo
+      );
+    }
+
+    const rateLimitHeaders = buildRateLimitHeaders(rateLimitInfo);
+
+    // Start streaming immediately; receipt is appended as SSE comments at end.
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const reader = providerResponse.body!.getReader();
+        const hasher = nobleSha256.create();
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+
+            hasher.update(value);
+            controller.enqueue(value);
+          }
+
+          const responseHash = bytesToHex(hasher.digest());
+
+          // Log confidential requests WITHOUT plaintext (only metadata)
+          if (policyResult.confidentialMode) {
+            logConfidentialRequest(request, provider, model, policyResult.policyHash);
+          }
+
+          // Streaming receipts are always hash-only (no encrypted payloads).
+          const receipt = await generateReceiptFromHashes(
+            {
+              provider,
+              model,
+              requestHash,
+              responseHash,
+              startTime,
+              binding: finalBinding,
+              payment,
+              privacyMode: 'hash_only',
+            },
+            signingContext
+          );
+
+          const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
+            gatewayId,
+          });
+
+          // Log token hash with receipt metadata (never log token itself)
+          if (validatedCst) {
+            logTokenUsed(request, {
+              token_hash: validatedCst.token_hash,
+              sub: validatedCst.claims.sub,
+              aud: validatedCst.claims.aud,
+              scope: validatedCst.claims.scope,
+              provider,
+              model,
+              receipt_request_hash: receipt.requestHash,
+              receipt_timestamp: receipt.timestamp,
+            });
+          }
+
+          // CPX-US-031: commit idempotency (store receipt only; streaming bodies are not stored)
+          if (idempotency) {
+            try {
+              await commitIdempotency(env, idempotency.nonce, idempotency.fingerprint, {
+                status: providerResponse.status,
+                body: {
+                  streaming: true,
+                  _receipt: receipt,
+                  _receipt_envelope: receiptEnvelope,
+                },
+              });
+            } catch (err) {
+              // Best-effort: still deliver receipt via trailer comments so shims can capture it.
+              console.error('idempotency commit failed for streaming response', err);
+            }
+          }
+
+          // Append clawproxy receipt trailer comments for shim extraction.
+          // NOTE: response_hash in the receipt covers ONLY the upstream provider bytes.
+          try {
+            const trailerText =
+              `:clawproxy_receipt_envelope_b64u=${base64urlEncodeJson(receiptEnvelope)}\n` +
+              `:clawproxy_receipt_b64u=${base64urlEncodeJson(receipt)}\n\n`;
+            controller.enqueue(new TextEncoder().encode(trailerText));
+          } catch (err) {
+            console.error('failed to append receipt trailer comments', err);
+          }
+
+          controller.close();
+        } catch (err) {
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore
+          }
+
+          if (idempotency) {
+            try {
+              await releaseIdempotency(env, idempotency.nonce, idempotency.fingerprint);
+            } catch (releaseErr) {
+              console.error('idempotency release failed after streaming error', releaseErr);
+            }
+          }
+
+          controller.error(err);
+        }
+      },
+    });
+
+    const headers = new Headers({
+      'Content-Type': upstreamContentType ?? 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'X-Proxy-Version': env.PROXY_VERSION,
+      ...rateLimitHeaders,
+    });
+
+    return new Response(stream, {
+      status: providerResponse.status,
+      headers,
+    });
   }
 
   let responseBody: string;

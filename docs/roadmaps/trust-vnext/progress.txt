@@ -212,3 +212,28 @@ Started: 2026-02-07T19:53:07Z
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
   - cd services/clawbounties && npm run typecheck
 ---
+
+## 2026-02-09T14:10:00Z - POH-US-019
+- What was implemented
+  - Added streaming/SSE support in `clawproxy` for requests with `stream:true`:
+    - Upstream provider responses are forwarded as streams (no full buffering).
+    - Response hashes are computed incrementally and used to issue signed gateway receipts.
+    - Receipts are committed to the durable idempotency store (receipt-only marker for streaming) and also appended as SSE comment trailers for shim extraction.
+  - Updated `@clawbureau/clawproof-adapters` shim to support streaming:
+    - Detects streaming requests and forwards SSE from clawproxy without buffering.
+    - Injects PoH binding headers (X-Run-Id/X-Event-Hash/X-Idempotency-Key) for streaming flows.
+    - Captures canonical `_receipt_envelope` from clawproxy SSE trailer comments, strips them before returning to the harness, and falls back to deterministic idempotency replay when needed.
+- Files changed
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/src/receipt.ts
+  - services/clawproxy/package.json
+  - services/clawproxy/package-lock.json
+  - packages/clawproof-adapters/src/types.ts
+  - packages/clawproof-adapters/src/session.ts
+  - packages/clawproof-adapters/src/shim.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
+  - cd packages/clawproof-adapters && npm run typecheck
+---

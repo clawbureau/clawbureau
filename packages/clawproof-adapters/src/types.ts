@@ -269,6 +269,11 @@ export interface AdapterSession {
   readonly runId: string;
   readonly agentDid: string;
 
+  /** Configured clawproxy base URL (used by the shim for streaming requests). */
+  readonly proxyBaseUrl: string;
+  /** Optional bearer token for proxy auth (CST/JWT). */
+  readonly proxyToken?: string;
+
   /** Record an event in the hash-linked chain. */
   recordEvent(input: RecordEventInput): Promise<{ event: RecorderEvent; binding: BindingContext }>;
 

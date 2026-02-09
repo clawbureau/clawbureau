@@ -259,11 +259,12 @@
         "Add smoke test coverage for at least one streaming harness/provider"
       ],
       "priority": 20,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented streaming pass-through in clawproxy + SSE trailer receipt comments; shim forwards SSE without buffering and captures receipts (with idempotency replay fallback)."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-08T23:44:30Z",
+    "updatedAt": "2026-02-09T13:07:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

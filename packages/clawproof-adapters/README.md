@@ -49,9 +49,9 @@ After the run completes, proof artifacts are written to `.clawproof/`:
 
 1. **Shim routing**: The wrapper starts a local shim HTTP server and sets provider base URL env vars (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`) to point to it. The harness CLI talks to the shim using normal OpenAI/Anthropic SDK requests.
 
-2. **Gateway forwarding + PoH binding**: The shim forwards each request to `clawproxy` via the shared session runtime (`session.proxyLLMCall()`), which injects PoH binding headers (`X-Run-Id`, `X-Event-Hash`, `X-Idempotency-Key`).
+2. **Gateway forwarding + PoH binding**: The shim forwards each request to `clawproxy`. For non-streaming calls it uses the shared session runtime (`session.proxyLLMCall()`); for streaming/SSE calls it forwards the response body without buffering. In both cases it injects PoH binding headers (`X-Run-Id`, `X-Event-Hash`, `X-Idempotency-Key`).
 
-3. **Receipt collection**: `clawproxy` returns canonical signed `_receipt_envelope` objects. The shim extracts and stores these receipts so they can be included in the proof bundle.
+3. **Receipt collection**: `clawproxy` issues canonical signed `_receipt_envelope` objects. For JSON responses these are returned as fields; for streaming/SSE responses they are delivered as SSE comment trailers (which the shim strips from the harness-facing stream while recording the receipts for the proof bundle).
 
 4. **Event chain**: The adapter records `run_start`/`tool_call`/`run_end` plus one `llm_call` event per model request into a hash-linked event chain (SHA-256, deterministic key order per PoH Adapter Spec §4.2).
 

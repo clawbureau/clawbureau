@@ -433,21 +433,22 @@ This spec is implemented via `docs/roadmaps/proof-of-harness/prd.json`:
   - `clawproxy` emits canonical `_receipt_envelope` as `SignedEnvelope<GatewayReceiptPayload>`.
   - Receipts are signed by a `did:key` derived from `PROXY_SIGNING_KEY` (see `GET /v1/did`).
 
+- **Streaming support for external harness shims**: resolved by POH-US-019.
+  - `clawproxy` streams `text/event-stream` responses for `stream:true` requests and computes response hashes incrementally.
+  - Receipts are delivered via deterministic SSE comment trailers (and persisted via nonce idempotency for replay fallback).
+  - The local shim forwards SSE without buffering, strips the receipt trailers from the harness-facing stream, and captures `_receipt_envelope` for proof bundles.
+
+- **Event hash recomputation in clawverify**: resolved by CVF-US-021.
+  - `clawverify` recomputes `event_hash_b64u` for all events and rejects mismatches (fail-closed).
+
 ### Still open
 
-1) **Event hash recomputation in clawverify**
-- Spec defines event hashes, but verifier currently validates linkage without recomputing `event_hash_b64u`.
-- Tracked in Trust vNext (see `docs/roadmaps/trust-vnext/prd.json` CVF-US-021).
-
-2) **Canonical JSON / hashing rules beyond PoH**
+1) **Canonical JSON / hashing rules beyond PoH**
 - Adopt RFC 8785 everywhere (recommended)
 - Or define per-object stable stringify rules
 
-3) **Execution attestation authority**
+2) **Execution attestation authority**
 - clawea design and key distribution
 
-4) **Streaming support for external harness shims**
-- The external-harness shim used by `@clawbureau/clawproof-adapters` is currently not streaming/SSE safe.
-- Decide how to support streaming while still extracting receipts deterministically.
 
 ---

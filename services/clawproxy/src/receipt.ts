@@ -156,6 +156,95 @@ export async function generateReceipt(
   return receipt;
 }
 
+export interface ReceiptHashInput {
+  provider: Provider;
+  model?: string;
+  requestHash: string;
+  responseHash: string;
+  startTime: number;
+  /** Optional binding fields for chaining proofs */
+  binding?: ReceiptBinding;
+  /** Payment attribution for the receipt */
+  payment?: ReceiptPayment;
+  /** Override timestamp (useful when other IDs depend on it) */
+  timestamp?: string;
+  /** Privacy mode: hash_only (default) or encrypted */
+  privacyMode?: ReceiptPrivacyMode;
+}
+
+/**
+ * Generate a receipt when request/response hashes are already known.
+ *
+ * Used for streaming proxy responses where the full response body is not buffered.
+ * Note: encrypted payloads are not supported in this mode.
+ */
+export async function generateReceiptFromHashes(
+  input: ReceiptHashInput,
+  signingContext?: SigningContext
+): Promise<Receipt> {
+  const {
+    provider,
+    model,
+    requestHash,
+    responseHash,
+    startTime,
+    binding,
+    payment,
+    timestamp,
+    privacyMode,
+  } = input;
+
+  const receipt: Receipt = {
+    version: '1.0',
+    provider,
+    model,
+    requestHash,
+    responseHash,
+    timestamp: timestamp ?? new Date().toISOString(),
+    latencyMs: Date.now() - startTime,
+  };
+
+  // Attach payment attribution when present
+  if (payment) {
+    receipt.payment = payment;
+  }
+
+  // Add binding fields if provided (for proof chaining)
+  if (
+    binding &&
+    (binding.runId ||
+      binding.eventHash ||
+      binding.nonce ||
+      binding.policyHash ||
+      binding.tokenScopeHashB64u)
+  ) {
+    receipt.binding = {};
+    if (binding.runId) receipt.binding.runId = binding.runId;
+    if (binding.eventHash) receipt.binding.eventHash = binding.eventHash;
+    if (binding.nonce) receipt.binding.nonce = binding.nonce;
+    if (binding.policyHash) receipt.binding.policyHash = binding.policyHash;
+    if (binding.tokenScopeHashB64u)
+      receipt.binding.tokenScopeHashB64u = binding.tokenScopeHashB64u;
+  }
+
+  // Set privacy mode (defaults to hash_only)
+  receipt.privacyMode = privacyMode ?? 'hash_only';
+
+  // Sign receipt if signing context is provided
+  if (signingContext) {
+    receipt.proxyDid = signingContext.did;
+    receipt.kid = signingContext.kid;
+
+    const payloadToSign = createSigningPayload(receipt);
+    receipt.signature = await signEd25519(
+      signingContext.keyPair.privateKey,
+      payloadToSign
+    );
+  }
+
+  return receipt;
+}
+
 /**
  * Convert AES encrypted payload to EncryptedPayload type
  */
