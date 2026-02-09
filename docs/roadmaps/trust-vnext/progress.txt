@@ -167,3 +167,22 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawproxy && npm test && npm run typecheck
 ---
+
+## 2026-02-09T01:29:33Z - POH-US-014
+- What was implemented
+  - Added a D1 replay database for marketplace submissions:
+    - `replay_runs`: unique (agent_did, run_id)
+    - `replay_receipts`: unique (receipt_signer_did, receipt_id)
+  - Submission flow now rejects replayed evidence:
+    - Fail-closed binding: `proof_bundle_envelope.payload.agent_did` must match authenticated `worker_did`.
+    - For proof-bundle-VALID submissions, reserve replay keys and reject duplicates with deterministic error codes:
+      - `REPLAY_RUN_ID_REUSED`
+      - `REPLAY_RECEIPT_ID_REUSED`
+- Files changed
+  - services/clawbounties/migrations/0008_marketplace_replay_db.sql
+  - services/clawbounties/src/index.ts
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawbounties && npm run typecheck
+---

@@ -213,6 +213,21 @@ interface VerifyCommitProofResponse {
   error?: { code: string; message: string; field?: string };
 }
 
+interface VerifyReceiptResult {
+  status: VerificationStatus;
+  reason: string;
+  verified_at: string;
+  signer_did?: string;
+}
+
+interface VerifyReceiptResponse {
+  result: VerifyReceiptResult;
+  provider?: string;
+  model?: string;
+  gateway_id?: string;
+  error?: { code: string; message: string; field?: string };
+}
+
 interface TestHarnessRunRequest {
   schema_version: '1';
   test_harness_id: string;
@@ -1416,6 +1431,39 @@ async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCom
   return json as unknown as VerifyCommitProofResponse;
 }
 
+async function verifyGatewayReceipt(env: Env, envelope: unknown): Promise<VerifyReceiptResponse> {
+  const url = `${resolveVerifyBaseUrl(env)}/v1/verify/receipt`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ envelope }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`VERIFY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.result)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  const result = json.result as Record<string, unknown>;
+  if (!isNonEmptyString(result.status) || !isNonEmptyString(result.reason) || !isNonEmptyString(result.verified_at)) {
+    throw new Error(`VERIFY_INVALID_RESPONSE:${response.status}:${text}`);
+  }
+
+  return json as unknown as VerifyReceiptResponse;
+}
+
 function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
   if (result.status !== 'VALID') return null;
 
@@ -1440,6 +1488,111 @@ function proofTierRank(tier: ProofTier): number {
     case 'sandbox':
       return 3;
   }
+}
+
+type ReplayReceiptKey = {
+  receipt_signer_did: string;
+  receipt_id: string;
+};
+
+function extractProofBundleAgentDid(envelope: Record<string, unknown>): string | null {
+  const payload = envelope.payload;
+  if (!isRecord(payload)) return null;
+  const agentDid = payload.agent_did;
+  if (!isNonEmptyString(agentDid)) return null;
+  return agentDid.trim();
+}
+
+function extractRunIdAndEventHashesFromProofBundle(envelope: Record<string, unknown>): {
+  run_id: string;
+  event_hashes_b64u: Set<string>;
+} | null {
+  const payload = envelope.payload;
+  if (!isRecord(payload)) return null;
+
+  const eventChain = payload.event_chain;
+  if (!Array.isArray(eventChain) || eventChain.length === 0) return null;
+
+  const first = eventChain[0];
+  if (!isRecord(first)) return null;
+
+  const runId = first.run_id;
+  if (!isNonEmptyString(runId)) return null;
+
+  const eventHashes = new Set<string>();
+  for (const e of eventChain) {
+    if (!isRecord(e)) continue;
+    const h = e.event_hash_b64u;
+    if (isNonEmptyString(h)) eventHashes.add(h.trim());
+  }
+
+  return { run_id: runId.trim(), event_hashes_b64u: eventHashes };
+}
+
+function extractReceiptsFromProofBundle(envelope: Record<string, unknown>): unknown[] {
+  const payload = envelope.payload;
+  if (!isRecord(payload)) return [];
+  const receipts = payload.receipts;
+  if (!Array.isArray(receipts)) return [];
+  return receipts;
+}
+
+function extractBoundReceiptKey(
+  receiptEnvelope: Record<string, unknown>,
+  bindingContext: { run_id: string; allowed_event_hashes_b64u: ReadonlySet<string> }
+): ReplayReceiptKey | null {
+  const signerDid = receiptEnvelope.signer_did;
+  if (!isNonEmptyString(signerDid)) return null;
+
+  const payload = receiptEnvelope.payload;
+  if (!isRecord(payload)) return null;
+
+  const receiptId = payload.receipt_id;
+  if (!isNonEmptyString(receiptId)) return null;
+
+  const binding = payload.binding;
+  if (!isRecord(binding)) return null;
+
+  const runId = binding.run_id;
+  const eventHash = binding.event_hash_b64u;
+  if (!isNonEmptyString(runId) || runId.trim() !== bindingContext.run_id) return null;
+  if (!isNonEmptyString(eventHash) || !bindingContext.allowed_event_hashes_b64u.has(eventHash.trim())) return null;
+
+  return {
+    receipt_signer_did: signerDid.trim(),
+    receipt_id: receiptId.trim(),
+  };
+}
+
+async function computeReplayReceiptKeys(
+  env: Env,
+  proofBundleEnvelope: Record<string, unknown>,
+  bindingContext: { run_id: string; allowed_event_hashes_b64u: ReadonlySet<string> }
+): Promise<ReplayReceiptKey[]> {
+  const receipts = extractReceiptsFromProofBundle(proofBundleEnvelope);
+  if (receipts.length === 0) return [];
+
+  const keys: ReplayReceiptKey[] = [];
+
+  // Verify each receipt signature via clawverify, then enforce binding to this run/event chain.
+  for (const receipt of receipts) {
+    if (!isRecord(receipt)) continue;
+
+    let verification: VerifyReceiptResponse;
+    try {
+      verification = await verifyGatewayReceipt(env, receipt);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      throw new Error(`REPLAY_RECEIPT_VERIFY_FAILED:${message}`);
+    }
+
+    if (verification.result.status !== 'VALID') continue;
+
+    const key = extractBoundReceiptKey(receipt, bindingContext);
+    if (key) keys.push(key);
+  }
+
+  return keys;
 }
 
 function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
@@ -2009,8 +2162,8 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
     .run();
 }
 
-async function insertSubmission(db: D1Database, record: SubmissionRecord): Promise<void> {
-  await db
+function prepareInsertSubmission(db: D1Database, record: SubmissionRecord): D1PreparedStatement {
+  return db
     .prepare(
       `INSERT INTO submissions (
         submission_id,
@@ -2064,8 +2217,142 @@ async function insertSubmission(db: D1Database, record: SubmissionRecord): Promi
       record.result_summary,
       record.created_at,
       record.updated_at
+    );
+}
+
+async function insertSubmission(db: D1Database, record: SubmissionRecord): Promise<void> {
+  await prepareInsertSubmission(db, record).run();
+}
+
+function prepareInsertReplayRun(
+  db: D1Database,
+  params: {
+    agent_did: string;
+    run_id: string;
+    bounty_id: string;
+    submission_id: string;
+  }
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO replay_runs (
+        agent_did,
+        run_id,
+        bounty_id,
+        submission_id
+      ) VALUES (?, ?, ?, ?)`
     )
-    .run();
+    .bind(params.agent_did, params.run_id, params.bounty_id, params.submission_id);
+}
+
+function prepareInsertReplayReceipt(
+  db: D1Database,
+  params: {
+    receipt_signer_did: string;
+    receipt_id: string;
+    bounty_id: string;
+    submission_id: string;
+  }
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO replay_receipts (
+        receipt_signer_did,
+        receipt_id,
+        bounty_id,
+        submission_id
+      ) VALUES (?, ?, ?, ?)`
+    )
+    .bind(
+      params.receipt_signer_did,
+      params.receipt_id,
+      params.bounty_id,
+      params.submission_id
+    );
+}
+
+async function getReplayRun(
+  db: D1Database,
+  params: { agent_did: string; run_id: string }
+): Promise<{ bounty_id: string; submission_id: string; first_seen_at: string } | null> {
+  const row = await db
+    .prepare(
+      'SELECT bounty_id, submission_id, first_seen_at FROM replay_runs WHERE agent_did = ? AND run_id = ?'
+    )
+    .bind(params.agent_did, params.run_id)
+    .first();
+
+  if (!row || !isRecord(row)) return null;
+
+  const bounty_id = d1String(row.bounty_id);
+  const submission_id = d1String(row.submission_id);
+  const first_seen_at = d1String(row.first_seen_at);
+
+  if (!bounty_id || !submission_id || !first_seen_at) return null;
+
+  return { bounty_id, submission_id, first_seen_at };
+}
+
+async function getReplayReceipt(
+  db: D1Database,
+  params: { receipt_signer_did: string; receipt_id: string }
+): Promise<{ bounty_id: string; submission_id: string; first_seen_at: string } | null> {
+  const row = await db
+    .prepare(
+      'SELECT bounty_id, submission_id, first_seen_at FROM replay_receipts WHERE receipt_signer_did = ? AND receipt_id = ?'
+    )
+    .bind(params.receipt_signer_did, params.receipt_id)
+    .first();
+
+  if (!row || !isRecord(row)) return null;
+
+  const bounty_id = d1String(row.bounty_id);
+  const submission_id = d1String(row.submission_id);
+  const first_seen_at = d1String(row.first_seen_at);
+
+  if (!bounty_id || !submission_id || !first_seen_at) return null;
+
+  return { bounty_id, submission_id, first_seen_at };
+}
+
+async function insertSubmissionWithReplayGuards(
+  db: D1Database,
+  params: {
+    record: SubmissionRecord;
+    agent_did?: string | null;
+    run_id?: string | null;
+    receipt_keys?: ReplayReceiptKey[];
+  }
+): Promise<void> {
+  const stmts: D1PreparedStatement[] = [];
+
+  if (params.agent_did && params.run_id) {
+    stmts.push(
+      prepareInsertReplayRun(db, {
+        agent_did: params.agent_did,
+        run_id: params.run_id,
+        bounty_id: params.record.bounty_id,
+        submission_id: params.record.submission_id,
+      })
+    );
+  }
+
+  if (params.receipt_keys && params.receipt_keys.length > 0) {
+    for (const k of params.receipt_keys) {
+      stmts.push(
+        prepareInsertReplayReceipt(db, {
+          receipt_signer_did: k.receipt_signer_did,
+          receipt_id: k.receipt_id,
+          bounty_id: params.record.bounty_id,
+          submission_id: params.record.submission_id,
+        })
+      );
+    }
+  }
+
+  stmts.push(prepareInsertSubmission(db, params.record));
+
+  await db.batch(stmts);
 }
 
 async function insertTestResult(db: D1Database, record: TestResultRecord): Promise<void> {
@@ -3506,6 +3793,24 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('VERIFY_FAILED', message, 502, undefined, version);
   }
 
+  const proofBundleAgentDid = extractProofBundleAgentDid(proof_bundle_envelope_raw);
+
+  if (proofBundleResponse.result.status === 'VALID') {
+    if (!proofBundleAgentDid) {
+      return errorResponse('INVALID_REQUEST', 'proof_bundle_envelope.payload.agent_did is required', 400, undefined, version);
+    }
+
+    if (proofBundleAgentDid !== worker_did) {
+      return errorResponse(
+        'UNAUTHORIZED',
+        'proof_bundle_envelope.payload.agent_did must match worker_did',
+        401,
+        { agent_did: proofBundleAgentDid },
+        version
+      );
+    }
+  }
+
   let proofStatus: 'valid' | 'invalid' = proofBundleResponse.result.status === 'VALID' ? 'valid' : 'invalid';
   let proofReason = proofBundleResponse.result.reason.trim();
   const proofTier = deriveProofTier(proofBundleResponse.result);
@@ -3527,6 +3832,38 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     }
 
     commitStatus = commitProofResponse.result.status === 'VALID' ? 'valid' : 'invalid';
+  }
+
+  let replayRunId: string | null = null;
+  let replayReceiptKeys: ReplayReceiptKey[] = [];
+
+  const replayAgentDid = proofBundleResponse.result.status === 'VALID' ? proofBundleAgentDid : null;
+  if (proofBundleResponse.result.status === 'VALID') {
+    const binding = extractRunIdAndEventHashesFromProofBundle(proof_bundle_envelope_raw);
+
+    if (binding) {
+      replayRunId = binding.run_id;
+      try {
+        replayReceiptKeys = await computeReplayReceiptKeys(env, proof_bundle_envelope_raw, {
+          run_id: binding.run_id,
+          allowed_event_hashes_b64u: binding.event_hashes_b64u,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return errorResponse('REPLAY_PROTECTION_FAILED', message, 502, undefined, version);
+      }
+    } else {
+      const receipts = extractReceiptsFromProofBundle(proof_bundle_envelope_raw);
+      if (receipts.length > 0) {
+        return errorResponse(
+          'INVALID_REQUEST',
+          'proof_bundle_envelope.payload.event_chain is required when receipts are present',
+          400,
+          undefined,
+          version
+        );
+      }
+    }
   }
 
   const isValid = proofStatus === 'valid' && (commitStatus ?? 'valid') === 'valid';
@@ -3582,7 +3919,16 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   };
 
   try {
-    await insertSubmission(env.BOUNTIES_DB, record);
+    if (proofBundleResponse.result.status === 'VALID') {
+      await insertSubmissionWithReplayGuards(env.BOUNTIES_DB, {
+        record,
+        agent_did: replayAgentDid,
+        run_id: replayRunId,
+        receipt_keys: replayReceiptKeys,
+      });
+    } else {
+      await insertSubmission(env.BOUNTIES_DB, record);
+    }
   } catch (err) {
     try {
       const existing = await getSubmissionByIdempotencyKey(env.BOUNTIES_DB, idempotency_key, worker_did, bounty.bounty_id);
@@ -3602,6 +3948,51 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
       return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    if (proofBundleResponse.result.status === 'VALID') {
+      try {
+        if (replayAgentDid && replayRunId) {
+          const seen = await getReplayRun(env.BOUNTIES_DB, {
+            agent_did: replayAgentDid,
+            run_id: replayRunId,
+          });
+          if (seen) {
+            return errorResponse(
+              'REPLAY_RUN_ID_REUSED',
+              'run_id already used in a prior submission',
+              409,
+              { run_id: replayRunId, first_seen: seen },
+              version
+            );
+          }
+        }
+
+        if (replayReceiptKeys.length > 0) {
+          for (const k of replayReceiptKeys) {
+            const seen = await getReplayReceipt(env.BOUNTIES_DB, {
+              receipt_signer_did: k.receipt_signer_did,
+              receipt_id: k.receipt_id,
+            });
+            if (seen) {
+              return errorResponse(
+                'REPLAY_RECEIPT_ID_REUSED',
+                'receipt_id already used in a prior submission',
+                409,
+                {
+                  receipt_signer_did: k.receipt_signer_did,
+                  receipt_id: k.receipt_id,
+                  first_seen: seen,
+                },
+                version
+              );
+            }
+          }
+        }
+      } catch (lookupErr) {
+        const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
+        return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+      }
     }
 
     const message = err instanceof Error ? err.message : 'Unknown error';
