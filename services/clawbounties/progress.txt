@@ -373,3 +373,19 @@ Started: 2026-02-02T03:08:26.937005
 - Docs:
   - Updated `/docs` + `/skill.md` to include submit endpoint.
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-09 - Trust Pulse: submission storage + auto-load viewer
+- Added optional Trust Pulse ingestion at submission time:
+  - `POST /v1/bounties/{bounty_id}/submit` accepts optional `trust_pulse` (trust_pulse.v1 JSON).
+  - Enforces non-tier invariants (`evidence_class=self_reported`, `tier_uplift=false`).
+  - Binds Trust Pulse to proof bundle context (`run_id` + `agent_did`) and authenticated `worker_did`.
+  - If URM includes `metadata.trust_pulse.artifact_hash_b64u`, hash must match (fail-closed).
+- Added auth-gated retrieval endpoint:
+  - `GET /v1/submissions/{submission_id}/trust-pulse` (admin key OR owning worker token).
+- Updated `/trust-pulse` viewer:
+  - Supports `?submission_id=sub_...` + fetch via `Authorization: Bearer ...` header (token is never in URL).
+- Persistence:
+  - Added D1 migration `migrations/0009_submission_trust_pulse.sql`.
+- Docs:
+  - Updated `/docs` + `/skill.md`.
+- Typecheck: `npm run typecheck`.
