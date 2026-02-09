@@ -21,6 +21,14 @@ This folder contains prompts + outputs from Oracle runs focused on `agentlog` an
   - Output: `agentlog-integration-plan.gpt-5.2-pro.md`
   - Focus: actionable roadmap + phased implementation plan (redaction middleware, local verification UX, trust-pulse metadata).
 
+- `trust-pulse-marketplace-auto-viewer` (google/gemini-3-pro-preview)
+  - Output: `trust-pulse-marketplace-auto-viewer.google-gemini-3-pro-preview.md`
+  - Focus: design proposal for making the Trust Pulse viewer auto-loadable by marketplace submission.
+
+- `trust-pulse-marketplace-plan` (gpt-5.2-pro)
+  - Output: `trust-pulse-marketplace-plan.gpt-5.2-pro.md`
+  - Focus: concrete implementation plan (DB + ingestion + retrieval endpoint + viewer auto-load + acceptance criteria).
+
 ## Running
 
 (none)
@@ -29,3 +37,5 @@ This folder contains prompts + outputs from Oracle runs focused on `agentlog` an
 
 - `PROMPT_agentlog-repo-analysis.md`
 - `PROMPT_agentlog-integration-plan.md`
+- `PROMPT_trust-pulse-marketplace-auto-viewer.md`
+- `PROMPT_trust-pulse-marketplace-implementation-plan.md`

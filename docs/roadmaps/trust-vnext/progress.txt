@@ -299,3 +299,22 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd /Users/gfw/code/agentlog && python3 -m unittest discover -s tests -q
 ---
+
+## 2026-02-09T18:54:00Z - Trust Pulse marketplace: storage + auto-load viewer
+- What was implemented
+  - Added server-side storage for Trust Pulse (self-reported, non-tier) at bounty submission time:
+    - `POST /v1/bounties/{bounty_id}/submit` accepts optional `trust_pulse`.
+    - Enforces `tier_uplift=false`, binds to proof bundle context (`run_id` + `agent_did`), and validates against authenticated `worker_did`.
+    - If URM contains `metadata.trust_pulse.artifact_hash_b64u`, enforces hash match (fail-closed).
+  - Added auth-gated retrieval endpoint:
+    - `GET /v1/submissions/{submission_id}/trust-pulse` (admin key OR owning worker token).
+  - Updated public `/trust-pulse` viewer to fetch by `submission_id` (token via `Authorization` header; no URL tokens).
+- Files changed
+  - services/clawbounties/src/index.ts
+  - services/clawbounties/migrations/0009_submission_trust_pulse.sql
+  - services/clawbounties/progress.txt
+  - docs/roadmaps/proof-of-harness/oracle/2026-02-09/* (Trust Pulse marketplace prompts/outputs)
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd services/clawbounties && npm run typecheck
+---

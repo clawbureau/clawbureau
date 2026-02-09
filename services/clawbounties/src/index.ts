@@ -1532,6 +1532,117 @@ function extractRunIdAndEventHashesFromProofBundle(envelope: Record<string, unkn
   return { run_id: runId.trim(), event_hashes_b64u: eventHashes };
 }
 
+type TrustPulseStorageStatus = 'verified' | 'unverified';
+
+type StoredTrustPulseRow = {
+  submission_id: string;
+  run_id: string;
+  agent_did: string;
+  trust_pulse_json: string;
+  hash_b64u: string;
+  status: TrustPulseStorageStatus;
+  created_at: string;
+};
+
+const MAX_TRUST_PULSE_BYTES = 64 * 1024;
+
+function utf8ByteSize(s: string): number {
+  return new TextEncoder().encode(s).byteLength;
+}
+
+function extractExpectedTrustPulseHashFromUrm(urm: Record<string, unknown> | null): string | null {
+  if (!urm) return null;
+
+  const md = urm.metadata;
+  if (!isRecord(md)) return null;
+
+  const tp = md.trust_pulse;
+  if (!isRecord(tp)) return null;
+
+  const h = tp.artifact_hash_b64u;
+  if (!isNonEmptyString(h)) return null;
+
+  return h.trim();
+}
+
+function isSafeRelativePath(p: string): boolean {
+  if (!p) return false;
+  if (p.startsWith('/') || p.startsWith('~') || p.includes('\\')) return false;
+  const parts = p.split('/');
+  if (parts.some((seg) => seg === '..')) return false;
+  return true;
+}
+
+function validateTrustPulseV1(tp: Record<string, unknown>): { ok: true } | { ok: false; code: string; message: string; field?: string } {
+  const v = tp.trust_pulse_version;
+  if (v !== '1') {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.trust_pulse_version must be "1"', field: 'trust_pulse.trust_pulse_version' };
+  }
+
+  const evidence = tp.evidence_class;
+  if (evidence !== 'self_reported') {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.evidence_class must be "self_reported"', field: 'trust_pulse.evidence_class' };
+  }
+
+  if (tp.tier_uplift !== false) {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.tier_uplift must be false', field: 'trust_pulse.tier_uplift' };
+  }
+
+  if (!isNonEmptyString(tp.run_id)) {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.run_id is required', field: 'trust_pulse.run_id' };
+  }
+
+  if (!isNonEmptyString(tp.agent_did) || !tp.agent_did.trim().startsWith('did:')) {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.agent_did must be a DID string', field: 'trust_pulse.agent_did' };
+  }
+
+  if (!Array.isArray(tp.tools)) {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.tools must be an array', field: 'trust_pulse.tools' };
+  }
+
+  if (!Array.isArray(tp.files)) {
+    return { ok: false, code: 'INVALID_REQUEST', message: 'trust_pulse.files must be an array', field: 'trust_pulse.files' };
+  }
+
+  // Enforce safe relative paths (best-effort; schema already defines stricter pattern).
+  for (let i = 0; i < tp.files.length; i++) {
+    const item = tp.files[i];
+    if (!isRecord(item)) continue;
+    const path = item.path;
+    if (isNonEmptyString(path) && !isSafeRelativePath(path.trim())) {
+      return {
+        ok: false,
+        code: 'INVALID_REQUEST',
+        message: 'trust_pulse.files contains an unsafe path (must be relative; no .. traversal)',
+        field: `trust_pulse.files[${i}].path`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+function extractTrustPulseBindingFromProofBundle(envelope: Record<string, unknown>): { agent_did: string; run_id: string } | null {
+  const agent_did = extractProofBundleAgentDid(envelope);
+  const binding = extractRunIdAndEventHashesFromProofBundle(envelope);
+  if (!agent_did || !binding) return null;
+  return { agent_did, run_id: binding.run_id };
+}
+
+function extractTrustPulseBindingFromUrm(urm: Record<string, unknown> | null): { agent_did: string; run_id: string } | null {
+  if (!urm) return null;
+  const agent_did = urm.agent_did;
+  const run_id = urm.run_id;
+  if (!isNonEmptyString(agent_did) || !isNonEmptyString(run_id)) return null;
+  return { agent_did: agent_did.trim(), run_id: run_id.trim() };
+}
+
+function extractTrustPulseCanonicalJson(tp: Record<string, unknown>): { json: string; bytes: number } {
+  const json = JSON.stringify(tp);
+  const bytes = utf8ByteSize(json);
+  return { json, bytes };
+}
+
 function extractReceiptsFromProofBundle(envelope: Record<string, unknown>): unknown[] {
   const payload = envelope.payload;
   if (!isRecord(payload)) return [];
@@ -2227,6 +2338,69 @@ async function insertSubmission(db: D1Database, record: SubmissionRecord): Promi
   await prepareInsertSubmission(db, record).run();
 }
 
+function prepareInsertSubmissionTrustPulse(db: D1Database, row: StoredTrustPulseRow): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO submission_trust_pulse (
+        submission_id,
+        run_id,
+        agent_did,
+        trust_pulse_json,
+        hash_b64u,
+        status,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      row.submission_id,
+      row.run_id,
+      row.agent_did,
+      row.trust_pulse_json,
+      row.hash_b64u,
+      row.status,
+      row.created_at
+    );
+}
+
+async function getSubmissionTrustPulseBySubmissionId(
+  db: D1Database,
+  submissionId: string
+): Promise<StoredTrustPulseRow | null> {
+  const row = await db
+    .prepare(
+      'SELECT submission_id, run_id, agent_did, trust_pulse_json, hash_b64u, status, created_at FROM submission_trust_pulse WHERE submission_id = ?'
+    )
+    .bind(submissionId)
+    .first();
+
+  if (!row || !isRecord(row)) return null;
+
+  const submission_id = d1String(row.submission_id);
+  const run_id = d1String(row.run_id);
+  const agent_did = d1String(row.agent_did);
+  const trust_pulse_json = d1String(row.trust_pulse_json);
+  const hash_b64u = d1String(row.hash_b64u);
+  const statusRaw = d1String(row.status);
+  const created_at = d1String(row.created_at);
+
+  const status: TrustPulseStorageStatus | null =
+    statusRaw === 'verified' ? 'verified' : statusRaw === 'unverified' ? 'unverified' : null;
+
+  if (!submission_id || !run_id || !agent_did || !trust_pulse_json || !hash_b64u || !status || !created_at) {
+    return null;
+  }
+
+  return {
+    submission_id,
+    run_id,
+    agent_did,
+    trust_pulse_json,
+    hash_b64u,
+    status,
+    created_at,
+  };
+}
+
 function prepareInsertReplayRun(
   db: D1Database,
   params: {
@@ -2325,6 +2499,7 @@ async function insertSubmissionWithReplayGuards(
     agent_did?: string | null;
     run_id?: string | null;
     receipt_keys?: ReplayReceiptKey[];
+    trust_pulse?: StoredTrustPulseRow | null;
   }
 ): Promise<void> {
   const stmts: D1PreparedStatement[] = [];
@@ -2353,7 +2528,12 @@ async function insertSubmissionWithReplayGuards(
     }
   }
 
+  // Insert submission first (trust pulse references submission_id).
   stmts.push(prepareInsertSubmission(db, params.record));
+
+  if (params.trust_pulse) {
+    stmts.push(prepareInsertSubmissionTrustPulse(db, params.trust_pulse));
+  }
 
   await db.batch(stmts);
 }
@@ -3095,7 +3275,7 @@ function docsPage(origin: string): string {
       <h1>clawbounties docs</h1>
       <p>Minimal public discovery docs for the clawbounties service.</p>
 
-      <p><strong>Trust Pulse:</strong> If your harness emits a Trust Pulse artifact (tools + relative file touches; self-reported, non-tier), you can view it at <a href="${o}/trust-pulse">${o}/trust-pulse</a>.</p>
+      <p><strong>Trust Pulse:</strong> If your harness emits a Trust Pulse artifact (tools + relative file touches; self-reported, non-tier), you can view it at <a href="${o}/trust-pulse">${o}/trust-pulse</a>. If you stored it alongside a submission, use <code>/trust-pulse?submission_id=sub_...</code> and load it via token (header auth; token never goes in URL).</p>
 
       <h2>Public endpoints</h2>
       <ul>
@@ -3116,6 +3296,7 @@ function docsPage(origin: string): string {
         <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list open bounties (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>POST /v1/bounties/{bounty_id}/accept</code> — accept a bounty (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>POST /v1/bounties/{bounty_id}/submit</code> — submit work (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
+        <li><code>GET /v1/submissions/{submission_id}/trust-pulse</code> — fetch a stored Trust Pulse (requires <code>Authorization: Bearer &lt;token&gt;</code> OR admin key)</li>
       </ul>
 
       <h3>POST /v1/workers/register</h3>
@@ -3157,7 +3338,8 @@ function docsPage(origin: string): string {
     "urm": {"...": "..."},
     "commit_proof_envelope": {"...": "..."},
     "artifacts": [],
-    "result_summary": "Short summary of the work"
+    "result_summary": "Short summary of the work",
+    "trust_pulse": {"trust_pulse_version": "1", "evidence_class": "self_reported", "tier_uplift": false, "run_id": "run_...", "agent_did": "did:key:...", "tools": [], "files": []}
   }'</pre>
 
       <h3>Bounties API (admin)</h3>
@@ -3229,8 +3411,8 @@ function docsPage(origin: string): string {
 function trustPulseViewerPage(origin: string): string {
   const o = escapeHtml(origin);
 
-  // Viewer runs fully client-side (paste/upload a trust pulse JSON).
-  // This is intentionally non-authenticated: it does not fetch submissions.
+  // Viewer runs client-side (paste/upload a trust pulse JSON), and can optionally fetch
+  // a stored Trust Pulse by submission_id when an admin key or worker token is provided.
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -3249,6 +3431,28 @@ function trustPulseViewerPage(origin: string): string {
         Paste a <code>trust_pulse.v1</code> JSON document below, or upload the <code>*-trust-pulse.json</code> emitted by <code>clawproof-wrap</code>.
       </p>
       <p><a href="${o}/docs">Back to docs</a></p>
+
+      <div style="margin: 16px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa;">
+        <h2 style="margin: 0 0 8px 0; font-size: 16px;">Load from submission</h2>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+          <label style="display:flex; flex-direction:column; gap:4px; font-size: 13px;">
+            <span>submission_id</span>
+            <input id="submissionId" placeholder="sub_..." style="padding: 8px; min-width: 260px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size: 13px;" />
+          </label>
+          <label style="display:flex; flex-direction:column; gap:4px; font-size: 13px;">
+            <span>token (admin key or worker token)</span>
+            <input id="token" type="password" placeholder="Bearer ..." style="padding: 8px; min-width: 320px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas; font-size: 13px;" />
+          </label>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size: 13px;">&nbsp;</span>
+            <button id="fetch">Fetch</button>
+          </div>
+          <div id="fetchMeta" style="font-size: 13px; color:#374151;"></div>
+        </div>
+        <p style="margin: 8px 0 0 0; font-size: 12px; color:#6b7280;">
+          Uses <code>Authorization: Bearer ...</code> header. Token is never placed in the URL.
+        </p>
+      </div>
 
       <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin: 16px 0;">
         <button id="loadSample">Load sample</button>
@@ -3271,6 +3475,10 @@ function trustPulseViewerPage(origin: string): string {
           const elError = document.getElementById('error');
           const elOut = document.getElementById('out');
           const elFile = document.getElementById('file');
+          const elSubmissionId = document.getElementById('submissionId');
+          const elToken = document.getElementById('token');
+          const elFetch = document.getElementById('fetch');
+          const elFetchMeta = document.getElementById('fetchMeta');
 
           const SAMPLE = {
             trust_pulse_version: '1',
@@ -3372,6 +3580,84 @@ function trustPulseViewerPage(origin: string): string {
               + renderList('Files touched', files, 'path', 'touches');
           }
 
+          function normalizeToken(raw){
+            const s = String(raw || '').trim();
+            return s.replace(/^bearer\s+/i, '').trim();
+          }
+
+          async function fetchFromSubmission(auto){
+            elError.textContent = '';
+            elFetchMeta.textContent = '';
+
+            const submissionId = elSubmissionId && elSubmissionId.value ? elSubmissionId.value.trim() : '';
+            const token = normalizeToken(elToken && elToken.value ? elToken.value : '');
+
+            if (!submissionId) {
+              elError.textContent = 'submission_id is required.';
+              return;
+            }
+            if (!token) {
+              elError.textContent = 'token is required.';
+              return;
+            }
+
+            if (elFetch) {
+              elFetch.disabled = true;
+              elFetch.textContent = auto ? 'Fetching…' : 'Fetching…';
+            }
+
+            try {
+              const res = await fetch('/v1/submissions/' + encodeURIComponent(submissionId) + '/trust-pulse', {
+                method: 'GET',
+                headers: {
+                  'authorization': 'Bearer ' + token
+                }
+              });
+
+              const data = await res.json().catch(() => null);
+              if (!res.ok) {
+                const msg = data && data.message ? data.message : ('HTTP ' + res.status);
+                elError.textContent = 'Fetch failed: ' + msg;
+                return;
+              }
+
+              try { sessionStorage.setItem('trust_pulse_token', token); } catch(e) {}
+
+              elInput.value = JSON.stringify(data.trust_pulse, null, 2);
+              doRender();
+
+              const status = data.status || 'unknown';
+              const hash = data.hash_b64u ? String(data.hash_b64u) : '';
+              elFetchMeta.textContent = 'Loaded: ' + status + (hash ? (' · hash ' + hash) : '');
+            } catch(e) {
+              elError.textContent = 'Fetch error: ' + (e && e.message ? e.message : String(e));
+            } finally {
+              if (elFetch) {
+                elFetch.disabled = false;
+                elFetch.textContent = 'Fetch';
+              }
+            }
+          }
+
+          if (elFetch) {
+            elFetch.addEventListener('click', function(){
+              fetchFromSubmission(false);
+            });
+          }
+
+          try {
+            const qs = new URLSearchParams(window.location.search);
+            const qid = (qs.get('submission_id') || '').trim();
+            if (qid && elSubmissionId) elSubmissionId.value = qid;
+
+            const tok = sessionStorage.getItem('trust_pulse_token');
+            if (tok && elToken) elToken.value = tok;
+
+            if (qid && tok) {
+              fetchFromSubmission(true);
+            }
+          } catch(e) {}
+
           document.getElementById('loadSample').addEventListener('click', function(){
             elInput.value = JSON.stringify(SAMPLE, null, 2);
             doRender();
@@ -3416,6 +3702,7 @@ function skillMarkdown(origin: string): string {
       { method: 'GET', path: '/v1/bounties' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/accept' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/submit' },
+      { method: 'GET', path: '/v1/submissions/{submission_id}/trust-pulse' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/approve' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/reject' },
     ],
@@ -3437,6 +3724,7 @@ Public worker endpoints:
 - GET ${origin}/v1/bounties?status=open&is_code_bounty=true&tag=typescript (requires Authorization: Bearer <token>)
 - POST ${origin}/v1/bounties/{bounty_id}/accept (requires Authorization: Bearer <token>)
 - POST ${origin}/v1/bounties/{bounty_id}/submit (requires Authorization: Bearer <token>)
+- GET ${origin}/v1/submissions/{submission_id}/trust-pulse (requires Authorization: Bearer <worker token> OR admin key)
 
 Admin bounty endpoints (require BOUNTIES_ADMIN_KEY):
 - POST ${origin}/v1/bounties
@@ -3866,6 +4154,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   const artifacts_raw = bodyRaw.artifacts;
   const agent_pack_raw = bodyRaw.agent_pack;
   const result_summary_raw = bodyRaw.result_summary;
+  const trust_pulse_raw = bodyRaw.trust_pulse;
 
   if (!isNonEmptyString(worker_did_raw) || !worker_did_raw.trim().startsWith('did:')) {
     return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
@@ -3913,6 +4202,10 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('INVALID_REQUEST', 'result_summary must be a string', 400, undefined, version);
   }
 
+  if (trust_pulse_raw !== undefined && trust_pulse_raw !== null && !isRecord(trust_pulse_raw)) {
+    return errorResponse('INVALID_REQUEST', 'trust_pulse must be an object', 400, undefined, version);
+  }
+
   let idempotency_key: string;
   if (isNonEmptyString(idempotency_key_raw)) {
     idempotency_key = idempotency_key_raw.trim();
@@ -3930,6 +4223,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
         artifacts: artifacts_raw ?? null,
         agent_pack: agent_pack_raw ?? null,
         result_summary: result_summary_raw ?? null,
+        trust_pulse: trust_pulse_raw ?? null,
       })
     );
     idempotency_key = `submit:auto:${derived}`;
@@ -3994,6 +4288,116 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   }
 
   const proofBundleAgentDid = extractProofBundleAgentDid(proof_bundle_envelope_raw);
+
+  // Trust Pulse storage (self-reported, non-tier): optional `trust_pulse` field.
+  const trustPulseInput = isRecord(trust_pulse_raw) ? (trust_pulse_raw as Record<string, unknown>) : null;
+  let trustPulseRow: Omit<StoredTrustPulseRow, 'submission_id'> | null = null;
+
+  if (trustPulseInput) {
+    const validation = validateTrustPulseV1(trustPulseInput);
+    if (!validation.ok) {
+      return errorResponse(
+        validation.code,
+        validation.message,
+        400,
+        validation.field ? { field: validation.field } : undefined,
+        version
+      );
+    }
+
+    const bindingFromBundle = extractTrustPulseBindingFromProofBundle(proof_bundle_envelope_raw);
+    if (!bindingFromBundle) {
+      return errorResponse(
+        'TRUST_PULSE_UNBOUND',
+        'proof_bundle_envelope.payload.agent_did and payload.event_chain are required when trust_pulse is provided',
+        400,
+        undefined,
+        version
+      );
+    }
+
+    const tpRunId = isNonEmptyString(trustPulseInput.run_id) ? trustPulseInput.run_id.trim() : '';
+    const tpAgentDid = isNonEmptyString(trustPulseInput.agent_did) ? trustPulseInput.agent_did.trim() : '';
+
+    if (tpAgentDid !== worker_did) {
+      return errorResponse(
+        'UNAUTHORIZED',
+        'trust_pulse.agent_did must match worker_did',
+        401,
+        { agent_did: tpAgentDid },
+        version
+      );
+    }
+
+    if (tpAgentDid !== bindingFromBundle.agent_did) {
+      return errorResponse(
+        'TRUST_PULSE_BINDING_MISMATCH',
+        'trust_pulse.agent_did must match proof bundle agent_did',
+        400,
+        { agent_did: bindingFromBundle.agent_did },
+        version
+      );
+    }
+
+    if (tpRunId !== bindingFromBundle.run_id) {
+      return errorResponse(
+        'TRUST_PULSE_BINDING_MISMATCH',
+        'trust_pulse.run_id must match proof bundle run_id',
+        400,
+        { run_id: bindingFromBundle.run_id },
+        version
+      );
+    }
+
+    const urmRecord = isRecord(urm_raw) ? (urm_raw as Record<string, unknown>) : null;
+    const bindingFromUrm = extractTrustPulseBindingFromUrm(urmRecord);
+    if (bindingFromUrm) {
+      if (bindingFromUrm.agent_did !== tpAgentDid || bindingFromUrm.run_id !== tpRunId) {
+        return errorResponse(
+          'TRUST_PULSE_BINDING_MISMATCH',
+          'trust_pulse must match URM (run_id + agent_did)',
+          400,
+          { urm_agent_did: bindingFromUrm.agent_did, urm_run_id: bindingFromUrm.run_id },
+          version
+        );
+      }
+    }
+
+    const canonical = extractTrustPulseCanonicalJson(trustPulseInput);
+    if (canonical.bytes > MAX_TRUST_PULSE_BYTES) {
+      return errorResponse(
+        'TRUST_PULSE_TOO_LARGE',
+        `trust_pulse exceeds max size (${MAX_TRUST_PULSE_BYTES} bytes)`,
+        400,
+        { bytes: canonical.bytes },
+        version
+      );
+    }
+
+    const trustPulseHash = await sha256B64uUtf8(canonical.json);
+
+    const expectedHash = extractExpectedTrustPulseHashFromUrm(urmRecord);
+    if (expectedHash && expectedHash !== trustPulseHash) {
+      return errorResponse(
+        'TRUST_PULSE_HASH_MISMATCH',
+        'trust_pulse hash does not match URM.metadata.trust_pulse.artifact_hash_b64u',
+        400,
+        { expected_hash_b64u: expectedHash, actual_hash_b64u: trustPulseHash },
+        version
+      );
+    }
+
+    const status: TrustPulseStorageStatus = expectedHash ? 'verified' : 'unverified';
+
+    trustPulseRow = {
+      run_id: bindingFromBundle.run_id,
+      agent_did: bindingFromBundle.agent_did,
+      trust_pulse_json: canonical.json,
+      hash_b64u: trustPulseHash,
+      status,
+      created_at: now,
+    };
+  }
 
   if (proofBundleResponse.result.status === 'VALID') {
     if (!proofBundleAgentDid) {
@@ -4091,6 +4495,10 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
 
   const submission_id = `sub_${crypto.randomUUID()}`;
 
+  const storedTrustPulse: StoredTrustPulseRow | null = trustPulseRow
+    ? { submission_id, ...trustPulseRow }
+    : null;
+
   const record: SubmissionRecord = {
     submission_id,
     bounty_id: bounty.bounty_id,
@@ -4125,9 +4533,17 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
         agent_did: replayAgentDid,
         run_id: replayRunId,
         receipt_keys: replayReceiptKeys,
+        trust_pulse: storedTrustPulse,
       });
     } else {
-      await insertSubmission(env.BOUNTIES_DB, record);
+      if (storedTrustPulse) {
+        await env.BOUNTIES_DB.batch([
+          prepareInsertSubmission(env.BOUNTIES_DB, record),
+          prepareInsertSubmissionTrustPulse(env.BOUNTIES_DB, storedTrustPulse),
+        ]);
+      } else {
+        await insertSubmission(env.BOUNTIES_DB, record);
+      }
     }
   } catch (err) {
     try {
@@ -5107,6 +5523,71 @@ async function handleGetBounty(bountyId: string, env: Env, version: string): Pro
   return jsonResponse(bounty, 200, version);
 }
 
+async function handleGetSubmissionTrustPulse(
+  submissionId: string,
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const admin = isAdminAuthorized(request, env);
+
+  let worker: WorkerRecordV1 | null = null;
+  if (!admin) {
+    const auth = await requireWorker(request, env, version);
+    if ('error' in auth) return auth.error;
+    worker = auth.worker;
+  }
+
+  const submission = await getSubmissionById(env.BOUNTIES_DB, submissionId);
+  if (!submission) {
+    return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id: submissionId }, version);
+  }
+
+  if (worker && submission.worker_did !== worker.worker_did) {
+    return errorResponse('FORBIDDEN', 'Not allowed to access this submission', 403, undefined, version);
+  }
+
+  const tpRow = await getSubmissionTrustPulseBySubmissionId(env.BOUNTIES_DB, submissionId);
+  if (!tpRow) {
+    return errorResponse(
+      'TRUST_PULSE_NOT_FOUND',
+      'Trust Pulse not found for submission',
+      404,
+      { submission_id: submissionId },
+      version
+    );
+  }
+
+  let trust_pulse: unknown;
+  try {
+    trust_pulse = JSON.parse(tpRow.trust_pulse_json);
+  } catch {
+    return errorResponse('TRUST_PULSE_CORRUPT', 'Stored Trust Pulse JSON could not be parsed', 500, undefined, version);
+  }
+
+  const headers = new Headers();
+  headers.set('content-type', 'application/json; charset=utf-8');
+  headers.set('cache-control', 'no-store');
+  headers.set('X-Bounties-Version', version);
+
+  return new Response(
+    JSON.stringify(
+      {
+        submission_id: tpRow.submission_id,
+        run_id: tpRow.run_id,
+        agent_did: tpRow.agent_did,
+        hash_b64u: tpRow.hash_b64u,
+        status: tpRow.status,
+        created_at: tpRow.created_at,
+        trust_pulse,
+      },
+      null,
+      2
+    ),
+    { status: 200, headers }
+  );
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -5178,6 +5659,15 @@ export default {
           return handleListBounties(url, env, version);
         }
         return handleListBountiesForWorker(request, url, env, version);
+      }
+
+      const submissionTrustPulseMatch = path.match(/^\/v1\/submissions\/(sub_[a-f0-9-]+)\/trust-pulse$/);
+      if (submissionTrustPulseMatch && method === 'GET') {
+        const submissionId = submissionTrustPulseMatch[1];
+        if (!submissionId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleGetSubmissionTrustPulse(submissionId, request, env, version);
       }
 
       // Bounties API (admin)

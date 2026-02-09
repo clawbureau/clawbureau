@@ -304,10 +304,25 @@
       "priority": 23,
       "passes": true,
       "notes": "Implemented `agentlog verify` in /Users/gfw/code/agentlog/cli.py. The command discovers bundle+URM JSON artifacts (e.g. .clawproof/*-bundle.json + *-urm.json), calls clawverify /v1/verify/bundle with {envelope, urm}, and prints a derived-only VERIFIED/UNVERIFIED badge with proof_tier/trust_tier. Fail-closed on missing URM or verifier invalidation."
+    },
+    {
+      "id": "CBT-US-022",
+      "title": "clawbounties: Trust Pulse storage + auto-load viewer by submission",
+      "description": "As a reviewer, I want Trust Pulse to be loadable by submission_id so I can review run context without manual paste/upload.",
+      "acceptanceCriteria": [
+        "POST /v1/bounties/{bounty_id}/submit accepts optional trust_pulse and stores it server-side",
+        "Trust Pulse storage is bound to proof bundle context (run_id + agent_did) and authenticated worker_did",
+        "If URM.metadata.trust_pulse.artifact_hash_b64u is present, enforce hash match (fail-closed)",
+        "Add GET /v1/submissions/{submission_id}/trust-pulse (admin key OR owning worker token)",
+        "/trust-pulse supports ?submission_id=sub_... and fetches via Authorization header (no URL tokens)"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Implemented D1 table submission_trust_pulse + ingestion/binding checks, added GET retrieval endpoint, and updated /trust-pulse viewer to fetch by submission_id."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-09T16:40:00Z",
+    "updatedAt": "2026-02-09T18:54:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
