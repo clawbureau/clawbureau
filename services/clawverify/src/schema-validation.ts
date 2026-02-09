@@ -13,6 +13,8 @@ import {
   validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
   validateUrmV1 as validateUrmV1Generated,
+  validatePromptPackV1 as validatePromptPackV1Generated,
+  validateSystemPromptReportV1 as validateSystemPromptReportV1Generated,
 } from './schema-validators.generated';
 
 export interface SchemaValidationFailure {
@@ -38,6 +40,12 @@ const validateGatewayReceiptEnvelopeV1Fn =
   validateGatewayReceiptEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateUrmV1Fn = validateUrmV1Generated as StandaloneValidateFunction;
+
+const validatePromptPackV1Fn =
+  validatePromptPackV1Generated as StandaloneValidateFunction;
+
+const validateSystemPromptReportV1Fn =
+  validateSystemPromptReportV1Generated as StandaloneValidateFunction;
 
 export function getSchemaValidationInitError(): string | null {
   // Standalone validators are generated at build/commit time.
@@ -182,4 +190,12 @@ export function validateGatewayReceiptEnvelopeV1(
 
 export function validateUrmV1(urm: unknown): SchemaValidationResult {
   return validateWith(validateUrmV1Fn, urm, 'urm.v1');
+}
+
+export function validatePromptPackV1(value: unknown): SchemaValidationResult {
+  return validateWith(validatePromptPackV1Fn, value, 'prompt_pack.v1');
+}
+
+export function validateSystemPromptReportV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateSystemPromptReportV1Fn, value, 'system_prompt_report.v1');
 }

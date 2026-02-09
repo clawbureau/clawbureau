@@ -206,6 +206,7 @@ export type VerificationErrorCode =
   | 'HASH_MISMATCH'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
+  | 'PROMPT_COMMITMENT_MISMATCH'
   | 'SIGNATURE_INVALID'
   | 'MALFORMED_ENVELOPE'
   | 'SCHEMA_VALIDATION_FAILED'
@@ -589,6 +590,11 @@ export interface ProofBundleVerificationResult {
     event_chain_valid?: boolean;
     /** Root hash of the event chain (first event's hash) */
     chain_root_hash?: string;
+
+    // POH-US-016/017 (optional prompt commitments; do not uplift tier)
+    prompt_pack_valid?: boolean;
+    system_prompt_report_valid?: boolean;
+
     receipts_valid?: boolean;
     attestations_valid?: boolean;
     receipts_count?: number;

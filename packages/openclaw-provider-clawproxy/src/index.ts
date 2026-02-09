@@ -23,6 +23,9 @@ import type {
   FinalizeOptions,
   FinalizeResult,
   TrustPulseDocument,
+  PromptPackEntry,
+  PromptPackDocument,
+  SystemPromptReportDocument,
   HarnessConfig,
   ResourceDescriptor,
 } from './types';
@@ -34,6 +37,9 @@ export type {
   FinalizeOptions,
   FinalizeResult,
   TrustPulseDocument,
+  PromptPackEntry,
+  PromptPackDocument,
+  SystemPromptReportDocument,
   HarnessConfig,
   ResourceDescriptor,
 };

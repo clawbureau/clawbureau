@@ -44,7 +44,12 @@ import {
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
 import { jcsCanonicalize } from './jcs';
-import { validateProofBundleEnvelopeV1, validateUrmV1 } from './schema-validation';
+import {
+  validateProofBundleEnvelopeV1,
+  validateUrmV1,
+  validatePromptPackV1,
+  validateSystemPromptReportV1,
+} from './schema-validation';
 
 export interface ProofBundleVerifierOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
@@ -1241,6 +1246,246 @@ export async function verifyProofBundle(
     if (chainResult.chain_root_hash) {
       componentResults.chain_root_hash = chainResult.chain_root_hash;
     }
+  }
+
+  // POH-US-016/017: Prompt commitments (optional; fail-closed when present)
+  //
+  // These are *hash-only* objects carried in payload.metadata that commit to:
+  // - prompt pack inputs (prompt_pack.prompt_root_hash_b64u)
+  // - per-llm_call rendered system prompt hashes (system_prompt_report)
+  //
+  // They do not uplift proof tier; they are evidence for replay/audit safety.
+  let promptPackRootHashB64u: string | null = null;
+
+  const md = payload.metadata;
+  const mdRecord = md && typeof md === 'object' && md !== null && !Array.isArray(md)
+    ? (md as Record<string, unknown>)
+    : null;
+
+  const promptPackRaw = mdRecord ? mdRecord.prompt_pack : undefined;
+  if (promptPackRaw !== undefined) {
+    const schemaResult = validatePromptPackV1(promptPackRaw);
+    if (!schemaResult.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: schemaResult.message,
+          verified_at: now,
+        },
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: schemaResult.message,
+          field: schemaResult.field
+            ? `payload.metadata.prompt_pack.${schemaResult.field}`
+            : 'payload.metadata.prompt_pack',
+        },
+      };
+    }
+
+    const pp = promptPackRaw as Record<string, unknown>;
+    const claimed = typeof pp.prompt_root_hash_b64u === 'string' ? pp.prompt_root_hash_b64u.trim() : null;
+    const entries = Array.isArray(pp.entries) ? (pp.entries as unknown[]) : [];
+
+    const canonicalEntries = entries
+      .filter((e) => typeof e === 'object' && e !== null && !Array.isArray(e))
+      .map((e) => {
+        const er = e as Record<string, unknown>;
+        return {
+          entry_id: typeof er.entry_id === 'string' ? er.entry_id.trim() : '',
+          content_hash_b64u: typeof er.content_hash_b64u === 'string' ? er.content_hash_b64u.trim() : '',
+        };
+      })
+      .filter((e) => e.entry_id.length > 0 && e.content_hash_b64u.length > 0)
+      .sort((a, b) => a.entry_id.localeCompare(b.entry_id));
+
+    const canonical = {
+      prompt_pack_version: '1',
+      entries: canonicalEntries,
+    };
+
+    let computed: string;
+    try {
+      computed = await computeHash(canonical, 'SHA-256');
+    } catch (err) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Failed to compute prompt_pack root hash',
+          verified_at: now,
+        },
+        error: {
+          code: 'HASH_MISMATCH',
+          message: `Failed to compute prompt_pack prompt_root_hash_b64u: ${err instanceof Error ? err.message : 'unknown error'}`,
+          field: 'payload.metadata.prompt_pack',
+        },
+      };
+    }
+
+    if (!claimed || claimed !== computed) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'prompt_pack.prompt_root_hash_b64u mismatch',
+          verified_at: now,
+        },
+        error: {
+          code: 'HASH_MISMATCH',
+          message: 'prompt_root_hash_b64u does not match canonical entry list hash',
+          field: 'payload.metadata.prompt_pack.prompt_root_hash_b64u',
+        },
+      };
+    }
+
+    promptPackRootHashB64u = claimed;
+    componentResults.prompt_pack_valid = true;
+  }
+
+  const systemPromptReportRaw = mdRecord ? mdRecord.system_prompt_report : undefined;
+  if (systemPromptReportRaw !== undefined) {
+    const schemaResult = validateSystemPromptReportV1(systemPromptReportRaw);
+    if (!schemaResult.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: schemaResult.message,
+          verified_at: now,
+        },
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: schemaResult.message,
+          field: schemaResult.field
+            ? `payload.metadata.system_prompt_report.${schemaResult.field}`
+            : 'payload.metadata.system_prompt_report',
+        },
+      };
+    }
+
+    if (!payload.event_chain || payload.event_chain.length === 0) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'system_prompt_report requires payload.event_chain',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'payload.event_chain is required when payload.metadata.system_prompt_report is present',
+          field: 'payload.event_chain',
+        },
+      };
+    }
+
+    const spr = systemPromptReportRaw as Record<string, unknown>;
+    const sprRunId = typeof spr.run_id === 'string' ? spr.run_id.trim() : null;
+    const sprAgentDid = typeof spr.agent_did === 'string' ? spr.agent_did.trim() : null;
+    const expectedRunId = payload.event_chain[0].run_id;
+
+    if (!sprRunId || sprRunId !== expectedRunId) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'system_prompt_report.run_id mismatch',
+          verified_at: now,
+        },
+        error: {
+          code: 'PROMPT_COMMITMENT_MISMATCH',
+          message: 'system_prompt_report.run_id must equal payload.event_chain[0].run_id',
+          field: 'payload.metadata.system_prompt_report.run_id',
+        },
+      };
+    }
+
+    if (!sprAgentDid || sprAgentDid !== payload.agent_did) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'system_prompt_report.agent_did mismatch',
+          verified_at: now,
+        },
+        error: {
+          code: 'PROMPT_COMMITMENT_MISMATCH',
+          message: 'system_prompt_report.agent_did must equal payload.agent_did',
+          field: 'payload.metadata.system_prompt_report.agent_did',
+        },
+      };
+    }
+
+    const sprPromptRoot = typeof spr.prompt_root_hash_b64u === 'string' ? spr.prompt_root_hash_b64u.trim() : null;
+    if (promptPackRootHashB64u && sprPromptRoot && sprPromptRoot !== promptPackRootHashB64u) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'system_prompt_report.prompt_root_hash_b64u mismatch',
+          verified_at: now,
+        },
+        error: {
+          code: 'PROMPT_COMMITMENT_MISMATCH',
+          message: 'system_prompt_report.prompt_root_hash_b64u must match prompt_pack.prompt_root_hash_b64u (when both present)',
+          field: 'payload.metadata.system_prompt_report.prompt_root_hash_b64u',
+        },
+      };
+    }
+
+    const eventsById = new Map(payload.event_chain.map((e) => [e.event_id, e]));
+    const calls = Array.isArray(spr.calls) ? (spr.calls as unknown[]) : [];
+
+    for (let i = 0; i < calls.length; i++) {
+      const c = calls[i];
+      if (typeof c !== 'object' || c === null || Array.isArray(c)) continue;
+      const cr = c as Record<string, unknown>;
+
+      const eventId = typeof cr.event_id === 'string' ? cr.event_id.trim() : null;
+      if (!eventId) continue;
+
+      const evt = eventsById.get(eventId);
+      if (!evt) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'system_prompt_report references unknown event_id',
+            verified_at: now,
+          },
+          error: {
+            code: 'PROMPT_COMMITMENT_MISMATCH',
+            message: 'system_prompt_report.calls[*].event_id must refer to an event in payload.event_chain',
+            field: `payload.metadata.system_prompt_report.calls[${i}].event_id`,
+          },
+        };
+      }
+
+      if (evt.event_type !== 'llm_call') {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'system_prompt_report references a non-llm_call event',
+            verified_at: now,
+          },
+          error: {
+            code: 'PROMPT_COMMITMENT_MISMATCH',
+            message: 'system_prompt_report.calls[*] must reference llm_call events',
+            field: `payload.metadata.system_prompt_report.calls[${i}].event_id`,
+          },
+        };
+      }
+
+      const claimedEventHash = typeof cr.event_hash_b64u === 'string' ? cr.event_hash_b64u.trim() : null;
+      if (claimedEventHash && claimedEventHash !== evt.event_hash_b64u) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'system_prompt_report event_hash_b64u mismatch',
+            verified_at: now,
+          },
+          error: {
+            code: 'PROMPT_COMMITMENT_MISMATCH',
+            message: 'system_prompt_report.calls[*].event_hash_b64u must match payload.event_chain[event_id].event_hash_b64u',
+            field: `payload.metadata.system_prompt_report.calls[${i}].event_hash_b64u`,
+          },
+        };
+      }
+    }
+
+    componentResults.system_prompt_report_valid = true;
   }
 
   // POH-US-015: URM materialization + hash verification.

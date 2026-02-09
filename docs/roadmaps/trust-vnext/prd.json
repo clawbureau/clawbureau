@@ -134,7 +134,8 @@
         "Add tests for determinism of hashing/canonicalization"
       ],
       "priority": 10,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented prompt commitment evidence as optional proof bundle metadata: `prompt_pack` + `system_prompt_report`. OpenClaw recorder now (a) computes prompt_root_hash_b64u over sorted prompt pack entry commitments (hash-only) and (b) computes rendered_system_prompt_hash_b64u per llm_call while stripping prompt plaintext from the hashed payload. clawverify validates these objects when present and fail-closed enforces bindings to (run_id + agent_did) and llm_call event references. Added determinism + mismatch test coverage."
     },
     {
       "id": "POH-US-017",
@@ -146,7 +147,8 @@
         "Verifier validates prompt commitment objects when present"
       ],
       "priority": 11,
-      "passes": false
+      "passes": true,
+      "notes": "Added versioned schemas: packages/schema/poh/prompt_pack.v1.json and packages/schema/poh/system_prompt_report.v1.json. Registered schema IDs in clawverify schema registry allowlist, generated Workers-safe Ajv standalone validators, and verifier validates these objects when present (fail-closed on schema/binding/hash mismatches)."
     },
     {
       "id": "CPX-US-032",
@@ -322,7 +324,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-09T18:54:00Z",
+    "updatedAt": "2026-02-09T17:16:38Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

@@ -41,6 +41,10 @@ import type {
   FinalizeOptions,
   FinalizeResult,
   TrustPulseDocument,
+  PromptPackEntry,
+  PromptPackDocument,
+  SystemPromptReportCall,
+  SystemPromptReportDocument,
   BindingContext,
   PluginDeps,
 } from './types';
@@ -180,6 +184,71 @@ export async function createRecorder(
   const trustPulseToolCounts = new Map<string, number>();
   const trustPulseFileCounts = new Map<string, number>();
 
+  // POH-US-016/017: prompt commitment evidence (hash-only)
+  const systemPromptCalls: SystemPromptReportCall[] = [];
+
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  function tryGetString(obj: Record<string, unknown>, key: string): string | undefined {
+    const v = obj[key];
+    return typeof v === 'string' && v.trim().length > 0 ? v : undefined;
+  }
+
+  function extractRenderedSystemPrompt(payload: unknown): {
+    prompt: string;
+    provider?: string;
+    model?: string;
+  } | null {
+    if (!isRecord(payload)) return null;
+
+    const provider = tryGetString(payload, 'provider') ?? tryGetString(payload, 'upstream_provider');
+    const model = tryGetString(payload, 'model');
+
+    const keys = [
+      'rendered_system_prompt',
+      'renderedSystemPrompt',
+      'system_prompt',
+      'systemPrompt',
+      'system',
+    ];
+
+    for (const k of keys) {
+      const v = payload[k];
+      if (typeof v === 'string' && v.length > 0) {
+        return { prompt: v, provider, model };
+      }
+    }
+
+    return null;
+  }
+
+  function stripRenderedSystemPromptFields(obj: Record<string, unknown>): void {
+    delete obj.rendered_system_prompt;
+    delete obj.renderedSystemPrompt;
+    delete obj.system_prompt;
+    delete obj.systemPrompt;
+    // In llm_call payloads, `system` commonly carries the rendered system prompt.
+    delete (obj as any).system;
+  }
+
+  async function computePromptRootHashB64u(entries: PromptPackEntry[]): Promise<string> {
+    const canonicalEntries = [...entries]
+      .map((e) => ({
+        entry_id: e.entry_id.trim(),
+        content_hash_b64u: e.content_hash_b64u.trim(),
+      }))
+      .sort((a, b) => a.entry_id.localeCompare(b.entry_id));
+
+    const canonical = {
+      prompt_pack_version: '1',
+      entries: canonicalEntries,
+    };
+
+    return hashJsonB64u(canonical);
+  }
+
   deps.logger.info(`recorder: initialized (runId=${runId}, did=${agentDid})`);
 
   function bumpCount(map: Map<string, number>, key: string | undefined): void {
@@ -281,8 +350,29 @@ export async function createRecorder(
       const eventId = `evt_${randomUUID()}`;
       const timestamp = new Date().toISOString();
 
+      // POH-US-016: per-call rendered system prompt hash commitment.
+      // We compute the hash over the *exact* system prompt string (no redaction), then remove
+      // the plaintext prompt from the hashed payload.
+      let renderedSystemPromptHashB64u: string | null = null;
+      let llmProvider: string | undefined;
+      let llmModel: string | undefined;
+
+      if (input.eventType === 'llm_call') {
+        const extracted = extractRenderedSystemPrompt(input.payload);
+        if (extracted) {
+          llmProvider = extracted.provider?.trim();
+          llmModel = extracted.model?.trim();
+          renderedSystemPromptHashB64u = await sha256B64u(new TextEncoder().encode(extracted.prompt));
+        }
+      }
+
       // POH-US-020: redact before hashing (prevents secrets/PII entering immutable hashes).
       const redactedPayload = redactDeep(input.payload);
+
+      if (renderedSystemPromptHashB64u && isRecord(redactedPayload)) {
+        stripRenderedSystemPromptFields(redactedPayload);
+        redactedPayload.rendered_system_prompt_hash_b64u = renderedSystemPromptHashB64u;
+      }
 
       // OCL-US-004: capture a minimal trust pulse summary from tool_call events.
       if (input.eventType === 'tool_call') {
@@ -318,6 +408,16 @@ export async function createRecorder(
       deps.logger.debug(
         `recorder: event #${events.length} type=${input.eventType} hash=${eventHashB64u.slice(0, 12)}...`,
       );
+
+      if (renderedSystemPromptHashB64u) {
+        systemPromptCalls.push({
+          event_id: eventId,
+          event_hash_b64u: eventHashB64u,
+          provider: llmProvider,
+          model: llmModel,
+          rendered_system_prompt_hash_b64u: renderedSystemPromptHashB64u,
+        });
+      }
 
       const binding: BindingContext = {
         runId,
@@ -521,6 +621,77 @@ export async function createRecorder(
           },
         },
       };
+
+      // POH-US-016/017: prompt commitments (optional).
+      // These are hash-only commitments intended to reduce prompt injection ambiguity.
+      let promptPack: PromptPackDocument | null = null;
+
+      if (Array.isArray(options.promptPackEntries) && options.promptPackEntries.length > 0) {
+        const entriesMap = new Map<string, PromptPackEntry>();
+
+        for (const e of options.promptPackEntries) {
+          if (!e) continue;
+          const entry_id = typeof e.entry_id === 'string' ? e.entry_id.trim() : '';
+          const content_hash_b64u = typeof e.content_hash_b64u === 'string' ? e.content_hash_b64u.trim() : '';
+          if (!entry_id || !content_hash_b64u) continue;
+
+          entriesMap.set(entry_id, {
+            entry_id,
+            content_hash_b64u,
+            content_type: typeof e.content_type === 'string' ? e.content_type.trim() : undefined,
+            size_bytes:
+              typeof e.size_bytes === 'number' && Number.isInteger(e.size_bytes) && e.size_bytes >= 0
+                ? e.size_bytes
+                : undefined,
+          });
+        }
+
+        const entries = [...entriesMap.values()]
+          .sort((a, b) => a.entry_id.localeCompare(b.entry_id))
+          .slice(0, 256);
+
+        if (entries.length > 0) {
+          const rootHashB64u = await computePromptRootHashB64u(entries);
+
+          promptPack = {
+            prompt_pack_version: '1',
+            prompt_pack_id: `pp_${randomUUID()}`,
+            hash_algorithm: 'SHA-256',
+            prompt_root_hash_b64u: rootHashB64u,
+            entries,
+          };
+
+          payload.metadata = payload.metadata ?? {};
+          payload.metadata.prompt_pack = promptPack;
+        }
+      }
+
+      if (systemPromptCalls.length > 0) {
+        const report: SystemPromptReportDocument = {
+          system_prompt_report_version: '1',
+          report_id: `spr_${randomUUID()}`,
+          run_id: runId,
+          agent_did: agentDid,
+          issued_at: new Date().toISOString(),
+          hash_algorithm: 'SHA-256',
+          prompt_root_hash_b64u: promptPack?.prompt_root_hash_b64u,
+          calls: systemPromptCalls.slice(0, 128),
+        };
+
+        payload.metadata = payload.metadata ?? {};
+        payload.metadata.system_prompt_report = report;
+      }
+
+      // Defensive: keep bundle metadata under verifier limits (clawverify MAX_METADATA_BYTES = 16KB).
+      const MAX_BUNDLE_METADATA_BYTES = 16 * 1024;
+      if (payload.metadata && jsonByteSize(payload.metadata as Record<string, unknown>) > MAX_BUNDLE_METADATA_BYTES) {
+        // Prefer keeping prompt_pack over the per-call report.
+        delete (payload.metadata as any).system_prompt_report;
+
+        if (jsonByteSize(payload.metadata as Record<string, unknown>) > MAX_BUNDLE_METADATA_BYTES) {
+          delete (payload.metadata as any).prompt_pack;
+        }
+      }
 
       if (bridgedReceipts.length > 0) {
         payload.receipts = bridgedReceipts;
