@@ -21,9 +21,9 @@ import {
   didFromPublicKey,
   randomUUID,
   normalizeSha256HashB64u,
-} from './crypto';
+} from './crypto.js';
 
-import { jsonByteSize, redactDeep, redactText } from './redact';
+import { jsonByteSize, redactDeep, redactText } from './redact.js';
 
 import type {
   RecorderConfig,
@@ -47,7 +47,7 @@ import type {
   SystemPromptReportDocument,
   BindingContext,
   PluginDeps,
-} from './types';
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Event hash computation

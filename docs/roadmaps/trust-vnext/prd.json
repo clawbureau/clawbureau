@@ -262,7 +262,7 @@
       ],
       "priority": 20,
       "passes": true,
-      "notes": "Implemented streaming pass-through in clawproxy + SSE trailer receipt comments; shim forwards SSE without buffering and captures receipts (with idempotency replay fallback)."
+      "notes": "Implemented streaming pass-through in clawproxy + SSE trailer receipt comments; shim forwards SSE without buffering and captures receipts (with nonce receipt lookup fallback via GET /v1/receipt/:nonce)."
     },
     {
       "id": "POH-US-020",

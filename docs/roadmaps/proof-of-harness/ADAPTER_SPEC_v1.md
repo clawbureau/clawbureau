@@ -450,7 +450,7 @@ This spec is implemented via `docs/roadmaps/proof-of-harness/prd.json`:
 
 - **Streaming support for external harness shims**: resolved by POH-US-019.
   - `clawproxy` streams `text/event-stream` responses for `stream:true` requests and computes response hashes incrementally.
-  - Receipts are delivered via deterministic SSE comment trailers (and persisted via nonce idempotency for replay fallback).
+  - Receipts are delivered via deterministic SSE comment trailers and persisted via nonce idempotency; shims can recover receipts via `GET /v1/receipt/:nonce` (no full-body replay).
   - The local shim forwards SSE without buffering, strips the receipt trailers from the harness-facing stream, and captures `_receipt_envelope` for proof bundles.
 
 - **Event hash recomputation in clawverify**: resolved by CVF-US-021.

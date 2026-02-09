@@ -19,7 +19,7 @@ import type {
 } from './types';
 import { sha256 as nobleSha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders } from './providers';
+import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders, type OpenAIUpstreamApi } from './providers';
 import {
   generateReceipt,
   generateReceiptFromHashes,
@@ -46,6 +46,7 @@ import {
   extractBindingFromHeaders,
   computeIdempotencyFingerprint,
   checkIdempotencyAndLock,
+  readIdempotencyReceipt,
   commitIdempotency,
   releaseIdempotency,
 } from './idempotency';
@@ -190,6 +191,38 @@ function base64urlEncodeJson(value: unknown): string {
   return base64urlEncode(bytes);
 }
 
+function inferOpenAiUpstreamApi(request: Request, body: unknown): OpenAIUpstreamApi {
+  const path = new URL(request.url).pathname;
+
+  // Provider-compatible routes (explicit)
+  if (path === '/v1/responses') return 'responses';
+  if (path === '/v1/chat/completions') return 'chat_completions';
+
+  // Optional explicit override header for power users.
+  const explicit =
+    request.headers.get('X-OpenAI-API') ??
+    request.headers.get('X-OpenAI-Endpoint') ??
+    request.headers.get('X-Upstream-Endpoint');
+
+  if (explicit) {
+    const v = explicit.trim().toLowerCase();
+    if (v === 'responses' || v === '/v1/responses') return 'responses';
+    if (v === 'chat_completions' || v === 'chat/completions' || v === '/v1/chat/completions') {
+      return 'chat_completions';
+    }
+  }
+
+  // Heuristic for /v1/proxy/openai: OpenAI Responses uses `input`, chat completions uses `messages`.
+  if (body && typeof body === 'object') {
+    const b = body as Record<string, unknown>;
+    const hasInput = Object.prototype.hasOwnProperty.call(b, 'input');
+    const hasMessages = Object.prototype.hasOwnProperty.call(b, 'messages');
+    if (hasInput && !hasMessages) return 'responses';
+  }
+
+  return 'chat_completions';
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -242,6 +275,10 @@ export default {
       <h2>Endpoints</h2>
       <ul>
         <li><code>POST /v1/proxy/:provider</code> — Proxy a request to a provider and return provider response + <code>_receipt</code> (legacy) + <code>_receipt_envelope</code> (canonical).</li>
+        <li><code>POST /v1/chat/completions</code> — OpenAI-compatible alias for <code>/v1/proxy/openai</code>.</li>
+        <li><code>POST /v1/responses</code> — OpenAI Responses API alias (routes to OpenAI <code>/v1/responses</code> upstream).</li>
+        <li><code>POST /v1/messages</code> — Anthropic-compatible alias for <code>/v1/proxy/anthropic</code>.</li>
+        <li><code>GET /v1/receipt/:nonce</code> — Fetch stored receipts for an idempotency nonce (streaming recovery helper).</li>
         <li><code>GET /v1/did</code> — DID document (public key material for receipt verification).</li>
         <li><code>POST /v1/verify-receipt</code> — Verify a receipt signature and return claims.</li>
         <li><code>GET /health</code> — Health check.</li>
@@ -278,6 +315,10 @@ curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
             'Gateway proxy that issues signed receipts (proof-of-harness) for LLM model calls.',
           endpoints: [
             { method: 'POST', path: '/v1/proxy/:provider' },
+            { method: 'POST', path: '/v1/chat/completions' },
+            { method: 'POST', path: '/v1/responses' },
+            { method: 'POST', path: '/v1/messages' },
+            { method: 'GET', path: '/v1/receipt/:nonce' },
             { method: 'GET', path: '/v1/did' },
             { method: 'POST', path: '/v1/verify-receipt' },
           ],
@@ -294,6 +335,10 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 ## HTTP API
 
 - POST /v1/proxy/:provider
+- POST /v1/chat/completions (OpenAI-compatible)
+- POST /v1/responses (OpenAI Responses API)
+- POST /v1/messages (Anthropic-compatible)
+- GET /v1/receipt/:nonce
 - GET /v1/did
 - POST /v1/verify-receipt
 
@@ -305,7 +350,10 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 - When \`X-Client-DID\` is set, a valid CST token is required (fail-closed).
 
 ### BYOK provider keys
-- Recommended: \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
+- Recommended (all providers): \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
+- OpenAI-compatible routes: \`Authorization: Bearer <openai api key>\`
+- Anthropic-compatible routes: \`x-api-key: <anthropic api key>\` (or \`anthropic-api-key\`)
+- Google-compatible routes: \`x-goog-api-key: <google api key>\`
 - Legacy: \`Authorization: Bearer <provider api key>\` (only when Authorization is not used for CST)
 
 ## Receipt Binding Headers
@@ -382,6 +430,29 @@ Canonical: ${url.origin}/.well-known/security.txt
     // Verify receipt endpoint: POST /v1/verify-receipt
     if (path === '/v1/verify-receipt' && request.method === 'POST') {
       return handleVerifyReceipt(request, env);
+    }
+
+    // Receipt lookup endpoint: GET /v1/receipt/:nonce
+    const receiptMatch = path.match(/^\/v1\/receipt\/([^/]+)$/);
+    if (receiptMatch && request.method === 'GET') {
+      const nonce = receiptMatch[1];
+      if (!nonce) {
+        return errorResponse('INVALID_PATH', 'Receipt nonce not specified', 400);
+      }
+      return handleReceiptLookup(request, env, nonce);
+    }
+
+    // Provider-compatible endpoints (drop-in SDK support)
+    if (request.method === 'POST') {
+      if (path === '/v1/chat/completions') {
+        return handleProxy(request, env, 'openai');
+      }
+      if (path === '/v1/responses') {
+        return handleProxy(request, env, 'openai');
+      }
+      if (path === '/v1/messages') {
+        return handleProxy(request, env, 'anthropic');
+      }
     }
 
     // Proxy endpoint: POST /v1/proxy/:provider
@@ -601,6 +672,271 @@ function validateReceiptStructure(receipt: Receipt): { valid: true } | { valid: 
   return { valid: true };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function tryGetString(obj: Record<string, unknown> | undefined, key: string): string | undefined {
+  if (!obj) return undefined;
+  const v = obj[key];
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+function sanitizeLegacyReceiptForOutput(receipt: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(receipt)) return undefined;
+
+  const keep = [
+    'version',
+    'proxyDid',
+    'provider',
+    'model',
+    'requestHash',
+    'responseHash',
+    'timestamp',
+    'latencyMs',
+    'signature',
+    'kid',
+    'binding',
+    'payment',
+    'privacyMode',
+  ];
+
+  const out: Record<string, unknown> = {};
+  for (const k of keep) {
+    if (k in receipt) out[k] = receipt[k];
+  }
+  return out;
+}
+
+function extractStoredResponseBody(stored: unknown): { status?: number; body: Record<string, unknown> | null } {
+  if (!isRecord(stored)) return { body: null };
+
+  if (typeof stored.status === 'number' && 'body' in stored) {
+    const body = (stored as { body?: unknown }).body;
+    return { status: stored.status, body: isRecord(body) ? body : null };
+  }
+
+  return { body: stored };
+}
+
+function extractBindingFromReceiptEnvelope(envelope: unknown): {
+  run_id?: string;
+  event_hash_b64u?: string;
+  nonce?: string;
+} {
+  if (!isRecord(envelope)) return {};
+
+  const payload = envelope.payload;
+  if (!isRecord(payload)) return {};
+
+  const binding = payload.binding;
+  if (!isRecord(binding)) return {};
+
+  return {
+    run_id: tryGetString(binding, 'run_id'),
+    event_hash_b64u: tryGetString(binding, 'event_hash_b64u'),
+    nonce: tryGetString(binding, 'nonce'),
+  };
+}
+
+function extractBindingFromLegacyReceipt(receipt: unknown): {
+  run_id?: string;
+  event_hash_b64u?: string;
+  nonce?: string;
+} {
+  if (!isRecord(receipt)) return {};
+
+  const binding = receipt.binding;
+  if (!isRecord(binding)) return {};
+
+  return {
+    run_id: tryGetString(binding, 'runId'),
+    event_hash_b64u: tryGetString(binding, 'eventHash'),
+    nonce: tryGetString(binding, 'nonce'),
+  };
+}
+
+async function handleReceiptLookup(request: Request, env: Env, nonce: string): Promise<Response> {
+  // Rate limit receipt lookups as well (DO reads can still be abused).
+  const rateLimitInfo = await checkRateLimit(request, env);
+  if (!rateLimitInfo.allowed) {
+    logRateLimited(request, rateLimitInfo.key);
+    return rateLimitedResponse(rateLimitInfo);
+  }
+
+  const normalizedNonce = nonce.trim();
+  if (!normalizedNonce) {
+    return errorResponseWithRateLimit(
+      'INVALID_NONCE',
+      'Receipt nonce must be non-empty',
+      400,
+      rateLimitInfo
+    );
+  }
+
+  if (normalizedNonce.length > 256) {
+    return errorResponseWithRateLimit(
+      'INVALID_NONCE',
+      'Receipt nonce is too long',
+      400,
+      rateLimitInfo
+    );
+  }
+
+  const url = new URL(request.url);
+
+  const expectedRunId = (url.searchParams.get('run_id') ?? url.searchParams.get('runId') ?? '').trim() || undefined;
+  const expectedEventHash =
+    (url.searchParams.get('event_hash_b64u') ??
+      url.searchParams.get('event_hash') ??
+      url.searchParams.get('eventHash') ??
+      '').trim() || undefined;
+
+  const fingerprintHeader =
+    request.headers.get('X-Idempotency-Fingerprint') ?? request.headers.get('X-Fingerprint');
+  const fingerprint = fingerprintHeader?.trim() || undefined;
+
+  let read;
+  try {
+    read = await readIdempotencyReceipt(env, normalizedNonce, {
+      fingerprint,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    return errorResponseWithRateLimit(
+      'IDEMPOTENCY_STORE_ERROR',
+      `Idempotency store error: ${message}`,
+      503,
+      rateLimitInfo
+    );
+  }
+
+  if (read.kind === 'missing') {
+    return errorResponseWithRateLimit(
+      'RECEIPT_NOT_FOUND',
+      'Receipt not found (idempotency key unknown or expired)',
+      404,
+      rateLimitInfo
+    );
+  }
+
+  if (read.kind === 'inflight') {
+    return errorResponseWithRateLimit(
+      'RECEIPT_INFLIGHT',
+      'Receipt not yet committed for this nonce. Retry later.',
+      409,
+      rateLimitInfo
+    );
+  }
+
+  if (read.kind === 'mismatch') {
+    return errorResponseWithRateLimit(
+      'IDEMPOTENCY_FINGERPRINT_MISMATCH',
+      'Idempotency fingerprint mismatch for this nonce',
+      409,
+      rateLimitInfo
+    );
+  }
+
+  const stored = read.receipt;
+  const { status, body } = extractStoredResponseBody(stored);
+
+  if (!body) {
+    return errorResponseWithRateLimit(
+      'RECEIPT_CORRUPTED',
+      'Stored receipt is not an object',
+      500,
+      rateLimitInfo
+    );
+  }
+
+  const receiptEnvelope = body['_receipt_envelope'];
+  const legacyReceiptRaw = body['_receipt'];
+  const legacyReceipt = sanitizeLegacyReceiptForOutput(legacyReceiptRaw);
+
+  if (!receiptEnvelope && !legacyReceipt) {
+    return errorResponseWithRateLimit(
+      'RECEIPT_NOT_FOUND',
+      'Stored entry does not contain a receipt',
+      404,
+      rateLimitInfo
+    );
+  }
+
+  const bindingEnvelope = extractBindingFromReceiptEnvelope(receiptEnvelope);
+  const bindingLegacy = extractBindingFromLegacyReceipt(legacyReceiptRaw);
+
+  const actualRunId = bindingEnvelope.run_id ?? bindingLegacy.run_id;
+  const actualEventHash = bindingEnvelope.event_hash_b64u ?? bindingLegacy.event_hash_b64u;
+  const actualNonce = bindingEnvelope.nonce ?? bindingLegacy.nonce;
+
+  if (expectedRunId) {
+    if (!actualRunId) {
+      return errorResponseWithRateLimit(
+        'RECEIPT_BINDING_MISSING',
+        'Receipt is missing binding.run_id',
+        422,
+        rateLimitInfo
+      );
+    }
+
+    if (actualRunId !== expectedRunId) {
+      return errorResponseWithRateLimit(
+        'RECEIPT_BINDING_MISMATCH',
+        'Receipt binding.run_id does not match',
+        409,
+        rateLimitInfo
+      );
+    }
+  }
+
+  if (expectedEventHash) {
+    if (!actualEventHash) {
+      return errorResponseWithRateLimit(
+        'RECEIPT_BINDING_MISSING',
+        'Receipt is missing binding.event_hash_b64u',
+        422,
+        rateLimitInfo
+      );
+    }
+
+    if (actualEventHash !== expectedEventHash) {
+      return errorResponseWithRateLimit(
+        'RECEIPT_BINDING_MISMATCH',
+        'Receipt binding.event_hash_b64u does not match',
+        409,
+        rateLimitInfo
+      );
+    }
+  }
+
+  if (actualNonce && actualNonce !== normalizedNonce) {
+    return errorResponseWithRateLimit(
+      'RECEIPT_BINDING_MISMATCH',
+      'Receipt binding.nonce does not match requested nonce',
+      409,
+      rateLimitInfo
+    );
+  }
+
+  return jsonResponseWithRateLimit(
+    {
+      ok: true,
+      nonce: normalizedNonce,
+      status: status ?? null,
+      truncated: read.truncated,
+      receipt_envelope: receiptEnvelope ?? null,
+      receipt: legacyReceipt ?? null,
+      binding: {
+        run_id: actualRunId ?? null,
+        event_hash_b64u: actualEventHash ?? null,
+      },
+    },
+    200,
+    rateLimitInfo
+  );
+}
+
 /**
  * Handle proxy request to LLM provider
  */
@@ -774,7 +1110,13 @@ async function handleProxy(
   const providerApiKeyHeader =
     request.headers.get('X-Provider-API-Key') ??
     request.headers.get('X-Provider-Key') ??
-    request.headers.get('X-Provider-Authorization');
+    request.headers.get('X-Provider-Authorization') ??
+    // Provider-compatible BYOK headers (SDK drop-in)
+    (provider === 'anthropic'
+      ? request.headers.get('x-api-key') ?? request.headers.get('anthropic-api-key')
+      : provider === 'google'
+        ? request.headers.get('x-goog-api-key')
+        : null);
 
   const explicitProviderApiKey = stripBearer(providerApiKeyHeader);
 
@@ -891,7 +1233,10 @@ async function handleProxy(
   // Build provider-specific URL (Gemini needs model in path)
   let providerUrl: string;
   try {
-    providerUrl = buildProviderUrl(provider, model);
+    const openaiApi: OpenAIUpstreamApi | undefined =
+      provider === 'openai' ? inferOpenAiUpstreamApi(request, parsedBody) : undefined;
+
+    providerUrl = buildProviderUrl(provider, model, { openaiApi });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);

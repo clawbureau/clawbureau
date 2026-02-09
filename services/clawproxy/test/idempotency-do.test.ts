@@ -93,4 +93,35 @@ describe('CPX-US-031: IdempotencyDurableObject', () => {
     const r2 = await ido.fetch(post('/check', { fingerprint: 'fp_1' }));
     expect(await r2.json()).toEqual({ ok: true, kind: 'new' });
   });
+
+  it('supports read-only receipt lookup without creating a new lock', async () => {
+    const storage = new MockStorage();
+    const ido = makeDo(storage);
+
+    // No entry yet.
+    const miss = await ido.fetch(post('/receipt', {}));
+    expect(await miss.json()).toEqual({ ok: true, kind: 'missing' });
+
+    // Ensure /receipt didn't create an inflight lock.
+    const r1 = await ido.fetch(post('/check', { fingerprint: 'fp_1' }));
+    expect(await r1.json()).toEqual({ ok: true, kind: 'new' });
+
+    // Inflight entry.
+    const inflight = await ido.fetch(post('/receipt', {}));
+    expect(await inflight.json()).toEqual({ ok: true, kind: 'inflight' });
+
+    // Commit and read.
+    await ido.fetch(post('/commit', { fingerprint: 'fp_1', receipt: { ok: true } }));
+
+    const got = await ido.fetch(post('/receipt', {}));
+    expect(await got.json()).toEqual({
+      ok: true,
+      kind: 'receipt',
+      receipt: { ok: true },
+      truncated: false,
+    });
+
+    const mismatch = await ido.fetch(post('/receipt', { fingerprint: 'fp_other' }));
+    expect(await mismatch.json()).toEqual({ ok: true, kind: 'mismatch' });
+  });
 });

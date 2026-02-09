@@ -1,0 +1,57 @@
+{
+  "id": "provider-clawproxy",
+  "name": "Clawproxy PoH",
+  "description": "Routes OpenClaw LLM calls through clawproxy and emits Proof-of-Harness artifacts (event chain, receipts, URM, prompt commitments).",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["baseUrl"],
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "clawproxy base URL (e.g. https://clawproxy.com)"
+      },
+      "token": {
+        "type": "string",
+        "description": "Optional clawproxy auth token (CST/JWT). If set, upstream provider keys are forwarded via X-Provider-API-Key."
+      },
+      "outputDir": {
+        "type": "string",
+        "description": "Directory to write PoH artifacts (default: .clawproof/openclaw)"
+      },
+      "keyFile": {
+        "type": "string",
+        "description": "Path to persistent Ed25519 JWK key file (default: <stateDir>/clawproof/keys/<agentId>.jwk.json)"
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["enforce", "best_effort"],
+        "description": "enforce: fail model calls if PoH proxying fails; best_effort: fall back to direct provider calls"
+      },
+      "intercept": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "openai": { "type": "boolean" },
+          "anthropic": { "type": "boolean" },
+          "google": { "type": "boolean" }
+        }
+      },
+      "includePromptPack": {
+        "type": "boolean",
+        "description": "Include bootstrap-file prompt pack entries when available (default: true)"
+      },
+      "includeToolEvents": {
+        "type": "boolean",
+        "description": "Record tool_call events for Trust Pulse (default: true)"
+      }
+    }
+  },
+  "uiHints": {
+    "token": { "label": "clawproxy Token", "sensitive": true, "placeholder": "Bearer …" },
+    "baseUrl": { "label": "clawproxy Base URL", "placeholder": "https://clawproxy.com" },
+    "outputDir": { "label": "Output Directory", "placeholder": ".clawproof/openclaw" },
+    "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawproof/keys/<agentId>.jwk.json", "advanced": true },
+    "mode": { "label": "Mode", "help": "Use enforce to make PoH non-optional." }
+  }
+}
