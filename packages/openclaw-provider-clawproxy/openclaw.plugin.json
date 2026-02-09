@@ -13,7 +13,7 @@
       },
       "token": {
         "type": "string",
-        "description": "Optional clawproxy auth token (CST/JWT). If set, upstream provider keys are forwarded via X-Provider-API-Key."
+        "description": "Optional clawproxy auth token (CST/JWT). If set, it is sent via X-CST (strict-mode safe). Upstream provider keys are forwarded via X-Provider-API-Key."
       },
       "outputDir": {
         "type": "string",
@@ -48,7 +48,7 @@
     }
   },
   "uiHints": {
-    "token": { "label": "clawproxy Token", "sensitive": true, "placeholder": "Bearer …" },
+    "token": { "label": "clawproxy Token", "sensitive": true, "placeholder": "<CST/JWT>" },
     "baseUrl": { "label": "clawproxy Base URL", "placeholder": "https://clawproxy.com" },
     "outputDir": { "label": "Output Directory", "placeholder": ".clawproof/openclaw" },
     "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawproof/keys/<agentId>.jwk.json", "advanced": true },

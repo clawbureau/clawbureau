@@ -646,8 +646,19 @@ async function captureStreamingReceipt(params: {
         if (eventHash) receiptUrl.searchParams.set('event_hash_b64u', eventHash);
 
         const lookupHeaders = new Headers({ accept: 'application/json' });
-        const auth = params.proxyHeaders.get('Authorization');
-        if (auth) lookupHeaders.set('Authorization', auth);
+
+        const cst =
+          params.proxyHeaders.get('X-CST') ??
+          params.proxyHeaders.get('X-Scoped-Token') ??
+          null;
+
+        if (cst) {
+          // Prefer X-CST so receipt lookup works under STRICT_AUTH_HEADERS deployments.
+          lookupHeaders.set('X-CST', cst);
+        } else {
+          const auth = params.proxyHeaders.get('Authorization');
+          if (auth) lookupHeaders.set('Authorization', auth);
+        }
 
         for (let attempt = 0; attempt < 5 && (!receiptLegacy || !receiptEnvelope); attempt++) {
           const res = await params.baseFetch(receiptUrl.toString(), {
@@ -852,7 +863,7 @@ function patchFetch(params: {
     const accept = req.headers.get('accept');
     if (accept) headers.set('accept', accept);
 
-    // Provider key (always via X-Provider-API-Key so Authorization stays free for CST).
+    // Provider key (always via X-Provider-API-Key so Authorization isn't overloaded; CST uses X-CST).
     headers.set('X-Provider-API-Key', upstreamKey);
 
     // PoH binding
@@ -868,9 +879,10 @@ function patchFetch(params: {
       }
     }
 
-    // Proxy auth
+    // Proxy auth (CST)
     if (params.proxyToken) {
-      headers.set('Authorization', `Bearer ${params.proxyToken}`);
+      const token = stripBearer(params.proxyToken);
+      if (token) headers.set('X-CST', token);
     }
 
     // Forward relevant provider headers

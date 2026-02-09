@@ -38,6 +38,13 @@ export interface Env {
   CST_AUDIENCE?: string;
 
   /**
+   * CPX-US-032: strict auth header mode
+   * When enabled, CST must be provided via X-CST/X-Scoped-Token and provider keys via X-Provider-API-Key.
+   * Authorization header overloading is rejected.
+   */
+  STRICT_AUTH_HEADERS?: string;
+
+  /**
    * CPX-US-013: Platform-paid inference mode (reserve-backed)
    * When enabled, requests without an Authorization header may be routed using platform reserve credits.
    */

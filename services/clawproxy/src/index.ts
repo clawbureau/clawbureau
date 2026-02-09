@@ -287,7 +287,7 @@ export default {
       <h2>Quick start</h2>
       <pre># Recommended (proxy auth via CST + BYOK provider key)
 curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
-  -H "Authorization: Bearer $CST_TOKEN" \
+  -H "X-CST: $CST_TOKEN" \
   -H "X-Provider-API-Key: $OPENAI_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
@@ -345,16 +345,24 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 ## Authentication
 
 ### Proxy auth (CST)
-- \`Authorization: Bearer <CST>\` (recommended)
-- \`X-CST: <CST>\` or \`X-Scoped-Token: <CST>\` (alternate)
+- \`X-CST: <CST>\` (recommended)
+- \`X-Scoped-Token: <CST>\` (alternate)
+- \`Authorization: Bearer <CST>\` (legacy; disabled when \`STRICT_AUTH_HEADERS=true\`)
 - When \`X-Client-DID\` is set, a valid CST token is required (fail-closed).
 
 ### BYOK provider keys
 - Recommended (all providers): \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
-- OpenAI-compatible routes: \`Authorization: Bearer <openai api key>\`
-- Anthropic-compatible routes: \`x-api-key: <anthropic api key>\` (or \`anthropic-api-key\`)
-- Google-compatible routes: \`x-goog-api-key: <google api key>\`
-- Legacy: \`Authorization: Bearer <provider api key>\` (only when Authorization is not used for CST)
+- Legacy provider-compatible headers (non-strict mode only):
+  - \`Authorization: Bearer <openai api key>\` (OpenAI-compatible routes)
+  - \`x-api-key: <anthropic api key>\` (or \`anthropic-api-key\`)
+  - \`x-goog-api-key: <google api key>\`
+  - \`Authorization: Bearer <provider api key>\` (only when Authorization is not used for CST)
+
+### Strict auth headers mode
+When \`STRICT_AUTH_HEADERS=true\`:
+- Rejects \`Authorization\` header entirely
+- Rejects provider-compatible BYOK headers (\`x-api-key\`, \`anthropic-api-key\`, \`x-goog-api-key\`)
+- Requires CST via \`X-CST\`/\`X-Scoped-Token\` and provider keys via \`X-Provider-API-Key\`
 
 ## Receipt Binding Headers
 
@@ -965,15 +973,64 @@ async function handleProxy(
   // Scoped token (CST) authentication
   // "Authenticated" calls are those that provide X-Client-DID (used for rate limiting)
   // Fail closed: if X-Client-DID is present, a valid CST must also be present.
+  const strictAuthHeaders = env.STRICT_AUTH_HEADERS === 'true';
+
   const clientDidHeader = request.headers.get('X-Client-DID');
   const authorizationHeader = request.headers.get('Authorization');
 
-  const rawCstHeader = request.headers.get('X-CST') ?? request.headers.get('X-Scoped-Token');
-  const explicitCstToken = stripBearer(rawCstHeader);
+  const cstTokenFromXCst = stripBearer(request.headers.get('X-CST'));
+  const cstTokenFromXScopedToken = stripBearer(request.headers.get('X-Scoped-Token'));
+
+  if (strictAuthHeaders) {
+    const auth = authorizationHeader?.trim();
+    if (auth) {
+      return errorResponseWithRateLimit(
+        'STRICT_AUTH_HEADERS',
+        'Authorization header is not allowed when STRICT_AUTH_HEADERS=true. Provide CST via X-CST (or X-Scoped-Token) and provider keys via X-Provider-API-Key.',
+        400,
+        rateLimitInfo
+      );
+    }
+
+    if (cstTokenFromXCst && cstTokenFromXScopedToken && cstTokenFromXCst !== cstTokenFromXScopedToken) {
+      return errorResponseWithRateLimit(
+        'STRICT_AUTH_HEADERS',
+        'Conflicting CST headers: X-CST and X-Scoped-Token differ.',
+        400,
+        rateLimitInfo
+      );
+    }
+
+    const forbiddenProviderKeyHeaders = [
+      'X-Provider-Key',
+      'X-Provider-Authorization',
+      // Provider-compatible BYOK headers
+      'x-api-key',
+      'anthropic-api-key',
+      'x-goog-api-key',
+    ];
+
+    for (const h of forbiddenProviderKeyHeaders) {
+      const v = request.headers.get(h);
+      if (typeof v === 'string' && v.trim().length > 0) {
+        return errorResponseWithRateLimit(
+          'STRICT_AUTH_HEADERS',
+          `Provider API keys must be provided via X-Provider-API-Key when STRICT_AUTH_HEADERS=true (do not use ${h}).`,
+          400,
+          rateLimitInfo
+        );
+      }
+    }
+  }
+
   const authToken = stripBearer(authorizationHeader);
 
+  const explicitCstToken = cstTokenFromXCst ?? cstTokenFromXScopedToken;
+
   // Prefer explicit X-CST/X-Scoped-Token. Fall back to Authorization when it looks like a JWT.
-  const authorizationIsCst = !explicitCstToken && !!authToken && looksLikeJwt(authToken);
+  // (Strict mode disables this fallback to avoid Authorization overload.)
+  const authorizationIsCst =
+    !strictAuthHeaders && !explicitCstToken && !!authToken && looksLikeJwt(authToken);
 
   const cstToken = explicitCstToken ?? (authorizationIsCst ? authToken : undefined);
 
@@ -992,7 +1049,9 @@ async function handleProxy(
   if (clientDidHeader && !cstToken) {
     return errorResponseWithRateLimit(
       'TOKEN_REQUIRED',
-      'CST token required for authenticated requests (when X-Client-DID is set). Provide Authorization: Bearer <CST> or X-CST.',
+      strictAuthHeaders
+        ? 'CST token required for authenticated requests (when X-Client-DID is set). Provide X-CST (or X-Scoped-Token).'
+        : 'CST token required for authenticated requests (when X-Client-DID is set). Provide Authorization: Bearer <CST> or X-CST.',
       401,
       rateLimitInfo
     );
@@ -1105,24 +1164,26 @@ async function handleProxy(
 
   // CPX-US-013: Platform-paid inference mode (reserve-backed)
   // Provider API keys are accepted via:
-  // - X-Provider-API-Key / X-Provider-Authorization (recommended)
-  // - Authorization (legacy BYOK mode, when Authorization is NOT used for CST)
-  const providerApiKeyHeader =
-    request.headers.get('X-Provider-API-Key') ??
-    request.headers.get('X-Provider-Key') ??
-    request.headers.get('X-Provider-Authorization') ??
-    // Provider-compatible BYOK headers (SDK drop-in)
-    (provider === 'anthropic'
-      ? request.headers.get('x-api-key') ?? request.headers.get('anthropic-api-key')
-      : provider === 'google'
-        ? request.headers.get('x-goog-api-key')
-        : null);
+  // - X-Provider-API-Key (recommended)
+  // - Provider-compatible BYOK headers (SDK drop-in; disabled when STRICT_AUTH_HEADERS=true)
+  // - Authorization (legacy BYOK mode; disabled when STRICT_AUTH_HEADERS=true)
+  const providerApiKeyHeader = strictAuthHeaders
+    ? request.headers.get('X-Provider-API-Key')
+    : request.headers.get('X-Provider-API-Key') ??
+      request.headers.get('X-Provider-Key') ??
+      request.headers.get('X-Provider-Authorization') ??
+      // Provider-compatible BYOK headers (SDK drop-in)
+      (provider === 'anthropic'
+        ? request.headers.get('x-api-key') ?? request.headers.get('anthropic-api-key')
+        : provider === 'google'
+          ? request.headers.get('x-goog-api-key')
+          : null);
 
   const explicitProviderApiKey = stripBearer(providerApiKeyHeader);
 
   // Back-compat: if Authorization is not being used as CST, treat it as a legacy provider API key.
   const legacyProviderApiKey =
-    !explicitProviderApiKey && !authorizationIsCst ? authToken : undefined;
+    !strictAuthHeaders && !explicitProviderApiKey && !authorizationIsCst ? authToken : undefined;
 
   const apiKeyCandidate = explicitProviderApiKey ?? legacyProviderApiKey;
 
@@ -1136,7 +1197,9 @@ async function handleProxy(
     if (env.PLATFORM_PAID_ENABLED !== 'true') {
       return errorResponseWithRateLimit(
         'UNAUTHORIZED',
-        'Provider API key required (set X-Provider-API-Key or legacy Authorization). Platform-paid mode is disabled.',
+        strictAuthHeaders
+          ? 'Provider API key required (set X-Provider-API-Key). Platform-paid mode is disabled.'
+          : 'Provider API key required (set X-Provider-API-Key or legacy Authorization). Platform-paid mode is disabled.',
         401,
         rateLimitInfo
       );

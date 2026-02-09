@@ -165,13 +165,17 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - Log token hash with receipt
 
 **Implementation notes (current + v1 guidance):**
-- **CST vs provider key headers:**
-  - A CST is accepted in `Authorization: Bearer <jwt>` **when it parses as a JWT**.
-  - Provider API keys should be passed via `X-Provider-API-Key` (do not overload `Authorization` when using CST).
+- **Default mode** (`STRICT_AUTH_HEADERS` unset/false):
+  - A CST is accepted in `X-CST` / `X-Scoped-Token`.
+  - A CST is also accepted in `Authorization: Bearer <jwt>` **when it parses as a JWT**.
+  - Provider API keys should be passed via `X-Provider-API-Key`.
   - Legacy behavior: `Authorization: Bearer <provider-key>` may still be accepted when the value is *not* JWT-like.
+- **Strict mode** (`STRICT_AUTH_HEADERS=true`):
+  - Reject any `Authorization` header (prevents CST/provider-key ambiguity).
+  - CST MUST be provided via `X-CST` / `X-Scoped-Token`.
+  - Provider keys MUST be provided via `X-Provider-API-Key` (provider-compatible BYOK headers are rejected).
 - Fail-closed if a request is declared as user-bound (e.g. `X-Client-DID` present) but CST is missing/invalid.
 - Token format should be consistent with `packages/schema/auth/scoped_token_claims.v1.json`.
-- Future tightening: add a strict mode where CST must be in a canonical header (tracked in Trust vNext as `CPX-US-032`).
 
 ### CPX-US-012 — Token/policy binding in receipts
 **As a** verifier, **I want** receipts bound to policy **so that** authorization is provable.

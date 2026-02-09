@@ -333,7 +333,10 @@ export async function startShim(options: StartShimOptions): Promise<ShimServer> 
 
         // Proxy auth token (CST/JWT)
         if (options.session.proxyToken) {
-          proxyHeaders['Authorization'] = `Bearer ${options.session.proxyToken}`;
+          const raw = options.session.proxyToken.trim();
+          const m = raw.match(/^Bearer\s+/i);
+          const token = (m ? raw.slice(m[0].length) : raw).trim();
+          proxyHeaders['X-CST'] = token;
         }
 
         // Forward a few provider-specific headers that clawproxy may forward upstream.
@@ -408,7 +411,10 @@ export async function startShim(options: StartShimOptions): Promise<ShimServer> 
 
             // Proxy auth token (CST/JWT) if configured.
             if (options.session.proxyToken) {
-              lookupHeaders['Authorization'] = `Bearer ${options.session.proxyToken}`;
+              const raw = options.session.proxyToken.trim();
+              const m = raw.match(/^Bearer\s+/i);
+              const token = (m ? raw.slice(m[0].length) : raw).trim();
+              lookupHeaders['X-CST'] = token;
             }
 
             for (let attempt = 0; attempt < 5 && (!receipt || !receiptEnvelope); attempt++) {

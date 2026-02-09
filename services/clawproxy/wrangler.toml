@@ -26,11 +26,12 @@ CST_ISSUER_PUBLIC_KEY = "KhBwy4lBSKtd7M9eWyNnYfpIPl7sGnDWTSyJpmjYcjc"
 # Audience override (stabilizes staging usage)
 CST_AUDIENCE = "clawproxy.com"
 
-# Secrets to be set via wrangler secret put:
+# Secrets/vars to be set via wrangler secret put (or via dashboard vars):
 # - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
 # - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
 # - PLATFORM_PAID_ENABLED ("true" to allow platform-paid mode; optional)
 # - PLATFORM_OPENAI_API_KEY / PLATFORM_ANTHROPIC_API_KEY / PLATFORM_GOOGLE_API_KEY (optional)
+# - STRICT_AUTH_HEADERS ("true" to disable Authorization overload; require X-CST + X-Provider-API-Key; optional)
 
 [env.staging]
 name = "clawproxy-staging"
