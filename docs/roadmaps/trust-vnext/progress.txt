@@ -284,3 +284,18 @@ Started: 2026-02-07T19:53:07Z
   - cd packages/clawproof-adapters && npm run typecheck && npm test
   - cd packages/openclaw-provider-clawproxy && npm run typecheck
 ---
+
+## 2026-02-09T16:40:00Z - AGL-US-001
+- What was implemented
+  - Added a local PoH verification UX to `agentlog`:
+    - New `agentlog verify <path>` subcommand discovers a proof bundle envelope + materialized URM JSON (e.g. `.clawproof/*-bundle.json` + `*-urm.json`).
+    - Calls `POST /v1/verify/bundle` on `clawverify` with `{ envelope, urm }` and prints a derived-only VERIFIED/UNVERIFIED badge.
+    - Fail-closed: missing URM or verifier invalidation returns UNVERIFIED and exit code 2.
+- Files changed
+  - (external repo) /Users/gfw/code/agentlog/cli.py
+  - (external repo) /Users/gfw/code/agentlog/README.md
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+- Quality checks
+  - cd /Users/gfw/code/agentlog && python3 -m unittest discover -s tests -q
+---
