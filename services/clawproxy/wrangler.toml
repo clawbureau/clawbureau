@@ -38,6 +38,15 @@ routes = [
   { pattern = "staging.clawproxy.com/*", zone_name = "clawproxy.com" }
 ]
 
+# CPX-US-031: Durable idempotency store (Wrangler does not inherit durable_objects into env.*).
+[[env.staging.durable_objects.bindings]]
+name = "IDEMPOTENCY"
+class_name = "IdempotencyDurableObject"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_classes = ["IdempotencyDurableObject"]
+
 [env.staging.vars]
 PROXY_VERSION = "0.1.0"
 CST_ISSUER_PUBLIC_KEY = "pwdA3cDDu9BF7vmFGs7E5m_aT8qRtMHe0QOIi5-ci90"
