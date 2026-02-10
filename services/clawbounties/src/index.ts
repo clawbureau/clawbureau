@@ -5451,7 +5451,8 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
         cwc_token_scope_hash_b64u: expectedTokenScopeHash,
         now,
       });
-    } else {
+    } else if (bounty.min_proof_tier !== 'self') {
+      // POH-US-022: only persist non-CWC job binding for bounties that require gateway-tier proofs.
       await updateBountyJobTokenScopeHash(env.BOUNTIES_DB, {
         bounty_id: bounty.bounty_id,
         worker_did,
@@ -5961,10 +5962,12 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   // We only enforce this when:
   // - the proof bundle verified as VALID
   // - min_proof_tier passed (proofStatus still 'valid')
+  // - the bounty requires gateway-tier proofs (min_proof_tier !== 'self')
   // - the bounty has a stored job_token_scope_hash_b64u (new regime)
   if (
     bounty.job_token_scope_hash_b64u &&
     !bounty.cwc_hash_b64u &&
+    bounty.min_proof_tier !== 'self' &&
     proofStatus === 'valid' &&
     proofBundleResponse.result.status === 'VALID'
   ) {
