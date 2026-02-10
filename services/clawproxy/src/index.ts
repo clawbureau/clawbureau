@@ -42,6 +42,7 @@ import {
   type SigningContext,
   type EncryptionContext,
 } from './receipt';
+import { buildReceiptMetadataWithModelIdentity } from './model-identity';
 import {
   importEd25519Key,
   computeKeyId,
@@ -1644,11 +1645,19 @@ async function handleProxy(
             signingContext
           );
 
-          const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
-            gatewayId,
-            metadata: falOpenrouter
+          const modelLabel = receipt.model && receipt.model.trim().length > 0 ? receipt.model : 'unknown';
+
+          const receiptMetadata = await buildReceiptMetadataWithModelIdentity({
+            provider,
+            model: modelLabel,
+            existing: falOpenrouter
               ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
               : undefined,
+          });
+
+          const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
+            gatewayId,
+            metadata: receiptMetadata,
           });
 
           // Log token hash with receipt metadata (never log token itself)
@@ -1765,11 +1774,19 @@ async function handleProxy(
       encryptionContext ?? undefined
     );
 
-    receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
-      gatewayId,
-      metadata: falOpenrouter
+    const modelLabel = receipt.model && receipt.model.trim().length > 0 ? receipt.model : 'unknown';
+
+    const receiptMetadata = await buildReceiptMetadataWithModelIdentity({
+      provider,
+      model: modelLabel,
+      existing: falOpenrouter
         ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
         : undefined,
+    });
+
+    receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
+      gatewayId,
+      metadata: receiptMetadata,
     });
   } catch (err) {
     if (idempotency) {

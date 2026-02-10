@@ -217,6 +217,21 @@
       "priority": 15,
       "passes": true,
       "notes": "Updated clawproxy request parsing so Authorization can carry CST while provider keys are supplied separately. Updated docs and SDK/adapters to set X-Provider-API-Key and keep Authorization reserved for proxy auth."
+    },
+    {
+      "id": "CPX-US-016",
+      "title": "Model identity in receipts (tiered)",
+      "description": "As a verifier, I want each gateway receipt to carry a tiered model identity so that closed-provider limitations are explicit and verifiers never over-claim weight certainty.",
+      "acceptanceCriteria": [
+        "Emit payload.metadata.model_identity (model_identity.v1)",
+        "Emit payload.metadata.model_identity_hash_b64u = sha256_b64u(JCS(model_identity))",
+        "Default closed providers to tier=closed_opaque",
+        "Add unit tests",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "clawproxy now emits model_identity and model_identity_hash_b64u in _receipt_envelope.payload.metadata for all gateway receipts."
     }
   ]
 }
