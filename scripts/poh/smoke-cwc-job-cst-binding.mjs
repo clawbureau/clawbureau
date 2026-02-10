@@ -729,6 +729,13 @@ async function main() {
 
   assert(mismatchSubmit.status === 422, `mismatch submit expected 422, got ${mismatchSubmit.status}: ${mismatchSubmit.text}`);
 
+  const mismatchReason = mismatchSubmit.json?.verification?.proof_bundle?.reason;
+  assert(typeof mismatchReason === 'string', `mismatch submit expected proof_bundle.reason, got: ${mismatchSubmit.text}`);
+  assert(
+    mismatchReason.includes('token_scope_hash') && mismatchReason.includes(tokenScopeA) && mismatchReason.includes(tokenScopeB),
+    `mismatch submit reason not deterministic/expected: ${mismatchReason}`
+  );
+
   // 8) Produce receipt for A, submit to A (must succeed)
   const runA = `run_${crypto.randomUUID()}`;
   const chainA = await buildEventChain({ runId: runA });
@@ -757,6 +764,9 @@ async function main() {
 
   assert(okSubmit.status === 201, `ok submit expected 201, got ${okSubmit.status}: ${okSubmit.text}`);
 
+  const okProofStatus = okSubmit.json?.verification?.proof_bundle?.status;
+  assert(okProofStatus === 'valid', `ok submit expected proof_bundle.status=valid, got: ${okSubmit.text}`);
+
   // 9) After submission, bounty A should no longer be in accepted state.
   // /cst and /accept must fail closed.
   const cstAfter = await httpJson(`${bountiesBaseUrl}/v1/bounties/${bountyA}/cst`, {
@@ -768,7 +778,10 @@ async function main() {
 
   // Expect 409 INVALID_STATUS (once POH-US-021 follow-up gating is deployed)
   assert(cstAfter.status === 409, `post-submit /cst expected 409, got ${cstAfter.status}: ${cstAfter.text}`);
+  assert(cstAfter.json?.error === 'INVALID_STATUS', `post-submit /cst expected INVALID_STATUS, got: ${cstAfter.text}`);
+
   assert(acceptAfter.status === 409, `post-submit /accept expected 409, got ${acceptAfter.status}: ${acceptAfter.text}`);
+  assert(acceptAfter.json?.error === 'INVALID_STATUS', `post-submit /accept expected INVALID_STATUS, got: ${acceptAfter.text}`);
 
   console.log(
     JSON.stringify(

@@ -411,3 +411,23 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawbounties && npm run typecheck
 ---
+
+## 2026-02-10T17:30:00Z - POH-US-022 (job CST binding for non-CWC)
+- What was implemented
+  - Generalized receipt non-transferability beyond CWC bounties:
+    - New bounty field `job_token_scope_hash_b64u` stores deterministic expected v1 scope hash.
+    - On acceptance, marketplace computes/persists job scope hash for `min_proof_tier != self` bounties.
+    - `/v1/bounties/{id}/cst` now supports non-CWC bounties and returns `job_auth`.
+    - Submission verification enforces `binding.token_scope_hash_b64u` on verified+bound gateway receipts matches the expected job hash when configured.
+  - Updated worker harness tooling to accept either `cwc_auth` or `job_auth` CST response shapes.
+- Files changed
+  - services/clawbounties/migrations/0012_job_cst_binding.sql
+  - services/clawbounties/src/index.ts
+  - packages/clawproof-adapters/src/cli.ts
+  - packages/openclaw-provider-clawproxy/src/index.ts
+  - scripts/poh/smoke-cwc-job-cst-binding.mjs
+- Quality checks
+  - cd services/clawbounties && npm run typecheck
+  - cd packages/clawproof-adapters && npm run typecheck && npm test
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck
+---
