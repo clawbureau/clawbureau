@@ -5,6 +5,7 @@ import {
   buildFalOpenrouterUrl,
   buildFalOpenrouterAuthHeader,
   isFalOpenrouterModel,
+  stripOpenrouterModelPrefix,
 } from '../src/providers';
 
 describe('providers', () => {
@@ -39,6 +40,12 @@ describe('providers', () => {
     expect(isFalOpenrouterModel('OpenRouter/anthropic/claude-3.5-sonnet')).toBe(true);
     expect(isFalOpenrouterModel('gpt-4o-mini')).toBe(false);
     expect(isFalOpenrouterModel(undefined)).toBe(false);
+  });
+
+  it('strips openrouter/ prefix for upstream model IDs', () => {
+    expect(stripOpenrouterModelPrefix('openrouter/openai/gpt-4o-mini')).toBe('openai/gpt-4o-mini');
+    expect(stripOpenrouterModelPrefix(' openrouter/anthropic/claude-sonnet-4 ')).toBe('anthropic/claude-sonnet-4');
+    expect(stripOpenrouterModelPrefix('gpt-4o-mini')).toBe('gpt-4o-mini');
   });
 
   it('builds fal OpenRouter chat completions URL by default', () => {

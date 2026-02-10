@@ -27,6 +27,7 @@ import {
   extractModel,
   getSupportedProviders,
   isFalOpenrouterModel,
+  stripOpenrouterModelPrefix,
   buildFalOpenrouterUrl,
   buildFalOpenrouterAuthHeader,
   type OpenAIUpstreamApi,
@@ -1334,6 +1335,18 @@ async function handleProxy(
   // OpenRouter-through-fal uses OpenAI-compatible endpoints but a different upstream base + auth.
   const falOpenrouter = provider === 'openai' && isFalOpenrouterModel(model);
 
+  const falOpenrouterUpstreamModel =
+    falOpenrouter && typeof model === 'string' ? stripOpenrouterModelPrefix(model) : null;
+
+  if (falOpenrouter && (!falOpenrouterUpstreamModel || falOpenrouterUpstreamModel.length === 0)) {
+    return errorResponseWithRateLimit(
+      'INVALID_REQUEST',
+      'Invalid OpenRouter model id (expected openrouter/<provider>/<model>)',
+      400,
+      rateLimitInfo
+    );
+  }
+
   // Fail closed: platform-paid OpenAI keys are not valid for the fal OpenRouter router.
   if (falOpenrouter && payment.mode !== 'user') {
     return errorResponseWithRateLimit(
@@ -1379,6 +1392,28 @@ async function handleProxy(
     const redactedBody = applyRedactionRules(parsedBody, policyResult.policy.redaction_rules);
     const strippedBody = stripUndefined(redactedBody);
     finalRequestBody = JSON.stringify(strippedBody);
+  }
+
+  // OpenRouter-through-fal: rewrite model id for upstream call (strip leading `openrouter/`).
+  // The original `model` string is still used in receipts for auditability.
+  if (falOpenrouter && falOpenrouterUpstreamModel) {
+    try {
+      const obj = JSON.parse(finalRequestBody) as Record<string, unknown>;
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+        throw new Error('Request body must be a JSON object');
+      }
+
+      obj.model = falOpenrouterUpstreamModel;
+      finalRequestBody = JSON.stringify(obj);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'INVALID_REQUEST',
+        `Failed to rewrite OpenRouter model id: ${message}`,
+        400,
+        rateLimitInfo
+      );
+    }
   }
 
   // Build provider-specific URL (Gemini needs model in path)
@@ -1611,7 +1646,9 @@ async function handleProxy(
 
           const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
             gatewayId,
-            metadata: falOpenrouter ? { upstream: 'fal_openrouter' } : undefined,
+            metadata: falOpenrouter
+              ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
+              : undefined,
           });
 
           // Log token hash with receipt metadata (never log token itself)
@@ -1730,7 +1767,9 @@ async function handleProxy(
 
     receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
       gatewayId,
-      metadata: falOpenrouter ? { upstream: 'fal_openrouter' } : undefined,
+      metadata: falOpenrouter
+        ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
+        : undefined,
     });
   } catch (err) {
     if (idempotency) {

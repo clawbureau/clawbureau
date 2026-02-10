@@ -153,6 +153,20 @@ export function isFalOpenrouterModel(model: string | undefined): boolean {
   return typeof model === 'string' && model.trim().toLowerCase().startsWith('openrouter/');
 }
 
+/**
+ * OpenRouter model IDs in OpenClaw are typically encoded as:
+ *   openrouter/<upstream-provider>/<model>
+ *
+ * The OpenRouter upstream expects the model WITHOUT the leading `openrouter/` prefix.
+ */
+export function stripOpenrouterModelPrefix(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed) return trimmed;
+
+  const m = trimmed.match(/^openrouter\//i);
+  return m ? trimmed.slice(m[0].length).trim() : trimmed;
+}
+
 export function buildFalOpenrouterUrl(opts?: { openaiApi?: OpenAIUpstreamApi }): string {
   const api = opts?.openaiApi ?? 'chat_completions';
   if (api === 'responses') return `${FAL_OPENROUTER_BASE_URL}/responses`;
