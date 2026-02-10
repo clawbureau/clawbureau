@@ -27,6 +27,8 @@ Related trust design + roadmap:
 ## Implementation status (current)
 
 - **Implementation:** Not yet implemented in this monorepo (enterprise control plane/data plane work happens in dedicated service repos/worktrees).
+- **Staging origin (canonical):** https://staging.clawea.com
+- **Fallback staging mount (temporary):** https://clawea.com/staging/*
 - **Primary PoH contracts (schemas):**
   - Model identity: `packages/schema/poh/model_identity.v1.json`
   - Gateway receipts: `packages/schema/poh/gateway_receipt.v1.json`

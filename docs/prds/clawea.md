@@ -22,8 +22,10 @@
 
 ## Implementation status (current)
 
-- **Service:** not implemented yet (no service-level tracker found).
-- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
+- **Service:** Implemented + deployed via a dedicated clawea service repo; included here as the private `services/clawea` submodule.
+- **Staging origin (canonical):** https://staging.clawea.com
+- **Fallback staging mount (temporary):** https://clawea.com/staging/*
+- **Tracking:** Service-level tracker lives with the clawea service repo/worktrees.
 
 ---
 
