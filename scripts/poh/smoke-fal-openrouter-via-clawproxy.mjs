@@ -19,6 +19,7 @@
  */
 
 import process from 'node:process';
+import crypto from 'node:crypto';
 
 function parseArgs(argv) {
   const args = new Map();
@@ -43,6 +44,70 @@ function assert(cond, msg) {
 
 function isRecord(x) {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+function sha256B64u(utf8) {
+  return crypto.createHash('sha256').update(utf8, 'utf8').digest('base64url');
+}
+
+// RFC 8785 (JCS) — keep in sync with services/clawproxy/src/jcs.ts
+function jcsCanonicalize(value) {
+  if (value === null) return 'null';
+
+  switch (typeof value) {
+    case 'boolean':
+      return value ? 'true' : 'false';
+
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Non-finite number not allowed in JCS');
+      }
+      return JSON.stringify(value);
+
+    case 'string':
+      return JSON.stringify(value);
+
+    case 'object': {
+      if (Array.isArray(value)) {
+        return `[${value.map(jcsCanonicalize).join(',')}]`;
+      }
+
+      const obj = value;
+      const keys = Object.keys(obj).sort();
+      const parts = [];
+
+      for (const k of keys) {
+        parts.push(`${JSON.stringify(k)}:${jcsCanonicalize(obj[k])}`);
+      }
+
+      return `{${parts.join(',')}}`;
+    }
+
+    default:
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
+function assertModelIdentity(metadata, expectedModelLabel, ctx) {
+  assert(isRecord(metadata), `${ctx} metadata missing`);
+
+  const mi = metadata.model_identity;
+  assert(isRecord(mi), `${ctx} missing payload.metadata.model_identity`);
+
+  assert(mi.model_identity_version === '1', `${ctx} model_identity.model_identity_version expected "1", got ${String(mi.model_identity_version)}`);
+  assert(mi.tier === 'closed_opaque', `${ctx} model_identity.tier expected closed_opaque, got ${String(mi.tier)}`);
+
+  const m = mi.model;
+  assert(isRecord(m), `${ctx} model_identity.model missing/invalid`);
+  assert(typeof m.provider === 'string' && m.provider.trim().length > 0, `${ctx} model_identity.model.provider missing/invalid`);
+  assert(typeof m.name === 'string' && m.name.trim().length > 0, `${ctx} model_identity.model.name missing/invalid`);
+  assert(m.name === expectedModelLabel, `${ctx} model_identity.model.name expected ${expectedModelLabel}, got ${String(m.name)}`);
+
+  const hash = metadata.model_identity_hash_b64u;
+  assert(typeof hash === 'string' && hash.trim().length > 0, `${ctx} missing payload.metadata.model_identity_hash_b64u`);
+
+  const expected = sha256B64u(jcsCanonicalize(mi));
+  assert(hash === expected, `${ctx} model_identity_hash_b64u mismatch (expected ${expected}, got ${hash})`);
 }
 
 async function httpJson(url, init) {
@@ -129,6 +194,9 @@ async function smoke() {
     `chat/completions metadata.upstream_model expected ${expectedUpstreamModel}, got ${String(chatMeta.upstream_model)}`
   );
 
+  // CPX-US-016: model identity must be present and honest for closed providers.
+  assertModelIdentity(chatMeta, model, 'chat/completions');
+
   const chatVerify = await verifyReceipt(verifyBaseUrl, chatEnv);
   assert(chatVerify.status === 200, `verify/receipt (chat) expected 200, got ${chatVerify.status}: ${chatVerify.text}`);
   assert(chatVerify.json?.result?.status === 'VALID', `verify/receipt (chat) expected VALID, got: ${chatVerify.text}`);
@@ -160,6 +228,9 @@ async function smoke() {
     `responses metadata.upstream_model expected ${expectedUpstreamModel}, got ${String(respMeta.upstream_model)}`
   );
 
+  // CPX-US-016: model identity must be present and honest for closed providers.
+  assertModelIdentity(respMeta, model, 'responses');
+
   const respVerify = await verifyReceipt(verifyBaseUrl, respEnv);
   assert(respVerify.status === 200, `verify/receipt (responses) expected 200, got ${respVerify.status}: ${respVerify.text}`);
   assert(respVerify.json?.result?.status === 'VALID', `verify/receipt (responses) expected VALID, got: ${respVerify.text}`);
@@ -176,12 +247,16 @@ async function smoke() {
           status: chat.status,
           upstream: chatMeta.upstream,
           upstream_model: chatMeta.upstream_model,
+          model_identity_tier: chatMeta.model_identity?.tier,
+          model_identity_hash_b64u: chatMeta.model_identity_hash_b64u,
           verify_status: chatVerify.json?.result?.status,
         },
         responses: {
           status: responses.status,
           upstream: respMeta.upstream,
           upstream_model: respMeta.upstream_model,
+          model_identity_tier: respMeta.model_identity?.tier,
+          model_identity_hash_b64u: respMeta.model_identity_hash_b64u,
           verify_status: respVerify.json?.result?.status,
         },
       },
