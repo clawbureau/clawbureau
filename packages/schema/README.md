@@ -7,6 +7,7 @@ Shared JSON schemas for Claw Bureau services.
 - `bounties/` — marketplace request/response schemas.
 - `escrow/` — escrow record schemas.
 - `identity/` — ownership/attestation schemas.
+- `policy/` — policy contracts (Work Policy Contracts / WPC).
 - `poh/` — proof-of-harness schemas.
 - `fixtures/` — non-schema fixtures/test vectors (used by verifiers/tests).
 
@@ -30,6 +31,10 @@ Shared JSON schemas for Claw Bureau services.
 ### `identity/`
 - `owner_attestation.v1.json`
 - `did_rotation.v1.json`
+
+### `policy/`
+- `work_policy_contract.v1.json`
+- `work_policy_contract_envelope.v1.json`
 
 ### `poh/`
 - `commit_proof.v1.json`

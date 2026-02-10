@@ -161,7 +161,8 @@
         "Document behavior in docs/prds/clawproxy.md"
       ],
       "priority": 12,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented STRICT_AUTH_HEADERS mode in clawproxy to remove Authorization overload ambiguity, updated client integrations to send CST via X-CST, and documented strict vs default behavior."
     },
     {
       "id": "CCO-US-021",
@@ -173,7 +174,8 @@
         "Document how policy_hash is computed and validated"
       ],
       "priority": 13,
-      "passes": false
+      "passes": true,
+      "notes": "Implemented signed WPC registry API in services/clawcontrols (POST/GET /v1/wpc) with canonical policy_hash_b64u = sha256(JCS(payload)), and added policy schemas under packages/schema/policy/."
     },
     {
       "id": "CWC-US-001",

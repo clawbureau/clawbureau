@@ -22,3 +22,9 @@ Started: 2026-02-03
 - Tightened receipt binding validation inside proof bundles:
   - `packages/schema/poh/proof_bundle.v1.json` now references `receipt_binding.v1.json`.
 - Updated `packages/schema/README.md` to list the new PoH schemas.
+
+## CCO-US-021 — Work Policy Contract (WPC) schemas
+- Added policy schemas for signed Work Policy Contracts:
+  - `packages/schema/policy/work_policy_contract.v1.json`
+  - `packages/schema/policy/work_policy_contract_envelope.v1.json`
+- Updated `packages/schema/README.md` to include the new `policy/` directory + schemas.

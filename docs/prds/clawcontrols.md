@@ -2,11 +2,11 @@
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
 > **Last reviewed:** 2026-02-07
-> **Source of truth:** PRD intent (no active execution tracker yet)
+> **Source of truth:** `services/clawcontrols/prd.json` + `services/clawcontrols/progress.txt` + `docs/roadmaps/trust-vnext/{prd.json,progress.txt}`
 >
 > **Scope:**
 > - Product requirements for `clawcontrols.com`.
-> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+> - Service tracker lives in `services/clawcontrols/{prd.json,progress.txt}`.
 
 # clawcontrols.com (Policy Controls) — PRD
 
@@ -18,8 +18,15 @@
 
 ## Implementation status (current)
 
-- **Service:** not implemented yet (no service-level tracker found).
-- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
+- **Service:** implemented (initial MVP) at `services/clawcontrols/`.
+- **Tracking:**
+  - Trust vNext roadmap: `docs/roadmaps/trust-vnext/{prd.json,progress.txt}`
+  - Service tracker:
+    - `services/clawcontrols/prd.json`
+    - `services/clawcontrols/progress.txt`
+- **Shipped (CCO-US-021):** signed Work Policy Contract (WPC) registry API:
+  - `POST /v1/wpc` (admin-gated)
+  - `GET /v1/wpc/:policy_hash_b64u`
 
 ---
 

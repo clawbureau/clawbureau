@@ -1,0 +1,44 @@
+name = "clawcontrols"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-10"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "clawcontrols.com/*", zone_name = "clawcontrols.com" },
+  { pattern = "www.clawcontrols.com/*", zone_name = "clawcontrols.com" }
+]
+
+# CCO-US-021: WPC registry (Durable Object)
+[[durable_objects.bindings]]
+name = "WPC_REGISTRY"
+class_name = "WpcRegistryDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["WpcRegistryDurableObject"]
+
+[vars]
+SERVICE_VERSION = "0.1.0"
+
+# Secrets to be set via `wrangler secret put`:
+# - CONTROLS_SIGNING_KEY (Ed25519 seed, base64url; required)
+# - ADMIN_TOKEN (optional; required for POST /v1/wpc)
+
+[env.staging]
+name = "clawcontrols-staging"
+routes = [
+  { pattern = "staging.clawcontrols.com/*", zone_name = "clawcontrols.com" }
+]
+
+# Wrangler does not inherit durable_objects into env.*
+[[env.staging.durable_objects.bindings]]
+name = "WPC_REGISTRY"
+class_name = "WpcRegistryDurableObject"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_classes = ["WpcRegistryDurableObject"]
+
+[env.staging.vars]
+SERVICE_VERSION = "0.1.0"

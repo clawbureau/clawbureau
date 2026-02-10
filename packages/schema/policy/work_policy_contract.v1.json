@@ -1,0 +1,90 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.policy.work_policy_contract.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Work Policy Contract (WPC) v1",
+  "description": "A Work Policy Contract (WPC) defines enforceable constraints for confidential work runs (provider/model allowlists, redaction rules, receipt privacy mode, and egress allowlist).\n\nCanonical policy_hash_b64u (v1): SHA-256 base64url of the RFC8785 JCS canonical JSON string of the WPC payload (sha256(JCS(payload))).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policy_version", "policy_id", "issuer_did"],
+  "properties": {
+    "policy_version": {
+      "const": "1",
+      "description": "Policy schema version (v1)."
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human/stable identifier for the policy (hash-bound)."
+    },
+    "issuer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "minLength": 4,
+      "maxLength": 256,
+      "description": "DID of the enterprise/buyer issuing the policy."
+    },
+    "allowed_providers": {
+      "type": "array",
+      "description": "Optional provider allowlist. If omitted/empty, the gateway MAY allow all supported providers.",
+      "maxItems": 16,
+      "items": {
+        "type": "string",
+        "enum": ["openai", "anthropic", "google"]
+      }
+    },
+    "allowed_models": {
+      "type": "array",
+      "description": "Optional model allowlist patterns (glob-style, '*' supported).",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "redaction_rules": {
+      "type": "array",
+      "description": "Optional redaction rules applied by the gateway before upstream requests are made and before hashing/receipting.",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "action"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Simplified JSONPath-like pattern (e.g. $.messages[*].content)."
+          },
+          "action": {
+            "type": "string",
+            "enum": ["remove", "hash", "mask"],
+            "description": "Redaction action to apply."
+          }
+        }
+      }
+    },
+    "receipt_privacy_mode": {
+      "type": "string",
+      "enum": ["hash_only", "encrypted"],
+      "description": "Receipt privacy mode policy. In confidential mode, gateways may force hash_only."
+    },
+    "egress_allowlist": {
+      "type": "array",
+      "description": "Optional egress allowlist (hostnames / patterns) for future mediated egress receipts.",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional free-form metadata (hash-bound).",
+      "additionalProperties": true
+    }
+  }
+}

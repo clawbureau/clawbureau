@@ -1,0 +1,22 @@
+## Codebase Patterns
+- clawcontrols is a Cloudflare Worker that hosts governance/policy contracts.
+- Work Policy Contracts (WPC) are addressed by a content hash: policy_hash_b64u = sha256(JCS(payload)).
+- Registry responses return signed envelopes (Ed25519) so clients can verify integrity.
+- Storage is Durable Objects (single registry DO) for simple key→value lookup.
+
+# Ralph Progress Log
+Started: 2026-02-10T00:38:35Z
+---
+
+## 2026-02-10T00:38:35Z - CCO-US-021
+- What was implemented
+  - New service: `services/clawcontrols/`.
+  - Signed Work Policy Contract (WPC) registry API:
+    - `POST /v1/wpc` (admin-gated) creates/returns a signed envelope.
+    - `GET /v1/wpc/:policy_hash_b64u` fetches by hash.
+  - Canonical hashing: `policy_hash_b64u = sha256(JCS(wpc_payload))` (base64url).
+- Files changed
+  - services/clawcontrols/*
+- Quality checks
+  - cd services/clawcontrols && npm run typecheck && npm test
+---
