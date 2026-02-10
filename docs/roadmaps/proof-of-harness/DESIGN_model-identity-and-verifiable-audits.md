@@ -77,6 +77,10 @@ Defined by `model_identity.v1`:
 - `gateway_receipt.payload.metadata.model_identity`
 - `gateway_receipt.payload.metadata.model_identity_hash_b64u = sha256_b64u(JCS(model_identity))`
 
+**As emitted by clawproxy (HTTP response shape):**
+- `_receipt_envelope.payload.metadata.model_identity`
+- `_receipt_envelope.payload.metadata.model_identity_hash_b64u`
+
 ### 2.2 `derivation_attestation.v1` (Prepare analogue)
 **Schema:** `packages/schema/poh/derivation_attestation.v1.json`
 
