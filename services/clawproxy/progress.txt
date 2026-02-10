@@ -359,3 +359,16 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks
   - cd services/clawproxy && npm test && npm run typecheck
 ---
+
+## 2026-02-10 - CPX-US-016 (Model identity in receipts)
+- What was implemented
+  - Emit tiered model identity in canonical receipt envelope metadata:
+    - `_receipt_envelope.payload.metadata.model_identity`
+    - `_receipt_envelope.payload.metadata.model_identity_hash_b64u = sha256_b64u(JCS(model_identity))`
+  - Default tier for closed providers: `closed_opaque`
+  - Preserve existing upstream metadata (e.g. fal OpenRouter routing fields) alongside model identity
+- Tests
+  - Added `services/clawproxy/test/model-identity.test.ts`
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
+---
