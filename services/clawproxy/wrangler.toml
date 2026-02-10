@@ -26,6 +26,11 @@ CST_ISSUER_PUBLIC_KEY = "KhBwy4lBSKtd7M9eWyNnYfpIPl7sGnDWTSyJpmjYcjc"
 # Audience override (stabilizes staging usage)
 CST_AUDIENCE = "clawproxy.com"
 
+# WPC (Work Policy Contract) registry (clawcontrols)
+WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
+# Allowlisted WPC signer DIDs (did:key:...)
+WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK"
+
 # Secrets/vars to be set via wrangler secret put (or via dashboard vars):
 # - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
 # - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
@@ -52,3 +57,6 @@ new_classes = ["IdempotencyDurableObject"]
 PROXY_VERSION = "0.1.0"
 CST_ISSUER_PUBLIC_KEY = "pwdA3cDDu9BF7vmFGs7E5m_aT8qRtMHe0QOIi5-ci90"
 CST_AUDIENCE = "clawproxy.com"
+
+WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
+WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK,did:key:z6Mkoy4MkeFsYo2VTuRRVZ6QoguECQgT1wRJkhfoAu2bHKZt"

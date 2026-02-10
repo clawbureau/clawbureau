@@ -98,6 +98,70 @@ export function base58Encode(bytes: Uint8Array): string {
 }
 
 /**
+ * Base58btc decoder (Bitcoin alphabet).
+ */
+export function base58Decode(str: string): Uint8Array {
+  const bytes: number[] = [0];
+
+  for (const char of str) {
+    const value = BASE58_ALPHABET.indexOf(char);
+    if (value === -1) {
+      throw new Error(`Invalid base58 character: ${char}`);
+    }
+
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = bytes[i]! * 58;
+    }
+    bytes[0] = bytes[0]! + value;
+
+    let carry = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      const next = bytes[i]! + carry;
+      bytes[i] = next & 0xff;
+      carry = next >> 8;
+    }
+
+    while (carry) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+
+  // Handle leading zeros
+  for (const char of str) {
+    if (char !== '1') break;
+    bytes.push(0);
+  }
+
+  return new Uint8Array(bytes.reverse());
+}
+
+/**
+ * Extract raw Ed25519 public key bytes from a did:key DID.
+ * Expects multibase base58btc (z) and Ed25519 multicodec prefix 0xed01.
+ */
+export function extractEd25519PublicKeyFromDidKey(did: string): Uint8Array | null {
+  if (!did.startsWith('did:key:z')) {
+    return null;
+  }
+
+  try {
+    // Remove did:key:z prefix and decode multibase (z = base58btc)
+    const multibase = did.slice(9);
+    const decoded = base58Decode(multibase);
+
+    // Ed25519 multicodec prefix is 0xed01
+    if (decoded[0] === 0xed && decoded[1] === 0x01) {
+      return decoded.slice(2);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Derive a did:key DID for an Ed25519 public key.
  * Format: did:key:z<base58btc(0xed01 + rawPublicKeyBytes)>
  */

@@ -28,6 +28,12 @@ export interface Env {
   /** Optional AES key for encrypting receipt payloads (base64url-encoded 32-byte key) */
   PROXY_ENCRYPTION_KEY?: string;
 
+  /** Work Policy Contract (WPC) registry base URL (default: https://clawcontrols.com) */
+  WPC_REGISTRY_BASE_URL?: string;
+
+  /** Optional comma-separated allowlist of WPC signer DIDs (did:key:...) */
+  WPC_SIGNER_DIDS?: string;
+
   /**
    * CST (Scoped Token) issuer public key for validating JWT (EdDSA/Ed25519)
    * Base64url-encoded raw 32-byte Ed25519 public key.
