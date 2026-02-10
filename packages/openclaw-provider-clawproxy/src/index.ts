@@ -51,6 +51,90 @@ export type { HarnessRecorder } from './recorder.js';
 // Crypto utilities for key management
 export { generateKeyPair, didFromPublicKey, hashJsonB64u } from './crypto.js';
 
+// ---------------------------------------------------------------------------
+// Marketplace CST auto-fetch (POH-US-021)
+// ---------------------------------------------------------------------------
+
+type BountyCstResponse = {
+  cwc_auth?: {
+    cst: string;
+    token_scope_hash_b64u: string;
+    policy_hash_b64u: string;
+    mission_id: string;
+  };
+};
+
+function getEnvVar(name: string): string | undefined {
+  // Avoid a hard dependency on Node types in this package.
+  const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  const v = env?.[name];
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+async function maybeFetchJobCstFromBounties(config: ClawproxyProviderConfig, deps: PluginDeps): Promise<void> {
+  if (config.token) return;
+
+  const baseUrl = getEnvVar('CLAWBOUNTIES_BASE_URL');
+  const bountyId = getEnvVar('CLAWBOUNTIES_BOUNTY_ID');
+  const workerToken = getEnvVar('CLAWBOUNTIES_WORKER_TOKEN');
+
+  const any = Boolean(baseUrl || bountyId || workerToken);
+  if (!any) return;
+
+  if (!baseUrl || !bountyId || !workerToken) {
+    throw new Error(
+      'clawproxy provider: marketplace CST auto-fetch requested but missing env vars (need CLAWBOUNTIES_BASE_URL, CLAWBOUNTIES_BOUNTY_ID, CLAWBOUNTIES_WORKER_TOKEN)'
+    );
+  }
+
+  deps.logger.info(`clawproxy provider: fetching job CST from clawbounties (${baseUrl}, bounty=${bountyId})`);
+
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/bounties/${encodeURIComponent(bountyId)}/cst`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${workerToken}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: '{}',
+  });
+
+  const text = await res.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(`clawproxy provider: clawbounties /cst failed: HTTP ${res.status}: ${text}`);
+  }
+
+  const parsed = json as Partial<BountyCstResponse>;
+  const cst = parsed?.cwc_auth?.cst;
+  const policyHash = parsed?.cwc_auth?.policy_hash_b64u;
+
+  if (typeof cst !== 'string' || cst.trim().length === 0) {
+    throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.cst)');
+  }
+
+  if (typeof policyHash !== 'string' || policyHash.trim().length === 0) {
+    throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.policy_hash_b64u)');
+  }
+
+  config.token = cst.trim();
+
+  // Avoid POLICY_HASH_MISMATCH errors when CST pins policy_hash_b64u.
+  if (config.policyHashB64u && config.policyHashB64u !== policyHash.trim()) {
+    deps.logger.warn(
+      `clawproxy provider: overriding policyHashB64u from config (${config.policyHashB64u}) to match job CST policy_hash_b64u (${policyHash.trim()})`
+    );
+  }
+  config.policyHashB64u = policyHash.trim();
+}
+
 // ── Plugin definition ───────────────────────────────────────────────────────
 
 /**
@@ -97,6 +181,8 @@ const plugin = {
         'clawproxy provider: baseUrl is required in configuration',
       );
     }
+
+    await maybeFetchJobCstFromBounties(config, deps);
 
     deps.logger.info(
       `clawproxy provider: initializing (baseUrl=${config.baseUrl}, auth=${config.token ? 'token' : 'passthrough'})`,

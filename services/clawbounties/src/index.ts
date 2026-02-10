@@ -4867,16 +4867,8 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
       return errorResponse('CWC_INVALID_BOUNTY', 'Bounty is missing cwc_wpc_policy_hash_b64u', 500, undefined, version);
     }
 
-    // CWC bounties require clawscope so we can issue a job-scoped CST.
-    if (!env.SCOPE_ADMIN_KEY?.trim()) {
-      return errorResponse(
-        'SCOPE_NOT_CONFIGURED',
-        'SCOPE_ADMIN_KEY is not configured (required for CWC bounties)',
-        503,
-        undefined,
-        version
-      );
-    }
+    // Note: CST issuance (via clawscope) is best-effort. We still compute and persist
+    // the deterministic expected token_scope_hash_b64u even if clawscope is not configured.
 
     try {
       expectedTokenScopeHash = await computeTokenScopeHashB64uV1({
@@ -4927,6 +4919,16 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
   // Already accepted.
   if (bounty.worker_did) {
     if (bounty.worker_did === worker_did) {
+      if (bounty.status !== 'accepted') {
+        return errorResponse(
+          'INVALID_STATUS',
+          `Cannot accept bounty in status '${bounty.status}'`,
+          409,
+          { status: bounty.status },
+          version
+        );
+      }
+
       // If this bounty is governed by a CWC and is missing the worker countersign,
       // allow an idempotent accept call to provide/store it.
       if (cwcNeedsCountersign && cwc_worker_envelope_json) {
@@ -5147,6 +5149,16 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
       'Bounty is accepted by a different worker',
       403,
       { worker_did: bounty.worker_did },
+      version
+    );
+  }
+
+  if (bounty.status !== 'accepted') {
+    return errorResponse(
+      'INVALID_STATUS',
+      `Cannot issue CST for bounty in status '${bounty.status}'`,
+      409,
+      { status: bounty.status },
       version
     );
   }

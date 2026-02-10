@@ -68,6 +68,57 @@ async function loadOrGenerateKeyPair(keyFile: string): Promise<Ed25519KeyPair> {
 }
 
 // ---------------------------------------------------------------------------
+// Marketplace CST auto-fetch (POH-US-021)
+// ---------------------------------------------------------------------------
+
+type BountyCstResponse = {
+  cwc_auth?: {
+    cst: string;
+    token_scope_hash_b64u: string;
+    policy_hash_b64u?: string;
+    mission_id?: string;
+  };
+};
+
+async function fetchJobCstFromBounties(params: {
+  baseUrl: string;
+  bountyId: string;
+  workerToken: string;
+}): Promise<string> {
+  const baseUrl = params.baseUrl.replace(/\/$/, '');
+  const url = `${baseUrl}/v1/bounties/${encodeURIComponent(params.bountyId)}/cst`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${params.workerToken.trim()}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: '{}',
+  });
+
+  const text = await res.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(`clawbounties /cst failed: HTTP ${res.status}: ${text}`);
+  }
+
+  const parsed = json as Partial<BountyCstResponse>;
+  const cst = parsed?.cwc_auth?.cst;
+  if (typeof cst !== 'string' || cst.trim().length === 0) {
+    throw new Error('clawbounties /cst returned an invalid response (missing cwc_auth.cst)');
+  }
+
+  return cst.trim();
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -80,7 +131,13 @@ export async function main(argv: string[]): Promise<void> {
       `Supported harnesses: ${listAdapters().join(', ')}\n\n` +
       `Environment:\n` +
       `  ${ENV.CLAWPROXY_BASE_URL}   — clawproxy base URL (required)\n` +
-      `  ${ENV.CLAWPROXY_TOKEN} — bearer token (optional)\n` +
+      `  ${ENV.CLAWPROXY_TOKEN} — CST token for proxy auth (optional)\n` +
+      `\n` +
+      `  # Optional: marketplace job CST auto-fetch (POH-US-021)\n` +
+      `  ${ENV.CLAWBOUNTIES_BASE_URL} — clawbounties base URL (optional)\n` +
+      `  ${ENV.CLAWBOUNTIES_BOUNTY_ID} — bounty id (bty_...)\n` +
+      `  ${ENV.CLAWBOUNTIES_WORKER_TOKEN} — worker auth token (Bearer ...)\n` +
+      `\n` +
       `  ${ENV.AGENT_KEY_FILE}    — JWK key file (default: .clawproof-key.json)\n` +
       `  ${ENV.OUTPUT_DIR}  — output dir (default: .clawproof/)\n`,
     );
@@ -116,7 +173,40 @@ export async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  const proxyToken = process.env[ENV.CLAWPROXY_TOKEN];
+  let proxyToken = process.env[ENV.CLAWPROXY_TOKEN];
+
+  const bountiesBaseUrl = process.env[ENV.CLAWBOUNTIES_BASE_URL];
+  const bountiesBountyId = process.env[ENV.CLAWBOUNTIES_BOUNTY_ID];
+  const bountiesWorkerToken = process.env[ENV.CLAWBOUNTIES_WORKER_TOKEN];
+
+  // POH-US-021: If no proxy token was provided, optionally fetch a job-scoped CST from clawbounties.
+  if (!proxyToken && (bountiesBaseUrl || bountiesBountyId || bountiesWorkerToken)) {
+    if (!bountiesBaseUrl || !bountiesBountyId || !bountiesWorkerToken) {
+      process.stderr.write(
+        `clawproof: marketplace CST auto-fetch requested but missing env vars. Need ${ENV.CLAWBOUNTIES_BASE_URL}, ${ENV.CLAWBOUNTIES_BOUNTY_ID}, ${ENV.CLAWBOUNTIES_WORKER_TOKEN}.\n`,
+      );
+      process.exit(1);
+      return;
+    }
+
+    process.stderr.write(
+      `clawproof: fetching job CST from clawbounties (${bountiesBaseUrl}, bounty=${bountiesBountyId})\n`,
+    );
+
+    try {
+      proxyToken = await fetchJobCstFromBounties({
+        baseUrl: bountiesBaseUrl,
+        bountyId: bountiesBountyId,
+        workerToken: bountiesWorkerToken,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      process.stderr.write(`clawproof: failed to fetch job CST: ${message}\n`);
+      process.exit(1);
+      return;
+    }
+  }
+
   const keyFile = process.env[ENV.AGENT_KEY_FILE] ?? '.clawproof-key.json';
   const outputDir = process.env[ENV.OUTPUT_DIR] ?? '.clawproof';
 
