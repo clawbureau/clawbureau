@@ -1,0 +1,3 @@
+[submodule "services/clawea"]
+	path = services/clawea
+	url = git@github.com:clawbureau/clawea.git
