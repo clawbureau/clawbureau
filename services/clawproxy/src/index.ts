@@ -55,6 +55,7 @@ import {
 export { IdempotencyDurableObject } from './idempotency';
 
 import { validateScopedToken } from './scoped-token';
+import { computeTokenScopeHashB64uV1 } from './token-scope-hash';
 import {
   extractPolicyFromHeaders,
   enforceProviderAllowlist,
@@ -301,7 +302,13 @@ curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
 curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
   -H "Authorization: Bearer $OPENAI_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
+
+# Gemini (google provider; OpenAI-compatible request body)
+curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/google" \
+  -H "X-Provider-API-Key: $GEMINI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gemini-3-flash-preview","messages":[{"role":"user","content":"hello"}]}'</pre>
 
       <p>See also: <a href="/skill.md">/skill.md</a></p>
     </main>
@@ -354,13 +361,14 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 - \`X-Scoped-Token: <CST>\` (alternate)
 - \`Authorization: Bearer <CST>\` (legacy; disabled when \`STRICT_AUTH_HEADERS=true\`)
 - When \`X-Client-DID\` is set, a valid CST token is required (fail-closed).
+- The gateway recomputes and verifies \`token_scope_hash_b64u\` from canonical token claims (fail-closed).
 
 ### BYOK provider keys
 - Recommended (all providers): \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
 - Legacy provider-compatible headers (non-strict mode only):
   - \`Authorization: Bearer <openai api key>\` (OpenAI-compatible routes)
   - \`x-api-key: <anthropic api key>\` (or \`anthropic-api-key\`)
-  - \`x-goog-api-key: <google api key>\`
+  - \`x-goog-api-key: <gemini api key>\` (Gemini OpenAI-compat upstream)
   - \`Authorization: Bearer <provider api key>\` (only when Authorization is not used for CST)
 
 ### Strict auth headers mode
@@ -388,6 +396,7 @@ See: receipt_binding.v1.json schema for the full specification.
 ## Notes
 
 - Receipts are signed with the proxy Ed25519 key; retrieve the public key from /v1/did.
+- Google/Gemini: call \`POST /v1/proxy/google\` with an OpenAI-compatible body (\`{ model, messages, ... }\`).
 - When X-Client-DID is set, a scoped token (CST) may be required, depending on deployment config.
 `;
 
@@ -1120,13 +1129,46 @@ async function handleProxy(
         ? tokenValidation.claims.policy_hash_b64u.trim()
         : undefined;
 
+    const tokenScopeHashFromToken = tokenValidation.claims.token_scope_hash_b64u.trim();
+
+    // CPX-US-035: Recompute token_scope_hash_b64u from canonical claims (fail-closed).
+    let expectedTokenScopeHash: string;
+    try {
+      expectedTokenScopeHash = await computeTokenScopeHashB64uV1({
+        sub: tokenValidation.claims.sub,
+        aud: tokenValidation.claims.aud,
+        scope: tokenValidation.claims.scope,
+        owner_ref: typeof tokenValidation.claims.owner_ref === 'string' ? tokenValidation.claims.owner_ref : undefined,
+        policy_hash_b64u: policyHashFromToken,
+        spend_cap: typeof tokenValidation.claims.spend_cap === 'number' ? tokenValidation.claims.spend_cap : undefined,
+        mission_id: typeof tokenValidation.claims.mission_id === 'string' ? tokenValidation.claims.mission_id : undefined,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown error';
+      return errorResponseWithRateLimit(
+        'TOKEN_SCOPE_HASH_INVALID',
+        `Failed to compute token_scope_hash_b64u from claims: ${message}`,
+        401,
+        rateLimitInfo
+      );
+    }
+
+    if (expectedTokenScopeHash !== tokenScopeHashFromToken) {
+      return errorResponseWithRateLimit(
+        'TOKEN_SCOPE_HASH_MISMATCH',
+        'Token token_scope_hash_b64u does not match the deterministic hash of its claims',
+        401,
+        rateLimitInfo
+      );
+    }
+
     validatedCst = {
       token_hash: tokenValidation.token_hash,
       claims: {
         sub: tokenValidation.claims.sub,
         aud: tokenValidation.claims.aud,
         scope: tokenValidation.claims.scope,
-        token_scope_hash_b64u: tokenValidation.claims.token_scope_hash_b64u,
+        token_scope_hash_b64u: tokenScopeHashFromToken,
         policy_hash_b64u: policyHashFromToken,
       },
     };
