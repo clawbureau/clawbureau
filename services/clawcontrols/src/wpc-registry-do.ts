@@ -16,8 +16,12 @@ function error(code: string, message: string, status: number): Response {
   return json({ ok: false, error: { code, message } }, status);
 }
 
-const MAX_WPC_BYTES = 128 * 1024;
+// Durable Object per-value storage limits are ~128KB; keep headroom for envelope overhead.
+const MAX_WPC_BYTES = 64 * 1024;
 const STORAGE_PREFIX = 'wpc:';
+
+const B64U_RE = /^[A-Za-z0-9_-]+$/;
+const SHA256_B64U_LEN = 43;
 
 type StoredWpc = {
   envelope: SignedEnvelope<WorkPolicyContractV1>;
@@ -88,10 +92,11 @@ export class WpcRegistryDurableObject {
     try {
       text = await request.text();
     } catch {
-      return error('INVALID_REQUEST', 'Request body must be valid JSON', 400);
+      return error('BODY_READ_FAILED', 'Failed to read request body', 400);
     }
 
-    if (text.length > MAX_WPC_BYTES) {
+    const bodyBytes = new TextEncoder().encode(text);
+    if (bodyBytes.length > MAX_WPC_BYTES) {
       return error('PAYLOAD_TOO_LARGE', `WPC body exceeds ${MAX_WPC_BYTES} bytes`, 413);
     }
 
@@ -190,8 +195,12 @@ export class WpcRegistryDurableObject {
       return error('INVALID_POLICY_HASH', 'policy_hash_b64u must be non-empty', 400);
     }
 
-    if (normalized.length > 256) {
-      return error('INVALID_POLICY_HASH', 'policy_hash_b64u is too long', 400);
+    if (!B64U_RE.test(normalized)) {
+      return error('INVALID_POLICY_HASH', 'policy_hash_b64u must be base64url (no padding)', 400);
+    }
+
+    if (normalized.length !== SHA256_B64U_LEN) {
+      return error('INVALID_POLICY_HASH', `policy_hash_b64u must be SHA-256 base64url length ${SHA256_B64U_LEN}`, 400);
     }
 
     const storageKey = `${STORAGE_PREFIX}${normalized}`;

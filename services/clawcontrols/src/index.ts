@@ -47,7 +47,19 @@ function isAdminAuthed(request: Request, env: Env): boolean {
 
   const auth = request.headers.get('authorization');
   if (!auth) return false;
-  return auth === `Bearer ${expected}`;
+
+  // Parse "Authorization" header in a scheme-agnostic, whitespace-tolerant way.
+  // Expected: "Bearer <token>" (scheme is case-insensitive).
+  const parts = auth.trim().split(/\s+/g);
+  if (parts.length < 2) return false;
+
+  const scheme = parts[0]!.toLowerCase();
+  const token = parts.slice(1).join(' ').trim();
+
+  if (scheme !== 'bearer') return false;
+  if (token.length === 0) return false;
+
+  return token === expected.trim();
 }
 
 function getRegistryStub(env: Env): DurableObjectStub {
@@ -150,7 +162,18 @@ export default {
       }
 
       const stub = getRegistryStub(env);
-      return stub.fetch(request);
+      const doResponse = await stub.fetch(request);
+
+      const headers = new Headers(doResponse.headers);
+      if (!headers.has('access-control-allow-origin')) {
+        headers.set('access-control-allow-origin', '*');
+      }
+
+      return new Response(doResponse.body, {
+        status: doResponse.status,
+        statusText: doResponse.statusText,
+        headers,
+      });
     }
 
     // Fallback

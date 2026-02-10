@@ -24,7 +24,7 @@
       "const": "work_policy_contract"
     },
     "payload": {
-      "$ref": "./work_policy_contract.v1.json"
+      "$ref": "https://schemas.clawbureau.org/claw.policy.work_policy_contract.v1.json"
     },
     "payload_hash_b64u": {
       "type": "string",
@@ -36,6 +36,7 @@
     },
     "signature_b64u": {
       "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
       "minLength": 8
     },
     "algorithm": {
