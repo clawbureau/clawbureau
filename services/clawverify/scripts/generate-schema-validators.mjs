@@ -26,6 +26,7 @@ function readJson(relPath) {
 }
 
 const receiptBinding = readJson('packages/schema/poh/receipt_binding.v1.json');
+const modelIdentity = readJson('packages/schema/poh/model_identity.v1.json');
 const gatewayReceipt = readJson('packages/schema/poh/gateway_receipt.v1.json');
 const gatewayReceiptEnvelope = readJson('packages/schema/poh/gateway_receipt_envelope.v1.json');
 const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
@@ -51,6 +52,7 @@ addFormats(ajv);
 
 // Add referenced schemas first.
 ajv.addSchema(receiptBinding);
+ajv.addSchema(modelIdentity);
 
 // Add payload + envelope schemas.
 ajv.addSchema(gatewayReceipt);
@@ -68,6 +70,7 @@ ajv.addSchema(systemPromptReport);
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
+  validateModelIdentityV1: modelIdentity.$id,
   validateUrmV1: urm.$id,
   validatePromptPackV1: promptPack.$id,
   validateSystemPromptReportV1: systemPromptReport.$id,

@@ -118,6 +118,8 @@ async function verifyItem(
         provider: result.provider,
         model: result.model,
         gateway_id: result.gateway_id,
+        model_identity_tier: result.model_identity_tier,
+        risk_flags: result.risk_flags,
       };
     }
 

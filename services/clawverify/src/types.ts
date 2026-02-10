@@ -59,6 +59,7 @@ export interface VerifyAgentResponse {
   trust_tier: TrustTier;
   proof_tier: ProofTier;
   poh_tier: number;
+  model_identity_tier?: ModelIdentityTier;
   policy_compliance?: PolicyComplianceResult;
   risk_flags?: string[];
   components?: {
@@ -72,6 +73,7 @@ export interface VerifyAgentResponse {
       reason: string;
       trust_tier?: TrustTier;
       proof_tier?: ProofTier;
+      model_identity_tier?: ModelIdentityTier;
       error?: VerificationError;
     };
   };
@@ -257,6 +259,8 @@ export interface VerifyReceiptResponse {
   provider?: string;
   model?: string;
   gateway_id?: string;
+  model_identity_tier?: ModelIdentityTier;
+  risk_flags?: string[];
   error?: VerificationError;
 }
 
@@ -401,6 +405,8 @@ export interface BatchItemResult {
   provider?: string;
   model?: string;
   gateway_id?: string;
+  model_identity_tier?: ModelIdentityTier;
+  risk_flags?: string[];
 }
 
 /** Batch verification request */
@@ -575,6 +581,20 @@ export type ProofTier =
   | 'tee'
   | 'witnessed_web';
 
+/**
+ * PoH vNext: model identity tier (orthogonal to PoH proof tiers).
+ *
+ * Semantics:
+ * - `proof_tier` answers: "how was it executed?" (self/gateway/sandbox)
+ * - `model_identity_tier` answers: "what can we honestly claim about the underlying model identity?"
+ */
+export type ModelIdentityTier =
+  | 'unknown'
+  | 'closed_opaque'
+  | 'closed_provider_manifest'
+  | 'openweights_hashable'
+  | 'tee_measured';
+
 /** Proof bundle verification result */
 export interface ProofBundleVerificationResult {
   status: VerificationStatus;
@@ -584,6 +604,9 @@ export interface ProofBundleVerificationResult {
   agent_did?: string;
   trust_tier?: TrustTier;
   proof_tier?: ProofTier;
+  model_identity_tier?: ModelIdentityTier;
+  /** Optional deterministic risk flags (non-normative). */
+  risk_flags?: string[];
   component_results?: {
     envelope_valid: boolean;
     urm_valid?: boolean;
@@ -622,6 +645,8 @@ export interface VerifyBundleResponse {
   result: ProofBundleVerificationResult;
   trust_tier?: TrustTier;
   proof_tier?: ProofTier;
+  model_identity_tier?: ModelIdentityTier;
+  risk_flags?: string[];
   error?: VerificationError;
 }
 

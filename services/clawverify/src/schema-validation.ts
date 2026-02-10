@@ -12,6 +12,7 @@ import type { ErrorObject } from 'ajv';
 import {
   validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
+  validateModelIdentityV1 as validateModelIdentityV1Generated,
   validateUrmV1 as validateUrmV1Generated,
   validatePromptPackV1 as validatePromptPackV1Generated,
   validateSystemPromptReportV1 as validateSystemPromptReportV1Generated,
@@ -38,6 +39,9 @@ const validateProofBundleEnvelopeV1Fn =
 
 const validateGatewayReceiptEnvelopeV1Fn =
   validateGatewayReceiptEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateModelIdentityV1Fn =
+  validateModelIdentityV1Generated as StandaloneValidateFunction;
 
 const validateUrmV1Fn = validateUrmV1Generated as StandaloneValidateFunction;
 
@@ -186,6 +190,10 @@ export function validateGatewayReceiptEnvelopeV1(
     envelope,
     'gateway_receipt_envelope.v1'
   );
+}
+
+export function validateModelIdentityV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateModelIdentityV1Fn, value, 'model_identity.v1');
 }
 
 export function validateUrmV1(urm: unknown): SchemaValidationResult {

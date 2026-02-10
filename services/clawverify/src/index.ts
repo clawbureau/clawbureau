@@ -647,6 +647,8 @@ async function handleVerifyBundle(
     ...verification,
     trust_tier: verification.result.trust_tier,
     proof_tier: verification.result.proof_tier,
+    model_identity_tier: verification.result.model_identity_tier,
+    risk_flags: verification.result.risk_flags,
     audit_receipt: auditReceipt,
   };
 
