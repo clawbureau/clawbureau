@@ -34,3 +34,10 @@ Started: 2026-02-03
   - `packages/schema/policy/confidential_work_contract.v1.json`
   - `packages/schema/policy/confidential_work_contract_envelope.v1.json`
 - Updated `packages/schema/README.md` to list the new CWC schemas.
+
+## CSC-US-001 — Scoped token claim hardening (token_scope_hash_b64u)
+- Tightened CST claim schema:
+  - `packages/schema/auth/scoped_token_claims.v1.json` now enforces SHA-256 base64url patterns for:
+    - `policy_hash_b64u`
+    - `token_scope_hash_b64u`
+  - Documented the deterministic `token_scope_hash_b64u` derivation algorithm (JCS + sha256_b64u) in the schema description.

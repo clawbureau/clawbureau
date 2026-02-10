@@ -186,6 +186,11 @@ The proxy additionally injects two server-side binding fields:
 
 All binding fields are embedded in the signed receipt payload and are **tamper-proof** — any modification breaks the Ed25519 signature.
 
+**token_scope_hash_b64u (v1):** deterministic scope hash computed by the CST issuer as:
+- `token_scope_hash_b64u = sha256_b64u(JCS({token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, spend_cap?, mission_id?}))`
+- `aud` and `scope` MUST be normalized as sorted unique arrays
+- `iat/exp/jti/nonce` MUST be excluded so re-issuance yields the same scope hash.
+
 **Schema reference:** `packages/schema/poh/receipt_binding.v1.json`
 
 **Implementation:** `services/clawproxy/src/idempotency.ts` (extraction) and `services/clawproxy/src/receipt.ts` (embedding + signing).
