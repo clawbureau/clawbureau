@@ -14,7 +14,11 @@
  *   CLAWEA_TENANT_KEY=... node scripts/clawea/smoke-controlui-ws.mjs --env prod --agent <agentId>
  *
  * Optional:
- *   --base-url <url>   Override base URL (defaults to https://clawea.com[/staging])
+ *   --base-url <url>   Override base URL.
+ *
+ * Defaults:
+ *   - prod:    https://clawea.com
+ *   - staging: https://staging.clawea.com  (falls back to https://clawea.com/staging)
  */
 
 import process from 'node:process';
@@ -264,28 +268,64 @@ async function smoke() {
 
   const baseUrlArg = args.get('base-url');
 
-  const baseUrl =
-    typeof baseUrlArg === 'string' && baseUrlArg.trim().length > 0
-      ? String(baseUrlArg).trim()
-      : envName === 'prod' || envName === 'production'
-          ? 'https://clawea.com'
-          : 'https://clawea.com/staging';
+  /** @type {string[]} */
+  const baseUrlCandidates = [];
+  if (typeof baseUrlArg === 'string' && baseUrlArg.trim().length > 0) {
+    baseUrlCandidates.push(String(baseUrlArg).trim());
+  } else if (envName === 'prod' || envName === 'production') {
+    baseUrlCandidates.push('https://clawea.com');
+  } else {
+    // Prefer the canonical staging origin once DNS exists, but keep the path-based
+    // mount as a fallback while /staging is still routed.
+    baseUrlCandidates.push('https://staging.clawea.com', 'https://clawea.com/staging');
+  }
 
-  const base = new URL(baseUrl);
-  const origin = `${base.protocol}//${base.host}`;
-  const host = base.host;
-  const pathPrefix = base.pathname.replace(/\/$/, '');
+  /** @type {string | null} */
+  let baseUrl = null;
+  /** @type {URL | null} */
+  let base = null;
+  /** @type {string | null} */
+  let origin = null;
+  /** @type {string | null} */
+  let host = null;
+  /** @type {string | null} */
+  let pathPrefix = null;
+  /** @type {{ res: Response, status: number, text: string, json: any } | null} */
+  let sessionRes = null;
 
-  // 1) Mint control-session token
-  const sessionRes = await httpJson(`${origin}${pathPrefix}/v1/agents/${encodeURIComponent(agentId)}/control-session`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${tenantKey}`,
-    },
-  });
+  let lastErr = null;
 
-  assert(sessionRes.status === 200, `control-session expected 200, got ${sessionRes.status}: ${sessionRes.text}`);
-  assert(isRecord(sessionRes.json) && typeof sessionRes.json.url === 'string', 'control-session response missing url');
+  for (const candidate of baseUrlCandidates) {
+    try {
+      const u = new URL(candidate);
+      const o = `${u.protocol}//${u.host}`;
+      const h = u.host;
+      const pfx = u.pathname.replace(/\/$/, '');
+
+      const out = await httpJson(`${o}${pfx}/v1/agents/${encodeURIComponent(agentId)}/control-session`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${tenantKey}`,
+        },
+      });
+
+      if (out.status === 200 && isRecord(out.json) && typeof out.json.url === 'string') {
+        baseUrl = candidate;
+        base = u;
+        origin = o;
+        host = h;
+        pathPrefix = pfx;
+        sessionRes = out;
+        break;
+      }
+
+      lastErr = new Error(`control-session expected 200, got ${out.status}: ${out.text}`);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  assert(baseUrl && base && origin && host && pathPrefix !== null && sessionRes, `Failed to reach clawea base URL. candidates=${baseUrlCandidates.join(', ')} lastErr=${String(lastErr)}`);
 
   const sessionUrl = new URL(String(sessionRes.json.url), origin);
   const sessionToken = sessionUrl.searchParams.get('session') || '';
