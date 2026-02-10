@@ -19,7 +19,18 @@ import type {
 } from './types';
 import { sha256 as nobleSha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { isValidProvider, getProviderConfig, buildAuthHeader, buildProviderUrl, extractModel, getSupportedProviders, type OpenAIUpstreamApi } from './providers';
+import {
+  isValidProvider,
+  getProviderConfig,
+  buildAuthHeader,
+  buildProviderUrl,
+  extractModel,
+  getSupportedProviders,
+  isFalOpenrouterModel,
+  buildFalOpenrouterUrl,
+  buildFalOpenrouterAuthHeader,
+  type OpenAIUpstreamApi,
+} from './providers';
 import {
   generateReceipt,
   generateReceiptFromHashes,
@@ -308,7 +319,13 @@ curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
 curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/google" \
   -H "X-Provider-API-Key: $GEMINI_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gemini-3-flash-preview","messages":[{"role":"user","content":"hello"}]}'</pre>
+  -d '{"model":"gemini-3-flash-preview","messages":[{"role":"user","content":"hello"}]}'
+
+# OpenRouter via fal (OpenAI-compatible; model prefix openrouter/)
+curl -sS -X POST "${escapeHtml(origin)}/v1/chat/completions" \
+  -H "X-Provider-API-Key: $FAL_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"openrouter/openai/gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
 
       <p>See also: <a href="/skill.md">/skill.md</a></p>
     </main>
@@ -397,6 +414,7 @@ See: receipt_binding.v1.json schema for the full specification.
 
 - Receipts are signed with the proxy Ed25519 key; retrieve the public key from /v1/did.
 - Google/Gemini: call \`POST /v1/proxy/google\` with an OpenAI-compatible body (\`{ model, messages, ... }\`).
+- OpenRouter (via fal): set \`model\` to \`openrouter/...\` and call \`POST /v1/chat/completions\` (or \`POST /v1/proxy/openai\`) with \`X-Provider-API-Key: $FAL_KEY\`. The proxy sends \`Authorization: Key ...\` upstream.
 - When X-Client-DID is set, a scoped token (CST) may be required, depending on deployment config.
 `;
 
@@ -1313,6 +1331,19 @@ async function handleProxy(
   // Extract model for receipt
   const model = extractModel(provider, parsedBody);
 
+  // OpenRouter-through-fal uses OpenAI-compatible endpoints but a different upstream base + auth.
+  const falOpenrouter = provider === 'openai' && isFalOpenrouterModel(model);
+
+  // Fail closed: platform-paid OpenAI keys are not valid for the fal OpenRouter router.
+  if (falOpenrouter && payment.mode !== 'user') {
+    return errorResponseWithRateLimit(
+      'UNAUTHORIZED',
+      'Provider API key required for openrouter/* models (set X-Provider-API-Key to your FAL key).',
+      401,
+      rateLimitInfo
+    );
+  }
+
   // Google Gemini requires model in the URL path
   if (provider === 'google' && !model) {
     return errorResponseWithRateLimit(
@@ -1358,7 +1389,9 @@ async function handleProxy(
         ? inferOpenAiUpstreamApi(request, parsedBody)
         : undefined;
 
-    providerUrl = buildProviderUrl(provider, model, { openaiApi });
+    providerUrl = falOpenrouter
+      ? buildFalOpenrouterUrl({ openaiApi })
+      : buildProviderUrl(provider, model, { openaiApi });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponseWithRateLimit('INVALID_REQUEST', message, 400, rateLimitInfo);
@@ -1459,7 +1492,7 @@ async function handleProxy(
   try {
     const providerHeaders: Record<string, string> = {
       'Content-Type': config.contentType,
-      ...buildAuthHeader(provider, apiKey),
+      ...(falOpenrouter ? buildFalOpenrouterAuthHeader(apiKey) : buildAuthHeader(provider, apiKey)),
     };
 
     // For streaming requests, explicitly request SSE from the upstream provider.
@@ -1578,6 +1611,7 @@ async function handleProxy(
 
           const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
             gatewayId,
+            metadata: falOpenrouter ? { upstream: 'fal_openrouter' } : undefined,
           });
 
           // Log token hash with receipt metadata (never log token itself)
@@ -1696,6 +1730,7 @@ async function handleProxy(
 
     receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
       gatewayId,
+      metadata: falOpenrouter ? { upstream: 'fal_openrouter' } : undefined,
     });
   } catch (err) {
     if (idempotency) {

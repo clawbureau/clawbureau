@@ -25,6 +25,7 @@ import { readFile, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createSession } from './session';
 import { startShim } from './shim';
+import { parseMarketplaceCstResponse } from './marketplace-cst';
 import { getAdapter, listAdapters } from './adapters/index';
 import {
   generateKeyPair,
@@ -71,20 +72,6 @@ async function loadOrGenerateKeyPair(keyFile: string): Promise<Ed25519KeyPair> {
 // Marketplace CST auto-fetch (POH-US-021/POH-US-022)
 // ---------------------------------------------------------------------------
 
-type BountyCstResponse = {
-  cwc_auth?: {
-    cst: string;
-    token_scope_hash_b64u: string;
-    policy_hash_b64u?: string;
-    mission_id?: string;
-  };
-  job_auth?: {
-    cst: string;
-    token_scope_hash_b64u: string;
-    policy_hash_b64u?: string;
-    mission_id?: string;
-  };
-};
 
 async function fetchJobCstFromBounties(params: {
   baseUrl: string;
@@ -115,13 +102,8 @@ async function fetchJobCstFromBounties(params: {
     throw new Error(`clawbounties /cst failed: HTTP ${res.status}: ${text}`);
   }
 
-  const parsed = json as Partial<BountyCstResponse>;
-  const cst = parsed?.cwc_auth?.cst ?? parsed?.job_auth?.cst;
-  if (typeof cst !== 'string' || cst.trim().length === 0) {
-    throw new Error('clawbounties /cst returned an invalid response (missing cwc_auth.cst or job_auth.cst)');
-  }
-
-  return cst.trim();
+  const parsed = parseMarketplaceCstResponse(json);
+  return parsed.cst;
 }
 
 // ---------------------------------------------------------------------------

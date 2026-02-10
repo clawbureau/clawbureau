@@ -344,3 +344,17 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks
   - cd services/clawproxy && npm test && npm run typecheck
 ---
+
+## 2026-02-10 - CPX-US-036 (OpenRouter-through-fal via clawproxy)
+- What was implemented
+  - Added routing for OpenRouter-through-fal via OpenAI-compatible endpoints:
+    - When request body `model` starts with `openrouter/`, clawproxy routes to the fal OpenRouter router:
+      - base: `https://fal.run/openrouter/router/openai/v1`
+      - endpoints: `/chat/completions` and `/responses`
+    - Upstream auth uses `Authorization: Key <FAL_KEY>` (fail-closed; not Bearer).
+    - Receipts include `metadata.upstream = "fal_openrouter"` for auditability.
+- Tests
+  - Extended providers tests to cover fal OpenRouter URL + auth header building.
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
+---

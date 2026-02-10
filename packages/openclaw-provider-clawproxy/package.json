@@ -12,7 +12,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "peerDependencies": {
     "openclaw": ">=2026.1.26"
