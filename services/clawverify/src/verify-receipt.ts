@@ -6,6 +6,7 @@
 import type {
   SignedEnvelope,
   GatewayReceiptPayload,
+  ModelIdentityTier,
   VerificationResult,
   VerificationError,
 } from './types';
@@ -25,6 +26,7 @@ import {
   verifySignature,
 } from './crypto';
 import { validateGatewayReceiptEnvelopeV1 } from './schema-validation';
+import { verifyModelIdentityFromReceiptPayload } from './model-identity';
 
 export interface ReceiptVerifierOptions {
   /**
@@ -141,6 +143,8 @@ export async function verifyReceipt(
   provider?: string;
   model?: string;
   gateway_id?: string;
+  model_identity_tier?: ModelIdentityTier;
+  risk_flags?: string[];
   error?: VerificationError;
 }> {
   const now = new Date().toISOString();
@@ -471,6 +475,19 @@ export async function verifyReceipt(
   }
 
   // 14. All checks passed - receipt is valid
+  let modelIdentityTier: ModelIdentityTier = 'unknown';
+  let modelIdentityRiskFlags: string[] = ['MODEL_IDENTITY_VERIFY_FAILED'];
+
+  try {
+    const modelIdentity = await verifyModelIdentityFromReceiptPayload(
+      envelope.payload
+    );
+    modelIdentityTier = modelIdentity.tier;
+    modelIdentityRiskFlags = modelIdentity.risk_flags;
+  } catch {
+    // Fail closed on the model identity axis only; do not break receipt verification.
+  }
+
   return {
     result: {
       status: 'VALID',
@@ -482,5 +499,7 @@ export async function verifyReceipt(
     provider: envelope.payload.provider,
     model: envelope.payload.model,
     gateway_id: envelope.payload.gateway_id,
+    model_identity_tier: modelIdentityTier,
+    risk_flags: modelIdentityRiskFlags,
   };
 }

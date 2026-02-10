@@ -16,6 +16,7 @@ import type {
   SignedEnvelope,
   TrustTier,
   ProofTier,
+  ModelIdentityTier,
   VerifyAgentRequest,
   VerifyAgentResponse,
   DidRotationCertificate,
@@ -244,6 +245,7 @@ export async function verifyAgent(
   let ownerStatus: OwnerAttestationStatus = 'unknown';
   let trustTier: TrustTier = 'unknown';
   let proofTier: ProofTier = 'unknown';
+  let modelIdentityTier: ModelIdentityTier | undefined;
   let policyCompliance: PolicyComplianceResult | undefined;
 
   const components: VerifyAgentResponse['components'] = {};
@@ -451,11 +453,22 @@ export async function verifyAgent(
       reason: bundleVerification.result.reason,
       trust_tier: bundleVerification.result.trust_tier,
       proof_tier: bundleVerification.result.proof_tier,
+      model_identity_tier: bundleVerification.result.model_identity_tier,
       error: bundleVerification.error,
     };
 
     trustTier = bundleVerification.result.trust_tier ?? 'unknown';
     proofTier = bundleVerification.result.proof_tier ?? 'unknown';
+    modelIdentityTier = bundleVerification.result.model_identity_tier;
+
+    // Merge proof-bundle risk flags into the top-level risk vector.
+    if (Array.isArray(bundleVerification.result.risk_flags)) {
+      for (const f of bundleVerification.result.risk_flags) {
+        if (typeof f === 'string' && f.length > 0 && !riskFlags.includes(f)) {
+          riskFlags.push(f);
+        }
+      }
+    }
 
     // Fail closed: if caller provided a bundle, it must verify
     if (bundleVerification.result.status !== 'VALID') {
@@ -618,6 +631,7 @@ export async function verifyAgent(
     trust_tier: trustTier,
     proof_tier: proofTier,
     poh_tier: pohTier,
+    model_identity_tier: modelIdentityTier,
     policy_compliance: policyCompliance,
     components,
     risk_flags: riskFlags.length > 0 ? riskFlags : undefined,

@@ -23,6 +23,7 @@ import type {
   VerificationError,
   TrustTier,
   ProofTier,
+  ModelIdentityTier,
   URMReference,
   AttestationReference,
   GatewayReceiptPayload,
@@ -43,6 +44,7 @@ import {
   verifySignature,
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
+import { computeModelIdentityTierFromReceipts } from './model-identity';
 import { jcsCanonicalize } from './jcs';
 import {
   validateProofBundleEnvelopeV1,
@@ -1175,6 +1177,10 @@ export async function verifyProofBundle(
     envelope_valid: true,
   };
 
+  // CVF-US-016: model identity is an orthogonal axis to PoH tiers.
+  let modelIdentityTier: ModelIdentityTier = 'unknown';
+  const modelIdentityRiskFlags = new Set<string>();
+
   // Validate event chain if present (verify hash linkage per POH-US-003)
   if (payload.event_chain !== undefined && payload.event_chain.length > 0) {
     const chainResult = validateEventChain(payload.event_chain);
@@ -1677,6 +1683,19 @@ export async function verifyProofBundle(
     componentResults.receipts_count = payload.receipts.length;
     componentResults.receipts_signature_verified_count = signatureValidCount;
     componentResults.receipts_verified_count = boundValidCount;
+
+    // CVF-US-016: Extract + verify model identity and compute an overall tier.
+    try {
+      const modelIdentity = await computeModelIdentityTierFromReceipts({
+        receipts: payload.receipts,
+        receiptResults,
+      });
+      modelIdentityTier = modelIdentity.model_identity_tier;
+      for (const f of modelIdentity.risk_flags) modelIdentityRiskFlags.add(f);
+    } catch {
+      modelIdentityTier = 'unknown';
+      modelIdentityRiskFlags.add('MODEL_IDENTITY_VERIFY_FAILED');
+    }
   }
 
   // Validate + verify attestations if present
@@ -1727,6 +1746,11 @@ export async function verifyProofBundle(
       agent_did: payload.agent_did,
       trust_tier: trustTier,
       proof_tier: proofTier,
+      model_identity_tier: modelIdentityTier,
+      risk_flags:
+        modelIdentityRiskFlags.size > 0
+          ? [...modelIdentityRiskFlags].sort()
+          : undefined,
       component_results: componentResults,
     },
   };
