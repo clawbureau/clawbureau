@@ -62,7 +62,10 @@ After the run completes, proof artifacts are written to `.clawproof/`:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `CLAWPROOF_PROXY_URL` | Yes | — | clawproxy base URL |
-| `CLAWPROOF_PROXY_TOKEN` | No | — | Bearer token for proxy auth |
+| `CLAWPROOF_PROXY_TOKEN` | No | — | CST token for proxy auth |
+| `CLAWBOUNTIES_BASE_URL` | No | — | clawbounties base URL (enables job CST auto-fetch when other vars are set) |
+| `CLAWBOUNTIES_BOUNTY_ID` | No | — | bounty id (bty_...) for job CST issuance |
+| `CLAWBOUNTIES_WORKER_TOKEN` | No | — | clawbounties worker auth token (Authorization: Bearer ...) |
 | `CLAWPROOF_KEY_FILE` | No | `.clawproof-key.json` | Path to Ed25519 JWK key file |
 | `CLAWPROOF_OUTPUT_DIR` | No | `.clawproof/` | Directory for proof artifacts |
 

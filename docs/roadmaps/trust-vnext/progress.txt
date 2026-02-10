@@ -396,3 +396,18 @@ Started: 2026-02-07T19:53:07Z
   - cd services/clawbounties && npm run typecheck
   - cd packages/openclaw-provider-clawproxy && npm run typecheck && npm test
 ---
+
+## 2026-02-10T13:45:00Z - POH-US-021 (CWC job CST binding)
+- What was implemented
+  - Extended CWC enforcement with job-scoped CST bindings:
+    - New D1 column `cwc_token_scope_hash_b64u` stores the expected deterministic scope hash.
+    - `POST /v1/bounties/{id}/accept` computes/stores the expected hash and (best-effort) issues a clawscope CST, returned as `cwc_auth`.
+    - New worker endpoint: `POST /v1/bounties/{id}/cst` issues/returns the CST for the accepted worker.
+    - `POST /v1/bounties/{id}/submit` enforces `receipt.payload.binding.token_scope_hash_b64u` matches the expected value on verified+run-bound receipts.
+- Files changed
+  - services/clawbounties/migrations/0011_cwc_job_cst.sql
+  - services/clawbounties/src/index.ts
+  - docs/roadmaps/proof-of-harness/oracle/2026-02-10/*
+- Quality checks
+  - cd services/clawbounties && npm run typecheck
+---
