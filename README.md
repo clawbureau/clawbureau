@@ -33,4 +33,16 @@ monorepo/
 
 ---
 
+## Private submodules
+
+Some services are maintained in **private repos** and included here as git submodules (for example, `services/clawea`).
+
+If you have access, initialize them with:
+
+```bash
+git submodule update --init --recursive
+```
+
+If you don't have access, you can ignore submodules and work on the public parts of the repo.
+
 See `docs/README.md` for the docs hub, and `docs/PRD_INDEX.md` for all domain PRDs.
