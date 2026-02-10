@@ -332,3 +332,15 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks
   - cd services/clawproxy && npm test && npm run typecheck
 ---
+
+## 2026-02-10 - CST policy pinning (policy_hash_b64u)
+- What was implemented
+  - Policy enforcement now supports pinning the WPC policy hash into the CST:
+    - If the validated CST contains `policy_hash_b64u`, clawproxy treats it as the authoritative policy hash.
+    - If the request also includes `X-Policy-Hash`, it MUST match the CST claim (fail-closed 403 `POLICY_HASH_MISMATCH`).
+    - In confidential mode, a CST policy hash satisfies the “policy required” condition (header is no longer strictly required).
+- Tests
+  - Added `services/clawproxy/test/policy-token-override.test.ts`.
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
+---

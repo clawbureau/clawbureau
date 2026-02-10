@@ -102,16 +102,42 @@ function resolvePrivacyMode(
  */
 export async function extractPolicyFromHeaders(
   request: Request,
-  env: Env
+  env: Env,
+  options?: { policyHashOverride?: string }
 ): Promise<PolicyExtractionResult> {
   const confidentialModeHeader = request.headers.get(CONFIDENTIAL_MODE_HEADER);
-  const policyHashRaw = request.headers.get(POLICY_HEADER) ?? undefined;
+  const policyHashHeader = request.headers.get(POLICY_HEADER) ?? undefined;
 
   // Confidential mode is enabled if header is present and truthy
   const confidentialMode = confidentialModeHeader === 'true' || confidentialModeHeader === '1';
 
+  const headerPolicyHash =
+    typeof policyHashHeader === 'string' && policyHashHeader.trim().length > 0
+      ? policyHashHeader.trim()
+      : undefined;
+
+  const overridePolicyHash =
+    typeof options?.policyHashOverride === 'string' && options.policyHashOverride.trim().length > 0
+      ? options.policyHashOverride.trim()
+      : undefined;
+
+  // If a policy hash is pinned into the CST, treat it as authoritative.
+  // If the caller also supplies X-Policy-Hash, it must match.
+  if (overridePolicyHash && headerPolicyHash && headerPolicyHash !== overridePolicyHash) {
+    return {
+      confidentialMode,
+      policyHash: overridePolicyHash,
+      privacyMode: resolvePrivacyMode(request, confidentialMode, undefined),
+      errorCode: 'POLICY_HASH_MISMATCH',
+      errorStatus: 403,
+      error: 'X-Policy-Hash does not match CST policy_hash_b64u',
+    };
+  }
+
+  const policyHash = overridePolicyHash ?? headerPolicyHash;
+
   // No policy requested.
-  if (!policyHashRaw || policyHashRaw.trim().length === 0) {
+  if (!policyHash) {
     const privacyMode = resolvePrivacyMode(request, confidentialMode, undefined);
 
     // Fail closed in confidential mode if no policy hash was provided.
@@ -121,14 +147,12 @@ export async function extractPolicyFromHeaders(
         privacyMode,
         errorCode: 'POLICY_REQUIRED',
         errorStatus: 400,
-        error: 'Confidential mode requires X-Policy-Hash header',
+        error: 'Confidential mode requires a policy hash (X-Policy-Hash or CST policy_hash_b64u)',
       };
     }
 
     return { confidentialMode: false, privacyMode };
   }
-
-  const policyHash = policyHashRaw.trim();
 
   if (!isWpcHashB64u(policyHash)) {
     return {

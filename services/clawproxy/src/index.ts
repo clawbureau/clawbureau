@@ -1047,6 +1047,7 @@ async function handleProxy(
           aud: string | string[];
           scope: string[];
           token_scope_hash_b64u: string;
+          policy_hash_b64u?: string;
         };
       }
     | undefined;
@@ -1113,6 +1114,12 @@ async function handleProxy(
       );
     }
 
+    const policyHashFromToken =
+      typeof tokenValidation.claims.policy_hash_b64u === 'string' &&
+      tokenValidation.claims.policy_hash_b64u.trim().length > 0
+        ? tokenValidation.claims.policy_hash_b64u.trim()
+        : undefined;
+
     validatedCst = {
       token_hash: tokenValidation.token_hash,
       claims: {
@@ -1120,13 +1127,16 @@ async function handleProxy(
         aud: tokenValidation.claims.aud,
         scope: tokenValidation.claims.scope,
         token_scope_hash_b64u: tokenValidation.claims.token_scope_hash_b64u,
+        policy_hash_b64u: policyHashFromToken,
       },
     };
   }
 
 
   // Extract policy information for WPC enforcement
-  const policyResult = await extractPolicyFromHeaders(request, env);
+  const policyResult = await extractPolicyFromHeaders(request, env, {
+    policyHashOverride: validatedCst?.claims.policy_hash_b64u,
+  });
 
   // Fail closed if policy is missing/invalid when required.
   if (policyResult.error) {

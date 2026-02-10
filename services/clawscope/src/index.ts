@@ -7,6 +7,7 @@ import {
   signEd25519,
   verifyEd25519,
 } from './crypto';
+import { computeTokenScopeHashB64u } from './token-scope-hash';
 
 const SCOPE_DID = 'did:web:clawscope.com';
 
@@ -59,6 +60,7 @@ export interface IssueTokenRequest {
   ttl_sec?: number;
   exp?: number;
   owner_ref?: string;
+  policy_hash_b64u?: string;
   spend_cap?: number;
   mission_id?: string;
   tier?: string;
@@ -124,6 +126,8 @@ interface IssuanceRecord {
   policy_version: string;
   policy_tier?: string;
   owner_ref?: string;
+  policy_hash_b64u?: string;
+  token_scope_hash_b64u?: string;
   spend_cap?: number;
   mission_id?: string;
   jti?: string;
@@ -207,6 +211,12 @@ function requireAdmin(request: Request, env: Env): Response | null {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+const SHA256_B64U_RE = /^[A-Za-z0-9_-]{43}$/;
+
+function isSha256B64u(value: string): boolean {
+  return SHA256_B64U_RE.test(value);
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -429,6 +439,22 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   if (ttl !== undefined) req.ttl_sec = ttl;
   if (exp !== undefined) req.exp = exp;
   if (typeof b.owner_ref === 'string') req.owner_ref = b.owner_ref;
+
+  const policyHashInput = typeof b.policy_hash_b64u === 'string' ? b.policy_hash_b64u.trim() : '';
+  if (policyHashInput) {
+    if (!isSha256B64u(policyHashInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'POLICY_HASH_INVALID',
+          'policy_hash_b64u must be a SHA-256 base64url hash (length 43)',
+          400
+        ),
+      };
+    }
+    req.policy_hash_b64u = policyHashInput;
+  }
+
   if (typeof b.spend_cap === 'number') req.spend_cap = b.spend_cap;
   if (typeof b.mission_id === 'string') req.mission_id = b.mission_id;
 
@@ -578,6 +604,16 @@ async function issueToken(
     return Promise.reject(new Error('TTL_TOO_LONG'));
   }
 
+  const token_scope_hash_b64u = await computeTokenScopeHashB64u({
+    sub: req.sub,
+    aud: req.aud,
+    scope: req.scope,
+    owner_ref: req.owner_ref,
+    policy_hash_b64u: req.policy_hash_b64u,
+    spend_cap: req.spend_cap,
+    mission_id: req.mission_id,
+  });
+
   const claims: ScopedTokenClaims = {
     token_version: '1',
     sub: req.sub,
@@ -586,6 +622,8 @@ async function issueToken(
     iat: nowSec,
     exp,
     owner_ref: req.owner_ref,
+    policy_hash_b64u: req.policy_hash_b64u,
+    token_scope_hash_b64u,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
     jti: crypto.randomUUID(),
@@ -726,6 +764,8 @@ export default {
             policy_version: policy.policy_version,
             policy_tier: policy.tier,
             owner_ref: claims.owner_ref,
+            policy_hash_b64u: claims.policy_hash_b64u,
+            token_scope_hash_b64u: claims.token_scope_hash_b64u,
             spend_cap: claims.spend_cap,
             mission_id: claims.mission_id,
             jti: claims.jti,
@@ -738,6 +778,8 @@ export default {
         return jsonResponse({
           token,
           token_hash,
+          policy_hash_b64u: claims.policy_hash_b64u,
+          token_scope_hash_b64u: claims.token_scope_hash_b64u,
           policy_version: policy.policy_version,
           policy_tier: policy.tier,
           kid,
@@ -1138,6 +1180,10 @@ export default {
           aud: payload.aud,
           scope: payload.scope,
           owner_ref: payload.owner_ref,
+          policy_hash_b64u: payload.policy_hash_b64u,
+          token_scope_hash_b64u: payload.token_scope_hash_b64u,
+          spend_cap: payload.spend_cap,
+          mission_id: payload.mission_id,
           iat: payload.iat,
           exp: payload.exp,
           revoked_at: revocation.revoked_at,
@@ -1152,6 +1198,10 @@ export default {
         aud: payload.aud,
         scope: payload.scope,
         owner_ref: payload.owner_ref,
+        policy_hash_b64u: payload.policy_hash_b64u,
+        token_scope_hash_b64u: payload.token_scope_hash_b64u,
+        spend_cap: payload.spend_cap,
+        mission_id: payload.mission_id,
         iat: payload.iat,
         exp: payload.exp,
       });

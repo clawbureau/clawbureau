@@ -14,6 +14,21 @@ export async function sha256(data: string | ArrayBuffer): Promise<string> {
 }
 
 /**
+ * Compute SHA-256 hash of data and return as base64url (no padding)
+ */
+export async function sha256B64u(data: string | ArrayBuffer | Uint8Array): Promise<string> {
+  const buffer =
+    typeof data === 'string'
+      ? new TextEncoder().encode(data)
+      : data instanceof Uint8Array
+        ? data
+        : new Uint8Array(data);
+
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  return base64urlEncode(new Uint8Array(hashBuffer));
+}
+
+/**
  * Encode bytes to base64url (RFC 4648)
  */
 export function base64urlEncode(data: Uint8Array): string {

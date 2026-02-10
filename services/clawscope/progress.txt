@@ -69,3 +69,20 @@ Started: 2026-02-02T22:30:00Z
   - Keeps cache-control headers on JWKS (`public, max-age=300`).
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-10 - CSC-US-001 (policy binding + deterministic token_scope_hash_b64u)
+- Token issuance now supports optional pinned policy hash:
+  - `POST /v1/tokens/issue` accepts `policy_hash_b64u` (SHA-256 base64url, len=43).
+- Issued tokens now include:
+  - `policy_hash_b64u` (when provided)
+  - `token_scope_hash_b64u` (always) computed deterministically as:
+    - `sha256_b64u(JCS({token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, spend_cap?, mission_id?}))`
+    - excludes `iat/exp/jti/nonce` so re-issuance yields the same scope hash.
+- `/v1/tokens/issue` response and `/v1/tokens/introspect` now return `policy_hash_b64u` and `token_scope_hash_b64u`.
+- Issuance audit records now include `policy_hash_b64u` and `token_scope_hash_b64u`.
+- Tests:
+  - `services/clawscope/test/token-scope-hash.test.ts`
+- Quality checks:
+  - `npm run typecheck`
+  - `npm test`
+---

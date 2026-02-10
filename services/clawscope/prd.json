@@ -15,7 +15,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented POST /v1/tokens/issue issuing Ed25519-signed JWT (alg=EdDSA). Enforces TTL + scope limits and returns token_hash + policy_version."
+      "notes": "Implemented POST /v1/tokens/issue issuing Ed25519-signed JWT (alg=EdDSA). Enforces TTL + scope limits, supports optional policy_hash_b64u pinning, and computes deterministic token_scope_hash_b64u for receipt binding; returns token_hash + policy_version."
     },
     {
       "id": "CSC-US-002",
