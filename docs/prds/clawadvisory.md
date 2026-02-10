@@ -100,6 +100,28 @@ Council governance: proposals, votes, decisions, and attestations.
   - Term info
 
 
+### CAD-US-007 — Attester allowlists (audits + execution)
+**As a** community, **I want** governance-published allowlists of trusted attesters **so that** clawverify can fail closed on audit/execution attestations.
+
+**Acceptance Criteria:**
+  - Publish allowlists for:
+    - audit result attesters
+    - sandbox execution attesters (clawea)
+    - future TEE attestation roots / vendors
+  - Each allowlist entry includes: attester DID, scope, added_at, expires_at (optional)
+  - Provide a signed public endpoint returning the current allowlist bundle
+  - Support revocation (mark attester as revoked with reason + timestamp)
+
+
+### CAD-US-008 — Emergency revocation (attestation vulnerabilities)
+**As a** safety officer, **I want** an emergency revocation mechanism **so that** compromised attesters/TCB versions can be invalidated quickly.
+
+**Acceptance Criteria:**
+  - Record emergency revocation decisions (signed)
+  - Expose a machine-readable revocation feed
+  - clawverify can consume revocations to fail closed on revoked attestations
+
+
 ## 8) Success Metrics
 - Proposals/month
 - Vote participation

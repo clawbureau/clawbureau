@@ -32,6 +32,10 @@ Primary OpenClaw integration points:
 
 See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
+See also (PoH vNext):
+- `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`
+- `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+
 ---
 
 ## 1) Purpose
@@ -121,6 +125,24 @@ Tamper-evident audit logging and Merkle anchoring for all economic and verificat
   - Store token_scope_hash + policy_hash on relevant events
   - Store owner attestation hash when present
   - Store commit proof hash when supplied
+
+
+### CLG-US-008 — Portable inclusion proof schema + API
+**As a** third party, **I want** a portable inclusion proof object **so that** transparency verification works without bespoke integration.
+
+**Acceptance Criteria:**
+  - Define `log_inclusion_proof.v1` schema (`packages/schema/poh/log_inclusion_proof.v1.json`)
+  - Publish a root endpoint (signed root) and an inclusion proof endpoint
+  - Inclusion proof validates leaf membership in a published root
+
+
+### CLG-US-009 — Transparency log entry types for audits/derivations
+**As a** compliance officer, **I want** standard log entry types for audit/derivation attestations **so that** published compliance claims are discoverable and time-anchored.
+
+**Acceptance Criteria:**
+  - Log entry types include: `model_derivation_attested`, `model_audit_attested`
+  - Entries store hash pointers only (attestation hash, signer DID, issued_at, related model identity hash)
+  - Support export + inclusion proof for these entries
 
 
 ## 8) Success Metrics

@@ -38,6 +38,11 @@ OpenClaw already has a strong local policy system (tool allow/deny profiles + sa
 
 See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
+See also (PoH vNext):
+- `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`
+- `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+- `docs/foundations/decisions/0001-audit-pack-convention.md`
+
 ---
 
 ## 1) Purpose
@@ -166,6 +171,16 @@ Policy engine for spend caps, allowlists, and kill switches.
   - Configure actions requiring owner-verified status
   - Provide rate-limit multipliers by owner status
   - Log enforcement decisions
+
+
+### CCO-US-012 — WPC requirements: model identity tier + audit packs
+**As a** security admin, **I want** WPC to express minimum model identity tiers and required audit packs **so that** sensitive workflows fail closed when only opaque model identity is available.
+
+**Acceptance Criteria:**
+  - WPC supports `minimum_model_identity_tier` (e.g. closed_opaque|closed_provider_manifest|openweights_hashable|tee_measured)
+  - WPC supports `required_audit_packs` by deterministic `audit_pack_hash_b64u` (see ADR 0001)
+  - Provide policy simulation for these constraints (builds on CCO-US-004)
+  - Enforcement points are explicit (clawproxy, clawea runner, clawverify)
 
 
 ## 8) Success Metrics

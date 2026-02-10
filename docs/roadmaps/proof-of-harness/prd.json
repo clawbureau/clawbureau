@@ -191,9 +191,118 @@
       "passes": true,
       "notes": "Inspired by vercel-labs/skills agent registry + sync scripts; keeps our PoH harness map centralized.",
       "completionNotes": "Implemented a local shim server in clawproof-adapters + added a PoH harness registry + sync/validate scripts + CI workflow."
+    },
+    {
+      "id": "POHVN-US-001",
+      "title": "Model identity v1 (tiered) + trust vector output",
+      "description": "As an enterprise platform, I want an explicit model identity object (tiered) so that closed-provider limitations are encoded and verification never over-claims weight certainty.",
+      "acceptanceCriteria": [
+        "Add model_identity.v1 schema (tiered: closed_opaque|closed_provider_manifest|openweights_hashable|tee_measured)",
+        "clawproxy emits model_identity in canonical gateway receipt metadata (non-breaking)",
+        "clawverify returns a trust vector including PoH tier and model_identity_tier",
+        "Docs updated: ADAPTER_SPEC_v1 + PRDs reflect the two-axis model"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Phase 0: no-TEE improvements. Keep PoH tiers unchanged; add model identity as an orthogonal axis."
+    },
+    {
+      "id": "POHVN-US-002",
+      "title": "Derivation attestation v1 (Prepare analogue)",
+      "description": "As a verifier, I want an attestation that a model artifact was derived from another model artifact under a declared transformation so that audits can be traced across quantization/fine-tuning.",
+      "acceptanceCriteria": [
+        "Add derivation_attestation.v1 schema",
+        "Register schema in clawverify allowlist (future PR)",
+        "Add clawverify verification endpoint for derivation attestations (fail-closed) (future PR)",
+        "Optional: anchor attestation hash in clawlogs and validate inclusion proofs when present"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Phase 0/1. Enables A_{M→Mq}-style traceability without requiring TEEs."
+    },
+    {
+      "id": "POHVN-US-003",
+      "title": "Audit result attestation v1 (Audit analogue)",
+      "description": "As a regulator-facing auditor, I want a verifiable audit result object binding model identity + audit code + dataset hashes to a result so that benchmark claims are cryptographically checkable.",
+      "acceptanceCriteria": [
+        "Add audit_result_attestation.v1 schema",
+        "Define deterministic audit_pack_hash_b64u convention for policy gating (ADR 0001)",
+        "Register schema in clawverify allowlist (future PR)",
+        "Add clawverify verification endpoint for audit result attestations (fail-closed) (future PR)",
+        "Define a reference mechanism so receipts/bundles/execution attestations can attach audit_result_refs"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Phase 0/1. This is the main Attestable Audits delta for ClawBureau."
+    },
+    {
+      "id": "POHVN-US-004",
+      "title": "Transparency log inclusion proofs (clawlogs)",
+      "description": "As a third party, I want portable inclusion proofs for clawlogs so that published attestations can be independently verified against a transparency log root.",
+      "acceptanceCriteria": [
+        "Add log_inclusion_proof.v1 schema",
+        "clawlogs exposes an inclusion proof endpoint (future PR)",
+        "clawverify can validate inclusion proofs when they are supplied with attestation objects (future PR)",
+        "Docs updated: clawlogs PRD + PoH roadmap"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Phase 0 schema + docs; service implementation can follow."
+    },
+    {
+      "id": "POHVN-US-005",
+      "title": "WPC hooks for model identity + audit requirements",
+      "description": "As a security admin, I want WPC to require minimum model identity tier and/or specific audit packs so that sensitive workflows fail closed when only opaque model identity is available.",
+      "acceptanceCriteria": [
+        "Define WPC fields: minimum_model_identity_tier + required_audit_packs (by audit_pack_hash_b64u)",
+        "clawproxy enforces minimum_model_identity_tier where possible and records decisions in receipt metadata (future PR)",
+        "clawverify supports verify-under-policy semantics for receipts/bundles (future PR)"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Phase 0/1. Keep enforcement points explicit (proxy, runner, verifier)."
+    },
+    {
+      "id": "POHVN-US-006",
+      "title": "Sandbox execution attestation hardening (clawea)",
+      "description": "As an enterprise buyer, I want sandbox attestations to be specific and reproducible so that the sandbox PoH tier has concrete meaning.",
+      "acceptanceCriteria": [
+        "clawea emits SignedEnvelope<execution_attestation.v1>",
+        "execution_attestation.runtime_metadata includes image digest, sandbox version, WPC binding, network posture summary, resource limits",
+        "Attestation is stored as a content-addressed artifact and anchored in clawlogs (when enabled)"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Phase 1. This is the bridge to a future TEE path."
+    },
+    {
+      "id": "POHVN-US-007",
+      "title": "Audit-ready export bundles (offline verifiability)",
+      "description": "As an auditor, I want a single export bundle containing proof bundles, execution attestations, and inclusion proofs so that verification works offline.",
+      "acceptanceCriteria": [
+        "Export includes proof bundle, execution attestation, and relevant inclusion proofs",
+        "Export is itself signed and content-addressed",
+        "clawverify can validate the export artifacts without external network calls (except optional schema fetch)"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "Phase 1. Critical for enterprise compliance workflows."
+    },
+    {
+      "id": "POHVN-US-008",
+      "title": "TEE execution attestation (future path for openweights)",
+      "description": "As a future capability, I want execution attestations that can carry TEE remote-attestation evidence so that openweights inference/audits can reach measured execution guarantees.",
+      "acceptanceCriteria": [
+        "Define runtime_metadata fields for TEE evidence refs + measurements",
+        "Define allowlist + revocation strategy for TEE roots/TCB versions",
+        "Document confidentiality vs integrity trade-offs across multiple TEEs"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Phase 2+. Explicitly out of scope for near-term closed-provider enterprise defaults."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T18:52:44.000Z"
+    "updatedAt": "2026-02-10T19:55:54.061Z"
   }
 }

@@ -212,3 +212,24 @@ Started: 2026-02-05T21:49:28Z
   - packages/openclaw-provider-clawproxy/src/index.ts
   - scripts/poh/smoke-cwc-job-cst-binding.mjs
 ---
+
+## 2026-02-10T20:50:00Z - PoH vNext (model identity + verifiable audits) (planning)
+- What was updated
+  - Added PoH vNext docs:
+    - `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`
+    - `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+    - `docs/roadmaps/proof-of-harness/PHASE0_PR_STACK.md`
+  - Added ADR for deterministic audit pack hashing (policy gating):
+    - `docs/foundations/decisions/0001-audit-pack-convention.md`
+  - Added new PoH vNext schemas:
+    - `packages/schema/poh/model_identity.v1.json`
+    - `packages/schema/poh/derivation_attestation.v1.json`
+    - `packages/schema/poh/audit_result_attestation.v1.json`
+    - `packages/schema/poh/log_inclusion_proof.v1.json`
+  - Updated PoH spec and tracker:
+    - `docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md` (trust vector semantics + canonical receipts + model identity)
+    - `docs/roadmaps/proof-of-harness/prd.json` (added POHVN-US-001..008)
+- Notes
+  - Closed provider APIs cannot prove weight identity; `model_identity.tier=closed_opaque` encodes this explicitly.
+  - PoH tiers remain unchanged; model identity is an orthogonal axis.
+---

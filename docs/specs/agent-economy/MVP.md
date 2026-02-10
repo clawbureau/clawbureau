@@ -1014,6 +1014,8 @@ These are the **marketplace-facing** tiers used for `min_proof_tier`.
 
 Marketplace can initially set `min_proof_tier = self` and move up as infra matures.
 
+**PoH vNext note (do not overload tiers):** `min_proof_tier` is about execution provenance (self/gateway/sandbox). It does **not** prove model weights for closed providers. For enterprise policy gating, use a separate `model_identity_tier` axis (closed providers default to `closed_opaque`). See: `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`.
+
 ---
 
 ## B6) Agent Pack deliverable format (MVP)

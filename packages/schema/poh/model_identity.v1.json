@@ -1,0 +1,146 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.model_identity.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Model Identity v1",
+  "type": "object",
+  "description": "Tiered model identity object for PoH. Explicitly encodes what can and cannot be claimed about the underlying model (especially for closed-provider APIs).",
+  "additionalProperties": false,
+  "required": ["model_identity_version", "tier", "model"],
+  "properties": {
+    "model_identity_version": { "const": "1" },
+    "tier": {
+      "type": "string",
+      "enum": ["closed_opaque", "closed_provider_manifest", "openweights_hashable", "tee_measured"],
+      "description": "Strength of the model identity claim. closed_opaque is the default for closed-provider APIs."
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "name"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provider identifier (e.g., openai, anthropic, google, self_hosted)."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provider model name / deployment label (opaque string for closed providers)."
+        },
+        "family": { "type": "string" },
+        "endpoint": { "type": "string" },
+        "region": { "type": "string" },
+        "deployment_id": { "type": "string" },
+        "revision": { "type": "string" }
+      }
+    },
+    "gateway_observed": {
+      "type": "object",
+      "description": "Optional gateway-observed correlation fields (for closed providers). These fields are not weight proofs; they are observations signed as part of the receipt/bundle.",
+      "additionalProperties": false,
+      "required": ["gateway_id", "observed_at"],
+      "properties": {
+        "gateway_id": {
+          "type": "string",
+          "pattern": "^did:",
+          "description": "Gateway DID (e.g., did:web:clawproxy.com or did:key:...)."
+        },
+        "observed_at": { "type": "string", "format": "date-time" },
+        "request_id": { "type": "string" },
+        "provider_response_fingerprint": { "type": "string" },
+        "transport": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider_api": { "type": "string" },
+            "http_status": { "type": "number", "minimum": 0 },
+            "latency_ms": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Optional artifact commitments (provider manifests, openweights hashes, TEE evidence references).",
+      "additionalProperties": false,
+      "properties": {
+        "provider_manifest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manifest_type", "hash_b64u"],
+          "properties": {
+            "manifest_type": { "type": "string", "const": "provider_build_manifest" },
+            "uri": { "type": "string" },
+            "hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8 },
+            "content_type": { "type": "string" },
+            "signature": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["signer_did", "signature_envelope_ref"],
+              "properties": {
+                "signer_did": { "type": "string", "pattern": "^did:" },
+                "signature_envelope_ref": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["resource_type", "resource_hash_b64u"],
+                  "properties": {
+                    "resource_type": { "type": "string", "minLength": 1 },
+                    "resource_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8 },
+                    "uri": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "openweights": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "weights_format": { "type": "string" },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["hash_b64u"],
+                "properties": {
+                  "file_name": { "type": "string" },
+                  "hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8 },
+                  "size_bytes": { "type": "number", "minimum": 0 }
+                }
+              }
+            },
+            "tokenizer": { "type": "object", "additionalProperties": true },
+            "config": { "type": "object", "additionalProperties": true },
+            "serving_code": { "type": "object", "additionalProperties": true }
+          }
+        },
+        "tee_measurement": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "attestation_type": { "type": "string" },
+            "attestation_report_ref": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["resource_type", "resource_hash_b64u"],
+              "properties": {
+                "resource_type": { "type": "string", "minLength": 1 },
+                "resource_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8 },
+                "uri": { "type": "string" }
+              }
+            },
+            "measurement": { "type": "object", "additionalProperties": true },
+            "tcb": { "type": "object", "additionalProperties": true }
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Freeform extra metadata (must not be treated as stronger proof)."
+    }
+  }
+}

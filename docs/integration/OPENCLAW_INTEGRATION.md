@@ -93,7 +93,22 @@ When OpenClaw calls Claw Bureau services, include:
 - `X-OpenClaw-Session-Key: <sessionKey>`
 - `X-OpenClaw-Model: <provider/model>` (for receipts)
 
+For PoH receipt binding (clawproxy), also include:
+- `X-Run-Id: <run_id>`
+- `X-Event-Hash: <event_hash_b64u>`
+- `X-Idempotency-Key: <nonce>`
+
 These fields should be echoed into receipts/audit entries to make runs explainable.
+
+### 5) Model identity + verifiable audits (PoH vNext)
+Enterprise defaults route to closed providers, so we must be honest about what can be proven.
+
+- Receipts should carry a tiered `model_identity` object in metadata (closed providers default to `closed_opaque`).
+- Runs/bundles may carry references to `audit_result_attestation` objects that bind audits (code+dataset+config) to model identity.
+
+See:
+- `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`
+- `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
 
 ---
 
@@ -110,6 +125,9 @@ These fields should be echoed into receipts/audit entries to make runs explainab
 
 4) **WPC ↔ OpenClaw tool policy mapping**
 - Goal: import a Work Policy Contract and narrow OpenClaw’s tool set deterministically.
+
+5) **Model identity + audit attestations (PoH vNext)**
+- Goal: propagate tiered `model_identity` + optional `audit_result_attestation` references into receipts/bundles for enterprise compliance.
 
 ---
 

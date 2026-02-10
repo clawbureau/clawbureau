@@ -14,6 +14,10 @@
 **Pillar:** Labor & Delegation  
 **Status:** Draft  
 
+> **Note:** `clawea.com` is expanding into an enterprise agent platform (fleet orchestration + execution attestation). This file remains the **execution attestation** PRD slice.
+>
+> For the full enterprise PRD, see: `docs/prds/clawea-enterprise.md`.
+
 ---
 
 ## Implementation status (current)
@@ -42,6 +46,7 @@ Safe execution layer (Moltworker-style) that produces run attestations.
 - Mission metadata binding
 
 ## 4) Non-Goals (v0)
+- Proving closed-provider weight identity (OpenAI/Anthropic/Gemini). Use tiered `model_identity` instead.
 - Full TEE v0
 
 ## 5) Dependencies

@@ -41,3 +41,14 @@ Started: 2026-02-03
     - `policy_hash_b64u`
     - `token_scope_hash_b64u`
   - Documented the deterministic `token_scope_hash_b64u` derivation algorithm (JCS + sha256_b64u) in the schema description.
+
+## POHVN-US-001..004 — PoH vNext schemas (model identity + verifiable audits)
+- Added new PoH schemas to support tiered model identity and attestable audits:
+  - `packages/schema/poh/model_identity.v1.json`
+  - `packages/schema/poh/derivation_attestation.v1.json`
+  - `packages/schema/poh/audit_result_attestation.v1.json`
+  - `packages/schema/poh/log_inclusion_proof.v1.json`
+- Updated receipt schema docs to standardize metadata attachment points:
+  - `packages/schema/poh/gateway_receipt.v1.json`
+  - `packages/schema/poh/proof_bundle.v1.json`
+- Updated `packages/schema/README.md` to list the new PoH vNext schemas.
