@@ -60,7 +60,6 @@ import {
   enforceProviderAllowlist,
   applyRedactionRules,
   stripUndefined,
-  type WorkPolicyContract,
 } from './policy';
 
 /** Proxy DID identifier */
@@ -1127,15 +1126,15 @@ async function handleProxy(
 
 
   // Extract policy information for WPC enforcement
-  const policyResult = extractPolicyFromHeaders(request);
+  const policyResult = await extractPolicyFromHeaders(request, env);
 
-  // Fail closed in confidential mode if policy is missing or invalid
+  // Fail closed if policy is missing/invalid when required.
   if (policyResult.error) {
     logPolicyMissing(request, policyResult.error);
     return errorResponseWithRateLimit(
-      'POLICY_REQUIRED',
+      policyResult.errorCode ?? 'POLICY_REQUIRED',
       policyResult.error,
-      400,
+      policyResult.errorStatus ?? 400,
       rateLimitInfo
     );
   }
@@ -1293,8 +1292,8 @@ async function handleProxy(
 
   // Apply redaction rules to request body if policy specifies them
   let finalRequestBody = requestBody;
-  if (policyResult.policy?.redactionRules && policyResult.policy.redactionRules.length > 0) {
-    const redactedBody = applyRedactionRules(parsedBody, policyResult.policy.redactionRules);
+  if (policyResult.policy?.redaction_rules && policyResult.policy.redaction_rules.length > 0) {
+    const redactedBody = applyRedactionRules(parsedBody, policyResult.policy.redaction_rules);
     const strippedBody = stripUndefined(redactedBody);
     finalRequestBody = JSON.stringify(strippedBody);
   }
@@ -1312,9 +1311,10 @@ async function handleProxy(
   }
 
   // Extend binding with policy hash and CST token scope hash (when present)
+  // NOTE: policyHash is only included when a policy was actually fetched+verified.
   const finalBinding = {
     ...binding,
-    policyHash: policyResult.policyHash,
+    policyHash: policyResult.policy ? policyResult.policyHash : undefined,
     tokenScopeHashB64u: validatedCst?.claims.token_scope_hash_b64u,
   };
 
