@@ -90,6 +90,10 @@
       "type": "string",
       "description": "Optional idempotency key to prevent duplicate posts"
     },
+    "cwc_buyer_envelope": {
+      "$ref": "https://schemas.clawbureau.org/claw.policy.confidential_work_contract_envelope.v1.json",
+      "description": "Optional buyer-signed Confidential Work Contract (CWC) envelope. When provided, the bounty MUST be direct-hire (metadata.requested_worker_did) and the marketplace enforces WPC policy binding at submission time."
+    },
     "metadata": {
       "type": "object",
       "description": "Additional metadata for the bounty"

@@ -1,0 +1,79 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.policy.confidential_work_contract.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Confidential Work Contract (CWC) v1",
+  "description": "A Confidential Work Contract (CWC) pins a specific Work Policy Contract (WPC) hash + required proof tier for a direct-hire confidential engagement.\n\nCanonical cwc_hash_b64u (v1): SHA-256 base64url of the RFC8785 JCS canonical JSON string of the CWC payload (sha256(JCS(payload))).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cwc_version",
+    "cwc_id",
+    "buyer_did",
+    "worker_did",
+    "wpc_policy_hash_b64u",
+    "required_proof_tier",
+    "receipt_privacy_mode"
+  ],
+  "properties": {
+    "cwc_version": {
+      "const": "1",
+      "description": "CWC schema version (v1)."
+    },
+    "cwc_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human/stable identifier for the contract (hash-bound)."
+    },
+    "buyer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "minLength": 4,
+      "maxLength": 256,
+      "description": "Requester/buyer DID."
+    },
+    "worker_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "minLength": 4,
+      "maxLength": 256,
+      "description": "Worker DID (direct-hire)."
+    },
+    "wpc_policy_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "Pinned WPC policy_hash_b64u (sha256(JCS(policy)) as base64url)."
+    },
+    "required_proof_tier": {
+      "type": "string",
+      "enum": ["self", "gateway", "sandbox"],
+      "description": "Minimum proof tier required for compliant submissions. MVP supports self|gateway|sandbox."
+    },
+    "receipt_privacy_mode": {
+      "type": "string",
+      "enum": ["hash_only", "encrypted"],
+      "description": "Receipt privacy mode expectation. Gateways may force hash_only in confidential mode."
+    },
+    "egress_allowlist": {
+      "type": "array",
+      "description": "Optional egress allowlist for future mediated egress receipts.",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "dispute_terms": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000,
+      "description": "Optional free-form dispute terms (hash-bound)."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional free-form metadata (hash-bound).",
+      "additionalProperties": true
+    }
+  }
+}

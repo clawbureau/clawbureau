@@ -187,7 +187,8 @@
         "Marketplace stores and enforces CWC hash at job post + submission time"
       ],
       "priority": 14,
-      "passes": false
+      "passes": true,
+      "notes": "Added CWC v1 schemas (payload + envelope) under packages/schema/policy and integrated into clawbounties: post bounty accepts optional buyer-signed cwc_buyer_envelope for direct-hire, accept requires worker countersign cwc_worker_envelope (stored on the bounty), and submission enforces policy binding by requiring verified+bound gateway receipts to carry binding.policy_hash matching the pinned WPC hash."
     },
     {
       "id": "CEA-US-010",

@@ -45,6 +45,16 @@ type PluginMode = 'enforce' | 'best_effort';
 type PluginConfig = {
   baseUrl: string;
   token?: string;
+
+  /** Optional pinned WPC hash (policy_hash_b64u). */
+  policyHashB64u?: string;
+
+  /** If true, send X-Confidential-Mode: true on all proxied calls. */
+  confidentialMode?: boolean;
+
+  /** Optional receipt privacy mode override (X-Receipt-Privacy-Mode). */
+  receiptPrivacyMode?: 'hash_only' | 'encrypted';
+
   outputDir?: string;
   keyFile?: string;
   mode?: PluginMode;
@@ -82,9 +92,18 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
   const mode = asString(obj.mode);
   const parsedMode: PluginMode | undefined = mode === 'enforce' || mode === 'best_effort' ? mode : undefined;
 
+  const receiptPrivacyModeRaw = asString(obj.receiptPrivacyMode);
+  const receiptPrivacyMode: PluginConfig['receiptPrivacyMode'] =
+    receiptPrivacyModeRaw === 'hash_only' || receiptPrivacyModeRaw === 'encrypted'
+      ? receiptPrivacyModeRaw
+      : undefined;
+
   return {
     baseUrl,
     token: asString(obj.token),
+    policyHashB64u: asString(obj.policyHashB64u),
+    confidentialMode: asBoolean(obj.confidentialMode),
+    receiptPrivacyMode,
     outputDir: asString(obj.outputDir),
     keyFile: asString(obj.keyFile),
     mode: parsedMode,
@@ -760,6 +779,12 @@ function getFetchPatchState(): FetchPatchState {
 function patchFetch(params: {
   proxyBaseUrl: string;
   proxyToken?: string;
+
+  // Optional WPC / confidential-mode headers
+  policyHashB64u?: string;
+  confidentialMode?: boolean;
+  receiptPrivacyMode?: 'hash_only' | 'encrypted';
+
   mode: PluginMode;
   intercept: Required<NonNullable<PluginConfig['intercept']>>;
   logger: Logger;
@@ -870,6 +895,11 @@ function patchFetch(params: {
     headers.set('X-Run-Id', binding.runId);
     if (binding.eventHash) headers.set('X-Event-Hash', binding.eventHash);
     if (binding.nonce) headers.set('X-Idempotency-Key', binding.nonce);
+
+    // WPC / confidential-mode headers
+    if (params.policyHashB64u) headers.set('X-Policy-Hash', params.policyHashB64u);
+    if (params.confidentialMode) headers.set('X-Confidential-Mode', 'true');
+    if (params.receiptPrivacyMode) headers.set('X-Receipt-Privacy-Mode', params.receiptPrivacyMode);
 
     // OpenAI upstream endpoint selection (chat completions vs responses)
     if (provider === 'openai') {
@@ -1061,6 +1091,9 @@ export default {
     patchFetch({
       proxyBaseUrl,
       proxyToken,
+      policyHashB64u: cfg.policyHashB64u,
+      confidentialMode: cfg.confidentialMode,
+      receiptPrivacyMode: cfg.receiptPrivacyMode,
       mode,
       intercept,
       logger,

@@ -28,3 +28,9 @@ Started: 2026-02-03
   - `packages/schema/policy/work_policy_contract.v1.json`
   - `packages/schema/policy/work_policy_contract_envelope.v1.json`
 - Updated `packages/schema/README.md` to include the new `policy/` directory + schemas.
+
+## CWC-US-001 — Confidential Work Contract (CWC) schemas
+- Added policy schemas for signed Confidential Work Contracts (buyer signs, worker countersigns):
+  - `packages/schema/policy/confidential_work_contract.v1.json`
+  - `packages/schema/policy/confidential_work_contract_envelope.v1.json`
+- Updated `packages/schema/README.md` to list the new CWC schemas.
