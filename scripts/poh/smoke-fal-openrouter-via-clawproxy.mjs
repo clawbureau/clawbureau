@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+
+/**
+ * Smoke test: OpenRouter-through-fal via clawproxy (PoH receipts)
+ *
+ * Validates the end-to-end path:
+ *   clawproxy (OpenAI compat) → fal OpenRouter router → _receipt_envelope → clawverify
+ *
+ * Usage:
+ *   node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env staging
+ *   node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env prod
+ *
+ * Required env vars:
+ *   - FAL_KEY (fal.ai API key used by the fal OpenRouter router)
+ *
+ * Notes:
+ * - This script performs real upstream calls and will incur usage costs.
+ * - The gateway must forward auth upstream as: Authorization: Key <FAL_KEY>.
+ */
+
+import process from 'node:process';
+
+function parseArgs(argv) {
+  const args = new Map();
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith('--')) continue;
+    const key = a.slice(2);
+    const next = argv[i + 1];
+    if (next && !next.startsWith('--')) {
+      args.set(key, next);
+      i++;
+    } else {
+      args.set(key, 'true');
+    }
+  }
+  return args;
+}
+
+function assert(cond, msg) {
+  if (!cond) throw new Error(`ASSERT_FAILED: ${msg}`);
+}
+
+function isRecord(x) {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+async function httpJson(url, init) {
+  const res = await fetch(url, init);
+  const text = await res.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+  return { res, status: res.status, text, json };
+}
+
+function getReceiptEnvelope(body) {
+  if (!isRecord(body)) return null;
+  const env = body._receipt_envelope;
+  return isRecord(env) ? env : null;
+}
+
+function getEnvelopeMetadata(envelope) {
+  if (!isRecord(envelope)) return null;
+  const payload = envelope.payload;
+  if (!isRecord(payload)) return null;
+  const metadata = payload.metadata;
+  return isRecord(metadata) ? metadata : null;
+}
+
+async function verifyReceipt(verifyBaseUrl, envelope) {
+  const out = await httpJson(`${verifyBaseUrl.replace(/\/$/, '')}/v1/verify/receipt`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ envelope }),
+  });
+
+  return out;
+}
+
+async function smoke() {
+  const args = parseArgs(process.argv.slice(2));
+  const envName = String(args.get('env') || 'staging').toLowerCase();
+  const model = String(args.get('model') || 'openrouter/openai/gpt-4o-mini');
+
+  const falKey = process.env.FAL_KEY;
+  assert(typeof falKey === 'string' && falKey.trim().length > 0, 'Missing FAL_KEY env var');
+
+  const proxyBaseUrl =
+    envName === 'prod' || envName === 'production'
+      ? 'https://clawproxy.com'
+      : 'https://staging.clawproxy.com';
+
+  const verifyBaseUrl =
+    envName === 'prod' || envName === 'production'
+      ? 'https://clawverify.com'
+      : 'https://staging.clawverify.com';
+
+  const expectedUpstreamModel = model.replace(/^openrouter\//i, '');
+
+  // 1) chat/completions
+  const chat = await httpJson(`${proxyBaseUrl}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'x-provider-api-key': falKey.trim(),
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: 'smoke: openrouter via fal via clawproxy' }],
+      max_tokens: 1,
+      temperature: 0,
+    }),
+  });
+
+  assert(chat.status === 200, `chat/completions expected 200, got ${chat.status}: ${chat.text}`);
+
+  const chatEnv = getReceiptEnvelope(chat.json);
+  assert(chatEnv, 'chat/completions missing _receipt_envelope');
+
+  const chatMeta = getEnvelopeMetadata(chatEnv);
+  assert(chatMeta, 'chat/completions receipt envelope missing payload.metadata');
+  assert(chatMeta.upstream === 'fal_openrouter', `chat/completions metadata.upstream expected fal_openrouter, got ${String(chatMeta.upstream)}`);
+  assert(
+    chatMeta.upstream_model === expectedUpstreamModel,
+    `chat/completions metadata.upstream_model expected ${expectedUpstreamModel}, got ${String(chatMeta.upstream_model)}`
+  );
+
+  const chatVerify = await verifyReceipt(verifyBaseUrl, chatEnv);
+  assert(chatVerify.status === 200, `verify/receipt (chat) expected 200, got ${chatVerify.status}: ${chatVerify.text}`);
+  assert(chatVerify.json?.result?.status === 'VALID', `verify/receipt (chat) expected VALID, got: ${chatVerify.text}`);
+
+  // 2) responses
+  const responses = await httpJson(`${proxyBaseUrl}/v1/responses`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'x-provider-api-key': falKey.trim(),
+    },
+    body: JSON.stringify({
+      model,
+      input: 'smoke: openrouter via fal via clawproxy',
+      max_output_tokens: 1,
+    }),
+  });
+
+  assert(responses.status === 200, `responses expected 200, got ${responses.status}: ${responses.text}`);
+
+  const respEnv = getReceiptEnvelope(responses.json);
+  assert(respEnv, 'responses missing _receipt_envelope');
+
+  const respMeta = getEnvelopeMetadata(respEnv);
+  assert(respMeta, 'responses receipt envelope missing payload.metadata');
+  assert(respMeta.upstream === 'fal_openrouter', `responses metadata.upstream expected fal_openrouter, got ${String(respMeta.upstream)}`);
+  assert(
+    respMeta.upstream_model === expectedUpstreamModel,
+    `responses metadata.upstream_model expected ${expectedUpstreamModel}, got ${String(respMeta.upstream_model)}`
+  );
+
+  const respVerify = await verifyReceipt(verifyBaseUrl, respEnv);
+  assert(respVerify.status === 200, `verify/receipt (responses) expected 200, got ${respVerify.status}: ${respVerify.text}`);
+  assert(respVerify.json?.result?.status === 'VALID', `verify/receipt (responses) expected VALID, got: ${respVerify.text}`);
+
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        env: envName,
+        model,
+        proxyBaseUrl,
+        verifyBaseUrl,
+        chat: {
+          status: chat.status,
+          upstream: chatMeta.upstream,
+          upstream_model: chatMeta.upstream_model,
+          verify_status: chatVerify.json?.result?.status,
+        },
+        responses: {
+          status: responses.status,
+          upstream: respMeta.upstream,
+          upstream_model: respMeta.upstream_model,
+          verify_status: respVerify.json?.result?.status,
+        },
+      },
+      null,
+      2
+    )
+  );
+}
+
+smoke().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
