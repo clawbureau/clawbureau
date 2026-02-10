@@ -203,8 +203,9 @@
         "Docs updated: ADAPTER_SPEC_v1 + PRDs reflect the two-axis model"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": "Phase 0: no-TEE improvements. Keep PoH tiers unchanged; add model identity as an orthogonal axis."
+      "passes": true,
+      "notes": "Phase 0: no-TEE improvements. Keep PoH tiers unchanged; add model identity as an orthogonal axis.",
+      "completionNotes": "Implemented: packages/schema adds model_identity.v1 schema; clawproxy emits receipt metadata.model_identity + model_identity_hash_b64u; clawverify validates and surfaces model_identity_tier + risk flags. Tripwire smoke asserts end-to-end behavior via clawproxy→fal(OpenRouter)→clawverify."
     },
     {
       "id": "POHVN-US-002",
@@ -303,6 +304,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-10T19:55:54.061Z"
+    "updatedAt": "2026-02-10T22:55:00.000Z"
   }
 }

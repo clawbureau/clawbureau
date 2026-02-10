@@ -233,3 +233,17 @@ Started: 2026-02-05T21:49:28Z
   - Closed provider APIs cannot prove weight identity; `model_identity.tier=closed_opaque` encodes this explicitly.
   - PoH tiers remain unchanged; model identity is an orthogonal axis.
 ---
+
+## 2026-02-10T22:50:00Z - POHVN-US-001 (model identity axis) (implemented)
+- What was implemented
+  - clawproxy emits `payload.metadata.model_identity` + `payload.metadata.model_identity_hash_b64u` on every gateway receipt.
+  - clawverify validates the model identity object + hash and surfaces `model_identity_tier` + deterministic `risk_flags` on verify outputs.
+  - Tripwire smoke asserts end-to-end behavior (clawproxy→fal(OpenRouter)→clawverify) including:
+    - receipt metadata fields
+    - model identity hash correctness (JCS)
+    - clawverify returning `model_identity_tier`
+- PRs
+  - PR #97: CPX-US-016 receipt metadata emission
+  - PR #98: tripwire asserts model identity metadata + hash
+  - PR #99: CVF-US-016 model identity tier verification
+---

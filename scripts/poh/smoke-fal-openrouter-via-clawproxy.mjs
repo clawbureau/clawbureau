@@ -110,6 +110,22 @@ function assertModelIdentity(metadata, expectedModelLabel, ctx) {
   assert(hash === expected, `${ctx} model_identity_hash_b64u mismatch (expected ${expected}, got ${hash})`);
 }
 
+function assertVerifyModelIdentity(verifyJson, ctx) {
+  assert(isRecord(verifyJson), `${ctx} response missing/invalid JSON`);
+
+  assert(
+    verifyJson.model_identity_tier === 'closed_opaque',
+    `${ctx} model_identity_tier expected closed_opaque, got ${String(verifyJson.model_identity_tier)}`
+  );
+
+  const flags = verifyJson.risk_flags;
+  assert(Array.isArray(flags), `${ctx} risk_flags missing/invalid`);
+  assert(
+    flags.includes('MODEL_IDENTITY_OPAQUE'),
+    `${ctx} risk_flags missing MODEL_IDENTITY_OPAQUE`
+  );
+}
+
 async function httpJson(url, init) {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -200,6 +216,7 @@ async function smoke() {
   const chatVerify = await verifyReceipt(verifyBaseUrl, chatEnv);
   assert(chatVerify.status === 200, `verify/receipt (chat) expected 200, got ${chatVerify.status}: ${chatVerify.text}`);
   assert(chatVerify.json?.result?.status === 'VALID', `verify/receipt (chat) expected VALID, got: ${chatVerify.text}`);
+  assertVerifyModelIdentity(chatVerify.json, 'verify/receipt (chat)');
 
   // 2) responses
   const responses = await httpJson(`${proxyBaseUrl}/v1/responses`, {
@@ -234,6 +251,7 @@ async function smoke() {
   const respVerify = await verifyReceipt(verifyBaseUrl, respEnv);
   assert(respVerify.status === 200, `verify/receipt (responses) expected 200, got ${respVerify.status}: ${respVerify.text}`);
   assert(respVerify.json?.result?.status === 'VALID', `verify/receipt (responses) expected VALID, got: ${respVerify.text}`);
+  assertVerifyModelIdentity(respVerify.json, 'verify/receipt (responses)');
 
   console.log(
     JSON.stringify(
@@ -250,6 +268,7 @@ async function smoke() {
           model_identity_tier: chatMeta.model_identity?.tier,
           model_identity_hash_b64u: chatMeta.model_identity_hash_b64u,
           verify_status: chatVerify.json?.result?.status,
+          verify_model_identity_tier: chatVerify.json?.model_identity_tier,
         },
         responses: {
           status: responses.status,
@@ -258,6 +277,7 @@ async function smoke() {
           model_identity_tier: respMeta.model_identity?.tier,
           model_identity_hash_b64u: respMeta.model_identity_hash_b64u,
           verify_status: respVerify.json?.result?.status,
+          verify_model_identity_tier: respVerify.json?.model_identity_tier,
         },
       },
       null,
