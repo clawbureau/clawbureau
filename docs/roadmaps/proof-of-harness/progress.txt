@@ -181,3 +181,15 @@ Started: 2026-02-05T21:49:28Z
   - docs/roadmaps/proof-of-harness/prd.json
   - .gitignore
 ---
+
+## 2026-02-10T13:30:00Z - POH-US-021
+- What was implemented
+  - Added job-scoped CST binding for CWC bounties to prevent receipt borrowing/transfer:
+    - Marketplace stores expected `cwc_token_scope_hash_b64u` on bounty acceptance (deterministic v1 hash).
+    - Marketplace issues a worker+job scoped CST from clawscope on accept (best-effort) and via `POST /v1/bounties/{id}/cst`.
+    - Submission verification enforces `receipt.payload.binding.token_scope_hash_b64u` matches the expected value on all verified+run-bound receipts.
+- Files changed
+  - services/clawbounties/migrations/0011_cwc_job_cst.sql
+  - services/clawbounties/src/index.ts
+  - docs/roadmaps/proof-of-harness/oracle/2026-02-10/*
+---
