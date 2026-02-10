@@ -348,22 +348,38 @@ function extractTextContent(
       return undefined;
     }
     case 'google': {
-      // Gemini: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
+      // Gemini can respond in either:
+      // - Native Gemini shape: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
+      // - OpenAI-compatible shape (Gemini OpenAI compat): { choices: [{ message: { content: "..." } }] }
+      //
+      // Prefer native parsing, but fall back to OpenAI choices parsing for compatibility.
       const candidates = body['candidates'];
       if (Array.isArray(candidates) && candidates.length > 0) {
         const first = candidates[0] as Record<string, unknown> | undefined;
         const content = first?.['content'] as Record<string, unknown> | undefined;
         const parts = content?.['parts'];
         if (Array.isArray(parts)) {
-          return parts
+          const text = parts
             .filter(
               (p: unknown): p is { text: string } =>
                 typeof p === 'object' && p !== null && 'text' in p,
             )
             .map((p) => p.text)
             .join('');
+          if (text) return text;
         }
       }
+
+      // Fallback: OpenAI Chat Completions shape
+      const choices = body['choices'];
+      if (Array.isArray(choices) && choices.length > 0) {
+        const first = choices[0] as Record<string, unknown> | undefined;
+        const message = first?.['message'] as Record<string, unknown> | undefined;
+        if (typeof message?.['content'] === 'string') {
+          return message['content'] as string;
+        }
+      }
+
       return undefined;
     }
     default:
