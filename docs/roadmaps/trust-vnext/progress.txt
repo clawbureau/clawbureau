@@ -346,3 +346,21 @@ Started: 2026-02-07T19:53:07Z
   - cd packages/openclaw-provider-clawproxy && npm run typecheck
   - cd services/clawverify && npm run typecheck && npm test
 ---
+
+## 2026-02-10T00:38:35Z - CCO-US-021
+- What was implemented
+  - Implemented `clawcontrols` Work Policy Contract (WPC) registry API (signed policies):
+    - `POST /v1/wpc` (admin-gated) creates a WPC addressed by `policy_hash_b64u = sha256(JCS(payload))` and returns a signed envelope.
+    - `GET /v1/wpc/:policy_hash_b64u` fetches the previously created WPC envelope.
+  - Added versioned schemas for WPC payloads + envelopes under `packages/schema/policy/`.
+  - Updated clawcontrols PRD implementation status and moved the `clawcontrols.com/*` route off `claw-domains` to the new worker.
+- Files changed
+  - services/clawcontrols/*
+  - packages/schema/policy/*
+  - packages/schema/{README.md,progress.txt}
+  - docs/prds/clawcontrols.md
+  - services/claw-domains/wrangler.toml
+  - docs/roadmaps/trust-vnext/{prd.json,progress.txt}
+- Quality checks
+  - cd services/clawcontrols && npm run typecheck && npm test
+---

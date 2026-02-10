@@ -1,0 +1,20 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawcontrols",
+  "description": "clawcontrols.com (Policy Controls) — MVP: signed Work Policy Contract (WPC) registry.",
+  "userStories": [
+    {
+      "id": "CCO-US-021",
+      "title": "Work Policy Contract (WPC) registry API (signed policies)",
+      "description": "As a platform, I want a signed policy registry so jobs can pin a WPC hash and gateways/verifiers can enforce it.",
+      "acceptanceCriteria": [
+        "Define a canonical WPC JSON shape + hashing (JCS + SHA-256)",
+        "Implement create/read endpoints that return signed WPC envelopes",
+        "Document how policy_hash is computed and validated"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented services/clawcontrols with POST/GET /v1/wpc backed by Durable Objects. WPCs are addressed by policy_hash_b64u = sha256(JCS(payload)) and returned as signed envelopes (Ed25519, signer_did=did:key)."
+    }
+  ]
+}

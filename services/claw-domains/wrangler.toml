@@ -35,8 +35,6 @@ routes = [
   { pattern = "www.clawintel.com/*", zone_name = "clawintel.com" },
   { pattern = "clawtrials.com/*",    zone_name = "clawtrials.com" },
   { pattern = "www.clawtrials.com/*", zone_name = "clawtrials.com" },
-  { pattern = "clawcontrols.com/*",  zone_name = "clawcontrols.com" },
-  { pattern = "www.clawcontrols.com/*", zone_name = "clawcontrols.com" },
   { pattern = "clawmanage.com/*",    zone_name = "clawmanage.com" },
   { pattern = "www.clawmanage.com/*", zone_name = "clawmanage.com" },
   { pattern = "clawlogs.com/*",      zone_name = "clawlogs.com" },
