@@ -133,3 +133,60 @@ export function extractModel(provider: Provider, body: unknown): string | undefi
   const obj = body as Record<string, unknown>;
   return typeof obj['model'] === 'string' ? obj['model'] : undefined;
 }
+
+// ---------------------------------------------------------------------------
+// fal OpenRouter upstream (OpenAI-compatible)
+// ---------------------------------------------------------------------------
+
+/**
+ * fal OpenRouter router (OpenAI-compatible) upstream.
+ *
+ * Upstream auth: `Authorization: Key <FAL_KEY>` (NOT Bearer).
+ */
+export const FAL_OPENROUTER_BASE_URL = 'https://fal.run/openrouter/router/openai/v1';
+
+/**
+ * Routing selector: treat `model=openrouter/...` as a signal to route OpenAI requests
+ * to fal's OpenRouter router instead of api.openai.com.
+ */
+export function isFalOpenrouterModel(model: string | undefined): boolean {
+  return typeof model === 'string' && model.trim().toLowerCase().startsWith('openrouter/');
+}
+
+/**
+ * OpenRouter model IDs in OpenClaw are typically encoded as:
+ *   openrouter/<upstream-provider>/<model>
+ *
+ * The OpenRouter upstream expects the model WITHOUT the leading `openrouter/` prefix.
+ */
+export function stripOpenrouterModelPrefix(model: string): string {
+  const trimmed = model.trim();
+  if (!trimmed) return trimmed;
+
+  const m = trimmed.match(/^openrouter\//i);
+  return m ? trimmed.slice(m[0].length).trim() : trimmed;
+}
+
+export function buildFalOpenrouterUrl(opts?: { openaiApi?: OpenAIUpstreamApi }): string {
+  const api = opts?.openaiApi ?? 'chat_completions';
+  if (api === 'responses') return `${FAL_OPENROUTER_BASE_URL}/responses`;
+  return `${FAL_OPENROUTER_BASE_URL}/chat/completions`;
+}
+
+function stripKeyPrefix(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  const m = trimmed.match(/^Key\s+/i);
+  return m ? trimmed.slice(m[0].length).trim() : trimmed;
+}
+
+/**
+ * Build the upstream authorization header for fal OpenRouter router.
+ *
+ * Accepts either a raw key (`fal_...`) or a pre-prefixed value (`Key fal_...`).
+ */
+export function buildFalOpenrouterAuthHeader(apiKey: string): Record<string, string> {
+  const key = stripKeyPrefix(apiKey);
+  return { Authorization: `Key ${key}` };
+}

@@ -431,3 +431,31 @@ Started: 2026-02-07T19:53:07Z
   - cd packages/clawproof-adapters && npm run typecheck && npm test
   - cd packages/openclaw-provider-clawproxy && npm run typecheck
 ---
+
+## 2026-02-10T19:15:00Z - CPX-US-036 (OpenRouter-through-fal via clawproxy)
+- What was implemented
+  - Added fal OpenRouter router support to clawproxy for OpenAI-compatible endpoints:
+    - Routing selector: when request body `model` starts with `openrouter/`, clawproxy routes the request to:
+      - base: `https://fal.run/openrouter/router/openai/v1`
+      - endpoints: `/chat/completions` and `/responses` (OpenAI-compatible)
+    - Upstream auth is enforced as `Authorization: Key <FAL_KEY>` (not Bearer).
+    - clawproxy strips the leading `openrouter/` prefix from the upstream request body `model` value, but keeps the original model string in the receipt for auditability.
+    - Fail-closed: platform-paid mode is not allowed for `openrouter/*` models.
+    - Receipts include `metadata.upstream = "fal_openrouter"` and `metadata.upstream_model` for auditability.
+  - Improved harness tooling test coverage:
+    - Added unit tests for marketplace `/cst` response parsing (supports `cwc_auth` and `job_auth`).
+    - OpenClaw clawproxy provider now routes `openrouter/*` models via `/v1/proxy/openai`.
+- Files changed
+  - services/clawproxy/src/providers.ts
+  - services/clawproxy/src/index.ts
+  - services/clawproxy/test/providers.test.ts
+  - packages/openclaw-provider-clawproxy/src/{provider.ts,index.ts,marketplace-cst.ts}
+  - packages/openclaw-provider-clawproxy/test/{marketplace-cst.test.mjs,openrouter-routing.test.mjs}
+  - packages/openclaw-provider-clawproxy/package.json
+  - packages/clawproof-adapters/src/{cli.ts,marketplace-cst.ts}
+  - packages/clawproof-adapters/test/marketplace-cst.test.ts
+- Quality checks
+  - cd services/clawproxy && npm run typecheck && npm test
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck && npm test
+  - cd packages/clawproof-adapters && npm run typecheck && npm test
+---

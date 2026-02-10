@@ -14,6 +14,7 @@
  */
 
 import { createClawproxyProvider } from './provider.js';
+import { parseMarketplaceCstResponse } from './marketplace-cst.js';
 import type {
   ClawproxyProviderConfig,
   PluginDeps,
@@ -55,20 +56,6 @@ export { generateKeyPair, didFromPublicKey, hashJsonB64u } from './crypto.js';
 // Marketplace CST auto-fetch (POH-US-021/POH-US-022)
 // ---------------------------------------------------------------------------
 
-type BountyCstResponse = {
-  cwc_auth?: {
-    cst: string;
-    token_scope_hash_b64u: string;
-    policy_hash_b64u: string;
-    mission_id: string;
-  };
-  job_auth?: {
-    cst: string;
-    token_scope_hash_b64u: string;
-    policy_hash_b64u?: string;
-    mission_id: string;
-  };
-};
 
 function getEnvVar(name: string): string | undefined {
   // Avoid a hard dependency on Node types in this package.
@@ -118,20 +105,16 @@ async function maybeFetchJobCstFromBounties(config: ClawproxyProviderConfig, dep
     throw new Error(`clawproxy provider: clawbounties /cst failed: HTTP ${res.status}: ${text}`);
   }
 
-  const parsed = json as Partial<BountyCstResponse>;
-  const cst = parsed?.cwc_auth?.cst ?? parsed?.job_auth?.cst;
-  const policyHash = parsed?.cwc_auth?.policy_hash_b64u ?? parsed?.job_auth?.policy_hash_b64u;
-
-  if (typeof cst !== 'string' || cst.trim().length === 0) {
-    throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.cst or job_auth.cst)');
-  }
+  const parsed = parseMarketplaceCstResponse(json);
 
   // If this is a CWC bounty, policy_hash_b64u is required.
-  if (parsed?.cwc_auth && (typeof policyHash !== 'string' || policyHash.trim().length === 0)) {
+  if (parsed.kind === 'cwc' && (!parsed.policy_hash_b64u || parsed.policy_hash_b64u.trim().length === 0)) {
     throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.policy_hash_b64u)');
   }
 
-  config.token = cst.trim();
+  config.token = parsed.cst;
+
+  const policyHash = parsed.policy_hash_b64u;
 
   // Avoid POLICY_HASH_MISMATCH errors when CST pins policy_hash_b64u.
   if (typeof policyHash === 'string' && policyHash.trim().length > 0) {

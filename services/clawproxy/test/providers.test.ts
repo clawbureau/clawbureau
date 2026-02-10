@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProviderUrl } from '../src/providers';
+import {
+  buildProviderUrl,
+  buildFalOpenrouterUrl,
+  buildFalOpenrouterAuthHeader,
+  isFalOpenrouterModel,
+  stripOpenrouterModelPrefix,
+} from '../src/providers';
 
 describe('providers', () => {
   it('builds OpenAI chat completions URL by default', () => {
@@ -27,5 +33,31 @@ describe('providers', () => {
     expect(buildProviderUrl('google', 'gemini-3-flash-preview', { openaiApi: 'responses' })).toBe(
       'https://generativelanguage.googleapis.com/v1beta/openai/responses'
     );
+  });
+
+  it('detects fal OpenRouter model prefix', () => {
+    expect(isFalOpenrouterModel('openrouter/openai/gpt-4o-mini')).toBe(true);
+    expect(isFalOpenrouterModel('OpenRouter/anthropic/claude-3.5-sonnet')).toBe(true);
+    expect(isFalOpenrouterModel('gpt-4o-mini')).toBe(false);
+    expect(isFalOpenrouterModel(undefined)).toBe(false);
+  });
+
+  it('strips openrouter/ prefix for upstream model IDs', () => {
+    expect(stripOpenrouterModelPrefix('openrouter/openai/gpt-4o-mini')).toBe('openai/gpt-4o-mini');
+    expect(stripOpenrouterModelPrefix(' openrouter/anthropic/claude-sonnet-4 ')).toBe('anthropic/claude-sonnet-4');
+    expect(stripOpenrouterModelPrefix('gpt-4o-mini')).toBe('gpt-4o-mini');
+  });
+
+  it('builds fal OpenRouter chat completions URL by default', () => {
+    expect(buildFalOpenrouterUrl()).toBe('https://fal.run/openrouter/router/openai/v1/chat/completions');
+  });
+
+  it('builds fal OpenRouter responses URL when requested', () => {
+    expect(buildFalOpenrouterUrl({ openaiApi: 'responses' })).toBe('https://fal.run/openrouter/router/openai/v1/responses');
+  });
+
+  it('builds fal OpenRouter Authorization: Key header (strips optional Key prefix)', () => {
+    expect(buildFalOpenrouterAuthHeader('fal_abc').Authorization).toBe('Key fal_abc');
+    expect(buildFalOpenrouterAuthHeader('Key fal_abc').Authorization).toBe('Key fal_abc');
   });
 });

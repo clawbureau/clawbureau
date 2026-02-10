@@ -40,6 +40,8 @@ function inferProvider(
 ): string {
   const lower = model.toLowerCase();
   if (lower.startsWith('claude') || lower.startsWith('anthropic')) return 'anthropic';
+  // OpenRouter (via fal OpenAI-compatible router)
+  if (lower.startsWith('openrouter/')) return 'openai';
   // OpenAI model families (known prefixes): gpt*, o1*
   if (lower.startsWith('gpt') || lower.startsWith('o1')) return 'openai';
   if (lower.startsWith('gemini') || lower.startsWith('models/gemini')) return 'google';
@@ -220,6 +222,7 @@ export function createClawproxyProvider(
       { id: 'claude-*', provider: 'clawproxy', capabilities: ['chat', 'vision'] },
       { id: 'gpt-*', provider: 'clawproxy', capabilities: ['chat', 'vision'] },
       { id: 'gemini-*', provider: 'clawproxy', capabilities: ['chat'] },
+      { id: 'openrouter/*', provider: 'clawproxy', capabilities: ['chat', 'vision'] },
     ],
 
     receipts: collectedReceipts,
