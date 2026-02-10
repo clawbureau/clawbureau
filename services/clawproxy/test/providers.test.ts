@@ -16,4 +16,16 @@ describe('providers', () => {
   it('requires model for Google Gemini URL building', () => {
     expect(() => buildProviderUrl('google')).toThrow(/Model is required/);
   });
+
+  it('builds Google Gemini OpenAI-compat chat completions URL', () => {
+    expect(buildProviderUrl('google', 'gemini-3-flash-preview')).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+    );
+  });
+
+  it('builds Google Gemini OpenAI-compat responses URL when requested', () => {
+    expect(buildProviderUrl('google', 'gemini-3-flash-preview', { openaiApi: 'responses' })).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/openai/responses'
+    );
+  });
 });

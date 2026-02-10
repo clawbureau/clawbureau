@@ -523,7 +523,7 @@ async function callClawproxy({ cst, runId, eventHash, nonce }) {
     ? `${proxyBaseUrl}/v1/chat/completions`
     : provider === 'anthropic'
       ? `${proxyBaseUrl}/v1/messages`
-      : `${proxyBaseUrl}/v1/chat/completions`;
+      : `${proxyBaseUrl}/v1/proxy/google`;
 
   // Use OpenAI-compatible payload for openai. For other providers this script may need adjustment.
   const body = {

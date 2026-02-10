@@ -21,10 +21,14 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     contentType: 'application/json',
   },
   google: {
-    // Base URL for Gemini API - model is appended as path parameter
-    // Full URL format: https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-    authHeader: 'x-goog-api-key',
+    // Gemini API via OpenAI compatibility endpoints.
+    // Base URL format: https://generativelanguage.googleapis.com/v1beta/openai/{endpoint}
+    // Example: POST https://generativelanguage.googleapis.com/v1beta/openai/chat/completions
+    //
+    // This matches the request shape used by OpenAI SDKs ({ model, messages, ... }) and
+    // avoids format translation in the gateway.
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    authHeader: 'Authorization',
     contentType: 'application/json',
   },
 };
@@ -62,12 +66,12 @@ export function buildAuthHeader(
 ): Record<string, string> {
   const config = PROVIDERS[provider];
 
-  if (provider === 'openai') {
-    // OpenAI uses Bearer token format
+  // Providers that expect Bearer tokens in Authorization.
+  if (provider === 'openai' || provider === 'google') {
     return { [config.authHeader]: `Bearer ${apiKey}` };
   }
 
-  // Anthropic, Google, and others use direct API key
+  // Anthropic and other direct-key providers.
   return { [config.authHeader]: apiKey };
 }
 
@@ -94,11 +98,17 @@ export function buildProviderUrl(
   const config = PROVIDERS[provider];
 
   if (provider === 'google') {
+    // Model is still required for receipts + policy enforcement, even though the OpenAI
+    // compatibility endpoint does not include the model in the URL.
     if (!model) {
       throw new Error('Model is required for Google Gemini API');
     }
-    // Gemini URL format: {baseUrl}/{model}:generateContent
-    return `${config.baseUrl}/${model}:generateContent`;
+
+    const api = opts?.openaiApi ?? 'chat_completions';
+    if (api === 'responses') {
+      return `${config.baseUrl}/responses`;
+    }
+    return `${config.baseUrl}/chat/completions`;
   }
 
   if (provider === 'openai') {

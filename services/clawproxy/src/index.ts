@@ -1312,7 +1312,9 @@ async function handleProxy(
   let providerUrl: string;
   try {
     const openaiApi: OpenAIUpstreamApi | undefined =
-      provider === 'openai' ? inferOpenAiUpstreamApi(request, parsedBody) : undefined;
+      provider === 'openai' || provider === 'google'
+        ? inferOpenAiUpstreamApi(request, parsedBody)
+        : undefined;
 
     providerUrl = buildProviderUrl(provider, model, { openaiApi });
   } catch (err) {
