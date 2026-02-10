@@ -68,11 +68,17 @@ async function loadOrGenerateKeyPair(keyFile: string): Promise<Ed25519KeyPair> {
 }
 
 // ---------------------------------------------------------------------------
-// Marketplace CST auto-fetch (POH-US-021)
+// Marketplace CST auto-fetch (POH-US-021/POH-US-022)
 // ---------------------------------------------------------------------------
 
 type BountyCstResponse = {
   cwc_auth?: {
+    cst: string;
+    token_scope_hash_b64u: string;
+    policy_hash_b64u?: string;
+    mission_id?: string;
+  };
+  job_auth?: {
     cst: string;
     token_scope_hash_b64u: string;
     policy_hash_b64u?: string;
@@ -110,9 +116,9 @@ async function fetchJobCstFromBounties(params: {
   }
 
   const parsed = json as Partial<BountyCstResponse>;
-  const cst = parsed?.cwc_auth?.cst;
+  const cst = parsed?.cwc_auth?.cst ?? parsed?.job_auth?.cst;
   if (typeof cst !== 'string' || cst.trim().length === 0) {
-    throw new Error('clawbounties /cst returned an invalid response (missing cwc_auth.cst)');
+    throw new Error('clawbounties /cst returned an invalid response (missing cwc_auth.cst or job_auth.cst)');
   }
 
   return cst.trim();
@@ -133,7 +139,7 @@ export async function main(argv: string[]): Promise<void> {
       `  ${ENV.CLAWPROXY_BASE_URL}   — clawproxy base URL (required)\n` +
       `  ${ENV.CLAWPROXY_TOKEN} — CST token for proxy auth (optional)\n` +
       `\n` +
-      `  # Optional: marketplace job CST auto-fetch (POH-US-021)\n` +
+      `  # Optional: marketplace job CST auto-fetch (POH-US-021/POH-US-022)\n` +
       `  ${ENV.CLAWBOUNTIES_BASE_URL} — clawbounties base URL (optional)\n` +
       `  ${ENV.CLAWBOUNTIES_BOUNTY_ID} — bounty id (bty_...)\n` +
       `  ${ENV.CLAWBOUNTIES_WORKER_TOKEN} — worker auth token (Bearer ...)\n` +

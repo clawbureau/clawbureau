@@ -52,7 +52,7 @@ export type { HarnessRecorder } from './recorder.js';
 export { generateKeyPair, didFromPublicKey, hashJsonB64u } from './crypto.js';
 
 // ---------------------------------------------------------------------------
-// Marketplace CST auto-fetch (POH-US-021)
+// Marketplace CST auto-fetch (POH-US-021/POH-US-022)
 // ---------------------------------------------------------------------------
 
 type BountyCstResponse = {
@@ -60,6 +60,12 @@ type BountyCstResponse = {
     cst: string;
     token_scope_hash_b64u: string;
     policy_hash_b64u: string;
+    mission_id: string;
+  };
+  job_auth?: {
+    cst: string;
+    token_scope_hash_b64u: string;
+    policy_hash_b64u?: string;
     mission_id: string;
   };
 };
@@ -113,26 +119,29 @@ async function maybeFetchJobCstFromBounties(config: ClawproxyProviderConfig, dep
   }
 
   const parsed = json as Partial<BountyCstResponse>;
-  const cst = parsed?.cwc_auth?.cst;
-  const policyHash = parsed?.cwc_auth?.policy_hash_b64u;
+  const cst = parsed?.cwc_auth?.cst ?? parsed?.job_auth?.cst;
+  const policyHash = parsed?.cwc_auth?.policy_hash_b64u ?? parsed?.job_auth?.policy_hash_b64u;
 
   if (typeof cst !== 'string' || cst.trim().length === 0) {
-    throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.cst)');
+    throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.cst or job_auth.cst)');
   }
 
-  if (typeof policyHash !== 'string' || policyHash.trim().length === 0) {
+  // If this is a CWC bounty, policy_hash_b64u is required.
+  if (parsed?.cwc_auth && (typeof policyHash !== 'string' || policyHash.trim().length === 0)) {
     throw new Error('clawproxy provider: clawbounties /cst returned an invalid response (missing cwc_auth.policy_hash_b64u)');
   }
 
   config.token = cst.trim();
 
   // Avoid POLICY_HASH_MISMATCH errors when CST pins policy_hash_b64u.
-  if (config.policyHashB64u && config.policyHashB64u !== policyHash.trim()) {
-    deps.logger.warn(
-      `clawproxy provider: overriding policyHashB64u from config (${config.policyHashB64u}) to match job CST policy_hash_b64u (${policyHash.trim()})`
-    );
+  if (typeof policyHash === 'string' && policyHash.trim().length > 0) {
+    if (config.policyHashB64u && config.policyHashB64u !== policyHash.trim()) {
+      deps.logger.warn(
+        `clawproxy provider: overriding policyHashB64u from config (${config.policyHashB64u}) to match job CST policy_hash_b64u (${policyHash.trim()})`
+      );
+    }
+    config.policyHashB64u = policyHash.trim();
   }
-  config.policyHashB64u = policyHash.trim();
 }
 
 // ── Plugin definition ───────────────────────────────────────────────────────

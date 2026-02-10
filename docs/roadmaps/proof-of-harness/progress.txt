@@ -193,3 +193,22 @@ Started: 2026-02-05T21:49:28Z
   - services/clawbounties/src/index.ts
   - docs/roadmaps/proof-of-harness/oracle/2026-02-10/*
 ---
+
+## 2026-02-10T17:30:00Z - POH-US-022
+- What was implemented
+  - Generalized job-scoped CST binding beyond CWC bounties (receipt non-transferability):
+    - Added `job_token_scope_hash_b64u` on bounties (deterministic v1 hash) for non-CWC jobs.
+    - Acceptance now computes/persists expected job token scope hash for bounties with `min_proof_tier != self`.
+    - `POST /v1/bounties/{id}/cst` now supports non-CWC bounties and returns `job_auth` (while CWC continues to return `cwc_auth`).
+    - Submission verification enforces `binding.token_scope_hash_b64u` matches the stored expected job hash for non-CWC bounties (when configured).
+  - Updated harness tooling to accept both marketplace CST response shapes:
+    - `@clawbureau/clawproof-adapters` CLI accepts `job_auth.cst` or `cwc_auth.cst`.
+    - `@openclaw/provider-clawproxy` auto-fetch accepts `job_auth` or `cwc_auth` and only overrides policy hash when the CST pins one.
+  - Hardened smoke script assertions to validate deterministic `proof_bundle.reason` strings.
+- Files changed
+  - services/clawbounties/migrations/0012_job_cst_binding.sql
+  - services/clawbounties/src/index.ts
+  - packages/clawproof-adapters/src/cli.ts
+  - packages/openclaw-provider-clawproxy/src/index.ts
+  - scripts/poh/smoke-cwc-job-cst-binding.mjs
+---

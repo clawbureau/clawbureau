@@ -127,6 +127,9 @@ interface BountyV2 {
   accept_idempotency_key: string | null;
   accepted_at: string | null;
 
+  /** Deterministic v1 job-scoped token_scope_hash_b64u for binding receipts to this bounty. */
+  job_token_scope_hash_b64u: string | null;
+
   // Confidential Work Contract (CWC) — direct-hire confidential consulting
   cwc_hash_b64u: string | null;
   cwc_wpc_policy_hash_b64u: string | null;
@@ -433,6 +436,18 @@ interface WorkerListItemV1 {
   pricing: WorkerPricingV1;
 }
 
+type JobAuthResponseV1 = {
+  cst: string;
+  token_scope_hash_b64u: string;
+  aud: string;
+  mission_id: string;
+  policy_hash_b64u?: string;
+  iat?: number;
+  exp?: number;
+};
+
+type CwcAuthResponseV1 = JobAuthResponseV1 & { policy_hash_b64u: string };
+
 interface AcceptBountyResponseV1 {
   bounty_id: string;
   escrow_id: string;
@@ -442,23 +457,14 @@ interface AcceptBountyResponseV1 {
   fee_policy_version: string;
   payout: { worker_net_minor: string; currency: 'USD' };
 
-  cwc_auth?: {
-    cst: string;
-    token_scope_hash_b64u: string;
-    aud: string;
-    policy_hash_b64u: string;
-    mission_id: string;
-    iat?: number;
-    exp?: number;
-  };
+  cwc_auth?: CwcAuthResponseV1;
 }
-
-type CwcAuthResponseV1 = NonNullable<AcceptBountyResponseV1['cwc_auth']>;
 
 interface IssueBountyCstResponseV1 {
   bounty_id: string;
   worker_did: string;
-  cwc_auth: CwcAuthResponseV1;
+  job_auth?: JobAuthResponseV1;
+  cwc_auth?: CwcAuthResponseV1;
 }
 
 function escapeHtml(input: string): string {
@@ -1064,6 +1070,127 @@ async function issueCwcJobCst(
       ok: false,
       error: errorResponse(
         'CWC_CST_ISSUE_FAILED',
+        'clawscope returned an invalid token_scope_hash_b64u',
+        502,
+        { token_scope_hash_b64u },
+        version
+      ),
+    };
+  }
+
+  const iat = typeof json.iat === 'number' && Number.isFinite(json.iat) ? Math.floor(json.iat) : undefined;
+  const exp = typeof json.exp === 'number' && Number.isFinite(json.exp) ? Math.floor(json.exp) : undefined;
+
+  const value: IssuedCst = {
+    token,
+    token_scope_hash_b64u,
+    policy_hash_b64u: isNonEmptyString(json.policy_hash_b64u) ? json.policy_hash_b64u.trim() : undefined,
+    mission_id: params.bounty_id,
+    iat,
+    exp,
+  };
+
+  return { ok: true, value };
+}
+
+async function issueJobCst(
+  env: Env,
+  params: {
+    worker_did: string;
+    bounty_id: string;
+    policy_hash_b64u?: string;
+  },
+  version: string
+): Promise<{ ok: true; value: IssuedCst } | { ok: false; error: Response }> {
+  const adminKey = env.SCOPE_ADMIN_KEY?.trim();
+  if (!adminKey) {
+    return {
+      ok: false,
+      error: errorResponse(
+        'SCOPE_NOT_CONFIGURED',
+        'SCOPE_ADMIN_KEY is not configured (required for job CST issuance)',
+        503,
+        undefined,
+        version
+      ),
+    };
+  }
+
+  const url = `${resolveScopeBaseUrl(env)}/v1/tokens/issue`;
+
+  const body: Record<string, unknown> = {
+    sub: params.worker_did,
+    aud: CWC_JOB_CST_AUD,
+    scope: CWC_JOB_CST_SCOPE,
+    mission_id: params.bounty_id,
+    ttl_sec: CWC_JOB_CST_TTL_SEC,
+  };
+
+  if (typeof params.policy_hash_b64u === 'string' && params.policy_hash_b64u.trim().length > 0) {
+    body.policy_hash_b64u = params.policy_hash_b64u.trim();
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${adminKey}`,
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
+      ok: false,
+      error: errorResponse('JOB_CST_ISSUE_FAILED', `Failed to call clawscope token issuer: ${message}`, 502, undefined, version),
+    };
+  }
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    return {
+      ok: false,
+      error: errorResponse(
+        'JOB_CST_ISSUE_FAILED',
+        `clawscope /v1/tokens/issue returned HTTP ${response.status}`,
+        502,
+        { status: response.status, details },
+        version
+      ),
+    };
+  }
+
+  if (!isRecord(json) || !isNonEmptyString(json.token) || !isNonEmptyString(json.token_scope_hash_b64u)) {
+    return {
+      ok: false,
+      error: errorResponse(
+        'JOB_CST_ISSUE_FAILED',
+        'clawscope /v1/tokens/issue returned an invalid response',
+        502,
+        { raw: isRecord(json) ? json : text },
+        version
+      ),
+    };
+  }
+
+  const token = json.token.trim();
+  const token_scope_hash_b64u = json.token_scope_hash_b64u.trim();
+
+  if (!isSha256B64u(token_scope_hash_b64u)) {
+    return {
+      ok: false,
+      error: errorResponse(
+        'JOB_CST_ISSUE_FAILED',
         'clawscope returned an invalid token_scope_hash_b64u',
         502,
         { token_scope_hash_b64u },
@@ -2492,6 +2619,7 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const worker_did = d1String(row.worker_did);
   const accept_idempotency_key = d1String(row.accept_idempotency_key);
   const accepted_at = d1String(row.accepted_at);
+  const job_token_scope_hash_b64u = d1String(row.job_token_scope_hash_b64u);
 
   const cwc_hash_b64u = d1String(row.cwc_hash_b64u);
   const cwc_wpc_policy_hash_b64u = d1String(row.cwc_wpc_policy_hash_b64u);
@@ -2582,6 +2710,8 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const cwc_buyer_envelope = cwc_buyer_envelope_json ? parseJsonObject(cwc_buyer_envelope_json) : null;
   const cwc_worker_envelope = cwc_worker_envelope_json ? parseJsonObject(cwc_worker_envelope_json) : null;
 
+  if (job_token_scope_hash_b64u && !isSha256B64u(job_token_scope_hash_b64u.trim())) return null;
+
   const hasAnyCwc = Boolean(
     cwc_hash_b64u ||
       cwc_wpc_policy_hash_b64u ||
@@ -2619,6 +2749,7 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     worker_did: worker_did && worker_did.trim().startsWith('did:') ? worker_did.trim() : null,
     accept_idempotency_key: accept_idempotency_key ? accept_idempotency_key.trim() : null,
     accepted_at: accepted_at ? accepted_at.trim() : null,
+    job_token_scope_hash_b64u: job_token_scope_hash_b64u ? job_token_scope_hash_b64u.trim() : null,
 
     cwc_hash_b64u: hasAnyCwc ? cwc_hash_b64u!.trim() : null,
     cwc_wpc_policy_hash_b64u: hasAnyCwc ? cwc_wpc_policy_hash_b64u!.trim() : null,
@@ -2763,6 +2894,7 @@ async function updateBountyAccepted(
     idempotency_key: string;
     cwc_worker_envelope_json: string | null;
     cwc_token_scope_hash_b64u: string | null;
+    job_token_scope_hash_b64u: string | null;
     now: string;
   }
 ): Promise<void> {
@@ -2775,6 +2907,7 @@ async function updateBountyAccepted(
              accept_idempotency_key = COALESCE(accept_idempotency_key, ?),
              cwc_worker_envelope_json = COALESCE(cwc_worker_envelope_json, ?),
              cwc_token_scope_hash_b64u = COALESCE(cwc_token_scope_hash_b64u, ?),
+             job_token_scope_hash_b64u = COALESCE(job_token_scope_hash_b64u, ?),
              updated_at = ?
        WHERE bounty_id = ?
          AND (worker_did IS NULL OR worker_did = ?)`
@@ -2785,6 +2918,7 @@ async function updateBountyAccepted(
       params.idempotency_key,
       params.cwc_worker_envelope_json,
       params.cwc_token_scope_hash_b64u,
+      params.job_token_scope_hash_b64u,
       params.now,
       params.bounty_id,
       params.worker_did
@@ -2839,6 +2973,31 @@ async function updateBountyCwcTokenScopeHash(
 
   if (!result || !result.success || !result.meta || result.meta.changes === 0) {
     throw new Error('CWC_TOKEN_SCOPE_UPDATE_FAILED');
+  }
+}
+
+async function updateBountyJobTokenScopeHash(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    worker_did: string;
+    job_token_scope_hash_b64u: string;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+         SET job_token_scope_hash_b64u = COALESCE(job_token_scope_hash_b64u, ?),
+             updated_at = ?
+       WHERE bounty_id = ?
+         AND worker_did = ?`
+    )
+    .bind(params.job_token_scope_hash_b64u, params.now, params.bounty_id, params.worker_did)
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('JOB_TOKEN_SCOPE_UPDATE_FAILED');
   }
 }
 
@@ -2931,6 +3090,7 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
         require_owner_verified_votes,
         test_harness_id,
         metadata_json,
+        job_token_scope_hash_b64u,
         cwc_hash_b64u,
         cwc_wpc_policy_hash_b64u,
         cwc_required_proof_tier,
@@ -2944,7 +3104,7 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
         status,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.bounty_id,
@@ -2962,6 +3122,7 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
       record.require_owner_verified_votes ? 1 : 0,
       record.test_harness_id,
       JSON.stringify(record.metadata),
+      record.job_token_scope_hash_b64u,
       record.cwc_hash_b64u,
       record.cwc_wpc_policy_hash_b64u,
       record.cwc_required_proof_tier,
@@ -4916,6 +5077,66 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
     }
   }
 
+  // POH-US-022: deterministic job token binding (non-transferable receipts)
+  //
+  // For bounties that require gateway-tier proofs (min_proof_tier != self), we compute a deterministic
+  // expected token_scope_hash_b64u for a job-scoped CST. This binds gateway receipts to:
+  // - worker DID (sub)
+  // - bounty id (mission_id)
+  // - (optionally) pinned policy hash (CWC)
+  //
+  // We persist this at acceptance time (open -> accepted). For older already-accepted bounties,
+  // we do not auto-backfill here to avoid unintentionally changing submission requirements mid-flight.
+  let expectedJobTokenScopeHash: string | null = null;
+  const shouldBindJobToken = bounty.min_proof_tier !== 'self';
+
+  if (shouldBindJobToken) {
+    try {
+      expectedJobTokenScopeHash = await computeTokenScopeHashB64uV1({
+        sub: worker_did,
+        aud: CWC_JOB_CST_AUD,
+        scope: CWC_JOB_CST_SCOPE,
+        policy_hash_b64u: cwcPolicyHash ?? undefined,
+        mission_id: bounty.bounty_id,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse(
+        'JOB_TOKEN_SCOPE_HASH_FAILED',
+        `Failed to compute job token_scope_hash_b64u: ${message}`,
+        500,
+        undefined,
+        version
+      );
+    }
+
+    if (!expectedJobTokenScopeHash || !isSha256B64u(expectedJobTokenScopeHash)) {
+      return errorResponse(
+        'JOB_TOKEN_SCOPE_HASH_FAILED',
+        'Computed job token_scope_hash_b64u is invalid',
+        500,
+        { token_scope_hash_b64u: expectedJobTokenScopeHash },
+        version
+      );
+    }
+
+    const stored = bounty.job_token_scope_hash_b64u;
+    const canValidateStoredScope = bounty.worker_did === null || bounty.worker_did === worker_did;
+
+    if (stored && stored.trim().length > 0 && canValidateStoredScope && stored.trim() !== expectedJobTokenScopeHash) {
+      return errorResponse(
+        'JOB_TOKEN_SCOPE_HASH_MISMATCH',
+        'Stored job_token_scope_hash_b64u does not match computed expected token scope hash',
+        500,
+        {
+          stored_token_scope_hash_b64u: stored.trim(),
+          expected_token_scope_hash_b64u: expectedJobTokenScopeHash,
+        },
+        version
+      );
+    }
+  }
+
   // Already accepted.
   if (bounty.worker_did) {
     if (bounty.worker_did === worker_did) {
@@ -5081,6 +5302,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
       idempotency_key,
       cwc_worker_envelope_json,
       cwc_token_scope_hash_b64u: expectedTokenScopeHash,
+      job_token_scope_hash_b64u: expectedJobTokenScopeHash,
       now,
     });
   } catch (err) {
@@ -5163,27 +5385,17 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
     );
   }
 
-  if (!bounty.cwc_hash_b64u) {
-    return errorResponse('CWC_NOT_ENABLED', 'Bounty is not governed by a Confidential Work Contract', 409, undefined, version);
-  }
+  const isCwcBounty = bounty.cwc_hash_b64u !== null;
+  const cwcPolicyHash = isCwcBounty ? bounty.cwc_wpc_policy_hash_b64u : null;
 
-  if (!bounty.cwc_wpc_policy_hash_b64u) {
-    return errorResponse('CWC_INVALID_BOUNTY', 'Bounty is missing cwc_wpc_policy_hash_b64u', 500, undefined, version);
-  }
+  if (isCwcBounty) {
+    if (!cwcPolicyHash) {
+      return errorResponse('CWC_INVALID_BOUNTY', 'Bounty is missing cwc_wpc_policy_hash_b64u', 500, undefined, version);
+    }
 
-  if (!bounty.cwc_worker_envelope) {
-    return errorResponse('CWC_COUNTERSIGN_REQUIRED', 'CWC worker countersign is required', 409, undefined, version);
-  }
-
-  // Ensure clawscope is available/configured.
-  if (!env.SCOPE_ADMIN_KEY?.trim()) {
-    return errorResponse(
-      'SCOPE_NOT_CONFIGURED',
-      'SCOPE_ADMIN_KEY is not configured (required for CWC job CST issuance)',
-      503,
-      undefined,
-      version
-    );
+    if (!bounty.cwc_worker_envelope) {
+      return errorResponse('CWC_COUNTERSIGN_REQUIRED', 'CWC worker countersign is required', 409, undefined, version);
+    }
   }
 
   let expectedTokenScopeHash: string;
@@ -5192,17 +5404,19 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
       sub: worker_did,
       aud: CWC_JOB_CST_AUD,
       scope: CWC_JOB_CST_SCOPE,
-      policy_hash_b64u: bounty.cwc_wpc_policy_hash_b64u,
+      policy_hash_b64u: cwcPolicyHash ?? undefined,
       mission_id: bounty.bounty_id,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return errorResponse('CWC_TOKEN_SCOPE_HASH_FAILED', `Failed to compute token_scope_hash_b64u: ${message}`, 500, undefined, version);
+    const code = isCwcBounty ? 'CWC_TOKEN_SCOPE_HASH_FAILED' : 'JOB_TOKEN_SCOPE_HASH_FAILED';
+    return errorResponse(code, `Failed to compute token_scope_hash_b64u: ${message}`, 500, undefined, version);
   }
 
   if (!isSha256B64u(expectedTokenScopeHash)) {
+    const code = isCwcBounty ? 'CWC_TOKEN_SCOPE_HASH_FAILED' : 'JOB_TOKEN_SCOPE_HASH_FAILED';
     return errorResponse(
-      'CWC_TOKEN_SCOPE_HASH_FAILED',
+      code,
       'Computed token_scope_hash_b64u is invalid',
       500,
       { token_scope_hash_b64u: expectedTokenScopeHash },
@@ -5210,11 +5424,16 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
     );
   }
 
-  const stored = bounty.cwc_token_scope_hash_b64u;
+  const stored = isCwcBounty ? bounty.cwc_token_scope_hash_b64u : bounty.job_token_scope_hash_b64u;
   if (stored && stored.trim().length > 0 && stored.trim() !== expectedTokenScopeHash) {
+    const code = isCwcBounty ? 'CWC_TOKEN_SCOPE_HASH_MISMATCH' : 'JOB_TOKEN_SCOPE_HASH_MISMATCH';
+    const message = isCwcBounty
+      ? 'Stored cwc_token_scope_hash_b64u does not match computed expected token scope hash'
+      : 'Stored job_token_scope_hash_b64u does not match computed expected token scope hash';
+
     return errorResponse(
-      'CWC_TOKEN_SCOPE_HASH_MISMATCH',
-      'Stored cwc_token_scope_hash_b64u does not match computed expected token scope hash',
+      code,
+      message,
       500,
       { stored_token_scope_hash_b64u: stored.trim(), expected_token_scope_hash_b64u: expectedTokenScopeHash },
       version
@@ -5223,33 +5442,55 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
 
   // Persist expected hash (best-effort idempotent).
   try {
-    await updateBountyCwcTokenScopeHash(env.BOUNTIES_DB, {
-      bounty_id: bounty.bounty_id,
-      worker_did,
-      cwc_token_scope_hash_b64u: expectedTokenScopeHash,
-      now: new Date().toISOString(),
-    });
+    const now = new Date().toISOString();
+
+    if (isCwcBounty) {
+      await updateBountyCwcTokenScopeHash(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        worker_did,
+        cwc_token_scope_hash_b64u: expectedTokenScopeHash,
+        now,
+      });
+    } else if (bounty.min_proof_tier !== 'self') {
+      // POH-US-022: only persist non-CWC job binding for bounties that require gateway-tier proofs.
+      await updateBountyJobTokenScopeHash(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        worker_did,
+        job_token_scope_hash_b64u: expectedTokenScopeHash,
+        now,
+      });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
-  const issued = await issueCwcJobCst(
-    env,
-    {
-      worker_did,
-      bounty_id: bounty.bounty_id,
-      policy_hash_b64u: bounty.cwc_wpc_policy_hash_b64u,
-    },
-    version
-  );
+  const issued = isCwcBounty
+    ? await issueCwcJobCst(
+        env,
+        {
+          worker_did,
+          bounty_id: bounty.bounty_id,
+          policy_hash_b64u: cwcPolicyHash!,
+        },
+        version
+      )
+    : await issueJobCst(
+        env,
+        {
+          worker_did,
+          bounty_id: bounty.bounty_id,
+        },
+        version
+      );
 
   if (!issued.ok) return issued.error;
 
   const issuedCst = issued.value;
   if (issuedCst.token_scope_hash_b64u !== expectedTokenScopeHash) {
+    const code = isCwcBounty ? 'CWC_CST_ISSUE_FAILED' : 'JOB_CST_ISSUE_FAILED';
     return errorResponse(
-      'CWC_CST_ISSUE_FAILED',
+      code,
       'clawscope returned a token_scope_hash_b64u that does not match the expected deterministic hash',
       502,
       {
@@ -5263,16 +5504,32 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
   const response: IssueBountyCstResponseV1 = {
     bounty_id: bounty.bounty_id,
     worker_did,
-    cwc_auth: {
+  };
+
+  if (isCwcBounty) {
+    response.cwc_auth = {
       cst: issuedCst.token,
       token_scope_hash_b64u: issuedCst.token_scope_hash_b64u,
       aud: CWC_JOB_CST_AUD,
-      policy_hash_b64u: bounty.cwc_wpc_policy_hash_b64u,
+      policy_hash_b64u: cwcPolicyHash!,
       mission_id: bounty.bounty_id,
       iat: issuedCst.iat,
       exp: issuedCst.exp,
-    },
-  };
+    };
+  } else {
+    const jobAuth: JobAuthResponseV1 = {
+      cst: issuedCst.token,
+      token_scope_hash_b64u: issuedCst.token_scope_hash_b64u,
+      aud: CWC_JOB_CST_AUD,
+      mission_id: bounty.bounty_id,
+      iat: issuedCst.iat,
+      exp: issuedCst.exp,
+    };
+
+    if (issuedCst.policy_hash_b64u) jobAuth.policy_hash_b64u = issuedCst.policy_hash_b64u;
+
+    response.job_auth = jobAuth;
+  }
 
   return jsonResponse(response, 200, version);
 }
@@ -5697,6 +5954,34 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
         proofStatus = 'invalid';
         proofReason = `CWC token_scope_hash mismatch (expected ${expectedTokenScopeHash}, got ${Array.from(verifiedBoundTokenScopeHashes).join(', ') || 'none'})`;
       }
+    }
+  }
+
+  // POH-US-022: enforce job-scoped CST binding for non-CWC bounties (when configured).
+  //
+  // We only enforce this when:
+  // - the proof bundle verified as VALID
+  // - min_proof_tier passed (proofStatus still 'valid')
+  // - the bounty requires gateway-tier proofs (min_proof_tier !== 'self')
+  // - the bounty has a stored job_token_scope_hash_b64u (new regime)
+  if (
+    bounty.job_token_scope_hash_b64u &&
+    !bounty.cwc_hash_b64u &&
+    bounty.min_proof_tier !== 'self' &&
+    proofStatus === 'valid' &&
+    proofBundleResponse.result.status === 'VALID'
+  ) {
+    const expectedTokenScopeHash = bounty.job_token_scope_hash_b64u;
+
+    if (verifiedBoundReceiptCount === 0) {
+      proofStatus = 'invalid';
+      proofReason = 'Job binding requires at least one verified, run-bound gateway receipt';
+    } else if (verifiedBoundMissingTokenScopeHashCount > 0) {
+      proofStatus = 'invalid';
+      proofReason = 'Job binding requires binding.token_scope_hash_b64u on all verified, run-bound gateway receipts';
+    } else if (verifiedBoundTokenScopeHashes.size !== 1 || !verifiedBoundTokenScopeHashes.has(expectedTokenScopeHash)) {
+      proofStatus = 'invalid';
+      proofReason = `Job token_scope_hash mismatch (expected ${expectedTokenScopeHash}, got ${Array.from(verifiedBoundTokenScopeHashes).join(', ') || 'none'})`;
     }
   }
 
@@ -6696,6 +6981,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     worker_did: null,
     accept_idempotency_key: null,
     accepted_at: null,
+    job_token_scope_hash_b64u: null,
 
     cwc_hash_b64u,
     cwc_wpc_policy_hash_b64u,
