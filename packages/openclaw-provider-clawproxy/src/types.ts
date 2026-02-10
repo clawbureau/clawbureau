@@ -18,6 +18,16 @@ export interface ClawproxyProviderConfig {
   baseUrl: string;
   /** Bearer token for authenticating with clawproxy (optional — user API keys forwarded if absent). */
   token?: string;
+
+  /** Optional pinned Work Policy Contract (WPC) hash (policy_hash_b64u). */
+  policyHashB64u?: string;
+
+  /** If true, send X-Confidential-Mode: true on all proxied calls. */
+  confidentialMode?: boolean;
+
+  /** Optional receipt privacy mode override (sent as X-Receipt-Privacy-Mode). */
+  receiptPrivacyMode?: 'hash_only' | 'encrypted';
+
   /** Upstream provider to route through (default: inferred from model ID). */
   defaultProvider?: 'anthropic' | 'openai' | 'google';
 }

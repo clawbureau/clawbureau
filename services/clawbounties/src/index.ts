@@ -121,6 +121,13 @@ interface BountyV2 {
   accept_idempotency_key: string | null;
   accepted_at: string | null;
 
+  // Confidential Work Contract (CWC) — direct-hire confidential consulting
+  cwc_hash_b64u: string | null;
+  cwc_wpc_policy_hash_b64u: string | null;
+  cwc_required_proof_tier: ProofTier | null;
+  cwc_buyer_envelope: Record<string, unknown> | null;
+  cwc_worker_envelope: Record<string, unknown> | null;
+
   // requester decision (approve/reject)
   approved_submission_id: string | null;
   approve_idempotency_key: string | null;
@@ -1678,15 +1685,35 @@ function extractBoundReceiptKey(
   };
 }
 
+type ReplayReceiptComputation = {
+  keys: ReplayReceiptKey[];
+  /** Count of receipts that are (a) cryptographically verified and (b) bound to this run/event chain. */
+  verified_bound_receipt_count: number;
+  /** Observed binding.policy_hash values across verified+bound receipts. */
+  verified_bound_policy_hashes: Set<string>;
+  /** Verified+bound receipts missing binding.policy_hash. */
+  verified_bound_missing_policy_hash_count: number;
+};
+
 async function computeReplayReceiptKeys(
   env: Env,
   proofBundleEnvelope: Record<string, unknown>,
   bindingContext: { run_id: string; allowed_event_hashes_b64u: ReadonlySet<string> }
-): Promise<ReplayReceiptKey[]> {
+): Promise<ReplayReceiptComputation> {
   const receipts = extractReceiptsFromProofBundle(proofBundleEnvelope);
-  if (receipts.length === 0) return [];
+  if (receipts.length === 0) {
+    return {
+      keys: [],
+      verified_bound_receipt_count: 0,
+      verified_bound_policy_hashes: new Set(),
+      verified_bound_missing_policy_hash_count: 0,
+    };
+  }
 
   const keys: ReplayReceiptKey[] = [];
+  let verified_bound_receipt_count = 0;
+  const verified_bound_policy_hashes = new Set<string>();
+  let verified_bound_missing_policy_hash_count = 0;
 
   // Verify each receipt signature via clawverify, then enforce binding to this run/event chain.
   for (const receipt of receipts) {
@@ -1703,10 +1730,28 @@ async function computeReplayReceiptKeys(
     if (verification.result.status !== 'VALID') continue;
 
     const key = extractBoundReceiptKey(receipt, bindingContext);
-    if (key) keys.push(key);
+    if (!key) continue;
+
+    keys.push(key);
+    verified_bound_receipt_count++;
+
+    const payload = receipt.payload;
+    const binding = isRecord(payload) ? payload.binding : null;
+    const policyHash = isRecord(binding) ? binding.policy_hash : null;
+
+    if (isNonEmptyString(policyHash)) {
+      verified_bound_policy_hashes.add(policyHash.trim());
+    } else {
+      verified_bound_missing_policy_hash_count++;
+    }
   }
 
-  return keys;
+  return {
+    keys,
+    verified_bound_receipt_count,
+    verified_bound_policy_hashes,
+    verified_bound_missing_policy_hash_count,
+  };
 }
 
 function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
@@ -1791,12 +1836,146 @@ function stableStringify(value: unknown): string {
   }
 }
 
+/**
+ * RFC 8785 — JSON Canonicalization Scheme (JCS)
+ *
+ * Produces a deterministic JSON string suitable for hashing/signing.
+ */
+function jcsCanonicalize(value: unknown): string {
+  if (value === null) return 'null';
+
+  switch (typeof value) {
+    case 'boolean':
+      return value ? 'true' : 'false';
+
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Non-finite number not allowed in JCS');
+      }
+      // JSON.stringify() uses the ECMAScript number-to-string algorithm.
+      return JSON.stringify(value);
+
+    case 'string':
+      return JSON.stringify(value);
+
+    case 'object': {
+      if (Array.isArray(value)) {
+        return `[${value.map(jcsCanonicalize).join(',')}]`;
+      }
+
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      const parts: string[] = [];
+
+      for (const k of keys) {
+        parts.push(`${JSON.stringify(k)}:${jcsCanonicalize(obj[k])}`);
+      }
+
+      return `{${parts.join(',')}}`;
+    }
+
+    default:
+      // undefined | function | symbol | bigint
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
 function base64UrlEncode(bytes: Uint8Array): string {
   // btoa expects a binary string.
   let binary = '';
   for (const b of bytes) binary += String.fromCharCode(b);
   const base64 = btoa(binary);
   return base64.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+}
+
+function base64UrlDecode(str: string): Uint8Array {
+  const base64 = str.replaceAll('-', '+').replaceAll('_', '/');
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(base64 + padding);
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58Decode(str: string): Uint8Array {
+  const bytes: number[] = [0];
+
+  for (const char of str) {
+    const value = BASE58_ALPHABET.indexOf(char);
+    if (value === -1) {
+      throw new Error(`Invalid base58 character: ${char}`);
+    }
+
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = bytes[i]! * 58;
+    }
+    bytes[0] = bytes[0]! + value;
+
+    let carry = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      const next = bytes[i]! + carry;
+      bytes[i] = next & 0xff;
+      carry = next >> 8;
+    }
+
+    while (carry) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+
+  // Handle leading zeros
+  for (const char of str) {
+    if (char !== '1') break;
+    bytes.push(0);
+  }
+
+  return new Uint8Array(bytes.reverse());
+}
+
+/**
+ * Extract raw Ed25519 public key bytes from did:key.
+ * Expects multibase base58btc (z) and Ed25519 multicodec prefix 0xed01.
+ */
+function extractEd25519PublicKeyFromDidKey(did: string): Uint8Array | null {
+  if (!did.startsWith('did:key:z')) return null;
+
+  try {
+    const multibase = did.slice(9);
+    const decoded = base58Decode(multibase);
+    if (decoded[0] === 0xed && decoded[1] === 0x01) return decoded.slice(2);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyEd25519DidKeySignature(params: {
+  signer_did: string;
+  message: string;
+  signature_b64u: string;
+}): Promise<boolean> {
+  const publicKeyBytes = extractEd25519PublicKeyFromDidKey(params.signer_did);
+  if (!publicKeyBytes) return false;
+
+  let signatureBytes: Uint8Array;
+  try {
+    signatureBytes = base64UrlDecode(params.signature_b64u);
+  } catch {
+    return false;
+  }
+
+  const messageBytes = new TextEncoder().encode(params.message);
+
+  try {
+    const publicKey = await crypto.subtle.importKey('raw', publicKeyBytes, { name: 'Ed25519' }, false, ['verify']);
+
+    return await crypto.subtle.verify({ name: 'Ed25519' }, publicKey, signatureBytes, messageBytes);
+  } catch {
+    return false;
+  }
 }
 
 function hexEncode(bytes: Uint8Array): string {
@@ -1815,6 +1994,184 @@ async function sha256B64uUtf8(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return base64UrlEncode(new Uint8Array(digest));
+}
+
+// ---------------------------------------------------------------------------
+// Confidential Work Contract (CWC)
+// ---------------------------------------------------------------------------
+
+const SHA256_B64U_RE = /^[A-Za-z0-9_-]{43}$/;
+
+function isSha256B64u(value: string): boolean {
+  return SHA256_B64U_RE.test(value);
+}
+
+type CwcReceiptPrivacyMode = 'hash_only' | 'encrypted';
+
+type ConfidentialWorkContractV1 = {
+  cwc_version: '1';
+  cwc_id: string;
+
+  buyer_did: string;
+  worker_did: string;
+
+  /** Pinned WPC hash (policy_hash_b64u). */
+  wpc_policy_hash_b64u: string;
+
+  /** Required proof tier for submissions. */
+  required_proof_tier: ProofTier;
+
+  /** Receipt privacy mode expectation. */
+  receipt_privacy_mode: CwcReceiptPrivacyMode;
+
+  /** Optional egress allowlist (future mediated egress). */
+  egress_allowlist?: string[];
+
+  /** Optional dispute terms (free-form). */
+  dispute_terms?: string;
+
+  /** Optional metadata (hash-bound). */
+  metadata?: Record<string, unknown>;
+};
+
+type ConfidentialWorkContractEnvelopeV1 = {
+  envelope_version: '1';
+  envelope_type: 'confidential_work_contract';
+  payload: ConfidentialWorkContractV1;
+  payload_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
+  issued_at: string;
+};
+
+function isStringArrayBounded(value: unknown, opts: { maxItems: number; maxLen: number }): value is string[] {
+  if (!Array.isArray(value)) return false;
+  if (value.length > opts.maxItems) return false;
+
+  for (const v of value) {
+    if (!isNonEmptyString(v)) return false;
+    if (v.trim().length > opts.maxLen) return false;
+  }
+
+  return true;
+}
+
+function isConfidentialWorkContractV1(value: unknown): value is ConfidentialWorkContractV1 {
+  if (!isRecord(value)) return false;
+
+  const allowedKeys = new Set([
+    'cwc_version',
+    'cwc_id',
+    'buyer_did',
+    'worker_did',
+    'wpc_policy_hash_b64u',
+    'required_proof_tier',
+    'receipt_privacy_mode',
+    'egress_allowlist',
+    'dispute_terms',
+    'metadata',
+  ]);
+
+  for (const k of Object.keys(value)) {
+    if (!allowedKeys.has(k)) return false;
+  }
+
+  if (value.cwc_version !== '1') return false;
+  if (!isNonEmptyString(value.cwc_id) || value.cwc_id.trim().length > 128) return false;
+
+  if (!isNonEmptyString(value.buyer_did) || !value.buyer_did.trim().startsWith('did:') || value.buyer_did.trim().length > 256) return false;
+  if (!isNonEmptyString(value.worker_did) || !value.worker_did.trim().startsWith('did:') || value.worker_did.trim().length > 256) return false;
+
+  if (!isNonEmptyString(value.wpc_policy_hash_b64u) || !isSha256B64u(value.wpc_policy_hash_b64u.trim())) return false;
+
+  if (!isNonEmptyString(value.required_proof_tier) || !parseProofTier(value.required_proof_tier)) return false;
+
+  if (value.receipt_privacy_mode !== 'hash_only' && value.receipt_privacy_mode !== 'encrypted') return false;
+
+  if (value.egress_allowlist !== undefined && !isStringArrayBounded(value.egress_allowlist, { maxItems: 256, maxLen: 256 })) {
+    return false;
+  }
+
+  if (value.dispute_terms !== undefined) {
+    if (!isNonEmptyString(value.dispute_terms) || value.dispute_terms.trim().length > 10000) return false;
+  }
+
+  if (value.metadata !== undefined && !isRecord(value.metadata)) {
+    return false;
+  }
+
+  return true;
+}
+
+function isConfidentialWorkContractEnvelopeV1(value: unknown): value is ConfidentialWorkContractEnvelopeV1 {
+  if (!isRecord(value)) return false;
+
+  const allowedKeys = new Set([
+    'envelope_version',
+    'envelope_type',
+    'payload',
+    'payload_hash_b64u',
+    'hash_algorithm',
+    'signature_b64u',
+    'algorithm',
+    'signer_did',
+    'issued_at',
+  ]);
+
+  for (const k of Object.keys(value)) {
+    if (!allowedKeys.has(k)) return false;
+  }
+
+  if (value.envelope_version !== '1') return false;
+  if (value.envelope_type !== 'confidential_work_contract') return false;
+  if (value.hash_algorithm !== 'SHA-256') return false;
+  if (value.algorithm !== 'Ed25519') return false;
+
+  if (!isNonEmptyString(value.payload_hash_b64u) || !isSha256B64u(value.payload_hash_b64u.trim())) return false;
+  if (!isNonEmptyString(value.signature_b64u) || !/^[A-Za-z0-9_-]+$/.test(value.signature_b64u.trim())) return false;
+  if (!isNonEmptyString(value.signer_did) || !value.signer_did.trim().startsWith('did:')) return false;
+  if (!isNonEmptyString(value.issued_at)) return false;
+
+  if (!isConfidentialWorkContractV1(value.payload)) return false;
+
+  return true;
+}
+
+async function verifyCwcEnvelope(envelope: ConfidentialWorkContractEnvelopeV1): Promise<
+  | { ok: true; payload_hash_b64u: string; payload: ConfidentialWorkContractV1 }
+  | { ok: false; code: string; message: string }
+> {
+  const payload_hash_b64u = envelope.payload_hash_b64u.trim();
+
+  // Recompute hash from canonical payload bytes (JCS)
+  let computed: string;
+  try {
+    computed = await sha256B64uUtf8(jcsCanonicalize(envelope.payload));
+  } catch {
+    return { ok: false, code: 'CWC_HASH_FAILED', message: 'Failed to canonicalize/hash CWC payload' };
+  }
+
+  if (computed !== payload_hash_b64u) {
+    return {
+      ok: false,
+      code: 'CWC_HASH_MISMATCH',
+      message: 'CWC payload_hash_b64u does not match sha256(JCS(payload))',
+    };
+  }
+
+  const sigOk = await verifyEd25519DidKeySignature({
+    signer_did: envelope.signer_did,
+    message: payload_hash_b64u,
+    signature_b64u: envelope.signature_b64u,
+  });
+
+  if (!sigOk) {
+    return { ok: false, code: 'CWC_SIGNATURE_INVALID', message: 'CWC signature verification failed' };
+  }
+
+  return { ok: true, payload_hash_b64u, payload: envelope.payload };
 }
 
 async function deriveIdempotencyKey(requester_did: string, body: Record<string, unknown>): Promise<string> {
@@ -1892,6 +2249,12 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const worker_did = d1String(row.worker_did);
   const accept_idempotency_key = d1String(row.accept_idempotency_key);
   const accepted_at = d1String(row.accepted_at);
+
+  const cwc_hash_b64u = d1String(row.cwc_hash_b64u);
+  const cwc_wpc_policy_hash_b64u = d1String(row.cwc_wpc_policy_hash_b64u);
+  const cwc_required_proof_tier = parseProofTier(d1String(row.cwc_required_proof_tier));
+  const cwc_buyer_envelope_json = d1String(row.cwc_buyer_envelope_json);
+  const cwc_worker_envelope_json = d1String(row.cwc_worker_envelope_json);
 
   const approved_submission_id = d1String(row.approved_submission_id);
   const approve_idempotency_key = d1String(row.approve_idempotency_key);
@@ -1972,6 +2335,25 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
 
   if (!tags || !metadata) return null;
 
+  const cwc_buyer_envelope = cwc_buyer_envelope_json ? parseJsonObject(cwc_buyer_envelope_json) : null;
+  const cwc_worker_envelope = cwc_worker_envelope_json ? parseJsonObject(cwc_worker_envelope_json) : null;
+
+  const hasAnyCwc = Boolean(
+    cwc_hash_b64u ||
+      cwc_wpc_policy_hash_b64u ||
+      cwc_required_proof_tier ||
+      cwc_buyer_envelope_json ||
+      cwc_worker_envelope_json
+  );
+
+  if (hasAnyCwc) {
+    if (!cwc_hash_b64u || !isSha256B64u(cwc_hash_b64u.trim())) return null;
+    if (!cwc_wpc_policy_hash_b64u || !isSha256B64u(cwc_wpc_policy_hash_b64u.trim())) return null;
+    if (!cwc_required_proof_tier) return null;
+    if (!cwc_buyer_envelope) return null;
+    if (cwc_worker_envelope_json && !cwc_worker_envelope) return null;
+  }
+
   return {
     schema_version: '2',
     bounty_id,
@@ -1991,6 +2373,12 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     worker_did: worker_did && worker_did.trim().startsWith('did:') ? worker_did.trim() : null,
     accept_idempotency_key: accept_idempotency_key ? accept_idempotency_key.trim() : null,
     accepted_at: accepted_at ? accepted_at.trim() : null,
+
+    cwc_hash_b64u: hasAnyCwc ? cwc_hash_b64u!.trim() : null,
+    cwc_wpc_policy_hash_b64u: hasAnyCwc ? cwc_wpc_policy_hash_b64u!.trim() : null,
+    cwc_required_proof_tier: hasAnyCwc ? cwc_required_proof_tier! : null,
+    cwc_buyer_envelope: hasAnyCwc ? cwc_buyer_envelope : null,
+    cwc_worker_envelope: hasAnyCwc ? cwc_worker_envelope : null,
 
     approved_submission_id: approved_submission_id ? approved_submission_id.trim() : null,
     approve_idempotency_key: approve_idempotency_key ? approve_idempotency_key.trim() : null,
@@ -2126,6 +2514,7 @@ async function updateBountyAccepted(
     worker_did: string;
     accepted_at: string;
     idempotency_key: string;
+    cwc_worker_envelope_json: string | null;
     now: string;
   }
 ): Promise<void> {
@@ -2136,6 +2525,7 @@ async function updateBountyAccepted(
              accepted_at = ?,
              status = 'accepted',
              accept_idempotency_key = COALESCE(accept_idempotency_key, ?),
+             cwc_worker_envelope_json = COALESCE(cwc_worker_envelope_json, ?),
              updated_at = ?
        WHERE bounty_id = ?
          AND (worker_did IS NULL OR worker_did = ?)`
@@ -2144,11 +2534,37 @@ async function updateBountyAccepted(
       params.worker_did,
       params.accepted_at,
       params.idempotency_key,
+      params.cwc_worker_envelope_json,
       params.now,
       params.bounty_id,
       params.worker_did
     )
     .run();
+}
+
+async function updateBountyCwcWorkerEnvelope(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    worker_did: string;
+    cwc_worker_envelope_json: string;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+         SET cwc_worker_envelope_json = COALESCE(cwc_worker_envelope_json, ?),
+             updated_at = ?
+       WHERE bounty_id = ?
+         AND worker_did = ?`
+    )
+    .bind(params.cwc_worker_envelope_json, params.now, params.bounty_id, params.worker_did)
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('CWC_COUNTERSIGN_UPDATE_FAILED');
+  }
 }
 
 async function updateBountyApproved(
@@ -2240,6 +2656,11 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
         require_owner_verified_votes,
         test_harness_id,
         metadata_json,
+        cwc_hash_b64u,
+        cwc_wpc_policy_hash_b64u,
+        cwc_required_proof_tier,
+        cwc_buyer_envelope_json,
+        cwc_worker_envelope_json,
         fee_quote_json,
         fee_policy_version,
         all_in_cost_json,
@@ -2247,7 +2668,7 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
         status,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.bounty_id,
@@ -2265,6 +2686,11 @@ async function insertBounty(db: D1Database, record: BountyV2): Promise<void> {
       record.require_owner_verified_votes ? 1 : 0,
       record.test_harness_id,
       JSON.stringify(record.metadata),
+      record.cwc_hash_b64u,
+      record.cwc_wpc_policy_hash_b64u,
+      record.cwc_required_proof_tier,
+      record.cwc_buyer_envelope ? JSON.stringify(record.cwc_buyer_envelope) : null,
+      record.cwc_worker_envelope ? JSON.stringify(record.cwc_worker_envelope) : null,
       JSON.stringify(record.fee_quote),
       record.fee_policy_version,
       JSON.stringify(record.all_in_cost),
@@ -4005,6 +4431,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
 
   const idempotency_key_raw = bodyRaw.idempotency_key;
   const worker_did_raw = bodyRaw.worker_did;
+  const cwc_worker_envelope_raw = bodyRaw.cwc_worker_envelope;
 
   if (!isNonEmptyString(idempotency_key_raw)) {
     return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, undefined, version);
@@ -4022,6 +4449,10 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
   const worker_did = worker_did_raw.trim();
   if (worker_did !== auth.worker.worker_did) {
     return errorResponse('UNAUTHORIZED', 'worker_did must match authenticated worker', 401, undefined, version);
+  }
+
+  if (cwc_worker_envelope_raw !== undefined && cwc_worker_envelope_raw !== null && !isRecord(cwc_worker_envelope_raw)) {
+    return errorResponse('INVALID_REQUEST', 'cwc_worker_envelope must be an object', 400, undefined, version);
   }
 
   let bounty: BountyV2 | null;
@@ -4054,9 +4485,104 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
     }
   }
 
+  const cwcNeedsCountersign = bounty.cwc_hash_b64u !== null && !bounty.cwc_worker_envelope;
+  let cwc_worker_envelope_json: string | null = null;
+
+  if (cwcNeedsCountersign) {
+    if (!isRecord(cwc_worker_envelope_raw) || !isConfidentialWorkContractEnvelopeV1(cwc_worker_envelope_raw)) {
+      return errorResponse(
+        'CWC_COUNTERSIGN_REQUIRED',
+        'cwc_worker_envelope is required and must be a valid confidential_work_contract envelope',
+        400,
+        undefined,
+        version
+      );
+    }
+
+    const envelope = cwc_worker_envelope_raw as unknown as ConfidentialWorkContractEnvelopeV1;
+    const verified = await verifyCwcEnvelope(envelope);
+
+    if (!verified.ok) {
+      return errorResponse(verified.code, verified.message, 400, undefined, version);
+    }
+
+    if (verified.payload_hash_b64u !== bounty.cwc_hash_b64u) {
+      return errorResponse(
+        'CWC_HASH_MISMATCH',
+        'cwc_worker_envelope must sign the exact CWC hash pinned to the bounty',
+        400,
+        { expected_hash_b64u: bounty.cwc_hash_b64u, actual_hash_b64u: verified.payload_hash_b64u },
+        version
+      );
+    }
+
+    const buyerDid = verified.payload.buyer_did.trim();
+    const workerDid = verified.payload.worker_did.trim();
+
+    if (buyerDid !== bounty.requester_did) {
+      return errorResponse('CWC_PARTY_MISMATCH', 'CWC buyer_did does not match bounty requester', 400, undefined, version);
+    }
+
+    if (workerDid !== worker_did) {
+      return errorResponse('UNAUTHORIZED', 'CWC worker_did must match worker_did', 401, { worker_did: workerDid }, version);
+    }
+
+    if (envelope.signer_did.trim() !== workerDid) {
+      return errorResponse('INVALID_REQUEST', 'CWC worker envelope signer_did must equal payload.worker_did', 400, undefined, version);
+    }
+
+    if (verified.payload.wpc_policy_hash_b64u.trim() !== bounty.cwc_wpc_policy_hash_b64u) {
+      return errorResponse(
+        'CWC_POLICY_HASH_MISMATCH',
+        'CWC wpc_policy_hash_b64u does not match bounty pinned policy hash',
+        400,
+        { expected_policy_hash_b64u: bounty.cwc_wpc_policy_hash_b64u },
+        version
+      );
+    }
+
+    if (verified.payload.required_proof_tier !== bounty.cwc_required_proof_tier) {
+      return errorResponse(
+        'CWC_TIER_MISMATCH',
+        'CWC required_proof_tier does not match bounty pinned required tier',
+        400,
+        { expected_required_proof_tier: bounty.cwc_required_proof_tier },
+        version
+      );
+    }
+
+    if (verified.payload.required_proof_tier !== bounty.min_proof_tier) {
+      return errorResponse(
+        'CWC_TIER_MISMATCH',
+        'CWC required_proof_tier must match bounty min_proof_tier',
+        400,
+        { required_proof_tier: verified.payload.required_proof_tier, min_proof_tier: bounty.min_proof_tier },
+        version
+      );
+    }
+
+    cwc_worker_envelope_json = JSON.stringify(cwc_worker_envelope_raw);
+  }
+
   // Already accepted.
   if (bounty.worker_did) {
     if (bounty.worker_did === worker_did) {
+      // If this bounty is governed by a CWC and is missing the worker countersign,
+      // allow an idempotent accept call to provide/store it.
+      if (cwcNeedsCountersign && cwc_worker_envelope_json) {
+        try {
+          await updateBountyCwcWorkerEnvelope(env.BOUNTIES_DB, {
+            bounty_id: bountyId,
+            worker_did,
+            cwc_worker_envelope_json,
+            now: new Date().toISOString(),
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Unknown error';
+          return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+        }
+      }
+
       const accepted_at = bounty.accepted_at ?? bounty.updated_at;
       const response: AcceptBountyResponseV1 = {
         bounty_id: bounty.bounty_id,
@@ -4109,6 +4635,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
       worker_did,
       accepted_at: now,
       idempotency_key,
+      cwc_worker_envelope_json,
       now,
     });
   } catch (err) {
@@ -4277,6 +4804,16 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('INVALID_REQUEST', 'commit_proof_envelope is required for code bounties', 400, undefined, version);
   }
 
+  if (bounty.cwc_hash_b64u && !bounty.cwc_worker_envelope) {
+    return errorResponse(
+      'CWC_COUNTERSIGN_REQUIRED',
+      'Bounty requires a Confidential Work Contract (CWC) worker countersign before submission',
+      409,
+      undefined,
+      version
+    );
+  }
+
   const now = new Date().toISOString();
 
   let proofBundleResponse: VerifyBundleResponse;
@@ -4440,6 +4977,9 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
 
   let replayRunId: string | null = null;
   let replayReceiptKeys: ReplayReceiptKey[] = [];
+  let verifiedBoundReceiptCount = 0;
+  let verifiedBoundPolicyHashes = new Set<string>();
+  let verifiedBoundMissingPolicyHashCount = 0;
 
   const replayAgentDid = proofBundleResponse.result.status === 'VALID' ? proofBundleAgentDid : null;
   if (proofBundleResponse.result.status === 'VALID') {
@@ -4448,10 +4988,15 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     if (binding) {
       replayRunId = binding.run_id;
       try {
-        replayReceiptKeys = await computeReplayReceiptKeys(env, proof_bundle_envelope_raw, {
+        const computed = await computeReplayReceiptKeys(env, proof_bundle_envelope_raw, {
           run_id: binding.run_id,
           allowed_event_hashes_b64u: binding.event_hashes_b64u,
         });
+
+        replayReceiptKeys = computed.keys;
+        verifiedBoundReceiptCount = computed.verified_bound_receipt_count;
+        verifiedBoundPolicyHashes = computed.verified_bound_policy_hashes;
+        verifiedBoundMissingPolicyHashCount = computed.verified_bound_missing_policy_hash_count;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
         return errorResponse('REPLAY_PROTECTION_FAILED', message, 502, undefined, version);
@@ -4466,6 +5011,30 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
           undefined,
           version
         );
+      }
+    }
+  }
+
+  // Enforce Confidential Work Contract (CWC) policy binding for otherwise-valid submissions.
+  // We only evaluate this when the proof bundle verified as VALID and passes min_proof_tier.
+  if (bounty.cwc_hash_b64u && proofStatus === 'valid' && proofBundleResponse.result.status === 'VALID') {
+    const expectedPolicyHash = bounty.cwc_wpc_policy_hash_b64u;
+
+    if (!expectedPolicyHash) {
+      return errorResponse('CWC_INVALID_BOUNTY', 'Bounty is missing cwc_wpc_policy_hash_b64u', 500, undefined, version);
+    }
+
+    if (verifiedBoundReceiptCount === 0) {
+      proofStatus = 'invalid';
+      proofReason = 'CWC requires at least one verified, run-bound gateway receipt';
+    } else if (verifiedBoundMissingPolicyHashCount > 0) {
+      proofStatus = 'invalid';
+      proofReason = 'CWC requires binding.policy_hash on all verified, run-bound gateway receipts';
+    } else {
+      const mismatched = Array.from(verifiedBoundPolicyHashes).filter((h) => h !== expectedPolicyHash);
+      if (mismatched.length > 0 || !verifiedBoundPolicyHashes.has(expectedPolicyHash)) {
+        proofStatus = 'invalid';
+        proofReason = `CWC policy_hash mismatch (expected ${expectedPolicyHash}, got ${Array.from(verifiedBoundPolicyHashes).join(', ') || 'none'})`;
       }
     }
   }
@@ -5191,6 +5760,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   const test_harness_id_raw = bodyRaw.test_harness_id;
   const idempotency_key_raw = bodyRaw.idempotency_key;
   const metadata_raw = bodyRaw.metadata;
+  const cwc_buyer_envelope_raw = bodyRaw.cwc_buyer_envelope;
 
   if (!isNonEmptyString(title)) {
     return errorResponse('INVALID_REQUEST', 'title is required', 400, undefined, version);
@@ -5278,6 +5848,75 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     }
   }
 
+  // Confidential Work Contract (CWC) is optional, but when present it MUST be direct-hire.
+  let cwc_hash_b64u: string | null = null;
+  let cwc_wpc_policy_hash_b64u: string | null = null;
+  let cwc_required_proof_tier: ProofTier | null = null;
+  let cwc_buyer_envelope: Record<string, unknown> | null = null;
+
+  if (cwc_buyer_envelope_raw !== undefined && cwc_buyer_envelope_raw !== null) {
+    if (!isRecord(cwc_buyer_envelope_raw) || !isConfidentialWorkContractEnvelopeV1(cwc_buyer_envelope_raw)) {
+      return errorResponse('INVALID_REQUEST', 'cwc_buyer_envelope must be a valid confidential_work_contract envelope', 400, undefined, version);
+    }
+
+    if (!isNonEmptyString(requested_worker_did)) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'cwc_buyer_envelope requires metadata.requested_worker_did (direct-hire)',
+        400,
+        undefined,
+        version
+      );
+    }
+
+    const envelope = cwc_buyer_envelope_raw as unknown as ConfidentialWorkContractEnvelopeV1;
+    const verified = await verifyCwcEnvelope(envelope);
+
+    if (!verified.ok) {
+      return errorResponse(verified.code, verified.message, 400, undefined, version);
+    }
+
+    const buyerDid = verified.payload.buyer_did.trim();
+    const workerDid = verified.payload.worker_did.trim();
+
+    if (buyerDid !== requesterHeader.requester_did) {
+      return errorResponse('UNAUTHORIZED', 'CWC buyer_did must match x-requester-did', 401, { buyer_did: buyerDid }, version);
+    }
+
+    if (envelope.signer_did.trim() !== buyerDid) {
+      return errorResponse('INVALID_REQUEST', 'CWC buyer envelope signer_did must equal payload.buyer_did', 400, undefined, version);
+    }
+
+    if (workerDid !== requested_worker_did.trim()) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'CWC worker_did must match metadata.requested_worker_did',
+        400,
+        { worker_did: workerDid, requested_worker_did: requested_worker_did.trim() },
+        version
+      );
+    }
+
+    if (verified.payload.required_proof_tier !== min_proof_tier) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'CWC required_proof_tier must match bounty min_proof_tier',
+        400,
+        { required_proof_tier: verified.payload.required_proof_tier, min_proof_tier },
+        version
+      );
+    }
+
+    if (verified.payload.required_proof_tier === 'self') {
+      return errorResponse('INVALID_REQUEST', 'CWC requires required_proof_tier to be gateway or sandbox', 400, undefined, version);
+    }
+
+    cwc_hash_b64u = verified.payload_hash_b64u;
+    cwc_wpc_policy_hash_b64u = verified.payload.wpc_policy_hash_b64u.trim();
+    cwc_required_proof_tier = verified.payload.required_proof_tier;
+    cwc_buyer_envelope = cwc_buyer_envelope_raw as Record<string, unknown>;
+  }
+
   let idempotency_key: string;
   if (idempotency_key_raw !== undefined && idempotency_key_raw !== null) {
     if (!isNonEmptyString(idempotency_key_raw)) {
@@ -5362,6 +6001,9 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
         tags,
         min_proof_tier,
         requested_worker_did: requested_worker_did ?? null,
+        cwc_hash_b64u,
+        cwc_wpc_policy_hash_b64u,
+        cwc_required_proof_tier,
         fee_policy: {
           id: feeQuote.policy.id,
           version: feeQuote.policy.version,
@@ -5393,6 +6035,12 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     worker_did: null,
     accept_idempotency_key: null,
     accepted_at: null,
+
+    cwc_hash_b64u,
+    cwc_wpc_policy_hash_b64u,
+    cwc_required_proof_tier,
+    cwc_buyer_envelope,
+    cwc_worker_envelope: null,
 
     approved_submission_id: null,
     approve_idempotency_key: null,

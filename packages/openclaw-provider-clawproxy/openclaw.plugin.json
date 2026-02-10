@@ -15,6 +15,19 @@
         "type": "string",
         "description": "Optional clawproxy auth token (CST/JWT). If set, it is sent via X-CST (strict-mode safe). Upstream provider keys are forwarded via X-Provider-API-Key."
       },
+      "policyHashB64u": {
+        "type": "string",
+        "description": "Optional pinned Work Policy Contract (WPC) hash (policy_hash_b64u). If set, it is sent via X-Policy-Hash on all proxied calls."
+      },
+      "confidentialMode": {
+        "type": "boolean",
+        "description": "If true, send X-Confidential-Mode: true on all proxied calls (gateway may force hash_only receipts)."
+      },
+      "receiptPrivacyMode": {
+        "type": "string",
+        "enum": ["hash_only", "encrypted"],
+        "description": "Optional receipt privacy mode override (sent as X-Receipt-Privacy-Mode)."
+      },
       "outputDir": {
         "type": "string",
         "description": "Directory to write PoH artifacts (default: .clawproof/openclaw)"
@@ -49,6 +62,9 @@
   },
   "uiHints": {
     "token": { "label": "clawproxy Token", "sensitive": true, "placeholder": "<CST/JWT>" },
+    "policyHashB64u": { "label": "WPC Policy Hash", "placeholder": "<policy_hash_b64u>", "advanced": true },
+    "confidentialMode": { "label": "Confidential Mode", "help": "Send X-Confidential-Mode: true to enable confidential-mode proxy behavior.", "advanced": true },
+    "receiptPrivacyMode": { "label": "Receipt Privacy Mode", "advanced": true },
     "baseUrl": { "label": "clawproxy Base URL", "placeholder": "https://clawproxy.com" },
     "outputDir": { "label": "Output Directory", "placeholder": ".clawproof/openclaw" },
     "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawproof/keys/<agentId>.jwk.json", "advanced": true },

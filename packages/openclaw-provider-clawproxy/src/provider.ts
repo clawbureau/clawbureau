@@ -101,10 +101,17 @@ function buildHeaders(
     Accept: 'application/json',
   });
 
-  // Proxy auth: prefer plugin-level token (CST or other gateway token)
+  // Proxy auth: prefer plugin-level token (CST / scoped token)
+  // NOTE: clawproxy strict mode rejects Authorization header overload; use X-CST.
   if (config.token) {
-    headers.set('Authorization', `Bearer ${config.token}`);
+    const token = stripBearer(config.token);
+    if (token) headers.set('X-CST', token);
   }
+
+  // Optional WPC / confidential-mode headers
+  if (config.policyHashB64u) headers.set('X-Policy-Hash', config.policyHashB64u);
+  if (config.confidentialMode) headers.set('X-Confidential-Mode', 'true');
+  if (config.receiptPrivacyMode) headers.set('X-Receipt-Privacy-Mode', config.receiptPrivacyMode);
 
   // Upstream provider key: extract from per-call auth and send via X-Provider-API-Key.
   const providerApiKey = extractProviderApiKey(upstreamProvider, auth);

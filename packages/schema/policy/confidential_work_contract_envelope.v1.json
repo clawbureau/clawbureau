@@ -1,0 +1,55 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.policy.confidential_work_contract_envelope.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Confidential Work Contract Envelope v1",
+  "description": "A signed envelope for a Confidential Work Contract (CWC). The payload_hash_b64u MUST equal cwc_hash_b64u = sha256(JCS(payload)) (base64url, no padding).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "payload",
+    "payload_hash_b64u",
+    "hash_algorithm",
+    "signature_b64u",
+    "algorithm",
+    "signer_did",
+    "issued_at"
+  ],
+  "properties": {
+    "envelope_version": {
+      "const": "1"
+    },
+    "envelope_type": {
+      "const": "confidential_work_contract"
+    },
+    "payload": {
+      "$ref": "https://schemas.clawbureau.org/claw.policy.confidential_work_contract.v1.json"
+    },
+    "payload_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "hash_algorithm": {
+      "const": "SHA-256"
+    },
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "algorithm": {
+      "const": "Ed25519"
+    },
+    "signer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "minLength": 4
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

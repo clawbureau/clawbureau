@@ -364,3 +364,35 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - cd services/clawcontrols && npm run typecheck && npm test
 ---
+
+## 2026-02-10T03:00:00Z - CWC-US-001
+- What was implemented
+  - Added versioned schemas for Confidential Work Contracts (CWC):
+    - `packages/schema/policy/confidential_work_contract.v1.json`
+    - `packages/schema/policy/confidential_work_contract_envelope.v1.json`
+  - Marketplace (clawbounties) now supports storing and enforcing a pinned CWC hash:
+    - `POST /v1/bounties` accepts optional `cwc_buyer_envelope` for **direct-hire** bounties.
+      - Verifies buyer signature and binds buyer/worker DIDs to the bounty.
+      - Stores `cwc_hash_b64u` + `wpc_policy_hash_b64u` + required tier on the bounty.
+    - `POST /v1/bounties/{id}/accept` requires `cwc_worker_envelope` countersign when a CWC is pinned.
+      - Stores the worker countersign on the bounty.
+    - `POST /v1/bounties/{id}/submit` enforces policy binding for otherwise-valid proofs:
+      - Requires at least one **verified + run-bound** gateway receipt.
+      - Requires `receipt.payload.binding.policy_hash` to match the pinned `wpc_policy_hash_b64u` on all verified+bound receipts.
+  - OpenClaw provider-clawproxy plugin config expanded to support WPC headers:
+    - `policyHashB64u`, `confidentialMode`, `receiptPrivacyMode`.
+    - Sends `X-Policy-Hash` / `X-Confidential-Mode` / `X-Receipt-Privacy-Mode` to clawproxy.
+- Files changed
+  - packages/schema/policy/confidential_work_contract.v1.json
+  - packages/schema/policy/confidential_work_contract_envelope.v1.json
+  - packages/schema/bounties/post_bounty_request.v2.json
+  - packages/schema/README.md
+  - services/clawbounties/migrations/0010_confidential_work_contract.sql
+  - services/clawbounties/src/index.ts
+  - packages/openclaw-provider-clawproxy/openclaw.plugin.json
+  - packages/openclaw-provider-clawproxy/src/{openclaw.ts,provider.ts,types.ts}
+  - docs/roadmaps/trust-vnext/{prd.json,progress.txt}
+- Quality checks
+  - cd services/clawbounties && npm run typecheck
+  - cd packages/openclaw-provider-clawproxy && npm run typecheck && npm test
+---

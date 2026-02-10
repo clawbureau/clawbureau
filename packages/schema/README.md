@@ -35,6 +35,8 @@ Shared JSON schemas for Claw Bureau services.
 ### `policy/`
 - `work_policy_contract.v1.json`
 - `work_policy_contract_envelope.v1.json`
+- `confidential_work_contract.v1.json`
+- `confidential_work_contract_envelope.v1.json`
 
 ### `poh/`
 - `commit_proof.v1.json`
