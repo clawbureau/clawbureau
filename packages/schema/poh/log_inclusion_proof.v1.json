@@ -1,0 +1,56 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.log_inclusion_proof.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Log Inclusion Proof v1",
+  "type": "object",
+  "description": "Portable Merkle inclusion proof for clawlogs entries. Used to prove a leaf hash is included in a signed log root.",
+  "additionalProperties": false,
+  "required": [
+    "proof_version",
+    "log_id",
+    "tree_size",
+    "leaf_hash_b64u",
+    "root_hash_b64u",
+    "audit_path",
+    "root_published_at",
+    "root_signature"
+  ],
+  "properties": {
+    "proof_version": { "const": "1" },
+    "log_id": { "type": "string", "minLength": 1 },
+    "tree_size": { "type": "number", "minimum": 0 },
+    "leaf_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "root_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "audit_path": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "minLength": 8
+      }
+    },
+    "root_published_at": { "type": "string", "format": "date-time" },
+    "root_signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signer_did", "sig_b64u"],
+      "properties": {
+        "signer_did": { "type": "string", "pattern": "^did:" },
+        "sig_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        }
+      }
+    },
+    "metadata": { "type": "object" }
+  }
+}

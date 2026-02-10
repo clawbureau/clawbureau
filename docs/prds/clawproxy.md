@@ -36,6 +36,11 @@ OpenClaw is the reference harness for Claw Bureau proof-of-harness.
 
 See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
+See also (PoH vNext):
+- `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`
+- `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+- `docs/foundations/decisions/0001-audit-pack-convention.md`
+
 ---
 
 ## 1) Purpose
@@ -51,6 +56,7 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 ## 3) MVP Scope
 - POST /v1/proxy/<provider>
 - Signed receipt with request/response hashes
+- Tiered model identity metadata in receipts (closed providers default to `closed_opaque`)
 - Receipt includes proxy DID + binding fields
 - Provider routing (Anthropic/OpenAI/Google)
 - WPC enforcement + redaction hooks
@@ -230,6 +236,39 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - Support routing at least one provider end-to-end (Anthropic or OpenAI) through `POST /v1/proxy/<provider>`
 - Attach receipt metadata to OpenClaw run logs (and optionally forward to clawlogs)
 - Ensure token handling does not expose long-lived secrets to the LLM (plugin-owned secrets only)
+
+### CPX-US-016 — Model identity in receipts (tiered)
+**As a** verifier, **I want** each gateway receipt to carry a tiered model identity **so that** closed-provider limitations are explicit and verifiers never over-claim weight certainty.
+
+**Acceptance Criteria:**
+- Receipt payload supports `payload.metadata.model_identity` (schema: `packages/schema/poh/model_identity.v1.json`)
+- Receipt payload supports `payload.metadata.model_identity_hash_b64u = sha256_b64u(JCS(model_identity))`
+- For closed providers (OpenAI/Anthropic/Google), default tier is `closed_opaque`
+- Document the semantics and “what is proven” in /docs
+
+### CPX-US-017 — Provider-observed request IDs / fingerprints (allowlisted)
+**As a** compliance officer, **I want** clawproxy to capture allowlisted provider identifiers **so that** investigations can correlate provider-side incidents without logging prompts.
+
+**Acceptance Criteria:**
+- Capture allowlisted provider request IDs / response fingerprints when available (best-effort)
+- Store in receipt metadata; never store prompt plaintext in confidential mode
+- Bound size of captured metadata (fail-safe truncation)
+
+### CPX-US-018 — Audit result reference attachment (optional)
+**As a** platform, **I want** receipts to optionally reference audit result attestations **so that** outputs can be linked to compliance claims.
+
+**Acceptance Criteria:**
+- Receipt metadata supports `audit_result_refs[]` (hash + URI references)
+- Attachment mechanism is controlled (e.g., only when a valid CST pins an audit ref, or when clawproxy is called from an allowlisted internal runner)
+- clawverify can surface attached audit refs in verification results
+
+### CPX-US-019 — WPC enforcement: minimum model identity tier
+**As a** security admin, **I want** WPC to require a minimum model identity tier **so that** sensitive workflows fail closed when only opaque provider identity is available.
+
+**Acceptance Criteria:**
+- In confidential mode, clawproxy enforces WPC fields for `minimum_model_identity_tier`
+- When requirements are not met, reject the call with a deterministic error code
+- Emit enforcement decisions in receipt metadata (hash-only)
 
 ## 8) Success Metrics
 - Receipts issued/day

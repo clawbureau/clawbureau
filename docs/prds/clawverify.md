@@ -60,6 +60,11 @@ OpenClaw is the reference harness for Claw Bureau verification workflows.
 
 See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
+See also (PoH vNext):
+- `docs/roadmaps/proof-of-harness/DESIGN_model-identity-and-verifiable-audits.md`
+- `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+- `docs/foundations/decisions/0001-audit-pack-convention.md`
+
 ---
 
 ## 1) Purpose
@@ -253,6 +258,48 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Provide an OpenClaw **tool slot** plugin that wraps core verification endpoints
 - Provide an OpenClaw skill (`skills/clawverify/SKILL.md`) with examples (receipt, commit proof, proof bundle)
 - Fail closed on unknown schema/version, matching Claw Bureau verifier semantics
+
+### CVF-US-016 — Verify and surface model identity (tiered)
+**As a** platform, **I want** clawverify to extract and validate tiered model identity from receipts/bundles **so that** integrations can gate on honest model identity strength.
+
+**Acceptance Criteria:**
+- Validate `payload.metadata.model_identity` against `packages/schema/poh/model_identity.v1.json` when present
+- Compute and/or validate `model_identity_hash_b64u = sha256_b64u(JCS(model_identity))`
+- Return `model_identity_tier` and deterministic risk flags (e.g. `MODEL_IDENTITY_OPAQUE`)
+- Do not conflate model identity tier with PoH tier
+
+### CVF-US-017 — Verify derivation attestations
+**As a** verifier, **I want** to validate derivation attestations **so that** model transformations (quantize/fine-tune/merge) are traceable.
+
+**Acceptance Criteria:**
+- POST /v1/verify/derivation-attestation
+- Fail closed on unknown schema/version/algo
+- Validate optional clawlogs inclusion proof if supplied
+
+### CVF-US-018 — Verify audit result attestations
+**As a** regulator-facing auditor, **I want** to validate audit result attestations **so that** benchmark/audit claims are cryptographically checkable.
+
+**Acceptance Criteria:**
+- POST /v1/verify/audit-result-attestation
+- Fail closed on unknown schema/version/algo
+- Validate optional clawlogs inclusion proof if supplied
+- Return a stable summary: audit status + audit_pack_hash_b64u (when present) + model identity tier + refs
+
+### CVF-US-019 — Verify clawlogs inclusion proofs
+**As a** third party, **I want** clawverify to validate clawlogs inclusion proofs **so that** transparency log anchoring can be checked offline.
+
+**Acceptance Criteria:**
+- Support validating `log_inclusion_proof.v1` objects (`packages/schema/poh/log_inclusion_proof.v1.json`)
+- Verify Merkle path + signed root
+- Expose deterministic error codes for invalid proofs
+
+### CVF-US-020 — Verify-under-policy (WPC compliance)
+**As a** security admin, **I want** verification to optionally enforce WPC requirements **so that** systems can fail closed on missing audits or insufficient model identity tiers.
+
+**Acceptance Criteria:**
+- /v1/verify/bundle and /v1/verify/agent accept an optional WPC ref (e.g., `policy_hash_b64u`)
+- Verification output includes `policy_compliance` + per-requirement failures
+- Verification fails closed when policy is supplied and requirements are not met
 
 ## 8) Success Metrics
 - Verification success rate

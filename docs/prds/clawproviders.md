@@ -131,6 +131,16 @@ Registry and onboarding for providers (compute, judges, auditors).
   - Surface reserve provider status in API
 
 
+### CPR-US-010 — Auditor / attester provider type
+**As a** platform, **I want** auditor/attester providers in the registry **so that** enterprises can discover trusted audit services and verification can rely on allowlisted DIDs.
+
+**Acceptance Criteria:**
+  - Support provider type "auditor" (and/or "attester")
+  - Providers can publish supported audit packs / benchmark suites (pack hashes + optional IDs/versions; see ADR 0001)
+  - Listing includes attester DID(s) used to sign audit_result_attestation envelopes
+  - Listing supports suspension/revocation and is reflected in clawverify allowlists (via governance)
+
+
 ## 8) Success Metrics
 - Providers onboarded
 - Approval time

@@ -48,6 +48,7 @@ This spec is intentionally pragmatic: it describes a path from today’s codebas
 ### Non-goals (v1)
 
 - Perfect confidentiality without TEEs.
+- Proving that closed-provider inference used a specific weight set (for OpenAI/Anthropic/Gemini APIs we can only prove what the gateway observed and signed: model label + request/response hashes).
 - Proving “the model’s internal reasoning.”
 - Proving that a harness binary has not been modified (that requires remote attestation / reproducible builds / TEEs).
 
@@ -62,6 +63,10 @@ These tiers are marketplace-facing policy levels.
 - **`sandbox`**: includes a verifiable execution attestation from an allowlisted sandbox (e.g. future `clawea`).
 
 **Important:** harness metadata is useful for auditability, but **must not** be treated as a trust tier on its own.
+
+**vNext note (model identity is a separate axis):** PoH tiers describe *execution provenance* (self/gateway/sandbox). They do **not** imply that a closed-provider API call used a specific weight set. Verifiers should return a **trust vector**:
+- `poh_tier`: `self | gateway | sandbox`
+- `model_identity_tier`: what we can claim about the model (defaults to `closed_opaque` for closed providers)
 
 ---
 
@@ -78,7 +83,7 @@ Recommended format:
 A run ID MUST be included in:
 
 - every event in the event chain (`event.run_id`)
-- every receipt binding (`receipt.binding.runId`)
+- every receipt binding (`receipt.binding.run_id`)
 - the URM (manifest)
 
 ### 3.2 Harness metadata
@@ -217,6 +222,27 @@ This gap is now closed (POH-US-009 + POH-US-010):
 Therefore, marketplaces can safely derive `gateway` tier from proof bundles as long as:
 - the receipt signer allowlist is configured, and
 - the proof bundle includes a valid event chain that the receipts bind to.
+
+### 5.4 Model identity (vNext, enterprise-safe)
+
+PoH receipts prove *what the gateway observed and signed*. For closed providers, that cannot include weight hashes.
+
+To avoid over-claiming, the gateway SHOULD attach an explicit, tiered **Model Identity** object to each canonical gateway receipt.
+
+- **Schema:** `packages/schema/poh/model_identity.v1.json`
+- **Attachment point:** `gateway_receipt.payload.metadata.model_identity`
+- **Stable identifier:** `gateway_receipt.payload.metadata.model_identity_hash_b64u = sha256_b64u(JCS(model_identity))`
+
+Recommended tiers (orthogonal to PoH tier):
+- `closed_opaque` — provider/model label only (default for OpenAI/Anthropic/Gemini APIs)
+- `closed_provider_manifest` — provider supplies a signed/attested build manifest reference
+- `openweights_hashable` — self-hosted/openweights: weights/tokenizer/config are content-addressed by hashes
+- `tee_measured` — TEE evidence binds image/code/config/weights root to execution
+
+**Rule:** `poh_tier=gateway` + `model_identity_tier=closed_opaque` is the normal closed-provider posture.
+
+Audit binding (vNext):
+- Receipts and proof bundles MAY carry `audit_result_refs[]` referencing `audit_result_attestation.v1` objects (content-addressed, optionally anchored in `clawlogs`).
 
 ---
 
@@ -359,10 +385,16 @@ Candidates:
 - `clawea` (Cloudflare sandbox attester)
 - TEEs (future)
 
-We will add a schema placeholder (`execution_attestation.v1.json`) and include it either:
+**Schema:** `packages/schema/poh/execution_attestation.v1.json`
+
+Execution attestations can be included either:
 
 - as an attestation envelope referenced from `ProofBundlePayload.attestations`, or
-- as a dedicated `SignedEnvelope` embedded in the proof bundle metadata.
+- as a dedicated `SignedEnvelope` embedded in the proof bundle metadata (or URM metadata).
+
+vNext hardening guidance (enterprise / clawea):
+- include container image digest, sandbox runtime version, enforced WPC hash/network posture summary, and resource limits in `runtime_metadata`
+- anchor the attestation hash in `clawlogs` and (optionally) include an inclusion proof
 
 ---
 
@@ -434,14 +466,13 @@ Current gap: `verify-proof-bundle.ts` checks linkage but does not recompute `eve
 
 ## 11) Roadmap mapping
 
-This spec is implemented via `docs/roadmaps/proof-of-harness/prd.json`:
+Primary trackers:
+- `docs/roadmaps/proof-of-harness/prd.json`
+- `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
 
-- **POH-US-001**: this doc
-- **POH-US-002**: schemas
-- **POH-US-003**: clawverify improvements
-- **POH-US-004**: receipt binding + doc updates
-- **POH-US-005/006**: OpenClaw plugins/recorder
-- **POH-US-007/008**: external harness adapters + SDK
+High-level mapping:
+- **POH-US-001..012**: PoH v1 (adapters, schemas, canonical receipts, harness shims/registry)
+- **POHVN-US-001..008**: PoH vNext (model identity axis, derivation/audit attestations, clawlogs inclusion proofs, WPC hooks, hardened sandbox attestations, future TEE path)
 
 ---
 
@@ -461,14 +492,32 @@ This spec is implemented via `docs/roadmaps/proof-of-harness/prd.json`:
 - **Event hash recomputation in clawverify**: resolved by CVF-US-021.
   - `clawverify` recomputes `event_hash_b64u` for all events and rejects mismatches (fail-closed).
 
-### Still open
+### Resolved (PoH vNext)
+
+- **Audit pack standardization (Phase 0)**: resolved via deterministic pack hashing.
+  - See ADR: `docs/foundations/decisions/0001-audit-pack-convention.md`.
+
+### Still open (PoH vNext)
 
 1) **Canonical JSON / hashing rules beyond PoH**
 - Adopt RFC 8785 everywhere (recommended)
 - Or define per-object stable stringify rules
 
-2) **Execution attestation authority**
+2) **Provider manifests for closed providers**
+- What evidence do we accept for `closed_provider_manifest` (headers vs signed blobs vs dedicated endpoints)?
+- What DID method(s) do we allow for provider signatures (`did:web` with DID-doc fetch vs `did:key` only)?
+
+3) **clawlogs inclusion proof API details**
+- Exact leaf hashing rules + Merkle root cadence (daily vs hourly)
+- Root discovery + inclusion proof API surface
+
+4) **Execution attestation authority**
 - clawea design and key distribution
 
+5) **Execution attestation placement**
+- Reference via `proof_bundle.attestations[]` vs embed full envelope(s) in proof bundle / URM metadata
+
+6) **Statelessness semantics**
+- What can we realistically enforce/attest in clawea sandbox runs vs future TEE runs?
 
 ---

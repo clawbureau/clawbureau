@@ -1,0 +1,147 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.audit_result_attestation.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audit Result Attestation v1",
+  "type": "object",
+  "description": "Attestation that an audit/benchmark (code+dataset) was executed against a specific model identity, producing an aggregated result (Audit analogue).",
+  "additionalProperties": false,
+  "required": [
+    "audit_version",
+    "audit_id",
+    "issued_at",
+    "model",
+    "audit_code",
+    "dataset",
+    "protocol",
+    "result"
+  ],
+  "properties": {
+    "audit_pack": {
+      "type": "object",
+      "description": "Optional audit pack identifiers for policy gating. pack_hash_b64u should be derived deterministically from {audit_code.code_hash_b64u, dataset.dataset_hash_b64u, protocol.name, protocol.config_hash_b64u} (see ADR 0001).",
+      "additionalProperties": false,
+      "required": ["pack_hash_b64u"],
+      "properties": {
+        "pack_id": { "type": "string" },
+        "pack_version": { "type": "string" },
+        "pack_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        }
+      }
+    },
+
+    "audit_version": { "const": "1" },
+    "audit_id": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+
+    "model": { "$ref": "https://schemas.clawbureau.org/claw.poh.model_identity.v1.json" },
+    "derivation_attestation_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+
+    "audit_code": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code_hash_b64u"],
+      "properties": {
+        "repo_uri": { "type": "string", "format": "uri" },
+        "commit_sha": { "type": "string" },
+        "code_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "uri": { "type": "string" }
+      }
+    },
+
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_id", "dataset_hash_b64u", "access"],
+      "properties": {
+        "dataset_id": { "type": "string", "minLength": 1 },
+        "dataset_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "access": { "type": "string", "enum": ["public", "confidential"] },
+        "uri": { "type": "string" }
+      }
+    },
+
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "config_hash_b64u"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "config_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "seed": { "type": "number" }
+      }
+    },
+
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "results_hash_b64u"],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "warn"] },
+        "results_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Minimal public summary. Full results should be stored separately and referenced by results_hash_b64u."
+        }
+      }
+    },
+
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "execution_attestation_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "proof_bundle_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        }
+      }
+    },
+
+    "clawlogs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "log_entry_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "inclusion_proof": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.log_inclusion_proof.v1.json"
+        }
+      }
+    },
+
+    "metadata": { "type": "object" }
+  }
+}

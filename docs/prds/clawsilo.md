@@ -100,6 +100,15 @@ Encrypted artifact storage for proof bundles and outputs.
   - Download button
 
 
+### CSL-US-007 — Immutable audit artifact namespaces
+**As an** auditor, **I want** audit artifacts to be immutable and content-addressed **so that** published hashes remain valid and auditable over time.
+
+**Acceptance Criteria:**
+  - Prevent overwrites for content-addressed audit artifacts (builds on CSL-US-003 hash registry)
+  - Return stable `clawsilo://`-style URIs for referenced artifacts
+  - Support retention policies per tenant (link to CSL-US-004)
+
+
 ## 8) Success Metrics
 - Artifacts stored
 - Download success rate

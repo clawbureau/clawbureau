@@ -41,6 +41,39 @@
     "latency_ms": { "type": "number", "minimum": 0 },
     "timestamp": { "type": "string", "format": "date-time" },
     "binding": { "$ref": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json" },
-    "metadata": { "type": "object" }
+    "metadata": {
+      "type": "object",
+      "description": "Optional receipt metadata. These fields are signed as part of the receipt payload but must not be interpreted as stronger guarantees than their tier semantics.",
+      "properties": {
+        "model_identity": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.model_identity.v1.json"
+        },
+        "model_identity_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8,
+          "description": "sha256_b64u(JCS(model_identity)) for stable deduping."
+        },
+        "audit_result_refs": {
+          "type": "array",
+          "description": "Optional references to audit_result_attestation artifacts that cover this output.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["resource_hash_b64u"],
+            "properties": {
+              "resource_type": { "type": "string" },
+              "resource_hash_b64u": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "minLength": 8
+              },
+              "uri": { "type": "string" }
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    }
   }
 }
