@@ -439,8 +439,9 @@ Started: 2026-02-07T19:53:07Z
       - base: `https://fal.run/openrouter/router/openai/v1`
       - endpoints: `/chat/completions` and `/responses` (OpenAI-compatible)
     - Upstream auth is enforced as `Authorization: Key <FAL_KEY>` (not Bearer).
+    - clawproxy strips the leading `openrouter/` prefix from the upstream request body `model` value, but keeps the original model string in the receipt for auditability.
     - Fail-closed: platform-paid mode is not allowed for `openrouter/*` models.
-    - Receipts include `metadata.upstream = "fal_openrouter"` for auditability.
+    - Receipts include `metadata.upstream = "fal_openrouter"` and `metadata.upstream_model` for auditability.
   - Improved harness tooling test coverage:
     - Added unit tests for marketplace `/cst` response parsing (supports `cwc_auth` and `job_auth`).
     - OpenClaw clawproxy provider now routes `openrouter/*` models via `/v1/proxy/openai`.

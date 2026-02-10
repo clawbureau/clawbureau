@@ -352,6 +352,7 @@ Started: 2026-02-02T03:08:26.937763
       - base: `https://fal.run/openrouter/router/openai/v1`
       - endpoints: `/chat/completions` and `/responses`
     - Upstream auth uses `Authorization: Key <FAL_KEY>` (fail-closed; not Bearer).
+    - clawproxy strips the leading `openrouter/` prefix from the upstream request body `model` value (keeps original model in the receipt) and includes `metadata.upstream_model`.
     - Receipts include `metadata.upstream = "fal_openrouter"` for auditability.
 - Tests
   - Extended providers tests to cover fal OpenRouter URL + auth header building.
