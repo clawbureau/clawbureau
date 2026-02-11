@@ -459,3 +459,26 @@ Started: 2026-02-02T03:08:26.936251
 - Final status
   - CLD-US-016 marked shipped in `services/ledger/prd.json` and `docs/prds/clawledger.md`.
 ---
+
+## 2026-02-11T16:10:00Z - settlement verification token contract (clawea Finance M2.1 dependency)
+- What was implemented
+  - Added optional read-only auth token support for settlement verification lookup paths:
+    - `LEDGER_SETTLEMENT_VERIFY_TOKEN`
+  - Auth behavior remains fail-closed and deterministic:
+    - Mutating endpoints still require `LEDGER_ADMIN_KEY`.
+    - Verification token is accepted only on read paths used by settlement verification:
+      - `GET /v1/payments/settlements`
+      - `GET /v1/payments/settlements/:provider/:external_payment_id`
+      - `GET /accounts/id/:id`
+    - If presented token mismatches configured values, response remains `401 UNAUTHORIZED`.
+    - If no applicable key/token is configured, response remains `503 LEDGER_ADMIN_KEY_MISSING`.
+- Files changed
+  - `services/ledger/src/index.ts`
+  - `services/ledger/src/types.ts`
+  - `services/ledger/wrangler.toml`
+  - `services/ledger/test/settlement-verify-auth.test.ts`
+  - `services/ledger/progress.txt`
+- Quality checks
+  - `cd services/ledger && npm run typecheck`
+  - `cd services/ledger && npm test`
+---

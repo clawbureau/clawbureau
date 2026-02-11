@@ -1955,6 +1955,83 @@ async function handleListPaymentSettlements(
   }
 }
 
+export function isSettlementVerificationReadRequest(method: string, path: string): boolean {
+  if (method !== 'GET') return false;
+
+  if (path === '/v1/payments/settlements') return true;
+
+  if (/^\/v1\/payments\/settlements\/[^/]+\/[^/]+$/.test(path)) {
+    return true;
+  }
+
+  if (/^\/accounts\/id\/[^/]+$/.test(path)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function parseAuthCandidates(request: Request): string[] {
+  const authHeader =
+    request.headers.get('authorization') ??
+    request.headers.get('Authorization');
+  const bearerMatch = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
+  const bearer = bearerMatch?.[1]?.trim() ?? null;
+
+  const xAdminKeyRaw =
+    request.headers.get('x-admin-key') ?? request.headers.get('X-Admin-Key');
+  const xAdminKey = xAdminKeyRaw?.trim() || null;
+
+  return [bearer, xAdminKey].filter((value): value is string => Boolean(value));
+}
+
+export function evaluateLedgerAuth(params: {
+  request: Request;
+  env: Env;
+  method: string;
+  path: string;
+}):
+  | { ok: true }
+  | { ok: false; status: number; code: string; message: string } {
+  const adminKey = params.env.LEDGER_ADMIN_KEY?.trim() || null;
+  const settlementVerifyToken =
+    params.env.LEDGER_SETTLEMENT_VERIFY_TOKEN?.trim() || null;
+  const allowSettlementVerifyToken = isSettlementVerificationReadRequest(
+    params.method,
+    params.path
+  );
+
+  if (!adminKey && !(allowSettlementVerifyToken && settlementVerifyToken)) {
+    return {
+      ok: false,
+      status: 503,
+      code: 'LEDGER_ADMIN_KEY_MISSING',
+      message: 'Ledger admin key not configured',
+    };
+  }
+
+  const authCandidates = parseAuthCandidates(params.request);
+
+  const adminAuthorized =
+    Boolean(adminKey) && authCandidates.some((candidate) => candidate === adminKey);
+
+  const verifyAuthorized =
+    Boolean(settlementVerifyToken) &&
+    allowSettlementVerifyToken &&
+    authCandidates.some((candidate) => candidate === settlementVerifyToken);
+
+  if (!adminAuthorized && !verifyAuthorized) {
+    return {
+      ok: false,
+      status: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Unauthorized',
+    };
+  }
+
+  return { ok: true };
+}
+
 /**
  * Router for handling requests
  */
@@ -1980,27 +2057,15 @@ async function router(
       path === '/attestation/reserve');
 
   if (!isPublicGet) {
-    const adminKey = env.LEDGER_ADMIN_KEY;
+    const auth = evaluateLedgerAuth({
+      request,
+      env,
+      method,
+      path,
+    });
 
-    if (!adminKey) {
-      return errorResponse(
-        'Ledger admin key not configured',
-        'LEDGER_ADMIN_KEY_MISSING',
-        503
-      );
-    }
-
-    const authHeader =
-      request.headers.get('authorization') ??
-      request.headers.get('Authorization');
-    const bearerMatch = authHeader ? authHeader.match(/^Bearer\s+(.+)$/i) : null;
-    const bearer = bearerMatch?.[1]?.trim();
-
-    const xAdminKey =
-      request.headers.get('x-admin-key') ?? request.headers.get('X-Admin-Key');
-
-    if (bearer !== adminKey && xAdminKey !== adminKey) {
-      return errorResponse('Unauthorized', 'UNAUTHORIZED', 401);
+    if (!auth.ok) {
+      return errorResponse(auth.message, auth.code, auth.status);
     }
   }
 
