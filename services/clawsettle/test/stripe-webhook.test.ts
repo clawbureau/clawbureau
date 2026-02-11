@@ -51,9 +51,13 @@ function makeService(opts?: {
   ledgerClient?: LedgerSettlementClientLike;
   now?: () => string;
   nowMs?: () => number;
+  settleEnv?: 'staging' | 'production';
+  allowTestmodeInProd?: string;
 }) {
   const env: Env = {
     DB: {} as D1Database,
+    SETTLE_ENV: opts?.settleEnv ?? 'staging',
+    STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD: opts?.allowTestmodeInProd,
     STRIPE_WEBHOOK_SIGNING_SECRET: opts?.signingSecret ?? 'whsec_test',
     LEDGER_BASE_URL: 'https://example-ledger.com',
     LEDGER_ADMIN_KEY: 'ledger_admin_test',
@@ -72,6 +76,7 @@ function makeStripeEventPayload(overrides: Record<string, unknown> = {}): Record
     id: 'evt_test_001',
     type: 'payment_intent.succeeded',
     created: 1739290000,
+    livemode: false,
     data: {
       object: {
         id: 'pi_test_001',
@@ -206,6 +211,90 @@ describe('stripe webhook service', () => {
     expect(first.idempotency_key).toBe('stripe:event:evt_replay_001');
     expect(replay.idempotency_key).toBe('stripe:event:evt_replay_001');
 
+    expect(ledger.calls).toHaveLength(1);
+  });
+
+  it('rejects live Stripe events on staging with deterministic livemode mismatch', async () => {
+    const repo = new InMemoryWebhookRepository();
+    const ledger = new MockLedgerClient({
+      status: 201,
+      json: { settlement: { id: 'set_staging_live' } },
+      text: '{"ok":true}',
+    });
+
+    const timestamp = 1739290005;
+    const service = makeService({
+      repository: repo,
+      ledgerClient: ledger,
+      settleEnv: 'staging',
+      nowMs: () => timestamp * 1000,
+    });
+
+    const payload = makeStripeEventPayload({ id: 'evt_staging_live', livemode: true });
+    const rawBody = JSON.stringify(payload);
+    const signature = await makeSignatureHeader('whsec_test', timestamp, rawBody);
+
+    await expect(service.processWebhook(rawBody, signature)).rejects.toMatchObject({
+      code: 'LIVEMODE_MISMATCH',
+      status: 422,
+    });
+
+    expect(ledger.calls).toHaveLength(0);
+  });
+
+  it('rejects Stripe test-mode events on production by default', async () => {
+    const repo = new InMemoryWebhookRepository();
+    const ledger = new MockLedgerClient({
+      status: 201,
+      json: { settlement: { id: 'set_prod_test' } },
+      text: '{"ok":true}',
+    });
+
+    const timestamp = 1739290005;
+    const service = makeService({
+      repository: repo,
+      ledgerClient: ledger,
+      settleEnv: 'production',
+      nowMs: () => timestamp * 1000,
+    });
+
+    const payload = makeStripeEventPayload({ id: 'evt_prod_test', livemode: false });
+    const rawBody = JSON.stringify(payload);
+    const signature = await makeSignatureHeader('whsec_test', timestamp, rawBody);
+
+    await expect(service.processWebhook(rawBody, signature)).rejects.toMatchObject({
+      code: 'LIVEMODE_MISMATCH',
+      status: 422,
+    });
+
+    expect(ledger.calls).toHaveLength(0);
+  });
+
+  it('allows Stripe test-mode events on production when override flag is enabled', async () => {
+    const repo = new InMemoryWebhookRepository();
+    const ledger = new MockLedgerClient({
+      status: 201,
+      json: { settlement: { id: 'set_prod_override' } },
+      text: '{"ok":true}',
+    });
+
+    const timestamp = 1739290005;
+    const service = makeService({
+      repository: repo,
+      ledgerClient: ledger,
+      settleEnv: 'production',
+      allowTestmodeInProd: 'true',
+      nowMs: () => timestamp * 1000,
+    });
+
+    const payload = makeStripeEventPayload({ id: 'evt_prod_override', livemode: false });
+    const rawBody = JSON.stringify(payload);
+    const signature = await makeSignatureHeader('whsec_test', timestamp, rawBody);
+
+    const result = await service.processWebhook(rawBody, signature);
+
+    expect(result.ok).toBe(true);
+    expect(result.forwarded_to_ledger).toBe(true);
     expect(ledger.calls).toHaveLength(1);
   });
 });

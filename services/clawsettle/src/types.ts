@@ -2,6 +2,15 @@ export interface Env {
   DB: D1Database;
   SETTLE_VERSION?: string;
 
+  /** Deployment environment marker used by livemode guard (staging|production). */
+  SETTLE_ENV?: string;
+
+  /**
+   * If true, production accepts Stripe test-mode events.
+   * Defaults to false (fail-closed: production rejects test-mode events).
+   */
+  STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD?: string;
+
   /** Required for webhook signature verification (fail-closed). */
   STRIPE_WEBHOOK_SIGNING_SECRET?: string;
 

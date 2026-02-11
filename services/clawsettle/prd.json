@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/economy/MPY-US-003-clawsettle-stripe-webhook",
+  "branchName": "feat/economy/MPY-US-006-clawsettle-prod-livemode-guard",
   "description": "clawsettle.com (Settlement) — provider adapter layer for external rails mapped into clawledger settlement semantics.",
   "userStories": [
     {
@@ -17,7 +17,37 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Shipped to staging only: fail-closed Stripe webhook verification, deterministic forwarding idempotency key stripe:event:<event_id>, replay dedupe persistence, staging deploy + smoke evidence captured in progress.txt"
+      "notes": "Shipped to staging only in MPY-US-003 phase. Later phases add production activation + reliability hardening."
+    },
+    {
+      "id": "MPY-US-006",
+      "title": "clawsettle production activation + livemode hardening",
+      "description": "As an operator, I want clawsettle production-ready with strict Stripe livemode environment guardrails so test/live rails cannot cross-contaminate environments.",
+      "acceptanceCriteria": [
+        "Deploy clawsettle to production with migration + smoke evidence",
+        "Staging rejects live Stripe events",
+        "Production rejects Stripe test-mode events unless explicitly allowed by flag",
+        "Return deterministic fail-closed livemode mismatch error",
+        "Keep signature verification + replay dedupe semantics intact"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Shipped to staging + production: clawsettle activated on prod routes, strict livemode guard enforced with deterministic LIVEMODE_MISMATCH fail-closed behavior, signature verification and replay dedupe preserved."
+    },
+    {
+      "id": "MPY-US-007",
+      "title": "Reliable forwarding outbox + retry",
+      "description": "As a settlement operator, I want verified webhook events persisted before forwarding with durable retry semantics so transient ledger failures cannot silently drop settlements.",
+      "acceptanceCriteria": [
+        "Persist verified webhook events in durable forwarding outbox before ledger forwarding",
+        "Retry failed forwarding via cron/manual trigger",
+        "Preserve exact-once economic side effects under replay/retry races",
+        "Provide deterministic status/error outputs for retry lifecycle",
+        "Add smoke: initial failure -> retry success -> no double-credit"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Queued after MPY-US-006"
     }
   ]
 }

@@ -36,6 +36,36 @@ function safeEqualText(a: string, b: string): boolean {
   return out === 0;
 }
 
+function parseBooleanFlag(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'y';
+}
+
+type SettleEnvironment = 'staging' | 'production';
+
+function resolveSettleEnvironment(env: Env): SettleEnvironment {
+  const raw = env.SETTLE_ENV?.trim().toLowerCase();
+
+  if (!raw || raw === 'production' || raw === 'prod' || raw === 'live') {
+    return 'production';
+  }
+
+  if (raw === 'staging' || raw === 'stage') {
+    return 'staging';
+  }
+
+  throw new ClawSettleError(
+    'Invalid settle environment configuration',
+    'DEPENDENCY_NOT_CONFIGURED',
+    503,
+    { field: 'env.SETTLE_ENV' }
+  );
+}
+
 function parseMinorAmount(value: unknown, field: string): string {
   if (typeof value === 'number') {
     if (!Number.isInteger(value) || value < 0) {
@@ -631,6 +661,55 @@ export class StripeWebhookService {
     }
   }
 
+  private enforceEventLivemode(event: StripeEvent): void {
+    const settleEnv = resolveSettleEnvironment(this.env);
+
+    if (typeof event.livemode !== 'boolean') {
+      throw new ClawSettleError(
+        'Stripe event livemode does not match environment policy',
+        'LIVEMODE_MISMATCH',
+        422,
+        {
+          settle_env: settleEnv,
+          expected_livemode: settleEnv === 'staging' ? false : true,
+          event_livemode: null,
+          reason: 'missing_livemode',
+        }
+      );
+    }
+
+    if (settleEnv === 'staging') {
+      if (event.livemode !== false) {
+        throw new ClawSettleError(
+          'Stripe event livemode does not match environment policy',
+          'LIVEMODE_MISMATCH',
+          422,
+          {
+            settle_env: settleEnv,
+            expected_livemode: false,
+            event_livemode: event.livemode,
+          }
+        );
+      }
+      return;
+    }
+
+    const allowTestInProd = parseBooleanFlag(this.env.STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD);
+    if (!allowTestInProd && event.livemode === false) {
+      throw new ClawSettleError(
+        'Stripe event livemode does not match environment policy',
+        'LIVEMODE_MISMATCH',
+        422,
+        {
+          settle_env: settleEnv,
+          expected_livemode: true,
+          event_livemode: event.livemode,
+          allow_testmode_in_prod: false,
+        }
+      );
+    }
+  }
+
   private async persistAndReturn(
     record: StripeWebhookRecord,
     response: StripeWebhookResponse
@@ -674,6 +753,7 @@ export class StripeWebhookService {
     });
 
     const event = parseStripeEvent(rawBody);
+    this.enforceEventLivemode(event);
 
     const existing = await this.repository.findByEventId(event.id);
     if (existing) {

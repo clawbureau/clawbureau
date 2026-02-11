@@ -11,8 +11,7 @@ routes = [
   # For-sale candidates
   { pattern = "clawinsure.com/*",    zone_name = "clawinsure.com" },
   { pattern = "www.clawinsure.com/*", zone_name = "clawinsure.com" },
-  { pattern = "clawsettle.com/*",    zone_name = "clawsettle.com" },
-  { pattern = "www.clawsettle.com/*", zone_name = "clawsettle.com" },
+  # clawsettle.com moved to dedicated Worker: services/clawsettle
   { pattern = "clawportfolio.com/*", zone_name = "clawportfolio.com" },
   { pattern = "www.clawportfolio.com/*", zone_name = "clawportfolio.com" },
   { pattern = "clawadvisory.com/*",  zone_name = "clawadvisory.com" },
@@ -25,8 +24,7 @@ routes = [
   { pattern = "www.clawrep.com/*",   zone_name = "clawrep.com" },
   { pattern = "clawsig.com/*",       zone_name = "clawsig.com" },
   { pattern = "www.clawsig.com/*",   zone_name = "clawsig.com" },
-  { pattern = "clawea.com/*",        zone_name = "clawea.com" },
-  { pattern = "www.clawea.com/*",    zone_name = "clawea.com" },
+  # clawea.com moved to dedicated Worker: services/clawea-www
   { pattern = "clawsilo.com/*",      zone_name = "clawsilo.com" },
   { pattern = "www.clawsilo.com/*",  zone_name = "clawsilo.com" },
   { pattern = "clawdelegate.com/*",  zone_name = "clawdelegate.com" },

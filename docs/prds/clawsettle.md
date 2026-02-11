@@ -12,7 +12,7 @@
 
 **Domain:** clawsettle.com  
 **Pillar:** Economy & Settlement  
-**Status:** Active (MPY-US-003 shipped to staging)  
+**Status:** Active (MPY-US-006 shipped to staging + production; MPY-US-007 queued)  
 
 ---
 
@@ -22,10 +22,12 @@
 - **Execution tracker:**
   - `services/clawsettle/prd.json`
   - `services/clawsettle/progress.txt`
-- **Current shipped story:**
+- **Current shipped stories:**
   - `MPY-US-003` — Stripe webhook verification + deterministic ledger forwarding
-  - **Environment:** staging (`clawsettle-staging`), staging smoke passed
-  - **Production:** intentionally not deployed in this phase
+  - `MPY-US-006` — production activation + strict livemode environment guard
+  - **Environment:** staging + production (`clawsettle-staging`, `clawsettle`), smoke passed
+- **Queued:**
+  - `MPY-US-007` — reliable forwarding outbox + retry hardening
 
 ---
 
@@ -63,6 +65,30 @@ Payouts, netting, and external rails (Stripe/USDC).
   - Replay events dedupe without double-forwarding side effects
 
 **Current Status:** ✅ Shipped to staging (staging deploy + smoke evidence in `services/clawsettle/progress.txt`)
+
+### MPY-US-006 — clawsettle production activation + livemode hardening
+**As an** operator, **I want** strict environment-mode gating for Stripe webhooks and production activation controls **so that** staging/prod cannot ingest cross-mode events.
+
+**Acceptance Criteria:**
+  - Production rollout (migration + deploy + smoke)
+  - Staging rejects Stripe live events fail-closed
+  - Production rejects Stripe test-mode events unless explicit allow flag is enabled
+  - Deterministic fail-closed livemode mismatch error
+  - Signature verification + replay dedupe semantics remain intact
+
+**Current Status:** ✅ Shipped to staging + production (deploy + smoke evidence in `services/clawsettle/progress.txt`)
+
+### MPY-US-007 — clawsettle reliable forwarding (outbox/retry)
+**As a** settlement operator, **I want** durable verified-event persistence and retryable forwarding **so that** transient ledger failures cannot silently drop settlement side effects.
+
+**Acceptance Criteria:**
+  - Persist verified webhook event before forwarding attempt
+  - Durable outbox status + retry mechanism (cron/manual)
+  - Exact-once economic side effects under replay/retry races
+  - Deterministic status/error lifecycle
+  - Smoke: initial failure → retry success → no double-credit
+
+**Current Status:** ⏳ Queued next
 
 ### CST-US-001 — Initiate payout
 **As a** agent, **I want** to withdraw funds **so that** I can cash out.
