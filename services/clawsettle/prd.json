@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/economy/MPY-US-008-010-clawsettle-payout-lifecycle-recon",
+  "branchName": "feat/economy/MPY-US-011-clawsettle-netting-engine",
   "description": "clawsettle.com (Settlement) — provider adapter layer for external rails mapped into clawledger settlement semantics.",
   "userStories": [
     {
@@ -93,6 +93,22 @@
       "priority": 6,
       "passes": true,
       "notes": "Shipped to staging + production: daily payout reconciliation JSON/CSV with deterministic artifact hash, stuck/failed ops visibility, and targeted payout retry controls."
+    },
+    {
+      "id": "MPY-US-011",
+      "title": "CST-US-002 deterministic netting engine",
+      "description": "As finance ops, I want deterministic and replay-safe payout netting runs so settlement batching is auditable and cannot double-apply under retries or races.",
+      "acceptanceCriteria": [
+        "Add netting persistence schema (`netting_runs`, `netting_entries`) with replay-safe uniques/indexes",
+        "Implement POST /v1/netting/runs (admin) for deterministic run create/execute",
+        "Implement GET /v1/netting/runs/:id status/summary endpoint",
+        "Implement GET /v1/netting/runs/:id/report?format=json|csv with stable report hash",
+        "Deterministically select eligible payouts, compute minor-unit net amounts, and emit stable idempotency keys per netting entry",
+        "Prevent duplicate economic side effects under replay/retry/race conditions (including overlapping run collisions)"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Shipped to staging + production: netting schema/endpoints/replay hardening live, production migration/deploy complete, and full regression smoke set passed (webhook/livemode, forwarding retry, payout lifecycle, payout reconciliation, netting runs)."
     }
   ]
 }

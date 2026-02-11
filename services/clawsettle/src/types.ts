@@ -40,6 +40,15 @@ export interface Env {
 
   /** Default threshold (minutes) used by stuck payout visibility endpoint. */
   PAYOUT_STUCK_MINUTES_DEFAULT?: string;
+
+  /** Source clearing domain used for payout netting debits. Defaults to PAYOUTS_CLEARING_DOMAIN. */
+  NETTING_SOURCE_CLEARING_DOMAIN?: string;
+
+  /** Target clearing domain used for payout netting credits. */
+  NETTING_TARGET_CLEARING_DOMAIN?: string;
+
+  /** Default max payout candidate count per netting run. */
+  NETTING_RUN_DEFAULT_LIMIT?: string;
 }
 
 export interface ErrorResponse {
@@ -234,5 +243,97 @@ export interface DailyPayoutReconciliationReport {
     amount_minor_by_status: Record<string, string>;
   };
   rows: DailyPayoutReconciliationRow[];
+  artifact_sha256: string;
+}
+
+export type NettingRunStatus = 'created' | 'running' | 'applied' | 'failed';
+export type NettingEntryStatus = 'pending' | 'applying' | 'applied' | 'failed';
+
+export interface NettingRunRecord {
+  id: string;
+  idempotency_key: string;
+  request_hash: string;
+  currency: string;
+  selection_before: string;
+  source_clearing_domain: string;
+  target_clearing_domain: string;
+  status: NettingRunStatus;
+  candidate_count: number;
+  applied_count: number;
+  failed_count: number;
+  total_amount_minor: string;
+  last_error_code?: string;
+  last_error_message?: string;
+  report_hash?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface NettingEntryRecord {
+  id: string;
+  run_id: string;
+  entry_key: string;
+  connect_account_id: string;
+  currency: string;
+  amount_minor: string;
+  payout_count: number;
+  payout_ids: string[];
+  idempotency_key: string;
+  status: NettingEntryStatus;
+  ledger_event_id?: string;
+  last_error_code?: string;
+  last_error_message?: string;
+  created_at: string;
+  updated_at: string;
+  applied_at?: string;
+}
+
+export interface NettingRunExecuteRequest {
+  currency?: string;
+  limit?: number;
+  source_clearing_domain?: string;
+  target_clearing_domain?: string;
+}
+
+export interface NettingRunExecuteResponse {
+  ok: true;
+  deduped: boolean;
+  run: NettingRunRecord;
+  entries: NettingEntryRecord[];
+}
+
+export interface NettingRunStatusResponse {
+  ok: true;
+  run: NettingRunRecord;
+  entries: NettingEntryRecord[];
+}
+
+export interface NettingReportRow {
+  entry_id: string;
+  connect_account_id: string;
+  payout_count: number;
+  amount_minor: string;
+  status: NettingEntryStatus;
+  ledger_event_id?: string;
+  last_error_code?: string;
+  last_error_message?: string;
+  payout_ids: string[];
+}
+
+export interface NettingRunReport {
+  run_id: string;
+  generated_at: string;
+  summary: {
+    status: NettingRunStatus;
+    currency: string;
+    source_clearing_domain: string;
+    target_clearing_domain: string;
+    candidate_count: number;
+    applied_count: number;
+    failed_count: number;
+    total_amount_minor: string;
+  };
+  entries: NettingReportRow[];
   artifact_sha256: string;
 }

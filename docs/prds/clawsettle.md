@@ -12,7 +12,7 @@
 
 **Domain:** clawsettle.com  
 **Pillar:** Economy & Settlement  
-**Status:** Active (MPY-US-003/006/007/008/009/010 shipped to staging + production)  
+**Status:** Active (MPY-US-003/006/007/008/009/010/011 shipped)  
 
 ---
 
@@ -29,6 +29,7 @@
   - `MPY-US-008` (`CST-US-001`) — payout initiation + deterministic lock semantics
   - `MPY-US-009` (`CST-US-003`) — payout lifecycle state machine + status endpoint
   - `MPY-US-010` (`CST-US-004`) — reconciliation reports + ops controls
+  - `MPY-US-011` (`CST-US-002`) — deterministic netting engine
   - **Environment:** staging + production (`clawsettle-staging`, `clawsettle`), smoke passed
 
 ---
@@ -104,14 +105,18 @@ Payouts, netting, and external rails (Stripe/USDC).
 
 **Current Status:** ✅ Shipped to staging + production (onboarding + payout initiation with deterministic idempotency and lock semantics)
 
-### CST-US-002 — Netting engine
-**As a** operator, **I want** to net transfers **so that** fees are minimized.
+### MPY-US-011 (CST-US-002) — Deterministic netting engine
+**As** finance ops, **I want** payout netting runs to be deterministic, replay-safe, and auditable **so that** settlement batching cannot double-apply under retries or races.
 
 **Acceptance Criteria:**
-  - Batch settlements
-  - Record net ledger events
-  - Provide audit trail
+  - Add netting persistence schema (`netting_runs`, `netting_entries`) with replay-safe indexes/uniques
+  - `POST /v1/netting/runs` (admin) creates/executes deterministic netting runs
+  - `GET /v1/netting/runs/:id` exposes run status + entry summary
+  - `GET /v1/netting/runs/:id/report?format=json|csv` exports deterministic artifacts with stable hash
+  - Candidate payout selection + entry ordering is deterministic and minor-unit only
+  - Overlapping run collisions and retries/replays do not double-apply ledger side effects
 
+**Current Status:** ✅ Shipped to staging + production (netting migration/deploy complete; regression smokes passed including netting runs)
 
 ### MPY-US-009 (CST-US-003) — Payout lifecycle state machine + status endpoint
 **As an** operator, **I want** payout lifecycle transitions to be explicit and exact-once **so that** webhook replays/retries cannot cause double-release or double-credit behavior.

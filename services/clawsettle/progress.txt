@@ -272,3 +272,112 @@ Started: 2026-02-12
   - MPY-US-009 shipped to staging + production.
   - MPY-US-010 shipped to staging + production.
 ---
+
+## 2026-02-11T17:55:00Z - MPY-US-011 (CST-US-002) deterministic netting engine
+- What was implemented
+  - Added deterministic netting domain module `services/clawsettle/src/netting.ts` with:
+    - replay-safe run idempotency (`idempotency_key` + payload hash guard)
+    - deterministic candidate selection (`paid`, `finalized_at <= selection_before`, stable ordering)
+    - deterministic entry grouping + per-entry idempotency (`netting:entry:<entry_id>`)
+    - one-way run/entry transitions (`created|failed -> running -> applied|failed`, `pending|failed -> applying -> applied|failed`)
+    - fail-closed collision handling (`DUPLICATE_CONFLICT`, `INVALID_STATUS_TRANSITION`, `IDEMPOTENCY_KEY_REUSED`)
+    - exact-once ledger side effects via `findEventByIdempotencyKey` + transfer CAS semantics
+    - deterministic JSON/CSV report artifacts with stable hash
+  - Added netting persistence migration:
+    - `services/clawsettle/migrations/0004_create_netting_runs.sql`
+    - tables: `netting_runs`, `netting_entries`, `netting_entry_payouts`
+  - Added new endpoints in `services/clawsettle/src/index.ts`:
+    - `POST /v1/netting/runs` (admin, idempotency required)
+    - `GET /v1/netting/runs/:id` (admin)
+    - `GET /v1/netting/runs/:id/report?format=json|csv` (admin)
+  - Added tests:
+    - `services/clawsettle/test/netting.test.ts`
+      - deterministic grouping/ordering invariants
+      - exact-once retry/replay behavior
+      - overlapping run collision fail-closed behavior
+      - stable report hash parity across repeated JSON/CSV exports
+  - Added smoke:
+    - `scripts/poh/smoke-clawsettle-netting-runs.mjs`
+    - supports full bootstrap mode (with Stripe+Ledger env vars) and existing-data mode (SETTLE_ADMIN_KEY only)
+  - Config/docs updates:
+    - `services/clawsettle/wrangler.toml` (`NETTING_*` vars)
+    - `services/clawsettle/README.md`
+    - PRD tracker/docs updated before implementation and status-updated post-staging.
+- Dependency hardening discovered during staging smoke
+  - Initial staging netting runs failed with `LEDGER_INGEST_FAILED` and downstream ledger code `EVENT_WRITE_FAILED` on clearing-origin transfers.
+  - Root cause: ledger `events.account_id` FK path expected `accounts.id`; clearing-origin transfers emit clearing IDs.
+  - Added ledger compatibility patch in `services/ledger/src/index.ts`:
+    - `ensureClearingMirrorUserAccount(...)` creates deterministic internal mirror rows in `accounts` for clearing IDs (`did:internal:clearing:<domain>`) before event writes.
+    - unblocks clearing->clearing v1 transfer event persistence without weakening auth/validation.
+- Quality checks
+  - `cd services/clawsettle && npm run lint && npm run typecheck && npm test`
+  - `cd services/ledger && npm run lint && npm run typecheck && npm test`
+  - `node scripts/docs/lint-prds.mjs`
+- Staging migration/deploy evidence
+  - `clawsettle` staging migration:
+    - `wrangler d1 migrations apply clawsettle-staging --env staging --remote`
+    - applied: `0004_create_netting_runs.sql`
+  - `clawsettle` staging deploy versions:
+    - `09dbe2ed-a53e-4fca-9e26-fa107470fd7b`
+    - `c06144f5-f598-4c16-af29-ac19e91c1a5c`
+    - `5f2cc6d1-4611-4c5a-9851-27cd99887883` (current)
+  - `clawledger` staging deploy (dependency compatibility fix):
+    - `ba6e2082-ffe1-4308-a690-89b790e44023`
+  - Staging secret updates (names only):
+    - `SETTLE_ADMIN_KEY`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET`
+- Staging smoke evidence
+  - Command:
+    - `SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-netting-runs.mjs --env staging`
+  - Result highlights:
+    - mode: `existing-paid-payouts`
+    - run status: `applied`
+    - replay: `deduped=true`
+    - report hash parity: CSV header hash == JSON `artifact_sha256`
+    - follow-up noop run: `candidate_count=0` (no duplicate side effects)
+- Release status
+  - MPY-US-011 implemented + staging validated.
+  - Production migration/deploy/smoke intentionally NOT executed yet.
+  - Await explicit **GO PROD** before production rollout and `passes=true` flip.
+---
+
+## 2026-02-11T18:35:00Z - MPY-US-011 GO PROD rollout (production window)
+- Scope executed (ordered)
+  1) ledger compatibility fix deployed to production first (dependency guard)
+  2) ledger regression smoke executed
+  3) clawsettle migration `0004_create_netting_runs.sql` applied in production
+  4) clawsettle production deploy completed
+  5) full clawsettle regression set executed in production:
+     - webhook/livemode
+     - forwarding retry exact-once
+     - payout lifecycle
+     - payout reconciliation
+     - netting runs
+  6) tracker flip: MPY-US-011 `passes=true`
+- Production deploy/migration evidence
+  - `clawledger` production deploy version: `7262d8df-6271-40bd-ae80-1b159a8c8d4b`
+  - `clawsettle` production migration applied:
+    - `0004_create_netting_runs.sql`
+  - `clawsettle` production deploy version: `6abcb814-217b-4c61-b59f-452e3021e02e`
+- Production smoke evidence
+  - Ledger regression:
+    - `LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-ledger-payment-settlements.mjs --env prod --parallel-burst 8`
+    - pass: confirm/replay/reversal + burst exact-once invariants
+  - clawsettle regression set:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-forwarding-retry.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-lifecycle.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-reconciliation.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-netting-runs.mjs --env prod`
+  - highlights:
+    - webhook/livemode: signature reject + `LIVEMODE_MISMATCH` fail-closed + forward/replay OK
+    - forwarding retry: fail-first (`LEDGER_INGEST_FAILED`) -> retry success -> replay dedupe -> no double-credit
+    - payout lifecycle: paid finalize exact-once + failed rollback exact-once
+    - reconciliation: JSON/CSV hash parity deterministic
+    - netting: run applied, replay deduped, deterministic report hash parity, post-run no duplicate side effects
+- Secrets ops (names only; values not logged)
+  - production `LEDGER_ADMIN_KEY` updated for `clawledger`, `clawsettle`, `clawproxy`, `clawescrow`
+  - production `SETTLE_ADMIN_KEY` and `STRIPE_WEBHOOK_SIGNING_SECRET` updated for `clawsettle`
+- Release status
+  - MPY-US-011 shipped to staging + production.
+---

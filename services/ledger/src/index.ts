@@ -825,6 +825,43 @@ interface V1ResolvedAccount {
   display: string;
 }
 
+async function ensureClearingMirrorUserAccount(
+  env: Env,
+  params: { clearingAccountId: string; domain: string }
+): Promise<void> {
+  const accountRepo = new AccountRepository(env.DB);
+  const existing = await accountRepo.findById(params.clearingAccountId);
+  if (existing) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const mirrorDid = `did:internal:clearing:${params.domain}`;
+
+  try {
+    await env.DB
+      .prepare(
+        `INSERT INTO accounts (
+           id,
+           did,
+           balance_available,
+           balance_held,
+           balance_bonded,
+           balance_fee_pool,
+           balance_promo,
+           created_at,
+           updated_at,
+           version
+         ) VALUES (?, ?, '0', '0', '0', '0', '0', ?, ?, 1)`
+      )
+      .bind(params.clearingAccountId, mirrorDid, now, now)
+      .run();
+  } catch {
+    // Best-effort mirror creation for legacy events FK compatibility.
+    // If a concurrent writer created the mirror row first, we can safely continue.
+  }
+}
+
 async function resolveV1AccountRef(account: string, env: Env): Promise<V1ResolvedAccount> {
   const input = account.trim();
 
@@ -849,6 +886,11 @@ async function resolveV1AccountRef(account: string, env: Env): Promise<V1Resolve
     if (!clearing) {
       clearing = await clearingService.createClearingAccount({ domain, name: domain });
     }
+
+    await ensureClearingMirrorUserAccount(env, {
+      clearingAccountId: clearing.id,
+      domain,
+    });
 
     return { kind: 'clearing', id: clearing.id, display: input };
   }
