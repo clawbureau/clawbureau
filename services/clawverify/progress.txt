@@ -329,3 +329,19 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck
 ---
+
+## 2026-02-11 - POH-US-018 (witnessed-web receipts)
+- What was implemented
+  - Added verifier support for witnessed web receipts:
+    - `POST /v1/verify/web-receipt`
+    - new verifier: `src/verify-web-receipt.ts`
+    - strict schema gate + allowlist gate (`WEB_RECEIPT_SIGNER_DIDS`) + signature/hash checks
+  - Tier semantics kept distinct:
+    - verified web receipts return `proof_tier=witnessed_web`
+    - `equivalent_to_gateway=false` by default
+  - Added standalone schema validator support for `web_receipt_envelope.v1`.
+- Tests
+  - `services/clawverify/test/web-receipt.test.ts` (golden + allowlist fail-closed + tamper)
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck
+---

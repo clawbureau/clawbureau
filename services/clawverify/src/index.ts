@@ -6,6 +6,7 @@
 import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
+import { verifyWebReceipt } from './verify-web-receipt';
 import { verifyDerivationAttestation } from './verify-derivation-attestation';
 import { verifyAuditResultAttestation } from './verify-audit-result-attestation';
 import { verifyBatch } from './verify-batch';
@@ -32,6 +33,7 @@ import type {
   VerifyArtifactResponse,
   VerifyMessageResponse,
   VerifyReceiptResponse,
+  VerifyWebReceiptResponse,
   VerifyDerivationAttestationResponse,
   VerifyAuditResultAttestationResponse,
   VerifyBatchResponse,
@@ -57,6 +59,12 @@ export interface Env {
    * Used for fail-closed receipt verification (POH gateway tier).
    */
   GATEWAY_RECEIPT_SIGNER_DIDS?: string;
+
+  /**
+   * Comma-separated list of trusted witnessed-web receipt signer DIDs (did:key:...).
+   * Used for fail-closed web receipt verification (POH-US-018).
+   */
+  WEB_RECEIPT_SIGNER_DIDS?: string;
 
   /**
    * Comma-separated list of repo claim IDs that exist in clawclaim.
@@ -301,6 +309,53 @@ async function handleVerifyReceipt(
   // Return 200 for valid, 422 for invalid
   const status = verification.result.status === 'VALID' ? 200 : 422;
 
+  return jsonResponse(response, status);
+}
+
+/**
+ * Handle POST /v1/verify/web-receipt - Verify witnessed web receipt signatures
+ */
+async function handleVerifyWebReceipt(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  const signerAllowlist = parseCommaSeparatedAllowlist(env.WEB_RECEIPT_SIGNER_DIDS);
+
+  const verification = await verifyWebReceipt(envelope, {
+    allowlistedSignerDids: signerAllowlist,
+  });
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'web_receipt' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did,
+    );
+  }
+
+  const response: VerifyWebReceiptResponse & { audit_receipt?: AuditLogReceipt } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(response, status);
 }
 
@@ -831,24 +886,34 @@ async function handleVerifyBundle(
       env.EXECUTION_ATTESTATION_SIGNER_DIDS
     );
 
-    const bundleEnvelope = envelope as Record<string, any>;
+    const bundleEnvelope = envelope as Record<string, unknown>;
+    const payloadRecord =
+      typeof bundleEnvelope.payload === 'object' && bundleEnvelope.payload !== null
+        ? (bundleEnvelope.payload as Record<string, unknown>)
+        : null;
+    const urmRecord =
+      typeof urm === 'object' && urm !== null ? (urm as Record<string, unknown>) : null;
+
     const expectedBundleHash =
-      typeof bundleEnvelope?.payload_hash_b64u === 'string'
+      typeof bundleEnvelope.payload_hash_b64u === 'string'
         ? bundleEnvelope.payload_hash_b64u
         : null;
 
     const expectedAgentDid =
-      (typeof bundleEnvelope?.payload?.agent_did === 'string'
-        ? bundleEnvelope.payload.agent_did
+      (payloadRecord && typeof payloadRecord.agent_did === 'string'
+        ? payloadRecord.agent_did
         : null) ?? finalResult.agent_did ?? null;
 
+    const eventChain = payloadRecord?.event_chain;
+    const firstEvent = Array.isArray(eventChain)
+      ? (eventChain[0] as Record<string, unknown> | undefined)
+      : undefined;
+
     const expectedRunId =
-      typeof (urm as any)?.run_id === 'string'
-        ? (urm as any).run_id
-        : Array.isArray(bundleEnvelope?.payload?.event_chain) &&
-            bundleEnvelope.payload.event_chain.length > 0 &&
-            typeof bundleEnvelope.payload.event_chain[0]?.run_id === 'string'
-          ? bundleEnvelope.payload.event_chain[0].run_id
+      typeof urmRecord?.run_id === 'string'
+        ? urmRecord.run_id
+        : typeof firstEvent?.run_id === 'string'
+          ? firstEvent.run_id
           : null;
 
     if (!expectedBundleHash || !expectedAgentDid || !expectedRunId) {
@@ -1354,6 +1419,7 @@ export default {
         <li><code>POST /v1/verify</code> — artifact_signature verification</li>
         <li><code>POST /v1/verify/message</code> — message_signature verification</li>
         <li><code>POST /v1/verify/receipt</code> — gateway_receipt verification</li>
+        <li><code>POST /v1/verify/web-receipt</code> — witnessed web_receipt verification</li>
         <li><code>POST /v1/verify/owner-attestation</code> — owner_attestation verification</li>
         <li><code>POST /v1/verify/execution-attestation</code> — execution_attestation verification</li>
         <li><code>POST /v1/verify/did-rotation</code> — did_rotation certificate verification</li>
@@ -1395,6 +1461,7 @@ export default {
             { method: 'POST', path: '/v1/verify' },
             { method: 'POST', path: '/v1/verify/message' },
             { method: 'POST', path: '/v1/verify/receipt' },
+            { method: 'POST', path: '/v1/verify/web-receipt' },
             { method: 'POST', path: '/v1/verify/owner-attestation' },
             { method: 'POST', path: '/v1/verify/execution-attestation' },
             { method: 'POST', path: '/v1/verify/did-rotation' },
@@ -1489,6 +1556,11 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/verify/receipt - Gateway receipt verification
     if (url.pathname === '/v1/verify/receipt' && method === 'POST') {
       return handleVerifyReceipt(request, env);
+    }
+
+    // POST /v1/verify/web-receipt - Witnessed web receipt verification
+    if (url.pathname === '/v1/verify/web-receipt' && method === 'POST') {
+      return handleVerifyWebReceipt(request, env);
     }
 
     // POST /v1/verify/derivation-attestation - Derivation attestation verification

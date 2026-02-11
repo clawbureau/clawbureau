@@ -128,6 +128,14 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Check receipt schema
 - Return verified provider/model
 
+### CVF-US-022 — Verify witnessed web receipts
+**As a** platform, **I want** to validate witness-signed web receipts **so that** subscription/web-auth evidence can be verified without conflating it with gateway API proofs.
+
+**Acceptance Criteria:**
+- Support `POST /v1/verify/web-receipt`
+- Enforce fail-closed witness signer allowlist (`WEB_RECEIPT_SIGNER_DIDS`)
+- Return `proof_tier=witnessed_web` and keep default non-equivalence to gateway receipts
+
 ### CVF-US-004 — Batch verification
 **As a** auditor, **I want** to submit multiple envelopes **so that** I can verify at scale.
 

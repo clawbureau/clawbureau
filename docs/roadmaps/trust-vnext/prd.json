@@ -213,7 +213,8 @@
         "Verifier recognizes web_receipt but does not equate it to gateway API receipts by default"
       ],
       "priority": 16,
-      "passes": false
+      "passes": true,
+      "notes": "Shipped POH-US-018 end-to-end. Added schemas (`web_receipt.v1`, `web_receipt_envelope.v1`), golden fixture, strict Ajv standalone validation, verifier module (`verify-web-receipt.ts`), and endpoint `POST /v1/verify/web-receipt` with fail-closed signer allowlist (`WEB_RECEIPT_SIGNER_DIDS`). Verified semantics remain distinct from gateway receipts via `proof_tier=witnessed_web` and `equivalent_to_gateway=false`. Deployed clawverify staging/prod and passed smoke (`scripts/poh/smoke-web-receipt.mjs`) including tamper-invalid path."
     },
     {
       "id": "OCL-US-001",

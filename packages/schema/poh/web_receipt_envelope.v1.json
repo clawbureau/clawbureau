@@ -1,0 +1,50 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.web_receipt_envelope.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Web Receipt Envelope v1",
+  "description": "SignedEnvelope wrapper for witnessed web receipts (envelope_type = web_receipt).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "payload",
+    "payload_hash_b64u",
+    "hash_algorithm",
+    "signature_b64u",
+    "algorithm",
+    "signer_did",
+    "issued_at"
+  ],
+  "properties": {
+    "envelope_version": { "const": "1" },
+    "envelope_type": { "const": "web_receipt" },
+    "payload": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.web_receipt.v1.json"
+    },
+    "payload_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256", "BLAKE3"]
+    },
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": ["Ed25519"]
+    },
+    "signer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Witness signer DID. Must start with 'did:'."
+    },
+    "issued_at": { "type": "string", "format": "date-time" }
+  }
+}

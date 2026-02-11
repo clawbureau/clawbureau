@@ -41,6 +41,8 @@ const exportBundle = readJson('packages/schema/poh/export_bundle.v1.json');
 
 const gatewayReceipt = readJson('packages/schema/poh/gateway_receipt.v1.json');
 const gatewayReceiptEnvelope = readJson('packages/schema/poh/gateway_receipt_envelope.v1.json');
+const webReceipt = readJson('packages/schema/poh/web_receipt.v1.json');
+const webReceiptEnvelope = readJson('packages/schema/poh/web_receipt_envelope.v1.json');
 const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
 const proofBundleEnvelope = readJson('packages/schema/poh/proof_bundle_envelope.v1.json');
 const urm = readJson('packages/schema/poh/urm.v1.json');
@@ -70,6 +72,8 @@ ajv.addSchema(logInclusionProof);
 // Add payload + envelope schemas.
 ajv.addSchema(gatewayReceipt);
 ajv.addSchema(gatewayReceiptEnvelope);
+ajv.addSchema(webReceipt);
+ajv.addSchema(webReceiptEnvelope);
 ajv.addSchema(proofBundle);
 ajv.addSchema(proofBundleEnvelope);
 
@@ -95,6 +99,7 @@ ajv.addSchema(systemPromptReport);
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
+  validateWebReceiptEnvelopeV1: webReceiptEnvelope.$id,
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,
   validateLogInclusionProofV1: logInclusionProof.$id,

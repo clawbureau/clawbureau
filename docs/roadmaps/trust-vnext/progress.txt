@@ -468,3 +468,30 @@ Started: 2026-02-07T19:53:07Z
   - docs/roadmaps/trust-vnext/prd.json
   - docs/roadmaps/trust-vnext/progress.txt
 ---
+## 2026-02-11T20:00:00Z - POH-US-018
+- What was implemented
+  - Added witnessed-web receipt support in schema + verifier:
+    - `packages/schema/poh/web_receipt.v1.json`
+    - `packages/schema/poh/web_receipt_envelope.v1.json`
+    - `services/clawverify/src/verify-web-receipt.ts`
+    - `POST /v1/verify/web-receipt`
+  - Added fail-closed witness signer allowlist gate:
+    - env var `WEB_RECEIPT_SIGNER_DIDS`
+    - returns `DEPENDENCY_NOT_CONFIGURED` when unset
+  - Preserved trust semantics:
+    - web receipts verify to `proof_tier=witnessed_web`
+    - not auto-equivalent to gateway receipts (`equivalent_to_gateway=false`)
+- Tests & fixtures
+  - Added fixture: `packages/schema/fixtures/web_receipt_golden.v1.json`
+  - Added unit tests: `services/clawverify/test/web-receipt.test.ts`
+- Deploy & smoke
+  - Deployed `clawverify` to staging and production
+  - Smokes passed:
+    - `node scripts/poh/smoke-web-receipt.mjs --env staging`
+    - `node scripts/poh/smoke-web-receipt.mjs --env prod`
+  - Regression smokes passed:
+    - `node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env staging`
+    - `node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env prod`
+- Quality checks
+  - `cd services/clawverify && npm test && npm run typecheck && npm run lint`
+---

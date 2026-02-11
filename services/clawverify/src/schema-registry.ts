@@ -60,6 +60,13 @@ export const SCHEMA_ALLOWLIST: readonly SchemaAllowlistEntry[] = [
     added_at: '2026-01-01T00:00:00Z',
   },
   {
+    schema_id: 'web_receipt',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-11T00:00:00Z',
+  },
+  {
     schema_id: 'proof_bundle',
     version: '1',
     supported_versions: ['1'],

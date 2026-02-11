@@ -1,0 +1,58 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.web_receipt.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Web Receipt v1",
+  "description": "Witness-signed receipt for web/subscription model interactions (e.g. hosted chat UIs). Distinct from gateway API receipts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "witness_id",
+    "source",
+    "request_hash_b64u",
+    "response_hash_b64u",
+    "timestamp"
+  ],
+  "properties": {
+    "receipt_version": { "const": "1" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "witness_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the witnessing service/runtime."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["chatgpt_web", "claude_web", "gemini_web", "other"],
+      "description": "Web interaction surface the witness observed."
+    },
+    "request_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash of the witnessed request bytes (base64url)."
+    },
+    "response_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash of the witnessed response bytes (base64url)."
+    },
+    "session_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "Optional hash pointer to witnessed browser/session state."
+    },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "binding": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional metadata for non-sensitive witness context.",
+      "additionalProperties": true
+    }
+  }
+}
