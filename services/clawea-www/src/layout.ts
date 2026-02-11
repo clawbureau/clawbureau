@@ -43,13 +43,91 @@ export function layout(opts: LayoutOpts): string {
   ${schemas.join("\n")}
 </head>
 <body>
-  ${nav()}
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <div class="progress-bar" role="progressbar" aria-hidden="true"></div>
+  ${nav(meta.path)}
   ${bcHtml}
-  <main>${body}</main>
+  <main id="main-content">${body}</main>
   ${footer()}
+  <a href="#" class="back-to-top" aria-label="Back to top">&uarr;</a>
+  ${interactiveScript()}
   ${trackingScript()}
 </body>
 </html>`;
+}
+
+function interactiveScript(): string {
+  return `<script>
+(function(){
+  /* Mobile nav toggle */
+  var toggle=document.querySelector('.nav-toggle');
+  var menu=document.getElementById('nav-menu');
+  if(toggle&&menu){
+    toggle.addEventListener('click',function(){
+      var expanded=toggle.getAttribute('aria-expanded')==='true';
+      toggle.setAttribute('aria-expanded',String(!expanded));
+      menu.classList.toggle('open');
+      if(!expanded){document.body.style.overflow='hidden';}
+      else{document.body.style.overflow='';}
+    });
+    menu.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click',function(){
+        toggle.setAttribute('aria-expanded','false');
+        menu.classList.remove('open');
+        document.body.style.overflow='';
+      });
+    });
+  }
+
+  /* Reading progress bar */
+  var bar=document.querySelector('.progress-bar');
+  if(bar){
+    var ticking=false;
+    window.addEventListener('scroll',function(){
+      if(!ticking){requestAnimationFrame(function(){
+        var h=document.documentElement.scrollHeight-window.innerHeight;
+        bar.style.width=h>0?((window.scrollY/h)*100)+'%':'0%';
+        ticking=false;
+      });ticking=true;}
+    },{passive:true});
+  }
+
+  /* Back to top */
+  var btt=document.querySelector('.back-to-top');
+  if(btt){
+    window.addEventListener('scroll',function(){
+      btt.classList.toggle('visible',window.scrollY>600);
+    },{passive:true});
+    btt.addEventListener('click',function(e){
+      e.preventDefault();
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+  }
+
+  /* TOC active heading tracking */
+  var tocLinks=document.querySelectorAll('.toc a');
+  if(tocLinks.length>0){
+    var headings=[];
+    tocLinks.forEach(function(a){
+      var id=(a.getAttribute('href')||'').slice(1);
+      var el=id&&document.getElementById(id);
+      if(el)headings.push({el:el,link:a});
+    });
+    var tocTicking=false;
+    window.addEventListener('scroll',function(){
+      if(!tocTicking){requestAnimationFrame(function(){
+        var current=null;
+        for(var i=0;i<headings.length;i++){
+          if(headings[i].el.getBoundingClientRect().top<=120)current=headings[i];
+        }
+        tocLinks.forEach(function(a){a.classList.remove('active');});
+        if(current)current.link.classList.add('active');
+        tocTicking=false;
+      });tocTicking=true;}
+    },{passive:true});
+  }
+})();
+</script>`;
 }
 
 function trackingScript(): string {
@@ -227,24 +305,37 @@ function trackingScript(): string {
 </script>`;
 }
 
-function nav(): string {
+function nav(currentPath: string): string {
+  const links = [
+    { href: "/controls", label: "Controls" },
+    { href: "/workflows", label: "Workflows" },
+    { href: "/tools", label: "Tools" },
+    { href: "/channels", label: "Channels" },
+    { href: "/trust", label: "Trust" },
+    { href: "/pricing", label: "Pricing" },
+  ];
+  const linkHtml = links
+    .map((l) => {
+      const active = currentPath === l.href || currentPath.startsWith(l.href + "/");
+      return `<a href="${l.href}"${active ? ' aria-current="page"' : ''}>${l.label}</a>`;
+    })
+    .join("");
+
   return `
-  <nav>
+  <nav aria-label="Main navigation">
     <div class="wrap">
-      <a href="/" class="logo">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <a href="/" class="logo" aria-label="Claw EA home">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
         </svg>
         claw<span>ea</span>
       </a>
-      <div class="links">
-        <a href="/controls">Controls</a>
-        <a href="/workflows">Workflows</a>
-        <a href="/tools">Tools</a>
-        <a href="/channels">Channels</a>
-        <a href="/trust">Trust</a>
-        <a href="/pricing">Pricing</a>
-        <a href="/contact" class="cta-btn">Talk to Sales</a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Toggle navigation">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="links" id="nav-menu">
+        ${linkHtml}
+        <a href="/contact" class="cta-btn" data-cta="nav-contact">Talk to Sales</a>
       </div>
     </div>
   </nav>`;
