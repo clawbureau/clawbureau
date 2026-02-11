@@ -42,6 +42,17 @@ import type {
 
 type PluginMode = 'enforce' | 'best_effort';
 
+type AirlockConfig = {
+  enabled?: boolean;
+  identityRoots?: string[];
+  jobRoots?: string[];
+  /**
+   * Fail-closed if bootstrap files are discovered outside identityRoots
+   * (including files under jobRoots).
+   */
+  requireTrustedBootstrap?: boolean;
+};
+
 type PluginConfig = {
   baseUrl: string;
   token?: string;
@@ -65,6 +76,7 @@ type PluginConfig = {
   };
   includePromptPack?: boolean;
   includeToolEvents?: boolean;
+  airlock?: AirlockConfig;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -78,6 +90,16 @@ function asBoolean(value: unknown): boolean | undefined {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const out = value
+    .map((v) => asString(v))
+    .filter((v): v is string => typeof v === 'string');
+
+  return out.length > 0 ? out : undefined;
 }
 
 function parsePluginConfig(raw: unknown): PluginConfig | null {
@@ -98,6 +120,8 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
       ? receiptPrivacyModeRaw
       : undefined;
 
+  const airlockObj = asObject(obj.airlock);
+
   return {
     baseUrl,
     token: asString(obj.token),
@@ -116,11 +140,97 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
       : undefined,
     includePromptPack: asBoolean(obj.includePromptPack),
     includeToolEvents: asBoolean(obj.includeToolEvents),
+    airlock: airlockObj
+      ? {
+          enabled: asBoolean(airlockObj.enabled),
+          identityRoots: asStringArray(airlockObj.identityRoots),
+          jobRoots: asStringArray(airlockObj.jobRoots),
+          requireTrustedBootstrap: asBoolean(airlockObj.requireTrustedBootstrap),
+        }
+      : undefined,
   };
 }
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, '');
+}
+
+export type AirlockBootstrapFileInput = {
+  name: string | undefined;
+  path: string | undefined;
+  content: string | undefined;
+  missing: boolean | undefined;
+};
+
+export type AirlockPathClassification = 'trusted' | 'untrusted' | 'unknown';
+
+export type AirlockPartitionResult = {
+  trustedFiles: AirlockBootstrapFileInput[];
+  untrustedFiles: AirlockBootstrapFileInput[];
+  unknownFiles: AirlockBootstrapFileInput[];
+};
+
+function normalizePathForAirlock(value: string): string {
+  // Normalize separators + collapse relative segments.
+  const withForwardSlashes = value.replace(/\\/g, '/');
+  const normalized = path.posix.normalize(withForwardSlashes);
+
+  // Keep roots canonical without trailing slash (except '/').
+  if (normalized === '/') return normalized;
+  return normalized.replace(/\/+$/, '');
+}
+
+function pathWithinRoot(targetPath: string, rootPath: string): boolean {
+  if (rootPath === '/') return true;
+  return targetPath === rootPath || targetPath.startsWith(`${rootPath}/`);
+}
+
+export function classifyAirlockPath(
+  filePath: string | undefined,
+  identityRoots: readonly string[],
+  jobRoots: readonly string[],
+): AirlockPathClassification {
+  if (!filePath) return 'unknown';
+
+  const normalizedFilePath = normalizePathForAirlock(filePath);
+
+  const normalizedIdentityRoots = identityRoots.map((r) => normalizePathForAirlock(r));
+  const normalizedJobRoots = jobRoots.map((r) => normalizePathForAirlock(r));
+
+  for (const root of normalizedIdentityRoots) {
+    if (pathWithinRoot(normalizedFilePath, root)) return 'trusted';
+  }
+
+  for (const root of normalizedJobRoots) {
+    if (pathWithinRoot(normalizedFilePath, root)) return 'untrusted';
+  }
+
+  return 'unknown';
+}
+
+export function partitionBootstrapFilesForAirlock(
+  files: AirlockBootstrapFileInput[],
+  airlock: AirlockConfig,
+): AirlockPartitionResult {
+  const identityRoots = airlock.identityRoots ?? [];
+  const jobRoots = airlock.jobRoots ?? [];
+
+  const trustedFiles: AirlockBootstrapFileInput[] = [];
+  const untrustedFiles: AirlockBootstrapFileInput[] = [];
+  const unknownFiles: AirlockBootstrapFileInput[] = [];
+
+  for (const file of files) {
+    const classification = classifyAirlockPath(file.path, identityRoots, jobRoots);
+    if (classification === 'trusted') {
+      trustedFiles.push(file);
+    } else if (classification === 'untrusted') {
+      untrustedFiles.push(file);
+    } else {
+      unknownFiles.push(file);
+    }
+  }
+
+  return { trustedFiles, untrustedFiles, unknownFiles };
 }
 
 // ---------------------------------------------------------------------------
@@ -747,6 +857,15 @@ const runStorage = new AsyncLocalStorage<RunContext>();
 // sessionKey → prompt pack entries (computed at agent:bootstrap)
 const promptPackBySession = new Map<string, PromptPackEntry[]>();
 
+// sessionKey → airlock violation summary (computed at agent:bootstrap)
+const airlockViolationsBySession = new Map<
+  string,
+  {
+    untrustedCount: number;
+    unknownCount: number;
+  }
+>();
+
 // agentId → keyPair promise
 const keyPairsByAgent = new Map<string, Promise<Ed25519KeyPair>>();
 
@@ -1087,6 +1206,11 @@ export default {
     const includePromptPack = cfg.includePromptPack ?? true;
     const includeToolEvents = cfg.includeToolEvents ?? true;
 
+    const airlockEnabled = cfg.airlock?.enabled ?? false;
+    const airlockRequireTrustedBootstrap = cfg.airlock?.requireTrustedBootstrap ?? true;
+    const airlockIdentityRoots = cfg.airlock?.identityRoots ?? [];
+    const airlockJobRoots = cfg.airlock?.jobRoots ?? [];
+
     // Patch fetch once for this process.
     patchFetch({
       proxyBaseUrl,
@@ -1125,7 +1249,36 @@ export default {
             missing: typeof f.missing === 'boolean' ? f.missing : undefined,
           }));
 
-        const entries = await promptPackEntriesFromBootstrapFiles(files);
+        let filesForPromptPack = files;
+
+        if (airlockEnabled) {
+          const partition = partitionBootstrapFilesForAirlock(files, {
+            enabled: true,
+            identityRoots: airlockIdentityRoots,
+            jobRoots: airlockJobRoots,
+            requireTrustedBootstrap: airlockRequireTrustedBootstrap,
+          });
+
+          filesForPromptPack = partition.trustedFiles;
+
+          const untrustedCount = partition.untrustedFiles.length;
+          const unknownCount = partition.unknownFiles.length;
+
+          if (untrustedCount > 0 || unknownCount > 0) {
+            logger.warn(
+              `provider-clawproxy: AIRLOCK bootstrap partition detected non-trusted bootstrap files (session=${sessionKey}, untrusted=${untrustedCount}, unknown=${unknownCount})`,
+            );
+
+            if (airlockRequireTrustedBootstrap) {
+              airlockViolationsBySession.set(sessionKey, {
+                untrustedCount,
+                unknownCount,
+              });
+            }
+          }
+        }
+
+        const entries = await promptPackEntriesFromBootstrapFiles(filesForPromptPack);
         if (entries.length > 0) {
           promptPackBySession.set(sessionKey, entries);
         }
@@ -1140,6 +1293,16 @@ export default {
       const agentId = asString(ctx?.agentId) ?? 'default';
       const sessionKey = asString(ctx?.sessionKey) ?? asString(ctx?.sessionId) ?? undefined;
       const workspaceDir = asString(ctx?.workspaceDir) ?? process.cwd();
+
+      if (airlockEnabled && airlockRequireTrustedBootstrap && sessionKey) {
+        const violation = airlockViolationsBySession.get(sessionKey);
+        if (violation) {
+          airlockViolationsBySession.delete(sessionKey);
+          throw new Error(
+            `AIRLOCK_BOOTSTRAP_VIOLATION: non-trusted bootstrap files detected for session ${sessionKey} (untrusted=${violation.untrustedCount}, unknown=${violation.unknownCount})`,
+          );
+        }
+      }
 
       // Serialize all recordEvent calls (tool hooks + llm_call via fetch).
       // IMPORTANT: runStorage.enterWith() MUST run before the first await in this handler,
@@ -1359,6 +1522,7 @@ export default {
 
       if (sessionKey) {
         promptPackBySession.delete(sessionKey);
+        airlockViolationsBySession.delete(sessionKey);
       }
     });
   },

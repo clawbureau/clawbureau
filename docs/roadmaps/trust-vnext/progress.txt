@@ -495,3 +495,20 @@ Started: 2026-02-07T19:53:07Z
 - Quality checks
   - `cd services/clawverify && npm test && npm run typecheck && npm run lint`
 ---
+## 2026-02-11T21:15:00Z - OCL-US-001
+- What was implemented
+  - Added OpenClaw Airlock controls in `@openclaw/provider-clawproxy`:
+    - new plugin config block `airlock` with `enabled`, `identityRoots`, `jobRoots`, `requireTrustedBootstrap`
+    - bootstrap files are partitioned into trusted/untrusted/unknown by root
+    - prompt-pack capture only includes trusted IdentityRoot files
+    - fail-closed guard: when `requireTrustedBootstrap=true`, non-trusted bootstrap discovery triggers `AIRLOCK_BOOTSTRAP_VIOLATION` at agent start
+  - Added integration documentation for IdentityRoot vs JobRoot partition pattern:
+    - `docs/integration/OPENCLAW_INTEGRATION.md`
+- Tests
+  - Added regression tests:
+    - `packages/openclaw-provider-clawproxy/test/airlock-bootstrap.test.mjs`
+  - Local package tests passed:
+    - `node --test test/*.test.mjs`
+- Notes
+  - This enforces sensitive-profile bootstrap partitioning without requiring OpenClaw core changes by using plugin-level fail-closed checks.
+---
