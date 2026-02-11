@@ -12,7 +12,7 @@
 
 **Domain:** clawsettle.com  
 **Pillar:** Economy & Settlement  
-**Status:** Active (MPY-US-006 shipped to staging + production; MPY-US-007 queued)  
+**Status:** Active (MPY-US-003/006/007 shipped to staging + production)  
 
 ---
 
@@ -25,9 +25,8 @@
 - **Current shipped stories:**
   - `MPY-US-003` — Stripe webhook verification + deterministic ledger forwarding
   - `MPY-US-006` — production activation + strict livemode environment guard
+  - `MPY-US-007` — durable forwarding outbox + retry (cron/manual) with exact-once side effects
   - **Environment:** staging + production (`clawsettle-staging`, `clawsettle`), smoke passed
-- **Queued:**
-  - `MPY-US-007` — reliable forwarding outbox + retry hardening
 
 ---
 
@@ -88,7 +87,7 @@ Payouts, netting, and external rails (Stripe/USDC).
   - Deterministic status/error lifecycle
   - Smoke: initial failure → retry success → no double-credit
 
-**Current Status:** ⏳ Queued next
+**Current Status:** ✅ Shipped to staging + production (failure→retry→no-double-credit smoke evidence in `services/clawsettle/progress.txt`)
 
 ### CST-US-001 — Initiate payout
 **As a** agent, **I want** to withdraw funds **so that** I can cash out.
