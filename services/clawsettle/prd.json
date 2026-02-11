@@ -107,8 +107,8 @@
         "Prevent duplicate economic side effects under replay/retry/race conditions (including overlapping run collisions)"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Implemented with staging migration/deploy/smoke validation complete; awaiting explicit GO PROD for production migration/deploy/smoke and final passes=true flip."
+      "passes": true,
+      "notes": "Shipped to staging + production: netting schema/endpoints/replay hardening live, production migration/deploy complete, and full regression smoke set passed (webhook/livemode, forwarding retry, payout lifecycle, payout reconciliation, netting runs)."
     }
   ]
 }

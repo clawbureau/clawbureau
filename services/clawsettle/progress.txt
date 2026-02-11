@@ -340,3 +340,44 @@ Started: 2026-02-12
   - Production migration/deploy/smoke intentionally NOT executed yet.
   - Await explicit **GO PROD** before production rollout and `passes=true` flip.
 ---
+
+## 2026-02-11T18:35:00Z - MPY-US-011 GO PROD rollout (production window)
+- Scope executed (ordered)
+  1) ledger compatibility fix deployed to production first (dependency guard)
+  2) ledger regression smoke executed
+  3) clawsettle migration `0004_create_netting_runs.sql` applied in production
+  4) clawsettle production deploy completed
+  5) full clawsettle regression set executed in production:
+     - webhook/livemode
+     - forwarding retry exact-once
+     - payout lifecycle
+     - payout reconciliation
+     - netting runs
+  6) tracker flip: MPY-US-011 `passes=true`
+- Production deploy/migration evidence
+  - `clawledger` production deploy version: `7262d8df-6271-40bd-ae80-1b159a8c8d4b`
+  - `clawsettle` production migration applied:
+    - `0004_create_netting_runs.sql`
+  - `clawsettle` production deploy version: `6abcb814-217b-4c61-b59f-452e3021e02e`
+- Production smoke evidence
+  - Ledger regression:
+    - `LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-ledger-payment-settlements.mjs --env prod --parallel-burst 8`
+    - pass: confirm/replay/reversal + burst exact-once invariants
+  - clawsettle regression set:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-forwarding-retry.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-lifecycle.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-reconciliation.mjs --env prod`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-netting-runs.mjs --env prod`
+  - highlights:
+    - webhook/livemode: signature reject + `LIVEMODE_MISMATCH` fail-closed + forward/replay OK
+    - forwarding retry: fail-first (`LEDGER_INGEST_FAILED`) -> retry success -> replay dedupe -> no double-credit
+    - payout lifecycle: paid finalize exact-once + failed rollback exact-once
+    - reconciliation: JSON/CSV hash parity deterministic
+    - netting: run applied, replay deduped, deterministic report hash parity, post-run no duplicate side effects
+- Secrets ops (names only; values not logged)
+  - production `LEDGER_ADMIN_KEY` updated for `clawledger`, `clawsettle`, `clawproxy`, `clawescrow`
+  - production `SETTLE_ADMIN_KEY` and `STRIPE_WEBHOOK_SIGNING_SECRET` updated for `clawsettle`
+- Release status
+  - MPY-US-011 shipped to staging + production.
+---

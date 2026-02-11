@@ -12,7 +12,7 @@
 
 **Domain:** clawsettle.com  
 **Pillar:** Economy & Settlement  
-**Status:** Active (MPY-US-003/006/007/008/009/010 shipped; MPY-US-011 staging-validated, prod pending GO PROD)  
+**Status:** Active (MPY-US-003/006/007/008/009/010/011 shipped)  
 
 ---
 
@@ -29,9 +29,8 @@
   - `MPY-US-008` (`CST-US-001`) — payout initiation + deterministic lock semantics
   - `MPY-US-009` (`CST-US-003`) — payout lifecycle state machine + status endpoint
   - `MPY-US-010` (`CST-US-004`) — reconciliation reports + ops controls
-  - **Environment:** staging + production (`clawsettle-staging`, `clawsettle`), smoke passed
-- **In progress (staging complete, prod pending explicit GO PROD):**
   - `MPY-US-011` (`CST-US-002`) — deterministic netting engine
+  - **Environment:** staging + production (`clawsettle-staging`, `clawsettle`), smoke passed
 
 ---
 
@@ -117,7 +116,7 @@ Payouts, netting, and external rails (Stripe/USDC).
   - Candidate payout selection + entry ordering is deterministic and minor-unit only
   - Overlapping run collisions and retries/replays do not double-apply ledger side effects
 
-**Current Status:** 🚧 Implemented + staging-validated (migration/deploy/smoke complete), awaiting explicit GO PROD
+**Current Status:** ✅ Shipped to staging + production (netting migration/deploy complete; regression smokes passed including netting runs)
 
 ### MPY-US-009 (CST-US-003) — Payout lifecycle state machine + status endpoint
 **As an** operator, **I want** payout lifecycle transitions to be explicit and exact-once **so that** webhook replays/retries cannot cause double-release or double-credit behavior.

@@ -502,3 +502,15 @@ Started: 2026-02-02T03:08:26.936251
 - Validation signal
   - clawsettle staging netting smoke progressed from failing runs (`EVENT_WRITE_FAILED`) to applied netting runs after ledger deploy.
 ---
+
+## 2026-02-11T18:35:00Z - netting compatibility fix production rollout + regression smoke
+- What was implemented
+  - Deployed ledger compatibility bridge (`ensureClearingMirrorUserAccount`) to production before clawsettle MPY-US-011 production cut.
+- Deploy evidence
+  - `clawledger` production version: `7262d8df-6271-40bd-ae80-1b159a8c8d4b`
+- Regression smoke
+  - `LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-ledger-payment-settlements.mjs --env prod --parallel-burst 8`
+  - pass: baseline confirm/replay/reversal path + burst exact-once dedupe invariants preserved.
+- Secrets ops (names only)
+  - production `LEDGER_ADMIN_KEY` updated.
+---
