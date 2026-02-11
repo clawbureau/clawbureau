@@ -12,6 +12,8 @@ import type { ErrorObject } from 'ajv';
 import {
   validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
+  validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
+  validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
   validateModelIdentityV1 as validateModelIdentityV1Generated,
   validateUrmV1 as validateUrmV1Generated,
   validatePromptPackV1 as validatePromptPackV1Generated,
@@ -39,6 +41,12 @@ const validateProofBundleEnvelopeV1Fn =
 
 const validateGatewayReceiptEnvelopeV1Fn =
   validateGatewayReceiptEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateDerivationAttestationEnvelopeV1Fn =
+  validateDerivationAttestationEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateAuditResultAttestationEnvelopeV1Fn =
+  validateAuditResultAttestationEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateModelIdentityV1Fn =
   validateModelIdentityV1Generated as StandaloneValidateFunction;
@@ -189,6 +197,26 @@ export function validateGatewayReceiptEnvelopeV1(
     validateGatewayReceiptEnvelopeV1Fn,
     envelope,
     'gateway_receipt_envelope.v1'
+  );
+}
+
+export function validateDerivationAttestationEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(
+    validateDerivationAttestationEnvelopeV1Fn,
+    envelope,
+    'derivation_attestation_envelope.v1'
+  );
+}
+
+export function validateAuditResultAttestationEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(
+    validateAuditResultAttestationEnvelopeV1Fn,
+    envelope,
+    'audit_result_attestation_envelope.v1'
   );
 }
 

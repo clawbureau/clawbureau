@@ -17,6 +17,8 @@ export const ENVELOPE_TYPES = [
   'owner_attestation',
   'commit_proof',
   'execution_attestation',
+  'derivation_attestation',
+  'audit_result_attestation',
   'scoped_token',
 ] as const;
 export type EnvelopeType = (typeof ENVELOPE_TYPES)[number];
@@ -272,6 +274,115 @@ export interface VerifyReceiptResponse {
   gateway_id?: string;
   model_identity_tier?: ModelIdentityTier;
   risk_flags?: string[];
+  error?: VerificationError;
+}
+
+/**
+ * Derivation Attestation types
+ * CVF-US-017: Verify derivation attestations
+ */
+export interface DerivationAttestationPayload {
+  derivation_version: '1';
+  derivation_id: string;
+  issued_at: string;
+  input_model: unknown;
+  output_model: unknown;
+  transform: {
+    kind: string;
+    code_hash_b64u?: string;
+    params_hash_b64u?: string;
+    build_steps?: string[];
+  };
+  artifacts?: unknown[];
+  execution?: Record<string, unknown>;
+  clawlogs?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyDerivationAttestationRequest {
+  envelope: SignedEnvelope<DerivationAttestationPayload>;
+}
+
+export interface VerifyDerivationAttestationResponse {
+  result: VerificationResult;
+  derivation_id?: string;
+  transform_kind?: string;
+  input_model?: {
+    provider?: string;
+    name?: string;
+    tier?: ModelIdentityTier;
+  };
+  output_model?: {
+    provider?: string;
+    name?: string;
+    tier?: ModelIdentityTier;
+  };
+  error?: VerificationError;
+}
+
+/**
+ * Audit Result Attestation types
+ * CVF-US-018: Verify audit result attestations
+ */
+export interface AuditResultAttestationPayload {
+  audit_version: '1';
+  audit_id: string;
+  issued_at: string;
+  expires_at?: string;
+  audit_pack?: {
+    pack_id?: string;
+    pack_version?: string;
+    pack_hash_b64u: string;
+  };
+  model: unknown;
+  derivation_attestation_hash_b64u?: string;
+  audit_code: {
+    repo_uri?: string;
+    commit_sha?: string;
+    code_hash_b64u: string;
+    uri?: string;
+  };
+  dataset: {
+    dataset_id: string;
+    dataset_hash_b64u: string;
+    access: 'public' | 'confidential';
+    uri?: string;
+  };
+  protocol: {
+    name: string;
+    config_hash_b64u: string;
+    seed?: number;
+  };
+  result: {
+    status: 'pass' | 'fail' | 'warn';
+    results_hash_b64u: string;
+    summary?: Record<string, unknown>;
+  };
+  execution?: Record<string, unknown>;
+  clawlogs?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyAuditResultAttestationRequest {
+  envelope: SignedEnvelope<AuditResultAttestationPayload>;
+}
+
+export interface VerifyAuditResultAttestationResponse {
+  result: VerificationResult;
+  audit_id?: string;
+  audit_pack_hash_b64u?: string;
+  model?: {
+    provider?: string;
+    name?: string;
+    tier?: ModelIdentityTier;
+  };
+  audit_code_hash_b64u?: string;
+  dataset_id?: string;
+  dataset_hash_b64u?: string;
+  protocol_name?: string;
+  protocol_config_hash_b64u?: string;
+  result_status?: string;
+  results_hash_b64u?: string;
   error?: VerificationError;
 }
 

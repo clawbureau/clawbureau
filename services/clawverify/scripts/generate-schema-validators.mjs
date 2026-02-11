@@ -27,6 +27,13 @@ function readJson(relPath) {
 
 const receiptBinding = readJson('packages/schema/poh/receipt_binding.v1.json');
 const modelIdentity = readJson('packages/schema/poh/model_identity.v1.json');
+const logInclusionProof = readJson('packages/schema/poh/log_inclusion_proof.v1.json');
+
+const derivationAttestation = readJson('packages/schema/poh/derivation_attestation.v1.json');
+const derivationAttestationEnvelope = readJson('packages/schema/poh/derivation_attestation_envelope.v1.json');
+const auditResultAttestation = readJson('packages/schema/poh/audit_result_attestation.v1.json');
+const auditResultAttestationEnvelope = readJson('packages/schema/poh/audit_result_attestation_envelope.v1.json');
+
 const gatewayReceipt = readJson('packages/schema/poh/gateway_receipt.v1.json');
 const gatewayReceiptEnvelope = readJson('packages/schema/poh/gateway_receipt_envelope.v1.json');
 const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
@@ -53,12 +60,19 @@ addFormats(ajv);
 // Add referenced schemas first.
 ajv.addSchema(receiptBinding);
 ajv.addSchema(modelIdentity);
+ajv.addSchema(logInclusionProof);
 
 // Add payload + envelope schemas.
 ajv.addSchema(gatewayReceipt);
 ajv.addSchema(gatewayReceiptEnvelope);
 ajv.addSchema(proofBundle);
 ajv.addSchema(proofBundleEnvelope);
+
+// Attestation payload + envelope schemas
+ajv.addSchema(derivationAttestation);
+ajv.addSchema(derivationAttestationEnvelope);
+ajv.addSchema(auditResultAttestation);
+ajv.addSchema(auditResultAttestationEnvelope);
 
 // PoH artifact schemas (URM materialization)
 ajv.addSchema(urm);
@@ -70,6 +84,8 @@ ajv.addSchema(systemPromptReport);
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
+  validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
+  validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,
   validateModelIdentityV1: modelIdentity.$id,
   validateUrmV1: urm.$id,
   validatePromptPackV1: promptPack.$id,
