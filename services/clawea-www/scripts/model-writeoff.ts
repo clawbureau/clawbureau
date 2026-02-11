@@ -350,6 +350,38 @@ function parseCommaListEnv(name: string): string[] | null {
     .filter(Boolean);
 }
 
+function normalizeDomain(d: string): string {
+  return d
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^\./, "")
+    .replace(/\/$/, "");
+}
+
+const SOURCE_ALLOWLIST_DOMAINS = (parseCommaListEnv("WRITE_OFF_SOURCE_ALLOWLIST_DOMAINS") ?? [])
+  .map(normalizeDomain)
+  .filter(Boolean);
+
+function domainAllowedByAllowlist(domain: string): boolean {
+  if (SOURCE_ALLOWLIST_DOMAINS.length === 0) return true;
+  const d = normalizeDomain(domain);
+  return SOURCE_ALLOWLIST_DOMAINS.some((a) => d === a || d.endsWith(`.${a}`) || a.endsWith(`.${d}`));
+}
+
+function applySourceAllowlist(includeDomains: string[]): string[] {
+  if (SOURCE_ALLOWLIST_DOMAINS.length === 0) return includeDomains;
+
+  const filtered = includeDomains.filter((d) => domainAllowedByAllowlist(d));
+  if (filtered.length > 0) {
+    return [...new Set(filtered.map(normalizeDomain))];
+  }
+
+  throw new Error(
+    `WRITE_OFF_SOURCE_ALLOWLIST_DOMAINS removed all include domains for target retrieval. includeDomains=${includeDomains.join(",")} allowlist=${SOURCE_ALLOWLIST_DOMAINS.join(",")}`,
+  );
+}
+
 const MODELS: string[] = (() => {
   const env = parseCommaListEnv("WRITE_OFF_MODELS");
   if (!env?.length) return DEFAULT_MODELS;
@@ -874,6 +906,53 @@ async function openrouterChat(
   throw new Error("OpenRouter retries exhausted");
 }
 
+type TokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
+function toFiniteNumber(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeTokenUsage(usage: unknown): TokenUsage {
+  const root = (usage && typeof usage === "object") ? (usage as Record<string, unknown>) : {};
+
+  const promptTokens = toFiniteNumber(
+    root.prompt_tokens
+      ?? root.promptTokens
+      ?? root.input_tokens
+      ?? root.inputTokens
+      ?? root.prompt_token_count,
+  );
+
+  const completionTokens = toFiniteNumber(
+    root.completion_tokens
+      ?? root.completionTokens
+      ?? root.output_tokens
+      ?? root.outputTokens
+      ?? root.candidates_token_count,
+  );
+
+  const totalTokensRaw = toFiniteNumber(
+    root.total_tokens
+      ?? root.totalTokens
+      ?? root.total_token_count,
+  );
+
+  const totalTokens = totalTokensRaw > 0
+    ? totalTokensRaw
+    : promptTokens + completionTokens;
+
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+  };
+}
+
 function hostMatchesDomain(host: string, domain: string): boolean {
   const h = host.toLowerCase();
   const d = domain.toLowerCase();
@@ -910,7 +989,7 @@ function selectDiverseSources(
 }
 
 async function fetchWebSources(profile: RetrievalProfile): Promise<Array<{ title: string; url: string; text: string }>> {
-  const includeDomains = profile.includeDomains;
+  const includeDomains = applySourceAllowlist(profile.includeDomains);
 
   // Prefer Exa search with includeDomains for high-quality, controllable sources.
   if (EXA_API_KEY) {
@@ -1382,6 +1461,115 @@ async function main(): Promise<void> {
   privateMap.createdAt ??= new Date().toISOString();
   privateMap.articles ??= {};
 
+  const runUsagePath = path.join(OUT_ROOT, "RUN_USAGE.json");
+  const runUsage: {
+    runId: string;
+    updatedAt: string;
+    entries: Array<{
+      slug: string;
+      candidate: string;
+      kind: "article" | "wizard";
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      chars: number;
+      ms: number;
+      generatedAt: string;
+    }>;
+    totals: TokenUsage;
+  } = (() => {
+    if (APPEND && fs.existsSync(runUsagePath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(runUsagePath, "utf-8")) as any;
+        return {
+          runId: String(parsed?.runId ?? RUN_ID),
+          updatedAt: String(parsed?.updatedAt ?? new Date().toISOString()),
+          entries: Array.isArray(parsed?.entries)
+            ? parsed.entries
+              .filter((x: any) => x && typeof x.slug === "string" && typeof x.candidate === "string")
+              .map((x: any) => ({
+                slug: String(x.slug),
+                candidate: String(x.candidate),
+                kind: x.kind === "wizard" ? "wizard" : "article",
+                promptTokens: toFiniteNumber(x.promptTokens),
+                completionTokens: toFiniteNumber(x.completionTokens),
+                totalTokens: toFiniteNumber(x.totalTokens),
+                chars: toFiniteNumber(x.chars),
+                ms: toFiniteNumber(x.ms),
+                generatedAt: String(x.generatedAt ?? new Date(0).toISOString()),
+              }))
+            : [],
+          totals: normalizeTokenUsage(parsed?.totals),
+        };
+      } catch (e: any) {
+        console.error(`Failed to parse existing RUN_USAGE.json at ${runUsagePath}: ${e?.message ?? e}`);
+      }
+    }
+
+    return {
+      runId: RUN_ID,
+      updatedAt: new Date().toISOString(),
+      entries: [],
+      totals: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    };
+  })();
+
+  const usageIndex = new Map<string, number>();
+  for (let i = 0; i < runUsage.entries.length; i++) {
+    const e = runUsage.entries[i];
+    usageIndex.set(`${e.slug}::${e.candidate}`, i);
+  }
+
+  function upsertRunUsage(row: {
+    slug: string;
+    candidate: string;
+    kind: "article" | "wizard";
+    usage: TokenUsage;
+    chars: number;
+    ms: number;
+    generatedAt: string;
+  }): void {
+    const key = `${row.slug}::${row.candidate}`;
+    const payload = {
+      slug: row.slug,
+      candidate: row.candidate,
+      kind: row.kind,
+      promptTokens: row.usage.promptTokens,
+      completionTokens: row.usage.completionTokens,
+      totalTokens: row.usage.totalTokens,
+      chars: row.chars,
+      ms: row.ms,
+      generatedAt: row.generatedAt,
+    };
+
+    const idx = usageIndex.get(key);
+    if (typeof idx === "number") {
+      runUsage.entries[idx] = payload;
+    } else {
+      runUsage.entries.push(payload);
+      usageIndex.set(key, runUsage.entries.length - 1);
+    }
+  }
+
+  function recalcRunUsageTotals(): void {
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let totalTokens = 0;
+
+    for (const row of runUsage.entries) {
+      promptTokens += toFiniteNumber(row.promptTokens);
+      completionTokens += toFiniteNumber(row.completionTokens);
+      totalTokens += toFiniteNumber(row.totalTokens);
+    }
+
+    runUsage.totals = {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+    };
+    runUsage.updatedAt = new Date().toISOString();
+  }
+
   if (!APPEND) {
     // Write top-level readme without model IDs.
     fs.writeFileSync(
@@ -1413,6 +1601,7 @@ async function main(): Promise<void> {
             lowTrustBlocked: [...LOW_TRUST_DOMAIN_SUBSTRINGS],
             githubOrgAllowlist: [...ALLOWED_GITHUB_ORGS],
             highTrustDomains: [...HIGH_TRUST_DOMAINS],
+            sourceAllowlistDomains: SOURCE_ALLOWLIST_DOMAINS,
           },
           integrationManifest: {
             path: integrationManifestPath ?? "(default)",
@@ -1584,7 +1773,7 @@ async function main(): Promise<void> {
               exaSearchAndContents: EXA_API_KEY
                 ? {
                     numResults: target.retrieval.maxResults,
-                    includeDomains: target.retrieval.includeDomains,
+                    includeDomains: applySourceAllowlist(target.retrieval.includeDomains),
                     maxCharacters: 2500,
                     maxAgeHours: 720,
                   }
@@ -1659,6 +1848,7 @@ async function main(): Promise<void> {
       });
 
       const truncated = resp.finishReason === "length" || resp.finishReason === "max_tokens";
+      const usage = normalizeTokenUsage(resp.usage);
 
       if (kind === "wizard") {
         const jsonText = extractJsonObjectText(resp.text);
@@ -1800,6 +1990,7 @@ async function main(): Promise<void> {
               generatedAt: new Date().toISOString(),
               ms: Date.now() - started,
               chars: resp.text.length,
+              usage,
               finishReason: resp.finishReason ?? null,
               truncated,
               sanitized,
@@ -1834,6 +2025,16 @@ async function main(): Promise<void> {
             2,
           ),
         );
+
+        upsertRunUsage({
+          slug,
+          candidate: job.candidate,
+          kind,
+          usage,
+          chars: resp.text.length,
+          ms: Date.now() - started,
+          generatedAt: new Date().toISOString(),
+        });
 
         const issueCount =
           (parseOk ? 0 : 1) +
@@ -1946,6 +2147,7 @@ async function main(): Promise<void> {
             generatedAt: new Date().toISOString(),
             ms: Date.now() - started,
             chars: html.length,
+            usage,
             finishReason: resp.finishReason ?? null,
             truncated,
             sanitized,
@@ -1982,6 +2184,16 @@ async function main(): Promise<void> {
         ),
       );
 
+      upsertRunUsage({
+        slug,
+        candidate: job.candidate,
+        kind,
+        usage,
+        chars: html.length,
+        ms: Date.now() - started,
+        generatedAt: new Date().toISOString(),
+      });
+
       const issueCount =
         lint.issues.length +
         missingH2.length +
@@ -2007,8 +2219,12 @@ async function main(): Promise<void> {
   ensureDir(path.dirname(PRIVATE_MAP_PATH));
   fs.writeFileSync(PRIVATE_MAP_PATH, JSON.stringify(privateMap, null, 2));
 
+  recalcRunUsageTotals();
+  fs.writeFileSync(runUsagePath, JSON.stringify(runUsage, null, 2));
+
   console.log(`\nDone.`);
   console.log(`Outputs: ${OUT_ROOT}`);
+  console.log(`Usage summary: ${runUsagePath}`);
   console.log(`Private mapping (do not share with reviewers): ${PRIVATE_MAP_PATH}`);
 }
 

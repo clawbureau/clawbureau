@@ -1,0 +1,82 @@
+{
+  "schema_name": "clawea.content_campaign",
+  "schema_version": "1.0",
+  "campaign": {
+    "id": "aeo-content-004",
+    "name": "AEO-CONTENT-004 autonomous factory baseline",
+    "seed": "2026-w06"
+  },
+  "execution": {
+    "mode": "full-run",
+    "resume": true,
+    "simulate": false
+  },
+  "targets": {
+    "slugs": [
+      "tools/okta",
+      "workflows/contract-review-approval",
+      "policy/event-chain"
+    ],
+    "indexable_only": true
+  },
+  "source_allowlist": {
+    "domains": [
+      "developers.cloudflare.com",
+      "blog.cloudflare.com",
+      "github.com",
+      "owasp.org",
+      "cheatsheetseries.owasp.org",
+      "modelcontextprotocol.io",
+      "openpolicyagent.org",
+      "learn.microsoft.com",
+      "developer.okta.com",
+      "okta.com"
+    ]
+  },
+  "model_pool": [
+    {
+      "id": "anthropic/claude-opus-4.6",
+      "enabled": true,
+      "cost_usd_per_1m_input_tokens": 15,
+      "cost_usd_per_1m_output_tokens": 75
+    },
+    {
+      "id": "openai/gpt-5.2",
+      "enabled": true,
+      "cost_usd_per_1m_input_tokens": 10,
+      "cost_usd_per_1m_output_tokens": 30
+    },
+    {
+      "id": "google/gemini-3-pro-preview",
+      "enabled": true,
+      "cost_usd_per_1m_input_tokens": 7,
+      "cost_usd_per_1m_output_tokens": 21
+    }
+  ],
+  "council": {
+    "min_mean_overall": 3.8,
+    "min_dimension_score": 3.4,
+    "max_stdev_overall": 1.25,
+    "require_top3_votes": 1
+  },
+  "publish": {
+    "mode": "canary",
+    "canary_size": 2,
+    "apply_to_articles": false,
+    "upload_to_r2": false,
+    "auto_index": false,
+    "bucket": "clawea-www-staging"
+  },
+  "budgets": {
+    "max_candidates": 60,
+    "max_prompt_tokens": 400000,
+    "max_completion_tokens": 400000,
+    "max_total_tokens": 800000,
+    "max_usd": 120,
+    "max_retryable_failures": 4
+  },
+  "reporting": {
+    "base_url": "https://clawea.com",
+    "days": 7
+  }
+}

@@ -12,7 +12,9 @@
     "index:replay": "tsx scripts/upload-to-r2.ts --auto-index --replay-failures articles/_indexing_failures.json",
     "conversion:weekly": "tsx scripts/weekly-conversion-summary.ts",
     "growth:weekly": "tsx scripts/weekly-growth-report.ts",
-    "ops:artifacts": "tsx scripts/build-growth-engine-artifacts.ts"
+    "ops:artifacts": "tsx scripts/build-growth-engine-artifacts.ts",
+    "content:factory": "tsx scripts/content-factory.ts",
+    "content:factory:dry": "tsx scripts/content-factory.ts --mode dry-run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250121.0",
