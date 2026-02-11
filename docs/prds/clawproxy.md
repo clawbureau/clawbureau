@@ -270,6 +270,29 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - When requirements are not met, reject the call with a deterministic error code
 - Emit enforcement decisions in receipt metadata (hash-only)
 
+### MPY-US-004 — Platform-paid funded-account precheck enforcement
+**As the** platform, **I want** platform-paid routing to fail closed unless account funding is provable in clawledger **so that** reserve-backed calls cannot execute against unfunded or unbound payment identities.
+
+**Acceptance Criteria:**
+- Enforce funded-account precheck for platform-paid path
+- Return deterministic `402 PAYMENT_REQUIRED` when payment account is unfunded or unbound
+- Keep BYOK path behavior unchanged
+- Include signed receipt/payment metadata proving funding-check context
+- Add tests + staging smoke (`deny-before-fund`, `allow-after-fund`)
+
+**Current Status:** ✅ Shipped to staging + production (deploy + smoke evidence in `services/clawproxy/progress.txt`)
+
+### MPY-US-005 — CST payment account binding
+**As a** security owner, **I want** payment account identity bound into CST claims **so that** callers cannot spoof payment account context via headers.
+
+**Acceptance Criteria:**
+- Bind payment account identity claim into CST issuance/validation path
+- Fail closed on claim/account mismatch
+- Preserve deterministic error semantics for mismatch denials
+- Add tests + smoke for mismatch path
+
+**Current Status:** ⏳ Queued next (after MPY-US-004)
+
 ## 8) Success Metrics
 - Receipts issued/day
 - Median proxy latency

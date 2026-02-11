@@ -386,3 +386,71 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks
   - cd services/clawproxy && npm test && npm run typecheck
 ---
+
+## 2026-02-11 - MPY-US-004 (platform-paid funded-account precheck)
+- What was implemented
+  - Enforced fail-closed funding precheck for platform-paid routing in `services/clawproxy/src/index.ts`:
+    - payment account DID resolution order:
+      - `X-Payment-Account-DID`
+      - fallback `X-Client-DID`
+      - fallback CST `sub`
+    - clawproxy now calls clawledger account endpoint before provider routing for platform-paid calls.
+    - deterministic `402 PAYMENT_REQUIRED` for:
+      - unbound payment accounts (`Account not found` in clawledger)
+      - unfunded payment accounts (`available < PLATFORM_PAID_MIN_AVAILABLE_MINOR`, default `1`)
+    - fail-closed `503 PAYMENT_CHECK_UNAVAILABLE` for dependency/config failures (missing ledger config, ledger unreachable, invalid dependency payload).
+  - BYOK path preserved:
+    - no funding precheck required when provider API key is supplied by caller.
+  - Added signed payment context to receipts for funded platform-paid requests:
+    - `_receipt.payment.fundingCheck`
+    - `_receipt_envelope.payload.metadata.payment_funding_check`
+    - includes account DID/source, account ID, available balance, minimum required balance, ledger source URL, and check timestamp.
+  - Added clawproxy staging config wiring:
+    - `LEDGER_BASE_URL` var in `services/clawproxy/wrangler.toml` (prod + staging)
+    - documented required secret `LEDGER_ADMIN_KEY` and optional `PLATFORM_PAID_MIN_AVAILABLE_MINOR`
+- Tests
+  - Added `services/clawproxy/test/platform-paid-funding.test.ts`:
+    - deny-before-fund => `402 PAYMENT_REQUIRED`
+    - allow-after-fund => request proceeds + signed funding metadata present
+    - BYOK unchanged => no ledger precheck dependency
+  - Quality checks:
+    - `cd services/clawproxy && npm test && npm run typecheck`
+    - `node scripts/docs/lint-prds.mjs`
+- Staging deploy + smoke evidence
+  - Updated staging secrets (names only):
+    - `LEDGER_ADMIN_KEY`
+    - `PLATFORM_PAID_ENABLED`
+    - `PLATFORM_OPENAI_API_KEY`
+  - Deployed `clawproxy-staging` version:
+    - `8c37bdaa-2403-4f71-8c56-62abd23f6898`
+  - Added smoke script:
+    - `scripts/poh/smoke-clawproxy-platform-paid-funding.mjs`
+  - Smoke command:
+    - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-platform-paid-funding.mjs --env staging`
+  - Smoke highlights:
+    - deny-before-fund: `402`, code `PAYMENT_REQUIRED`
+    - funding step: settlement ingest `201`, account available `1500`
+    - allow-after-fund: request no longer blocked (`status 401` upstream with receipt context), `payment.mode=platform`, `fundingCheck.status=funded`
+- Production deploy + smoke evidence
+  - Security hygiene completed before rollout:
+    - rotated/revoked previously exposed Cloudflare API token (old token now rejected as invalid)
+  - Rotated production clawledger admin key and updated production dependents (names only):
+    - `services/ledger`: `LEDGER_ADMIN_KEY`
+    - `services/clawproxy`: `LEDGER_ADMIN_KEY`, `PLATFORM_PAID_ENABLED`, `PLATFORM_OPENAI_API_KEY`
+    - `services/escrow`: `LEDGER_ADMIN_KEY`
+  - Deployed `clawproxy` production version:
+    - `fce7d81c-392c-4454-92dc-a898bbad9147`
+  - Production smoke command:
+    - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-platform-paid-funding.mjs --env prod`
+  - Production smoke highlights:
+    - deny-before-fund: `402`, code `PAYMENT_REQUIRED`, message `Platform-paid account is not bound in ledger`
+    - funding step: settlement ingest `201`, account available `1500`
+    - allow-after-fund: not blocked by funding gate (`status 401` upstream in smoke setup), receipt context contains:
+      - `_receipt.payment.mode=platform`
+      - `_receipt.payment.paid=true`
+      - `_receipt.payment.fundingCheck.status=funded`
+      - `_receipt_envelope.payload.metadata.payment_funding_check.account_id=acc_5d40c61d`
+- Release status
+  - MPY-US-004 shipped to staging + production.
+  - MPY-US-005 queued next (CST payment-account claim binding + mismatch fail-closed).
+---

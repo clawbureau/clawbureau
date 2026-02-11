@@ -14,6 +14,8 @@ import type {
   VerificationMethod,
   Receipt,
   ReceiptPayment,
+  PlatformFundingCheckContext,
+  PaymentAccountDidSource,
   VerifyReceiptRequest,
   VerifyReceiptResponse,
 } from './types';
@@ -237,6 +239,219 @@ function inferOpenAiUpstreamApi(request: Request, body: unknown): OpenAIUpstream
   return 'chat_completions';
 }
 
+type PlatformFundingCheckResult =
+  | {
+      ok: true;
+      context: PlatformFundingCheckContext;
+    }
+  | {
+      ok: false;
+      code: 'PAYMENT_REQUIRED' | 'PAYMENT_CHECK_UNAVAILABLE';
+      status: 402 | 503;
+      message: string;
+    };
+
+function readNonEmptyHeader(request: Request, name: string): string | undefined {
+  const raw = request.headers.get(name);
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function isNonNegativeIntegerString(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9]+$/.test(value);
+}
+
+function normalizeBaseUrl(urlRaw: string): string {
+  return urlRaw.replace(/\/+$/, '');
+}
+
+function parsePlatformPaidMinimumMinor(raw: string | undefined): bigint {
+  if (!raw || raw.trim().length === 0) {
+    return 1n;
+  }
+
+  const trimmed = raw.trim();
+  if (!/^[0-9]+$/.test(trimmed)) {
+    throw new Error('PLATFORM_PAID_MIN_AVAILABLE_MINOR must be a non-negative integer string');
+  }
+
+  return BigInt(trimmed);
+}
+
+function resolvePaymentAccountDid(params: {
+  request: Request;
+  clientDidHeader: string | null;
+  cstSub?: string;
+}): { accountDid?: string; source?: PaymentAccountDidSource } {
+  const fromPaymentHeader = readNonEmptyHeader(params.request, 'X-Payment-Account-DID');
+  if (fromPaymentHeader) {
+    return { accountDid: fromPaymentHeader, source: 'x-payment-account-did' };
+  }
+
+  const fromClientDid = params.clientDidHeader?.trim();
+  if (fromClientDid && fromClientDid.length > 0) {
+    return { accountDid: fromClientDid, source: 'x-client-did' };
+  }
+
+  const fromCstSub = params.cstSub?.trim();
+  if (fromCstSub && fromCstSub.length > 0) {
+    return { accountDid: fromCstSub, source: 'cst-sub' };
+  }
+
+  return {};
+}
+
+async function verifyPlatformPaidFunding(params: {
+  env: Env;
+  accountDid: string;
+  accountDidSource: PaymentAccountDidSource;
+}): Promise<PlatformFundingCheckResult> {
+  const ledgerBaseUrlRaw = params.env.LEDGER_BASE_URL?.trim();
+  if (!ledgerBaseUrlRaw) {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Platform-paid funding check is not configured (missing LEDGER_BASE_URL)',
+    };
+  }
+
+  const ledgerAdminKey = params.env.LEDGER_ADMIN_KEY?.trim();
+  if (!ledgerAdminKey) {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Platform-paid funding check is not configured (missing LEDGER_ADMIN_KEY)',
+    };
+  }
+
+  let minimumRequiredMinor: bigint;
+  try {
+    minimumRequiredMinor = parsePlatformPaidMinimumMinor(
+      params.env.PLATFORM_PAID_MIN_AVAILABLE_MINOR
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid platform-paid minimum balance config';
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message,
+    };
+  }
+
+  const ledgerBaseUrl = normalizeBaseUrl(ledgerBaseUrlRaw);
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${ledgerBaseUrl}/accounts/${params.accountDid}`,
+      {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${ledgerAdminKey}`,
+        },
+      }
+    );
+  } catch {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Failed to reach clawledger for funding check',
+    };
+  }
+
+  if (response.status === 404) {
+    return {
+      ok: false,
+      code: 'PAYMENT_REQUIRED',
+      status: 402,
+      message: 'Platform-paid account is not bound in ledger',
+    };
+  }
+
+  if (response.status < 200 || response.status >= 300) {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: `Funding check dependency returned HTTP ${response.status}`,
+    };
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Funding check dependency returned non-JSON account payload',
+    };
+  }
+
+  if (!isRecord(body)) {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Funding check dependency returned invalid account payload',
+    };
+  }
+
+  const accountId = body.id;
+  const balances = body.balances;
+
+  if (typeof accountId !== 'string' || accountId.trim().length === 0 || !isRecord(balances)) {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Funding check dependency returned incomplete account payload',
+    };
+  }
+
+  const availableMinorRaw = balances.available;
+  if (!isNonNegativeIntegerString(availableMinorRaw)) {
+    return {
+      ok: false,
+      code: 'PAYMENT_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'Funding check dependency returned invalid available balance',
+    };
+  }
+
+  const availableMinor = BigInt(availableMinorRaw);
+
+  if (availableMinor < minimumRequiredMinor) {
+    return {
+      ok: false,
+      code: 'PAYMENT_REQUIRED',
+      status: 402,
+      message: 'Platform-paid account has insufficient available balance',
+    };
+  }
+
+  return {
+    ok: true,
+    context: {
+      status: 'funded',
+      source: 'clawledger',
+      accountDid: params.accountDid,
+      accountDidSource: params.accountDidSource,
+      accountId: accountId.trim(),
+      availableMinor: availableMinorRaw,
+      minimumRequiredMinor: minimumRequiredMinor.toString(),
+      checkedAt: new Date().toISOString(),
+      ledgerBaseUrl,
+    },
+  };
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -328,8 +543,17 @@ curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/google" \
 curl -sS -X POST "${escapeHtml(origin)}/v1/chat/completions" \
   -H "X-Provider-API-Key: $FAL_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"openrouter/openai/gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
+  -d '{"model":"openrouter/openai/gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'
 
+# Platform-paid (no BYOK key): requires funded ledger account context
+curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
+  -H "X-CST: $CST_TOKEN" \
+  -H "X-Client-DID: did:key:..." \
+  -H "X-Payment-Account-DID: did:key:..." \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
+
+      <p>Platform-paid calls fail-closed with <code>402 PAYMENT_REQUIRED</code> if the payment account is unbound or unfunded in clawledger.</p>
       <p>See also: <a href="/skill.md">/skill.md</a></p>
     </main>
   </body>
@@ -396,6 +620,15 @@ When \`STRICT_AUTH_HEADERS=true\`:
 - Rejects \`Authorization\` header entirely
 - Rejects provider-compatible BYOK headers (\`x-api-key\`, \`anthropic-api-key\`, \`x-goog-api-key\`)
 - Requires CST via \`X-CST\`/\`X-Scoped-Token\` and provider keys via \`X-Provider-API-Key\`
+
+### Platform-paid funding precheck
+For platform-paid calls (no provider BYOK key), clawproxy performs a fail-closed funding check against clawledger before provider routing:
+- Payment account DID is read from \`X-Payment-Account-DID\` (fallback: \`X-Client-DID\`, then CST \`sub\`)
+- Account must be bound in clawledger and have enough available balance (default minimum: \`1\` minor unit)
+- If unbound or unfunded, clawproxy returns deterministic \`402\` with code \`PAYMENT_REQUIRED\`
+- Successful platform-paid receipts include signed payment funding context in:
+  - \`_receipt.payment.fundingCheck\`
+  - \`_receipt_envelope.payload.metadata.payment_funding_check\`
 
 ## Receipt Binding Headers
 
@@ -1267,6 +1500,7 @@ async function handleProxy(
 
   let apiKey: string;
   let payment: ReceiptPayment;
+  let platformFundingCheckMeta: Record<string, unknown> | undefined;
 
   if (apiKeyCandidate) {
     apiKey = apiKeyCandidate;
@@ -1293,6 +1527,36 @@ async function handleProxy(
       );
     }
 
+    const resolvedPaymentAccount = resolvePaymentAccountDid({
+      request,
+      clientDidHeader,
+      cstSub: validatedCst?.claims.sub,
+    });
+
+    if (!resolvedPaymentAccount.accountDid || !resolvedPaymentAccount.source) {
+      return errorResponseWithRateLimit(
+        'PAYMENT_REQUIRED',
+        'Payment account context is required for platform-paid requests',
+        402,
+        rateLimitInfo
+      );
+    }
+
+    const fundingCheck = await verifyPlatformPaidFunding({
+      env,
+      accountDid: resolvedPaymentAccount.accountDid,
+      accountDidSource: resolvedPaymentAccount.source,
+    });
+
+    if (!fundingCheck.ok) {
+      return errorResponseWithRateLimit(
+        fundingCheck.code,
+        fundingCheck.message,
+        fundingCheck.status,
+        rateLimitInfo
+      );
+    }
+
     const platformApiKey =
       provider === 'anthropic'
         ? env.PLATFORM_ANTHROPIC_API_KEY
@@ -1315,7 +1579,28 @@ async function handleProxy(
       ? `clawledger:reserve:${binding.nonce}`
       : `clawledger:reserve:${crypto.randomUUID()}`;
 
-    payment = { mode: 'platform', paid: true, ledgerRef };
+    payment = {
+      mode: 'platform',
+      paid: true,
+      ledgerRef,
+      fundingCheck: fundingCheck.context,
+    };
+
+    platformFundingCheckMeta = {
+      payment_mode: 'platform',
+      payment_ledger_ref: ledgerRef,
+      payment_funding_check: {
+        status: fundingCheck.context.status,
+        source: fundingCheck.context.source,
+        account_did: fundingCheck.context.accountDid,
+        account_did_source: fundingCheck.context.accountDidSource,
+        account_id: fundingCheck.context.accountId,
+        available_minor: fundingCheck.context.availableMinor,
+        minimum_required_minor: fundingCheck.context.minimumRequiredMinor,
+        checked_at: fundingCheck.context.checkedAt,
+        ledger_base_url: fundingCheck.context.ledgerBaseUrl,
+      },
+    };
   }
 
   // Read and validate request body
@@ -1682,6 +1967,7 @@ async function handleProxy(
                 ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
                 : {}),
               ...(wpcModelIdentityMeta ?? {}),
+              ...(platformFundingCheckMeta ?? {}),
             },
           });
 
@@ -1814,6 +2100,7 @@ async function handleProxy(
           ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
           : {}),
         ...(wpcModelIdentityMeta ?? {}),
+        ...(platformFundingCheckMeta ?? {}),
       },
     });
 

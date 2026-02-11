@@ -232,6 +232,35 @@
       "priority": 16,
       "passes": true,
       "notes": "clawproxy now emits model_identity and model_identity_hash_b64u in _receipt_envelope.payload.metadata for all gateway receipts."
+    },
+    {
+      "id": "MPY-US-004",
+      "title": "Platform-paid funded-account precheck enforcement",
+      "description": "As the platform, I want platform-paid proxy calls to fail closed unless the payment account is provably funded in clawledger so that reserve-backed routing cannot spend against unfunded or unbound identities.",
+      "acceptanceCriteria": [
+        "Enforce funded-account precheck for platform-paid path",
+        "Return deterministic 402 PAYMENT_REQUIRED when payment account is unfunded or unbound",
+        "Keep BYOK path behavior unchanged",
+        "Include signed receipt/payment metadata proving funding-check context",
+        "Add unit tests and staging smoke for deny-before-fund and allow-after-fund"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Shipped to staging + production: platform-paid calls now perform clawledger funding precheck and fail with deterministic 402 PAYMENT_REQUIRED for unbound/unfunded accounts; funded path emits signed payment_funding_check receipt metadata. Production deploy version: fce7d81c-392c-4454-92dc-a898bbad9147."
+    },
+    {
+      "id": "MPY-US-005",
+      "title": "CST payment account binding",
+      "description": "As a security owner, I want payment account identity bound into CST claims so callers cannot spoof account context headers on platform-paid requests.",
+      "acceptanceCriteria": [
+        "Bind payment account identity claim into CST issuance/validation path",
+        "Fail closed on claim/header account mismatch",
+        "Preserve deterministic authorization errors",
+        "Add tests and smoke coverage for mismatch denial"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Queued after MPY-US-004"
     }
   ]
 }

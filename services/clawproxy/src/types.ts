@@ -60,6 +60,15 @@ export interface Env {
   PLATFORM_ANTHROPIC_API_KEY?: string;
   PLATFORM_OPENAI_API_KEY?: string;
   PLATFORM_GOOGLE_API_KEY?: string;
+
+  /** clawledger base URL used for platform-paid funding checks. */
+  LEDGER_BASE_URL?: string;
+
+  /** clawledger admin key used for funding checks (Authorization: Bearer). */
+  LEDGER_ADMIN_KEY?: string;
+
+  /** Minimum required available balance (minor units) for platform-paid calls. Default: 1. */
+  PLATFORM_PAID_MIN_AVAILABLE_MINOR?: string;
 }
 
 /**
@@ -157,12 +166,31 @@ export interface ReceiptBinding {
  */
 export type ReceiptPaymentMode = 'user' | 'platform';
 
+export type PaymentAccountDidSource =
+  | 'x-payment-account-did'
+  | 'x-client-did'
+  | 'cst-sub';
+
+export interface PlatformFundingCheckContext {
+  status: 'funded';
+  source: 'clawledger';
+  accountDid: string;
+  accountDidSource: PaymentAccountDidSource;
+  accountId: string;
+  availableMinor: string;
+  minimumRequiredMinor: string;
+  checkedAt: string;
+  ledgerBaseUrl: string;
+}
+
 export interface ReceiptPayment {
   mode: ReceiptPaymentMode;
   /** True when platform reserve credits were spent */
   paid: boolean;
   /** Reference to the ledger entry that recorded the spend (when paid=true) */
   ledgerRef?: string;
+  /** Proof context for platform-paid precheck (present for funded platform calls). */
+  fundingCheck?: PlatformFundingCheckContext;
 }
 
 /**

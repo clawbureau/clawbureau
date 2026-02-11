@@ -31,11 +31,16 @@ WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
 # Allowlisted WPC signer DIDs (did:key:...)
 WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK"
 
+# clawledger integration (platform-paid funding precheck)
+LEDGER_BASE_URL = "https://clawledger.com"
+
 # Secrets/vars to be set via wrangler secret put (or via dashboard vars):
 # - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
 # - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
 # - PLATFORM_PAID_ENABLED ("true" to allow platform-paid mode; optional)
 # - PLATFORM_OPENAI_API_KEY / PLATFORM_ANTHROPIC_API_KEY / PLATFORM_GOOGLE_API_KEY (optional)
+# - LEDGER_ADMIN_KEY (required when PLATFORM_PAID_ENABLED=true)
+# - PLATFORM_PAID_MIN_AVAILABLE_MINOR (optional, default "1")
 # - STRICT_AUTH_HEADERS ("true" to disable Authorization overload; require X-CST + X-Provider-API-Key; optional)
 
 [env.staging]
@@ -60,3 +65,5 @@ CST_AUDIENCE = "clawproxy.com"
 
 WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
 WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK,did:key:z6Mkoy4MkeFsYo2VTuRRVZ6QoguECQgT1wRJkhfoAu2bHKZt"
+
+LEDGER_BASE_URL = "https://staging.clawledger.com"
