@@ -20,9 +20,12 @@ const getArg = (name: string) => {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
 };
 
-const TOKEN = process.env.INDEX_AUTOMATION_TOKEN ?? process.env.CLAWEA_INDEX_AUTOMATION_TOKEN;
-if (!TOKEN) {
-  console.error("Missing INDEX_AUTOMATION_TOKEN (or CLAWEA_INDEX_AUTOMATION_TOKEN)");
+const AUTOMATION_TOKEN = process.env.INDEX_AUTOMATION_TOKEN
+  ?? process.env.CLAWEA_INDEX_AUTOMATION_TOKEN;
+const OPS_TOKEN = process.env.LEADS_API_TOKEN ?? AUTOMATION_TOKEN;
+
+if (!AUTOMATION_TOKEN && !OPS_TOKEN) {
+  console.error("Missing LEADS_API_TOKEN and INDEX_AUTOMATION_TOKEN (or CLAWEA_INDEX_AUTOMATION_TOKEN)");
   process.exit(1);
 }
 
@@ -31,6 +34,9 @@ const eventsEndpoint = getArg("events-endpoint") ?? `${baseUrl.replace(/\/+$/, "
 const queueEndpoint = getArg("queue-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/index-queue/status`;
 const leadsEndpoint = getArg("leads-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/leads/status`;
 const winnersEndpoint = getArg("winners-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/experiments/winners`;
+const routingEndpoint = getArg("routing-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/routing/status`;
+const attributionEndpoint = getArg("attribution-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/attribution/summary`;
+const recommendationEndpoint = getArg("recommendation-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/experiments/recommend`;
 const days = Math.max(1, Math.min(90, Number(getArg("days") ?? process.env.CLAWEA_GROWTH_DAYS ?? "7")));
 
 const now = new Date();
@@ -97,12 +103,41 @@ function bulletsLeadStatus(rows: any[] | undefined, fallback = "- none"): string
     .join("\n");
 }
 
-async function authedJson(url: string, init: RequestInit): Promise<any> {
+function bulletsRouting(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 8)
+    .map((r) => `- ${r.key}: ${r.count}`)
+    .join("\n");
+}
+
+function bulletsAttribution(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 10)
+    .map((r) => `- ${r.source}/${r.pageFamily} (${r.variant || "na"}): leads=${r.leads}, booked=${r.booked}, bookedRate=${r.bookedRate}`)
+    .join("\n");
+}
+
+function bulletsRecommendations(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 12)
+    .map((r) => {
+      if (!r?.recommendedVariant) {
+        return `- ${r?.pageFamily ?? "unknown"}: no recommendation (${Array.isArray(r?.guardrailNotes) ? r.guardrailNotes.join(",") : "guardrail"})`;
+      }
+      return `- ${r.pageFamily}: recommend ${r.recommendedVariant} (bookedRate=${r?.winner?.bookedRate ?? 0}, impressions=${r?.winner?.impressions ?? 0})`;
+    })
+    .join("\n");
+}
+
+async function authedJson(url: string, init: RequestInit, token: string): Promise<any> {
   const res = await fetch(url, {
     ...init,
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${TOKEN}`,
+      authorization: `Bearer ${token}`,
       ...(init.headers ?? {}),
     },
   });
@@ -133,22 +168,46 @@ async function main() {
       to: to.toISOString(),
       days,
     }),
-  });
+  }, AUTOMATION_TOKEN ?? OPS_TOKEN!);
 
-  const queue = await authedJson(queueEndpoint, { method: "GET" });
+  const queue = await authedJson(queueEndpoint, { method: "GET" }, AUTOMATION_TOKEN ?? OPS_TOKEN!);
 
   let leads: any = null;
   try {
-    leads = await authedJson(leadsEndpoint, { method: "GET" });
+    leads = await authedJson(leadsEndpoint, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
   } catch (err: any) {
     leads = { ok: false, error: String(err?.message ?? "LEADS_STATUS_UNAVAILABLE") };
   }
 
   let winners: any = null;
   try {
-    winners = await authedJson(winnersEndpoint, { method: "GET" });
+    winners = await authedJson(winnersEndpoint, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
   } catch (err: any) {
     winners = { ok: false, error: String(err?.message ?? "VARIANT_WINNERS_UNAVAILABLE") };
+  }
+
+  let routing: any = null;
+  try {
+    routing = await authedJson(routingEndpoint, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    routing = { ok: false, error: String(err?.message ?? "ROUTING_STATUS_UNAVAILABLE") };
+  }
+
+  let attribution: any = null;
+  try {
+    attribution = await authedJson(`${attributionEndpoint}?days=${days}`, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    attribution = { ok: false, error: String(err?.message ?? "ATTRIBUTION_SUMMARY_UNAVAILABLE") };
+  }
+
+  let recommendations: any = null;
+  try {
+    recommendations = await authedJson(recommendationEndpoint, {
+      method: "POST",
+      body: JSON.stringify({ days }),
+    }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    recommendations = { ok: false, error: String(err?.message ?? "RECOMMENDATIONS_UNAVAILABLE") };
   }
 
   const report = {
@@ -162,6 +221,9 @@ async function main() {
     queue,
     leads,
     winners,
+    routing,
+    attribution,
+    recommendations,
     highlights: {
       topLandingPages: topRows(events?.breakdown?.topPages, 10),
       searchToClick: {
@@ -184,6 +246,18 @@ async function main() {
       leadStatus: Array.isArray(leads?.breakdown?.byStatus)
         ? leads.breakdown.byStatus.slice(0, 12)
         : [],
+      routingState: Array.isArray(routing?.summary?.byState)
+        ? routing.summary.byState.slice(0, 12)
+        : [],
+      routingSegment: Array.isArray(routing?.summary?.bySegment)
+        ? routing.summary.bySegment.slice(0, 12)
+        : [],
+      attributionRows: Array.isArray(attribution?.rows)
+        ? attribution.rows.slice(0, 16)
+        : [],
+      winnerRecommendations: Array.isArray(recommendations?.recommendations)
+        ? recommendations.recommendations.slice(0, 16)
+        : [],
       indexingBacklog: queue?.summary ?? null,
       indexingLastRun: queue?.lastRun ?? null,
     },
@@ -205,6 +279,14 @@ async function main() {
     + `## Variant performance (events funnel)\n${bulletsVariant(report.highlights.variantPerformance)}\n\n`
     + `## Weekly winner candidates by page family\n${bulletsWinners(report.highlights.winnerByFamily)}\n\n`
     + `## Lead pipeline status\n${bulletsLeadStatus(report.highlights.leadStatus)}\n\n`
+    + `## Routing queue status\n`
+    + `### By state\n${bulletsRouting(report.highlights.routingState)}\n\n`
+    + `### By segment\n${bulletsRouting(report.highlights.routingSegment)}\n\n`
+    + `### Dead-letter\n`
+    + `- total: ${Number(routing?.summary?.deadLetter?.total ?? 0)}\n`
+    + `- pending: ${Number(routing?.summary?.deadLetter?.pending ?? 0)}\n\n`
+    + `## Attribution summary (lead → booked)\n${bulletsAttribution(report.highlights.attributionRows)}\n\n`
+    + `## Experiment recommendations (guardrailed)\n${bulletsRecommendations(report.highlights.winnerRecommendations)}\n\n`
     + `## Indexing backlog\n`
     + `- totalEntries: ${Number(queue?.summary?.totalEntries ?? 0)}\n`
     + `- nextAttemptAt: ${queue?.summary?.nextAttemptAt ?? "none"}\n`

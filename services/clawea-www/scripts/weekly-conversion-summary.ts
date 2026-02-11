@@ -19,10 +19,12 @@ const getArg = (name: string) => {
 
 const ENDPOINT = getArg("endpoint") ?? process.env.CLAWEA_EVENTS_SUMMARY_ENDPOINT ?? "https://clawea.com/api/events/summary";
 const DAYS = Math.max(1, Math.min(56, Number(getArg("days") ?? process.env.CLAWEA_CONVERSION_DAYS ?? "7")));
-const TOKEN = process.env.INDEX_AUTOMATION_TOKEN ?? process.env.CLAWEA_INDEX_AUTOMATION_TOKEN;
+const TOKEN = process.env.LEADS_API_TOKEN
+  ?? process.env.INDEX_AUTOMATION_TOKEN
+  ?? process.env.CLAWEA_INDEX_AUTOMATION_TOKEN;
 
 if (!TOKEN) {
-  console.error("Missing INDEX_AUTOMATION_TOKEN (or CLAWEA_INDEX_AUTOMATION_TOKEN)");
+  console.error("Missing LEADS_API_TOKEN or INDEX_AUTOMATION_TOKEN (or CLAWEA_INDEX_AUTOMATION_TOKEN)");
   process.exit(1);
 }
 
@@ -85,7 +87,12 @@ async function main() {
     `- totalEvents: ${Number(totals.events ?? 0)}\n` +
     `- contactIntentViews: ${Number(totals.contactIntentViews ?? 0)}\n` +
     `- contactIntentActions: ${Number(totals.contactIntentActions ?? 0)}\n` +
-    `- intentToActionRate: ${Number(totals.intentToActionRate ?? 0)}\n\n` +
+    `- leadSubmits: ${Number(totals.leadSubmits ?? 0)}\n` +
+    `- bookingSubmits: ${Number(totals.bookingSubmits ?? 0)}\n` +
+    `- bookingCompletions: ${Number(totals.bookingCompletions ?? 0)}\n` +
+    `- intentToActionRate: ${Number(totals.intentToActionRate ?? 0)}\n` +
+    `- leadToBookingRate: ${Number(totals.leadToBookingRate ?? 0)}\n` +
+    `- bookingCompletionRate: ${Number(totals.bookingCompletionRate ?? 0)}\n\n` +
     `## Top Sources\n${toBullet(pickTopRows(parsed.breakdown?.bySource))}\n\n` +
     `## Top Pages\n${toBullet(pickTopRows(parsed.breakdown?.topPages))}\n\n` +
     `## Top CTAs\n${toBullet(pickTopRows(parsed.breakdown?.topCtas))}\n`;
