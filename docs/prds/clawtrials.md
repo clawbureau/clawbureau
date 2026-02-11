@@ -23,10 +23,17 @@
 - Staging deployment + validation:
   - `staging.clawtrials.com` route active
   - workers.dev endpoint active (`https://clawtrials-staging.generaite.workers.dev`)
-  - evidence artifact: `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+  - latest staging version (CBT-OPS-003 run): `2a7af0d8-d91e-45ba-8d9d-48af3846d016`
+  - evidence artifacts:
+    - `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+    - `artifacts/simulations/clawbounties/2026-02-11T21-54-21-876Z-prod-gate/gate-report.json` (route + harness preflight checks)
 
 ### Not yet implemented
 - Full dispute intake / judge assignment / arbitration workflows remain roadmap scope.
+
+### Current cross-service blocker (CBT-OPS-003)
+- Requester scoped token generation for clawbounties staging is currently blocked by clawscope signing-key mismatch (`TOKEN_UNKNOWN_KID`) for locally minted requester tokens.
+- This blocks full requester-authenticated marketplace E2E gate pass even though clawtrials route/harness checks are healthy.
 
 ---
 

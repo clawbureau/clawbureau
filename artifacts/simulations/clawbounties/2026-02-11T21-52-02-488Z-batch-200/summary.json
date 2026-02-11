@@ -1,0 +1,270 @@
+{
+  "ok": false,
+  "run_label": "cbt-ops-003-scale200",
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "clawtrials_base_url": "https://staging.clawtrials.com",
+  "total_jobs": 200,
+  "concurrency": 10,
+  "reward_minor": "200",
+  "harness_id": "th_smoke_pass_v1",
+  "requester_did_mode": "fixed",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "success_jobs": 0,
+  "failed_jobs": 200,
+  "skipped_jobs": 0,
+  "aborted": false,
+  "abort_reason": null,
+  "closure_type_breakdown": {
+    "requester": {
+      "total": 100,
+      "success": 0,
+      "failed": 100
+    },
+    "test": {
+      "total": 100,
+      "success": 0,
+      "failed": 100
+    }
+  },
+  "deterministic_error_buckets": {
+    "REQUESTER_TOKEN_INVALID": 201
+  },
+  "raw_error_buckets": {
+    "REQUESTER_TOKEN_INVALID": 201
+  },
+  "classified_error_buckets": {
+    "AUTH_CONTRACT": 201
+  },
+  "stuck_state_counts": {
+    "pending_review": 0,
+    "unknown": 200,
+    "non_terminal_other": 0,
+    "total": 200
+  },
+  "terminal_status_breakdown": {
+    "unknown": 200
+  },
+  "stuck_jobs_sample": [
+    {
+      "job_id": "cbt-ops-003-scale200-001",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-002",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-003",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-004",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-005",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-006",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-007",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-008",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-009",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-010",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-011",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-012",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-013",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-014",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-015",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-016",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-017",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-018",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-019",
+      "closure_type": "requester",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    },
+    {
+      "job_id": "cbt-ops-003-scale200-020",
+      "closure_type": "test",
+      "final_status": null,
+      "error_code": "REQUESTER_TOKEN_INVALID",
+      "error_bucket": "AUTH_CONTRACT",
+      "last_step": "post_bounty"
+    }
+  ],
+  "step_metrics": {
+    "register_worker": {
+      "success": 200,
+      "failure": 0,
+      "latency": {
+        "count": 200,
+        "min_ms": 124,
+        "max_ms": 643,
+        "avg_ms": 252.48,
+        "p95_ms": 598
+      }
+    },
+    "post_bounty": {
+      "success": 0,
+      "failure": 200,
+      "latency": {
+        "count": 200,
+        "min_ms": 23,
+        "max_ms": 161,
+        "avg_ms": 36.91,
+        "p95_ms": 96
+      }
+    }
+  },
+  "funding_preflight": {
+    "ok": false,
+    "status": 401,
+    "error_code": "REQUESTER_TOKEN_INVALID",
+    "error_bucket": "AUTH_CONTRACT",
+    "error_message": "{\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}",
+    "bounty_id": null,
+    "elapsed_ms": 42,
+    "started_at": "2026-02-11T21:51:56.597Z",
+    "ended_at": "2026-02-11T21:51:56.639Z"
+  },
+  "backpressure": {
+    "enabled": true,
+    "base_cooldown_ms": 1200,
+    "step_cooldown_ms": 600,
+    "max_cooldown_ms": 8000,
+    "insufficient_funds_stop_threshold": 3,
+    "retriable_failures": 0,
+    "insufficient_funds_failures": 0,
+    "cooldown_wait_events": 0,
+    "total_cooldown_ms": 0,
+    "executed_jobs": 200,
+    "skipped_jobs": 0,
+    "aborted": false,
+    "abort_reason": null
+  },
+  "generated_at": "2026-02-11T21:52:02.488Z",
+  "preflight": {
+    "clawbounties_health_ms": 109,
+    "clawtrials_health_ms": 68,
+    "clawbounties_health_status": 200,
+    "clawtrials_health_status": 200,
+    "requested_concurrency": 16,
+    "applied_concurrency": 10,
+    "max_concurrency": 10
+  }
+}

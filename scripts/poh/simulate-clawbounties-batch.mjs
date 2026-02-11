@@ -8,7 +8,6 @@ import {
   resolveEnvName,
   resolveBountiesBaseUrl,
   resolveTrialsBaseUrl,
-  requireEnv,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -42,12 +41,108 @@ function expectedRequesterDecision(index) {
   return index % 4 === 0 ? 'rejected' : 'approved';
 }
 
+const TERMINAL_STATUSES = new Set(['approved', 'rejected', 'invalid']);
+
+function parseBoolean(raw, fallback = false) {
+  if (raw === undefined || raw === null) return fallback;
+  const value = String(raw).trim().toLowerCase();
+  if (value === '1' || value === 'true' || value === 'yes' || value === 'on') return true;
+  if (value === '0' || value === 'false' || value === 'no' || value === 'off') return false;
+  return fallback;
+}
+
+function resolveRequesterToken(args) {
+  const fromArg = String(args.get('requester-token') || '').trim();
+  if (fromArg) return fromArg;
+
+  const fromEnv = String(process.env.REQUESTER_SCOPED_TOKEN || process.env.BOUNTIES_ADMIN_KEY || '').trim();
+  assert(
+    fromEnv.length > 0,
+    'Missing requester token. Provide --requester-token or set REQUESTER_SCOPED_TOKEN (fallback: BOUNTIES_ADMIN_KEY).'
+  );
+  return fromEnv;
+}
+
+function classifyErrorBucket(errorCode, errorMessage) {
+  const code = String(errorCode || 'UNKNOWN').trim().toUpperCase();
+  const message = String(errorMessage || '').toUpperCase();
+
+  if (code === 'ABORTED') return 'ABORTED';
+  if (message.includes('INSUFFICIENT_FUNDS') || code === 'INSUFFICIENT_FUNDS') return 'INSUFFICIENT_FUNDS';
+
+  if (
+    code === 'REQUESTER_TOKEN_REQUIRED' ||
+    code === 'REQUESTER_TOKEN_INVALID' ||
+    code === 'REQUESTER_SCOPE_REQUIRED' ||
+    code === 'REQUESTER_SUB_MISMATCH' ||
+    code === 'REQUESTER_AUDIENCE_REQUIRED' ||
+    code === 'REQUESTER_SUB_INVALID' ||
+    code === 'UNAUTHORIZED' ||
+    code === 'FORBIDDEN'
+  ) {
+    return 'AUTH_CONTRACT';
+  }
+
+  if (code === 'TEST_HARNESS_INVALID') return 'TEST_HARNESS_INVALID';
+  if (
+    code === 'TEST_HARNESS_UNAVAILABLE' ||
+    code === 'TEST_HARNESS_INVALID_RESPONSE' ||
+    code === 'TEST_HARNESS_FAILED' ||
+    code === 'TEST_HARNESS_NOT_CONFIGURED'
+  ) {
+    return 'TEST_HARNESS_UNAVAILABLE';
+  }
+
+  if (code === 'ESCROW_FAILED' || code === 'AUTO_APPROVAL_ESCROW_FAILED' || code === 'AUTO_REJECTION_ESCROW_FAILED') {
+    return 'ESCROW_UPSTREAM';
+  }
+
+  if (code === 'HTTP_429') return 'RATE_LIMITED';
+  if (code.startsWith('HTTP_5') || code.endsWith('_UNAVAILABLE') || code.endsWith('_UPSTREAM_ERROR')) {
+    return 'UPSTREAM_UNAVAILABLE';
+  }
+
+  if (code.startsWith('DB_')) return 'DB_ERROR';
+  if (code.startsWith('VERIFY_') || code === 'PROOF_INVALID' || code === 'COMMIT_PROOF_INVALID') {
+    return 'VERIFY_PIPELINE';
+  }
+
+  if (code === 'UNCAUGHT') return 'UNCAUGHT';
+  return 'OTHER';
+}
+
+function isRetriableErrorBucket(bucket) {
+  return (
+    bucket === 'RATE_LIMITED' ||
+    bucket === 'UPSTREAM_UNAVAILABLE' ||
+    bucket === 'TEST_HARNESS_UNAVAILABLE' ||
+    bucket === 'ESCROW_UPSTREAM'
+  );
+}
+
+function buildSkippedJobResult(job, reason) {
+  return {
+    job_id: job.job_id,
+    closure_type: job.closure_type,
+    ok: false,
+    skipped: true,
+    error_code: 'ABORTED',
+    error_bucket: 'ABORTED',
+    error_message: reason,
+    step_results: [],
+    started_at: null,
+    ended_at: nowIso(),
+    final_status: null,
+  };
+}
+
 async function runRequesterJob({
   jobId,
   index,
   baseUrl,
-  adminKey,
+  requesterToken,
   requesterDid,
+  rewardMinor,
 }) {
   const startedAt = nowIso();
   const stepResults = [];
@@ -65,13 +160,13 @@ async function runRequesterJob({
 
     const postRes = await postBounty({
       baseUrl,
-      requesterToken: adminKey,
+      requesterToken,
       requesterDid,
       closureType: 'requester',
       isCodeBounty: false,
       title: `Batch requester ${jobId}`,
       description: `Batch requester job ${jobId}`,
-      amountMinor: '200',
+      amountMinor: rewardMinor,
       tags: ['simulation', 'batch', 'requester'],
       metadata: { simulation: true, flow: 'requester', job_id: jobId },
       idempotencyKey: `sim:batch:req:post:${jobId}`,
@@ -160,7 +255,7 @@ async function runRequesterJob({
     const listRes = await listBountySubmissions({
       baseUrl,
       bountyId,
-      requesterToken: adminKey,
+      requesterToken,
       requesterDid,
       params: { limit: 20 },
     });
@@ -174,7 +269,7 @@ async function runRequesterJob({
     const detailBefore = await getSubmissionDetail({
       baseUrl,
       submissionId,
-      requesterToken: adminKey,
+      requesterToken,
       requesterDid,
     });
 
@@ -209,7 +304,7 @@ async function runRequesterJob({
       decisionRes = await approveBounty({
         baseUrl,
         bountyId,
-        requesterToken: adminKey,
+        requesterToken,
         requesterDid,
         submissionId,
         idempotencyKey: `sim:batch:req:approve:${jobId}`,
@@ -218,7 +313,7 @@ async function runRequesterJob({
       decisionRes = await rejectBounty({
         baseUrl,
         bountyId,
-        requesterToken: adminKey,
+        requesterToken,
         requesterDid,
         submissionId,
         idempotencyKey: `sim:batch:req:reject:${jobId}`,
@@ -258,7 +353,7 @@ async function runRequesterJob({
     const terminal = await waitForSubmissionTerminal({
       baseUrl,
       submissionId,
-      requesterToken: adminKey,
+      requesterToken,
       requesterDid,
       timeoutMs: 20_000,
       intervalMs: 700,
@@ -310,9 +405,10 @@ async function runRequesterJob({
 async function runTestJob({
   jobId,
   baseUrl,
-  adminKey,
+  requesterToken,
   requesterDid,
   harnessId,
+  rewardMinor,
 }) {
   const startedAt = nowIso();
   const stepResults = [];
@@ -330,14 +426,14 @@ async function runTestJob({
 
     const postRes = await postBounty({
       baseUrl,
-      adminKey,
+      requesterToken,
       requesterDid,
       closureType: 'test',
       isCodeBounty: true,
       testHarnessId: harnessId,
       title: `Batch test ${jobId}`,
       description: `Batch test job ${jobId}`,
-      amountMinor: '200',
+      amountMinor: rewardMinor,
       tags: ['simulation', 'batch', 'test'],
       metadata: { simulation: true, flow: 'test', job_id: jobId },
       idempotencyKey: `sim:batch:test:post:${jobId}`,
@@ -522,28 +618,154 @@ async function runTestJob({
   }
 }
 
-async function runWithConcurrency(jobs, concurrency, workerFn) {
+async function runFundingPreflight({
+  baseUrl,
+  requesterToken,
+  requesterDid,
+  amountMinor,
+  runLabel,
+}) {
+  const startedAt = nowIso();
+
+  const response = await postBounty({
+    baseUrl,
+    requesterToken,
+    requesterDid,
+    closureType: 'requester',
+    isCodeBounty: false,
+    title: `Funding preflight ${runLabel}`,
+    description: 'Funding preflight probe for batch simulation orchestration',
+    amountMinor,
+    tags: ['simulation', 'funding-preflight'],
+    metadata: {
+      simulation: true,
+      preflight: 'funding',
+      run_label: runLabel,
+    },
+    idempotencyKey: `sim:batch:funding-preflight:${runLabel}:${requesterDid}:${amountMinor}`,
+  });
+
+  const errorCode = response.ok ? null : extractErrorCode(response);
+  const errorMessage = response.ok ? null : response.text;
+
+  return {
+    ok: response.status === 200 || response.status === 201,
+    status: response.status,
+    error_code: errorCode,
+    error_bucket: errorCode ? classifyErrorBucket(errorCode, errorMessage) : null,
+    error_message: errorMessage,
+    bounty_id: response.json?.bounty_id ?? null,
+    elapsed_ms: response.elapsed_ms,
+    started_at: startedAt,
+    ended_at: nowIso(),
+  };
+}
+
+async function runWithBackpressure(jobs, options, workerFn) {
   const results = new Array(jobs.length);
   let cursor = 0;
+  let stopRequested = false;
+  let stopReason = null;
+  let throttleUntil = 0;
+  let dynamicCooldownMs = 0;
+
+  const telemetry = {
+    enabled: options.enabled,
+    base_cooldown_ms: options.baseCooldownMs,
+    step_cooldown_ms: options.stepCooldownMs,
+    max_cooldown_ms: options.maxCooldownMs,
+    insufficient_funds_stop_threshold: options.insufficientFundsStopThreshold,
+    retriable_failures: 0,
+    insufficient_funds_failures: 0,
+    cooldown_wait_events: 0,
+    total_cooldown_ms: 0,
+    executed_jobs: 0,
+    skipped_jobs: 0,
+    aborted: false,
+    abort_reason: null,
+  };
+
+  async function waitForThrottle() {
+    if (!options.enabled) return;
+    const waitMs = throttleUntil - Date.now();
+    if (waitMs <= 0) return;
+
+    telemetry.cooldown_wait_events += 1;
+    telemetry.total_cooldown_ms += waitMs;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  function registerResult(result) {
+    telemetry.executed_jobs += 1;
+
+    if (!result.ok) {
+      const bucket = result.error_bucket ?? classifyErrorBucket(result.error_code, result.error_message);
+      result.error_bucket = bucket;
+
+      if (bucket === 'INSUFFICIENT_FUNDS') {
+        telemetry.insufficient_funds_failures += 1;
+        if (
+          options.insufficientFundsStopThreshold > 0 &&
+          telemetry.insufficient_funds_failures >= options.insufficientFundsStopThreshold
+        ) {
+          stopRequested = true;
+          stopReason = `INSUFFICIENT_FUNDS_THRESHOLD_REACHED:${telemetry.insufficient_funds_failures}`;
+          telemetry.aborted = true;
+          telemetry.abort_reason = stopReason;
+        }
+      }
+
+      if (options.enabled && isRetriableErrorBucket(bucket)) {
+        telemetry.retriable_failures += 1;
+        dynamicCooldownMs = Math.min(
+          options.maxCooldownMs,
+          Math.max(options.baseCooldownMs, dynamicCooldownMs + options.stepCooldownMs)
+        );
+        throttleUntil = Math.max(throttleUntil, Date.now() + dynamicCooldownMs);
+      }
+    } else if (options.enabled && dynamicCooldownMs > 0) {
+      dynamicCooldownMs = Math.max(0, dynamicCooldownMs - options.stepCooldownMs);
+    }
+  }
 
   async function runner() {
     while (true) {
+      if (stopRequested) return;
+
       const idx = cursor;
       cursor += 1;
       if (idx >= jobs.length) return;
 
+      await waitForThrottle();
+      if (stopRequested) return;
+
       const job = jobs[idx];
-      results[idx] = await workerFn(job, idx);
+      if (!job) return;
+
+      const result = await workerFn(job, idx);
+      if (!result.ok && !result.error_bucket) {
+        result.error_bucket = classifyErrorBucket(result.error_code, result.error_message);
+      }
+
+      results[idx] = result;
+      registerResult(result);
     }
   }
 
   const workers = [];
-  for (let i = 0; i < Math.max(1, concurrency); i += 1) {
+  for (let i = 0; i < Math.max(1, options.concurrency); i += 1) {
     workers.push(runner());
   }
-
   await Promise.all(workers);
-  return results;
+
+  for (let i = 0; i < jobs.length; i += 1) {
+    if (!results[i]) {
+      results[i] = buildSkippedJobResult(jobs[i], stopReason ?? 'ABORTED');
+      telemetry.skipped_jobs += 1;
+    }
+  }
+
+  return { results, telemetry };
 }
 
 function summarize(results, {
@@ -553,37 +775,75 @@ function summarize(results, {
   total,
   concurrency,
   harnessId,
+  rewardMinor,
   runLabel,
   requesterDidMode,
   requesterDid,
+  fundingPreflight,
+  backpressure,
 }) {
   const stepBuckets = new Map();
-  const errorBuckets = {};
+  const rawErrorBuckets = {};
+  const classifiedErrorBuckets = {};
+  const terminalStatusBreakdown = {};
+
   const closureBreakdown = {
     requester: { total: 0, success: 0, failed: 0 },
     test: { total: 0, success: 0, failed: 0 },
   };
+
   const stuckStateCounts = {
     pending_review: 0,
     unknown: 0,
+    non_terminal_other: 0,
+    total: 0,
   };
 
+  const stuckJobsSample = [];
+
   for (const result of results) {
-    const closure = result.closure_type;
+    const closure = result.closure_type === 'test' ? 'test' : 'requester';
     closureBreakdown[closure].total += 1;
+
     if (result.ok) {
       closureBreakdown[closure].success += 1;
     } else {
       closureBreakdown[closure].failed += 1;
       const code = result.error_code || 'UNKNOWN';
-      errorBuckets[code] = (errorBuckets[code] || 0) + 1;
+      rawErrorBuckets[code] = (rawErrorBuckets[code] || 0) + 1;
+
+      const bucket = result.error_bucket || classifyErrorBucket(result.error_code, result.error_message);
+      classifiedErrorBuckets[bucket] = (classifiedErrorBuckets[bucket] || 0) + 1;
     }
 
-    if (result.final_status === 'pending_review') {
-      stuckStateCounts.pending_review += 1;
-    }
-    if (!result.final_status) {
-      stuckStateCounts.unknown += 1;
+    const statusKey = result.final_status ?? (result.skipped ? 'skipped' : 'unknown');
+    terminalStatusBreakdown[statusKey] = (terminalStatusBreakdown[statusKey] || 0) + 1;
+
+    const isStuck = !result.skipped && (!result.final_status || !TERMINAL_STATUSES.has(result.final_status));
+    if (isStuck) {
+      stuckStateCounts.total += 1;
+      if (result.final_status === 'pending_review') {
+        stuckStateCounts.pending_review += 1;
+      } else if (!result.final_status) {
+        stuckStateCounts.unknown += 1;
+      } else {
+        stuckStateCounts.non_terminal_other += 1;
+      }
+
+      if (stuckJobsSample.length < 20) {
+        const lastStep = Array.isArray(result.step_results) && result.step_results.length > 0
+          ? result.step_results[result.step_results.length - 1]?.step ?? null
+          : null;
+
+        stuckJobsSample.push({
+          job_id: result.job_id,
+          closure_type: result.closure_type,
+          final_status: result.final_status ?? null,
+          error_code: result.error_code ?? null,
+          error_bucket: result.error_bucket ?? null,
+          last_step: lastStep,
+        });
+      }
     }
 
     for (const step of result.step_results ?? []) {
@@ -595,13 +855,22 @@ function summarize(results, {
           latencies: [],
         });
       }
+
       const bucket = stepBuckets.get(key);
       if (step.ok) bucket.success += 1;
       else bucket.failure += 1;
+
       if (typeof step.elapsed_ms === 'number') {
         bucket.latencies.push(step.elapsed_ms);
       }
     }
+  }
+
+  if (fundingPreflight?.ok === false && fundingPreflight.error_code) {
+    const code = fundingPreflight.error_code;
+    const bucket = fundingPreflight.error_bucket || classifyErrorBucket(code, fundingPreflight.error_message);
+    rawErrorBuckets[code] = (rawErrorBuckets[code] || 0) + 1;
+    classifiedErrorBuckets[bucket] = (classifiedErrorBuckets[bucket] || 0) + 1;
   }
 
   const stepSummary = {};
@@ -616,23 +885,38 @@ function summarize(results, {
   const successJobs = results.filter((r) => r.ok).length;
   const failedJobs = results.length - successJobs;
 
+  const overallOk =
+    failedJobs === 0 &&
+    (fundingPreflight?.ok !== false) &&
+    !backpressure?.aborted;
+
   return {
-    ok: failedJobs === 0,
+    ok: overallOk,
     run_label: runLabel,
     env: envName,
     base_url: baseUrl,
     clawtrials_base_url: trialsBaseUrl,
     total_jobs: total,
     concurrency,
+    reward_minor: rewardMinor,
     harness_id: harnessId,
     requester_did_mode: requesterDidMode,
     requester_did: requesterDid,
     success_jobs: successJobs,
     failed_jobs: failedJobs,
+    skipped_jobs: backpressure?.skipped_jobs ?? 0,
+    aborted: backpressure?.aborted ?? false,
+    abort_reason: backpressure?.abort_reason ?? null,
     closure_type_breakdown: closureBreakdown,
-    deterministic_error_buckets: errorBuckets,
+    deterministic_error_buckets: rawErrorBuckets,
+    raw_error_buckets: rawErrorBuckets,
+    classified_error_buckets: classifiedErrorBuckets,
     stuck_state_counts: stuckStateCounts,
+    terminal_status_breakdown: terminalStatusBreakdown,
+    stuck_jobs_sample: stuckJobsSample,
     step_metrics: stepSummary,
+    funding_preflight: fundingPreflight,
+    backpressure,
     generated_at: nowIso(),
   };
 }
@@ -644,16 +928,47 @@ async function main() {
   const total = Number.parseInt(String(args.get('total') || '10'), 10);
   assert(Number.isFinite(total) && total > 0, 'total must be a positive integer');
 
-  const concurrency = Number.parseInt(String(args.get('concurrency') || '4'), 10);
-  assert(Number.isFinite(concurrency) && concurrency > 0, 'concurrency must be a positive integer');
+  const requestedConcurrency = Number.parseInt(String(args.get('concurrency') || '4'), 10);
+  assert(Number.isFinite(requestedConcurrency) && requestedConcurrency > 0, 'concurrency must be a positive integer');
+
+  const maxConcurrency = Number.parseInt(String(args.get('max-concurrency') || '12'), 10);
+  assert(Number.isFinite(maxConcurrency) && maxConcurrency > 0, 'max-concurrency must be a positive integer');
+
+  const concurrency = Math.min(maxConcurrency, requestedConcurrency);
+
+  const rewardMinor = String(args.get('reward-minor') || '200').trim();
+  assert(/^[0-9]+$/.test(rewardMinor), 'reward-minor must be a non-negative integer string');
+  assert(BigInt(rewardMinor) > 0n, 'reward-minor must be > 0');
 
   const runLabel = String(args.get('label') || `batch-${total}`);
   const harnessId = String(args.get('harness-id') || 'th_smoke_pass_v1');
 
+  const fundingPreflightEnabled = parseBoolean(args.get('funding-preflight'), true);
+  const fundingPreflightAmountMinor = String(args.get('funding-preflight-amount-minor') || rewardMinor).trim();
+  assert(/^[0-9]+$/.test(fundingPreflightAmountMinor), 'funding-preflight-amount-minor must be an integer string');
+
+  const continueOnFundingFailure = parseBoolean(args.get('continue-on-funding-failure'), false);
+
+  const backpressureEnabled = parseBoolean(args.get('backpressure-enabled'), true);
+  const baseCooldownMs = Number.parseInt(String(args.get('backpressure-base-cooldown-ms') || '1200'), 10);
+  const stepCooldownMs = Number.parseInt(String(args.get('backpressure-step-cooldown-ms') || '600'), 10);
+  const maxCooldownMs = Number.parseInt(String(args.get('backpressure-max-cooldown-ms') || '8000'), 10);
+  const insufficientFundsStopThreshold = Number.parseInt(
+    String(args.get('insufficient-funds-stop-threshold') || '3'),
+    10
+  );
+
+  assert(Number.isFinite(baseCooldownMs) && baseCooldownMs >= 0, 'backpressure-base-cooldown-ms must be >= 0');
+  assert(Number.isFinite(stepCooldownMs) && stepCooldownMs >= 0, 'backpressure-step-cooldown-ms must be >= 0');
+  assert(Number.isFinite(maxCooldownMs) && maxCooldownMs >= 0, 'backpressure-max-cooldown-ms must be >= 0');
+  assert(
+    Number.isFinite(insufficientFundsStopThreshold) && insufficientFundsStopThreshold >= 0,
+    'insufficient-funds-stop-threshold must be >= 0'
+  );
+
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
   const trialsBaseUrl = resolveTrialsBaseUrl(envName, args.get('clawtrials-base-url'));
-
-  const adminKey = requireEnv('BOUNTIES_ADMIN_KEY');
+  const requesterToken = resolveRequesterToken(args);
 
   const requesterDidOverrideRaw = String(args.get('requester-did') || '').trim();
   const requesterDidOverride = requesterDidOverrideRaw.length > 0 ? requesterDidOverrideRaw : null;
@@ -677,25 +992,79 @@ async function main() {
     };
   });
 
-  const results = await runWithConcurrency(jobs, concurrency, async (job, idx) => {
-    if (job.closure_type === 'requester') {
-      return runRequesterJob({
-        jobId: job.job_id,
-        index: idx,
+  const fundingRequesterDid = requesterDidOverride ?? jobs[0]?.requester_did ?? randomDid('funding');
+  const fundingPreflight = fundingPreflightEnabled
+    ? await runFundingPreflight({
         baseUrl,
-        adminKey,
-        requesterDid: job.requester_did,
-      });
-    }
+        requesterToken,
+        requesterDid: fundingRequesterDid,
+        amountMinor: fundingPreflightAmountMinor,
+        runLabel,
+      })
+    : {
+        ok: true,
+        skipped: true,
+        reason: 'disabled',
+      };
 
-    return runTestJob({
-      jobId: job.job_id,
-      baseUrl,
-      adminKey,
-      requesterDid: job.requester_did,
-      harnessId,
-    });
-  });
+  let results;
+  let backpressure;
+
+  if (!fundingPreflight.ok && !continueOnFundingFailure) {
+    const reason = `FUNDING_PREFLIGHT_FAILED:${fundingPreflight.error_code ?? 'UNKNOWN'}`;
+    results = jobs.map((job) => buildSkippedJobResult(job, reason));
+    backpressure = {
+      enabled: backpressureEnabled,
+      base_cooldown_ms: baseCooldownMs,
+      step_cooldown_ms: stepCooldownMs,
+      max_cooldown_ms: maxCooldownMs,
+      insufficient_funds_stop_threshold: insufficientFundsStopThreshold,
+      retriable_failures: 0,
+      insufficient_funds_failures: fundingPreflight.error_bucket === 'INSUFFICIENT_FUNDS' ? 1 : 0,
+      cooldown_wait_events: 0,
+      total_cooldown_ms: 0,
+      executed_jobs: 0,
+      skipped_jobs: jobs.length,
+      aborted: true,
+      abort_reason: reason,
+    };
+  } else {
+    const run = await runWithBackpressure(
+      jobs,
+      {
+        concurrency,
+        enabled: backpressureEnabled,
+        baseCooldownMs,
+        stepCooldownMs,
+        maxCooldownMs,
+        insufficientFundsStopThreshold,
+      },
+      async (job, idx) => {
+        if (job.closure_type === 'requester') {
+          return runRequesterJob({
+            jobId: job.job_id,
+            index: idx,
+            baseUrl,
+            requesterToken,
+            requesterDid: job.requester_did,
+            rewardMinor,
+          });
+        }
+
+        return runTestJob({
+          jobId: job.job_id,
+          baseUrl,
+          requesterToken,
+          requesterDid: job.requester_did,
+          harnessId,
+          rewardMinor,
+        });
+      }
+    );
+
+    results = run.results;
+    backpressure = run.telemetry;
+  }
 
   const summary = summarize(results, {
     envName,
@@ -704,9 +1073,12 @@ async function main() {
     total,
     concurrency,
     harnessId,
+    rewardMinor,
     runLabel,
     requesterDidMode: requesterDidOverride ? 'fixed' : 'per-job',
     requesterDid: requesterDidOverride,
+    fundingPreflight,
+    backpressure,
   });
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -718,6 +1090,11 @@ async function main() {
     preflight: {
       clawbounties_health_ms: bountiesHealth.elapsed_ms,
       clawtrials_health_ms: trialsHealth.elapsed_ms,
+      clawbounties_health_status: bountiesHealth.status,
+      clawtrials_health_status: trialsHealth.status,
+      requested_concurrency: requestedConcurrency,
+      applied_concurrency: concurrency,
+      max_concurrency: maxConcurrency,
     },
   });
 

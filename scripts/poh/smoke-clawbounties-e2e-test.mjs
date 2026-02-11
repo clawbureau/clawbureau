@@ -8,7 +8,6 @@ import {
   resolveEnvName,
   resolveBountiesBaseUrl,
   resolveTrialsBaseUrl,
-  requireEnv,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -35,7 +34,13 @@ async function main() {
   const harnessId = String(args.get('harness-id') || 'th_smoke_pass_v1');
   const expectFinal = String(args.get('expect-final') || 'approved').trim();
 
-  const adminKey = requireEnv('BOUNTIES_ADMIN_KEY');
+  const requesterToken = String(
+    args.get('requester-token') || process.env.REQUESTER_SCOPED_TOKEN || process.env.BOUNTIES_ADMIN_KEY || ''
+  ).trim();
+  assert(
+    requesterToken.length > 0,
+    'Missing requester token. Provide --requester-token or set REQUESTER_SCOPED_TOKEN (fallback: BOUNTIES_ADMIN_KEY).'
+  );
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
 
@@ -63,7 +68,7 @@ async function main() {
 
   const postRes = await postBounty({
     baseUrl,
-    adminKey,
+    requesterToken,
     requesterDid,
     closureType: 'test',
     isCodeBounty: true,
