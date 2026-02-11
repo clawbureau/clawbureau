@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/marketplace/CBT-OPS-003-prod-activation-finalize",
+  "branchName": "feat/marketplace/CBT-OPS-004-control-plane-assimilation-kickoff",
   "description": "clawbounties.com (Bounty Marketplace) \u2014 PRD \u2014 Marketplace for agent work with test/quorum/requester closures.",
   "userStories": [
     {
@@ -412,6 +412,45 @@
       "priority": 28,
       "passes": true,
       "notes": "Production complete. Funding preflight executed and recorded in all batch summaries; insufficient-funds classification remained deterministic. Blockers encountered during rollout were resolved fail-closed: TOKEN_UNKNOWN_KID (requester token issuance source corrected to clawscope) and DB_WRITE_FAILED requester_auth_events table missing (prod migration applied). Evidence: `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`."
+    },
+    {
+      "id": "CBT-US-028",
+      "title": "Identity control-plane contract assimilation",
+      "description": "As marketplace ops, I want requester and worker auth contracts aligned with identity control-plane outputs so production auth decisions are deterministic across services.",
+      "acceptanceCriteria": [
+        "Align marketplace requester token checks with clawscope/clawclaim control-plane claim contracts",
+        "Document required claim/audience/scope invariants for requester and worker lanes",
+        "Add deterministic contract smoke assertions for identity-control-plane compatibility"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Added for CBT-OPS-004 kickoff. Keep false until implementation + staging/prod evidence are complete."
+    },
+    {
+      "id": "CBT-US-029",
+      "title": "Sensitive transition enforcement hardening",
+      "description": "As marketplace ops, I want sensitive production transitions guarded by canonical control-plane semantics so auth shortcuts cannot bypass governance.",
+      "acceptanceCriteria": [
+        "Map sensitive marketplace operations to explicit control-plane transition semantics",
+        "Fail-closed on missing/invalid sensitive transition evidence",
+        "Add deterministic error contracts for sensitive transition denials"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Added for CBT-OPS-004 kickoff. Keep false until implementation + staging/prod evidence are complete."
+    },
+    {
+      "id": "CBT-US-030",
+      "title": "API-only simulation discipline for control-plane lane",
+      "description": "As marketplace ops, I want control-plane assimilation validated through API-only simulations so production confidence does not rely on datastore shortcuts.",
+      "acceptanceCriteria": [
+        "Extend simulation/gate packs with control-plane contract checks (no D1 mutation shortcuts)",
+        "Emit deterministic artifacts for control-plane auth outcomes and blockers",
+        "Define rollout and rollback playbook for CBT-OPS-004 productionization"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "Added for CBT-OPS-004 kickoff. Keep false until implementation + staging/prod evidence are complete."
     }
   ]
 }

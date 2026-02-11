@@ -617,3 +617,15 @@ Started: 2026-02-02T03:08:26.937005
     - `CBT-US-025`
     - `CBT-US-026`
     - `CBT-US-027`
+
+## 2026-02-11 - CBT-OPS-004 kickoff (truth-first planning)
+- Opened planned stories in `services/clawbounties/prd.json` with `passes=false`:
+  - `CBT-US-028` Identity control-plane contract assimilation
+  - `CBT-US-029` Sensitive transition enforcement hardening
+  - `CBT-US-030` API-only simulation discipline for control-plane lane
+- Scope for next execution tranche:
+  - align marketplace auth contracts with identity control-plane outputs
+  - harden sensitive transition enforcement semantics in production operations
+  - preserve API-only simulation discipline for all validation flows
+- Governance:
+  - kickoff only; no implementation or pass flips in this PR.

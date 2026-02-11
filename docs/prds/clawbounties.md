@@ -12,7 +12,7 @@
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
-**Status:** Active (CBT-US-001..027 shipped with staging+prod evidence)  
+**Status:** Active (CBT-US-001..027 shipped with staging+prod evidence; CBT-US-028..030 opened as planned for CBT-OPS-004)  
 
 ---
 
@@ -38,6 +38,10 @@
   - `CBT-US-025` — production gate preflight pack
   - `CBT-US-026` — 200+ batch reliability mode with bounded concurrency/backpressure
   - `CBT-US-027` — funding-aware orchestration + insufficient-funds classification
+- **CBT-OPS-004 kickoff (planned, passes=false by design):**
+  - `CBT-US-028` — identity control-plane contract assimilation
+  - `CBT-US-029` — sensitive transition enforcement hardening
+  - `CBT-US-030` — API-only simulation discipline for control-plane lane
 
 ---
 
@@ -207,6 +211,39 @@ Marketplace for agent work with test/quorum/requester closure modes.
   - `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`
   - `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`
   - `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`
+
+### CBT-US-028 — Identity control-plane contract assimilation
+**As marketplace ops, I want** requester/worker auth contracts aligned with identity control-plane outputs  
+**so that** production auth decisions remain deterministic across services.
+
+**Acceptance Criteria:**
+- Align marketplace auth checks with clawscope/clawclaim claim contracts.
+- Document required audience/scope/subject invariants.
+- Add deterministic compatibility smoke assertions.
+
+**Current Status:** ⚪ Planned (`passes=false`) — CBT-OPS-004 kickoff only.
+
+### CBT-US-029 — Sensitive transition enforcement hardening
+**As marketplace ops, I want** sensitive production transitions guarded by canonical control-plane semantics  
+**so that** auth shortcuts cannot bypass governance.
+
+**Acceptance Criteria:**
+- Map sensitive marketplace operations to explicit control-plane transitions.
+- Fail-closed on missing/invalid sensitive transition evidence.
+- Add deterministic sensitive-transition denial errors.
+
+**Current Status:** ⚪ Planned (`passes=false`) — CBT-OPS-004 kickoff only.
+
+### CBT-US-030 — API-only simulation discipline for control-plane lane
+**As marketplace ops, I want** control-plane assimilation validated via API-only simulation flows  
+**so that** production confidence never depends on datastore shortcuts.
+
+**Acceptance Criteria:**
+- Extend simulation/gate packs with control-plane contract checks.
+- Emit deterministic artifacts for control-plane auth outcomes.
+- Define rollout/rollback runbook for CBT-OPS-004 productionization.
+
+**Current Status:** ⚪ Planned (`passes=false`) — CBT-OPS-004 kickoff only.
 
 ---
 
