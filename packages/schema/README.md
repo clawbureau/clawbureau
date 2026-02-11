@@ -53,5 +53,7 @@ Shared JSON schemas for Claw Bureau services.
 - `trust_pulse.v1.json` (self-reported UX artifact; non-tier)
 - `model_identity.v1.json`
 - `derivation_attestation.v1.json`
+- `derivation_attestation_envelope.v1.json`
 - `audit_result_attestation.v1.json`
+- `audit_result_attestation_envelope.v1.json`
 - `log_inclusion_proof.v1.json`

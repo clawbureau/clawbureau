@@ -213,13 +213,15 @@
       "description": "As a verifier, I want an attestation that a model artifact was derived from another model artifact under a declared transformation so that audits can be traced across quantization/fine-tuning.",
       "acceptanceCriteria": [
         "Add derivation_attestation.v1 schema",
-        "Register schema in clawverify allowlist (future PR)",
-        "Add clawverify verification endpoint for derivation attestations (fail-closed) (future PR)",
+        "Add derivation_attestation_envelope.v1 schema",
+        "Register schema in clawverify schema allowlist + Workers-safe Ajv standalone validators",
+        "Add clawverify verification endpoint POST /v1/verify/derivation-attestation (fail-closed)",
         "Optional: anchor attestation hash in clawlogs and validate inclusion proofs when present"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": "Phase 0/1. Enables A_{M→Mq}-style traceability without requiring TEEs."
+      "passes": true,
+      "notes": "Phase 0/1. Enables A_{M→Mq}-style traceability without requiring TEEs.",
+      "completionNotes": "Added SignedEnvelope wrapper schemas, Workers-safe Ajv standalone validators, and a fail-closed verification endpoint. Verification requires allowlisting via DERIVATION_ATTESTATION_SIGNER_DIDS."
     },
     {
       "id": "POHVN-US-003",
@@ -227,14 +229,16 @@
       "description": "As a regulator-facing auditor, I want a verifiable audit result object binding model identity + audit code + dataset hashes to a result so that benchmark claims are cryptographically checkable.",
       "acceptanceCriteria": [
         "Add audit_result_attestation.v1 schema",
+        "Add audit_result_attestation_envelope.v1 schema",
         "Define deterministic audit_pack_hash_b64u convention for policy gating (ADR 0001)",
-        "Register schema in clawverify allowlist (future PR)",
-        "Add clawverify verification endpoint for audit result attestations (fail-closed) (future PR)",
+        "Register schema in clawverify schema allowlist + Workers-safe Ajv standalone validators",
+        "Add clawverify verification endpoint POST /v1/verify/audit-result-attestation (fail-closed)",
         "Define a reference mechanism so receipts/bundles/execution attestations can attach audit_result_refs"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": "Phase 0/1. This is the main Attestable Audits delta for ClawBureau."
+      "passes": true,
+      "notes": "Phase 0/1. This is the main Attestable Audits delta for ClawBureau.",
+      "completionNotes": "Added SignedEnvelope wrapper schemas, Workers-safe Ajv standalone validators, and a fail-closed verification endpoint. Verification requires allowlisting via AUDIT_RESULT_ATTESTATION_SIGNER_DIDS."
     },
     {
       "id": "POHVN-US-004",

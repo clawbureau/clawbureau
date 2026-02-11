@@ -6,6 +6,8 @@
 import { verifyArtifact } from './verify-artifact';
 import { verifyMessage } from './verify-message';
 import { verifyReceipt } from './verify-receipt';
+import { verifyDerivationAttestation } from './verify-derivation-attestation';
+import { verifyAuditResultAttestation } from './verify-audit-result-attestation';
 import { verifyBatch } from './verify-batch';
 import { verifyProofBundle } from './verify-proof-bundle';
 import { verifyEventChain } from './verify-event-chain';
@@ -28,6 +30,8 @@ import type {
   VerifyArtifactResponse,
   VerifyMessageResponse,
   VerifyReceiptResponse,
+  VerifyDerivationAttestationResponse,
+  VerifyAuditResultAttestationResponse,
   VerifyBatchResponse,
   VerifyBundleResponse,
   VerifyEventChainResponse,
@@ -64,6 +68,18 @@ export interface Env {
    * allowlisted and the signature verifies.
    */
   ATTESTATION_SIGNER_DIDS?: string;
+
+  /**
+   * Comma-separated allowlist of signer DIDs (did:key:...) for derivation attestations.
+   * CVF-US-017: fail-closed verification.
+   */
+  DERIVATION_ATTESTATION_SIGNER_DIDS?: string;
+
+  /**
+   * Comma-separated allowlist of signer DIDs (did:key:...) for audit result attestations.
+   * CVF-US-018: fail-closed verification.
+   */
+  AUDIT_RESULT_ATTESTATION_SIGNER_DIDS?: string;
 }
 
 /**
@@ -275,6 +291,108 @@ async function handleVerifyReceipt(
   // Return 200 for valid, 422 for invalid
   const status = verification.result.status === 'VALID' ? 200 : 422;
 
+  return jsonResponse(response, status);
+}
+
+/**
+ * Handle POST /v1/verify/derivation-attestation - Verify derivation attestation envelopes
+ */
+async function handleVerifyDerivationAttestation(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  const allowlist = parseCommaSeparatedAllowlist(
+    env.DERIVATION_ATTESTATION_SIGNER_DIDS
+  );
+
+  const verification = await verifyDerivationAttestation(envelope, {
+    allowlistedSignerDids: allowlist,
+  });
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'derivation_attestation' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyDerivationAttestationResponse & {
+    audit_receipt?: AuditLogReceipt;
+  } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(response, status);
+}
+
+/**
+ * Handle POST /v1/verify/audit-result-attestation - Verify audit result attestation envelopes
+ */
+async function handleVerifyAuditResultAttestation(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  const allowlist = parseCommaSeparatedAllowlist(
+    env.AUDIT_RESULT_ATTESTATION_SIGNER_DIDS
+  );
+
+  const verification = await verifyAuditResultAttestation(envelope, {
+    allowlistedSignerDids: allowlist,
+  });
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.result.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'audit_result_attestation' as EnvelopeType,
+      verification.result.status,
+      verification.result.signer_did
+    );
+  }
+
+  const response: VerifyAuditResultAttestationResponse & {
+    audit_receipt?: AuditLogReceipt;
+  } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(response, status);
 }
 
@@ -1063,6 +1181,16 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/verify/receipt - Gateway receipt verification
     if (url.pathname === '/v1/verify/receipt' && method === 'POST') {
       return handleVerifyReceipt(request, env);
+    }
+
+    // POST /v1/verify/derivation-attestation - Derivation attestation verification
+    if (url.pathname === '/v1/verify/derivation-attestation' && method === 'POST') {
+      return handleVerifyDerivationAttestation(request, env);
+    }
+
+    // POST /v1/verify/audit-result-attestation - Audit result attestation verification
+    if (url.pathname === '/v1/verify/audit-result-attestation' && method === 'POST') {
+      return handleVerifyAuditResultAttestation(request, env);
     }
 
     // POST /v1/verify/owner-attestation - Owner attestation verification
