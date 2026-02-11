@@ -1,0 +1,89 @@
+{
+  "ok": false,
+  "run_label": "cbt-ops-003-funding-gate",
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "clawtrials_base_url": "https://staging.clawtrials.com",
+  "total_jobs": 200,
+  "concurrency": 10,
+  "reward_minor": "200",
+  "harness_id": "th_smoke_pass_v1",
+  "requester_did_mode": "fixed",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "success_jobs": 0,
+  "failed_jobs": 200,
+  "skipped_jobs": 200,
+  "aborted": true,
+  "abort_reason": "FUNDING_PREFLIGHT_FAILED:REQUESTER_TOKEN_INVALID",
+  "closure_type_breakdown": {
+    "requester": {
+      "total": 100,
+      "success": 0,
+      "failed": 100
+    },
+    "test": {
+      "total": 100,
+      "success": 0,
+      "failed": 100
+    }
+  },
+  "deterministic_error_buckets": {
+    "ABORTED": 200,
+    "REQUESTER_TOKEN_INVALID": 1
+  },
+  "raw_error_buckets": {
+    "ABORTED": 200,
+    "REQUESTER_TOKEN_INVALID": 1
+  },
+  "classified_error_buckets": {
+    "ABORTED": 200,
+    "AUTH_CONTRACT": 1
+  },
+  "stuck_state_counts": {
+    "pending_review": 0,
+    "unknown": 0,
+    "non_terminal_other": 0,
+    "total": 0
+  },
+  "terminal_status_breakdown": {
+    "skipped": 200
+  },
+  "stuck_jobs_sample": [],
+  "step_metrics": {},
+  "funding_preflight": {
+    "ok": false,
+    "status": 401,
+    "error_code": "REQUESTER_TOKEN_INVALID",
+    "error_bucket": "AUTH_CONTRACT",
+    "error_message": "{\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}",
+    "bounty_id": null,
+    "elapsed_ms": 44,
+    "started_at": "2026-02-11T21:52:17.624Z",
+    "ended_at": "2026-02-11T21:52:17.669Z"
+  },
+  "backpressure": {
+    "enabled": true,
+    "base_cooldown_ms": 1200,
+    "step_cooldown_ms": 600,
+    "max_cooldown_ms": 8000,
+    "insufficient_funds_stop_threshold": 3,
+    "retriable_failures": 0,
+    "insufficient_funds_failures": 0,
+    "cooldown_wait_events": 0,
+    "total_cooldown_ms": 0,
+    "executed_jobs": 0,
+    "skipped_jobs": 200,
+    "aborted": true,
+    "abort_reason": "FUNDING_PREFLIGHT_FAILED:REQUESTER_TOKEN_INVALID"
+  },
+  "generated_at": "2026-02-11T21:52:17.670Z",
+  "preflight": {
+    "clawbounties_health_ms": 99,
+    "clawtrials_health_ms": 63,
+    "clawbounties_health_status": 200,
+    "clawtrials_health_status": 200,
+    "requested_concurrency": 10,
+    "applied_concurrency": 10,
+    "max_concurrency": 12
+  }
+}

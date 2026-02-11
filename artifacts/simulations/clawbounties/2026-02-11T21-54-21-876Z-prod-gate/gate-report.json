@@ -1,0 +1,144 @@
+{
+  "ok": false,
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "clawtrials_base_url": "https://staging.clawtrials.com",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "recommendation": {
+    "status": "BLOCKED",
+    "blockers": [
+      "auth.requester.post-valid-token: expected 200/201, got 401 (REQUESTER_TOKEN_INVALID): {\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}",
+      "auth.requester.submission-list: ASSERT_FAILED: requester bounty id not available",
+      "harness.integration.auto-decision: post test bounty failed (401, REQUESTER_TOKEN_INVALID): {\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}",
+      "harness.integration.invalid-replay: post invalid harness bounty failed (401, REQUESTER_TOKEN_INVALID): {\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}"
+    ],
+    "governance_note": "Explicit GO PROD approval is still required before production deploy."
+  },
+  "checks": [
+    {
+      "id": "routes.clawbounties.health",
+      "description": "clawbounties domain health endpoint responds with 200",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 236,
+      "output": {
+        "status": 200,
+        "version": "0.7.0",
+        "environment": "staging"
+      }
+    },
+    {
+      "id": "routes.clawtrials.health",
+      "description": "clawtrials domain health endpoint responds with 200",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 172,
+      "output": {
+        "status": 200,
+        "version": "0.1.0-staging",
+        "environment": "staging"
+      }
+    },
+    {
+      "id": "routes.clawtrials.catalog",
+      "description": "clawtrials catalog endpoint exposes deterministic harness IDs",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 23,
+      "output": {
+        "status": 200,
+        "harness_count": 3,
+        "harness_ids": [
+          "th_smoke_pass_v1",
+          "th_smoke_fail_v1",
+          "th_policy_summary_v1"
+        ]
+      }
+    },
+    {
+      "id": "routes.clawtrials.harness-run",
+      "description": "clawtrials /v1/harness/run returns deterministic response for pass harness",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 25,
+      "output": {
+        "status": 200,
+        "passed": true,
+        "total_tests": 3,
+        "failed_tests": 0
+      }
+    },
+    {
+      "id": "auth.requester.post-missing-token",
+      "description": "POST /v1/bounties fails closed without requester token",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 18,
+      "output": {
+        "status": 401,
+        "error": "REQUESTER_TOKEN_REQUIRED"
+      }
+    },
+    {
+      "id": "auth.requester.post-valid-token",
+      "description": "POST /v1/bounties succeeds with valid requester scoped token",
+      "required": true,
+      "ok": false,
+      "elapsed_ms": 91,
+      "error": "expected 200/201, got 401 (REQUESTER_TOKEN_INVALID): {\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}"
+    },
+    {
+      "id": "auth.worker.register-and-self",
+      "description": "worker token can be minted and used for /v1/workers/self",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 589,
+      "output": {
+        "register_status": 201,
+        "self_status": 200,
+        "worker_did": "did:key:z6MkvjiwM4ivDEhnpCVnDoMiUcLrxfjRF59nMPZdoL8Zw8hT"
+      }
+    },
+    {
+      "id": "auth.requester.submission-list",
+      "description": "requester token can access /v1/bounties/{id}/submissions for own bounty",
+      "required": true,
+      "ok": false,
+      "elapsed_ms": 0,
+      "error": "ASSERT_FAILED: requester bounty id not available"
+    },
+    {
+      "id": "harness.integration.auto-decision",
+      "description": "closure_type=test submission auto-decides via clawtrials harness",
+      "required": true,
+      "ok": false,
+      "elapsed_ms": 30,
+      "error": "post test bounty failed (401, REQUESTER_TOKEN_INVALID): {\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}"
+    },
+    {
+      "id": "harness.integration.invalid-replay",
+      "description": "invalid harness replay remains deterministic + fail-closed",
+      "required": true,
+      "ok": false,
+      "elapsed_ms": 30,
+      "error": "post invalid harness bounty failed (401, REQUESTER_TOKEN_INVALID): {\n  \"error\": \"REQUESTER_TOKEN_INVALID\",\n  \"message\": \"Requester scoped token is invalid or expired\",\n  \"details\": {\n    \"upstream_error\": \"TOKEN_UNKNOWN_KID\"\n  }\n}"
+    },
+    {
+      "id": "auth.admin.get-bounty",
+      "description": "admin key can read bounty detail endpoint",
+      "required": false,
+      "ok": false,
+      "elapsed_ms": 0,
+      "error": "ASSERT_FAILED: requester bounty id missing"
+    }
+  ],
+  "resources": {
+    "workerDid": "did:key:z6MkvjiwM4ivDEhnpCVnDoMiUcLrxfjRF59nMPZdoL8Zw8hT",
+    "requesterBountyId": null,
+    "testBountyId": null,
+    "testSubmissionId": null,
+    "invalidHarnessBountyId": null,
+    "invalidHarnessSubmissionId": null
+  },
+  "generated_at": "2026-02-11T21:54:21.876Z"
+}

@@ -7,7 +7,6 @@ import {
   assert,
   resolveEnvName,
   resolveBountiesBaseUrl,
-  requireEnv,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -28,7 +27,13 @@ async function main() {
   const envName = resolveEnvName(args.get('env'));
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
 
-  const requesterToken = requireEnv('BOUNTIES_ADMIN_KEY');
+  const requesterToken = String(
+    args.get('requester-token') || process.env.REQUESTER_SCOPED_TOKEN || process.env.BOUNTIES_ADMIN_KEY || ''
+  ).trim();
+  assert(
+    requesterToken.length > 0,
+    'Missing requester token. Provide --requester-token or set REQUESTER_SCOPED_TOKEN (fallback: BOUNTIES_ADMIN_KEY).'
+  );
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
 

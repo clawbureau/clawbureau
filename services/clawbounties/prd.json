@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/marketplace/CBT-OPS-002-clawbounties-simulation-activation",
+  "branchName": "feat/marketplace/CBT-OPS-003-prod-gate-scale-reliability",
   "description": "clawbounties.com (Bounty Marketplace) — PRD — Marketplace for agent work with test/quorum/requester closures.",
   "userStories": [
     {
@@ -370,6 +370,48 @@
       "priority": 25,
       "passes": false,
       "notes": "Staging complete: submission listing/detail endpoints live and artifact metrics emitted under artifacts/simulations/clawbounties/*. Pass flip deferred pending explicit GO PROD."
+    },
+    {
+      "id": "CBT-US-025",
+      "title": "Production gate preflight pack",
+      "description": "As marketplace ops, I want a deterministic preflight gate pack so GO PROD decisions are based on a reproducible artifact instead of ad-hoc checks.",
+      "acceptanceCriteria": [
+        "Add one-command gate script that validates staging route reachability + health for clawbounties and clawtrials",
+        "Gate script validates auth contracts (fail-closed missing token + valid requester token path)",
+        "Gate script validates harness availability directly and through clawbounties test-lane integration",
+        "Gate script writes machine-readable and markdown report artifacts under artifacts/simulations/clawbounties/<timestamp>/ with recommendation + blockers"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "Added for CBT-OPS-003. Staging implementation and evidence in progress; keep false until explicit GO PROD governance decision and production verification."
+    },
+    {
+      "id": "CBT-US-026",
+      "title": "Scale reliability pipeline (200+ runs)",
+      "description": "As marketplace ops, I want the batch simulation runner to sustain 200+ API-only runs with bounded concurrency and backpressure so staging scale signals are trustworthy.",
+      "acceptanceCriteria": [
+        "Extend batch runner with bounded concurrency cap and adaptive backpressure controls",
+        "Support 200+ run mode without D1 injection shortcuts",
+        "Emit deterministic error-bucket accounting (raw + classified) and detailed stuck-state reporting",
+        "Write summary + jobs artifacts under artifacts/simulations/clawbounties/<timestamp>/"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "Added for CBT-OPS-003. Keep false pending production gate and explicit GO PROD."
+    },
+    {
+      "id": "CBT-US-027",
+      "title": "Funding-aware orchestration",
+      "description": "As marketplace ops, I want funding preflight checks before large simulation waves so we avoid noisy escrow failures and can classify insufficient funds deterministically.",
+      "acceptanceCriteria": [
+        "Batch runner performs requester funding preflight before high-volume execution",
+        "Insufficient funds is classified into dedicated summary buckets",
+        "Runner supports aborting or continuing based on configured funding policy",
+        "Summary artifacts include funding preflight outcome and funding-related blockers"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "Added for CBT-OPS-003. Keep false pending explicit GO PROD and production verification evidence."
     }
   ]
 }

@@ -517,3 +517,41 @@ Started: 2026-02-02T03:08:26.937005
   - clawtrials domain check: `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
 - Policy/tracker state kept truthful:
   - `CBT-US-022/023/024` remain `passes=false` (staging complete, explicit GO PROD still required).
+
+## 2026-02-11 - CBT-OPS-003 (marketplace production gate + scale reliability pipeline, staging)
+- Added tracker stories for CBT-OPS-003 tranche (all `passes=false` pending GO PROD):
+  - `CBT-US-025` production gate preflight pack
+  - `CBT-US-026` 200+ batch reliability mode
+  - `CBT-US-027` funding-aware orchestration
+- Added one-command deterministic gate pack:
+  - `scripts/poh/gate-clawbounties-prod-readiness.mjs`
+  - checks include routes/health, auth contracts, harness availability, and integration checks
+  - outputs:
+    - `gate-report.json`
+    - `gate-report.md`
+    under `artifacts/simulations/clawbounties/<timestamp>-prod-gate/`
+- Extended batch simulation runner (`scripts/poh/simulate-clawbounties-batch.mjs`):
+  - bounded concurrency (`--max-concurrency`)
+  - adaptive backpressure knobs (`--backpressure-*`)
+  - deterministic classified error buckets + raw buckets
+  - expanded stuck-state reporting with sampled stuck jobs
+  - 200+ mode exercised on staging (`--total 200`)
+- Funding-aware orchestration implemented:
+  - funding preflight probe before job wave
+  - configurable abort/continue behavior on funding preflight failure
+  - dedicated `INSUFFICIENT_FUNDS` classification path in summary logic
+- Staging deploys for this tranche:
+  - `clawtrials-staging`: `2a7af0d8-d91e-45ba-8d9d-48af3846d016`
+  - `clawbounties-staging`: `d00fe272-c0a7-466c-947e-a5a8966f576a`
+- Staging artifacts captured:
+  - prod gate report: `artifacts/simulations/clawbounties/2026-02-11T21-54-21-876Z-prod-gate/{gate-report.json,gate-report.md}`
+  - 200-run reliability (continue mode): `artifacts/simulations/clawbounties/2026-02-11T21-52-02-488Z-batch-200/{summary.json,jobs.ndjson}`
+  - funding-gated abort mode: `artifacts/simulations/clawbounties/2026-02-11T21-52-17-670Z-batch-200/{summary.json,jobs.ndjson}`
+- Deterministic blocker surfaced:
+  - requester scoped token rejected with `REQUESTER_TOKEN_INVALID` + `TOKEN_UNKNOWN_KID` on staging, blocking requester-authenticated post/approve/reject path until requester token issuance path is restored.
+- Validation:
+  - `npm --prefix services/clawbounties run typecheck` ✅
+  - `npm --prefix services/clawtrials run typecheck` ✅
+  - `node scripts/docs/lint-prds.mjs` ✅
+- Governance status:
+  - keep `CBT-US-025/026/027` as `passes=false` until explicit GO PROD and production verification.

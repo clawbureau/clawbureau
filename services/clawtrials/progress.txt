@@ -16,3 +16,19 @@
     - `artifacts/simulations/clawbounties/2026-02-11T19-29-09-547Z-test-e2e/test-smoke.json`
 - Status:
   - Staging lane operational; production rollout intentionally deferred pending explicit GO PROD.
+
+## 2026-02-11 — CBT-OPS-003 gate-pack integration (staging)
+- Redeployed clawtrials-staging for CBT-OPS-003 verification:
+  - version: `2a7af0d8-d91e-45ba-8d9d-48af3846d016`
+  - domain: `staging.clawtrials.com`
+- Integrated into new deterministic production gate script:
+  - `scripts/poh/gate-clawbounties-prod-readiness.mjs`
+  - checks:
+    - `GET /health`
+    - `GET /v1/harness/catalog`
+    - `POST /v1/harness/run` deterministic pass contract
+- Artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T21-54-21-876Z-prod-gate/gate-report.json`
+- Status:
+  - clawtrials route/harness checks are healthy in staging.
+  - overall marketplace gate remains blocked by requester token issuance mismatch upstream (`TOKEN_UNKNOWN_KID`), not by clawtrials harness health.
