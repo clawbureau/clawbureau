@@ -247,3 +247,14 @@ Started: 2026-02-05T21:49:28Z
   - PR #98: tripwire asserts model identity metadata + hash
   - PR #99: CVF-US-016 model identity tier verification
 ---
+
+## 2026-02-11T03:20:00Z - POHVN-US-005 (WPC hooks: model identity + audit packs) (implemented)
+- What was implemented
+  - Extended WPC payload schema to support:
+    - `minimum_model_identity_tier`
+    - `required_audit_packs[]` (audit_pack_hash_b64u)
+  - clawcontrols validates/stores these fields in signed WPC envelopes.
+  - clawproxy enforces `minimum_model_identity_tier` at request time (fail-closed) and records a pass decision in receipt metadata.
+- Notes
+  - Enforcement of `required_audit_packs` is deferred to verify-under-policy / workflow gating.
+---

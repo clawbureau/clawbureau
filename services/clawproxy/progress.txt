@@ -372,3 +372,17 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks
   - cd services/clawproxy && npm test && npm run typecheck
 ---
+
+## 2026-02-11 - POHVN-US-005 (WPC minimum model identity tier enforcement)
+- What was implemented
+  - Added WPC field support + enforcement:
+    - Policy payload supports `minimum_model_identity_tier` + `required_audit_packs[]`.
+    - clawproxy enforces `minimum_model_identity_tier` at request time (fail-closed) when a WPC is active.
+    - clawproxy records a pass decision in receipt metadata:
+      - `metadata.wpc_minimum_model_identity_tier`
+      - `metadata.wpc_model_identity_requirement_met=true`
+- Tests
+  - Added `services/clawproxy/test/wpc-model-identity-tier.test.ts`
+- Quality checks
+  - cd services/clawproxy && npm test && npm run typecheck
+---

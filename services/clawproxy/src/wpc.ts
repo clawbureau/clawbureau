@@ -28,6 +28,18 @@ export type WorkPolicyContractV1 = {
   allowed_providers?: Provider[];
   allowed_models?: string[];
 
+  /**
+   * Optional minimum required model identity tier (orthogonal to PoH tiers).
+   * Gateways MUST fail closed when only a weaker tier is available.
+   */
+  minimum_model_identity_tier?: 'closed_opaque' | 'closed_provider_manifest' | 'openweights_hashable' | 'tee_measured';
+
+  /**
+   * Optional required audit packs by deterministic audit_pack_hash_b64u (see ADR 0001).
+   * Used for policy gating (verify-under-policy / procurement requirements).
+   */
+  required_audit_packs?: string[];
+
   // Privacy / DLP controls
   redaction_rules?: RedactionRule[];
   receipt_privacy_mode?: ReceiptPrivacyMode;
@@ -64,6 +76,29 @@ function isNonEmptyString(value: unknown, opts?: { maxLen?: number }): value is 
   return true;
 }
 
+const B64U_RE = /^[A-Za-z0-9_-]+$/;
+
+function isB64uString(
+  value: unknown,
+  opts?: { minLen?: number; maxLen?: number }
+): value is string {
+  if (typeof value !== 'string') return false;
+  const s = value.trim();
+  if (s.length === 0) return false;
+  if (opts?.minLen && s.length < opts.minLen) return false;
+  if (opts?.maxLen && s.length > opts.maxLen) return false;
+  return B64U_RE.test(s);
+}
+
+function isB64uStringArray(
+  value: unknown,
+  opts?: { maxItems?: number; minLen?: number; maxLen?: number }
+): value is string[] {
+  if (!Array.isArray(value)) return false;
+  if (opts?.maxItems && value.length > opts.maxItems) return false;
+  return value.every((v) => isB64uString(v, { minLen: opts?.minLen, maxLen: opts?.maxLen }));
+}
+
 function isStringArray(value: unknown, opts?: { maxItems?: number; maxLen?: number }): value is string[] {
   if (!Array.isArray(value)) return false;
   if (opts?.maxItems && value.length > opts.maxItems) return false;
@@ -74,6 +109,15 @@ function isProviderArray(value: unknown, opts?: { maxItems?: number }): value is
   if (!Array.isArray(value)) return false;
   if (opts?.maxItems && value.length > opts.maxItems) return false;
   return value.every((v) => v === 'openai' || v === 'anthropic' || v === 'google');
+}
+
+function isModelIdentityTier(value: unknown): boolean {
+  return (
+    value === 'closed_opaque' ||
+    value === 'closed_provider_manifest' ||
+    value === 'openweights_hashable' ||
+    value === 'tee_measured'
+  );
 }
 
 function isRedactionRules(value: unknown): value is RedactionRule[] {
@@ -106,6 +150,8 @@ export function isWorkPolicyContractV1(value: unknown): value is WorkPolicyContr
     'issuer_did',
     'allowed_providers',
     'allowed_models',
+    'minimum_model_identity_tier',
+    'required_audit_packs',
     'redaction_rules',
     'receipt_privacy_mode',
     'egress_allowlist',
@@ -127,6 +173,14 @@ export function isWorkPolicyContractV1(value: unknown): value is WorkPolicyContr
   }
 
   if (obj.allowed_models !== undefined && !isStringArray(obj.allowed_models, { maxItems: 256, maxLen: 256 })) {
+    return false;
+  }
+
+  if (obj.minimum_model_identity_tier !== undefined && !isModelIdentityTier(obj.minimum_model_identity_tier)) {
+    return false;
+  }
+
+  if (obj.required_audit_packs !== undefined && !isB64uStringArray(obj.required_audit_packs, { maxItems: 64, minLen: 8, maxLen: 128 })) {
     return false;
   }
 

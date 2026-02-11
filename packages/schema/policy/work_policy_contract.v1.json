@@ -43,6 +43,25 @@
         "maxLength": 256
       }
     },
+
+    "minimum_model_identity_tier": {
+      "type": "string",
+      "description": "Optional minimum required model identity tier (orthogonal to PoH tiers). Gateways MUST fail closed when only a weaker tier is available.",
+      "enum": ["closed_opaque", "closed_provider_manifest", "openweights_hashable", "tee_measured"]
+    },
+
+    "required_audit_packs": {
+      "type": "array",
+      "description": "Optional required audit packs by deterministic audit_pack_hash_b64u (see ADR 0001). Used for policy gating (verify-under-policy / procurement requirements).",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "minLength": 8,
+        "maxLength": 128
+      }
+    },
+
     "redaction_rules": {
       "type": "array",
       "description": "Optional redaction rules applied by the gateway before upstream requests are made and before hashing/receipting.",

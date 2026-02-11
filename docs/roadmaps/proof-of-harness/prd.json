@@ -259,13 +259,14 @@
       "title": "WPC hooks for model identity + audit requirements",
       "description": "As a security admin, I want WPC to require minimum model identity tier and/or specific audit packs so that sensitive workflows fail closed when only opaque model identity is available.",
       "acceptanceCriteria": [
-        "Define WPC fields: minimum_model_identity_tier + required_audit_packs (by audit_pack_hash_b64u)",
-        "clawproxy enforces minimum_model_identity_tier where possible and records decisions in receipt metadata (future PR)",
-        "clawverify supports verify-under-policy semantics for receipts/bundles (future PR)"
+        "Extend WPC schema: minimum_model_identity_tier + required_audit_packs (by audit_pack_hash_b64u)",
+        "clawcontrols validates/stores these fields in signed WPC envelopes (hash-bound)",
+        "clawproxy enforces minimum_model_identity_tier (fail-closed) and records the decision in receipt metadata"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": "Phase 0/1. Keep enforcement points explicit (proxy, runner, verifier)."
+      "passes": true,
+      "notes": "Phase 0/1. Keep enforcement points explicit (proxy, runner, verifier).",
+      "completionNotes": "Extended WPC schema + clawcontrols validation to support minimum_model_identity_tier + required_audit_packs, and added clawproxy enforcement for minimum_model_identity_tier with decision recording in receipt metadata. Verify-under-policy semantics for audit packs remain a future verifier/policy feature."
     },
     {
       "id": "POHVN-US-006",

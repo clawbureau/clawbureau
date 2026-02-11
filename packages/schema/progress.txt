@@ -52,3 +52,10 @@ Started: 2026-02-03
   - `packages/schema/poh/gateway_receipt.v1.json`
   - `packages/schema/poh/proof_bundle.v1.json`
 - Updated `packages/schema/README.md` to list the new PoH vNext schemas.
+
+## POHVN-US-005 — WPC hooks: minimum model identity tier + required audit packs
+- Extended the WPC payload schema:
+  - `packages/schema/policy/work_policy_contract.v1.json`
+  - Added optional fields:
+    - `minimum_model_identity_tier`
+    - `required_audit_packs[]` (audit_pack_hash_b64u)

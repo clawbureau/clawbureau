@@ -10,6 +10,7 @@
 import type { Env, Provider, ReceiptPrivacyMode } from './types';
 import type { RedactionRule, WorkPolicyContractV1 } from './wpc';
 import { fetchWpcFromRegistry, isWpcHashB64u } from './wpc';
+import { buildModelIdentityV1, type ModelIdentityTier } from './model-identity';
 
 /**
  * Policy header for Work Policy Contract
@@ -253,6 +254,49 @@ export function enforceProviderAllowlist(
   }
 
   return { allowed: true };
+}
+
+const MODEL_IDENTITY_TIER_STRENGTH: Record<ModelIdentityTier, number> = {
+  closed_opaque: 1,
+  closed_provider_manifest: 2,
+  openweights_hashable: 3,
+  tee_measured: 4,
+};
+
+/**
+ * Enforce minimum model identity tier from policy.
+ *
+ * Note: model identity tier is orthogonal to PoH tiers.
+ */
+export function enforceMinimumModelIdentityTier(
+  provider: Provider,
+  model: string | undefined,
+  policy: WorkPolicyContractV1
+): PolicyEnforcementResult & {
+  observedTier?: ModelIdentityTier;
+  requiredTier?: ModelIdentityTier;
+} {
+  const required = policy.minimum_model_identity_tier;
+  if (!required) return { allowed: true };
+
+  const modelLabel = typeof model === 'string' && model.trim().length > 0 ? model : 'unknown';
+  const observed = buildModelIdentityV1({ provider, model: modelLabel }).tier;
+  const requiredTier = required as ModelIdentityTier;
+
+  const observedStrength = MODEL_IDENTITY_TIER_STRENGTH[observed] ?? 0;
+  const requiredStrength = MODEL_IDENTITY_TIER_STRENGTH[requiredTier] ?? 0;
+
+  if (observedStrength < requiredStrength) {
+    return {
+      allowed: false,
+      observedTier: observed,
+      requiredTier,
+      errorCode: 'POLICY_MODEL_IDENTITY_TIER_TOO_LOW',
+      error: `Model identity tier '${observed}' does not meet policy minimum '${requiredTier}'`,
+    };
+  }
+
+  return { allowed: true, observedTier: observed, requiredTier };
 }
 
 /**

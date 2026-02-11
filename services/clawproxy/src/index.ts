@@ -72,6 +72,7 @@ import { computeTokenScopeHashB64uV1 } from './token-scope-hash';
 import {
   extractPolicyFromHeaders,
   enforceProviderAllowlist,
+  enforceMinimumModelIdentityTier,
   applyRedactionRules,
   stripUndefined,
 } from './policy';
@@ -1368,7 +1369,10 @@ async function handleProxy(
     );
   }
 
-  // Enforce WPC provider/model allowlist if policy is active
+  // Optional receipt metadata about policy checks (hash-only; no prompt/plaintext).
+  let wpcModelIdentityMeta: Record<string, unknown> | undefined;
+
+  // Enforce WPC constraints if policy is active
   if (policyResult.policy) {
     const allowlistResult = enforceProviderAllowlist(provider, model, policyResult.policy);
     if (!allowlistResult.allowed) {
@@ -1384,6 +1388,29 @@ async function handleProxy(
         403,
         rateLimitInfo
       );
+    }
+
+    const modelIdentityResult = enforceMinimumModelIdentityTier(provider, model, policyResult.policy);
+    if (!modelIdentityResult.allowed) {
+      logPolicyViolation(
+        request,
+        policyResult.policyHash ?? 'unknown',
+        modelIdentityResult.errorCode ?? 'POLICY_VIOLATION',
+        modelIdentityResult.error ?? 'Policy enforcement failed'
+      );
+      return errorResponseWithRateLimit(
+        modelIdentityResult.errorCode ?? 'POLICY_VIOLATION',
+        modelIdentityResult.error ?? 'Policy enforcement failed',
+        403,
+        rateLimitInfo
+      );
+    }
+
+    if (modelIdentityResult.requiredTier) {
+      wpcModelIdentityMeta = {
+        wpc_minimum_model_identity_tier: modelIdentityResult.requiredTier,
+        wpc_model_identity_requirement_met: true,
+      };
     }
   }
 
@@ -1650,9 +1677,12 @@ async function handleProxy(
           const receiptMetadata = await buildReceiptMetadataWithModelIdentity({
             provider,
             model: modelLabel,
-            existing: falOpenrouter
-              ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
-              : undefined,
+            existing: {
+              ...(falOpenrouter
+                ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
+                : {}),
+              ...(wpcModelIdentityMeta ?? {}),
+            },
           });
 
           const receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
@@ -1779,9 +1809,12 @@ async function handleProxy(
     const receiptMetadata = await buildReceiptMetadataWithModelIdentity({
       provider,
       model: modelLabel,
-      existing: falOpenrouter
-        ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
-        : undefined,
+      existing: {
+        ...(falOpenrouter
+          ? { upstream: 'fal_openrouter', upstream_model: falOpenrouterUpstreamModel }
+          : {}),
+        ...(wpcModelIdentityMeta ?? {}),
+      },
     });
 
     receiptEnvelope = await generateReceiptEnvelope(receipt, signingContext, {
