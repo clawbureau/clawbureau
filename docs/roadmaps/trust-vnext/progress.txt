@@ -677,3 +677,60 @@ Started: 2026-02-07T19:53:07Z
   - Smoke artifacts:
     - `services/clawea/artifacts/smoke/finance-stripe/2026-02-11T17-37-15Z-staging/result.json` (PASS)
     - `services/clawea/artifacts/smoke/finance-stripe/2026-02-11T18-24-18Z-prod/result.json` (PASS)
+
+## 2026-02-11T22:20:00Z - ICP-US-001/002/003 (identity control-plane hard cutover)
+- What was implemented
+  - **ICP-US-001 (clawclaim)**
+    - Added controller-first control-plane challenge + registration flow and owner-bound sensitive policy lifecycle:
+      - `POST /v1/control-plane/challenges`
+      - `POST /v1/control-plane/controllers/register`
+      - `POST /v1/control-plane/controllers/{controller_did}/agents/register`
+      - `POST /v1/control-plane/controllers/{controller_did}/sensitive-policy`
+      - chain read/list endpoints under `/v1/control-plane/controllers/*`
+  - **ICP-US-002 (clawscope)**
+    - Added canonical CST issuance lane with chain checks and deterministic migration gate:
+      - `POST /v1/tokens/issue/canonical`
+      - migration-gated legacy `POST /v1/tokens/issue` (`SCOPE_LEGACY_EXCHANGE_MODE`)
+      - `POST /v1/tokens/introspect/matrix`
+      - `GET /v1/revocations/stream`
+      - `GET /v1/keys/rotation-contract`
+    - Extended scoped token claim contract (`packages/schema/auth/scoped_token_claims.v1.json`) with canonical lane claims + hash bindings.
+  - **ICP-US-003 (clawverify)**
+    - Added deterministic verification APIs with remediation hints:
+      - `POST /v1/verify/control-chain`
+      - `POST /v1/verify/token-control`
+    - Added explicit dependency config for chain/introspection lookups in `services/clawverify/wrangler.toml`.
+- Deterministic error codes added (new)
+  - clawscope:
+    - `CANONICAL_CHAIN_REQUIRED`
+    - `CANONICAL_AGENT_SUB_MISMATCH`
+    - `CONTROL_CHAIN_INACTIVE`
+    - `CONTROL_CHAIN_OWNER_MISMATCH`
+    - `CONTROL_CHAIN_CONTEXT_MISMATCH`
+    - `CONTROL_POLICY_HASH_MISMATCH`
+    - `SENSITIVE_SCOPE_NOT_ALLOWED`
+    - `LEGACY_EXCHANGE_DISABLED`
+    - `LEGACY_SENSITIVE_SCOPE_FORBIDDEN`
+    - `TRANSITION_UNKNOWN`
+  - clawverify:
+    - `CONTROL_CHAIN_NOT_FOUND`
+    - `CONTROL_CHAIN_CONTEXT_MISMATCH`
+    - `TOKEN_CONTROL_SCOPE_HASH_MISMATCH`
+    - `TOKEN_CONTROL_AUDIENCE_MISMATCH`
+    - `TOKEN_CONTROL_SCOPE_MISSING`
+    - `TOKEN_CONTROL_TRANSITION_FORBIDDEN`
+    - `TOKEN_CONTROL_CHAIN_MISSING`
+    - `TOKEN_CONTROL_SUBJECT_MISMATCH`
+- Quality checks
+  - `cd services/clawclaim && npm run typecheck && npm test`
+  - `cd services/clawscope && npm run typecheck && npm test`
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Deployment status
+  - Tracker complete in code + tests.
+  - Staging deploy versions:
+    - `clawclaim-staging`: `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`
+    - `clawscope-staging`: `c250201a-bb1c-458f-8a87-e4f09270ab60`
+    - `clawverify-staging`: `799e87ff-0456-4690-8563-96b38f3ff26a`
+  - Staging smoke artifact:
+    - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+  - **No production deploy executed** (await explicit GO PROD).

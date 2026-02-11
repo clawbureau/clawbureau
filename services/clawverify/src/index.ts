@@ -18,6 +18,8 @@ import { verifyDidRotation } from './verify-did-rotation';
 import { verifyCommitProof } from './verify-commit-proof';
 import { verifyAgent } from './verify-agent';
 import { verifyScopedToken } from './verify-scoped-token';
+import { verifyControlChain } from './verify-control-chain';
+import { verifyTokenControl } from './verify-token-control';
 import { verifyExportBundle } from './verify-export-bundle';
 import {
   writeAuditLogEntry,
@@ -45,6 +47,8 @@ import type {
   VerifyCommitProofResponse,
   VerifyAgentResponse,
   IntrospectScopedTokenResponse,
+  VerifyControlChainResponse,
+  VerifyTokenControlResponse,
   VerifyExportBundleResponse,
   EnvelopeType,
   AuditLogReceipt,
@@ -120,6 +124,24 @@ export interface Env {
    * Comma-separated revoked TCB versions (denylist, fail-closed when matched).
    */
   TEE_ATTESTATION_TCB_REVOKED?: string;
+
+  /**
+   * Base URL for clawclaim control-plane lookups used by /v1/verify/control-chain.
+   * Example: https://staging.clawclaim.com
+   */
+  CLAWCLAIM_BASE_URL?: string;
+
+  /**
+   * Base URL for clawscope CST introspection used by /v1/verify/token-control.
+   * Example: https://staging.clawscope.com
+   */
+  CLAWSCOPE_BASE_URL?: string;
+
+  /**
+   * Timeout budget (ms) for clawclaim/clawscope dependency calls.
+   * Defaults to 5000 when unset.
+   */
+  CONTROL_VERIFY_TIMEOUT_MS?: string;
 }
 
 /**
@@ -707,6 +729,70 @@ async function handleIntrospectScopedToken(
 
   const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(response, status);
+}
+
+function parseControlVerifyTimeoutMs(raw: string | undefined): number {
+  if (!raw) return 5000;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 5000;
+  return Math.min(Math.max(n, 500), 15000);
+}
+
+function verificationHttpStatus(
+  response: { result: { status: 'VALID' | 'INVALID' }; error?: { code?: string } }
+): number {
+  if (response.result.status === 'VALID') return 200;
+
+  switch (response.error?.code) {
+    case 'PARSE_ERROR':
+    case 'MISSING_REQUIRED_FIELD':
+    case 'INVALID_DID_FORMAT':
+      return 400;
+    case 'DEPENDENCY_NOT_CONFIGURED':
+      return 503;
+    default:
+      return 422;
+  }
+}
+
+/**
+ * Handle POST /v1/verify/control-chain - Owner/controller/agent chain verification
+ */
+async function handleVerifyControlChain(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  const verification = await verifyControlChain(body, {
+    clawclaimBaseUrl: env.CLAWCLAIM_BASE_URL,
+    timeoutMs: parseControlVerifyTimeoutMs(env.CONTROL_VERIFY_TIMEOUT_MS),
+  });
+
+  const status = verificationHttpStatus(verification);
+  return jsonResponse(verification as VerifyControlChainResponse, status);
+}
+
+/**
+ * Handle POST /v1/verify/token-control - Token control-chain verification
+ */
+async function handleVerifyTokenControl(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  const verification = await verifyTokenControl(body, {
+    clawscopeBaseUrl: env.CLAWSCOPE_BASE_URL,
+    timeoutMs: parseControlVerifyTimeoutMs(env.CONTROL_VERIFY_TIMEOUT_MS),
+  });
+
+  const status = verificationHttpStatus(verification);
+  return jsonResponse(verification as VerifyTokenControlResponse, status);
 }
 
 /**
@@ -1472,6 +1558,8 @@ export default {
         <li><code>POST /v1/verify/event-chain</code> — event chain verification</li>
         <li><code>POST /v1/verify/agent</code> — one-call agent verification</li>
         <li><code>POST /v1/introspect/scoped-token</code> — scoped token introspection</li>
+        <li><code>POST /v1/verify/control-chain</code> — one-call owner/controller/agent chain verification</li>
+        <li><code>POST /v1/verify/token-control</code> — token-control verification with deterministic remediation hints</li>
       </ul>
 
       <h2>Schema registry</h2>
@@ -1514,6 +1602,8 @@ export default {
             { method: 'POST', path: '/v1/verify/event-chain' },
             { method: 'POST', path: '/v1/verify/agent' },
             { method: 'POST', path: '/v1/introspect/scoped-token' },
+            { method: 'POST', path: '/v1/verify/control-chain' },
+            { method: 'POST', path: '/v1/verify/token-control' },
             { method: 'GET', path: '/v1/schemas' },
             { method: 'GET', path: '/v1/schemas/allowlist' },
           ],
@@ -1633,6 +1723,16 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/introspect/scoped-token - Scoped token introspection
     if (url.pathname === '/v1/introspect/scoped-token' && method === 'POST') {
       return handleIntrospectScopedToken(request, env);
+    }
+
+    // POST /v1/verify/control-chain - One-call owner/controller/agent chain verification
+    if (url.pathname === '/v1/verify/control-chain' && method === 'POST') {
+      return handleVerifyControlChain(request, env);
+    }
+
+    // POST /v1/verify/token-control - Token control verification + remediation hints
+    if (url.pathname === '/v1/verify/token-control' && method === 'POST') {
+      return handleVerifyTokenControl(request, env);
     }
 
     // POST /v1/verify/agent - One-call agent verification

@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawclaim-phase2",
-  "description": "clawclaim.com (DID Binding) — PRD — Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response.",
+  "description": "clawclaim.com (DID Binding) \u2014 PRD \u2014 Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response.",
   "userStories": [
     {
       "id": "CCL-US-001",
@@ -129,6 +129,21 @@
       "priority": 9,
       "passes": false,
       "notes": ""
+    },
+    {
+      "id": "CCL-US-011",
+      "title": "Controller-first provisioning hard cutover",
+      "description": "As identity operations, we want controller-first registration with owner-bound sensitive policy so downstream token control can fail closed.",
+      "acceptanceCriteria": [
+        "Register controllers under an owner DID with signed challenge flow",
+        "Register agents under a controller with deterministic chain records",
+        "Enforce owner-bound sensitive authorization policy artifacts",
+        "Expose deterministic controller/agent chain read endpoints",
+        "Typecheck and tests pass"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Implemented control-plane provisioning in `services/clawclaim/src/index.ts`: challenge purposes (`register_controller`, `register_agent`, `update_sensitive_policy`), owner-signed controller registration, controller-scoped agent registration, owner-bound sensitive policy updates, and deterministic read/list chain endpoints (`/v1/control-plane/controllers/*`). Added coverage in `services/clawclaim/test/control-plane.test.ts` and passed `npm run typecheck && npm test`. Staging deploy: `clawclaim-staging` version `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`; smoke: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`."
     }
   ]
 }

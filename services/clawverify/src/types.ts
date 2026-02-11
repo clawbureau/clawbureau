@@ -234,7 +234,15 @@ export type VerificationErrorCode =
   | 'DEPENDENCY_NOT_CONFIGURED'
   | 'PARSE_ERROR'
   | 'INCLUSION_PROOF_INVALID'
-  | 'REVOKED';
+  | 'REVOKED'
+  | 'CONTROL_CHAIN_NOT_FOUND'
+  | 'CONTROL_CHAIN_CONTEXT_MISMATCH'
+  | 'TOKEN_CONTROL_SCOPE_HASH_MISMATCH'
+  | 'TOKEN_CONTROL_AUDIENCE_MISMATCH'
+  | 'TOKEN_CONTROL_SCOPE_MISSING'
+  | 'TOKEN_CONTROL_TRANSITION_FORBIDDEN'
+  | 'TOKEN_CONTROL_CHAIN_MISSING'
+  | 'TOKEN_CONTROL_SUBJECT_MISMATCH';
 
 /**
  * Structured error for verification failures
@@ -600,6 +608,80 @@ export interface IntrospectScopedTokenResponse {
   audience?: string;
   owner_ref?: string;
   expires_at?: string;
+  error?: VerificationError;
+}
+
+/**
+ * Identity control-plane verification hints
+ * CVF-US-018: deterministic remediation guidance
+ */
+export type RemediationHintCode =
+  | 'REGISTER_OWNER_BINDING'
+  | 'REGISTER_CONTROLLER'
+  | 'REGISTER_AGENT_UNDER_CONTROLLER'
+  | 'UPDATE_SENSITIVE_POLICY'
+  | 'USE_CANONICAL_CST_LANE'
+  | 'REQUEST_REQUIRED_SCOPE'
+  | 'REQUEST_REQUIRED_AUDIENCE'
+  | 'REISSUE_TOKEN'
+  | 'ROTATE_KEYS_WITH_OVERLAP'
+  | 'SYNC_REVOCATION_STREAM'
+  | 'CHECK_CONTROL_CHAIN_CONFIG';
+
+export interface RemediationHint {
+  code: RemediationHintCode;
+  message: string;
+  action: string;
+}
+
+export interface VerifyControlChainRequest {
+  owner_did: string;
+  controller_did: string;
+  agent_did: string;
+}
+
+export interface VerifyControlChainResponse {
+  result: VerificationResult;
+  owner_did: string;
+  controller_did: string;
+  agent_did: string;
+  chain_active: boolean;
+  policy_hash_b64u?: string;
+  remediation_hints?: RemediationHint[];
+  error?: VerificationError;
+}
+
+export interface VerifyTokenControlRequest {
+  token: string;
+  expected_owner_did?: string;
+  expected_controller_did?: string;
+  expected_agent_did?: string;
+  required_audience?: string | string[];
+  required_scope?: string[];
+  required_transitions?: string[];
+}
+
+export interface VerifyTokenControlResponse {
+  result: VerificationResult;
+  token_hash?: string;
+  active?: boolean;
+  revoked?: boolean;
+  token_lane?: 'legacy' | 'canonical';
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
+  aud?: string | string[];
+  scope?: string[];
+  token_scope_hash_b64u?: string;
+  transition_matrix?: Record<
+    string,
+    {
+      allowed: boolean;
+      reason_code: string;
+      reason: string;
+    }
+  >;
+  remediation_hints?: RemediationHint[];
   error?: VerificationError;
 }
 

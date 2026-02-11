@@ -39,3 +39,27 @@ Started: 2026-02-02T22:45:00Z
   - Rejects bind attempts if binding is revoked.
 - Typecheck: `npm run typecheck`.
 ---
+
+## 2026-02-11 - CCL-US-011 / ICP-US-001 (controller-first provisioning hard cutover)
+- Added control-plane challenge issuance endpoint:
+  - `POST /v1/control-plane/challenges`
+  - supports deterministic challenge purposes: `register_controller`, `register_agent`, `update_sensitive_policy`
+  - preserves legacy bind/revoke challenge message shape for backwards compatibility
+- Added owner-signed control-plane mutation endpoints:
+  - `POST /v1/control-plane/controllers/register`
+  - `POST /v1/control-plane/controllers/{controller_did}/agents/register`
+  - `POST /v1/control-plane/controllers/{controller_did}/sensitive-policy`
+- Added deterministic chain read endpoints:
+  - `GET /v1/control-plane/controllers/{controller_did}`
+  - `GET /v1/control-plane/controllers/{controller_did}/agents`
+  - `GET /v1/control-plane/controllers/{controller_did}/agents/{agent_did}`
+- Added owner-bound sensitive policy artifacts (`policy_hash_b64u`) and chain records for downstream canonical CST checks.
+- Tests:
+  - `services/clawclaim/test/control-plane.test.ts`
+- Quality checks:
+  - `cd services/clawclaim && npm run typecheck && npm test`
+- Staging deploy:
+  - `clawclaim-staging` version `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`
+- Cross-service smoke evidence:
+  - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+---

@@ -25,6 +25,15 @@ export interface Env {
   SCOPE_ALLOWED_SCOPES?: string;
   SCOPE_ALLOWED_SCOPE_PREFIXES?: string;
 
+  // canonical CST / migration controls
+  SCOPE_LEGACY_EXCHANGE_MODE?: string; // enabled|migration|disabled
+  SCOPE_SENSITIVE_SCOPE_PREFIXES?: string;
+  SCOPE_KEY_ROTATION_OVERLAP_SECONDS?: string;
+
+  // control-plane dependency (clawclaim)
+  CLAIM_CONTROL_BASE_URL?: string;
+  CLAIM_CONTROL_TIMEOUT_MS?: string;
+
   // revocation storage knobs
   SCOPE_REVOCATION_TTL_SECONDS?: string;
 
@@ -45,11 +54,16 @@ export interface ScopedTokenClaims {
   iat: number;
   exp: number;
   owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
   token_scope_hash_b64u?: string;
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  token_lane?: 'legacy' | 'canonical';
   jti?: string;
   nonce?: string;
 }
@@ -61,10 +75,15 @@ export interface IssueTokenRequest {
   ttl_sec?: number;
   exp?: number;
   owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  token_lane?: 'legacy' | 'canonical';
   tier?: string;
 }
 
@@ -128,11 +147,16 @@ interface IssuanceRecord {
   policy_version: string;
   policy_tier?: string;
   owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
   token_scope_hash_b64u?: string;
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  token_lane?: 'legacy' | 'canonical';
   jti?: string;
 }
 
@@ -253,6 +277,156 @@ function parseBoolean(value: string | undefined, defaultValue: boolean): boolean
   if (v === '1' || v === 'true' || v === 'yes' || v === 'y') return true;
   if (v === '0' || v === 'false' || v === 'no' || v === 'n') return false;
   return defaultValue;
+}
+
+type LegacyExchangeMode = 'enabled' | 'migration' | 'disabled';
+
+interface ControlChainPolicy {
+  policy_version: '1';
+  mode: 'owner_bound';
+  owner_did: string;
+  allowed_sensitive_scopes: string[];
+  policy_hash_b64u: string;
+  updated_at: number;
+  updated_at_iso: string;
+}
+
+interface ControlChainRecord {
+  status: 'ok';
+  owner_did: string;
+  chain: {
+    owner_did: string;
+    controller_did: string;
+    agent_did: string;
+    policy_hash_b64u: string;
+    active: boolean;
+  };
+  controller: {
+    controller_did: string;
+    owner_did: string;
+    active: boolean;
+    policy: ControlChainPolicy;
+  };
+  agent_binding: {
+    binding_version: '1';
+    controller_did: string;
+    agent_did: string;
+    owner_did: string;
+    active: boolean;
+    policy_hash_b64u: string;
+  };
+}
+
+function parseLegacyExchangeMode(env: Env): LegacyExchangeMode {
+  const raw = env.SCOPE_LEGACY_EXCHANGE_MODE?.trim().toLowerCase();
+  if (raw === 'enabled' || raw === 'migration' || raw === 'disabled') return raw;
+  return 'migration';
+}
+
+function parseSensitiveScopePrefixes(env: Env): string[] {
+  const parsed = parseCsvList(env.SCOPE_SENSITIVE_SCOPE_PREFIXES);
+  if (parsed.length > 0) return parsed;
+  return ['control:'];
+}
+
+function collectSensitiveScopes(scopes: string[], prefixes: string[]): string[] {
+  return scopes.filter((scope) => prefixes.some((prefix) => scope.startsWith(prefix)));
+}
+
+async function fetchControlChainRecord(
+  env: Env,
+  controllerDid: string,
+  agentDid: string,
+  fetcher: typeof fetch = fetch
+): Promise<
+  | { ok: true; record: ControlChainRecord }
+  | { ok: false; code: string; message: string; status: number; details?: Record<string, unknown> }
+> {
+  const baseUrl = env.CLAIM_CONTROL_BASE_URL?.trim();
+  if (!baseUrl) {
+    return {
+      ok: false,
+      code: 'CONTROL_PLANE_NOT_CONFIGURED',
+      message: 'CLAIM_CONTROL_BASE_URL is not configured',
+      status: 503,
+    };
+  }
+
+  const timeoutMs = parseIntOrDefault(env.CLAIM_CONTROL_TIMEOUT_MS, 5000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const target = `${baseUrl.replace(/\/$/, '')}/v1/control-plane/controllers/${encodeURIComponent(controllerDid)}/agents/${encodeURIComponent(agentDid)}`;
+    const response = await fetcher(target, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let parsed: unknown;
+    try {
+      parsed = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (response.status !== 200) {
+      const details =
+        parsed && typeof parsed === 'object'
+          ? {
+              upstream_error: (parsed as Record<string, unknown>).error ?? null,
+              upstream_message: (parsed as Record<string, unknown>).message ?? null,
+              upstream_status: response.status,
+            }
+          : { upstream_status: response.status };
+
+      return {
+        ok: false,
+        code: response.status === 404 ? 'CONTROL_CHAIN_NOT_FOUND' : 'CONTROL_CHAIN_LOOKUP_FAILED',
+        message:
+          response.status === 404
+            ? 'Controller/agent control chain was not found'
+            : 'Unable to resolve control chain from clawclaim',
+        status: response.status === 404 ? 404 : 502,
+        details,
+      };
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return {
+        ok: false,
+        code: 'CONTROL_CHAIN_LOOKUP_FAILED',
+        message: 'Invalid control chain response payload',
+        status: 502,
+      };
+    }
+
+    const record = parsed as ControlChainRecord;
+    if (!record.chain || !record.controller || !record.agent_binding) {
+      return {
+        ok: false,
+        code: 'CONTROL_CHAIN_LOOKUP_FAILED',
+        message: 'Control chain response missing required fields',
+        status: 502,
+      };
+    }
+
+    return { ok: true, record };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      code: 'CONTROL_CHAIN_LOOKUP_FAILED',
+      message: msg.includes('aborted') ? 'Control chain lookup timed out' : 'Control chain lookup failed',
+      status: 502,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 interface ScopeTierPolicy {
@@ -448,6 +622,50 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   if (exp !== undefined) req.exp = exp;
   if (typeof b.owner_ref === 'string') req.owner_ref = b.owner_ref;
 
+  const ownerDidInput = typeof b.owner_did === 'string' ? b.owner_did.trim() : '';
+  if (ownerDidInput) {
+    if (!isDid(ownerDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('OWNER_DID_INVALID', 'owner_did must be a valid DID string', 400),
+      };
+    }
+    req.owner_did = ownerDidInput;
+  }
+
+  const controllerDidInput = typeof b.controller_did === 'string' ? b.controller_did.trim() : '';
+  if (controllerDidInput) {
+    if (!isDid(controllerDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('CONTROLLER_DID_INVALID', 'controller_did must be a valid DID string', 400),
+      };
+    }
+    req.controller_did = controllerDidInput;
+  }
+
+  const agentDidInput = typeof b.agent_did === 'string' ? b.agent_did.trim() : '';
+  if (agentDidInput) {
+    if (!isDid(agentDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('AGENT_DID_INVALID', 'agent_did must be a valid DID string', 400),
+      };
+    }
+    req.agent_did = agentDidInput;
+  }
+
+  const laneInput = typeof b.token_lane === 'string' ? b.token_lane.trim() : '';
+  if (laneInput) {
+    if (laneInput !== 'legacy' && laneInput !== 'canonical') {
+      return {
+        ok: false,
+        res: errorResponse('TOKEN_LANE_INVALID', 'token_lane must be "legacy" or "canonical"', 400),
+      };
+    }
+    req.token_lane = laneInput;
+  }
+
   const policyHashInput = typeof b.policy_hash_b64u === 'string' ? b.policy_hash_b64u.trim() : '';
   if (policyHashInput) {
     if (!isSha256B64u(policyHashInput)) {
@@ -461,6 +679,22 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
       };
     }
     req.policy_hash_b64u = policyHashInput;
+  }
+
+  const controlPolicyHashInput =
+    typeof b.control_plane_policy_hash_b64u === 'string' ? b.control_plane_policy_hash_b64u.trim() : '';
+  if (controlPolicyHashInput) {
+    if (!isSha256B64u(controlPolicyHashInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'CONTROL_POLICY_HASH_INVALID',
+          'control_plane_policy_hash_b64u must be a SHA-256 base64url hash (length 43)',
+          400
+        ),
+      };
+    }
+    req.control_plane_policy_hash_b64u = controlPolicyHashInput;
   }
 
   const paymentAccountDidInput =
@@ -491,6 +725,195 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   }
 
   return { ok: true, req };
+}
+
+function buildTransitionRequirements(): Record<string, string[]> {
+  return {
+    'controller.policy.update': ['control:policy:update'],
+    'token.issue.sensitive': ['control:token:issue_sensitive'],
+    'token.revoke': ['control:token:revoke'],
+    'key.rotate': ['control:key:rotate'],
+  };
+}
+
+function evaluateTransitionMatrix(claims: ScopedTokenClaims): Record<string, {
+  allowed: boolean;
+  reason_code: string;
+  reason: string;
+}> {
+  const requirements = buildTransitionRequirements();
+  const scopeSet = new Set(claims.scope.map((s) => s.trim()));
+  const hasChain =
+    typeof claims.owner_did === 'string' && claims.owner_did.length > 0 &&
+    typeof claims.controller_did === 'string' && claims.controller_did.length > 0 &&
+    typeof claims.agent_did === 'string' && claims.agent_did.length > 0;
+
+  const out: Record<string, { allowed: boolean; reason_code: string; reason: string }> = {};
+
+  for (const [transition, requiredScopes] of Object.entries(requirements)) {
+    if (!hasChain) {
+      out[transition] = {
+        allowed: false,
+        reason_code: 'TOKEN_CONTROL_CHAIN_MISSING',
+        reason: 'Token is missing owner/controller/agent chain claims',
+      };
+      continue;
+    }
+
+    if (claims.token_lane !== 'canonical') {
+      out[transition] = {
+        allowed: false,
+        reason_code: 'TOKEN_LANE_LEGACY_FORBIDDEN',
+        reason: 'Sensitive transitions require canonical token lane',
+      };
+      continue;
+    }
+
+    const missing = requiredScopes.filter((scope) => !scopeSet.has(scope));
+    if (missing.length > 0) {
+      out[transition] = {
+        allowed: false,
+        reason_code: 'TOKEN_SCOPE_MISSING',
+        reason: `Missing required scope(s): ${missing.join(', ')}`,
+      };
+      continue;
+    }
+
+    out[transition] = {
+      allowed: true,
+      reason_code: 'ALLOWED',
+      reason: 'Transition requirements satisfied',
+    };
+  }
+
+  return out;
+}
+
+async function getIntrospectionResult(
+  token: string,
+  env: Env
+): Promise<
+  | { ok: true; claims: ScopedTokenClaims; token_hash: string; revoked: boolean; revoked_at?: number; revoked_at_iso?: string }
+  | { ok: false; res: Response }
+> {
+  const token_hash = await sha256(token);
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    return {
+      ok: false,
+      res: errorResponse('TOKEN_MALFORMED', 'CST token must be a JWT (header.payload.signature)', 401),
+    };
+  }
+
+  const headerB64u = parts[0]!;
+  const payloadB64u = parts[1]!;
+  const signatureB64u = parts[2]!;
+
+  let header: unknown;
+  try {
+    header = decodeJwtJsonSegment(headerB64u);
+  } catch {
+    return { ok: false, res: errorResponse('TOKEN_MALFORMED', 'Invalid JWT header encoding', 401) };
+  }
+
+  if (typeof header !== 'object' || header === null) {
+    return { ok: false, res: errorResponse('TOKEN_MALFORMED', 'Invalid JWT header', 401) };
+  }
+
+  const h = header as Record<string, unknown>;
+  if (h.alg !== 'EdDSA') {
+    return {
+      ok: false,
+      res: errorResponse('TOKEN_UNSUPPORTED_ALG', 'Unsupported token algorithm (expected EdDSA)', 401),
+    };
+  }
+
+  let payload: unknown;
+  try {
+    payload = decodeJwtJsonSegment(payloadB64u);
+  } catch {
+    return { ok: false, res: errorResponse('TOKEN_MALFORMED', 'Invalid JWT payload encoding', 401) };
+  }
+
+  if (typeof payload === 'object' && payload !== null) {
+    const pv = (payload as Record<string, unknown>).token_version;
+    if (pv !== undefined && pv !== '1') {
+      return { ok: false, res: errorResponse('TOKEN_UNKNOWN_VERSION', 'Unknown token_version', 401) };
+    }
+  }
+
+  if (!validateClaimsShape(payload)) {
+    return {
+      ok: false,
+      res: errorResponse('TOKEN_INVALID_CLAIMS', 'Token claims do not match scoped_token_claims.v1 schema', 401),
+    };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (payload.exp <= nowSec) {
+    return { ok: false, res: errorResponse('TOKEN_EXPIRED', 'Token has expired', 401) };
+  }
+
+  let keyset: IssuerKeySet | null;
+  try {
+    keyset = await getIssuerKeySet(env);
+  } catch {
+    return { ok: false, res: errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503) };
+  }
+
+  if (!keyset) {
+    return { ok: false, res: errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503) };
+  }
+
+  let verifyKey: CryptoKey | null = null;
+  if (typeof h.kid === 'string' && h.kid.trim().length > 0) {
+    const key = keyset.byKid.get(h.kid.trim());
+    if (!key) {
+      return { ok: false, res: errorResponse('TOKEN_UNKNOWN_KID', 'Unknown token kid', 401) };
+    }
+    verifyKey = key.publicKey;
+  }
+
+  const signingInput = `${headerB64u}.${payloadB64u}`;
+  let sigValid = false;
+
+  try {
+    if (verifyKey) {
+      sigValid = await verifyEd25519(verifyKey, signatureB64u, signingInput);
+    } else {
+      for (const k of keyset.keys) {
+        if (await verifyEd25519(k.publicKey, signatureB64u, signingInput)) {
+          sigValid = true;
+          break;
+        }
+      }
+    }
+  } catch {
+    return { ok: false, res: errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401) };
+  }
+
+  if (!sigValid) {
+    return { ok: false, res: errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401) };
+  }
+
+  const revocation = await getRevocationRecord(env, token_hash);
+  if (revocation) {
+    return {
+      ok: true,
+      claims: payload,
+      token_hash,
+      revoked: true,
+      revoked_at: revocation.revoked_at,
+      revoked_at_iso: revocation.revoked_at_iso,
+    };
+  }
+
+  return {
+    ok: true,
+    claims: payload,
+    token_hash,
+    revoked: false,
+  };
 }
 
 async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
@@ -596,6 +1019,27 @@ function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
     if (!isDid(p.payment_account_did.trim())) return false;
   }
 
+  if (p.owner_did !== undefined) {
+    if (!isNonEmptyString(p.owner_did) || !isDid(p.owner_did.trim())) return false;
+  }
+
+  if (p.controller_did !== undefined) {
+    if (!isNonEmptyString(p.controller_did) || !isDid(p.controller_did.trim())) return false;
+  }
+
+  if (p.agent_did !== undefined) {
+    if (!isNonEmptyString(p.agent_did) || !isDid(p.agent_did.trim())) return false;
+  }
+
+  if (p.control_plane_policy_hash_b64u !== undefined) {
+    if (!isNonEmptyString(p.control_plane_policy_hash_b64u)) return false;
+    if (!isSha256B64u(p.control_plane_policy_hash_b64u.trim())) return false;
+  }
+
+  if (p.token_lane !== undefined) {
+    if (p.token_lane !== 'legacy' && p.token_lane !== 'canonical') return false;
+  }
+
   return true;
 }
 
@@ -638,7 +1082,11 @@ async function issueToken(
     aud: req.aud,
     scope: req.scope,
     owner_ref: req.owner_ref,
+    owner_did: req.owner_did,
+    controller_did: req.controller_did,
+    agent_did: req.agent_did,
     policy_hash_b64u: req.policy_hash_b64u,
+    control_plane_policy_hash_b64u: req.control_plane_policy_hash_b64u,
     payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
@@ -652,11 +1100,16 @@ async function issueToken(
     iat: nowSec,
     exp,
     owner_ref: req.owner_ref,
+    owner_did: req.owner_did,
+    controller_did: req.controller_did,
+    agent_did: req.agent_did,
     policy_hash_b64u: req.policy_hash_b64u,
+    control_plane_policy_hash_b64u: req.control_plane_policy_hash_b64u,
     token_scope_hash_b64u,
     payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
+    token_lane: req.token_lane,
     jti: crypto.randomUUID(),
     nonce: crypto.randomUUID(),
   };
@@ -684,6 +1137,18 @@ async function issueToken(
   const token_hash = await sha256(token);
 
   return { token, token_hash, claims, kid: keys.kid };
+}
+
+async function persistIssuanceAuditRecord(
+  env: Env,
+  record: IssuanceRecord
+): Promise<void> {
+  const kv = env.SCOPE_REVOCATIONS;
+  if (!kv) return;
+
+  const ttl = parseIntOrDefault(env.SCOPE_REVOCATION_TTL_SECONDS, 60 * 60 * 24 * 30);
+  await kv.put(issuanceRecordKey(record.token_hash), JSON.stringify(record), { expirationTtl: ttl });
+  await kv.put(issuanceEventKey(record.issued_at, record.token_hash), JSON.stringify(record), { expirationTtl: ttl });
 }
 
 export default {
@@ -741,11 +1206,175 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (CST issuer)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- POST /v1/tokens/issue (admin)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (canonical CST control lane)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- GET /v1/keys/rotation-contract\n- POST /v1/tokens/issue/canonical (admin)\n- POST /v1/tokens/issue (admin, legacy migration lane)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/revocations/stream (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n- POST /v1/tokens/introspect/matrix\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
-    // Token issuance (CSC-US-001)
+    // Token issuance (CSC-US-014) — Canonical lane
+    if (request.method === 'POST' && url.pathname === '/v1/tokens/issue/canonical') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+      }
+
+      const validated = validateIssueRequest(body, env);
+      if (!validated.ok) return validated.res;
+
+      const req = validated.req;
+      req.token_lane = 'canonical';
+      req.agent_did = req.agent_did ?? req.sub;
+
+      if (req.agent_did !== req.sub) {
+        return errorResponse('CANONICAL_AGENT_SUB_MISMATCH', 'agent_did must match sub for canonical lane', 400);
+      }
+
+      if (!req.owner_did || !req.controller_did || !req.agent_did) {
+        return errorResponse(
+          'CANONICAL_CHAIN_REQUIRED',
+          'owner_did, controller_did, and agent_did are required for canonical issuance',
+          400
+        );
+      }
+
+      const chainLookup = await fetchControlChainRecord(env, req.controller_did, req.agent_did);
+      if (!chainLookup.ok) {
+        return jsonResponse(
+          {
+            error: chainLookup.code,
+            message: chainLookup.message,
+            details: chainLookup.details ?? null,
+          },
+          chainLookup.status
+        );
+      }
+
+      const chain = chainLookup.record;
+      if (chain.chain.active !== true || chain.controller.active !== true || chain.agent_binding.active !== true) {
+        return errorResponse('CONTROL_CHAIN_INACTIVE', 'Control chain is inactive', 403);
+      }
+
+      if (chain.owner_did !== req.owner_did) {
+        return errorResponse('CONTROL_CHAIN_OWNER_MISMATCH', 'owner_did does not match registered control chain owner', 403);
+      }
+
+      if (chain.chain.controller_did !== req.controller_did || chain.chain.agent_did !== req.agent_did) {
+        return errorResponse('CONTROL_CHAIN_CONTEXT_MISMATCH', 'controller/agent pair does not match control chain', 403);
+      }
+
+      const sensitivePrefixes = parseSensitiveScopePrefixes(env);
+      const sensitiveScopes = collectSensitiveScopes(req.scope, sensitivePrefixes);
+      if (sensitiveScopes.length > 0) {
+        const allowed = new Set(chain.controller.policy.allowed_sensitive_scopes ?? []);
+        const disallowed = sensitiveScopes.filter((scope) => !allowed.has(scope));
+        if (disallowed.length > 0) {
+          return errorResponse(
+            'SENSITIVE_SCOPE_NOT_ALLOWED',
+            `Requested sensitive scope(s) are not allowed by control policy: ${disallowed.join(', ')}`,
+            403
+          );
+        }
+      }
+
+      if (
+        req.control_plane_policy_hash_b64u &&
+        req.control_plane_policy_hash_b64u !== chain.controller.policy.policy_hash_b64u
+      ) {
+        return errorResponse(
+          'CONTROL_POLICY_HASH_MISMATCH',
+          'control_plane_policy_hash_b64u does not match registered controller policy',
+          409
+        );
+      }
+
+      req.control_plane_policy_hash_b64u = chain.controller.policy.policy_hash_b64u;
+
+      const tier = req.tier ?? env.SCOPE_POLICY_TIER ?? 'default';
+
+      let policy: ResolvedScopePolicy;
+      try {
+        policy = resolveScopePolicy(env, tier);
+      } catch {
+        return errorResponse('POLICY_CONFIG_INVALID', 'Token policy configuration is invalid', 503);
+      }
+
+      try {
+        const { token, token_hash, claims, kid } = await issueToken(req, env, policy.max_ttl_seconds);
+
+        const issuedAt = claims.iat;
+        const record: IssuanceRecord = {
+          token_hash,
+          issued_at: issuedAt,
+          issued_at_iso: new Date(issuedAt * 1000).toISOString(),
+          sub: claims.sub,
+          aud: claims.aud,
+          scope: claims.scope,
+          iat: claims.iat,
+          exp: claims.exp,
+          kid,
+          policy_version: policy.policy_version,
+          policy_tier: policy.tier,
+          owner_ref: claims.owner_ref,
+          owner_did: claims.owner_did,
+          controller_did: claims.controller_did,
+          agent_did: claims.agent_did,
+          policy_hash_b64u: claims.policy_hash_b64u,
+          control_plane_policy_hash_b64u: claims.control_plane_policy_hash_b64u,
+          token_scope_hash_b64u: claims.token_scope_hash_b64u,
+          payment_account_did: claims.payment_account_did,
+          spend_cap: claims.spend_cap,
+          mission_id: claims.mission_id,
+          token_lane: claims.token_lane,
+          jti: claims.jti,
+        };
+
+        await persistIssuanceAuditRecord(env, record);
+
+        return jsonResponse({
+          token,
+          token_hash,
+          token_lane: 'canonical',
+          owner_did: claims.owner_did,
+          controller_did: claims.controller_did,
+          agent_did: claims.agent_did,
+          control_plane_policy_hash_b64u: claims.control_plane_policy_hash_b64u,
+          policy_hash_b64u: claims.policy_hash_b64u,
+          token_scope_hash_b64u: claims.token_scope_hash_b64u,
+          payment_account_did: claims.payment_account_did,
+          policy_version: policy.policy_version,
+          policy_tier: policy.tier,
+          kid,
+          iat: claims.iat,
+          exp: claims.exp,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
+        if (msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' || msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID') {
+          return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+        }
+        if (msg.startsWith('Invalid Ed25519 key length')) {
+          return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+        }
+        if (msg === 'TTL_TOO_LONG') {
+          return errorResponse('TTL_TOO_LONG', `ttl exceeds max (${policy.max_ttl_seconds}s)`, 400);
+        }
+        if (msg === 'TTL_EXPIRED') {
+          return errorResponse('TTL_EXPIRED', 'exp must be in the future', 400);
+        }
+
+        return errorResponse('ISSUE_FAILED', 'Failed to issue token', 500);
+      }
+    }
+
+    // Token issuance (legacy exchange; migration gate)
     if (request.method === 'POST' && url.pathname === '/v1/tokens/issue') {
       const adminErr = requireAdmin(request, env);
       if (adminErr) return adminErr;
@@ -760,7 +1389,25 @@ export default {
       const validated = validateIssueRequest(body, env);
       if (!validated.ok) return validated.res;
 
-      const tier = validated.req.tier ?? env.SCOPE_POLICY_TIER ?? 'default';
+      const mode = parseLegacyExchangeMode(env);
+      if (mode === 'disabled') {
+        return errorResponse('LEGACY_EXCHANGE_DISABLED', 'Legacy token issuance is disabled; use /v1/tokens/issue/canonical', 403);
+      }
+
+      const req = validated.req;
+      req.token_lane = 'legacy';
+
+      const sensitivePrefixes = parseSensitiveScopePrefixes(env);
+      const sensitiveScopes = collectSensitiveScopes(req.scope, sensitivePrefixes);
+      if (mode === 'migration' && sensitiveScopes.length > 0) {
+        return errorResponse(
+          'LEGACY_SENSITIVE_SCOPE_FORBIDDEN',
+          `Legacy issuance cannot mint sensitive scope(s) during migration: ${sensitiveScopes.join(', ')}`,
+          403
+        );
+      }
+
+      const tier = req.tier ?? env.SCOPE_POLICY_TIER ?? 'default';
 
       let policy: ResolvedScopePolicy;
       try {
@@ -770,46 +1417,46 @@ export default {
       }
 
       try {
-        const { token, token_hash, claims, kid } = await issueToken(
-          validated.req,
-          env,
-          policy.max_ttl_seconds
-        );
+        const { token, token_hash, claims, kid } = await issueToken(req, env, policy.max_ttl_seconds);
 
-        // CSC-US-006 — Token audit trail (best-effort; requires KV binding)
-        const kv = env.SCOPE_REVOCATIONS;
-        if (kv) {
-          const ttl = parseIntOrDefault(env.SCOPE_REVOCATION_TTL_SECONDS, 60 * 60 * 24 * 30);
-          const issuedAt = claims.iat;
+        const issuedAt = claims.iat;
+        const record: IssuanceRecord = {
+          token_hash,
+          issued_at: issuedAt,
+          issued_at_iso: new Date(issuedAt * 1000).toISOString(),
+          sub: claims.sub,
+          aud: claims.aud,
+          scope: claims.scope,
+          iat: claims.iat,
+          exp: claims.exp,
+          kid,
+          policy_version: policy.policy_version,
+          policy_tier: policy.tier,
+          owner_ref: claims.owner_ref,
+          owner_did: claims.owner_did,
+          controller_did: claims.controller_did,
+          agent_did: claims.agent_did,
+          policy_hash_b64u: claims.policy_hash_b64u,
+          control_plane_policy_hash_b64u: claims.control_plane_policy_hash_b64u,
+          token_scope_hash_b64u: claims.token_scope_hash_b64u,
+          payment_account_did: claims.payment_account_did,
+          spend_cap: claims.spend_cap,
+          mission_id: claims.mission_id,
+          token_lane: claims.token_lane,
+          jti: claims.jti,
+        };
 
-          const record: IssuanceRecord = {
-            token_hash,
-            issued_at: issuedAt,
-            issued_at_iso: new Date(issuedAt * 1000).toISOString(),
-            sub: claims.sub,
-            aud: claims.aud,
-            scope: claims.scope,
-            iat: claims.iat,
-            exp: claims.exp,
-            kid,
-            policy_version: policy.policy_version,
-            policy_tier: policy.tier,
-            owner_ref: claims.owner_ref,
-            policy_hash_b64u: claims.policy_hash_b64u,
-            token_scope_hash_b64u: claims.token_scope_hash_b64u,
-            payment_account_did: claims.payment_account_did,
-            spend_cap: claims.spend_cap,
-            mission_id: claims.mission_id,
-            jti: claims.jti,
-          };
-
-          await kv.put(issuanceRecordKey(token_hash), JSON.stringify(record), { expirationTtl: ttl });
-          await kv.put(issuanceEventKey(issuedAt, token_hash), JSON.stringify(record), { expirationTtl: ttl });
-        }
+        await persistIssuanceAuditRecord(env, record);
 
         return jsonResponse({
           token,
           token_hash,
+          token_lane: 'legacy',
+          legacy_exchange_mode: mode,
+          migration_notice:
+            mode === 'migration'
+              ? 'Legacy exchange is temporary; migrate to /v1/tokens/issue/canonical for sensitive transitions.'
+              : null,
           policy_hash_b64u: claims.policy_hash_b64u,
           token_scope_hash_b64u: claims.token_scope_hash_b64u,
           payment_account_did: claims.payment_account_did,
@@ -971,6 +1618,79 @@ export default {
       });
     }
 
+    // Revocation stream contract (CSC-US-014)
+    if (request.method === 'GET' && url.pathname === '/v1/revocations/stream') {
+      const adminErr = requireAdmin(request, env);
+      if (adminErr) return adminErr;
+
+      const kv = env.SCOPE_REVOCATIONS;
+      if (!kv) {
+        return errorResponse(
+          'REVOCATION_NOT_CONFIGURED',
+          'SCOPE_REVOCATIONS KV binding is not configured',
+          503
+        );
+      }
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 50), 1),
+        200
+      );
+
+      const cursor = url.searchParams.get('cursor') ?? undefined;
+      const list = await kv.list({ prefix: REVOCATION_EVENT_PREFIX, limit, cursor });
+
+      const events: Array<{ sequence: number; key: string; record: unknown }> = [];
+      for (const [idx, k] of list.keys.entries()) {
+        const raw = await kv.get(k.name);
+        if (!raw) continue;
+
+        let record: unknown;
+        try {
+          record = JSON.parse(raw) as unknown;
+        } catch {
+          record = raw;
+        }
+
+        events.push({ sequence: idx + 1, key: k.name, record });
+      }
+
+      return jsonResponse({
+        stream_version: '1',
+        events,
+        cursor: 'cursor' in list ? list.cursor : null,
+        list_complete: list.list_complete,
+      });
+    }
+
+    // Key rotation overlap contract (CSC-US-014)
+    if (request.method === 'GET' && url.pathname === '/v1/keys/rotation-contract') {
+      let keyset: IssuerKeySet | null;
+      try {
+        keyset = await getIssuerKeySet(env);
+      } catch {
+        return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+      }
+
+      if (!keyset) {
+        return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+      }
+
+      const overlapSeconds = parseIntOrDefault(env.SCOPE_KEY_ROTATION_OVERLAP_SECONDS, 3600);
+      const acceptedKids = keyset.keys.map((k) => k.kid);
+      const activeKid = keyset.active.kid;
+
+      return jsonResponse({
+        contract_version: '1',
+        key_algorithm: 'Ed25519',
+        active_kid: activeKid,
+        accepted_kids: acceptedKids,
+        overlap_seconds: overlapSeconds,
+        revocation_stream_endpoint: '/v1/revocations/stream',
+        jwks_endpoint: '/v1/jwks',
+      });
+    }
+
     // Issuance audit events (CSC-US-006)
     if (request.method === 'GET' && url.pathname === '/v1/audit/issuance') {
       const adminErr = requireAdmin(request, env);
@@ -1105,140 +1825,110 @@ export default {
         return errorResponse('INVALID_REQUEST', 'token is required', 400);
       }
 
-      const token_hash = await sha256(token);
+      const introspection = await getIntrospectionResult(token, env);
+      if (!introspection.ok) return introspection.res;
 
-      const parts = token.split('.');
-      if (parts.length !== 3) {
-        return errorResponse('TOKEN_MALFORMED', 'CST token must be a JWT (header.payload.signature)', 401);
-      }
-
-      const headerB64u = parts[0]!;
-      const payloadB64u = parts[1]!;
-      const signatureB64u = parts[2]!;
-
-      let header: unknown;
-      try {
-        header = decodeJwtJsonSegment(headerB64u);
-      } catch {
-        return errorResponse('TOKEN_MALFORMED', 'Invalid JWT header encoding', 401);
-      }
-
-      if (typeof header !== 'object' || header === null) {
-        return errorResponse('TOKEN_MALFORMED', 'Invalid JWT header', 401);
-      }
-
-      const h = header as Record<string, unknown>;
-      if (h.alg !== 'EdDSA') {
-        return errorResponse('TOKEN_UNSUPPORTED_ALG', 'Unsupported token algorithm (expected EdDSA)', 401);
-      }
-
-      let payload: unknown;
-      try {
-        payload = decodeJwtJsonSegment(payloadB64u);
-      } catch {
-        return errorResponse('TOKEN_MALFORMED', 'Invalid JWT payload encoding', 401);
-      }
-
-      if (typeof payload === 'object' && payload !== null) {
-        const pv = (payload as Record<string, unknown>).token_version;
-        if (pv !== undefined && pv !== '1') {
-          return errorResponse('TOKEN_UNKNOWN_VERSION', 'Unknown token_version', 401);
-        }
-      }
-
-      if (!validateClaimsShape(payload)) {
-        return errorResponse(
-          'TOKEN_INVALID_CLAIMS',
-          'Token claims do not match scoped_token_claims.v1 schema',
-          401
-        );
-      }
-
-      // Validate expiry
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (payload.exp <= nowSec) {
-        return errorResponse('TOKEN_EXPIRED', 'Token has expired', 401);
-      }
-
-      // Validate signature
-      let keyset: IssuerKeySet | null;
-      try {
-        keyset = await getIssuerKeySet(env);
-      } catch {
-        return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
-      }
-
-      if (!keyset) {
-        return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
-      }
-
-      let verifyKey: CryptoKey | null = null;
-      if (typeof h.kid === 'string' && h.kid.trim().length > 0) {
-        const key = keyset.byKid.get(h.kid.trim());
-        if (!key) {
-          return errorResponse('TOKEN_UNKNOWN_KID', 'Unknown token kid', 401);
-        }
-        verifyKey = key.publicKey;
-      }
-
-      const signingInput = `${headerB64u}.${payloadB64u}`;
-      let sigValid = false;
-
-      try {
-        if (verifyKey) {
-          sigValid = await verifyEd25519(verifyKey, signatureB64u, signingInput);
-        } else {
-          for (const k of keyset.keys) {
-            if (await verifyEd25519(k.publicKey, signatureB64u, signingInput)) {
-              sigValid = true;
-              break;
-            }
-          }
-        }
-      } catch {
-        return errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401);
-      }
-
-      if (!sigValid) {
-        return errorResponse('TOKEN_SIGNATURE_INVALID', 'Token signature verification failed', 401);
-      }
-
-      const revocation = await getRevocationRecord(env, token_hash);
-      if (revocation) {
+      const payload = introspection.claims;
+      if (introspection.revoked) {
         return jsonResponse({
           active: false,
           revoked: true,
-          token_hash,
+          token_hash: introspection.token_hash,
           sub: payload.sub,
           aud: payload.aud,
           scope: payload.scope,
           owner_ref: payload.owner_ref,
+          owner_did: payload.owner_did,
+          controller_did: payload.controller_did,
+          agent_did: payload.agent_did,
           policy_hash_b64u: payload.policy_hash_b64u,
+          control_plane_policy_hash_b64u: payload.control_plane_policy_hash_b64u,
           token_scope_hash_b64u: payload.token_scope_hash_b64u,
           payment_account_did: payload.payment_account_did,
           spend_cap: payload.spend_cap,
           mission_id: payload.mission_id,
+          token_lane: payload.token_lane,
           iat: payload.iat,
           exp: payload.exp,
-          revoked_at: revocation.revoked_at,
-          revoked_at_iso: revocation.revoked_at_iso,
+          revoked_at: introspection.revoked_at,
+          revoked_at_iso: introspection.revoked_at_iso,
         });
       }
 
       return jsonResponse({
         active: true,
-        token_hash,
+        token_hash: introspection.token_hash,
         sub: payload.sub,
         aud: payload.aud,
         scope: payload.scope,
         owner_ref: payload.owner_ref,
+        owner_did: payload.owner_did,
+        controller_did: payload.controller_did,
+        agent_did: payload.agent_did,
         policy_hash_b64u: payload.policy_hash_b64u,
+        control_plane_policy_hash_b64u: payload.control_plane_policy_hash_b64u,
         token_scope_hash_b64u: payload.token_scope_hash_b64u,
         payment_account_did: payload.payment_account_did,
         spend_cap: payload.spend_cap,
         mission_id: payload.mission_id,
+        token_lane: payload.token_lane,
         iat: payload.iat,
         exp: payload.exp,
+      });
+    }
+
+    // Sensitive-transition introspection matrix (CSC-US-014)
+    if (request.method === 'POST' && url.pathname === '/v1/tokens/introspect/matrix') {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+      }
+
+      if (typeof body !== 'object' || body === null) {
+        return errorResponse('INVALID_REQUEST', 'Request body must be a JSON object', 400);
+      }
+
+      const token = (body as Record<string, unknown>).token;
+      const transition =
+        typeof (body as Record<string, unknown>).transition === 'string'
+          ? ((body as Record<string, unknown>).transition as string).trim()
+          : undefined;
+
+      if (!isNonEmptyString(token)) {
+        return errorResponse('INVALID_REQUEST', 'token is required', 400);
+      }
+
+      const introspection = await getIntrospectionResult(token, env);
+      if (!introspection.ok) return introspection.res;
+
+      const payload = introspection.claims;
+      const matrix = evaluateTransitionMatrix(payload);
+
+      if (introspection.revoked) {
+        return jsonResponse({
+          active: false,
+          revoked: true,
+          token_hash: introspection.token_hash,
+          transition: transition ?? null,
+          matrix,
+          error: 'TOKEN_REVOKED',
+          message: 'Token is revoked and cannot authorize sensitive transitions',
+        });
+      }
+
+      if (transition && !(transition in matrix)) {
+        return errorResponse('TRANSITION_UNKNOWN', `Unknown transition '${transition}'`, 400);
+      }
+
+      return jsonResponse({
+        active: true,
+        revoked: false,
+        token_hash: introspection.token_hash,
+        transition: transition ?? null,
+        transition_result: transition ? matrix[transition] : null,
+        matrix,
       });
     }
 

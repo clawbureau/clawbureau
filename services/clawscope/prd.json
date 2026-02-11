@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawscope-phase2",
-  "description": "clawscope.com (Scope + Observability) — PRD — Define and enforce scoped token access, issue/introspect CSTs, and provide mission + usage analytics across services.",
+  "description": "clawscope.com (Scope + Observability) \u2014 PRD \u2014 Define and enforce scoped token access, issue/introspect CSTs, and provide mission + usage analytics across services.",
   "userStories": [
     {
       "id": "CSC-US-001",
@@ -184,6 +184,21 @@
       "priority": 13,
       "passes": false,
       "notes": ""
+    },
+    {
+      "id": "CSC-US-014",
+      "title": "Canonical CST lane hard cutover",
+      "description": "As platform security, we want canonical controller-bound CST issuance with deterministic introspection controls so sensitive transitions are fail-closed.",
+      "acceptanceCriteria": [
+        "Add canonical CST issuance lane with controller/owner/agent chain binding",
+        "Keep legacy /v1/tokens/issue only as migration path behind explicit mode gate",
+        "Add sensitive-transition introspection matrix with deterministic allow/deny reasons",
+        "Add revocation stream + key rotation overlap contract endpoints",
+        "Typecheck and tests pass"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Implemented canonical lane in `services/clawscope/src/index.ts`: new `POST /v1/tokens/issue/canonical` enforces control-chain lookup + owner/controller/agent claims + sensitive policy gate; legacy `POST /v1/tokens/issue` is now migration-gated (`SCOPE_LEGACY_EXCHANGE_MODE`) with deterministic `LEGACY_EXCHANGE_DISABLED` / `LEGACY_SENSITIVE_SCOPE_FORBIDDEN`. Added `POST /v1/tokens/introspect/matrix`, `GET /v1/revocations/stream`, and `GET /v1/keys/rotation-contract`. Extended claim contract and hash binding for owner/controller/agent + control-plane policy hash. Passed `npm run typecheck && npm test` with new canonical lane tests. Staging deploy: `clawscope-staging` version `c250201a-bb1c-458f-8a87-e4f09270ab60`; smoke: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`."
     }
   ]
 }

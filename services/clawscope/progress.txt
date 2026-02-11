@@ -111,3 +111,40 @@ Started: 2026-02-02T22:30:00Z
   - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-payment-account-binding.mjs --env prod`
   - both smokes successfully exercised clawscope issuance with/without `payment_account_did` and downstream enforcement outcomes.
 ---
+
+## 2026-02-11 - CSC-US-014 / ICP-US-002 (canonical CST lane hard cutover)
+- What was implemented
+  - Added canonical issuance endpoint:
+    - `POST /v1/tokens/issue/canonical`
+    - requires owner/controller/agent DID chain claims
+    - validates chain state via clawclaim control-plane read endpoint
+    - enforces controller sensitive-scope policy and policy-hash consistency
+  - Hardened legacy issuance as migration lane:
+    - `POST /v1/tokens/issue` now honors `SCOPE_LEGACY_EXCHANGE_MODE` (`enabled|migration|disabled`)
+    - deterministic deny codes for migration/disabled paths:
+      - `LEGACY_SENSITIVE_SCOPE_FORBIDDEN`
+      - `LEGACY_EXCHANGE_DISABLED`
+  - Added deterministic sensitive-transition matrix endpoint:
+    - `POST /v1/tokens/introspect/matrix`
+    - returns per-transition allow/deny with reason codes
+  - Added explicit revocation + key-rotation contracts:
+    - `GET /v1/revocations/stream`
+    - `GET /v1/keys/rotation-contract`
+  - Extended CST claim contract + deterministic scope hashing with canonical lane fields:
+    - owner/controller/agent DID claims
+    - `control_plane_policy_hash_b64u`
+    - `token_lane`
+- Files changed
+  - `services/clawscope/src/index.ts`
+  - `services/clawscope/src/token-scope-hash.ts`
+  - `services/clawscope/wrangler.toml`
+  - `services/clawscope/test/canonical-cst.test.ts`
+  - `services/clawscope/test/token-scope-hash.test.ts`
+  - `packages/schema/auth/scoped_token_claims.v1.json`
+- Quality checks
+  - `cd services/clawscope && npm run typecheck && npm test`
+- Staging deploy
+  - `clawscope-staging` version `c250201a-bb1c-458f-8a87-e4f09270ab60`
+- Smoke evidence
+  - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+---

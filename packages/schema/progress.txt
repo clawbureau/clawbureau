@@ -106,3 +106,16 @@ Started: 2026-02-03
   - `payment_account_did`
 - Updated deterministic hash contract description:
   - `token_scope_hash_b64u` now includes `payment_account_did` when present in canonical claim set.
+
+## ICP-US-002 — Canonical CST lane claim contract extensions
+- Extended `packages/schema/auth/scoped_token_claims.v1.json` for identity control-plane hard cutover:
+  - added optional canonical control-chain claims:
+    - `owner_did`
+    - `controller_did`
+    - `agent_did`
+  - added optional control-policy binding claim:
+    - `control_plane_policy_hash_b64u`
+  - added issuance lane claim:
+    - `token_lane` (`legacy | canonical`)
+- Updated deterministic token hash contract description:
+  - `token_scope_hash_b64u` now includes canonical chain/policy fields when present.

@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/clawverify/{prd.json,progress.txt}` + `packages/schema/**`
 >
 > **Scope:**
@@ -336,6 +336,32 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Verification success rate
 - Median verification latency < 50ms
 - % invalid envelopes detected
+
+---
+
+## 9) 2026-02-11 addendum — ICP-US-003 control-chain + token-control verification
+
+Shipped in `services/clawverify/src/index.ts`:
+- `POST /v1/verify/control-chain`
+- `POST /v1/verify/token-control`
+
+Deterministic verification/remediation modules:
+- `services/clawverify/src/verify-control-chain.ts`
+- `services/clawverify/src/verify-token-control.ts`
+
+Key deterministic error codes (new):
+- `CONTROL_CHAIN_NOT_FOUND`
+- `CONTROL_CHAIN_CONTEXT_MISMATCH`
+- `TOKEN_CONTROL_SCOPE_HASH_MISMATCH`
+- `TOKEN_CONTROL_AUDIENCE_MISMATCH`
+- `TOKEN_CONTROL_SCOPE_MISSING`
+- `TOKEN_CONTROL_TRANSITION_FORBIDDEN`
+- `TOKEN_CONTROL_CHAIN_MISSING`
+- `TOKEN_CONTROL_SUBJECT_MISMATCH`
+
+Delivery evidence:
+- Staging deploy: `clawverify-staging` version `799e87ff-0456-4690-8563-96b38f3ff26a`
+- Smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
 
 ---
 

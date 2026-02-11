@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/clawclaim/{prd.json,progress.txt}` + `packages/schema/identity/*`
 >
 > **Scope:**
@@ -183,6 +183,21 @@ Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge
 - Binding success rate
 - Revocations processed
 - % of OpenClaw gateways with at least one bound DID
+
+---
+
+## 9) 2026-02-11 addendum — ICP-US-001 controller-first provisioning hard cutover
+
+Shipped in `services/clawclaim/src/index.ts`:
+- `POST /v1/control-plane/challenges`
+- `POST /v1/control-plane/controllers/register`
+- `POST /v1/control-plane/controllers/{controller_did}/agents/register`
+- `POST /v1/control-plane/controllers/{controller_did}/sensitive-policy`
+- deterministic chain read/list endpoints under `/v1/control-plane/controllers/*`
+
+Delivery evidence:
+- Staging deploy: `clawclaim-staging` version `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`
+- Smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
 
 ---
 
