@@ -92,6 +92,21 @@ interface Article {
   indexable?: boolean;
 }
 
+interface ManifestEntry {
+  title: string;
+  category: string;
+  description: string;
+  indexable?: boolean;
+}
+
+interface SearchResult {
+  slug: string;
+  title: string;
+  description: string;
+  category: string;
+  score: number;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 function json(data: unknown, status = 200): Response {
@@ -567,8 +582,127 @@ async function loadArticle(env: Env, slug: string): Promise<Article | null> {
   return data;
 }
 
+async function loadManifest(env: Env): Promise<Record<string, ManifestEntry>> {
+  const obj = await env.ARTICLES.get("articles/_manifest.json");
+  if (!obj) return {};
+  try {
+    const parsed = await obj.json<Record<string, ManifestEntry>>();
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function slugFromPath(pathname: string): string {
   return pathname.replace(/^\//, "").replace(/\/$/, "");
+}
+
+function normalizeSearchQuery(raw: string | null): string {
+  return (raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .slice(0, 120);
+}
+
+function searchManifest(manifest: Record<string, ManifestEntry>, query: string, limit = 30): SearchResult[] {
+  if (!query) return [];
+  const tokens = [...new Set(query.split(/[^a-z0-9]+/g).filter((t) => t.length >= 2))];
+  const out: SearchResult[] = [];
+
+  for (const [slug, entry] of Object.entries(manifest)) {
+    if (!entry || typeof entry.title !== "string") continue;
+
+    const title = entry.title.toLowerCase();
+    const desc = (entry.description ?? "").toLowerCase();
+    const slugText = slug.toLowerCase().replace(/\//g, " ");
+
+    let score = 0;
+    if (title.includes(query)) score += 120;
+    if (slugText.includes(query)) score += 90;
+    if (desc.includes(query)) score += 45;
+
+    for (const t of tokens) {
+      if (title.startsWith(t)) score += 25;
+      if (title.includes(t)) score += 18;
+      if (slugText.includes(t)) score += 15;
+      if (desc.includes(t)) score += 8;
+    }
+
+    if (entry.indexable === true) score += 8;
+    if (score <= 0) continue;
+
+    out.push({
+      slug,
+      title: entry.title,
+      description: entry.description,
+      category: entry.category,
+      score,
+    });
+  }
+
+  return out
+    .sort((a, b) => (b.score - a.score) || a.slug.localeCompare(b.slug, "en"))
+    .slice(0, limit);
+}
+
+function previewText(input: string, max = 220): string {
+  const cleaned = input.replace(/\s+/g, " ").trim();
+  if (cleaned.length <= max) return cleaned;
+  return `${cleaned.slice(0, max - 1)}…`;
+}
+
+function glossarySearchPage(query: string, results: SearchResult[]): string {
+  const q = query.trim();
+  const hasResults = results.length > 0;
+  const body = hasResults
+    ? `<div class="search-results">${results
+        .map(
+          (r) => `<a class="search-result-card" href="/${r.slug}">
+            <div class="search-result-meta">
+              <span class="badge badge-blue">${esc(r.category.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}</span>
+              <span class="search-pill">/${esc(r.slug)}</span>
+            </div>
+            <div class="search-result-title">${esc(r.title.replace(/ \| Claw EA$/, ""))}</div>
+            <p class="search-result-desc">${esc(previewText(r.description, 240))}</p>
+          </a>`,
+        )
+        .join("")}</div>`
+    : `<div class="search-empty">
+        No exact matches for <strong>${esc(q)}</strong>. Try a tool name (e.g. <em>Okta</em>), a control (e.g. <em>DLP</em>), or a workflow phrase (e.g. <em>approval gate</em>).
+      </div>`;
+
+  return layout({
+    meta: {
+      title: `Search: ${q} | Claw EA`,
+      description: `Search Claw EA policy, workflow, tool, and glossary content for “${q}”.`,
+      path: "/glossary",
+      canonicalPath: "/glossary",
+      noindex: true,
+      ogImageAlt: `Search results for ${q}`,
+    },
+    breadcrumbs: [
+      { name: "Home", path: "/" },
+      { name: "Glossary", path: "/glossary" },
+      { name: `Search: ${q}`, path: "/glossary" },
+    ],
+    body: `
+    <section class="section content-page">
+      <div class="wrap">
+        <h1>Search results</h1>
+        <p class="search-summary">
+          <span class="search-pill">Query: ${esc(q)}</span>
+          <span>${results.length} result${results.length === 1 ? "" : "s"}</span>
+        </p>
+        <form class="card" role="search" action="/glossary" method="get" style="max-width:780px;padding:1rem 1.2rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <label for="glossary-search-input" class="sr-only">Refine search query</label>
+          <input id="glossary-search-input" type="search" name="q" value="${esc(q)}" placeholder="Search controls, workflows, tools..." style="flex:1;min-width:200px;border:1px solid var(--border);background:var(--surface-2);color:var(--text);padding:.6rem .75rem;border-radius:.6rem">
+          <button type="submit" class="cta-btn" data-cta="glossary-search-submit">Search</button>
+        </form>
+        ${body}
+      </div>
+    </section>`,
+  });
 }
 
 type TrackingEventType =
@@ -1163,6 +1297,18 @@ function formatDateYmd(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+function estimateReadMinutes(rawHtml: string, wordsPerMinute = 220): number {
+  const words = rawHtml
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean).length;
+
+  if (words <= 0) return 1;
+  return Math.max(1, Math.round(words / wordsPerMinute));
+}
+
 function toTitle(s: string): string {
   return s
     .split("-")
@@ -1332,6 +1478,8 @@ function articlePage(article: Article): string {
   }
 
   const updated = formatDateYmd(article.generatedAt);
+  const readMinutes = estimateReadMinutes(article.html);
+  const slugParts = article.slug.split("/").filter(Boolean);
 
   // Process article body: inject heading IDs, extract TOC, wrap tables
   const { html: processedHtml, toc } = extractAndInjectHeadings(article.html);
@@ -1355,11 +1503,20 @@ function articlePage(article: Article): string {
     .replace(/-/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
+  const familySlug = slugParts.length > 1 ? slugParts[0] : null;
+  const familyLinkHtml = familySlug
+    ? `<a href="/${familySlug}" class="meta-chip meta-chip-link" role="listitem">${esc(toTitle(familySlug))} hub</a>`
+    : "";
+
   return layout({
     meta: {
       title: article.title,
       description: article.description,
       path: `/${article.slug}`,
+      ogType: "article",
+      ogImageAlt: `${headline} | Claw EA`,
+      articleSection: categoryLabel,
+      publishedTime: article.generatedAt,
       modifiedTime: article.generatedAt,
       // Plan A: fail-closed. Only explicitly indexable pages should be indexed.
       noindex: article.indexable !== true,
@@ -1371,7 +1528,13 @@ function articlePage(article: Article): string {
       <div class="wrap">
         <span class="badge badge-blue">${categoryLabel}</span>
         <h1>${esc(headline)}</h1>
-        <p class="article-meta">Updated <time datetime="${esc(article.generatedAt)}">${updated}</time>. Evidence is linked in Sources when available.</p>
+        <p class="article-meta">Evidence is linked in Sources when available.</p>
+        <div class="article-meta-strip" role="list" aria-label="Article metadata">
+          <span class="meta-chip" role="listitem">Updated <time datetime="${esc(article.generatedAt)}">${updated}</time></span>
+          <span class="meta-chip" role="listitem">${readMinutes} min read</span>
+          <span class="meta-chip" role="listitem">${esc(categoryLabel)}</span>
+          ${familyLinkHtml}
+        </div>
         ${takeawaysHtml}
         <div class="article-layout">
           ${tocHtml}
@@ -1543,6 +1706,15 @@ export default {
     if (path === "/secure-workers") return html(secureWorkersPage());
     if (path === "/consulting") return html(consultingPage());
     if (path === "/about") return html(aboutPage());
+
+    if (path === "/glossary") {
+      const q = normalizeSearchQuery(url.searchParams.get("q"));
+      if (q) {
+        const manifest = await loadManifest(env);
+        const results = searchManifest(manifest, q, 32);
+        return html(glossarySearchPage(q, results), 200, 300);
+      }
+    }
 
     // ── Robots.txt ──
     if (path === "/robots.txt") {
