@@ -306,3 +306,26 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck
 ---
+
+## 2026-02-11 - POHVN-US-007 (audit-ready export bundles MVP)
+- What was implemented
+  - Added export-bundle schema validation support (Ajv standalone):
+    - `execution_attestation_envelope.v1`
+    - `export_bundle_manifest.v1`
+    - `export_bundle.v1`
+  - Added new verifier module:
+    - `verify-export-bundle.ts`
+    - verifies manifest hashes/content-addressing, bundle hash/signature, and nested envelopes via existing verifiers
+    - validates optional inclusion proofs through nested derivation/audit verifiers
+  - Added API endpoint:
+    - `POST /v1/verify/export-bundle`
+- Tests
+  - Added deterministic fixture + tests:
+    - `packages/schema/fixtures/export_bundle_golden.v1.json`
+    - `services/clawverify/test/export-bundle.test.ts`
+  - Added smoke scripts:
+    - `scripts/poh/smoke-export-bundle.mjs`
+    - `scripts/poh/smoke-clawlogs-inclusion-proof-e2e.mjs`
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck
+---

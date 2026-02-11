@@ -287,13 +287,15 @@
       "title": "Audit-ready export bundles (offline verifiability)",
       "description": "As an auditor, I want a single export bundle containing proof bundles, execution attestations, and inclusion proofs so that verification works offline.",
       "acceptanceCriteria": [
-        "Export includes proof bundle, execution attestation, and relevant inclusion proofs",
-        "Export is itself signed and content-addressed",
-        "clawverify can validate the export artifacts without external network calls (except optional schema fetch)"
+        "Export bundle schema includes deterministic file manifest entries {path, sha256_b64u, content_type, size_bytes}",
+        "Export bundle is signed + content-addressed (bundle_hash_b64u + Ed25519 signature)",
+        "clawverify endpoint POST /v1/verify/export-bundle validates manifest hashes and included envelopes without external network calls",
+        "Tampered manifest/proof artifacts fail closed"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": "Phase 1. Critical for enterprise compliance workflows."
+      "passes": true,
+      "notes": "Phase 1. Critical for enterprise compliance workflows.",
+      "completionNotes": "Added export_bundle_manifest.v1 + export_bundle.v1 schemas and execution_attestation_envelope.v1, implemented /v1/verify/export-bundle with strict Ajv standalone schema validation, manifest/content-address checks, signature verification, and nested proof/attestation verification (including optional clawlogs inclusion proofs). Added deterministic fixtures + smoke scripts and validated staging+prod." 
     },
     {
       "id": "POHVN-US-008",
@@ -310,6 +312,6 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-10T22:55:00.000Z"
+    "updatedAt": "2026-02-11T04:40:00.000Z"
   }
 }

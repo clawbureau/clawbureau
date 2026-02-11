@@ -1,0 +1,120 @@
+{
+  "vector_version": "1",
+  "description": "Golden export bundle fixture for verify/export-bundle tests",
+  "bundle": {
+    "export_version": "1",
+    "export_id": "exp_fixture_001",
+    "created_at": "2026-02-11T00:00:00.000Z",
+    "issuer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "manifest": {
+      "manifest_version": "1",
+      "generated_at": "2026-02-11T00:00:00.000Z",
+      "entries": [
+        {
+          "path": "artifacts/proof_bundle_envelope.json",
+          "sha256_b64u": "OTeiUscT6RoSwft3D_aT_0m4k9S5DpdpTifYldYI0KU",
+          "content_type": "application/json",
+          "size_bytes": 835
+        },
+        {
+          "path": "artifacts/derivation_attestation_envelopes/0.json",
+          "sha256_b64u": "5rX65Qrx-RIoUlZfwwjJGl7ijuWuY1dwOH9dd5Ja1nM",
+          "content_type": "application/json",
+          "size_bytes": 1480
+        }
+      ]
+    },
+    "artifacts": {
+      "proof_bundle_envelope": {
+        "envelope_version": "1",
+        "envelope_type": "proof_bundle",
+        "payload": {
+          "bundle_version": "1",
+          "bundle_id": "bundle_export_fixture_001",
+          "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+          "event_chain": [
+            {
+              "event_id": "evt_export_fixture_001",
+              "run_id": "run_export_fixture_001",
+              "event_type": "run_start",
+              "timestamp": "2026-02-11T00:00:00.000Z",
+              "payload_hash_b64u": "Hx48o1TscX-2mK_WDutIaGGEMWIysWrWQOMBWJJYAaA",
+              "prev_hash_b64u": null,
+              "event_hash_b64u": "JaQuwPd6Tkdzt8MXkU_xgESGZUb5TRT0rEB8uRhto6k"
+            }
+          ]
+        },
+        "payload_hash_b64u": "4-f0IRR-epRdTI3ONpASaL1vSd0hFLWgHQBruAnPirI",
+        "hash_algorithm": "SHA-256",
+        "signature_b64u": "g6K3mycVkxxSJQxCMHOHCv1D_J4me_jHFMl6jKXoO5_ehDBcc4DLQONXVOxwldWZ3FDtVPkE4Fwyu-iBq2rHCg",
+        "algorithm": "Ed25519",
+        "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "issued_at": "2026-02-11T00:00:00.000Z"
+      },
+      "derivation_attestation_envelopes": [
+        {
+          "envelope_version": "1",
+          "envelope_type": "derivation_attestation",
+          "payload": {
+            "derivation_version": "1",
+            "derivation_id": "drv_export_fixture_001",
+            "issued_at": "2026-02-11T00:00:00.000Z",
+            "input_model": {
+              "model_identity_version": "1",
+              "tier": "closed_opaque",
+              "model": {
+                "provider": "openai",
+                "name": "gpt-5.2"
+              }
+            },
+            "output_model": {
+              "model_identity_version": "1",
+              "tier": "closed_opaque",
+              "model": {
+                "provider": "openai",
+                "name": "gpt-5.2"
+              }
+            },
+            "transform": {
+              "kind": "other"
+            },
+            "clawlogs": {
+              "inclusion_proof": {
+                "proof_version": "1",
+                "log_id": "golden-log",
+                "tree_size": 5,
+                "leaf_hash_b64u": "n95Ww3Z2C9OZuC64VpIpot_xkhlBGscRVN_qss9QJFQ",
+                "root_hash_b64u": "OtSr7F1Drgn1J1z3znfYYV4ehxZLJVqnZh4jexmCpb8",
+                "audit_path": [
+                  "ZJg33ct-GWcIbX01qu97l1xROBXZb8bnABXpOiv-D5o",
+                  "iw9WMQYHAEihBXkmggxxGN7CC4pzcVVE9FKEh8FtwNc",
+                  "17co8mIcX0LM67kEB3j-Y7Mg-sgU-dul7LbCd3hcSx4"
+                ],
+                "root_published_at": "2026-02-11T00:00:00.000Z",
+                "root_signature": {
+                  "signer_did": "did:key:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+                  "sig_b64u": "-eeETOAyc_x8YNJ2d3PqoJPCMPU8SjV6uvKEZwZMa0J4iai-wDs7x8xdrlfottKHsS9HT-EtGaOE85xGcu5ZBA"
+                },
+                "metadata": {
+                  "leaf_index": 3,
+                  "merkle_algorithm": "sha256(left||right), duplicate-last for odd levels"
+                }
+              }
+            }
+          },
+          "payload_hash_b64u": "B_xkgOI7dUg4v9YK2QQr4N722jUpK6_hJ7Du-4Q_EVs",
+          "hash_algorithm": "SHA-256",
+          "signature_b64u": "6WuxTWjCBUEJjDWeTyTxDrsafFahdfBXAPgo-nptX9MLF8ypok1OmMmgB7VjYzLg6jaa7gyHpfUn53xn3iNlDQ",
+          "algorithm": "Ed25519",
+          "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+          "issued_at": "2026-02-11T00:00:00.000Z"
+        }
+      ]
+    },
+    "bundle_hash_b64u": "I2mrV0MtqXZlRInwzF80LAxTaTLoOiIRLgtG4DDUMt4",
+    "hash_algorithm": "SHA-256",
+    "signature_b64u": "OlZhD9yvhg7gfo2rRYMxW_MQSPzNMHMJz5dCyDygPFfrzpepdp4eLcSvxhIGRd48tL8a16RBzIIU8meF48UyAw",
+    "algorithm": "Ed25519",
+    "issued_at": "2026-02-11T00:00:00.000Z"
+  }
+}

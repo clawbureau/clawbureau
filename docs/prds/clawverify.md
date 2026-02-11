@@ -301,6 +301,16 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Verification output includes `policy_compliance` + per-requirement failures
 - Verification fails closed when policy is supplied and requirements are not met
 
+### CVF-US-021 — Verify audit-ready export bundles (offline)
+**As an** auditor, **I want** clawverify to validate export bundles offline **so that** I can verify evidence packages without external network dependencies.
+
+**Acceptance Criteria:**
+- `POST /v1/verify/export-bundle` validates `export_bundle.v1`
+- Manifest entries (`path`, `sha256_b64u`, `content_type`, `size_bytes`) are fail-closed checked against included artifacts
+- Export bundle hash + signature are verified (Ed25519 over `bundle_hash_b64u`)
+- Included proof bundle / execution / derivation / audit envelopes are verified via existing verifiers
+- Optional inclusion proofs inside included attestations are fail-closed validated when present
+
 ## 8) Success Metrics
 - Verification success rate
 - Median verification latency < 50ms

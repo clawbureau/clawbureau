@@ -33,6 +33,11 @@ const derivationAttestation = readJson('packages/schema/poh/derivation_attestati
 const derivationAttestationEnvelope = readJson('packages/schema/poh/derivation_attestation_envelope.v1.json');
 const auditResultAttestation = readJson('packages/schema/poh/audit_result_attestation.v1.json');
 const auditResultAttestationEnvelope = readJson('packages/schema/poh/audit_result_attestation_envelope.v1.json');
+const executionAttestation = readJson('packages/schema/poh/execution_attestation.v1.json');
+const executionAttestationEnvelope = readJson('packages/schema/poh/execution_attestation_envelope.v1.json');
+
+const exportBundleManifest = readJson('packages/schema/poh/export_bundle_manifest.v1.json');
+const exportBundle = readJson('packages/schema/poh/export_bundle.v1.json');
 
 const gatewayReceipt = readJson('packages/schema/poh/gateway_receipt.v1.json');
 const gatewayReceiptEnvelope = readJson('packages/schema/poh/gateway_receipt_envelope.v1.json');
@@ -73,6 +78,12 @@ ajv.addSchema(derivationAttestation);
 ajv.addSchema(derivationAttestationEnvelope);
 ajv.addSchema(auditResultAttestation);
 ajv.addSchema(auditResultAttestationEnvelope);
+ajv.addSchema(executionAttestation);
+ajv.addSchema(executionAttestationEnvelope);
+
+// Export bundle schemas
+ajv.addSchema(exportBundleManifest);
+ajv.addSchema(exportBundle);
 
 // PoH artifact schemas (URM materialization)
 ajv.addSchema(urm);
@@ -87,6 +98,7 @@ const code = standaloneCode(ajv, {
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,
   validateLogInclusionProofV1: logInclusionProof.$id,
+  validateExportBundleV1: exportBundle.$id,
   validateModelIdentityV1: modelIdentity.$id,
   validateUrmV1: urm.$id,
   validatePromptPackV1: promptPack.$id,

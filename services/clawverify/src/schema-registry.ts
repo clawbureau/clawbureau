@@ -123,6 +123,13 @@ export const SCHEMA_ALLOWLIST: readonly SchemaAllowlistEntry[] = [
     added_at: '2026-02-11T00:00:00Z',
   },
   {
+    schema_id: 'export_bundle',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-11T00:00:00Z',
+  },
+  {
     schema_id: 'scoped_token',
     version: '1',
     supported_versions: ['1'],

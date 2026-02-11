@@ -17,6 +17,7 @@ import { verifyDidRotation } from './verify-did-rotation';
 import { verifyCommitProof } from './verify-commit-proof';
 import { verifyAgent } from './verify-agent';
 import { verifyScopedToken } from './verify-scoped-token';
+import { verifyExportBundle } from './verify-export-bundle';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -42,6 +43,7 @@ import type {
   VerifyCommitProofResponse,
   VerifyAgentResponse,
   IntrospectScopedTokenResponse,
+  VerifyExportBundleResponse,
   EnvelopeType,
   AuditLogReceipt,
 } from './types';
@@ -1018,6 +1020,67 @@ async function handleVerifyBundle(
 }
 
 /**
+ * Handle POST /v1/verify/export-bundle - Verify audit-ready export bundles
+ */
+async function handleVerifyExportBundle(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null || !('bundle' in body)) {
+    return errorResponse('Request must contain a "bundle" field', 400);
+  }
+
+  const { bundle } = body as { bundle: unknown };
+
+  const verification = await verifyExportBundle(bundle, {
+    allowlistedReceiptSignerDids: parseCommaSeparatedAllowlist(
+      env.GATEWAY_RECEIPT_SIGNER_DIDS
+    ),
+    allowlistedAttesterDids: parseCommaSeparatedAllowlist(
+      env.ATTESTATION_SIGNER_DIDS
+    ),
+    allowlistedExecutionAttestationSignerDids: parseCommaSeparatedAllowlist(
+      env.EXECUTION_ATTESTATION_SIGNER_DIDS
+    ),
+    allowlistedDerivationAttestationSignerDids: parseCommaSeparatedAllowlist(
+      env.DERIVATION_ATTESTATION_SIGNER_DIDS
+    ),
+    allowlistedAuditResultAttestationSignerDids: parseCommaSeparatedAllowlist(
+      env.AUDIT_RESULT_ATTESTATION_SIGNER_DIDS
+    ),
+  });
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.export_id) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'export_bundle' as EnvelopeType,
+      verification.result.status,
+      verification.export_id,
+    );
+  }
+
+  const response: VerifyExportBundleResponse & {
+    audit_receipt?: AuditLogReceipt;
+  } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle POST /v1/verify/event-chain - Verify event chain envelopes
  */
 async function handleVerifyEventChain(
@@ -1297,6 +1360,7 @@ export default {
         <li><code>POST /v1/verify/commit-proof</code> — commit_proof verification</li>
         <li><code>POST /v1/verify/batch</code> — batch verification</li>
         <li><code>POST /v1/verify/bundle</code> — proof bundle verification (trust tier)</li>
+        <li><code>POST /v1/verify/export-bundle</code> — audit-ready export bundle verification (offline)</li>
         <li><code>POST /v1/verify/event-chain</code> — event chain verification</li>
         <li><code>POST /v1/verify/agent</code> — one-call agent verification</li>
         <li><code>POST /v1/introspect/scoped-token</code> — scoped token introspection</li>
@@ -1337,6 +1401,7 @@ export default {
             { method: 'POST', path: '/v1/verify/commit-proof' },
             { method: 'POST', path: '/v1/verify/batch' },
             { method: 'POST', path: '/v1/verify/bundle' },
+            { method: 'POST', path: '/v1/verify/export-bundle' },
             { method: 'POST', path: '/v1/verify/event-chain' },
             { method: 'POST', path: '/v1/verify/agent' },
             { method: 'POST', path: '/v1/introspect/scoped-token' },
@@ -1474,6 +1539,11 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/verify/bundle - Proof bundle verification
     if (url.pathname === '/v1/verify/bundle' && method === 'POST') {
       return handleVerifyBundle(request, env);
+    }
+
+    // POST /v1/verify/export-bundle - Export bundle verification
+    if (url.pathname === '/v1/verify/export-bundle' && method === 'POST') {
+      return handleVerifyExportBundle(request, env);
     }
 
     // POST /v1/verify/event-chain - Event chain verification
