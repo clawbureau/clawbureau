@@ -1,0 +1,45 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.export_bundle_manifest.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Export Bundle Manifest v1",
+  "description": "Content-addressed manifest for offline verification bundles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest_version", "generated_at", "entries"],
+  "properties": {
+    "manifest_version": { "const": "1" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256_b64u", "content_type", "size_bytes"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Artifact path in the virtual export bundle filesystem."
+          },
+          "sha256_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "SHA-256 hash of canonical artifact bytes (base64url)."
+          },
+          "content_type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "MIME type of the artifact content."
+          },
+          "size_bytes": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Byte size of canonical artifact content."
+          }
+        }
+      }
+    }
+  }
+}

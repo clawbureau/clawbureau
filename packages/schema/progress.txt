@@ -64,3 +64,11 @@ Started: 2026-02-03
 - Added deterministic fixture for Merkle/proof/signature verification tests:
   - `packages/schema/fixtures/log_inclusion_proof_golden.v1.json`
 - Updated `packages/schema/README.md` fixture list.
+
+## POHVN-US-007 — audit-ready export bundle schemas + fixture
+- Added export bundle schemas:
+  - `packages/schema/poh/execution_attestation_envelope.v1.json`
+  - `packages/schema/poh/export_bundle_manifest.v1.json`
+  - `packages/schema/poh/export_bundle.v1.json`
+- Added deterministic export-bundle fixture:
+  - `packages/schema/fixtures/export_bundle_golden.v1.json`

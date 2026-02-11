@@ -48,6 +48,7 @@ Shared JSON schemas for Claw Bureau services.
 - `receipt_binding.v1.json`
 - `urm.v1.json`
 - `execution_attestation.v1.json`
+- `execution_attestation_envelope.v1.json`
 - `prompt_pack.v1.json`
 - `system_prompt_report.v1.json`
 - `trust_pulse.v1.json` (self-reported UX artifact; non-tier)
@@ -57,7 +58,10 @@ Shared JSON schemas for Claw Bureau services.
 - `audit_result_attestation.v1.json`
 - `audit_result_attestation_envelope.v1.json`
 - `log_inclusion_proof.v1.json`
+- `export_bundle_manifest.v1.json`
+- `export_bundle.v1.json`
 
 ### `fixtures/`
 - `protocol-m-golden-vector.v1.json`
 - `log_inclusion_proof_golden.v1.json`
+- `export_bundle_golden.v1.json`

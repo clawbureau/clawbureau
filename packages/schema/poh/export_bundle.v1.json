@@ -1,0 +1,77 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.export_bundle.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audit-ready Export Bundle v1",
+  "description": "Offline-verifiable export bundle containing proof bundle evidence, execution attestations, and optional derivation/audit attestations plus inclusion proofs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "export_version",
+    "export_id",
+    "created_at",
+    "issuer_did",
+    "manifest",
+    "artifacts",
+    "bundle_hash_b64u",
+    "hash_algorithm",
+    "signature_b64u",
+    "algorithm",
+    "issued_at"
+  ],
+  "properties": {
+    "export_version": { "const": "1" },
+    "export_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "issuer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "Signer DID for this export bundle."
+    },
+    "manifest": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.export_bundle_manifest.v1.json"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proof_bundle_envelope"],
+      "properties": {
+        "proof_bundle_envelope": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.proof_bundle_envelope.v1.json"
+        },
+        "execution_attestation_envelopes": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.clawbureau.org/claw.poh.execution_attestation_envelope.v1.json"
+          }
+        },
+        "derivation_attestation_envelopes": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.clawbureau.org/claw.poh.derivation_attestation_envelope.v1.json"
+          }
+        },
+        "audit_result_attestation_envelopes": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.clawbureau.org/claw.poh.audit_result_attestation_envelope.v1.json"
+          }
+        }
+      }
+    },
+    "bundle_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash over canonical bundle signable content."
+    },
+    "hash_algorithm": { "type": "string", "enum": ["SHA-256"] },
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "algorithm": { "type": "string", "enum": ["Ed25519"] },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  }
+}

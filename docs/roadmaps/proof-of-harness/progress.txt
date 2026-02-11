@@ -272,3 +272,43 @@ Started: 2026-02-05T21:49:28Z
 - Notes
   - Proof verification is optional-field strictness: no proof => no gate; proof present => must verify.
 ---
+
+## 2026-02-11T05:00:00Z - POHVN-US-004 (operational rollout complete)
+- Rollout
+  - Deployed `services/clawlogs` to staging + production.
+  - Removed parked clawlogs routes by redeploying `services/claw-domains`, then attached `clawlogs.com/*` to dedicated `clawlogs` worker.
+  - Deployed `services/clawverify` to staging + production so inclusion-proof validation is live.
+- Ops actions
+  - Set clawlogs secrets in both envs:
+    - `LOGS_SIGNING_KEY`
+    - `ADMIN_TOKEN`
+  - Created staging DNS for clawlogs:
+    - `staging.clawlogs.com` (proxied CNAME to `clawlogs.com`)
+- E2E smoke
+  - `scripts/poh/smoke-clawlogs-inclusion-proof-e2e.mjs`
+    - append/root/proof path VALID
+    - tampered proof path INVALID (fail-closed)
+---
+
+## 2026-02-11T05:15:00Z - POHVN-US-007 (audit-ready export bundles MVP) (implemented + deployed)
+- What was implemented
+  - Added schemas:
+    - `execution_attestation_envelope.v1.json`
+    - `export_bundle_manifest.v1.json`
+    - `export_bundle.v1.json`
+  - Added deterministic fixture:
+    - `packages/schema/fixtures/export_bundle_golden.v1.json`
+  - Added `POST /v1/verify/export-bundle` in clawverify:
+    - strict standalone Ajv schema validation
+    - manifest/content-addressing verification
+    - bundle hash/signature verification
+    - nested envelope verification (proof bundle + optional execution/derivation/audit attestations)
+    - inclusion-proof validation via nested derivation/audit verifiers when present
+  - Added smoke script:
+    - `scripts/poh/smoke-export-bundle.mjs`
+- Rollout
+  - Deployed clawverify staging + production with export-bundle endpoint live.
+- E2E smoke
+  - `smoke-export-bundle.mjs --env staging` => VALID + tampered INVALID
+  - `smoke-export-bundle.mjs --env prod` => VALID + tampered INVALID
+---

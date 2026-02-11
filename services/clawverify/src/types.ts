@@ -19,6 +19,7 @@ export const ENVELOPE_TYPES = [
   'execution_attestation',
   'derivation_attestation',
   'audit_result_attestation',
+  'export_bundle',
   'scoped_token',
 ] as const;
 export type EnvelopeType = (typeof ENVELOPE_TYPES)[number];
@@ -821,6 +822,65 @@ export interface VerifyBundleResponse {
   proof_tier?: ProofTier;
   model_identity_tier?: ModelIdentityTier;
   risk_flags?: string[];
+  error?: VerificationError;
+}
+
+/**
+ * Export Bundle verification (POHVN-US-007)
+ */
+
+export interface ExportBundleManifestEntry {
+  path: string;
+  sha256_b64u: string;
+  content_type: string;
+  size_bytes: number;
+}
+
+export interface ExportBundleManifest {
+  manifest_version: '1';
+  generated_at: string;
+  entries: ExportBundleManifestEntry[];
+}
+
+export interface ExportBundleArtifacts {
+  proof_bundle_envelope: SignedEnvelope<ProofBundlePayload>;
+  execution_attestation_envelopes?: SignedEnvelope<ExecutionAttestationPayload>[];
+  derivation_attestation_envelopes?: SignedEnvelope<DerivationAttestationPayload>[];
+  audit_result_attestation_envelopes?: SignedEnvelope<AuditResultAttestationPayload>[];
+}
+
+export interface ExportBundlePayload {
+  export_version: '1';
+  export_id: string;
+  created_at: string;
+  issuer_did: string;
+  manifest: ExportBundleManifest;
+  artifacts: ExportBundleArtifacts;
+  bundle_hash_b64u: string;
+  hash_algorithm: 'SHA-256';
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  issued_at: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyExportBundleRequest {
+  bundle: ExportBundlePayload;
+}
+
+export interface VerifyExportBundleResponse {
+  result: VerificationResult;
+  export_id?: string;
+  bundle_hash_b64u?: string;
+  manifest_entries_verified?: number;
+  verified_components?: {
+    proof_bundle_valid: boolean;
+    execution_attestations_verified: number;
+    derivation_attestations_verified: number;
+    audit_result_attestations_verified: number;
+  };
+  proof_tier?: ProofTier;
+  model_identity_tier?: ModelIdentityTier;
   error?: VerificationError;
 }
 

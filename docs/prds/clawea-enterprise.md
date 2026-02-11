@@ -185,6 +185,7 @@ Every agent deployed through clawea should be pre-wired for:
   - clawlogs inclusion proofs (when clawlogs enabled)
 - Bundle includes a manifest listing `{path,sha256_b64u,content_type,size_bytes}` for each file
 - Bundle is itself signed and content-addressed
+- Bundle verifies via `clawverify` endpoint: `POST /v1/verify/export-bundle` (offline path; no external fetches required)
 
 #### CEA-US-035 — Stateless execution mode (policy-gated)
 **As a** security admin, **I want** stateless execution mode for sensitive runs **so that** prompt residue and covert channels are reduced.
