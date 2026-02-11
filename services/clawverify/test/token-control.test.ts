@@ -227,4 +227,66 @@ describe('verifyTokenControl', () => {
     expect(verification.error?.code).toBe('TOKEN_CONTROL_TRANSITION_FORBIDDEN');
     expect(verification.transition_matrix?.['key.rotate']?.allowed).toBe(false);
   });
+
+  it('maps TOKEN_UNKNOWN_KID from clawscope to TOKEN_CONTROL_KEY_UNKNOWN', async () => {
+    const verification = await verifyTokenControl(
+      {
+        token: 'jwt-token',
+      },
+      {
+        clawscopeBaseUrl: 'https://clawscope.test',
+        fetcher: (async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith('/v1/tokens/introspect')) {
+            return new Response(
+              JSON.stringify({
+                error: 'TOKEN_UNKNOWN_KID',
+                message: 'Unknown token kid',
+              }),
+              {
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+              }
+            );
+          }
+
+          throw new Error(`unexpected URL: ${url}`);
+        }) as typeof fetch,
+      }
+    );
+
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('TOKEN_CONTROL_KEY_UNKNOWN');
+  });
+
+  it('maps TOKEN_KID_EXPIRED from clawscope to TOKEN_CONTROL_KEY_EXPIRED', async () => {
+    const verification = await verifyTokenControl(
+      {
+        token: 'jwt-token',
+      },
+      {
+        clawscopeBaseUrl: 'https://clawscope.test',
+        fetcher: (async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.endsWith('/v1/tokens/introspect')) {
+            return new Response(
+              JSON.stringify({
+                error: 'TOKEN_KID_EXPIRED',
+                message: 'Token kid is no longer within accepted overlap window',
+              }),
+              {
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+              }
+            );
+          }
+
+          throw new Error(`unexpected URL: ${url}`);
+        }) as typeof fetch,
+      }
+    );
+
+    expect(verification.result.status).toBe('INVALID');
+    expect(verification.error?.code).toBe('TOKEN_CONTROL_KEY_EXPIRED');
+  });
 });

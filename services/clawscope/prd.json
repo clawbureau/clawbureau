@@ -198,7 +198,49 @@
       ],
       "priority": 14,
       "passes": true,
-      "notes": "Implemented canonical lane in `services/clawscope/src/index.ts`: new `POST /v1/tokens/issue/canonical` enforces control-chain lookup + owner/controller/agent claims + sensitive policy gate; legacy `POST /v1/tokens/issue` is now migration-gated (`SCOPE_LEGACY_EXCHANGE_MODE`) with deterministic `LEGACY_EXCHANGE_DISABLED` / `LEGACY_SENSITIVE_SCOPE_FORBIDDEN`. Added `POST /v1/tokens/introspect/matrix`, `GET /v1/revocations/stream`, and `GET /v1/keys/rotation-contract`. Extended claim contract and hash binding for owner/controller/agent + control-plane policy hash. Passed `npm run typecheck && npm test` with new canonical lane tests. Deploys: staging `37e14c8f-1016-4b5e-b117-70dd372e0131`, prod `2edbae03-adf5-4b8a-8cce-74ff3613cd79`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
+      "notes": "Implemented canonical lane in `services/clawscope/src/index.ts`: new `POST /v1/tokens/issue/canonical` enforces control-chain lookup + owner/controller/agent claims + sensitive policy gate; legacy `POST /v1/tokens/issue` is now migration-gated (`SCOPE_LEGACY_EXCHANGE_MODE`) with deterministic `LEGACY_EXCHANGE_DISABLED` / `LEGACY_SENSITIVE_SCOPE_FORBIDDEN`. Added `POST /v1/tokens/introspect/matrix`, `GET /v1/revocations/stream`, and `GET /v1/keys/rotation-contract`. Extended claim contract and hash binding for owner/controller/agent + control-plane policy hash. Passed `npm run typecheck && npm test` with new canonical lane tests. Updated deploys: staging `30cb1291-9cf1-467d-ac2c-f697a9a7b422`, prod `b45c4100-8ba5-44ba-b2e6-e715329bc744`; updated smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`."
+    },
+    {
+      "id": "CSC-US-016",
+      "title": "Cross-environment token kid interoperability",
+      "description": "As platform operations, we need deterministic kid interoperability so introspection does not fail with TOKEN_UNKNOWN_KID during controlled staging/prod overlap windows.",
+      "acceptanceCriteria": [
+        "Support verify-only public keys for accepted overlap kids without granting signing rights",
+        "Expose introspection kid diagnostics (`kid`, `kid_source`) for deterministic triage",
+        "Staging-issued tokens introspect successfully in prod and vice versa during overlap",
+        "Typecheck and tests pass"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Implemented verify-only key contract via `SCOPE_VERIFY_PUBLIC_KEYS_JSON` in `services/clawscope/src/index.ts`, added deterministic overlap expiry error `TOKEN_KID_EXPIRED`, and introspection diagnostics (`kid`, `kid_source`). Added test coverage in `services/clawscope/test/key-kid-interop.test.ts`. Interop smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`."
+    },
+    {
+      "id": "CSC-US-017",
+      "title": "Deterministic key overlap contract v2",
+      "description": "As integrators, we need explicit key overlap metadata so accepted kid windows are machine-readable and fail-closed.",
+      "acceptanceCriteria": [
+        "`GET /v1/keys/rotation-contract` includes signing_kids, verify_only_kids, and expiring_kids",
+        "`GET /v1/jwks` publishes only currently accepted keys",
+        "Overlap windows remain deterministic and auditable",
+        "Typecheck and tests pass"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Upgraded rotation contract to `contract_version=2` with explicit `signing_kids`, `verify_only_kids`, and `expiring_kids`. JWKS now serves accepted keys only (respecting overlap expiry). Verified in unit tests + identity smoke artifacts (`2026-02-11T22-42-34-634Z-staging`, `2026-02-11T22-42-46-640Z-prod`, `2026-02-11T22-43-00-300Z-kid-interop`)."
+    },
+    {
+      "id": "CSC-US-018",
+      "title": "Deterministic kid-error taxonomy for downstream gates",
+      "description": "As downstream services, we need stable kid-related introspection errors to avoid ambiguous retry behavior.",
+      "acceptanceCriteria": [
+        "Unknown kid returns `TOKEN_UNKNOWN_KID`",
+        "Expired overlap kid returns `TOKEN_KID_EXPIRED`",
+        "Error behavior remains fail-closed and documented for integrators",
+        "Typecheck and tests pass"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Added deterministic introspection error `TOKEN_KID_EXPIRED` while preserving `TOKEN_UNKNOWN_KID`. Downstream compatibility validated through interop smoke and documented for Agent C in `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md`."
     }
   ]
 }

@@ -239,4 +239,38 @@ Delivery evidence:
 
 ---
 
+## 10) 2026-02-11 addendum — CSC-US-016/017/018 key interoperability hardening
+
+Shipped in `services/clawscope/src/index.ts`:
+- verify-only overlap key support via `SCOPE_VERIFY_PUBLIC_KEYS_JSON`
+- deterministic overlap expiry error: `TOKEN_KID_EXPIRED`
+- introspection diagnostics: `kid`, `kid_source`
+- key overlap contract v2 (`GET /v1/keys/rotation-contract`):
+  - `signing_kids`
+  - `verify_only_kids`
+  - `expiring_kids`
+- JWKS now serves only currently accepted keys in overlap window.
+
+Operational unblock:
+- Staging/prod active signing key aligned to one kid.
+- Legacy staging kid retained as verify-only overlap key with explicit expiry for deterministic cutover.
+
+Validation evidence:
+- unit tests: `services/clawscope/test/key-kid-interop.test.ts`
+- interop smoke: `scripts/identity/smoke-scope-kid-interop.mjs`
+- operational runbook: `scripts/identity/RUNBOOK-identity-control-plane-operations.md`
+- artifacts:
+  - `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`
+- updated deploys:
+  - staging: `clawscope-staging` version `30cb1291-9cf1-467d-ac2c-f697a9a7b422`
+  - prod: `clawscope` version `b45c4100-8ba5-44ba-b2e6-e715329bc744`
+
+Compatibility note for Agent C:
+- published note: `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md`
+- downstream token-control/introspection consumers should treat:
+  - `TOKEN_UNKNOWN_KID` => reissue token / refresh overlap contract
+  - `TOKEN_KID_EXPIRED` => token cannot be recovered; must reissue with active key
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*

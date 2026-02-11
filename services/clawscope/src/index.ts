@@ -3,6 +3,7 @@ import {
   base64urlEncode,
   computeKeyId,
   importEd25519Key,
+  importEd25519PublicKey,
   sha256,
   signEd25519,
   verifyEd25519,
@@ -43,6 +44,7 @@ export interface Env {
   // secrets
   SCOPE_SIGNING_KEY?: string;
   SCOPE_SIGNING_KEYS_JSON?: string;
+  SCOPE_VERIFY_PUBLIC_KEYS_JSON?: string;
   SCOPE_ADMIN_KEY?: string;
 }
 
@@ -178,11 +180,16 @@ interface IssuerKey {
   publicKeyBytes: Uint8Array;
   kid: string;
   jwkX: string;
+  signing_enabled: boolean;
+  verify_only: boolean;
+  source: 'signing' | 'verify_public';
+  not_after_unix?: number;
 }
 
 interface IssuerKeySet {
   active: IssuerKey;
   keys: IssuerKey[];
+  signingKeys: IssuerKey[];
   byKid: Map<string, IssuerKey>;
 }
 
@@ -193,6 +200,80 @@ function parseIntOrDefault(value: string | undefined, d: number): number {
   if (!value) return d;
   const n = Number.parseInt(value, 10);
   return Number.isFinite(n) ? n : d;
+}
+
+interface VerifyOnlyKeySpec {
+  x: string;
+  kid?: string;
+  not_after_unix?: number;
+  source_label?: string;
+}
+
+function parseVerifyOnlyKeySpecs(raw: string | undefined): VerifyOnlyKeySpec[] {
+  const trimmed = raw?.trim();
+  if (!trimmed) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed) as unknown;
+  } catch {
+    throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+  }
+
+  const specs: VerifyOnlyKeySpec[] = [];
+  for (const item of parsed) {
+    if (typeof item === 'string') {
+      const x = item.trim();
+      if (!isSha256B64u(x)) {
+        throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+      }
+      specs.push({ x });
+      continue;
+    }
+
+    if (!item || typeof item !== 'object') {
+      throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+    }
+
+    const obj = item as Record<string, unknown>;
+    const x = typeof obj.x === 'string' ? obj.x.trim() : '';
+    const kid = typeof obj.kid === 'string' ? obj.kid.trim() : undefined;
+    const notAfter = obj.not_after_unix;
+    const sourceLabel = typeof obj.source_label === 'string' ? obj.source_label.trim() : undefined;
+
+    if (!isSha256B64u(x)) {
+      throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+    }
+
+    if (kid !== undefined && kid.length === 0) {
+      throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+    }
+
+    if (
+      notAfter !== undefined &&
+      (typeof notAfter !== 'number' || !Number.isFinite(notAfter) || notAfter <= 0)
+    ) {
+      throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+    }
+
+    specs.push({
+      x,
+      kid,
+      not_after_unix: typeof notAfter === 'number' ? Math.floor(notAfter) : undefined,
+      source_label: sourceLabel && sourceLabel.length > 0 ? sourceLabel : undefined,
+    });
+  }
+
+  return specs;
+}
+
+function isKeyAcceptedNow(key: IssuerKey, nowSec: number): boolean {
+  if (!key.not_after_unix) return true;
+  return nowSec <= key.not_after_unix;
 }
 
 function jsonResponse(body: unknown, status = 200, extraHeaders?: HeadersInit): Response {
@@ -793,7 +874,16 @@ async function getIntrospectionResult(
   token: string,
   env: Env
 ): Promise<
-  | { ok: true; claims: ScopedTokenClaims; token_hash: string; revoked: boolean; revoked_at?: number; revoked_at_iso?: string }
+  | {
+      ok: true;
+      claims: ScopedTokenClaims;
+      token_hash: string;
+      revoked: boolean;
+      revoked_at?: number;
+      revoked_at_iso?: string;
+      kid?: string;
+      kid_source?: 'header' | 'recovered';
+    }
   | { ok: false; res: Response }
 > {
   const token_hash = await sha256(token);
@@ -857,7 +947,11 @@ async function getIntrospectionResult(
   let keyset: IssuerKeySet | null;
   try {
     keyset = await getIssuerKeySet(env);
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+      return { ok: false, res: errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503) };
+    }
     return { ok: false, res: errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503) };
   }
 
@@ -866,12 +960,26 @@ async function getIntrospectionResult(
   }
 
   let verifyKey: CryptoKey | null = null;
+  let matchedKid: string | undefined;
+  let kidSource: 'header' | 'recovered' | undefined;
+
   if (typeof h.kid === 'string' && h.kid.trim().length > 0) {
-    const key = keyset.byKid.get(h.kid.trim());
+    const headerKid = h.kid.trim();
+    const key = keyset.byKid.get(headerKid);
     if (!key) {
       return { ok: false, res: errorResponse('TOKEN_UNKNOWN_KID', 'Unknown token kid', 401) };
     }
+
+    if (!isKeyAcceptedNow(key, nowSec)) {
+      return {
+        ok: false,
+        res: errorResponse('TOKEN_KID_EXPIRED', 'Token kid is no longer within accepted overlap window', 401),
+      };
+    }
+
     verifyKey = key.publicKey;
+    matchedKid = headerKid;
+    kidSource = 'header';
   }
 
   const signingInput = `${headerB64u}.${payloadB64u}`;
@@ -882,8 +990,11 @@ async function getIntrospectionResult(
       sigValid = await verifyEd25519(verifyKey, signatureB64u, signingInput);
     } else {
       for (const k of keyset.keys) {
+        if (!isKeyAcceptedNow(k, nowSec)) continue;
         if (await verifyEd25519(k.publicKey, signatureB64u, signingInput)) {
           sigValid = true;
+          matchedKid = k.kid;
+          kidSource = 'recovered';
           break;
         }
       }
@@ -905,6 +1016,8 @@ async function getIntrospectionResult(
       revoked: true,
       revoked_at: revocation.revoked_at,
       revoked_at_iso: revocation.revoked_at_iso,
+      kid: matchedKid,
+      kid_source: kidSource,
     };
   }
 
@@ -913,16 +1026,23 @@ async function getIntrospectionResult(
     claims: payload,
     token_hash,
     revoked: false,
+    kid: matchedKid,
+    kid_source: kidSource,
   };
 }
 
 async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
   const jsonText = env.SCOPE_SIGNING_KEYS_JSON?.trim();
-  const cacheKey = jsonText
-    ? `json:${jsonText}`
-    : env.SCOPE_SIGNING_KEY
-      ? `single:${env.SCOPE_SIGNING_KEY}`
-      : null;
+  const verifyJsonText = env.SCOPE_VERIFY_PUBLIC_KEYS_JSON?.trim();
+  const cacheKeyParts = [
+    jsonText
+      ? `json:${jsonText}`
+      : env.SCOPE_SIGNING_KEY
+        ? `single:${env.SCOPE_SIGNING_KEY}`
+        : null,
+    verifyJsonText ? `verify:${verifyJsonText}` : null,
+  ].filter((v): v is string => Boolean(v));
+  const cacheKey = cacheKeyParts.join('|');
 
   if (!cacheKey) return null;
 
@@ -948,12 +1068,15 @@ async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
     if (keyStrings.some((k) => k.length === 0)) {
       throw new Error('SCOPE_SIGNING_KEYS_JSON_INVALID');
     }
-  } else {
+  } else if (env.SCOPE_SIGNING_KEY && env.SCOPE_SIGNING_KEY.trim().length > 0) {
     // Single-key mode
-    keyStrings = [env.SCOPE_SIGNING_KEY!];
+    keyStrings = [env.SCOPE_SIGNING_KEY.trim()];
+  } else {
+    keyStrings = [];
   }
 
   const keys: IssuerKey[] = [];
+  const signingKeys: IssuerKey[] = [];
   const byKid = new Map<string, IssuerKey>();
 
   for (const keyStr of keyStrings) {
@@ -967,6 +1090,9 @@ async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
       publicKeyBytes: kp.publicKeyBytes,
       kid,
       jwkX,
+      signing_enabled: true,
+      verify_only: false,
+      source: 'signing',
     };
 
     if (byKid.has(kid)) {
@@ -974,15 +1100,54 @@ async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
     }
 
     keys.push(k);
+    signingKeys.push(k);
     byKid.set(kid, k);
   }
 
-  const active = keys[0];
-  if (!active) return null;
+  const verifyOnlySpecs = parseVerifyOnlyKeySpecs(env.SCOPE_VERIFY_PUBLIC_KEYS_JSON);
+  for (const spec of verifyOnlySpecs) {
+    const imported = await importEd25519PublicKey(spec.x);
+    const computedKid = await computeKeyId(imported.publicKeyBytes);
+    const kid = spec.kid ?? computedKid;
+
+    if (kid !== computedKid) {
+      throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID');
+    }
+
+    const existing = byKid.get(kid);
+    if (existing) {
+      if (existing.jwkX !== spec.x) {
+        throw new Error('SCOPE_VERIFY_PUBLIC_KEYS_DUPLICATE_KID');
+      }
+      // Same key already available through signing keys; keep deterministic signing source.
+      continue;
+    }
+
+    const verifyOnly: IssuerKey = {
+      privateKey: undefined,
+      publicKey: imported.publicKey,
+      publicKeyBytes: imported.publicKeyBytes,
+      kid,
+      jwkX: spec.x,
+      signing_enabled: false,
+      verify_only: true,
+      source: 'verify_public',
+      not_after_unix: spec.not_after_unix,
+    };
+
+    keys.push(verifyOnly);
+    byKid.set(kid, verifyOnly);
+  }
+
+  const active = signingKeys[0];
+  if (!active) {
+    throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
+  }
 
   const keyset: IssuerKeySet = {
     active,
     keys,
+    signingKeys,
     byKid,
   };
 
@@ -1165,7 +1330,11 @@ export default {
       let keyset: IssuerKeySet | null;
       try {
         keyset = await getIssuerKeySet(env);
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
         return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
       }
 
@@ -1180,21 +1349,29 @@ export default {
       let keyset: IssuerKeySet | null;
       try {
         keyset = await getIssuerKeySet(env);
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
         return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
       }
 
       if (!keyset) return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
 
+      const nowSec = Math.floor(Date.now() / 1000);
+      const acceptedKeys = keyset.keys.filter((k) => isKeyAcceptedNow(k, nowSec));
+
       return jsonResponse(
         {
-          keys: keyset.keys.map((k) => ({
+          keys: acceptedKeys.map((k) => ({
             kty: 'OKP',
             crv: 'Ed25519',
             x: k.jwkX,
             kid: k.kid,
             alg: 'EdDSA',
             use: 'sig',
+            ext: true,
           })),
         },
         200,
@@ -1357,7 +1534,12 @@ export default {
         if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
           return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
         }
-        if (msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' || msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID') {
+        if (
+          msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_DUPLICATE_KID'
+        ) {
           return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
         }
         if (msg.startsWith('Invalid Ed25519 key length')) {
@@ -1472,7 +1654,12 @@ export default {
         if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
           return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
         }
-        if (msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' || msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID') {
+        if (
+          msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_DUPLICATE_KID'
+        ) {
           return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
         }
         if (msg.startsWith('Invalid Ed25519 key length')) {
@@ -1668,7 +1855,11 @@ export default {
       let keyset: IssuerKeySet | null;
       try {
         keyset = await getIssuerKeySet(env);
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
         return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
       }
 
@@ -1677,15 +1868,30 @@ export default {
       }
 
       const overlapSeconds = parseIntOrDefault(env.SCOPE_KEY_ROTATION_OVERLAP_SECONDS, 3600);
-      const acceptedKids = keyset.keys.map((k) => k.kid);
+      const nowSec = Math.floor(Date.now() / 1000);
+      const acceptedKeys = keyset.keys.filter((k) => isKeyAcceptedNow(k, nowSec));
+      const expiringKeys = acceptedKeys
+        .filter((k) => k.not_after_unix !== undefined)
+        .map((k) => ({
+          kid: k.kid,
+          not_after_unix: k.not_after_unix,
+        }));
+
+      const acceptedKids = acceptedKeys.map((k) => k.kid);
       const activeKid = keyset.active.kid;
+      const signingKids = keyset.signingKeys.map((k) => k.kid);
+      const verifyOnlyKids = acceptedKeys.filter((k) => k.verify_only).map((k) => k.kid);
 
       return jsonResponse({
-        contract_version: '1',
+        contract_version: '2',
         key_algorithm: 'Ed25519',
         active_kid: activeKid,
         accepted_kids: acceptedKids,
+        signing_kids: signingKids,
+        verify_only_kids: verifyOnlyKids,
         overlap_seconds: overlapSeconds,
+        overlap_window_open: overlapSeconds > 0 && acceptedKids.length > 1,
+        expiring_kids: expiringKeys,
         revocation_stream_endpoint: '/v1/revocations/stream',
         jwks_endpoint: '/v1/jwks',
       });
@@ -1850,6 +2056,8 @@ export default {
           token_lane: payload.token_lane,
           iat: payload.iat,
           exp: payload.exp,
+          kid: introspection.kid,
+          kid_source: introspection.kid_source,
           revoked_at: introspection.revoked_at,
           revoked_at_iso: introspection.revoked_at_iso,
         });
@@ -1874,6 +2082,8 @@ export default {
         token_lane: payload.token_lane,
         iat: payload.iat,
         exp: payload.exp,
+        kid: introspection.kid,
+        kid_source: introspection.kid_source,
       });
     }
 
@@ -1913,6 +2123,8 @@ export default {
           token_hash: introspection.token_hash,
           transition: transition ?? null,
           matrix,
+          kid: introspection.kid,
+          kid_source: introspection.kid_source,
           error: 'TOKEN_REVOKED',
           message: 'Token is revoked and cannot authorize sensitive transitions',
         });
@@ -1929,6 +2141,8 @@ export default {
         transition: transition ?? null,
         transition_result: transition ? matrix[transition] : null,
         matrix,
+        kid: introspection.kid,
+        kid_source: introspection.kid_source,
       });
     }
 

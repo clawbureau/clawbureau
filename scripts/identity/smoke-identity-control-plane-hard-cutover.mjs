@@ -640,6 +640,7 @@ async function main() {
   result.steps.canonical_issue = safePick(canonicalIssue.json, [
     'token_hash',
     'token_lane',
+    'kid',
     'owner_did',
     'controller_did',
     'agent_did',
@@ -730,9 +731,19 @@ async function main() {
     'contract_version',
     'active_kid',
     'accepted_kids',
+    'signing_kids',
+    'verify_only_kids',
+    'expiring_kids',
     'overlap_seconds',
     'revocation_stream_endpoint',
   ]);
+
+  const acceptedKids = Array.isArray(rotationContract.json?.accepted_kids)
+    ? rotationContract.json.accepted_kids
+    : [];
+  if (!acceptedKids.includes(result.steps.canonical_issue?.kid)) {
+    throw new Error('rotationContract accepted_kids does not include canonical issuance kid');
+  }
 
   const verifyControlChain = await requestJson(`${baseUrls.clawverify}/v1/verify/control-chain`, {
     method: 'POST',

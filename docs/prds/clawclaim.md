@@ -222,16 +222,17 @@ Contract highlights:
 - controller state machine: `active -> transfer_pending -> transferred`
 - transfer freeze semantics enforced with deterministic `CONTROLLER_TRANSFER_FROZEN`
 - signed export/import contract uses `CLAIM_EXPORT_SIGNING_KEY` (HMAC-SHA256)
+- ops runbook: `scripts/identity/RUNBOOK-identity-control-plane-operations.md`
 
 Validation evidence:
 - unit tests: `services/clawclaim/test/claim-lifecycle-portability.test.ts`
 - quality checks: `cd services/clawclaim && npm run typecheck && npm test`
 - deploys:
-  - staging: `clawclaim-staging` version `ace3a741-85e3-4fcb-b582-aac6993d974f`
-  - prod: `clawclaim` version `2b45efe3-7bfd-48b2-a9c2-df5250f51488`
+  - staging: `clawclaim-staging` version `d8df6360-b7b8-4800-9bf7-c7a899c4dd73`
+  - prod: `clawclaim` version `247f3971-fbb1-4e31-8cd0-1287ac960b07`
 - smoke artifacts:
-  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json`
-  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`
 
 ---
 

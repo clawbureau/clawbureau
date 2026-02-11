@@ -1,0 +1,282 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-11T22:42:34.635Z",
+  "urls": {
+    "clawclaim": "https://staging.clawclaim.com",
+    "clawscope": "https://staging.clawscope.com",
+    "clawverify": "https://staging.clawverify.com"
+  },
+  "identities": {
+    "owner_did": "did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ",
+    "owner_transfer_target_did": "did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C",
+    "controller_did": "did:key:z6Mkfber9GP5xUfQup12Tv9Lp1YunRisYKhP7ZLjroS4yAJX",
+    "controller_rotated_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+    "agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC"
+  },
+  "steps": {
+    "bind_owner": {
+      "challenge": {
+        "challenge_id": "e89877a4-b71b-45d5-8224-cb6eceefdee2",
+        "expires_in_sec": 600
+      },
+      "bind": {
+        "status": "bound",
+        "did": "did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ",
+        "bound_at": 1770849754
+      }
+    },
+    "bind_owner_transfer_target": {
+      "challenge": {
+        "challenge_id": "692820b7-477d-4073-b374-9e4fd1071faf",
+        "expires_in_sec": 600
+      },
+      "bind": {
+        "status": "bound",
+        "did": "did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C",
+        "bound_at": 1770849755
+      }
+    },
+    "bind_controller": {
+      "challenge": {
+        "challenge_id": "1f2282ea-e0c9-4f0a-b356-82827fd05aa1",
+        "expires_in_sec": 600
+      },
+      "bind": {
+        "status": "bound",
+        "did": "did:key:z6Mkfber9GP5xUfQup12Tv9Lp1YunRisYKhP7ZLjroS4yAJX",
+        "bound_at": 1770849755
+      }
+    },
+    "bind_controller_rotated": {
+      "challenge": {
+        "challenge_id": "d50a466f-e55f-48c7-b448-b8400444d3c5",
+        "expires_in_sec": 600
+      },
+      "bind": {
+        "status": "bound",
+        "did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+        "bound_at": 1770849755
+      }
+    },
+    "bind_agent": {
+      "challenge": {
+        "challenge_id": "877ecc3c-fbbe-4f18-afb5-00fe566800c6",
+        "expires_in_sec": 600
+      },
+      "bind": {
+        "status": "bound",
+        "did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC",
+        "bound_at": 1770849756
+      }
+    },
+    "register_controller": {
+      "status": "registered",
+      "event_key": "events:control-plane:8229150243:controller-register:did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ:5b4a8cba-1a6e-4a70-8cf4-a2f5fa65e016"
+    },
+    "register_agent": {
+      "status": "registered",
+      "event_key": "events:control-plane:8229150243:agent-register:did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ:6ff5f1f6-6864-4c37-a061-de1d341b4036"
+    },
+    "update_sensitive_policy": {
+      "status": "updated",
+      "event_key": "events:control-plane:8229150242:policy-update:did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ:778a81cf-3f39-4842-abe0-5719745e9b68"
+    },
+    "confirm_rotation": {
+      "status": "rotated",
+      "rotation_role": "controller",
+      "event_key": "events:control-plane:8229150242:rotation-confirm:did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ:f03daa8b-1d83-4259-a689-7088ed056f84"
+    },
+    "chain_read_after_rotation": {
+      "status": "ok",
+      "chain": {
+        "owner_did": "did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ",
+        "controller_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+        "agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC",
+        "policy_hash_b64u": "jURwUTGZUfhVlhyGXjuyu-jwbTJM9_r1J7zoJ0gzD8A",
+        "active": true
+      },
+      "alias_resolution": {
+        "requested_controller_did": "did:key:z6Mkfber9GP5xUfQup12Tv9Lp1YunRisYKhP7ZLjroS4yAJX",
+        "resolved_controller_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+        "requested_agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC",
+        "resolved_agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC"
+      }
+    },
+    "transfer_request": {
+      "status": "transfer_pending",
+      "event_key": "events:control-plane:8229150241:transfer-request:did:key:z6MkfokQnyJcNqD2rQtBpiS5VirthyjFZvkj67Tp1Zku7XfJ:89f02d05-a6b1-46f7-82f3-c2886531ddce"
+    },
+    "transfer_freeze_policy_challenge": {
+      "status": 409,
+      "error": "CONTROLLER_TRANSFER_FROZEN",
+      "message": "controller_did is transfer_pending and currently frozen for mutations"
+    },
+    "transfer_confirm": {
+      "status": "transferred",
+      "event_key": "events:control-plane:8229150241:transfer-confirm:did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C:0dccc507-7201-4220-aa25-3066fb80e2e0"
+    },
+    "identity_export": {
+      "status": "exported",
+      "bundle_hash_b64u": "_GpITZ9DVg_4KqCFqcc3hRr9kEWkyZCKxAZtsaPAGoU",
+      "event_key": "events:control-plane:8229150240:identity-export:did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C:_GpITZ9DVg_4KqCFqcc3hRr9kEWkyZCKxAZtsaPAGoU"
+    },
+    "identity_import": {
+      "status": "imported",
+      "bundle_hash_b64u": "_GpITZ9DVg_4KqCFqcc3hRr9kEWkyZCKxAZtsaPAGoU",
+      "controller_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+      "event_key": "events:control-plane:8229150240:identity-import:did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C:_GpITZ9DVg_4KqCFqcc3hRr9kEWkyZCKxAZtsaPAGoU"
+    },
+    "identity_reimport": {
+      "status": "already_imported",
+      "bundle_hash_b64u": "_GpITZ9DVg_4KqCFqcc3hRr9kEWkyZCKxAZtsaPAGoU"
+    },
+    "identity_import_tampered": {
+      "status": 409,
+      "error": "IMPORT_BUNDLE_TAMPERED",
+      "message": "bundle_hash_b64u does not match payload hash"
+    },
+    "chain_read": {
+      "status": "ok",
+      "chain": {
+        "owner_did": "did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C",
+        "controller_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+        "agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC",
+        "policy_hash_b64u": "POr9eRWjdNfEky3QG2gszvITZJ-823esT_sIhAnah8Y",
+        "active": true,
+        "transfer_state": "transferred"
+      }
+    },
+    "canonical_issue": {
+      "token_hash": "ff8cdba88c7504eb040ab54182b29836753c9436942ceb5e60eb1cb9595e60ba",
+      "token_lane": "canonical",
+      "kid": "66a63dae7bbf4bda",
+      "owner_did": "did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C",
+      "controller_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+      "agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC",
+      "control_plane_policy_hash_b64u": "POr9eRWjdNfEky3QG2gszvITZJ-823esT_sIhAnah8Y",
+      "token_scope_hash_b64u": "uJdIyLzS3z86P5FEMpNeRuGHuiUh3CBU4IX7Iuz46M4",
+      "iat": 1770849760,
+      "exp": 1770850360
+    },
+    "introspect_canonical": {
+      "active": true,
+      "token_hash": "ff8cdba88c7504eb040ab54182b29836753c9436942ceb5e60eb1cb9595e60ba",
+      "token_lane": "canonical",
+      "owner_did": "did:key:z6MkwXLeB1zpPUHpHtUAjb4Qpg8BK7KBDHGHSXCPwCsTJY8C",
+      "controller_did": "did:key:z6MkoUReC9cP9mRZr2zUn8LarjijxxziHprsZiKfNfWtnpuc",
+      "agent_did": "did:key:z6MkeXUHYgwzaCh2sFFQtiZW9TenLJ34wmk5CqDUSX9HPEcC",
+      "token_scope_hash_b64u": "uJdIyLzS3z86P5FEMpNeRuGHuiUh3CBU4IX7Iuz46M4"
+    },
+    "matrix_canonical": {
+      "active": true,
+      "token_hash": "ff8cdba88c7504eb040ab54182b29836753c9436942ceb5e60eb1cb9595e60ba",
+      "token_issue_sensitive": {
+        "allowed": true,
+        "reason_code": "ALLOWED",
+        "reason": "Transition requirements satisfied"
+      },
+      "key_rotate": {
+        "allowed": false,
+        "reason_code": "TOKEN_SCOPE_MISSING",
+        "reason": "Missing required scope(s): control:key:rotate"
+      }
+    },
+    "legacy_sensitive_issue": {
+      "status": 403,
+      "error": "LEGACY_SENSITIVE_SCOPE_FORBIDDEN",
+      "message": "Legacy issuance cannot mint sensitive scope(s) during migration: control:token:issue_sensitive"
+    },
+    "legacy_non_sensitive_issue": {
+      "token_hash": "f9dd78684e3ccde3b97df38e790505f8268e9ce2c1ae2cfe04ca5c94c341c5aa",
+      "token_lane": "legacy",
+      "legacy_exchange_mode": "migration",
+      "migration_notice": "Legacy exchange is temporary; migrate to /v1/tokens/issue/canonical for sensitive transitions."
+    },
+    "rotation_contract": {
+      "contract_version": "2",
+      "active_kid": "66a63dae7bbf4bda",
+      "accepted_kids": [
+        "66a63dae7bbf4bda",
+        "65b60673d6ed884b"
+      ],
+      "signing_kids": [
+        "66a63dae7bbf4bda"
+      ],
+      "verify_only_kids": [
+        "65b60673d6ed884b"
+      ],
+      "expiring_kids": [
+        {
+          "kid": "65b60673d6ed884b",
+          "not_after_unix": 1771108817
+        }
+      ],
+      "overlap_seconds": 3600,
+      "revocation_stream_endpoint": "/v1/revocations/stream"
+    },
+    "verify_control_chain": {
+      "status": 200,
+      "result": {
+        "status": "VALID",
+        "reason": "Owner/controller/agent chain is valid and active",
+        "verified_at": "2026-02-11T22:42:41.132Z"
+      }
+    },
+    "verify_token_control_valid": {
+      "status": 200,
+      "result": {
+        "status": "VALID",
+        "reason": "Token satisfies control-chain, audience, scope, and transition requirements",
+        "verified_at": "2026-02-11T22:42:41.230Z"
+      },
+      "token_lane": "canonical"
+    },
+    "verify_token_control_denied": {
+      "status": 422,
+      "error": {
+        "code": "TOKEN_CONTROL_TRANSITION_FORBIDDEN",
+        "message": "Transition(s) denied by matrix: key.rotate",
+        "field": "required_transitions"
+      },
+      "result": {
+        "status": "INVALID",
+        "reason": "Token is not authorized for transition(s): key.rotate",
+        "verified_at": "2026-02-11T22:42:41.316Z"
+      }
+    },
+    "revoke_canonical": {
+      "status": "revoked",
+      "token_hash": "ff8cdba88c7504eb040ab54182b29836753c9436942ceb5e60eb1cb9595e60ba",
+      "revoked_at": 1770849761,
+      "event_key": "events:revocations:8229150238:ff8cdba88c7504eb040ab54182b29836753c9436942ceb5e60eb1cb9595e60ba"
+    },
+    "revocation_stream": {
+      "stream_version": "1",
+      "events_count": 5
+    },
+    "verify_token_control_revoked": {
+      "status": 422,
+      "error": {
+        "code": "REVOKED",
+        "message": "Token has been revoked in clawscope revocation stream"
+      },
+      "result": {
+        "status": "INVALID",
+        "reason": "Token is revoked",
+        "verified_at": "2026-02-11T22:42:41.759Z"
+      }
+    }
+  },
+  "deterministic_error_codes": {
+    "transfer_freeze_policy_challenge": "CONTROLLER_TRANSFER_FROZEN",
+    "identity_import_tampered": "IMPORT_BUNDLE_TAMPERED",
+    "legacy_sensitive_issue": "LEGACY_SENSITIVE_SCOPE_FORBIDDEN",
+    "verify_token_control_denied": "TOKEN_CONTROL_TRANSITION_FORBIDDEN",
+    "verify_token_control_revoked": "REVOKED"
+  },
+  "deployment_versions": {
+    "clawclaim": "d8df6360-b7b8-4800-9bf7-c7a899c4dd73",
+    "clawscope": "30cb1291-9cf1-467d-ac2c-f697a9a7b422",
+    "clawverify": "c2602134-d6ad-4110-b71e-2837edf59082"
+  }
+}
