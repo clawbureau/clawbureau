@@ -396,6 +396,20 @@ export class ReconciliationService {
         accountBalance.held -= amount;
         accountBalance.available += amount;
         break;
+
+      case 'payin_settle':
+        // Confirmed inbound settlement credits available funds.
+        accountBalance.available += amount;
+        break;
+
+      case 'payin_reverse':
+        // Reversal/refund settlement debits available funds.
+        accountBalance.available -= amount;
+        break;
+
+      case 'payout_settle':
+        // Settlement marker only; no implicit balance mutation here.
+        break;
     }
   }
 

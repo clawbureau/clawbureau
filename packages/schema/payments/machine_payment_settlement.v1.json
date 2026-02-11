@@ -1,0 +1,87 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.payments.machine_payment_settlement.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Machine Payment Settlement v1",
+  "description": "Provider-agnostic canonical settlement object for machine-payment ingestion into clawledger.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "settlement_version",
+    "provider",
+    "external_payment_id",
+    "direction",
+    "status",
+    "account_id",
+    "amount_minor",
+    "currency"
+  ],
+  "properties": {
+    "settlement_version": { "const": "1" },
+    "settlement_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional ledger-issued settlement id when materialized."
+    },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Provider identifier (e.g. stripe, adyen, internal_rail)."
+    },
+    "external_payment_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Provider payment/charge/transfer identifier."
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["payin", "refund", "payout"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "confirmed", "failed", "reversed"]
+    },
+    "account_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ledger account id (`acc_*`) receiving/owning settlement impact."
+    },
+    "amount_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "Integer-safe money amount in minor units as string."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "ISO-4217 currency code."
+    },
+    "network": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional network family (e.g. card, ach, usdc)."
+    },
+    "rail": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional provider-specific rail channel (e.g. visa, sepa, base)."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional provider payload excerpt / non-sensitive operational context.",
+      "additionalProperties": true
+    },
+    "provider_created_at": { "type": "string", "format": "date-time" },
+    "provider_updated_at": { "type": "string", "format": "date-time" },
+    "settled_at": { "type": "string", "format": "date-time" },
+    "latest_event_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional linked ledger event id when a settlement produced a ledger event."
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp the settlement was ingested into clawledger."
+    }
+  }
+}

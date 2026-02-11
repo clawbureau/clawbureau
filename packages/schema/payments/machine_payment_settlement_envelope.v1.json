@@ -1,0 +1,26 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.payments.machine_payment_settlement_envelope.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Machine Payment Settlement Envelope v1",
+  "description": "Envelope for idempotent machine-payment settlement ingestion requests.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "idempotency_key",
+    "settlement"
+  ],
+  "properties": {
+    "envelope_version": { "const": "1" },
+    "envelope_type": { "const": "machine_payment_settlement" },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Idempotency key for replay-safe settlement ingestion."
+    },
+    "settlement": {
+      "$ref": "https://schemas.clawbureau.org/claw.payments.machine_payment_settlement.v1.json"
+    }
+  }
+}

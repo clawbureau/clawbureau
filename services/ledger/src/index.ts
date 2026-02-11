@@ -11,6 +11,7 @@ import { ClearingAccountRepository, ClearingService } from './clearing';
 import { EventRepository, EventService, computeEventHash, isValidEventType, isValidBucket } from './events';
 import { HoldService } from './holds';
 import { ReconciliationService } from './reconciliation';
+import { PaymentSettlementError, PaymentSettlementService } from './payment-settlements';
 import { StakeFeeService } from './stake-fee';
 import { TransferService, WebhookService } from './transfer';
 import type {
@@ -27,6 +28,9 @@ import type {
   FeeTransferRequest,
   PromoBurnRequest,
   PromoMintRequest,
+  PaymentSettlementDirection,
+  PaymentSettlementIngestRequest,
+  PaymentSettlementListQuery,
   ReleaseHoldRequest,
   ReserveAssetUpsertRequest,
   ComputeReservesUpsertRequest,
@@ -103,6 +107,21 @@ async function parseJsonBody<T>(request: Request): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+function getIdempotencyKey(request: Request): string | null {
+  const raw =
+    request.headers.get('Idempotency-Key') ??
+    request.headers.get('idempotency-key') ??
+    request.headers.get('x-idempotency-key') ??
+    request.headers.get('X-Idempotency-Key');
+
+  if (!raw) {
+    return null;
+  }
+
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /**
@@ -215,7 +234,7 @@ async function handleCreateEvent(
 
   if (!isValidEventType(body.eventType)) {
     return errorResponse(
-      `Invalid eventType: ${body.eventType}. Must be one of: mint, burn, transfer, hold, release`,
+      `Invalid eventType: ${body.eventType}. Must be a supported ledger event type`,
       'INVALID_EVENT_TYPE',
       400
     );
@@ -791,20 +810,6 @@ async function handleV1GetBalances(env: Env, url: URL): Promise<Response> {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse(message, 'BALANCES_FAILED', 500);
   }
-}
-
-interface V1TransferParty {
-  account: string;
-  bucket: V1Bucket;
-}
-
-interface V1TransferRequestBody {
-  idempotency_key: string;
-  currency: string;
-  from: V1TransferParty;
-  to: V1TransferParty;
-  amount_minor: string;
-  metadata?: Record<string, unknown>;
 }
 
 interface V1TransferResponseBody {
@@ -1809,6 +1814,148 @@ async function handleSettlement(
 }
 
 /**
+ * Handle POST /v1/payments/settlements/ingest
+ */
+async function handleIngestPaymentSettlement(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const idempotencyKey = getIdempotencyKey(request);
+  if (!idempotencyKey) {
+    return errorResponse(
+      'Missing required header: Idempotency-Key',
+      'MISSING_IDEMPOTENCY_KEY',
+      400
+    );
+  }
+
+  const body = await parseJsonBody<PaymentSettlementIngestRequest>(request);
+  if (!body) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const service = new PaymentSettlementService(env);
+
+  try {
+    const response = await service.ingest(body, idempotencyKey);
+    const status = response.idempotency.replayed || response.idempotency.deduped ? 200 : 201;
+    return jsonResponse(response, status);
+  } catch (err) {
+    if (err instanceof PaymentSettlementError) {
+      return errorResponse(err.message, err.code, err.status, err.details);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('Insufficient funds')) {
+      return errorResponse(message, 'INSUFFICIENT_FUNDS', 422);
+    }
+    return errorResponse(message, 'PAYMENT_SETTLEMENT_INGEST_FAILED', 500);
+  }
+}
+
+function parseDirectionQuery(
+  value: string | null
+): PaymentSettlementDirection | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed === 'payin' || trimmed === 'refund' || trimmed === 'payout') {
+    return trimmed;
+  }
+
+  return undefined;
+}
+
+/**
+ * Handle GET /v1/payments/settlements/:provider/:external_payment_id
+ */
+async function handleGetPaymentSettlementByExternal(
+  provider: string,
+  externalPaymentId: string,
+  env: Env,
+  url: URL
+): Promise<Response> {
+  const service = new PaymentSettlementService(env);
+
+  const rawDirection = url.searchParams.get('direction');
+  const direction = parseDirectionQuery(rawDirection);
+
+  if (rawDirection && !direction) {
+    return errorResponse(
+      'direction must be one of: payin|refund|payout',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  try {
+    const settlements = await service.getByProviderExternal(
+      decodeURIComponent(provider),
+      decodeURIComponent(externalPaymentId),
+      direction
+    );
+
+    if (settlements.length === 0) {
+      return errorResponse('Settlement not found', 'NOT_FOUND', 404);
+    }
+
+    return jsonResponse({ settlements });
+  } catch (err) {
+    if (err instanceof PaymentSettlementError) {
+      return errorResponse(err.message, err.code, err.status, err.details);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'PAYMENT_SETTLEMENT_LOOKUP_FAILED', 500);
+  }
+}
+
+/**
+ * Handle GET /v1/payments/settlements
+ */
+async function handleListPaymentSettlements(
+  env: Env,
+  url: URL
+): Promise<Response> {
+  const service = new PaymentSettlementService(env);
+
+  const rawDirection = url.searchParams.get('direction');
+  const direction = parseDirectionQuery(rawDirection);
+  if (rawDirection && !direction) {
+    return errorResponse(
+      'direction must be one of: payin|refund|payout',
+      'INVALID_REQUEST',
+      400
+    );
+  }
+
+  const query: PaymentSettlementListQuery = {
+    account_id: url.searchParams.get('account_id') ?? undefined,
+    status: (url.searchParams.get('status') as PaymentSettlementListQuery['status']) ?? undefined,
+    provider: url.searchParams.get('provider') ?? undefined,
+    direction,
+    limit: url.searchParams.get('limit')
+      ? Number.parseInt(url.searchParams.get('limit') as string, 10)
+      : undefined,
+    cursor: url.searchParams.get('cursor') ?? undefined,
+  };
+
+  try {
+    const response = await service.list(query);
+    return jsonResponse(response);
+  } catch (err) {
+    if (err instanceof PaymentSettlementError) {
+      return errorResponse(err.message, err.code, err.status, err.details);
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse(message, 'PAYMENT_SETTLEMENT_LIST_FAILED', 500);
+  }
+}
+
+/**
  * Router for handling requests
  */
 async function router(
@@ -1903,6 +2050,9 @@ async function router(
         <li><code>GET /v1/balances?did=&lt;did&gt;</code> — Spec-compatible balances (buckets A/H/B/F/P).</li>
         <li><code>POST /transfers</code> — Execute transfers between accounts (internal format).</li>
         <li><code>POST /v1/transfers</code> — Spec-compatible transfers (bucket moves, clearing accounts).</li>
+        <li><code>POST /v1/payments/settlements/ingest</code> — Ingest provider-agnostic settlement updates (admin + idempotency required).</li>
+        <li><code>GET /v1/payments/settlements/:provider/:external_payment_id</code> — Lookup settlement(s) by provider external id.</li>
+        <li><code>GET /v1/payments/settlements</code> — List settlements (deterministic cursor pagination).</li>
         <li><code>GET /attestation/reserve</code> — Signed reserve coverage attestation (public).</li>
         <li><code>POST /reserve/compute</code> — Upsert compute reserve assets (Gemini/FAL credits).</li>
       </ul>
@@ -1930,6 +2080,9 @@ async function router(
           { method: 'GET', path: '/v1/balances' },
           { method: 'POST', path: '/transfers' },
           { method: 'POST', path: '/v1/transfers' },
+          { method: 'POST', path: '/v1/payments/settlements/ingest' },
+          { method: 'GET', path: '/v1/payments/settlements/:provider/:external_payment_id' },
+          { method: 'GET', path: '/v1/payments/settlements' },
           { method: 'GET', path: '/attestation/reserve' },
           { method: 'POST', path: '/reserve/compute' },
         ],
@@ -1989,6 +2142,35 @@ curl -sS -X POST "${url.origin}/transfers" \\
 curl -sS -X POST "${url.origin}/v1/transfers" \\
   -H "Content-Type: application/json" \\
   -d '{"idempotency_key":"escrow:esc_123:hold","currency":"USD","from":{"account":"did:key:zBuyer","bucket":"A"},"to":{"account":"did:key:zBuyer","bucket":"H"},"amount_minor":"5000","metadata":{"reason":"escrow_hold"}}'
+\`\`\`
+
+## Machine payment settlement ingest
+
+\`POST /v1/payments/settlements/ingest\`
+
+Requires:
+- admin auth header (Authorization Bearer / X-Admin-Key)
+- \`Idempotency-Key\` header
+
+\`\`\`bash
+curl -sS -X POST "${url.origin}/v1/payments/settlements/ingest" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: payset:example:1" \\
+  -d '{"provider":"provider_sim","external_payment_id":"pay_123","direction":"payin","status":"confirmed","account_id":"acc_...","amount_minor":"2500","currency":"USD"}'
+\`\`\`
+
+## Settlement lookup + list
+
+\`GET /v1/payments/settlements/:provider/:external_payment_id\`
+
+\`\`\`bash
+curl -sS "${url.origin}/v1/payments/settlements/provider_sim/pay_123"
+\`\`\`
+
+\`GET /v1/payments/settlements?account_id=...&status=...&provider=...&limit=...\`
+
+\`\`\`bash
+curl -sS "${url.origin}/v1/payments/settlements?provider=provider_sim&limit=20"
 \`\`\`
 
 ## Reserve attestation (public)
@@ -2056,6 +2238,29 @@ Canonical: ${url.origin}/.well-known/security.txt
 
   if (path === '/v1/transfers' && method === 'POST') {
     return handleV1Transfers(request, env);
+  }
+
+  // POST /v1/payments/settlements/ingest
+  if (path === '/v1/payments/settlements/ingest' && method === 'POST') {
+    return handleIngestPaymentSettlement(request, env);
+  }
+
+  // GET /v1/payments/settlements/:provider/:external_payment_id
+  const paymentSettlementByExternalMatch = path.match(
+    /^\/v1\/payments\/settlements\/([^/]+)\/([^/]+)$/
+  );
+  if (paymentSettlementByExternalMatch && method === 'GET') {
+    return handleGetPaymentSettlementByExternal(
+      paymentSettlementByExternalMatch[1],
+      paymentSettlementByExternalMatch[2],
+      env,
+      url
+    );
+  }
+
+  // GET /v1/payments/settlements
+  if (path === '/v1/payments/settlements' && method === 'GET') {
+    return handleListPaymentSettlements(env, url);
   }
 
   // GET /balances - List account balances
