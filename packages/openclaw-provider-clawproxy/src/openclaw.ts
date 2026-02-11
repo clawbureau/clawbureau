@@ -49,6 +49,11 @@ export type DirectiveAuthConfig = {
   restrictedDirectives?: string[];
 };
 
+export type SensitiveProfileConfig = {
+  enabled?: boolean;
+  forbidSkillAutoAllowBins?: boolean;
+};
+
 type AirlockConfig = {
   enabled?: boolean;
   identityRoots?: string[];
@@ -85,6 +90,7 @@ type PluginConfig = {
   includeToolEvents?: boolean;
   airlock?: AirlockConfig;
   directiveAuth?: DirectiveAuthConfig;
+  sensitiveProfile?: SensitiveProfileConfig;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -130,6 +136,7 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
 
   const airlockObj = asObject(obj.airlock);
   const directiveAuthObj = asObject(obj.directiveAuth);
+  const sensitiveProfileObj = asObject(obj.sensitiveProfile);
 
   return {
     baseUrl,
@@ -163,6 +170,12 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
           operatorRoles: asStringArray(directiveAuthObj.operatorRoles),
           buyerRoles: asStringArray(directiveAuthObj.buyerRoles),
           restrictedDirectives: asStringArray(directiveAuthObj.restrictedDirectives),
+        }
+      : undefined,
+    sensitiveProfile: sensitiveProfileObj
+      ? {
+          enabled: asBoolean(sensitiveProfileObj.enabled),
+          forbidSkillAutoAllowBins: asBoolean(sensitiveProfileObj.forbidSkillAutoAllowBins),
         }
       : undefined,
   };
@@ -248,6 +261,32 @@ export function partitionBootstrapFilesForAirlock(
   }
 
   return { trustedFiles, untrustedFiles, unknownFiles };
+}
+
+function detectSkillAutoAllowBins(files: AirlockBootstrapFileInput[]): string[] {
+  const violatingPaths: string[] = [];
+
+  for (const file of files) {
+    const content = file.content;
+    const filePath = file.path;
+
+    if (!content || !filePath) continue;
+
+    const normalizedPath = normalizePathForAirlock(filePath).toLowerCase();
+    const looksLikeSkillJson = normalizedPath.includes('/skills/') && normalizedPath.endsWith('/skill.json');
+    if (!looksLikeSkillJson) continue;
+
+    try {
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      if (parsed?.autoAllowBins === true) {
+        violatingPaths.push(filePath);
+      }
+    } catch {
+      // Ignore malformed skill.json in this check; OpenClaw handles parser-level failures separately.
+    }
+  }
+
+  return violatingPaths;
 }
 
 function normalizeRole(value: string | undefined): string | undefined {
@@ -1042,6 +1081,14 @@ const airlockViolationsBySession = new Map<
   }
 >();
 
+// sessionKey → sensitive profile violations (computed at agent:bootstrap)
+const sensitiveProfileViolationsBySession = new Map<
+  string,
+  {
+    autoAllowBinsSkills: string[];
+  }
+>();
+
 // agentId → keyPair promise
 const keyPairsByAgent = new Map<string, Promise<Ed25519KeyPair>>();
 
@@ -1389,6 +1436,10 @@ export default {
 
     const directiveAuthEnabled = cfg.directiveAuth?.enabled ?? false;
 
+    const sensitiveProfileEnabled = cfg.sensitiveProfile?.enabled ?? false;
+    const sensitiveProfileForbidSkillAutoAllowBins =
+      cfg.sensitiveProfile?.forbidSkillAutoAllowBins ?? true;
+
     // Patch fetch once for this process.
     patchFetch({
       proxyBaseUrl,
@@ -1412,8 +1463,6 @@ export default {
         const sessionKey = asString(ctx.sessionKey) ?? asString(event.sessionKey);
         if (!sessionKey) return;
 
-        if (!includePromptPack) return;
-
         const filesRaw = ctx.bootstrapFiles;
         if (!Array.isArray(filesRaw)) return;
 
@@ -1426,6 +1475,15 @@ export default {
             content: typeof f.content === 'string' ? f.content : undefined,
             missing: typeof f.missing === 'boolean' ? f.missing : undefined,
           }));
+
+        if (sensitiveProfileEnabled && sensitiveProfileForbidSkillAutoAllowBins) {
+          const violatingSkills = detectSkillAutoAllowBins(files);
+          if (violatingSkills.length > 0) {
+            sensitiveProfileViolationsBySession.set(sessionKey, {
+              autoAllowBinsSkills: violatingSkills,
+            });
+          }
+        }
 
         let filesForPromptPack = files;
 
@@ -1456,9 +1514,11 @@ export default {
           }
         }
 
-        const entries = await promptPackEntriesFromBootstrapFiles(filesForPromptPack);
-        if (entries.length > 0) {
-          promptPackBySession.set(sessionKey, entries);
+        if (includePromptPack) {
+          const entries = await promptPackEntriesFromBootstrapFiles(filesForPromptPack);
+          if (entries.length > 0) {
+            promptPackBySession.set(sessionKey, entries);
+          }
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1494,6 +1554,16 @@ export default {
           airlockViolationsBySession.delete(sessionKey);
           throw new Error(
             `AIRLOCK_BOOTSTRAP_VIOLATION: non-trusted bootstrap files detected for session ${sessionKey} (untrusted=${violation.untrustedCount}, unknown=${violation.unknownCount})`,
+          );
+        }
+      }
+
+      if (sensitiveProfileEnabled && sensitiveProfileForbidSkillAutoAllowBins && sessionKey) {
+        const violation = sensitiveProfileViolationsBySession.get(sessionKey);
+        if (violation && violation.autoAllowBinsSkills.length > 0) {
+          sensitiveProfileViolationsBySession.delete(sessionKey);
+          throw new Error(
+            `SENSITIVE_PROFILE_SKILL_BIN_AUTOALLOW_FORBIDDEN: autoAllowBins=true is forbidden in sensitive profile (${violation.autoAllowBinsSkills.join(', ')})`,
           );
         }
       }
@@ -1717,6 +1787,7 @@ export default {
       if (sessionKey) {
         promptPackBySession.delete(sessionKey);
         airlockViolationsBySession.delete(sessionKey);
+        sensitiveProfileViolationsBySession.delete(sessionKey);
       }
     });
   },

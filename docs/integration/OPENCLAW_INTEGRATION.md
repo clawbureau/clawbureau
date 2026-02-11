@@ -203,6 +203,25 @@ Prevent buyer-originated messages from applying security-sensitive directives th
 }
 ```
 
+## Sensitive consulting preset (OCL-US-003)
+
+Shipped preset file:
+- `packages/openclaw-provider-clawproxy/presets/sensitive-consulting.openclaw.json`
+
+Preset defaults:
+- `sandbox.mode = all`
+- `sandbox.workspaceAccess = none`
+- `sandbox.network = none`
+- minimal tool allowlist (`read`, `write`, `exec`) + deny browser/web/session/message/network groups
+- `directiveAuth` enabled for operator-only restricted directives
+- `airlock` enabled for IdentityRoot vs JobRoot partitioning
+- `sensitiveProfile.forbidSkillAutoAllowBins = true`
+
+### Trust-tier mapping
+- This preset is designed for **sandbox-ready posture**.
+- Actual `proof_tier=sandbox` still requires valid execution attestation verification in clawverify.
+- Without execution attestation, receipts remain `gateway` (or lower) even when runtime policy is strict.
+
 ## Notes / guardrails
 - Do not leak admin keys into LLM context; keep them in plugin config or gateway env.
 - Prefer offline verification (JWKS + EdDSA) for speed; introspection remains for revocation checks.

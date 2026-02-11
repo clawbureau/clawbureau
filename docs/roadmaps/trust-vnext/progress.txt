@@ -527,3 +527,19 @@ Started: 2026-02-07T19:53:07Z
   - Extended `packages/openclaw-provider-clawproxy/test/airlock-bootstrap.test.mjs` with directive parsing/authz regression cases.
   - `node --test test/*.test.mjs` passed.
 ---
+## 2026-02-11T22:20:00Z - OCL-US-003
+- What was implemented
+  - Shipped a sensitive consulting preset artifact:
+    - `packages/openclaw-provider-clawproxy/presets/sensitive-consulting.openclaw.json`
+    - includes `sandbox.mode=all`, `workspaceAccess=none`, `network=none`, minimal tool profile, and deny defaults for browser/web/session/message/network groups
+  - Added plugin-level sensitive profile enforcement:
+    - new config block `sensitiveProfile` (`enabled`, `forbidSkillAutoAllowBins`)
+    - bootstrap scan detects `skills/*/skill.json` with `autoAllowBins=true`
+    - fail-closed denial at run start with `SENSITIVE_PROFILE_SKILL_BIN_AUTOALLOW_FORBIDDEN`
+  - Documented preset + trust-tier mapping in `docs/integration/OPENCLAW_INTEGRATION.md`.
+- Tests
+  - Added/extended regression tests in `packages/openclaw-provider-clawproxy/test/airlock-bootstrap.test.mjs`:
+    - preset security defaults validation
+    - sensitiveProfile denial for `autoAllowBins=true`
+  - `node --test test/*.test.mjs` passed.
+---

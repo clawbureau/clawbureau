@@ -1,0 +1,83 @@
+{
+  "preset_id": "sensitive-consulting-v1",
+  "description": "Safe-by-default OpenClaw preset for sensitive consulting runs with verifiable PoH evidence.",
+  "sandbox": {
+    "mode": "all",
+    "workspaceAccess": "none",
+    "network": "none"
+  },
+  "tools": {
+    "profile": "minimal",
+    "allow": [
+      "read",
+      "write",
+      "exec"
+    ],
+    "deny": [
+      "browser",
+      "web",
+      "session",
+      "sessions",
+      "message",
+      "group:web",
+      "group:network"
+    ],
+    "exec": {
+      "security": "allowlist",
+      "ask": "always",
+      "safeBins": [
+        "cat",
+        "echo",
+        "find",
+        "grep",
+        "ls",
+        "pwd"
+      ]
+    }
+  },
+  "plugins": {
+    "entries": {
+      "provider-clawproxy": {
+        "config": {
+          "directiveAuth": {
+            "enabled": true,
+            "operatorRoles": [
+              "operator",
+              "admin"
+            ],
+            "buyerRoles": [
+              "buyer",
+              "customer"
+            ],
+            "restrictedDirectives": [
+              "/exec",
+              "/elevated",
+              "/model"
+            ]
+          },
+          "airlock": {
+            "enabled": true,
+            "requireTrustedBootstrap": true,
+            "identityRoots": [
+              "/opt/openclaw/identity"
+            ],
+            "jobRoots": [
+              "/workspace/job"
+            ]
+          },
+          "sensitiveProfile": {
+            "enabled": true,
+            "forbidSkillAutoAllowBins": true
+          }
+        }
+      }
+    }
+  },
+  "skills": {
+    "allowAutoAllowBins": false
+  },
+  "trust_target": {
+    "expected_poh_tier": "sandbox",
+    "notes": "Sandbox tier uplift requires valid execution attestation; this preset hardens runtime posture for sensitive workflows."
+  }
+}

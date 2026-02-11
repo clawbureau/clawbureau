@@ -253,7 +253,8 @@
         "Document the preset + intended trust tier mapping"
       ],
       "priority": 19,
-      "passes": false
+      "passes": true,
+      "notes": "Added sensitive preset artifact (`packages/openclaw-provider-clawproxy/presets/sensitive-consulting.openclaw.json`) with sandbox-all + network-none + minimal tool profile + denylist for browser/web/session/message/network groups. Added plugin `sensitiveProfile` checks to fail closed when any skill.json uses `autoAllowBins=true` (`SENSITIVE_PROFILE_SKILL_BIN_AUTOALLOW_FORBIDDEN`). Documented trust-tier mapping and preset usage in OpenClaw integration docs; added regression tests for preset constraints and sensitive-profile enforcement."
     },
     {
       "id": "POH-US-019",
@@ -329,7 +330,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T21:50:00Z",
+    "updatedAt": "2026-02-11T22:20:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

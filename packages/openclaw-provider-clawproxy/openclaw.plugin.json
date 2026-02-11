@@ -108,6 +108,21 @@
             "description": "Restricted slash directives (default: /elevated, /exec, /model)."
           }
         }
+      },
+      "sensitiveProfile": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Sensitive consulting preset guardrails.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable sensitive-profile runtime checks."
+          },
+          "forbidSkillAutoAllowBins": {
+            "type": "boolean",
+            "description": "Fail closed when any skill.json sets autoAllowBins=true."
+          }
+        }
       }
     }
   },
@@ -129,6 +144,11 @@
       "label": "Directive Auth (operator vs buyer)",
       "advanced": true,
       "help": "Enable role-based deny for security-sensitive directives (e.g. /exec, /elevated, /model)."
+    },
+    "sensitiveProfile": {
+      "label": "Sensitive profile checks",
+      "advanced": true,
+      "help": "Fail closed if skill.json uses autoAllowBins=true and enforce sensitive consulting posture."
     }
   }
 }
