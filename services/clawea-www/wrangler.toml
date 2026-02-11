@@ -1,0 +1,45 @@
+# clawea-www -- Enterprise marketing + SEO site for clawea.com
+#
+# This worker serves the public-facing marketing pages, programmatic SEO
+# content, sitemap, and robots.txt. The platform API worker handles /v1/*
+# routes on the same domain.
+#
+# Route precedence: this worker catches /* EXCEPT /v1/*, /health, /staging/*
+# which the platform API worker handles via its own route bindings.
+
+name = "clawea-www"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-01"
+
+routes = [
+  { pattern = "clawea.com/*", zone_name = "clawea.com" },
+  { pattern = "www.clawea.com/*", zone_name = "clawea.com" }
+]
+
+[vars]
+ENVIRONMENT = "production"
+SITE_URL = "https://www.clawea.com"
+
+[placement]
+mode = "smart"
+
+# ---------- R2 (article storage) ----------
+[[r2_buckets]]
+binding = "ARTICLES"
+bucket_name = "clawea-www"
+
+# ---------- Staging ----------
+[env.staging]
+name = "clawea-www-staging"
+routes = [
+  { pattern = "staging-www.clawea.com/*", zone_name = "clawea.com" }
+]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+SITE_URL = "https://staging-www.clawea.com"
+
+[[env.staging.r2_buckets]]
+binding = "ARTICLES"
+bucket_name = "clawea-www-staging"
