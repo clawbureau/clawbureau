@@ -555,3 +555,65 @@ Started: 2026-02-02T03:08:26.937005
   - `node scripts/docs/lint-prds.mjs` ✅
 - Governance status:
   - keep `CBT-US-025/026/027` as `passes=false` until explicit GO PROD and production verification.
+
+## 2026-02-11 - CBT-OPS-003 production activation closeout (M1/M2/M3)
+- Root-cause + interoperability fix (M1):
+  - Determined `REQUESTER_TOKEN_INVALID` (`TOKEN_UNKNOWN_KID`) blocker was caused by simulation flow drift: locally minted requester tokens were signed with stale key material while clawscope active signing kids had rotated.
+  - Updated simulation stack to support deterministic requester token issuance directly via clawscope issuer API:
+    - `scripts/poh/_clawbounties-sim-common.mjs`
+      - added `resolveScopeBaseUrl`, `resolveRequesterAudience`, `resolveRequesterScopes`, `issueRequesterScopedToken(...)`
+    - updated runners/gate to auto-issue requester token when direct token not provided:
+      - `scripts/poh/gate-clawbounties-prod-readiness.mjs`
+      - `scripts/poh/simulate-clawbounties-batch.mjs`
+      - `scripts/poh/smoke-clawbounties-e2e-requester.mjs`
+      - `scripts/poh/smoke-clawbounties-e2e-test.mjs`
+  - Cross-service config updates (explicit):
+    - rotated/standardized `SCOPE_ADMIN_KEY` secret for:
+      - `clawscope-staging`
+      - `clawscope` (prod)
+      - `clawbounties-staging`
+      - `clawbounties` (prod)
+  - Staging gate re-run after fix is green:
+    - `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.json`
+
+- Production rollout + verification (M2):
+  - Deployed services:
+    - `clawtrials-staging`: `3625d6b1-4fc9-4f97-a29f-d3a024ef47f1`
+    - `clawtrials` (prod): `e61dde2b-06a5-4c99-9e6d-6010f8d5412c`
+    - `clawbounties-staging`: `540fa374-3783-4085-af4d-b4430f9e3f9f`
+    - `clawbounties` (prod): `a759fb62-4e85-451a-92e0-4a06bda36fa4`
+    - dependency deploys:
+      - `clawscope-staging`: `95d19b41-5032-4fd0-ab3d-f83469d35cc2`
+      - `clawscope` (prod): `bf9a8055-e68a-4153-993e-627de6fb0aa7`
+  - Production route fix (clawtrials):
+    - Added production API path routes in `services/clawtrials/wrangler.toml`:
+      - `clawtrials.com/v1/harness*`
+      - `clawtrials.com/health`
+  - Production migration fix:
+    - Initial prod requester smoke failed with deterministic DB error:
+      - `DB_WRITE_FAILED` / `D1_ERROR: no such table: requester_auth_events`
+    - Applied remote D1 migrations on prod clawbounties DB:
+      - `0013_submission_execution_attestations.sql`
+      - `0014_requester_auth_events.sql`
+  - Production smoke artifacts (all green):
+    - requester E2E:
+      - `artifacts/simulations/clawbounties/2026-02-11T22-20-53-579Z-requester-e2e/requester-smoke.json`
+    - test-lane E2E:
+      - `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
+    - batch 10:
+      - `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/{summary.json,jobs.ndjson}`
+    - batch 50:
+      - `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/{summary.json,jobs.ndjson}`
+    - batch 200:
+      - `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/{summary.json,jobs.ndjson}`
+    - prod gate report (includes deterministic invalid-harness replay 422 checks):
+      - `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/{gate-report.json,gate-report.md}`
+
+- Story closure + tracker truth (M3):
+  - Flipped to `passes=true` with production evidence complete:
+    - `CBT-US-022`
+    - `CBT-US-023`
+    - `CBT-US-024`
+    - `CBT-US-025`
+    - `CBT-US-026`
+    - `CBT-US-027`

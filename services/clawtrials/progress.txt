@@ -32,3 +32,21 @@
 - Status:
   - clawtrials route/harness checks are healthy in staging.
   - overall marketplace gate remains blocked by requester token issuance mismatch upstream (`TOKEN_UNKNOWN_KID`), not by clawtrials harness health.
+
+## 2026-02-11 — CBT-OPS-003 production route activation + verification
+- Production route patch applied in `services/clawtrials/wrangler.toml`:
+  - `clawtrials.com/v1/harness*`
+  - `clawtrials.com/health`
+- Deploys:
+  - staging: `3625d6b1-4fc9-4f97-a29f-d3a024ef47f1`
+  - production: `e61dde2b-06a5-4c99-9e6d-6010f8d5412c`
+- Result:
+  - eliminated production parked-page fallback for harness endpoints.
+  - production `GET /health`, `GET /v1/harness/catalog`, and `POST /v1/harness/run` now resolve to clawtrials worker.
+- Evidence:
+  - prod gate report (includes harness direct checks + clawbounties integration):
+    - `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`
+  - prod test-lane smoke pass:
+    - `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
+- Status:
+  - CBT-US-022 production verification complete.

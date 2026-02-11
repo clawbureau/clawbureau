@@ -1,0 +1,165 @@
+{
+  "ok": true,
+  "env": "prod",
+  "base_url": "https://clawbounties.com",
+  "clawtrials_base_url": "https://clawtrials.com",
+  "scope_base_url": "https://clawscope.com",
+  "requester_audience": "clawbounties.com",
+  "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+  "requester_token_source": "clawscope-issue",
+  "requester_token_kid": "66a63dae7bbf4bda",
+  "requester_token_hash": "dac6369613ef3d3a85bd2d4b4a8c265c808fb6958735d9af30da981d731b50e8",
+  "recommendation": {
+    "status": "READY_FOR_PROD_GOVERNANCE_REVIEW",
+    "blockers": [],
+    "governance_note": "Explicit GO PROD approval is still required before production deploy."
+  },
+  "checks": [
+    {
+      "id": "routes.clawbounties.health",
+      "description": "clawbounties domain health endpoint responds with 200",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 136,
+      "output": {
+        "status": 200,
+        "version": "0.7.0",
+        "environment": "production"
+      }
+    },
+    {
+      "id": "routes.clawtrials.health",
+      "description": "clawtrials domain health endpoint responds with 200",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 70,
+      "output": {
+        "status": 200,
+        "version": "0.1.0",
+        "environment": "production"
+      }
+    },
+    {
+      "id": "routes.clawtrials.catalog",
+      "description": "clawtrials catalog endpoint exposes deterministic harness IDs",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 26,
+      "output": {
+        "status": 200,
+        "harness_count": 3,
+        "harness_ids": [
+          "th_smoke_pass_v1",
+          "th_smoke_fail_v1",
+          "th_policy_summary_v1"
+        ]
+      }
+    },
+    {
+      "id": "routes.clawtrials.harness-run",
+      "description": "clawtrials /v1/harness/run returns deterministic response for pass harness",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 24,
+      "output": {
+        "status": 200,
+        "passed": true,
+        "total_tests": 3,
+        "failed_tests": 0
+      }
+    },
+    {
+      "id": "auth.requester.post-missing-token",
+      "description": "POST /v1/bounties fails closed without requester token",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 23,
+      "output": {
+        "status": 401,
+        "error": "REQUESTER_TOKEN_REQUIRED"
+      }
+    },
+    {
+      "id": "auth.requester.post-valid-token",
+      "description": "POST /v1/bounties succeeds with valid requester scoped token",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 580,
+      "output": {
+        "status": 201,
+        "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0"
+      }
+    },
+    {
+      "id": "auth.worker.register-and-self",
+      "description": "worker token can be minted and used for /v1/workers/self",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 178,
+      "output": {
+        "register_status": 201,
+        "self_status": 200,
+        "worker_did": "did:key:z6Mkvoep8ZLV47BskJdg6dzENKsj5QztT2R1oNJNt8TprUb1"
+      }
+    },
+    {
+      "id": "auth.requester.submission-list",
+      "description": "requester token can access /v1/bounties/{id}/submissions for own bounty",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 126,
+      "output": {
+        "status": 200,
+        "submission_count": 0
+      }
+    },
+    {
+      "id": "harness.integration.auto-decision",
+      "description": "closure_type=test submission auto-decides via clawtrials harness",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 2223,
+      "output": {
+        "post_status": 201,
+        "submit_status": 201,
+        "final_status": "approved",
+        "bounty_id": "bty_1fab3e1d-3182-4c7a-9a73-69dc919ecc31",
+        "submission_id": "sub_9f4a6e84-64ad-4cbb-b4d2-31a67965dc99"
+      }
+    },
+    {
+      "id": "harness.integration.invalid-replay",
+      "description": "invalid harness replay remains deterministic + fail-closed",
+      "required": true,
+      "ok": true,
+      "elapsed_ms": 1218,
+      "output": {
+        "bounty_id": "bty_165b3dcb-7b26-4218-97c5-c1e25f1e3a8d",
+        "first_status": 422,
+        "replay_status": 422,
+        "first_error": "TEST_HARNESS_INVALID",
+        "replay_error": "TEST_HARNESS_INVALID"
+      }
+    },
+    {
+      "id": "auth.admin.get-bounty",
+      "description": "admin key can read bounty detail endpoint",
+      "required": false,
+      "ok": true,
+      "elapsed_ms": 57,
+      "output": {
+        "status": 200,
+        "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0"
+      }
+    }
+  ],
+  "resources": {
+    "workerDid": "did:key:z6Mkvoep8ZLV47BskJdg6dzENKsj5QztT2R1oNJNt8TprUb1",
+    "requesterBountyId": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+    "testBountyId": "bty_1fab3e1d-3182-4c7a-9a73-69dc919ecc31",
+    "testSubmissionId": "sub_9f4a6e84-64ad-4cbb-b4d2-31a67965dc99",
+    "invalidHarnessBountyId": "bty_165b3dcb-7b26-4218-97c5-c1e25f1e3a8d",
+    "invalidHarnessSubmissionId": "sub_79f12a1a-4e8c-4dce-b920-19633c5782d7"
+  },
+  "generated_at": "2026-02-11T22:23:53.242Z"
+}

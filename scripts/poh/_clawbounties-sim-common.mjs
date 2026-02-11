@@ -50,6 +50,83 @@ export function resolveTrialsBaseUrl(envName, override) {
   return envName === 'prod' ? 'https://clawtrials.com' : 'https://staging.clawtrials.com';
 }
 
+export function resolveScopeBaseUrl(envName, override) {
+  if (override && override.trim().length > 0) return override.trim();
+  return envName === 'prod' ? 'https://clawscope.com' : 'https://staging.clawscope.com';
+}
+
+export function resolveRequesterAudience(envName, override) {
+  if (override && override.trim().length > 0) return override.trim();
+  return envName === 'prod' ? 'clawbounties.com' : 'staging.clawbounties.com';
+}
+
+export function resolveRequesterScopes(rawOverride) {
+  if (Array.isArray(rawOverride) && rawOverride.length > 0) return rawOverride;
+  if (typeof rawOverride === 'string' && rawOverride.trim().length > 0) {
+    return rawOverride
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  return [
+    'clawbounties:bounty:create',
+    'clawbounties:bounty:approve',
+    'clawbounties:bounty:reject',
+    'clawbounties:bounty:read',
+  ];
+}
+
+export async function issueRequesterScopedToken({
+  scopeBaseUrl,
+  scopeAdminKey,
+  requesterDid,
+  audience,
+  scopes,
+  ttlSec = 3600,
+  source = 'clawbounties-sim',
+}) {
+  assert(scopeBaseUrl && scopeBaseUrl.trim().length > 0, 'scopeBaseUrl is required');
+  assert(scopeAdminKey && scopeAdminKey.trim().length > 0, 'scopeAdminKey is required');
+  assert(requesterDid && requesterDid.trim().length > 0, 'requesterDid is required');
+  assert(audience && audience.trim().length > 0, 'audience is required');
+  assert(Array.isArray(scopes) && scopes.length > 0, 'scopes must be a non-empty array');
+
+  const payload = {
+    sub: requesterDid,
+    aud: audience,
+    scope: scopes,
+    ttl_sec: ttlSec,
+    token_lane: 'legacy',
+    mission_id: `${source}:${requesterDid}`,
+  };
+
+  const out = await httpJson(`${scopeBaseUrl.replace(/\/$/, '')}/v1/tokens/issue`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${scopeAdminKey}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!(out.status === 200 || out.status === 201)) {
+    const code = extractErrorCode(out);
+    throw new Error(`requester token issue failed (${out.status}, ${code}): ${out.text}`);
+  }
+
+  assert(out.json && typeof out.json.token === 'string', 'requester token issue response missing token');
+
+  return {
+    token: out.json.token,
+    token_hash: typeof out.json.token_hash === 'string' ? out.json.token_hash : null,
+    kid: typeof out.json.kid === 'string' ? out.json.kid : null,
+    token_lane: typeof out.json.token_lane === 'string' ? out.json.token_lane : null,
+    issued_response: out.json,
+    elapsed_ms: out.elapsed_ms,
+  };
+}
+
 export function requireEnv(name) {
   const value = process.env[name];
   assert(value && value.trim().length > 0, `Missing required env var: ${name}`);

@@ -4,6 +4,11 @@ main = "src/index.ts"
 compatibility_date = "2026-02-11"
 workers_dev = true
 
+routes = [
+  { pattern = "clawtrials.com/v1/harness*", zone_name = "clawtrials.com" },
+  { pattern = "clawtrials.com/health", zone_name = "clawtrials.com" }
+]
+
 [vars]
 ENVIRONMENT = "production"
 CLAWTRIALS_VERSION = "0.1.0"

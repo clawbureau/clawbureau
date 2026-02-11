@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/marketplace/CBT-OPS-003-prod-gate-scale-reliability",
-  "description": "clawbounties.com (Bounty Marketplace) — PRD — Marketplace for agent work with test/quorum/requester closures.",
+  "branchName": "feat/marketplace/CBT-OPS-003-prod-activation-finalize",
+  "description": "clawbounties.com (Bounty Marketplace) \u2014 PRD \u2014 Marketplace for agent work with test/quorum/requester closures.",
   "userStories": [
     {
       "id": "CBT-US-001",
@@ -127,7 +127,7 @@
       ],
       "priority": 9,
       "passes": true,
-      "notes": "Added proof tier classification for submissions (self/gateway/sandbox) based on provided receipt/attestation references. Stored proof_tier + proof_evidence on Submission, returned proof_tier in submitWork response, and forwarded submission_proof_tier to clawrep reviewer selection for downstream weighting." 
+      "notes": "Added proof tier classification for submissions (self/gateway/sandbox) based on provided receipt/attestation references. Stored proof_tier + proof_evidence on Submission, returned proof_tier in submitWork response, and forwarded submission_proof_tier to clawrep reviewer selection for downstream weighting."
     },
     {
       "id": "CBT-US-010",
@@ -141,7 +141,7 @@
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Made fee disclosure deterministic and explicit: bounties now require fee_policy_version + all_in_cost at posting, and acceptance receipts include worker_net (reward principal), fee_policy_version, and all_in_cost so agents can see net payout and requester total cost. Typecheck passes." 
+      "notes": "Made fee disclosure deterministic and explicit: bounties now require fee_policy_version + all_in_cost at posting, and acceptance receipts include worker_net (reward principal), fee_policy_version, and all_in_cost so agents can see net payout and requester total cost. Typecheck passes."
     },
     {
       "id": "CBT-US-011",
@@ -155,7 +155,7 @@
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Difficulty scalar K is required at posting (validated + persisted). Added K to PostBounty response (posting receipt) and ensured it is forwarded to clawrep reviewer selection (rep weighting). Acceptance receipts already include difficulty_scalar; updates preserve immutability." 
+      "notes": "Difficulty scalar K is required at posting (validated + persisted). Added K to PostBounty response (posting receipt) and ensured it is forwarded to clawrep reviewer selection (rep weighting). Acceptance receipts already include difficulty_scalar; updates preserve immutability."
     },
     {
       "id": "CBT-US-012",
@@ -169,7 +169,7 @@
       ],
       "priority": 12,
       "passes": true,
-      "notes": "Code bounties now require a did-work style commit.sig.json at submission (SubmitWorkRequest.commit_sig). Signature is verified (Ed25519 over message 'commit:<sha>' from did:key) and the extracted commit_sha is stored on the Submission alongside proof_bundle, linking the commit proof to the proof bundle." 
+      "notes": "Code bounties now require a did-work style commit.sig.json at submission (SubmitWorkRequest.commit_sig). Signature is verified (Ed25519 over message 'commit:<sha>' from did:key) and the extracted commit_sha is stored on the Submission alongside proof_bundle, linking the commit proof to the proof bundle."
     },
     {
       "id": "CBT-US-013",
@@ -183,7 +183,7 @@
       ],
       "priority": 13,
       "passes": true,
-      "notes": "PoH tier gating is implemented end-to-end: PostBountyRequest supports min_poh_tier (default 0) and persists it on Bounty; acceptBounty enforces eligibility by calling clawtrust eligibilityService with required_poh_tier; searchBounties exposes trust_requirements.min_poh_tier in BountyListing." 
+      "notes": "PoH tier gating is implemented end-to-end: PostBountyRequest supports min_poh_tier (default 0) and persists it on Bounty; acceptBounty enforces eligibility by calling clawtrust eligibilityService with required_poh_tier; searchBounties exposes trust_requirements.min_poh_tier in BountyListing."
     },
     {
       "id": "CBT-US-014",
@@ -197,7 +197,7 @@
       ],
       "priority": 14,
       "passes": true,
-      "notes": "Implemented owner-verified voting enforcement in quorum review: when bounty.require_owner_verified_votes is enabled, owner-verified reviewers must include owner_attestation_ref (stored on vote), and non-owner-verified reviewers can still vote only by providing a fallback_stake meeting a minimum threshold. Quorum initiation prefers owner-verified reviewers but falls back to non-verified selection if insufficient verified reviewers are available." 
+      "notes": "Implemented owner-verified voting enforcement in quorum review: when bounty.require_owner_verified_votes is enabled, owner-verified reviewers must include owner_attestation_ref (stored on vote), and non-owner-verified reviewers can still vote only by providing a fallback_stake meeting a minimum threshold. Quorum initiation prefers owner-verified reviewers but falls back to non-verified selection if insufficient verified reviewers are available."
     },
     {
       "id": "CBT-US-015",
@@ -247,7 +247,7 @@
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Upgraded clawbounties post/list API to schema v2 shapes (reward object, is_code_bounty + tags) and updated cuts integration to v2 params; persists D1 records and creates escrow holds." 
+      "notes": "Upgraded clawbounties post/list API to schema v2 shapes (reward object, is_code_bounty + tags) and updated cuts integration to v2 params; persists D1 records and creates escrow holds."
     },
     {
       "id": "CBT-US-018",
@@ -340,8 +340,8 @@
         "Validate staging test-lane behavior with smoke evidence"
       ],
       "priority": 23,
-      "passes": false,
-      "notes": "Staging complete: clawtrials harness lane deployed + deterministic fail-closed invalid-harness replay evidence captured. Pass flip deferred pending explicit GO PROD."
+      "passes": true,
+      "notes": "Production complete. Staging + prod harness lane validated with deterministic contracts and fail-closed invalid replay behavior. Evidence: staging gate/report `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.json`; prod gate/report `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`; prod test smoke `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`."
     },
     {
       "id": "CBT-US-023",
@@ -354,8 +354,8 @@
         "Simulation scripts emit deterministic failures and fail-closed on dependency outages"
       ],
       "priority": 24,
-      "passes": false,
-      "notes": "Staging complete: requester/test API-only smokes + batch runs (10 and 50) succeeded with artifacts. Pass flip deferred pending explicit GO PROD."
+      "passes": true,
+      "notes": "Production complete. API-only requester/test smoke runners and batch runner validated in staging and prod with scoped requester token issuance via clawscope (no D1 simulation shortcuts). Evidence: requester prod `artifacts/simulations/clawbounties/2026-02-11T22-20-53-579Z-requester-e2e/requester-smoke.json`; test prod `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`; batch prod 10/50 `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`."
     },
     {
       "id": "CBT-US-024",
@@ -368,8 +368,8 @@
         "Artifacts include total jobs, per-step success/failure, deterministic error buckets, stuck-state counts, per-step latency stats, and closure_type breakdown"
       ],
       "priority": 25,
-      "passes": false,
-      "notes": "Staging complete: submission listing/detail endpoints live and artifact metrics emitted under artifacts/simulations/clawbounties/*. Pass flip deferred pending explicit GO PROD."
+      "passes": true,
+      "notes": "Production complete. Submission list/detail endpoints validated through requester/worker flows and reflected in deterministic simulation metrics artifacts across staging/prod. Evidence: prod requester smoke `artifacts/simulations/clawbounties/2026-02-11T22-20-53-579Z-requester-e2e/requester-smoke.json`; prod test smoke `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`; batch metrics `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`."
     },
     {
       "id": "CBT-US-025",
@@ -382,8 +382,8 @@
         "Gate script writes machine-readable and markdown report artifacts under artifacts/simulations/clawbounties/<timestamp>/ with recommendation + blockers"
       ],
       "priority": 26,
-      "passes": false,
-      "notes": "Added for CBT-OPS-003. Staging implementation and evidence in progress; keep false until explicit GO PROD governance decision and production verification."
+      "passes": true,
+      "notes": "Production complete. One-command gate pack now green in both staging and prod with route/health, auth fail-closed, harness integration, and deterministic invalid-replay checks. Evidence: `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/{gate-report.json,gate-report.md}` and `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/{gate-report.json,gate-report.md}`."
     },
     {
       "id": "CBT-US-026",
@@ -396,8 +396,8 @@
         "Write summary + jobs artifacts under artifacts/simulations/clawbounties/<timestamp>/"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": "Added for CBT-OPS-003. Keep false pending production gate and explicit GO PROD."
+      "passes": true,
+      "notes": "Production complete. 200+ reliability mode validated with bounded concurrency/backpressure and zero stuck states in staging + prod. Evidence: staging 200 `artifacts/simulations/clawbounties/2026-02-11T22-17-00-795Z-batch-200/summary.json`; prod 200 `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`."
     },
     {
       "id": "CBT-US-027",
@@ -410,8 +410,8 @@
         "Summary artifacts include funding preflight outcome and funding-related blockers"
       ],
       "priority": 28,
-      "passes": false,
-      "notes": "Added for CBT-OPS-003. Keep false pending explicit GO PROD and production verification evidence."
+      "passes": true,
+      "notes": "Production complete. Funding preflight executed and recorded in all batch summaries; insufficient-funds classification remained deterministic. Blockers encountered during rollout were resolved fail-closed: TOKEN_UNKNOWN_KID (requester token issuance source corrected to clawscope) and DB_WRITE_FAILED requester_auth_events table missing (prod migration applied). Evidence: `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`."
     }
   ]
 }

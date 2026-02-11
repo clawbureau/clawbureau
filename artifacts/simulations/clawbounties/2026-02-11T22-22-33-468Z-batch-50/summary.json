@@ -1,0 +1,186 @@
+{
+  "ok": true,
+  "run_label": "cbt-ops-003-prod-batch50",
+  "env": "prod",
+  "base_url": "https://clawbounties.com",
+  "clawtrials_base_url": "https://clawtrials.com",
+  "scope_base_url": "https://clawscope.com",
+  "requester_audience": "clawbounties.com",
+  "requester_token_source": "clawscope-issue",
+  "requester_token_kid": "66a63dae7bbf4bda",
+  "requester_token_hash": "5aa3893d804c282516013d2fabd09aa3e96a8d0c93a8f552f303d411501764ae",
+  "total_jobs": 50,
+  "concurrency": 8,
+  "reward_minor": "200",
+  "harness_id": "th_smoke_pass_v1",
+  "requester_did_mode": "fixed",
+  "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+  "success_jobs": 50,
+  "failed_jobs": 0,
+  "skipped_jobs": 0,
+  "aborted": false,
+  "abort_reason": null,
+  "closure_type_breakdown": {
+    "requester": {
+      "total": 25,
+      "success": 25,
+      "failed": 0
+    },
+    "test": {
+      "total": 25,
+      "success": 25,
+      "failed": 0
+    }
+  },
+  "deterministic_error_buckets": {},
+  "raw_error_buckets": {},
+  "classified_error_buckets": {},
+  "stuck_state_counts": {
+    "pending_review": 0,
+    "unknown": 0,
+    "non_terminal_other": 0,
+    "total": 0
+  },
+  "terminal_status_breakdown": {
+    "rejected": 13,
+    "approved": 37
+  },
+  "stuck_jobs_sample": [],
+  "step_metrics": {
+    "register_worker": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 116,
+        "max_ms": 283,
+        "avg_ms": 164.18,
+        "p95_ms": 246
+      }
+    },
+    "post_bounty": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 438,
+        "max_ms": 1957,
+        "avg_ms": 663.26,
+        "p95_ms": 1923
+      }
+    },
+    "accept_bounty": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 230,
+        "max_ms": 426,
+        "avg_ms": 300.28,
+        "p95_ms": 416
+      }
+    },
+    "submit": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 268,
+        "max_ms": 2619,
+        "avg_ms": 990.64,
+        "p95_ms": 2525
+      }
+    },
+    "list_submissions": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 131,
+        "max_ms": 336,
+        "avg_ms": 185.36,
+        "p95_ms": 227
+      }
+    },
+    "get_submission_detail": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 128,
+        "max_ms": 275,
+        "avg_ms": 180.8,
+        "p95_ms": 252
+      }
+    },
+    "reject": {
+      "success": 13,
+      "failure": 0,
+      "latency": {
+        "count": 13,
+        "min_ms": 334,
+        "max_ms": 1709,
+        "avg_ms": 469.15,
+        "p95_ms": 1709
+      }
+    },
+    "wait_terminal": {
+      "success": 50,
+      "failure": 0,
+      "latency": {
+        "count": 50,
+        "min_ms": 133,
+        "max_ms": 351,
+        "avg_ms": 194.56,
+        "p95_ms": 283
+      }
+    },
+    "approve": {
+      "success": 12,
+      "failure": 0,
+      "latency": {
+        "count": 12,
+        "min_ms": 1031,
+        "max_ms": 2597,
+        "avg_ms": 1375.92,
+        "p95_ms": 2597
+      }
+    }
+  },
+  "funding_preflight": {
+    "ok": true,
+    "status": 201,
+    "error_code": null,
+    "error_bucket": null,
+    "error_message": null,
+    "bounty_id": "bty_a838eed7-ee8a-460e-8cc3-4aaf8977f9bf",
+    "elapsed_ms": 473,
+    "started_at": "2026-02-11T22:22:12.384Z",
+    "ended_at": "2026-02-11T22:22:12.859Z"
+  },
+  "backpressure": {
+    "enabled": true,
+    "base_cooldown_ms": 1200,
+    "step_cooldown_ms": 600,
+    "max_cooldown_ms": 8000,
+    "insufficient_funds_stop_threshold": 3,
+    "retriable_failures": 0,
+    "insufficient_funds_failures": 0,
+    "cooldown_wait_events": 0,
+    "total_cooldown_ms": 0,
+    "executed_jobs": 50,
+    "skipped_jobs": 0,
+    "aborted": false,
+    "abort_reason": null
+  },
+  "generated_at": "2026-02-11T22:22:33.467Z",
+  "preflight": {
+    "clawbounties_health_ms": 83,
+    "clawtrials_health_ms": 69,
+    "clawbounties_health_status": 200,
+    "clawtrials_health_status": 200,
+    "requested_concurrency": 8,
+    "applied_concurrency": 8,
+    "max_concurrency": 12
+  }
+}

@@ -7,6 +7,10 @@ import {
   assert,
   resolveEnvName,
   resolveBountiesBaseUrl,
+  resolveScopeBaseUrl,
+  resolveRequesterAudience,
+  resolveRequesterScopes,
+  issueRequesterScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -27,15 +31,42 @@ async function main() {
   const envName = resolveEnvName(args.get('env'));
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
 
-  const requesterToken = String(
-    args.get('requester-token') || process.env.REQUESTER_SCOPED_TOKEN || process.env.BOUNTIES_ADMIN_KEY || ''
-  ).trim();
-  assert(
-    requesterToken.length > 0,
-    'Missing requester token. Provide --requester-token or set REQUESTER_SCOPED_TOKEN (fallback: BOUNTIES_ADMIN_KEY).'
-  );
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
+
+  let requesterToken = String(args.get('requester-token') || process.env.REQUESTER_SCOPED_TOKEN || '').trim();
+  let requesterTokenSource = 'provided';
+  let requesterTokenKid = null;
+  let requesterTokenHash = null;
+
+  if (!requesterToken) {
+    const scopeAdminKey = String(args.get('scope-admin-key') || process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
+    assert(
+      scopeAdminKey.length > 0,
+      'Missing requester auth input. Provide --requester-token / REQUESTER_SCOPED_TOKEN or set --scope-admin-key / SCOPE_ADMIN_KEY for clawscope issuance.'
+    );
+
+    const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+    const audience = resolveRequesterAudience(envName, args.get('requester-audience'));
+    const scopes = resolveRequesterScopes(args.get('requester-scopes'));
+    const ttlSec = Number.parseInt(String(args.get('requester-token-ttl-sec') || '3600'), 10);
+    assert(Number.isFinite(ttlSec) && ttlSec > 0, 'requester-token-ttl-sec must be a positive integer');
+
+    const issued = await issueRequesterScopedToken({
+      scopeBaseUrl,
+      scopeAdminKey,
+      requesterDid,
+      audience,
+      scopes,
+      ttlSec,
+      source: 'smoke-clawbounties-e2e-requester',
+    });
+
+    requesterToken = issued.token;
+    requesterTokenSource = 'clawscope-issue';
+    requesterTokenKid = issued.kid;
+    requesterTokenHash = issued.token_hash;
+  }
 
   const identity = await generateAgentIdentity();
   const workerDid = identity.did;
@@ -157,6 +188,9 @@ async function main() {
     env: envName,
     base_url: baseUrl,
     requester_did: requesterDid,
+    requester_token_source: requesterTokenSource,
+    requester_token_kid: requesterTokenKid,
+    requester_token_hash: requesterTokenHash,
     worker_did: workerDid,
     bounty_id: bountyId,
     submission_id: submissionId,

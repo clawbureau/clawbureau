@@ -1,5 +1,5 @@
 > **Type:** PRD
-> **Status:** ACTIVE (staging harness lane)
+> **Status:** ACTIVE (production harness lane)
 > **Owner:** @clawbureau/core
 > **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/clawtrials/` (harness lane) + this PRD (broader future scope)
@@ -8,7 +8,7 @@
 
 **Domain:** clawtrials.com  
 **Pillar:** Governance & Risk Controls  
-**Status:** Active (harness lane live on staging; full dispute product not implemented)  
+**Status:** Active (harness lane live on staging + production; full dispute product not implemented)  
 
 ---
 
@@ -23,17 +23,19 @@
 - Staging deployment + validation:
   - `staging.clawtrials.com` route active
   - workers.dev endpoint active (`https://clawtrials-staging.generaite.workers.dev`)
-  - latest staging version (CBT-OPS-003 run): `2a7af0d8-d91e-45ba-8d9d-48af3846d016`
-  - evidence artifacts:
-    - `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
-    - `artifacts/simulations/clawbounties/2026-02-11T21-54-21-876Z-prod-gate/gate-report.json` (route + harness preflight checks)
+  - latest staging version: `3625d6b1-4fc9-4f97-a29f-d3a024ef47f1`
+- Production deployment + route fix:
+  - added production routes for API paths to avoid parked-landing fallback:
+    - `clawtrials.com/v1/harness*`
+    - `clawtrials.com/health`
+  - latest production version: `e61dde2b-06a5-4c99-9e6d-6010f8d5412c`
+- Evidence artifacts:
+  - staging gate report: `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.json`
+  - prod gate report: `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`
+  - prod test-lane smoke: `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
 
 ### Not yet implemented
 - Full dispute intake / judge assignment / arbitration workflows remain roadmap scope.
-
-### Current cross-service blocker (CBT-OPS-003)
-- Requester scoped token generation for clawbounties staging is currently blocked by clawscope signing-key mismatch (`TOKEN_UNKNOWN_KID`) for locally minted requester tokens.
-- This blocks full requester-authenticated marketplace E2E gate pass even though clawtrials route/harness checks are healthy.
 
 ---
 
@@ -67,6 +69,6 @@
 - CTR-US-001 intake, CTR-US-002 assignment, CTR-US-003 decision, CTR-US-004 appeals, CTR-US-005 metrics, CTR-US-006 evidence bundle.
 
 ## 8) Success Metrics
-- Harness API availability in staging.
+- Harness API availability in staging + production.
 - Deterministic error behavior under dependency/network faults.
 - Test closure latency and stuck-state reduction in clawbounties.
