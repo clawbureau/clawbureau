@@ -41,6 +41,8 @@
  *   GET /sitemap.xml, /robots.txt, /health
  *   GET /<INDEXNOW_KEY>.txt
  *   POST /api/indexnow, /api/google-index, /api/index-urls
+ *   POST /api/events (public conversion telemetry)
+ *   POST /api/events/summary (token-protected weekly summary)
  *
  * Dynamic article routing:
  * - Any non-static route attempts to load articles/<slug>.json from R2.
@@ -68,6 +70,9 @@ interface Env {
   INDEXNOW_KEY?: string;
   INDEX_AUTOMATION_TOKEN?: string;
   GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON?: string;
+  INDEXNOW_MAX_ATTEMPTS?: string;
+  INDEXNOW_RETRY_BASE_MS?: string;
+  INDEXNOW_RETRY_MAX_MS?: string;
 }
 
 interface Article {
@@ -189,13 +194,56 @@ function normalizeUrlList(input: unknown, maxUrls = 500): { accepted: string[]; 
   return { accepted, rejected };
 }
 
+type IndexNowAttempt = {
+  attempt: number;
+  status: number;
+  ok: boolean;
+  retryable: boolean;
+  waitMs?: number;
+};
+
 type IndexNowResult = {
   ok: boolean;
   submitted: number;
   status: number;
   body?: unknown;
   error?: string;
+  attempts: number;
+  retried: number;
+  retryableFailures: number;
+  attemptLog: IndexNowAttempt[];
 };
+
+const RETRYABLE_HTTP_STATUS = new Set([429, 500, 502, 503, 504]);
+
+function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_HTTP_STATUS.has(status);
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+
+  const asNum = Number(value);
+  if (Number.isFinite(asNum) && asNum >= 0) {
+    return Math.floor(asNum * 1000);
+  }
+
+  const asDate = Date.parse(value);
+  if (Number.isNaN(asDate)) return null;
+
+  const delta = asDate - Date.now();
+  return delta > 0 ? delta : 0;
+}
+
+function backoffMs(attempt: number, baseMs = 900, maxMs = 30000): number {
+  const exp = Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt - 1));
+  const jitter = Math.floor(exp * 0.2 * Math.random());
+  return Math.min(maxMs, exp + jitter);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function submitIndexNow(urls: string[], env: Env): Promise<IndexNowResult> {
   const key = env.INDEXNOW_KEY?.trim();
@@ -205,8 +253,16 @@ async function submitIndexNow(urls: string[], env: Env): Promise<IndexNowResult>
       submitted: 0,
       status: 503,
       error: "INDEXNOW_KEY_NOT_CONFIGURED",
+      attempts: 0,
+      retried: 0,
+      retryableFailures: 0,
+      attemptLog: [],
     };
   }
+
+  const maxAttempts = Math.max(1, Number(env.INDEXNOW_MAX_ATTEMPTS ?? "4"));
+  const baseBackoffMs = Math.max(250, Number(env.INDEXNOW_RETRY_BASE_MS ?? "900"));
+  const maxBackoffMs = Math.max(baseBackoffMs, Number(env.INDEXNOW_RETRY_MAX_MS ?? "30000"));
 
   const payload = {
     host: "clawea.com",
@@ -215,26 +271,123 @@ async function submitIndexNow(urls: string[], env: Env): Promise<IndexNowResult>
     urlList: urls,
   };
 
-  const res = await fetch("https://api.indexnow.org/IndexNow", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  const attemptLog: IndexNowAttempt[] = [];
+  let retried = 0;
+  let retryableFailures = 0;
+  let lastBody: unknown = null;
+  let lastStatus = 502;
 
-  const raw = await res.text();
-  let parsed: unknown = raw;
-  try {
-    parsed = raw ? JSON.parse(raw) : null;
-  } catch {
-    // keep raw text body
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch("https://api.indexnow.org/IndexNow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const raw = await res.text();
+      let parsed: unknown = raw;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        // keep raw text body
+      }
+
+      const retryable = isRetryableStatus(res.status);
+      const nextAllowed = attempt < maxAttempts && retryable;
+
+      let waitMs: number | undefined;
+      if (nextAllowed) {
+        const retryAfterMs = parseRetryAfterMs(res.headers.get("retry-after"));
+        waitMs = retryAfterMs ?? backoffMs(attempt, baseBackoffMs, maxBackoffMs);
+      }
+
+      attemptLog.push({
+        attempt,
+        status: res.status,
+        ok: res.ok,
+        retryable,
+        waitMs,
+      });
+
+      lastBody = parsed;
+      lastStatus = res.status;
+
+      if (res.ok) {
+        return {
+          ok: true,
+          submitted: urls.length,
+          status: res.status,
+          body: parsed,
+          attempts: attempt,
+          retried,
+          retryableFailures,
+          attemptLog,
+        };
+      }
+
+      if (!nextAllowed) {
+        return {
+          ok: false,
+          submitted: 0,
+          status: res.status,
+          body: parsed,
+          error: "INDEXNOW_REQUEST_FAILED",
+          attempts: attempt,
+          retried,
+          retryableFailures,
+          attemptLog,
+        };
+      }
+
+      retryableFailures += 1;
+      retried += 1;
+      await sleep(waitMs ?? backoffMs(attempt, baseBackoffMs, maxBackoffMs));
+    } catch (err: any) {
+      const nextAllowed = attempt < maxAttempts;
+      const waitMs = nextAllowed ? backoffMs(attempt, baseBackoffMs, maxBackoffMs) : undefined;
+
+      attemptLog.push({
+        attempt,
+        status: 0,
+        ok: false,
+        retryable: nextAllowed,
+        waitMs,
+      });
+
+      lastBody = { message: String(err?.message ?? err) };
+      lastStatus = 502;
+
+      if (!nextAllowed) {
+        return {
+          ok: false,
+          submitted: 0,
+          status: 502,
+          body: lastBody,
+          error: "INDEXNOW_FETCH_FAILED",
+          attempts: attempt,
+          retried,
+          retryableFailures,
+          attemptLog,
+        };
+      }
+
+      retryableFailures += 1;
+      retried += 1;
+      await sleep(waitMs ?? backoffMs(attempt, baseBackoffMs, maxBackoffMs));
+    }
   }
 
   return {
-    ok: res.ok,
-    submitted: res.ok ? urls.length : 0,
-    status: res.status,
-    body: parsed,
-    error: res.ok ? undefined : "INDEXNOW_REQUEST_FAILED",
+    ok: false,
+    submitted: 0,
+    status: lastStatus,
+    body: lastBody,
+    error: "INDEXNOW_REQUEST_FAILED",
+    attempts: attemptLog.length,
+    retried,
+    retryableFailures,
+    attemptLog,
   };
 }
 
@@ -416,6 +569,246 @@ async function loadArticle(env: Env, slug: string): Promise<Article | null> {
 
 function slugFromPath(pathname: string): string {
   return pathname.replace(/^\//, "").replace(/\/$/, "");
+}
+
+type TrackingEventType =
+  | "cta_click"
+  | "contact_intent_view"
+  | "contact_email_click"
+  | "contact_intent_submit";
+
+type TrackingEvent = {
+  eventType: TrackingEventType;
+  page: string;
+  href?: string;
+  ctaId?: string;
+  ts: string;
+  source: string;
+  attribution: Record<string, string>;
+  context: {
+    referrer?: string;
+    country?: string;
+    userAgent?: string;
+    ipClassC?: string;
+  };
+};
+
+const TRACKING_EVENT_TYPES = new Set<TrackingEventType>([
+  "cta_click",
+  "contact_intent_view",
+  "contact_email_click",
+  "contact_intent_submit",
+]);
+
+function clipString(input: unknown, maxLen: number): string | undefined {
+  if (typeof input !== "string") return undefined;
+  const v = input.trim();
+  if (!v) return undefined;
+  return v.slice(0, maxLen);
+}
+
+function normalizeAttribution(input: unknown): Record<string, string> {
+  const src = typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
+
+  const allowedKeys = [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "gclid",
+    "fbclid",
+    "msclkid",
+    "referrer_host",
+    "landing_path",
+    "source",
+  ];
+
+  const out: Record<string, string> = {};
+  for (const key of allowedKeys) {
+    const v = clipString(src[key], 160);
+    if (v) out[key] = v;
+  }
+
+  return out;
+}
+
+function deriveSource(attribution: Record<string, string>): string {
+  if (attribution.source) return attribution.source;
+  if (attribution.utm_source) return `utm:${attribution.utm_source}`;
+  if (attribution.referrer_host) return `ref:${attribution.referrer_host}`;
+  return "direct";
+}
+
+function anonymizeIpClassC(ip: string | null): string | undefined {
+  if (!ip) return undefined;
+  const m = ip.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return undefined;
+  return `${m[1]}.${m[2]}.${m[3]}.x`;
+}
+
+async function ingestTrackingEvent(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  let body: any;
+  try {
+    body = await request.json<any>();
+  } catch {
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
+  }
+
+  const eventTypeRaw = clipString(body?.eventType, 64);
+  const eventType = eventTypeRaw && TRACKING_EVENT_TYPES.has(eventTypeRaw as TrackingEventType)
+    ? (eventTypeRaw as TrackingEventType)
+    : null;
+
+  if (!eventType) {
+    return apiError("EVENT_TYPE_INVALID", "eventType is missing or not allowed", 400);
+  }
+
+  const page = clipString(body?.page, 240) ?? "/";
+  const ts = clipString(body?.ts, 80) ?? new Date().toISOString();
+  const parsedTs = Number.isNaN(Date.parse(ts)) ? new Date().toISOString() : ts;
+
+  const attribution = normalizeAttribution(body?.attribution);
+
+  const event: TrackingEvent = {
+    eventType,
+    page,
+    href: clipString(body?.href, 500),
+    ctaId: clipString(body?.ctaId, 160),
+    ts: parsedTs,
+    source: deriveSource(attribution),
+    attribution,
+    context: {
+      referrer: clipString(request.headers.get("referer"), 500),
+      country: clipString(request.headers.get("cf-ipcountry"), 8),
+      userAgent: clipString(request.headers.get("user-agent"), 180),
+      ipClassC: anonymizeIpClassC(request.headers.get("cf-connecting-ip")),
+    },
+  };
+
+  const day = event.ts.slice(0, 10);
+  const random = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  const key = `events/${day}/${event.ts.replace(/[:.]/g, "-")}-${random}.json`;
+
+  await env.ARTICLES.put(key, JSON.stringify(event), {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  return apiJson({ ok: true, eventId: key });
+}
+
+async function listTrackingEvents(env: Env, sinceMs: number): Promise<TrackingEvent[]> {
+  const out: TrackingEvent[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    const listed = await env.ARTICLES.list({
+      prefix: "events/",
+      cursor,
+      limit: 1000,
+    });
+
+    for (const obj of listed.objects) {
+      const file = await env.ARTICLES.get(obj.key);
+      if (!file) continue;
+
+      try {
+        const ev = await file.json<TrackingEvent>();
+        const tsMs = Date.parse(ev.ts);
+        if (Number.isNaN(tsMs) || tsMs < sinceMs) continue;
+        if (!TRACKING_EVENT_TYPES.has(ev.eventType)) continue;
+        out.push(ev);
+      } catch {
+        // ignore malformed rows
+      }
+    }
+
+    if (!listed.truncated || !listed.cursor) break;
+    cursor = listed.cursor;
+  }
+
+  return out;
+}
+
+function topCounts(map: Map<string, number>, limit = 10): Array<{ key: string; count: number }> {
+  return [...map.entries()]
+    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], "en"))
+    .slice(0, limit)
+    .map(([key, count]) => ({ key, count }));
+}
+
+async function summarizeTrackingEvents(request: Request, env: Env): Promise<Response> {
+  const authError = checkAutomationAuth(request, env);
+  if (authError) return authError;
+
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  let body: any = {};
+  try {
+    body = await request.json<any>();
+  } catch {
+    // allow empty JSON body
+  }
+
+  const daysRaw = Number(body?.days ?? 7);
+  const days = Number.isFinite(daysRaw) ? Math.min(56, Math.max(1, Math.floor(daysRaw))) : 7;
+
+  const sinceMs = Date.now() - (days * 24 * 60 * 60 * 1000);
+  const events = await listTrackingEvents(env, sinceMs);
+
+  const byType = new Map<string, number>();
+  const bySource = new Map<string, number>();
+  const byPage = new Map<string, number>();
+  const byCta = new Map<string, number>();
+
+  let contactIntentViews = 0;
+  let contactIntentActions = 0;
+
+  for (const ev of events) {
+    byType.set(ev.eventType, (byType.get(ev.eventType) ?? 0) + 1);
+    bySource.set(ev.source, (bySource.get(ev.source) ?? 0) + 1);
+    byPage.set(ev.page, (byPage.get(ev.page) ?? 0) + 1);
+
+    const ctaKey = ev.ctaId ?? ev.href ?? "unknown";
+    if (ev.eventType === "cta_click" || ev.eventType === "contact_email_click") {
+      byCta.set(ctaKey, (byCta.get(ctaKey) ?? 0) + 1);
+    }
+
+    if (ev.eventType === "contact_intent_view") contactIntentViews += 1;
+    if (ev.eventType === "contact_email_click" || ev.eventType === "contact_intent_submit") {
+      contactIntentActions += 1;
+    }
+  }
+
+  const intentToActionRate = contactIntentViews > 0
+    ? Number((contactIntentActions / contactIntentViews).toFixed(4))
+    : 0;
+
+  return apiJson({
+    ok: true,
+    days,
+    generatedAt: new Date().toISOString(),
+    totals: {
+      events: events.length,
+      contactIntentViews,
+      contactIntentActions,
+      intentToActionRate,
+    },
+    breakdown: {
+      byType: topCounts(byType, 20),
+      bySource: topCounts(bySource, 20),
+      topPages: topCounts(byPage, 20),
+      topCtas: topCounts(byCta, 20),
+    },
+  });
 }
 
 function breadcrumbsFromSlug(slug: string): { name: string; path: string }[] {
@@ -931,10 +1324,20 @@ export default {
       });
     }
 
-    // ── API routes (indexing automation) ──
+    // ── API routes (indexing automation + conversion telemetry) ──
     if (path.startsWith("/api/")) {
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: apiHeaders() });
+      }
+
+      // Public conversion instrumentation endpoint (no bearer token)
+      if (path === "/api/events") {
+        return await ingestTrackingEvent(request, env);
+      }
+
+      // Protected telemetry summary endpoint
+      if (path === "/api/events/summary") {
+        return await summarizeTrackingEvents(request, env);
       }
 
       const authError = checkAutomationAuth(request, env);
@@ -965,6 +1368,10 @@ export default {
           requested: accepted.length,
           rejected,
           status: result.status,
+          attempts: result.attempts,
+          retried: result.retried,
+          retryableFailures: result.retryableFailures,
+          attemptLog: result.attemptLog,
           body: result.body,
           error: result.error,
         }, result.ok ? 200 : 502);
@@ -998,6 +1405,10 @@ export default {
         const useIndexNow = useAll || enginesInput.includes("indexnow");
         const useGoogle = useAll || enginesInput.includes("google");
 
+        if (!useIndexNow && !useGoogle) {
+          return apiError("ENGINES_INVALID", "engines must include indexnow, google, or all", 400);
+        }
+
         const out: Record<string, unknown> = {
           ok: true,
           requested: accepted.length,
@@ -1012,6 +1423,10 @@ export default {
             ok: r.ok,
             submitted: r.submitted,
             status: r.status,
+            attempts: r.attempts,
+            retried: r.retried,
+            retryableFailures: r.retryableFailures,
+            attemptLog: r.attemptLog,
             body: r.body,
             error: r.error,
           };
@@ -1029,10 +1444,6 @@ export default {
             error: r.error,
           };
           if (!r.ok) out.ok = false;
-        }
-
-        if (!useIndexNow && !useGoogle) {
-          return apiError("ENGINES_INVALID", "engines must include indexnow, google, or all", 400);
         }
 
         return apiJson(out, out.ok ? 200 : 207);

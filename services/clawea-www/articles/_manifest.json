@@ -1,0 +1,704 @@
+{
+  "agent-audit-and-replay": {
+    "title": "Agent Audit and Replay (Evidence, Retention, Rollback) | Claw EA",
+    "category": "pillars",
+    "description": "Agent audit and replay is the discipline of making every agent run provable, reviewable, and reversible, even after the chat transcript is gone or disputed. In Claw EA, the operational unit is a run governed by a WPC, au",
+    "indexable": true
+  },
+  "agent-proof-and-attestation": {
+    "title": "Agent Proof and Attestation (Receipts and Proof Bundles) | Claw EA",
+    "category": "pillars",
+    "description": "Agent proof and attestation is the ability to show what an agent did, under which permissions, and which model calls were made, in a way another party can verify. In Claw EA, OpenClaw is the baseline runtime, and Claw Bu",
+    "indexable": true
+  },
+  "agent-supply-chain-security": {
+    "title": "Agent Supply Chain Security (Skills, Plugins, MCP) | Claw EA",
+    "category": "pillars",
+    "description": "Agent supply chain security is about making skills, plugins, and MCP servers behave like production dependencies: pinned, permissioned, and auditable. In OpenClaw, prompts and skills are easy to change, but the risk live",
+    "indexable": true
+  },
+  "audit/replay-and-rollback": {
+    "title": "Replay and Rollback for Agent Actions | Claw EA",
+    "category": "audit",
+    "description": "Replay for agent actions is only trustworthy when you can bind “what the agent was allowed to do” to “what it actually did”, and verify both later. In Claw EA, OpenClaw is the baseline agent runtime, and Claw Bureau prim",
+    "indexable": true
+  },
+  "audit/tamper-evident-logs": {
+    "title": "Tamper-evident Audit Logs for Agents | Claw EA",
+    "category": "audit",
+    "description": "Tamper-evident audit logs for agents require more than saving chat transcripts. You need a permissioned execution layer that binds “what was allowed” (policy) to “what actually happened” (tool and model calls), then prod",
+    "indexable": true
+  },
+  "channels/discord": {
+    "title": "Discord AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Claw EA turns Discord into a controlled front door for enterprise agents by running OpenClaw as the baseline agent runtime and binding every run to machine-enforced policy. Instead of trusting “the prompt” to behave, you",
+    "indexable": true
+  },
+  "channels/email": {
+    "title": "Email AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "An Email AI Agent Control Plane is a way to let an agent read, draft, and sometimes send email while every action is constrained by policy-as-code and leaves auditable evidence. In Claw EA, OpenClaw is the baseline agent",
+    "indexable": true
+  },
+  "channels/google-chat": {
+    "title": "Google Chat AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Claw EA turns Google Chat into a permissioned control plane for enterprise agents, where actions are executed only under a Work Policy Contract (WPC) and every model call is receipted. OpenClaw is the baseline agent runt",
+    "indexable": true
+  },
+  "channels/matrix": {
+    "title": "Matrix AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Matrix can be a solid control plane for enterprise AI agents when you treat chat messages as a request queue, not as authorization. With Claw EA running OpenClaw as the baseline agent runtime, you enforce permissioned ex",
+    "indexable": true
+  },
+  "channels/mattermost": {
+    "title": "Mattermost AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Mattermost can work as a practical chat control plane for enterprise agents when you treat chat as the place to request work, approve risky actions, and review evidence. Claw EA runs agents on the OpenClaw baseline runti",
+    "indexable": true
+  },
+  "channels/microsoft-teams": {
+    "title": "Microsoft Teams AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Microsoft Teams can be a practical control plane for enterprise AI agents because it already has identity, chat-based approvals, and administrative controls that security teams understand. Claw EA runs the agent itself i",
+    "indexable": true
+  },
+  "channels/signal": {
+    "title": "Signal AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Signal can work as a lightweight human control plane for enterprise AI agents when you treat it as an approvals and notification surface, not as the execution boundary. In Claw EA, the execution boundary is permissioned ",
+    "indexable": true
+  },
+  "channels/slack": {
+    "title": "Slack AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Slack is a practical control plane for enterprise AI agents because it already has identity, channels, message history, and a place for approvals to happen in the open. Claw EA uses OpenClaw as the baseline agent runtime",
+    "indexable": true
+  },
+  "channels/telegram": {
+    "title": "Telegram AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Claw EA turns Telegram into a controlled command surface for enterprise agents by running them on OpenClaw as the baseline runtime, then forcing real permissions at execution time instead of relying on prompt text. You u",
+    "indexable": true
+  },
+  "channels/whatsapp": {
+    "title": "WhatsApp AI Agent Control Plane | Claw EA",
+    "category": "channels",
+    "description": "Claw EA makes WhatsApp a controlled entry point for enterprise agents by running the agent in OpenClaw and forcing every sensitive action through policy checks, scoped credentials, and verifiable model-call evidence. You",
+    "indexable": true
+  },
+  "channels": {
+    "title": "Chat Control Planes for Agents (Channels) | Claw EA",
+    "category": "hubs",
+    "description": "Channels like Microsoft Teams and Slack are your agent’s public attack surface and your audit boundary. If you only rely on prompts, you cannot reliably stop a user from steering the agent into unsafe tools, data exposur",
+    "indexable": true
+  },
+  "compliance": {
+    "title": "Compliance for Permissioned Agents | Claw EA",
+    "category": "hubs",
+    "description": "Enterprise compliance for AI agents fails when “policy” lives only in prompts. Claw EA makes execution permissioned by enforcing policy-as-code for what tools can run, under which identities, and with verifiable evidence",
+    "indexable": true
+  },
+  "controls/approval-gates": {
+    "title": "Step-up approvals (human-in-the-loop) for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Step-up approvals (human-in-the-loop) are a policy-as-code gate that pauses an OpenClaw-run agent right before a high-risk tool action and requires an explicit human “approve/deny” decision. The approval is enforced at t",
+    "indexable": true
+  },
+  "controls/budgets": {
+    "title": "Token and cost budgets for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Token and cost budgets only work when they are enforced by the execution layer, not by a prompt. In Claw EA, you express budgets in a WPC and bind a job to that policy using a CST, so the runtime can prove what policy go",
+    "indexable": true
+  },
+  "controls/dlp-redaction": {
+    "title": "DLP and redaction rules for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "DLP and redaction rules for agents are execution-time controls that detect sensitive data (like credentials, HR data, and customer identifiers), redact it before it leaves the runtime, and record what was changed. In Cla",
+    "indexable": true
+  },
+  "controls/egress-allowlist": {
+    "title": "Egress allowlist (domains, IPs) for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "An egress allowlist limits where an agent is permitted to send network traffic, typically by restricting domains and IP ranges at the execution layer. In Claw EA, you define the allowlist as policy-as-code in a WPC and b",
+    "indexable": true
+  },
+  "controls/file-path-scopes": {
+    "title": "File path read/write scopes for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "File path read/write scopes are machine-enforced rules that constrain what an agent can read from disk and where it can write, down to specific directories and patterns. In Claw EA, you treat these rules as policy-as-cod",
+    "indexable": true
+  },
+  "controls/forced-dry-run": {
+    "title": "Forced dry-run / simulate-first for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Forced dry-run (simulate-first) means an agent must produce a preview of intended tool actions and outputs before it is allowed to execute any irreversible steps. In Claw EA running OpenClaw agents, you implement this by",
+    "indexable": true
+  },
+  "controls/kill-switch": {
+    "title": "Kill switch and emergency halt for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "A kill switch is a policy-enforced emergency halt that stops an agent run from taking new actions, even if the agent keeps generating text. In Claw EA, the practical control is: deny tool execution and deny model egress ",
+    "indexable": true
+  },
+  "controls/provider-model-allowlist": {
+    "title": "Provider and model allowlists for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Provider and model allowlists are a policy-as-code control that restricts which model providers and which exact model identifiers an agent is permitted to call at runtime. In Claw EA, you express the rule as a WPC (Work ",
+    "indexable": true
+  },
+  "controls/rate-limits": {
+    "title": "Rate limits and concurrency limits for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Rate limits and concurrency limits are a policy-as-code control that caps how fast an agent can call models and how many requests it can run at once. In Claw EA, you express those limits in a WPC and bind them to executi",
+    "indexable": true
+  },
+  "controls/secret-boundary": {
+    "title": "Secrets isolation and scoped credentials for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Secrets isolation means your agent cannot read or reuse credentials unless the execution layer grants a narrowly scoped, short-lived credential for the specific job and tool. In Claw EA, you do this by binding a WPC to t",
+    "indexable": true
+  },
+  "controls/tool-allow-deny": {
+    "title": "Tool allow/deny lists for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "Tool allow/deny lists are a machine-enforced boundary that determines which tools an agent is allowed to call at runtime. In OpenClaw, this maps to tool policy controls like tool profiles and explicit allow and deny list",
+    "indexable": true
+  },
+  "controls/two-person-rule": {
+    "title": "Two-person rule for Agents | Policy-as-Code Control | Claw EA",
+    "category": "controls",
+    "description": "A two-person rule for agents means the agent cannot complete specific high-risk actions unless a second human approves the exact action payload. In Claw EA, you implement this as permissioned execution: a Work Policy Con",
+    "indexable": true
+  },
+  "controls": {
+    "title": "Agent Controls (Policy-as-Code) | Claw EA",
+    "category": "hubs",
+    "description": "Enterprise AI agents need controls that are enforced by the execution layer, not just requested in a prompt. Claw EA runs OpenClaw as the baseline agent runtime, then adds permissioned execution using WPC = Work Policy C",
+    "indexable": true
+  },
+  "enterprise-agent-governance": {
+    "title": "Enterprise Agent Governance (Policy, Approvals, Budgets) | Claw EA",
+    "category": "pillars",
+    "description": "Enterprise agent governance is permissioned execution: every tool call and every model call runs under a machine-enforced policy, with approvals and scope limits that cannot be bypassed by a clever prompt.",
+    "indexable": true
+  },
+  "event-native-agents": {
+    "title": "Event-native Agents (Webhooks, Changefeeds, Queues) | Claw EA",
+    "category": "pillars",
+    "description": "Event-native agents replace cron jobs with webhooks, changefeeds, and queue consumers, but they only stay safe at scale if execution is permissioned and repeatable. In Claw EA, OpenClaw is the baseline agent runtime, and",
+    "indexable": true
+  },
+  "events": {
+    "title": "Event-native Agents (Triggers) | Claw EA",
+    "category": "hubs",
+    "description": "Event-native agents are agents that run because an external system emitted an event: a webhook, a changefeed item, or a subscription notification. Claw EA makes these runs permissioned and auditable using OpenClaw as the",
+    "indexable": true
+  },
+  "glossary": {
+    "title": "Glossary: Enterprise Agent Security and Policy Terms | Claw EA",
+    "category": "hubs",
+    "description": "This page defines the security and policy terms teams use when they run enterprise AI agents, with OpenClaw as the baseline agent runtime. The focus is on permissioned execution: machine-enforced policy-as-code that cons",
+    "indexable": true
+  },
+  "guides": {
+    "title": "Implementation Guides for Permissioned Agents | Claw EA",
+    "category": "hubs",
+    "description": "This hub collects implementation guides for running permissioned enterprise agents on Claw EA, using OpenClaw as the baseline agent runtime. The goal is to make agent execution verifiable and restrictable using policy-as",
+    "indexable": true
+  },
+  "mcp-security": {
+    "title": "MCP Security for Enterprise Agents | Claw EA",
+    "category": "pillars",
+    "description": "MCP security for enterprise agents comes down to one rule: treat every MCP tool as a production capability with its own authorization, audit trail, and rollback plan. Prompt-only “don’t do bad things” controls fail becau",
+    "indexable": true
+  },
+  "mcp": {
+    "title": "MCP (Model Context Protocol) for Enterprise Agents | Claw EA",
+    "category": "hubs",
+    "description": "MCP (Model Context Protocol) is a standard way to expose tools and context to an agent, but in enterprise environments MCP alone is not a security boundary. Claw EA treats MCP as a tool transport and adds permissioned ex",
+    "indexable": true
+  },
+  "policy/event-chain": {
+    "title": "Event Chains | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "An Event Chain is a tamper-evident, append-only log for agent jobs where each record links to the previous record by hash and is optionally signed. Use it to make webhook and changefeed driven automation auditable, idemp",
+    "indexable": true
+  },
+  "policy/prompt-pack": {
+    "title": "Prompt Pack | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "A Prompt Pack is a hash-only policy artifact that commits an OpenClaw job to a specific set of prompts and routing rules, then binds execution approvals to that commitment. Instead of trusting whatever text happens to be",
+    "indexable": true
+  },
+  "policy/proof-bundles": {
+    "title": "Proof Bundles | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "A proof bundle is the artifact you keep when you need to prove what an agent did, under which policy, and which model calls happened. In Claw EA, proof bundles package gateway receipts (from clawproxy) plus run metadata ",
+    "indexable": true
+  },
+  "policy/receipt-binding": {
+    "title": "Receipt Binding | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "Receipt binding is how you prove that a specific agent run happened under a specific policy artifact, and that its model calls were not replayed, swapped, or mixed from another run. In Claw EA, the binding links a WPC, a",
+    "indexable": true
+  },
+  "policy/scoped-tokens": {
+    "title": "Scoped Tokens (CST) | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "CST (scoped token) is the execution approval artifact you hand to an agent run so it can call approved services and tools under machine-checked constraints. In Claw EA, CSTs are issued by clawscope and are typically boun",
+    "indexable": true
+  },
+  "policy/system-prompt-report": {
+    "title": "System Prompt Report | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "A System Prompt Report is a policy artifact that makes an agent’s “prompt commitments” auditable and enforceable during execution, not just readable in a text file. In Claw EA, the report is bound to a WPC and enforced t",
+    "indexable": true
+  },
+  "policy/token-scope-hash": {
+    "title": "Token Scope Hash | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "Token Scope Hash is a deterministic digest of what a CST is allowed to do, computed from a canonical “scope set” and optionally pinned to a WPC. It lets the execution layer approve or deny tool and model actions using po",
+    "indexable": true
+  },
+  "policy/urm": {
+    "title": "Universal Run Manifest (URM) | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "The Universal Run Manifest (URM) is a small, machine-validated manifest that binds an OpenClaw run to specific inputs, approvals, and expected outputs, so execution can be permissioned and auditable. In Claw EA, the URM ",
+    "indexable": true
+  },
+  "policy/work-policy-contract": {
+    "title": "Work Policy Contracts (WPC) | Policy Artifact | Claw EA",
+    "category": "policy",
+    "description": "Work Policy Contracts (WPC) are signed, hash-addressed policy artifacts that let you permission agent execution with policy-as-code, not prompt text. In Claw EA, a WPC is fetched and verified at run time and can be pinne",
+    "indexable": true
+  },
+  "policy-as-code-for-agents": {
+    "title": "Policy-as-Code for Agents (Permissioned Execution) | Claw EA",
+    "category": "pillars",
+    "description": "Policy-as-code for agents means the execution layer enforces permissions the same way your APIs do: explicit, versioned rules that decide what the agent may do, with which credentials, and under what conditions. In Claw ",
+    "indexable": true
+  },
+  "policy": {
+    "title": "Policy Artifacts (WPC, Scoped Tokens, Proof) | Claw EA",
+    "category": "hubs",
+    "description": "In Claw EA, “Policy Artifacts” are the objects you use to approve and constrain real execution by OpenClaw agents: WPC, CST, gateway receipts, and proof bundles. They make approvals machine-enforceable and auditable, ins",
+    "indexable": true
+  },
+  "proof/gateway-receipts": {
+    "title": "Gateway Receipts for Agents | Claw EA",
+    "category": "proof",
+    "description": "Gateway receipts are signed records of each model call made by an agent through clawproxy, designed so you can later prove what was requested, what policy context applied, and whether the response you used matches what t",
+    "indexable": true
+  },
+  "proof/proof-bundles": {
+    "title": "Proof Bundles for Agent Runs | Claw EA",
+    "category": "proof",
+    "description": "Proof bundles let you verify what an agent run actually did by packaging gateway receipts, policy references, and run metadata into one artifact you can re-check later. In Claw EA, the proof bundle is built around Work P",
+    "indexable": true
+  },
+  "proof": {
+    "title": "Proof and Attestation for Agents | Claw EA",
+    "category": "hubs",
+    "description": "Claw EA gives you verifiable proof about what an agent did by binding execution to a permissioned policy artifact and emitting cryptographic receipts for model calls. Instead of trusting a prompt transcript, you verify a",
+    "indexable": true
+  },
+  "secure-agent-execution": {
+    "title": "Secure Agent Execution (Permissioned Runtime) | Claw EA",
+    "category": "pillars",
+    "description": "Secure agent execution means the agent can only act through a permissioned runtime that enforces machine-checkable rules, not just “be careful” instructions in a prompt. OpenClaw is a strong baseline agent runtime, and C",
+    "indexable": true
+  },
+  "supply-chain": {
+    "title": "Agent Supply Chain Security (Skills and Plugins) | Claw EA",
+    "category": "hubs",
+    "description": "Agent supply chain security is about controlling what “skills”, plugins, dependencies, and MCP servers an agent can load, and proving what it actually used during a run. In Claw EA, OpenClaw is the baseline agent runtime",
+    "indexable": true
+  },
+  "tools/argo-cd": {
+    "title": "Argo CD for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Use Argo CD with permissioned agents by treating every write operation as a policy decision, not a chat decision. In Claw EA, the control point is a WPC and a CST, so an agent running in OpenClaw cannot sync, rollback, o",
+    "indexable": true
+  },
+  "tools/azure-devops": {
+    "title": "Azure DevOps for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Azure DevOps is a high-impact surface for agents because it can change code, pipelines, and release settings in ways that ship to production. If you let an agent operate on prompt-only instructions, a single prompt injec",
+    "indexable": true
+  },
+  "tools/azure-event-grid": {
+    "title": "Azure Event Grid for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Azure Event Grid is a push-based changefeed that delivers events to HTTPS webhooks, and it will retry deliveries, so duplicates and replays are normal operating conditions. For permissioned agents running in OpenClaw, yo",
+    "indexable": true
+  },
+  "tools/azure-key-vault": {
+    "title": "Azure Key Vault for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Azure Key Vault is the right place to store production secrets, keys, and certificates, but it is a high-impact target for enterprise agents. If an agent can read or mutate vault contents from a prompt, a single prompt-i",
+    "indexable": true
+  },
+  "tools/azure-sentinel": {
+    "title": "Microsoft Sentinel for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Microsoft Sentinel is a high-impact surface for enterprise agents because read access can expose sensitive detections and investigations, and write access can change incidents, analytics rules, and automation. Claw EA tr",
+    "indexable": true
+  },
+  "tools/azure-service-bus": {
+    "title": "Azure Service Bus for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Azure Service Bus is a durable queue and pub/sub backbone, so it is a natural place to connect enterprise agents to real workflows. It is also a high impact surface: a single mis-scoped sender or receiver can leak data, ",
+    "indexable": true
+  },
+  "tools/azure-storage": {
+    "title": "Azure Storage for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Azure Storage is a high-impact tool for enterprise agents because it can read and write business data at scale, and small mistakes turn into large data exposure or data loss. Claw EA treats Azure Storage access as permis",
+    "indexable": true
+  },
+  "tools/bitbucket": {
+    "title": "Bitbucket for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Bitbucket is a high-impact surface for enterprise agents because a single token can grant read access to proprietary code, and write access can change what gets built, tested, and deployed. If you want an agent to touch ",
+    "indexable": true
+  },
+  "tools/confluence": {
+    "title": "Confluence for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Confluence is a high-leverage target for enterprise agents because it contains internal procedures, architecture notes, incident writeups, and links to other systems. If an agent can read and write Confluence, it can als",
+    "indexable": true
+  },
+  "tools/entra-id": {
+    "title": "Microsoft Entra ID (Azure AD) for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Microsoft Entra ID is the identity and authorization control plane you already use for Microsoft Graph and tenant resources, so it is a natural place to anchor enterprise agent identities and access reviews. For permissi",
+    "indexable": true
+  },
+  "tools/github-actions": {
+    "title": "GitHub Actions for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "GitHub Actions is a high-leverage place to let agents propose changes, run tests, and open pull requests, but it is also a privileged execution surface where a mis-scoped token or unsafe workflow can turn into repo write",
+    "indexable": true
+  },
+  "tools/github": {
+    "title": "GitHub for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Use GitHub with permissioned agents by forcing every repo-changing action through policy-as-code and verifiable execution, not prompt instructions. In Claw EA, the baseline runtime is OpenClaw, and GitHub access is imple",
+    "indexable": true
+  },
+  "tools/gitlab": {
+    "title": "GitLab for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "GitLab is a high-impact surface for agents because it combines source code, CI/CD, runners, secrets, merge requests, and admin settings. If you let an agent “just use GitLab” via prompt instructions, you are relying on t",
+    "indexable": true
+  },
+  "tools/gmail": {
+    "title": "Gmail for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Gmail is a high-impact surface for enterprise agents because it combines sensitive data access with the ability to send messages that look official. In Claw EA, you should treat Gmail actions as permissioned execution: a",
+    "indexable": true
+  },
+  "tools/google-admin": {
+    "title": "Google Workspace Admin for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Google Workspace Admin access is high-impact because it can change identities, mail, files, and security settings for the whole domain. If you let an agent run these actions from prompt-only instructions, a single bad me",
+    "indexable": true
+  },
+  "tools/google-calendar": {
+    "title": "Google Calendar for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Google Calendar is a high-impact tool for enterprise agents because it touches real schedules, meeting links, attendees, and sometimes conferencing details. Claw EA treats Calendar access as permissioned execution: a Wor",
+    "indexable": true
+  },
+  "tools/google-drive": {
+    "title": "Google Drive for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Google Drive is a high-risk tool for enterprise agents because it combines broad read access, easy sharing, and the ability to overwrite source-of-truth documents. For permissioned agents, you should connect Drive via of",
+    "indexable": true
+  },
+  "tools/hubspot": {
+    "title": "HubSpot for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "If you want enterprise agents to operate in HubSpot without turning your CRM into an unbounded action surface, you need permissioned execution. Claw EA runs agents on the OpenClaw baseline runtime and adds policy-as-code",
+    "indexable": true
+  },
+  "tools/intercom": {
+    "title": "Intercom for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Intercom is a high-impact surface for agents because a single misfire can message customers, change ticket state, or leak conversation history. For enterprise use, treat Intercom actions as permissioned execution: policy",
+    "indexable": true
+  },
+  "tools/jira": {
+    "title": "Jira for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "If you want agents to touch Jira in an enterprise, treat Jira as a change-control system, not a chat toy. Claw EA runs OpenClaw as the baseline agent runtime and adds a permissioned execution layer so Jira reads and writ",
+    "indexable": true
+  },
+  "tools/kubernetes": {
+    "title": "Kubernetes for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Kubernetes is a good control plane for running enterprise agents, but it is a high-impact tool: a single mis-scoped credential can turn a “helpful” agent into a cluster admin. For permissioned agents, treat Kubernetes ac",
+    "indexable": true
+  },
+  "tools/microsoft-calendar": {
+    "title": "Microsoft Calendar for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Microsoft Calendar can be connected to permissioned agents via the official API (Microsoft Graph) with enterprise buildout controls, but it should not be treated as a “simple tool” you hand to a model. Calendar write acc",
+    "indexable": true
+  },
+  "tools/microsoft-defender": {
+    "title": "Microsoft Defender for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Microsoft Defender helps you discover AI agents, monitor risky behavior, and investigate incidents, but it does not make an agent safe to run by itself. For enterprise agents that can change security settings or query se",
+    "indexable": true
+  },
+  "tools/microsoft-graph": {
+    "title": "Microsoft Graph for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Microsoft Graph lets an agent read and write across Microsoft 365 and Entra ID, which makes it powerful and risky. For enterprise agents, prompt-only guardrails are not enough because a single mis-scoped OAuth grant can ",
+    "indexable": true
+  },
+  "tools/microsoft-purview": {
+    "title": "Microsoft Purview for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Microsoft Purview helps you apply Microsoft 365 security and compliance controls (for example DLP, sensitivity labels, and auditing) to AI interactions and content. For enterprise AI agents, Purview is necessary but not ",
+    "indexable": true
+  },
+  "tools/netsuite": {
+    "title": "NetSuite for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "NetSuite is a high-value target for AI agents because it holds financial records, vendor payments, purchase orders, and inventory data. Connecting an OpenClaw agent to NetSuite via official API requires a permissioned ex",
+    "indexable": true
+  },
+  "tools/okta": {
+    "title": "Okta for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Okta for permissioned agents means this: if an AI agent can provision users, reset factors, or change group membership, every action must be enforced by machine-checked policy, not by prompt instructions. In Claw EA, Ope",
+    "indexable": true
+  },
+  "tools/onedrive": {
+    "title": "OneDrive for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "OneDrive is one of the highest-value targets an enterprise agent can touch: it holds documents, spreadsheets, internal decks, and shared libraries across your entire tenant. Connecting an OpenClaw agent to OneDrive via t",
+    "indexable": true
+  },
+  "tools/onepassword": {
+    "title": "1Password for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "1Password stores the credentials your agents need to authenticate with external services: API keys, OAuth tokens, database passwords, and service account secrets. When an OpenClaw agent retrieves a secret from 1Password ",
+    "indexable": true
+  },
+  "tools/opsgenie": {
+    "title": "Opsgenie for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Opsgenie is an incident response control plane, so letting an enterprise agent touch it without hard controls is a fast way to create missed pages, noisy escalations, or tampered timelines. With Claw EA, you run the agen",
+    "indexable": true
+  },
+  "tools/outlook-exchange": {
+    "title": "Outlook / Exchange for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Outlook and Exchange give agents access to email send, calendar manipulation, and contact reads via Microsoft Graph. An unpermissioned agent with Mail.Send scope can exfiltrate data, impersonate users, or spam external r",
+    "indexable": true
+  },
+  "tools/power-automate": {
+    "title": "Power Automate for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Power Automate is a high-impact automation surface: it can move data, trigger downstream systems, and run on schedules or events. To use it with enterprise agents safely, you need permissioned execution that is enforced ",
+    "indexable": true
+  },
+  "tools/powerbi": {
+    "title": "Power BI for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Power BI is a high-impact surface for enterprise agents because it can reveal sensitive business metrics and, via official API with enterprise buildout controls, can also change content like datasets, reports, workspaces",
+    "indexable": true
+  },
+  "tools/salesforce": {
+    "title": "Salesforce for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Salesforce is a high-impact system for agents because a single “helpful” action can create, update, or expose leads, contacts, cases, and notes at scale. Claw EA runs OpenClaw as the baseline agent runtime, then adds a p",
+    "indexable": true
+  },
+  "tools/sap": {
+    "title": "SAP for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "SAP systems hold financial records, purchase orders, vendor master data, and HR payroll. An agent with write access to SAP via official API can post journal entries, approve purchase requisitions, or modify supplier bank",
+    "indexable": true
+  },
+  "tools/servicenow": {
+    "title": "ServiceNow for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "ServiceNow is a high-impact system of record for ITSM and operations, so agents must be constrained by permissioned execution, not prompt-only instructions. With Claw EA, you run ServiceNow-facing work in OpenClaw as the",
+    "indexable": true
+  },
+  "tools/sharepoint": {
+    "title": "SharePoint for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "SharePoint is where enterprise knowledge lives: sites, document libraries, pages, lists, and embedded Microsoft 365 content. If you let AI agents read and write there without machine-enforced constraints, you risk silent",
+    "indexable": true
+  },
+  "tools/terraform-cloud": {
+    "title": "Terraform Cloud for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Terraform Cloud can be connected to OpenClaw agents via official API with enterprise buildout controls, but it must not be exposed without policy-as-code enforcement. An agent with unconstrained Terraform Cloud access ca",
+    "indexable": true
+  },
+  "tools/workday": {
+    "title": "Workday for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Workday for permissioned agents means connecting AI agents to HR and finance data via official APIs, but only under machine enforced policy. If an agent can read or write employee records, compensation, or job changes, i",
+    "indexable": true
+  },
+  "tools/zendesk": {
+    "title": "Zendesk for Permissioned Agents | Claw EA",
+    "category": "tools",
+    "description": "Zendesk exposes ticket content, customer PII, and write operations (close ticket, update user, create macro) through its REST API and community MCP servers. An agent with unconstrained Zendesk access can leak support dat",
+    "indexable": true
+  },
+  "tools": {
+    "title": "Enterprise Tools for Permissioned Agents | Claw EA",
+    "category": "hubs",
+    "description": "Claw EA provides enterprise tools for running permissioned agents where execution is controlled by policy-as-code, not by prompts. OpenClaw is the baseline agent runtime, and Claw Bureau primitives add machine-verifiable",
+    "indexable": true
+  },
+  "verify/gateway-receipt": {
+    "title": "How to Verify a Gateway Receipt | Claw EA",
+    "category": "verify",
+    "description": "To verify a Gateway receipt, you check that (1) the receipt signature is valid for clawproxy’s public key, and (2) the receipt is cryptographically bound to the exact request context you expected: the model request/respo",
+    "indexable": true
+  },
+  "verify/proof-bundle": {
+    "title": "How to Verify a Proof Bundle | Claw EA",
+    "category": "verify",
+    "description": "To verify a Proof bundle, you check that every cryptographic envelope validates and that the bundle’s bindings are consistent: the Work Policy Contract (WPC), the CST = scoped token, and the Gateway receipts all point at",
+    "indexable": true
+  },
+  "workflows/access-request-automation": {
+    "title": "Access requests and entitlement changes | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Access requests and entitlement changes are safe to automate only when the execution layer is permissioned, not prompt-only. In Claw EA, an OpenClaw agent can assemble evidence and propose changes, but the actual grant, ",
+    "indexable": true
+  },
+  "workflows/change-management": {
+    "title": "Change management ticketing and approvals | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "For change management, you want an agent workflow where the agent can draft and simulate, but cannot approve or close a change unless a permissioned execution policy allows it. Claw EA runs OpenClaw as the baseline agent",
+    "indexable": true
+  },
+  "workflows/cloud-cost-anomaly-response": {
+    "title": "Cloud cost anomaly response | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "This workflow handles a cloud cost spike with permissioned execution: the agent can investigate broadly, but any irreversible action (stop workloads, scale down, disable services) is blocked unless it matches policy-as-c",
+    "indexable": true
+  },
+  "workflows/contract-review-approval": {
+    "title": "Contract review and approval workflow | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "This workflow runs contract review and redline generation under machine-enforced constraints, then requires step-up human approval before anything leaves your boundary. It is designed for OpenClaw as the baseline agent r",
+    "indexable": true
+  },
+  "workflows/credential-rotation": {
+    "title": "Credential rotation and secrets hygiene | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Credential rotation and secrets hygiene for enterprise agents is safest when rotation is executed as a permissioned workflow: the agent can prepare and validate changes, but final secret writes and invalidations require ",
+    "indexable": true
+  },
+  "workflows/customer-email-send": {
+    "title": "Customer communications with DLP and approvals | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "This workflow lets an OpenClaw agent draft and send customer emails only when DLP checks pass and a human approves the final payload. Claw EA makes the execution permissioned with policy-as-code so the agent cannot bypas",
+    "indexable": true
+  },
+  "workflows/data-exfiltration-prevention": {
+    "title": "Prevent agent exfiltration in tool runs | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "To prevent agent exfiltration during tool runs, you need permissioned execution that is enforced by the runtime, not a prompt instruction that can be bypassed. In Claw EA, run OpenClaw as the baseline agent runtime, then",
+    "indexable": true
+  },
+  "workflows/incident-triage": {
+    "title": "Incident triage and response coordination | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Incident triage and response coordination works best when the agent runtime is constrained by machine-enforced policy, not by “please be careful” prompt text. In Claw EA, OpenClaw is the baseline agent runtime, and Claw ",
+    "indexable": true
+  },
+  "workflows/knowledge-base-updates": {
+    "title": "Knowledge base updates with review | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "This workflow lets an OpenClaw-based agent propose knowledge base (KB) changes while keeping publishing permissioned and reviewable. The agent can draft, cite sources, and open a change request, but it cannot publish unt",
+    "indexable": true
+  },
+  "workflows/onboarding-offboarding": {
+    "title": "Employee onboarding/offboarding automation | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Employee onboarding and offboarding automation is high impact because it touches identity, access, and licensing. In Claw EA, you run the workflow as an OpenClaw baseline agent runtime job, but you do not rely on “the pr",
+    "indexable": true
+  },
+  "workflows/payment-approval": {
+    "title": "Payment and invoice approvals | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "For payment and invoice approvals, treat the agent as an untrusted operator: it can prepare evidence and drafts, but it must not be able to send payments, approve invoices, or update payout destinations without machine-e",
+    "indexable": true
+  },
+  "workflows/phishing-response": {
+    "title": "Inbox phishing triage with safe links policy | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "This workflow runs inbox phishing triage under a safe-links-first posture, where the agent is not allowed to click, fetch, or forward anything unless a policy allows it. OpenClaw is the baseline agent runtime, and Claw E",
+    "indexable": true
+  },
+  "workflows/privileged-breakglass": {
+    "title": "Privileged break-glass workflows (timeboxed) | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "A timeboxed privileged break-glass workflow lets an OpenClaw-based agent perform a narrowly scoped, high-risk action (like temporary admin grant or disabling a control) only after step-up approvals, with an explicit expi",
+    "indexable": true
+  },
+  "workflows/production-deploy-approval": {
+    "title": "Production deploy with two-person approval | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "To run production deploys with two-person approval, treat “deploy” as a permissioned action gated by policy-as-code, not a prompt instruction. In Claw EA, you do this by binding an agent run to a WPC and issuing a CST th",
+    "indexable": true
+  },
+  "workflows/release-notes-to-customers": {
+    "title": "Release notes and customer notifications with approvals | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Use OpenClaw as the baseline agent runtime to draft release notes and prepare customer notifications, but make the publish and send actions permissioned by policy-as-code. In Claw EA, that permissioning is expressed as a",
+    "indexable": true
+  },
+  "workflows/siem-evidence-collection": {
+    "title": "Compliance evidence collection to SIEM | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Use OpenClaw as the baseline agent runtime, but treat evidence export as a controlled workflow: policy decides what the agent can read, what it can send out, and what proof it must emit. In Claw EA, you attach a WPC (Wor",
+    "indexable": true
+  },
+  "workflows/sox-control-testing": {
+    "title": "SOX control testing evidence runs | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "SOX control testing evidence runs are safest when the agent is constrained by a permissioned execution layer, not just instructions in a prompt. Claw EA runs OpenClaw as the baseline agent runtime and adds machine-checka",
+    "indexable": true
+  },
+  "workflows/ticket-auto-routing": {
+    "title": "Support ticket classification and routing | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Support ticket classification and routing is safe to automate when the agent runs under permissioned execution, not prompt-only instructions. In Claw EA, you run an OpenClaw agent with a WPC that constrains what it can r",
+    "indexable": true
+  },
+  "workflows/vendor-risk-review": {
+    "title": "Vendor risk review and security questionnaire automation | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "Use Claw EA to run a vendor risk review agent on OpenClaw with permissioned execution: the agent can draft questionnaire responses and analyze vendor evidence, but it cannot send questionnaires or share evidence without ",
+    "indexable": true
+  },
+  "workflows/vulnerability-triage": {
+    "title": "Vulnerability triage and patch coordination | Secure Agent Workflow | Claw EA",
+    "category": "workflows",
+    "description": "For vulnerability triage and patch coordination, you want an agent that can read evidence, propose a patch plan, and execute only the minimal, permissioned actions needed to remediate. In Claw EA, OpenClaw is the baselin",
+    "indexable": true
+  },
+  "workflows": {
+    "title": "Enterprise Agent Workflows (Safe by Policy) | Claw EA",
+    "category": "hubs",
+    "description": "Enterprise agent workflows fail when “safety” lives only in prompts. Claw EA treats execution as a permissioned system: a Work Policy Contract (WPC) is the machine-enforced contract, a CST is the scoped token that binds ",
+    "indexable": true
+  }
+}

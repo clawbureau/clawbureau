@@ -91,7 +91,7 @@ if (!runArg) {
 
 const runRoot = path.resolve(runArg);
 const candidate = getArg("candidate") ?? "candidate-01";
-const cleanMode = !hasFlag("--no-clean");
+const cleanMode = !hasFlag("no-clean");
 const articlesDir = path.resolve(getArg("articles-dir") ?? path.resolve(import.meta.dirname ?? ".", "../articles"));
 const summaryPath = path.resolve(getArg("summary") ?? path.join(runRoot, "PUBLISH_SUMMARY.json"));
 
@@ -169,6 +169,35 @@ function extractMeta(html: string, fallbackTitle: string): { description: string
   }
 
   return { description, faqs };
+}
+
+function ensureBofuConversionBlocks(html: string, slug: string): string {
+  const isBofu =
+    slug.startsWith("tools/") ||
+    slug.startsWith("workflows/") ||
+    slug.startsWith("compare/") ||
+    slug.startsWith("compliance/") ||
+    slug.startsWith("channels/");
+
+  if (!isBofu) return html;
+
+  const hasContactCta = /href=["']\/contact["']/i.test(html);
+  const hasTrustLink = /href=["']\/trust["']/i.test(html);
+
+  if (hasContactCta && hasTrustLink) {
+    return html;
+  }
+
+  const block = `
+<div class="cta-banner" data-cta="bofu-endcap">
+  <h2>Ready to put this workflow into production?</h2>
+  <p>Get a scoped deployment plan with Work Policy Contracts, approval gates, and cryptographic proof bundles for your team.</p>
+  <a href="/contact" class="cta-btn cta-btn-lg" data-cta="bofu-talk-to-sales">Talk to Sales</a>
+  <a href="/trust" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="bofu-trust-layer">Review Trust Layer</a>
+</div>
+`;
+
+  return `${html.trim()}\n${block}`;
 }
 
 function mapSources(src: SourceInput[]): { title: string; uri: string }[] {
@@ -291,16 +320,17 @@ function main(): void {
     const topic = topicBySlug.get(slug);
     const category = topic?.category ?? (slug.includes("/") ? slug.split("/")[0] : "pillars");
     const title = String(spec?.title ?? topic?.title ?? slug);
+    const htmlWithBlocks = ensureBofuConversionBlocks(html, slug);
 
     const sourceRows = fs.existsSync(sourcesPath) ? readJson<SourceInput[]>(sourcesPath) : [];
     const sources = mapSources(sourceRows);
-    const meta = extractMeta(html, title);
+    const meta = extractMeta(htmlWithBlocks, title);
 
     const article: ArticleOut = {
       slug,
       title,
       category,
-      html,
+      html: htmlWithBlocks,
       description: meta.description,
       faqs: meta.faqs,
       sources,

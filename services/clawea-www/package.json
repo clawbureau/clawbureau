@@ -1,0 +1,25 @@
+{
+  "name": "@clawbureau/clawea-www",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "typecheck": "tsc --noEmit",
+    "upload:r2": "tsx scripts/upload-to-r2.ts",
+    "index:replay": "tsx scripts/upload-to-r2.ts --auto-index --replay-failures articles/_indexing_failures.json",
+    "conversion:weekly": "tsx scripts/weekly-conversion-summary.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250121.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.0",
+    "wrangler": "^3.105.0"
+  },
+  "dependencies": {
+    "@google/genai": "^1.40.0",
+    "zod": "^3.24.1"
+  }
+}

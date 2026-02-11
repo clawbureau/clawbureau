@@ -1,0 +1,66 @@
+{
+  "slug": "tools/sharepoint",
+  "title": "SharePoint for Permissioned Agents | Claw EA",
+  "category": "tools",
+  "html": "<h2>Direct Answer</h2>\n<p>SharePoint is where enterprise knowledge lives: sites, document libraries, pages, lists, and embedded Microsoft 365 content. If you let AI agents read and write there without machine-enforced constraints, you risk silent data exfiltration, unauthorized edits, and cross-site privilege drift.</p>\n<p>Claw EA runs OpenClaw as the baseline agent runtime and wraps SharePoint access in permissioned execution. Access is defined in policy-as-code using a WPC, enforced with CST, and audited with gateway receipts and proof bundles.</p>\n\n<h2>Step-by-step runbook</h2>\n<p><strong>1. Define the Work Policy Contract.</strong> Create a WPC that names specific SharePoint site IDs, document libraries, and allowed actions such as read-only search or controlled write. Pin Microsoft Graph permissions to least privilege and record the policy hash.</p>\n<p><strong>2. Register the app in Entra ID.</strong> Configure application or delegated permissions in Microsoft Graph. Apply Conditional Access and, where appropriate, Privileged Identity Management for approval workflows.</p>\n<p><strong>3. Issue a CST.</strong> Mint a CST with scope hash tied to the WPC. Optionally pin the policy hash so the token cannot be reused against a different policy.</p>\n<p><strong>4. Connect via official API.</strong> Integrate SharePoint through Microsoft Graph via official API with enterprise buildout controls. This is not a native connector and requires environment-specific configuration.</p>\n<p><strong>5. Run inside OpenClaw with sandbox and tool policy.</strong> Enable sandboxing and strict tool allowlists. Keep elevated tools off unless explicitly approved for the job.</p>\n<p><strong>6. Route model calls through clawproxy.</strong> All model calls produce gateway receipts. At job end, assemble a proof bundle and optionally publish a Trust Pulse artifact for audit viewing.</p>\n\n<h2>Threat model</h2>\n<table>\n<tr><th>Threat</th><th>What happens</th><th>Control and Action</th><th>Evidence</th></tr>\n<tr>\n<td>Overbroad Graph scopes</td>\n<td>Agent can read or modify sites beyond intent.</td>\n<td>WPC restricts site IDs and actions. CST scope hash binds token to that WPC.</td>\n<td>WPC hash, CST claims, proof bundle metadata.</td>\n</tr>\n<tr>\n<td>Prompt injection in document</td>\n<td>Malicious content instructs agent to fetch secrets or write to another site.</td>\n<td>OpenClaw tool allowlist plus sandbox. WPC denies cross-site calls.</td>\n<td>Gateway receipts showing blocked or absent calls.</td>\n</tr>\n<tr>\n<td>Plugin misconfiguration</td>\n<td>Agent runs with elevated exec on host and pivots to local files.</td>\n<td>Sandbox mode set to all or non-main as appropriate. Elevated tools gated.</td>\n<td>OpenClaw sandbox explain output and job config in proof bundle.</td>\n</tr>\n<tr>\n<td>Token replay</td>\n<td>CST reused in another job or context.</td>\n<td>Marketplace anti-replay binding with job-scoped CST binding.</td>\n<td>CST claims and job binding in proof bundle.</td>\n</tr>\n<tr>\n<td>Unauthorized write</td>\n<td>Agent edits or deletes documents without approval.</td>\n<td>WPC approval gates for write and admin actions. Conditional Access and PIM on Entra ID role.</td>\n<td>WPC approval record, gateway receipts for write calls.</td>\n</tr>\n</table>\n\n<h2>Policy-as-code example</h2>\n<p>Below is a simplified WPC fragment for a read-only research agent over two sites. Write actions require a separate WPC with approval gates.</p>\n<pre>{\n  \"resource\": \"m365:sharepoint\",\n  \"sites\": [\n    \"contoso.sharepoint.com/sites/Finance\",\n    \"contoso.sharepoint.com/sites/HR-Policies\"\n  ],\n  \"actions\": [\"read\", \"search\"],\n  \"graph_permissions\": [\"Sites.Read.All\"],\n  \"write_requires_approval\": true,\n  \"max_pages_per_run\": 200\n}</pre>\n<p>This WPC is signed and hash-addressed in the registry. The CST carries the scope hash and can optionally pin the policy hash.</p>\n\n<h2>What proof do you get?</h2>\n<p>Every model call routed through clawproxy emits gateway receipts. These receipts bind request, response metadata, and policy context.</p>\n<p>At the end of a job, Claw EA produces a proof bundle that includes receipts, CST claims, WPC hash, and run metadata. You can submit the bundle to clawverify for independent verification and store a Trust Pulse artifact for reviewers.</p>\n<p>This gives you replay resistance, scope verification, and a concrete audit trail for each SharePoint read or write operation initiated by the agent.</p>\n\n<h2>Rollback posture</h2>\n<table>\n<tr><th>Scenario</th><th>Immediate action</th><th>Safe rollback</th><th>Evidence retained</th></tr>\n<tr>\n<td>Suspected data overreach</td>\n<td>Revoke CST in clawscope.</td>\n<td>Disable Entra ID app or remove Graph permission.</td>\n<td>Revocation record plus proof bundle.</td>\n</tr>\n<tr>\n<td>Policy error in WPC</td>\n<td>Publish corrected WPC and stop issuing new CST.</td>\n<td>Rotate to new policy hash and invalidate old tokens.</td>\n<td>Old and new WPC hashes for comparison.</td>\n</tr>\n<tr>\n<td>Agent misbehavior</td>\n<td>Disable agent in OpenClaw and tighten tool policy.</td>\n<td>Rerun with sandbox mode all and reduced allowlist.</td>\n<td>Gateway receipts from both runs.</td>\n</tr>\n</table>\n<p>Planned controls such as automatic cost budget enforcement and egress allowlists outside clawproxy can be implemented if your environment requires stricter controls.</p>\n\n<h2>FAQ</h2>\n<h3>Is this a native SharePoint connector?</h3>\n<p>No. SharePoint can be connected via official API with enterprise buildout controls. Integration requires Entra ID app registration and Microsoft Graph configuration.</p>\n\n<h3>Why is prompt-only control not enough?</h3>\n<p>Prompt instructions can be ignored or subverted by document content. Permissioned execution with WPC and CST enforces least privilege at the execution layer, not just in text.</p>\n\n<h3>How do Microsoft 365 controls fit in?</h3>\n<p>SharePoint agents operate under existing permissions, Conditional Access, and PIM. Claw EA adds an execution boundary so the agent cannot exceed what the WPC and CST allow, even if Graph permissions are broad.</p>\n\n<h3>What about compliance and data protection?</h3>\n<p>Microsoft Purview and enterprise data protection features apply to content and user interactions. Claw EA complements this with proof bundles and verifiable receipts for agent-initiated actions.</p>\n\n<h3>Can we limit writes to specific libraries?</h3>\n<p>Yes. Define library-level constraints in the WPC and require approval gates for write and admin actions. Only issue CST for the exact scope needed per job.</p>\n\n<h2>Sources</h2>\n<ul>\n<li><a href=\"https://github.com/openclaw/openclaw/blob/5d4f42016f3afdbd5218843648d3ea594541dedc/docs/gateway/security/index.md\">OpenClaw Gateway Security</a></li>\n<li><a href=\"https://github.com/openclaw/openclaw/blob/5d4f42016f3afdbd5218843648d3ea594541dedc/docs/gateway/sandboxing.md\">OpenClaw Sandboxing</a></li>\n<li><a href=\"https://learn.microsoft.com/en-us/sharepoint/manage-access-agents-in-sharepoint\">Manage access to SharePoint agents</a></li>\n<li><a href=\"https://learn.microsoft.com/en-us/purview/ai-agents\">Use Microsoft Purview to manage data security and compliance for AI agents</a></li>\n</ul>\n\n<div class=\"cta-banner\" data-cta=\"bofu-endcap\">\n  <h2>Ready to put this workflow into production?</h2>\n  <p>Get a scoped deployment plan with Work Policy Contracts, approval gates, and cryptographic proof bundles for your team.</p>\n  <a href=\"/contact\" class=\"cta-btn cta-btn-lg\" data-cta=\"bofu-talk-to-sales\">Talk to Sales</a>\n  <a href=\"/trust\" class=\"cta-btn cta-btn-outline cta-btn-lg\" style=\"margin-left:.75rem\" data-cta=\"bofu-trust-layer\">Review Trust Layer</a>\n</div>\n",
+  "description": "SharePoint is where enterprise knowledge lives: sites, document libraries, pages, lists, and embedded Microsoft 365 content. If you let AI agents read and write there without machine-enforced constraints, you risk silent",
+  "faqs": [
+    {
+      "q": "Is this a native SharePoint connector?",
+      "a": "No. SharePoint can be connected via official API with enterprise buildout controls. Integration requires Entra ID app registration and Microsoft Graph configuration."
+    },
+    {
+      "q": "Why is prompt-only control not enough?",
+      "a": "Prompt instructions can be ignored or subverted by document content. Permissioned execution with WPC and CST enforces least privilege at the execution layer, not just in text."
+    },
+    {
+      "q": "How do Microsoft 365 controls fit in?",
+      "a": "SharePoint agents operate under existing permissions, Conditional Access, and PIM. Claw EA adds an execution boundary so the agent cannot exceed what the WPC and CST allow, even if Graph permissions are broad."
+    },
+    {
+      "q": "What about compliance and data protection?",
+      "a": "Microsoft Purview and enterprise data protection features apply to content and user interactions. Claw EA complements this with proof bundles and verifiable receipts for agent-initiated actions."
+    },
+    {
+      "q": "Can we limit writes to specific libraries?",
+      "a": "Yes. Define library-level constraints in the WPC and require approval gates for write and admin actions. Only issue CST for the exact scope needed per job."
+    }
+  ],
+  "sources": [
+    {
+      "title": "How to use Microsoft SharePoint content with Azure AI Agent Service",
+      "uri": "https://learn.microsoft.com/en-us/azure/ai-foundry/agents/how-to/tools-classic/sharepoint?view=foundry-classic"
+    },
+    {
+      "title": "Use Microsoft Purview to manage data security & compliance for AI agents",
+      "uri": "https://learn.microsoft.com/en-us/purview/ai-agents"
+    },
+    {
+      "title": "SharePoint Advanced Management overview",
+      "uri": "https://learn.microsoft.com/en-us/sharepoint/advanced-management"
+    },
+    {
+      "title": "Copilot Control System Security and Governance",
+      "uri": "https://learn.microsoft.com/en-us/copilot/microsoft-365/copilot-control-system/security-governance"
+    },
+    {
+      "title": "Enterprise data protection in Microsoft 365 Copilot and ...",
+      "uri": "https://learn.microsoft.com/en-us/copilot/microsoft-365/enterprise-data-protection"
+    },
+    {
+      "title": "Manage access to SharePoint agents",
+      "uri": "https://learn.microsoft.com/en-us/sharepoint/manage-access-agents-in-sharepoint"
+    },
+    {
+      "title": "Understand how content is shared with agents in Microsoft 365",
+      "uri": "https://learn.microsoft.com/en-us/microsoft-agent-365/share"
+    },
+    {
+      "title": "Get started with SharePoint agents",
+      "uri": "https://learn.microsoft.com/en-us/sharepoint/get-started-sharepoint-agents"
+    }
+  ],
+  "model": "candidate-01",
+  "generatedAt": "2026-02-11T16:56:53.464Z",
+  "indexable": true
+}

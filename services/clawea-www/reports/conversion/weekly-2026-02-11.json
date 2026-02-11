@@ -1,0 +1,37 @@
+{
+  "ok": true,
+  "days": 7,
+  "generatedAt": "2026-02-11T17:19:29.079Z",
+  "totals": {
+    "events": 1,
+    "contactIntentViews": 0,
+    "contactIntentActions": 0,
+    "intentToActionRate": 0
+  },
+  "breakdown": {
+    "byType": [
+      {
+        "key": "cta_click",
+        "count": 1
+      }
+    ],
+    "bySource": [
+      {
+        "key": "direct",
+        "count": 1
+      }
+    ],
+    "topPages": [
+      {
+        "key": "/pricing",
+        "count": 1
+      }
+    ],
+    "topCtas": [
+      {
+        "key": "smoke",
+        "count": 1
+      }
+    ]
+  }
+}

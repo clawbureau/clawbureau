@@ -21,6 +21,9 @@ routes = [
 ENVIRONMENT = "production"
 SITE_URL = "https://www.clawea.com"
 INDEXNOW_KEY = "edf20368863e485aa92e1b95fa15872a"
+INDEXNOW_MAX_ATTEMPTS = "4"
+INDEXNOW_RETRY_BASE_MS = "900"
+INDEXNOW_RETRY_MAX_MS = "30000"
 
 # Secrets (set with `wrangler secret put <NAME>`):
 # - INDEX_AUTOMATION_TOKEN
@@ -45,6 +48,9 @@ routes = [
 ENVIRONMENT = "staging"
 SITE_URL = "https://staging-www.clawea.com"
 INDEXNOW_KEY = "edf20368863e485aa92e1b95fa15872a"
+INDEXNOW_MAX_ATTEMPTS = "4"
+INDEXNOW_RETRY_BASE_MS = "900"
+INDEXNOW_RETRY_MAX_MS = "30000"
 
 [[env.staging.r2_buckets]]
 binding = "ARTICLES"
