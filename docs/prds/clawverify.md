@@ -136,6 +136,19 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Enforce fail-closed witness signer allowlist (`WEB_RECEIPT_SIGNER_DIDS`)
 - Return `proof_tier=witnessed_web` and keep default non-equivalence to gateway receipts
 
+### CVF-US-023 — Verify TEE execution attestation policy bindings
+**As a** verifier, **I want** `tee_execution` attestations to be checked against explicit root/TCB policy and revocation data **so that** measured execution claims fail closed when governance is missing or stale.
+
+**Acceptance Criteria:**
+- `POST /v1/verify/execution-attestation` enforces TEE metadata shape for `execution_type=tee_execution`
+- Require fail-closed policy config for TEE verification:
+  - `TEE_ATTESTATION_ROOT_ALLOWLIST`
+  - `TEE_ATTESTATION_TCB_ALLOWLIST`
+- Support deny-list revocation checks:
+  - `TEE_ATTESTATION_ROOT_REVOKED`
+  - `TEE_ATTESTATION_TCB_REVOKED`
+- Return deterministic invalid codes for missing policy, non-allowlisted claims, and revoked claims
+
 ### CVF-US-004 — Batch verification
 **As a** auditor, **I want** to submit multiple envelopes **so that** I can verify at scale.
 

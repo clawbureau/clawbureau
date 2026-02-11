@@ -322,3 +322,47 @@ Started: 2026-02-05T21:49:28Z
 - Notes
   - No new runtime behavior introduced in this sync; this change aligns tracker truth with already-shipped implementation.
 ---
+## 2026-02-11T23:10:00Z - POHVN-US-006 (tracker drift correction)
+- What was updated
+  - Corrected POHVN-US-006 completion references to the latest shipped chain:
+    - clawea private PR #8: https://github.com/clawbureau/clawea/pull/8
+    - public submodule bump PR #119: https://github.com/clawbureau/clawbureau/pull/119
+- Notes
+  - No new runtime behavior introduced; this is a tracker truth alignment update only.
+---
+
+## 2026-02-11T23:20:00Z - POHVN-US-008 (phase-1 scaffold)
+- What was implemented
+  - Extended schema for `execution_attestation.v1` to require structured `runtime_metadata.tee` claims when `execution_type=tee_execution`:
+    - `attestation_type`, `root_id`, `tcb_version`, `evidence_ref`, `measurements`
+    - optional `tcb` status/advisories metadata
+  - Added fail-closed verifier gating for `tee_execution` policy checks:
+    - required allowlists:
+      - `TEE_ATTESTATION_ROOT_ALLOWLIST`
+      - `TEE_ATTESTATION_TCB_ALLOWLIST`
+    - optional revocation deny lists:
+      - `TEE_ATTESTATION_ROOT_REVOKED`
+      - `TEE_ATTESTATION_TCB_REVOKED`
+    - deterministic invalid outcomes:
+      - `DEPENDENCY_NOT_CONFIGURED` when policy inputs are missing
+      - `CLAIM_NOT_FOUND` for non-allowlisted root/TCB
+      - `REVOKED` for deny-listed root/TCB
+  - Added strict Ajv standalone validator wiring for `execution_attestation_envelope.v1`.
+  - Added docs:
+    - `docs/specs/tee/TEE_ATTESTATION_POLICY_v1.md`
+    - updated `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+- Tests
+  - Extended `services/clawverify/test/execution-attestation.test.ts` with tee_execution cases:
+    - missing allowlists fail closed
+    - allowlisted path valid
+    - revoked TCB invalid
+- Deploy + smoke
+  - Deployed `services/clawverify` staging + prod.
+  - Added smoke: `scripts/poh/smoke-tee-execution-attestation.mjs`
+  - Smokes passed:
+    - `node scripts/poh/smoke-tee-execution-attestation.mjs --env staging`
+    - `node scripts/poh/smoke-tee-execution-attestation.mjs --env prod`
+  - Regression smokes passed:
+    - `node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env staging`
+    - `node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env prod`
+---

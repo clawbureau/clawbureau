@@ -11,3 +11,7 @@
 
 - Agent Economy:
   - `docs/specs/agent-economy/MVP.md`
+- Clawlogs:
+  - `docs/specs/clawlogs/MERKLE_TRANSPARENCY_LOG_v1.md`
+- TEE attestation policy:
+  - `docs/specs/tee/TEE_ATTESTATION_POLICY_v1.md`

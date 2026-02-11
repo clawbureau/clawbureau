@@ -51,11 +51,132 @@
     },
     "runtime_metadata": {
       "type": "object",
-      "description": "Optional environment claims (e.g. image hash, resource limits, network policy).",
-      "additionalProperties": true
+      "description": "Optional environment claims (e.g. image hash, resource limits, network policy). For tee_execution, runtime_metadata.tee carries measured attestation claims.",
+      "additionalProperties": true,
+      "properties": {
+        "tee": {
+          "type": "object",
+          "description": "TEE remote-attestation summary claims used for policy gating (allowlist/revocation) and offline review.",
+          "additionalProperties": false,
+          "required": [
+            "attestation_type",
+            "root_id",
+            "tcb_version",
+            "evidence_ref",
+            "measurements"
+          ],
+          "properties": {
+            "attestation_type": {
+              "type": "string",
+              "enum": [
+                "sgx_quote",
+                "tdx_quote",
+                "sev_snp_report",
+                "nitro_attestation_doc",
+                "generic_tee"
+              ]
+            },
+            "root_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "TEE root-of-trust identifier used for allowlist/revocation policy checks."
+            },
+            "tcb_version": {
+              "type": "string",
+              "minLength": 1,
+              "description": "TCB version string used for allowlist/revocation policy checks."
+            },
+            "evidence_ref": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["resource_type", "resource_hash_b64u"],
+              "properties": {
+                "resource_type": { "type": "string", "minLength": 1 },
+                "resource_hash_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8
+                },
+                "uri": { "type": "string" }
+              }
+            },
+            "measurements": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["measurement_hash_b64u"],
+              "properties": {
+                "measurement_hash_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8
+                },
+                "runtime_digest_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8
+                },
+                "kernel_digest_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8
+                }
+              }
+            },
+            "tcb": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "up_to_date",
+                    "out_of_date",
+                    "configuration_needed",
+                    "revoked",
+                    "unknown"
+                  ]
+                },
+                "advisory_ids": {
+                  "type": "array",
+                  "items": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "metadata": { "type": "object", "additionalProperties": true }
+          }
+        }
+      }
     },
     "issued_at": { "type": "string", "format": "date-time" },
     "expires_at": { "type": "string", "format": "date-time" },
     "metadata": { "type": "object" }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "execution_type": { "const": "tee_execution" }
+        }
+      },
+      "then": {
+        "required": ["runtime_metadata"],
+        "properties": {
+          "runtime_metadata": {
+            "required": ["tee"],
+            "properties": {
+              "tee": {
+                "required": [
+                  "attestation_type",
+                  "root_id",
+                  "tcb_version",
+                  "evidence_ref",
+                  "measurements"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

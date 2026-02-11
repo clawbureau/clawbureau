@@ -24,10 +24,23 @@ import {
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
+import { validateExecutionAttestationEnvelopeV1 } from './schema-validation';
 
 export interface ExecutionAttestationVerifierOptions {
   /** Allowlisted execution attestation signer DIDs (did:key:...). */
   allowlistedSignerDids?: readonly string[];
+
+  /** Allowlisted TEE root IDs for tee_execution attestations. */
+  teeRootAllowlist?: readonly string[];
+
+  /** Allowlisted TCB versions for tee_execution attestations. */
+  teeTcbAllowlist?: readonly string[];
+
+  /** Revoked TEE root IDs (denylist). */
+  teeRootRevoked?: readonly string[];
+
+  /** Revoked TCB versions (denylist). */
+  teeTcbRevoked?: readonly string[];
 }
 
 function validateEnvelopeStructure(
@@ -81,6 +94,30 @@ function validatePayload(
   return true;
 }
 
+type TeeClaims = {
+  rootId: string;
+  tcbVersion: string;
+};
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function extractTeeClaims(payload: ExecutionAttestationPayload): TeeClaims | null {
+  const runtimeMetadata = asObject(payload.runtime_metadata);
+  if (!runtimeMetadata) return null;
+
+  const tee = asObject(runtimeMetadata.tee);
+  if (!tee) return null;
+
+  const rootId = typeof tee.root_id === 'string' ? tee.root_id.trim() : '';
+  const tcbVersion = typeof tee.tcb_version === 'string' ? tee.tcb_version.trim() : '';
+
+  if (rootId.length === 0 || tcbVersion.length === 0) return null;
+
+  return { rootId, tcbVersion };
+}
+
 export async function verifyExecutionAttestation(
   envelope: unknown,
   options: ExecutionAttestationVerifierOptions = {}
@@ -94,6 +131,8 @@ export async function verifyExecutionAttestation(
   proof_bundle_hash_b64u?: string;
   signer_did?: string;
   allowlisted?: boolean;
+  tee_root_id?: string;
+  tee_tcb_version?: string;
   error?: VerificationError;
 }> {
   const now = new Date().toISOString();
@@ -186,6 +225,25 @@ export async function verifyExecutionAttestation(
         code: 'UNKNOWN_HASH_ALGORITHM',
         message: `Hash algorithm "${envelope.hash_algorithm}" is not in the allowlist`,
         field: 'hash_algorithm',
+      },
+    };
+  }
+
+  // 3.5) Strict schema validation (Ajv standalone)
+  const schemaResult = validateExecutionAttestationEnvelopeV1(envelope);
+  if (!schemaResult.valid) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: schemaResult.message,
+        envelope_type: envelope.envelope_type,
+        signer_did: envelope.signer_did,
+        verified_at: now,
+      },
+      error: {
+        code: 'SCHEMA_VALIDATION_FAILED',
+        message: schemaResult.message,
+        field: schemaResult.field,
       },
     };
   }
@@ -455,6 +513,159 @@ export async function verifyExecutionAttestation(
     };
   }
 
+  let teeClaims: TeeClaims | undefined;
+
+  if (payload.execution_type === 'tee_execution') {
+    const extracted = extractTeeClaims(payload);
+    if (!extracted) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Missing required TEE runtime metadata claims',
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message:
+            'tee_execution requires runtime_metadata.tee.{attestation_type,root_id,tcb_version,evidence_ref,measurements}',
+          field: 'payload.runtime_metadata.tee',
+        },
+      };
+    }
+
+    teeClaims = extracted;
+
+    if (!options.teeRootAllowlist || options.teeRootAllowlist.length === 0) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE root allowlist not configured',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        error: {
+          code: 'DEPENDENCY_NOT_CONFIGURED',
+          message:
+            'TEE root allowlist is not configured. Set TEE_ATTESTATION_ROOT_ALLOWLIST to enable tee_execution verification.',
+          field: 'env.TEE_ATTESTATION_ROOT_ALLOWLIST',
+        },
+      };
+    }
+
+    if (!options.teeTcbAllowlist || options.teeTcbAllowlist.length === 0) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE TCB allowlist not configured',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        error: {
+          code: 'DEPENDENCY_NOT_CONFIGURED',
+          message:
+            'TEE TCB allowlist is not configured. Set TEE_ATTESTATION_TCB_ALLOWLIST to enable tee_execution verification.',
+          field: 'env.TEE_ATTESTATION_TCB_ALLOWLIST',
+        },
+      };
+    }
+
+    if (options.teeRootRevoked?.includes(teeClaims.rootId)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE root is revoked',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        error: {
+          code: 'REVOKED',
+          message: `TEE root '${teeClaims.rootId}' is revoked`,
+          field: 'payload.runtime_metadata.tee.root_id',
+        },
+      };
+    }
+
+    if (options.teeTcbRevoked?.includes(teeClaims.tcbVersion)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE TCB version is revoked',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        error: {
+          code: 'REVOKED',
+          message: `TEE TCB version '${teeClaims.tcbVersion}' is revoked`,
+          field: 'payload.runtime_metadata.tee.tcb_version',
+        },
+      };
+    }
+
+    if (!options.teeRootAllowlist.includes(teeClaims.rootId)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE root is not allowlisted',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        error: {
+          code: 'CLAIM_NOT_FOUND',
+          message: `TEE root '${teeClaims.rootId}' is not in TEE_ATTESTATION_ROOT_ALLOWLIST`,
+          field: 'payload.runtime_metadata.tee.root_id',
+        },
+      };
+    }
+
+    if (!options.teeTcbAllowlist.includes(teeClaims.tcbVersion)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE TCB version is not allowlisted',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        error: {
+          code: 'CLAIM_NOT_FOUND',
+          message: `TEE TCB version '${teeClaims.tcbVersion}' is not in TEE_ATTESTATION_TCB_ALLOWLIST`,
+          field: 'payload.runtime_metadata.tee.tcb_version',
+        },
+      };
+    }
+  }
+
   return {
     result: {
       status: 'VALID',
@@ -471,5 +682,7 @@ export async function verifyExecutionAttestation(
     attester_did: payload.attester_did,
     run_id: payload.run_id,
     proof_bundle_hash_b64u: payload.proof_bundle_hash_b64u,
+    tee_root_id: teeClaims?.rootId,
+    tee_tcb_version: teeClaims?.tcbVersion,
   };
 }

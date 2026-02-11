@@ -109,10 +109,16 @@ Primary tracker:
 
 ---
 
-## Phase 2 (later): Optional TEE path for openweights
+## Phase 2 (TEE path): Optional for openweights, policy scaffolding shipped
 
-- `execution_type=tee_execution` carries RA evidence in `runtime_metadata`.
-- Same primitives; only evidence changes.
+- `execution_type=tee_execution` carries RA evidence in `runtime_metadata.tee`.
+- Fail-closed policy gates in clawverify now support:
+  - root allowlist (`TEE_ATTESTATION_ROOT_ALLOWLIST`)
+  - TCB allowlist (`TEE_ATTESTATION_TCB_ALLOWLIST`)
+  - root/TCB revocation deny lists
+- Confidentiality vs integrity trade-offs and operator policy guidance are documented in:
+  - `docs/specs/tee/TEE_ATTESTATION_POLICY_v1.md`
+- Same PoH primitives remain; only execution evidence class changes.
 
 ---
 
