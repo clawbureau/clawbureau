@@ -1067,15 +1067,16 @@ Terminology glossary (use these exact expansions, do not invent others):
 
 ${formatPlatformTruthTableBlock(platformTruth)}
 
-Required structure (use these exact <h2> headings, in this order):
-1) <h2>Direct Answer</h2>
-2) <h2>Step-by-step runbook</h2>
-3) <h2>Threat model</h2>
-4) <h2>Policy-as-code example</h2>
-5) <h2>What proof do you get?</h2>
-6) <h2>Rollback posture</h2>
-7) <h2>FAQ</h2>
-8) <h2>Sources</h2>
+Required structure:
+- Start with 1 to 2 short introductory paragraphs that answer the query directly (no "Direct Answer" heading).
+- Then use these exact <h2> headings, in this order:
+1) <h2>Step-by-step runbook</h2>
+2) <h2>Threat model</h2>
+3) <h2>Policy-as-code example</h2>
+4) <h2>What proof do you get?</h2>
+5) <h2>Rollback posture</h2>
+6) <h2>FAQ</h2>
+7) <h2>Sources</h2>
 
 FAQ rules:
 - 3 to 6 questions.
@@ -1431,7 +1432,7 @@ async function main(): Promise<void> {
   if (!APPEND) {
     fs.writeFileSync(
       path.join(OUT_ROOT, "REVIEW_CHECKLIST.md"),
-      `# External review checklist (blind)\n\nEach target folder contains ${MODELS.length} anonymized candidates:\n- candidates/candidate-01.(html|json) ... candidate-${String(MODELS.length).padStart(2, "0")}.(html|json)\n- each has a machine report: candidates/candidate-XX.report.json\n\nFor HTML page targets (most folders):\nScore each candidate 1–5 on each dimension:\n\n1) Directness\n- Does <h2>Direct Answer</h2> answer the query in 2–3 sentences?\n\n2) Specificity\n- Concrete steps, concrete controls, concrete failure modes. No vague claims.\n\n3) OpenClaw alignment\n- Mentions OpenClaw as the baseline runtime.\n- Uses realistic concepts: tool policy, sandboxing, allowlists, access control, security audit.\n\n4) Claw EA alignment\n- Frames the wedge correctly: permissioned execution, policy-as-code, approvals, budgets, proof.\n- Avoids inventing product endpoints or claiming native connectors.\n\n5) Enterprise correctness\n- For Microsoft-heavy pages: uses correct terminology and avoids made-up features.\n- Uses safe language: via official API, via MCP server, or enterprise buildout.\n\n6) Security quality\n- Threat model is real: prompt injection, tool abuse, exfiltration, privilege escalation, replay/TOCTOU, approval spoofing.\n- Controls match risks (egress allowlist, approvals, budgets, least privilege).\n\n7) Policy-as-code quality\n- Policy snippet is plausible, readable, and enforceable.\n- Avoids hand-wavy pseudo-policy.\n\n8) Proof/evidence quality\n- Explains what artifacts exist (receipts, audit logs, hashes, approvals) and what is verifiable.\n\n9) Structure + style compliance\n- Uses the required <h2> headings in order.\n- Short paragraphs. No em dashes.\n\nFor wizard JSON targets (folder slugs that start with wizard/):\nScore each candidate 1–5 on:\n\nA) JSON validity + schema compliance\n- candidate-XX.json parses and has the expected keys and types.\n\nB) Connector recommendations\n- Specific and realistic. Correctly labels integration mode (official API vs MCP server vs enterprise buildout).\n\nC) WPC skeleton quality\n- Egress allowlist and approval gates are plausible, safe, and not over-broad.\n\nD) Shipped vs planned correctness\n- capability_labels uses shipped/planned/optional/implementable correctly. No over-claims.\n\nE) Proof/evidence quality\n- Correct explanation of receipts, proof bundles, WPC, CST.\n\nF) Citation compliance\n- Uses only allowed URLs. Includes at least one OpenClaw URL and one vendor URL.\n\nNotes to record:\n- Any hallucinated vendor feature\n- Any unsafe advice\n- Any missing required section or missing required JSON key\n- Any generic filler or AI-blog tone\n\nTip: do not guess model families from style. Treat it as a writing contest.\n`,
+      `# External review checklist (blind)\n\nEach target folder contains ${MODELS.length} anonymized candidates:\n- candidates/candidate-01.(html|json) ... candidate-${String(MODELS.length).padStart(2, "0")}.(html|json)\n- each has a machine report: candidates/candidate-XX.report.json\n\nFor HTML page targets (most folders):\nScore each candidate 1–5 on each dimension:\n\n1) Directness\n- Do the opening paragraphs answer the query in 2–3 sentences (without a generic "Direct Answer" heading)?\n\n2) Specificity\n- Concrete steps, concrete controls, concrete failure modes. No vague claims.\n\n3) OpenClaw alignment\n- Mentions OpenClaw as the baseline runtime.\n- Uses realistic concepts: tool policy, sandboxing, allowlists, access control, security audit.\n\n4) Claw EA alignment\n- Frames the wedge correctly: permissioned execution, policy-as-code, approvals, budgets, proof.\n- Avoids inventing product endpoints or claiming native connectors.\n\n5) Enterprise correctness\n- For Microsoft-heavy pages: uses correct terminology and avoids made-up features.\n- Uses safe language: via official API, via MCP server, or enterprise buildout.\n\n6) Security quality\n- Threat model is real: prompt injection, tool abuse, exfiltration, privilege escalation, replay/TOCTOU, approval spoofing.\n- Controls match risks (egress allowlist, approvals, budgets, least privilege).\n\n7) Policy-as-code quality\n- Policy snippet is plausible, readable, and enforceable.\n- Avoids hand-wavy pseudo-policy.\n\n8) Proof/evidence quality\n- Explains what artifacts exist (receipts, audit logs, hashes, approvals) and what is verifiable.\n\n9) Structure + style compliance\n- Uses the required <h2> headings in order.\n- Short paragraphs. No em dashes.\n\nFor wizard JSON targets (folder slugs that start with wizard/):\nScore each candidate 1–5 on:\n\nA) JSON validity + schema compliance\n- candidate-XX.json parses and has the expected keys and types.\n\nB) Connector recommendations\n- Specific and realistic. Correctly labels integration mode (official API vs MCP server vs enterprise buildout).\n\nC) WPC skeleton quality\n- Egress allowlist and approval gates are plausible, safe, and not over-broad.\n\nD) Shipped vs planned correctness\n- capability_labels uses shipped/planned/optional/implementable correctly. No over-claims.\n\nE) Proof/evidence quality\n- Correct explanation of receipts, proof bundles, WPC, CST.\n\nF) Citation compliance\n- Uses only allowed URLs. Includes at least one OpenClaw URL and one vendor URL.\n\nNotes to record:\n- Any hallucinated vendor feature\n- Any unsafe advice\n- Any missing required section or missing required JSON key\n- Any generic filler or AI-blog tone\n\nTip: do not guess model families from style. Treat it as a writing contest.\n`,
     );
   }
 
@@ -1897,7 +1898,6 @@ async function main(): Promise<void> {
       });
 
       const requiredH2 = [
-        "Direct Answer",
         "Step-by-step runbook",
         "Threat model",
         "Policy-as-code example",

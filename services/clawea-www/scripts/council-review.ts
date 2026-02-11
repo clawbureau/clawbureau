@@ -368,7 +368,7 @@ function buildCouncilUserPrompt(input: {
   const rubric = `Rubric: score each dimension 1–5 (integers).
 
 Dimensions:
-- directness: Direct Answer is 2–3 sentences and answers the query.
+- directness: Opening paragraphs are 2–3 sentences and answer the query without a generic “Direct Answer” heading.
 - specificity: Concrete steps, concrete controls, concrete failure modes.
 - openclaw_alignment: Mentions OpenClaw correctly, uses realistic security primitives.
 - clawea_alignment: Correctly frames permissioned execution, WPC/CST/receipts/proof bundles, without inventing endpoints.

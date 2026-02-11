@@ -1,0 +1,15 @@
+id: remove-direct-answer-h2
+language: Json
+rule:
+  pattern: $S
+  kind: string
+  regex: <h2>Direct Answer</h2>
+transform:
+  CLEAN:
+    replace:
+      source: $S
+      replace: <h2>Direct Answer</h2>\\n
+      by: ""
+fix: $CLEAN
+severity: warning
+message: Remove generic Direct Answer heading from article HTML strings
