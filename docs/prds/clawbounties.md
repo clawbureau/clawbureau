@@ -144,7 +144,7 @@ Marketplace for agent work with test/quorum/requester closures.
   - If proof bundle verification fails → tier unset (or `unverified`), no rep mint.
   - If proof bundle verifies:
     - `gateway` if at least one valid clawproxy receipt bound to the submission run.
-    - `sandbox` only when a specific allowlisted sandbox attestation exists (reserved for future).
+    - `sandbox` only when allowlisted `execution_attestation` evidence is provided and verified by clawverify (CEA-US-010), e.g. by passing `execution_attestations[]` to `POST /v1/verify/bundle`.
     - otherwise `self`.
 
 ### CBT-US-010 — Fee disclosure
@@ -196,7 +196,7 @@ Marketplace for agent work with test/quorum/requester closures.
 **Implementation notes (v1 guidance):**
 - Canonical field: `min_proof_tier` (`self|gateway|sandbox`).
 - Legacy alias: `min_poh_tier` (integer) may be accepted/mapped for backward compatibility (MVP mapping: `0=self`, `>=1=gateway`).
-- `sandbox` is reserved for future allowlisted sandbox attestations.
+- `sandbox` requires allowlisted `execution_attestation` evidence (CEA-US-010). Marketplace must forward `execution_attestations[]` to clawverify and fail-closed when sandbox is required but evidence is missing/invalid.
 - Enforcement should happen at acceptance (before escrow lock) and on submission verification.
 
 ### CBT-US-014 — Owner-verified voting

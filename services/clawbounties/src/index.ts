@@ -197,6 +197,11 @@ interface VerifyBundleComponentResults {
   envelope_valid: boolean;
   receipts_valid?: boolean;
   attestations_valid?: boolean;
+
+  /** Optional CEA-US-010 execution attestation evidence (passed out-of-band to /v1/verify/bundle). */
+  execution_attestations_valid?: boolean;
+  execution_attestations_count?: number;
+  execution_attestations_verified_count?: number;
 }
 
 interface VerifyBundleResult {
@@ -299,6 +304,9 @@ interface SubmissionRecord {
   proof_verify_reason: string | null;
   proof_verified_at: string | null;
   proof_tier: ProofTier | null;
+
+  /** Optional evidence array forwarded to clawverify for sandbox-tier uplift (CEA-US-010). */
+  execution_attestations: Record<string, unknown>[] | null;
 
   commit_proof_envelope: Record<string, unknown> | null;
   commit_proof_hash_b64u: string | null;
@@ -1724,12 +1732,21 @@ async function runTestHarness(env: Env, request: TestHarnessRunRequest): Promise
   }
 }
 
-async function verifyProofBundle(env: Env, envelope: unknown, urm?: unknown): Promise<VerifyBundleResponse> {
+async function verifyProofBundle(
+  env: Env,
+  envelope: unknown,
+  urm?: unknown,
+  execution_attestations?: unknown
+): Promise<VerifyBundleResponse> {
   const url = `${resolveVerifyBaseUrl(env)}/v1/verify/bundle`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ envelope, urm: urm ?? undefined }),
+    body: JSON.stringify({
+      envelope,
+      urm: urm ?? undefined,
+      execution_attestations: execution_attestations ?? undefined,
+    }),
   });
 
   const text = await response.text();
@@ -1835,6 +1852,7 @@ function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
 
   // Back-compat (older clawverify): derive from component booleans.
   // Note: sandbox is considered >= gateway (higher tier wins).
+  if (result.component_results?.execution_attestations_valid) return 'sandbox';
   if (result.component_results?.attestations_valid) return 'sandbox';
   if (result.component_results?.receipts_valid) return 'gateway';
   return 'self';
@@ -1904,6 +1922,10 @@ type StoredTrustPulseRow = {
 };
 
 const MAX_TRUST_PULSE_BYTES = 64 * 1024;
+
+// CEA-US-010 evidence can be large-ish; hard cap to prevent DoS.
+const MAX_EXECUTION_ATTESTATIONS_COUNT = 5;
+const MAX_EXECUTION_ATTESTATIONS_BYTES = 256 * 1024;
 
 function utf8ByteSize(s: string): number {
   return new TextEncoder().encode(s).byteLength;
@@ -2794,6 +2816,7 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
   const proof_verify_reason = d1String(row.proof_verify_reason);
   const proof_verified_at = d1String(row.proof_verified_at);
   const proof_tier = parseProofTier(d1String(row.proof_tier));
+  const execution_attestations_json = d1String(row.execution_attestations_json);
 
   const commit_proof_envelope_json = d1String(row.commit_proof_envelope_json);
   const commit_proof_hash_b64u = d1String(row.commit_proof_hash_b64u);
@@ -2845,6 +2868,20 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
     if (!agent_pack) return null;
   }
 
+  let execution_attestations: Record<string, unknown>[] | null = null;
+  if (execution_attestations_json) {
+    const arr = parseJsonUnknownArray(execution_attestations_json);
+    if (!arr) return null;
+
+    const out: Record<string, unknown>[] = [];
+    for (const item of arr) {
+      if (!isRecord(item)) return null;
+      out.push(item);
+    }
+
+    execution_attestations = out;
+  }
+
   return {
     submission_id,
     bounty_id,
@@ -2857,6 +2894,7 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
     proof_verify_reason: proof_verify_reason ? proof_verify_reason.trim() : null,
     proof_verified_at: proof_verified_at ? proof_verified_at.trim() : null,
     proof_tier: proof_tier ?? null,
+    execution_attestations,
     commit_proof_envelope,
     commit_proof_hash_b64u: commit_proof_hash_b64u ? commit_proof_hash_b64u.trim() : null,
     commit_sha: commit_sha ? commit_sha.trim() : null,
@@ -3155,6 +3193,7 @@ function prepareInsertSubmission(db: D1Database, record: SubmissionRecord): D1Pr
         proof_verify_reason,
         proof_verified_at,
         proof_tier,
+        execution_attestations_json,
         commit_proof_envelope_json,
         commit_proof_hash_b64u,
         commit_sha,
@@ -3168,7 +3207,7 @@ function prepareInsertSubmission(db: D1Database, record: SubmissionRecord): D1Pr
         result_summary,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.submission_id,
@@ -3182,6 +3221,7 @@ function prepareInsertSubmission(db: D1Database, record: SubmissionRecord): D1Pr
       record.proof_verify_reason,
       record.proof_verified_at,
       record.proof_tier,
+      record.execution_attestations ? JSON.stringify(record.execution_attestations) : null,
       record.commit_proof_envelope ? JSON.stringify(record.commit_proof_envelope) : null,
       record.commit_proof_hash_b64u,
       record.commit_sha,
@@ -5552,6 +5592,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
   const agent_pack_raw = bodyRaw.agent_pack;
   const result_summary_raw = bodyRaw.result_summary;
   const trust_pulse_raw = bodyRaw.trust_pulse;
+  const execution_attestations_raw = bodyRaw.execution_attestations;
 
   if (!isNonEmptyString(worker_did_raw) || !worker_did_raw.trim().startsWith('did:')) {
     return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
@@ -5603,6 +5644,61 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('INVALID_REQUEST', 'trust_pulse must be an object', 400, undefined, version);
   }
 
+  let execution_attestations: Record<string, unknown>[] | null = null;
+  if (execution_attestations_raw !== undefined && execution_attestations_raw !== null) {
+    if (!Array.isArray(execution_attestations_raw)) {
+      return errorResponse('INVALID_REQUEST', 'execution_attestations must be an array', 400, undefined, version);
+    }
+
+    if (execution_attestations_raw.length === 0) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'execution_attestations must be non-empty when provided',
+        400,
+        undefined,
+        version
+      );
+    }
+
+    if (execution_attestations_raw.length > MAX_EXECUTION_ATTESTATIONS_COUNT) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        `execution_attestations exceeds max count (${MAX_EXECUTION_ATTESTATIONS_COUNT})`,
+        400,
+        { count: execution_attestations_raw.length },
+        version
+      );
+    }
+
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < execution_attestations_raw.length; i++) {
+      const item = execution_attestations_raw[i];
+      if (!isRecord(item)) {
+        return errorResponse(
+          'INVALID_REQUEST',
+          `execution_attestations[${i}] must be an object`,
+          400,
+          undefined,
+          version
+        );
+      }
+      out.push(item);
+    }
+
+    const bytes = utf8ByteSize(JSON.stringify(out));
+    if (bytes > MAX_EXECUTION_ATTESTATIONS_BYTES) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        `execution_attestations exceeds max size (${MAX_EXECUTION_ATTESTATIONS_BYTES} bytes)`,
+        400,
+        { bytes },
+        version
+      );
+    }
+
+    execution_attestations = out;
+  }
+
   let idempotency_key: string;
   if (isNonEmptyString(idempotency_key_raw)) {
     idempotency_key = idempotency_key_raw.trim();
@@ -5621,6 +5717,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
         agent_pack: agent_pack_raw ?? null,
         result_summary: result_summary_raw ?? null,
         trust_pulse: trust_pulse_raw ?? null,
+        execution_attestations: execution_attestations ?? null,
       })
     );
     idempotency_key = `submit:auto:${derived}`;
@@ -5688,7 +5785,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
 
   let proofBundleResponse: VerifyBundleResponse;
   try {
-    proofBundleResponse = await verifyProofBundle(env, proof_bundle_envelope_raw, urm_raw);
+    proofBundleResponse = await verifyProofBundle(env, proof_bundle_envelope_raw, urm_raw, execution_attestations ?? undefined);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('VERIFY_FAILED', message, 502, undefined, version);
@@ -6026,6 +6123,7 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     proof_verify_reason: proofReason,
     proof_verified_at: proofBundleResponse.result.verified_at.trim(),
     proof_tier: proofTier,
+    execution_attestations,
     commit_proof_envelope: isRecord(commit_proof_envelope_raw) ? commit_proof_envelope_raw : null,
     commit_proof_hash_b64u: commit_proof_hash_b64u ? commit_proof_hash_b64u.trim() : null,
     commit_sha,
