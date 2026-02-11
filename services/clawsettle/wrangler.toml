@@ -16,6 +16,9 @@ database_id = "1f2be28f-dfb5-4dd5-baa5-c23828ef26b0"
 
 [vars]
 SETTLE_VERSION = "0.1.0"
+SETTLE_ENV = "production"
+# Production rejects Stripe test-mode events by default.
+STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD = "false"
 LEDGER_BASE_URL = "https://clawledger.com"
 
 [env.staging]
@@ -31,4 +34,6 @@ database_id = "9edcb398-ac3e-4f78-be41-13470a5c2155"
 
 [env.staging.vars]
 SETTLE_VERSION = "0.1.0"
+SETTLE_ENV = "staging"
+STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD = "false"
 LEDGER_BASE_URL = "https://staging.clawledger.com"

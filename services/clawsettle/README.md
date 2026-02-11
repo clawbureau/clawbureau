@@ -2,8 +2,11 @@
 
 Settlement rail adapter service.
 
-Current scope (MPY-US-003):
+Current scope:
 - Verify Stripe webhooks (signature fail-closed)
+- Enforce strict Stripe livemode environment guard
+  - staging rejects `livemode=true`
+  - production rejects `livemode=false` unless explicitly allowed
 - Map verified provider events into clawledger settlement ingest API
 - Deduplicate replayed webhook events by Stripe `event.id`
 

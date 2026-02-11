@@ -55,3 +55,71 @@ Started: 2026-02-12
   - MPY-US-003 shipped to staging only.
   - No production deployment executed in this phase.
 ---
+
+## 2026-02-11T16:10:00Z - MPY-US-006 (production activation + livemode hardening)
+- What was implemented
+  - Added strict Stripe livemode environment policy in `services/clawsettle/src/stripe.ts`:
+    - staging (`SETTLE_ENV=staging`) rejects `livemode=true` events
+    - production (`SETTLE_ENV=production`) rejects `livemode=false` events by default
+    - optional override for production test-mode acceptance:
+      - `STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD=true`
+  - Added deterministic fail-closed error path for livemode violations:
+    - code: `LIVEMODE_MISMATCH`
+    - status: `422`
+  - Preserved webhook security semantics:
+    - signature verification unchanged (`SIGNATURE_INVALID`)
+    - replay dedupe unchanged (`event_id` persistence + deterministic deduped response)
+  - Updated configs/docs:
+    - `services/clawsettle/wrangler.toml` (`SETTLE_ENV`, `STRIPE_ALLOW_TESTMODE_EVENTS_IN_PROD`)
+    - `services/clawsettle/README.md`
+    - updated smoke script to assert livemode mismatch behavior
+- Tests + quality checks
+  - `cd services/clawsettle && npm test && npm run lint && npm run typecheck`
+  - Added/extended tests in `services/clawsettle/test/stripe-webhook.test.ts`:
+    - staging live-event reject
+    - production test-event reject (default)
+    - production test-event allow (override flag)
+  - `node scripts/docs/lint-prds.mjs`
+- Routing + deployment notes
+  - clawsettle production routes were previously parked on `claw-domains`; moved route ownership to `services/clawsettle` by removing:
+    - `clawsettle.com/*`
+    - `www.clawsettle.com/*`
+    from `services/claw-domains/wrangler.toml` and deploying `claw-domains`.
+  - Also removed stale `clawea.com` route entries from `claw-domains` to keep route ownership conflict-free with `clawea-www`.
+- Migration/deploy evidence
+  - Staging migration apply:
+    - `wrangler d1 migrations apply clawsettle-staging --env staging --remote` (no pending migrations)
+  - Production migration apply:
+    - `wrangler d1 migrations apply clawsettle --remote`
+    - applied: `0001_create_stripe_webhook_events.sql`
+  - Deployed staging service:
+    - `clawsettle-staging` code version: `068cedf2-28bd-415b-93a1-16c397ddbbe1`
+    - active version after secret updates: `914df775-4ca7-4ecb-925b-c7b54127af21`
+  - Deployed production service:
+    - `clawsettle` code version: `c3221d9d-b242-47c6-b70e-a9302f62a017`
+    - active version after secret updates: `169a0407-1f5c-4aca-bf30-86732e909d59`
+  - Secrets updated (names only):
+    - staging: `LEDGER_ADMIN_KEY`, `STRIPE_WEBHOOK_SIGNING_SECRET`
+    - production: `LEDGER_ADMIN_KEY`, `STRIPE_WEBHOOK_SIGNING_SECRET`
+- Staging smoke evidence
+  - Command:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env staging`
+  - Highlights:
+    - webhook accepted + forwarded (`200`, `deduped:false`, `forwarded_to_ledger:true`)
+    - replay dedupe (`200`, `deduped:true`)
+    - tampered signature reject (`401 SIGNATURE_INVALID`)
+    - livemode guard mismatch reject (`422 LIVEMODE_MISMATCH`, expected_livemode=false)
+    - settlement lookup confirmed, account available `1234`
+- Production smoke evidence
+  - Command:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env prod`
+  - Highlights:
+    - webhook accepted + forwarded (`200`, `deduped:false`, `forwarded_to_ledger:true`)
+    - replay dedupe (`200`, `deduped:true`)
+    - tampered signature reject (`401 SIGNATURE_INVALID`)
+    - livemode guard mismatch reject (`422 LIVEMODE_MISMATCH`, expected_livemode=true)
+    - settlement lookup confirmed, account available `1234`
+- Release status
+  - MPY-US-006 shipped to staging + production.
+  - MPY-US-007 queued next (durable outbox + retry exact-once hardening).
+---

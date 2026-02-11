@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Smoke: clawsettle Stripe webhook verification + ledger forwarding (staging focus)
+ * Smoke: clawsettle Stripe webhook verification + ledger forwarding + livemode guard
  *
  * Optional flags:
  *   --env staging|prod
@@ -198,10 +198,13 @@ async function main() {
   assert(typeof accountId === 'string' && accountId.length > 0, 'missing account id in create response');
 
   const nowSec = Math.floor(Date.now() / 1000);
+  const expectedLivemode = envName === 'prod' || envName === 'production';
+
   const event = {
     id: `evt_smoke_${envName}_${suffix}`,
     type: 'payment_intent.succeeded',
     created: nowSec,
+    livemode: expectedLivemode,
     data: {
       object: {
         id: `pi_smoke_${envName}_${suffix}`,
@@ -271,6 +274,50 @@ async function main() {
   assert(tampered.status === 401, `tampered expected 401, got ${tampered.status}: ${tampered.text}`);
   assert(tampered.json?.code === 'SIGNATURE_INVALID', `tampered expected SIGNATURE_INVALID, got ${tampered.text}`);
 
+  const mismatchEvent = {
+    id: `evt_smoke_livemode_mismatch_${envName}_${suffix}`,
+    type: 'payment_intent.succeeded',
+    created: nowSec,
+    livemode: !expectedLivemode,
+    data: {
+      object: {
+        id: `pi_smoke_livemode_mismatch_${envName}_${suffix}`,
+        amount_received: 1,
+        currency: 'usd',
+        payment_method_types: ['card'],
+        created: nowSec,
+        metadata: {
+          account_id: accountId,
+        },
+      },
+    },
+  };
+
+  const mismatchBody = JSON.stringify(mismatchEvent);
+  const mismatchSig = await signStripe(stripeSecret.trim(), nowSec, mismatchBody);
+
+  const livemodeMismatch = await httpJson(
+    `${clawsettleBaseUrl}/v1/stripe/webhook`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'stripe-signature': `t=${nowSec},v1=${mismatchSig}`,
+      },
+      body: mismatchBody,
+    },
+    clawsettleResolveIp
+  );
+
+  assert(
+    livemodeMismatch.status === 422,
+    `livemode mismatch expected 422, got ${livemodeMismatch.status}: ${livemodeMismatch.text}`
+  );
+  assert(
+    livemodeMismatch.json?.code === 'LIVEMODE_MISMATCH',
+    `livemode mismatch expected LIVEMODE_MISMATCH, got ${livemodeMismatch.text}`
+  );
+
   const settlementLookup = await httpJson(
     `${ledgerBaseUrl}/v1/payments/settlements/stripe/${encodeURIComponent(event.data.object.id)}?direction=payin`,
     {
@@ -319,6 +366,11 @@ async function main() {
         tampered: {
           status: tampered.status,
           code: tampered.json?.code,
+        },
+        livemode_guard: {
+          expected_livemode: expectedLivemode,
+          mismatch_status: livemodeMismatch.status,
+          mismatch_code: livemodeMismatch.json?.code,
         },
         settlement_lookup: {
           status: settlementLookup.status,
