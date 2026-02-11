@@ -144,6 +144,62 @@
       "priority": 10,
       "passes": true,
       "notes": "Implemented control-plane provisioning in `services/clawclaim/src/index.ts`: challenge purposes (`register_controller`, `register_agent`, `update_sensitive_policy`), owner-signed controller registration, controller-scoped agent registration, owner-bound sensitive policy updates, and deterministic read/list chain endpoints (`/v1/control-plane/controllers/*`). Added coverage in `services/clawclaim/test/control-plane.test.ts` and passed `npm run typecheck && npm test`. Deploys: staging `7c1cf0b7-af77-4d21-b29d-b902055519a5`, prod `4af46ea4-05b7-43de-ae1f-6f100b4fde56`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
+    },
+    {
+      "id": "CCL-US-012",
+      "title": "Purpose-scoped challenge contexts + freeze gating",
+      "description": "As identity operations, we want challenge payload contexts and transfer freeze guards so lifecycle mutations are replay-resistant and deterministic.",
+      "acceptanceCriteria": [
+        "Control-plane challenge issuance supports extended lifecycle purposes with deterministic context binding",
+        "Invalid context payloads fail closed with deterministic error codes",
+        "Transfer-pending controllers are frozen for policy/agent mutation flows",
+        "Typecheck and tests pass"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Extended `POST /v1/control-plane/challenges` with lifecycle purposes (`confirm_rotation`, `transfer_controller_request`, `transfer_controller_confirm`, `export_identity`, `import_identity`) and context-bound signing messages. Added deterministic context validation and `CONTROLLER_TRANSFER_FROZEN` gating for mutation paths."
+    },
+    {
+      "id": "CCL-US-013",
+      "title": "Owner-confirmed rotation continuity",
+      "description": "As identity operations, we want owner-confirmed DID rotation continuity so controller/agent chains remain portable without breaking authorization checks.",
+      "acceptanceCriteria": [
+        "Owner-confirmed rotation endpoint supports controller and agent roles",
+        "Rotation aliases preserve continuity for chain lookups",
+        "Replay/idempotency behavior is deterministic and fail-closed",
+        "Typecheck and tests pass"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Added `POST /v1/control-plane/rotations/confirm` with role-specific rotation handling, alias persistence (`control-plane:rotation-alias:*`), deterministic replay handling (`already_confirmed`, `ROTATION_CONFLICT`), and alias-aware chain reads/listing. Covered in `services/clawclaim/test/claim-lifecycle-portability.test.ts` and staging/prod smoke artifacts `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json` + `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`."
+    },
+    {
+      "id": "CCL-US-014",
+      "title": "Controller transfer state machine",
+      "description": "As identity operations, we want a deterministic transfer state machine (`active -> transfer_pending -> transferred`) with freeze semantics.",
+      "acceptanceCriteria": [
+        "Transfer request endpoint marks controller as transfer_pending",
+        "Transfer confirm endpoint finalizes transferred ownership and updates dependent bindings",
+        "Policy/agent mutation paths fail closed while transfer_pending",
+        "Typecheck and tests pass"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Added `POST /v1/control-plane/controllers/{controller_did}/transfer/request` and `/transfer/confirm` with challenge-bound signatures, deterministic state transitions, and ownership/policy propagation to controller-agent bindings. Freeze semantics enforced via `CONTROLLER_TRANSFER_FROZEN`, validated in unit tests and staging/prod identity smoke artifacts (2026-02-11T22-10-50-682Z, 2026-02-11T22-11-02-225Z)."
+    },
+    {
+      "id": "CCL-US-015",
+      "title": "Signed identity export/import bundle",
+      "description": "As platform operations, we want signed identity export/import bundles so portability is tamper-resistant and stale/revoked bundles fail closed.",
+      "acceptanceCriteria": [
+        "Signed identity export endpoint emits deterministic bundle hash + signature",
+        "Import endpoint verifies hash/signature freshness and rejects tampered/stale/revoked payloads",
+        "Import idempotency is deterministic",
+        "Typecheck and tests pass"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Added `POST /v1/control-plane/identity/export` and `/identity/import` with HMAC signing (`CLAIM_EXPORT_SIGNING_KEY`), deterministic bundle hash checks, stale bundle rejection (`IMPORT_BUNDLE_STALE`), tamper rejection (`IMPORT_BUNDLE_TAMPERED`), and idempotent import operation keys. Covered in `services/clawclaim/test/claim-lifecycle-portability.test.ts`; deployed in `clawclaim-staging` (`ace3a741-85e3-4fcb-b582-aac6993d974f`) + `clawclaim` (`2b45efe3-7bfd-48b2-a9c2-df5250f51488`) with staging/prod smoke evidence under `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/` and `.../2026-02-11T22-11-02-225Z-prod/`."
     }
   ]
 }

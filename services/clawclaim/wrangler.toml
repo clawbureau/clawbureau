@@ -16,6 +16,10 @@ id = "9e29c82bf0694272ac00d8affad48a45"
 [vars]
 CLAIM_VERSION = "0.1.0"
 CLAIM_CHALLENGE_TTL_SECONDS = "600"
+CLAIM_EXPORT_MAX_AGE_SECONDS = "86400"
+
+# Secrets to set via wrangler secret put:
+# - CLAIM_EXPORT_SIGNING_KEY (required for identity export/import bundle signing)
 
 [env.staging]
 name = "clawclaim-staging"
@@ -26,6 +30,7 @@ routes = [
 [env.staging.vars]
 CLAIM_VERSION = "0.1.0"
 CLAIM_CHALLENGE_TTL_SECONDS = "600"
+CLAIM_EXPORT_MAX_AGE_SECONDS = "86400"
 
 [[env.staging.kv_namespaces]]
 binding = "CLAIM_STORE"

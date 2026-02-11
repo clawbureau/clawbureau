@@ -73,3 +73,42 @@ Started: 2026-02-02T22:45:00Z
   - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
   - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
 ---
+
+## 2026-02-11 - CCL-US-012/013/014/015 (claim lifecycle + portability)
+- Added lifecycle challenge purposes in `POST /v1/control-plane/challenges`:
+  - `confirm_rotation`
+  - `transfer_controller_request`
+  - `transfer_controller_confirm`
+  - `export_identity`
+  - `import_identity`
+- Added owner-confirmed rotation continuity endpoint:
+  - `POST /v1/control-plane/rotations/confirm`
+  - supports `rotation_role=controller|agent`
+  - writes deterministic alias records (`control-plane:rotation-alias:*`)
+  - chain/list reads now resolve aliases for continuity
+- Added controller transfer state machine endpoints:
+  - `POST /v1/control-plane/controllers/{controller_did}/transfer/request`
+  - `POST /v1/control-plane/controllers/{controller_did}/transfer/confirm`
+  - controller state transitions: `active -> transfer_pending -> transferred`
+  - freeze semantics enforced: mutation flows fail with `CONTROLLER_TRANSFER_FROZEN` while pending
+- Added signed identity export/import endpoints:
+  - `POST /v1/control-plane/identity/export`
+  - `POST /v1/control-plane/identity/import`
+  - signed via `CLAIM_EXPORT_SIGNING_KEY` (HMAC-SHA256)
+  - fail-closed checks for tamper/stale/revoked payloads + deterministic import idempotency
+- Added config support:
+  - `CLAIM_EXPORT_SIGNING_KEY` (secret)
+  - `CLAIM_EXPORT_MAX_AGE_SECONDS` (var)
+- Tests:
+  - `services/clawclaim/test/claim-lifecycle-portability.test.ts`
+- Quality checks:
+  - `cd services/clawclaim && npm run typecheck && npm test`
+  - `cd services/clawscope && npm run typecheck && npm test`
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Deploy versions:
+  - staging: `clawclaim-staging` -> `ace3a741-85e3-4fcb-b582-aac6993d974f`
+  - prod: `clawclaim` -> `2b45efe3-7bfd-48b2-a9c2-df5250f51488`
+- Cross-service smoke evidence:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`
+---

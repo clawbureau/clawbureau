@@ -227,17 +227,31 @@ async function main() {
   };
 
   const owner = await createDidKeyPair();
+  const ownerTransferTarget = await createDidKeyPair();
   const controller = await createDidKeyPair();
+  const controllerRotated = await createDidKeyPair();
   const agent = await createDidKeyPair();
 
   result.identities = {
     owner_did: owner.did,
+    owner_transfer_target_did: ownerTransferTarget.did,
     controller_did: controller.did,
+    controller_rotated_did: controllerRotated.did,
     agent_did: agent.did,
   };
 
   result.steps.bind_owner = await bindDid(baseUrls.clawclaim, owner.did, owner.privateKey);
+  result.steps.bind_owner_transfer_target = await bindDid(
+    baseUrls.clawclaim,
+    ownerTransferTarget.did,
+    ownerTransferTarget.privateKey
+  );
   result.steps.bind_controller = await bindDid(baseUrls.clawclaim, controller.did, controller.privateKey);
+  result.steps.bind_controller_rotated = await bindDid(
+    baseUrls.clawclaim,
+    controllerRotated.did,
+    controllerRotated.privateKey
+  );
   result.steps.bind_agent = await bindDid(baseUrls.clawclaim, agent.did, agent.privateKey);
 
   const controllerChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
@@ -326,8 +340,267 @@ async function main() {
 
   result.steps.update_sensitive_policy = safePick(updatePolicy.json, ['status', 'event_key']);
 
-  const chainRead = await requestJson(
+  const rotationChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: owner.did,
+      purpose: 'confirm_rotation',
+      rotation_role: 'controller',
+      from_did: controller.did,
+      to_did: controllerRotated.did,
+    },
+  });
+  assertStatus('rotationChallenge', rotationChallenge, 200);
+
+  const rotationSig = await signMessage(owner.privateKey, String(rotationChallenge.json?.message ?? ''));
+  const confirmRotation = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/rotations/confirm`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: owner.did,
+      rotation_role: 'controller',
+      from_did: controller.did,
+      to_did: controllerRotated.did,
+      challenge_id: rotationChallenge.json.challenge_id,
+      signature_b64u: rotationSig,
+    },
+  });
+  assertStatus('confirmRotation', confirmRotation, 200);
+
+  result.steps.confirm_rotation = safePick(confirmRotation.json, ['status', 'rotation_role', 'event_key']);
+
+  const activeControllerDid = controllerRotated.did;
+
+  const chainReadAfterRotation = await requestJson(
     `${baseUrls.clawclaim}/v1/control-plane/controllers/${encodeURIComponent(controller.did)}/agents/${encodeURIComponent(agent.did)}`
+  );
+  assertStatus('chainReadAfterRotation', chainReadAfterRotation, 200);
+
+  result.steps.chain_read_after_rotation = {
+    status: chainReadAfterRotation.json?.status,
+    chain: safePick(chainReadAfterRotation.json?.chain, [
+      'owner_did',
+      'controller_did',
+      'agent_did',
+      'policy_hash_b64u',
+      'active',
+    ]),
+    alias_resolution: safePick(chainReadAfterRotation.json?.alias_resolution, [
+      'requested_controller_did',
+      'resolved_controller_did',
+      'requested_agent_did',
+      'resolved_agent_did',
+    ]),
+  };
+
+  const transferRequestChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: owner.did,
+      purpose: 'transfer_controller_request',
+      controller_did: activeControllerDid,
+      transfer_to_owner_did: ownerTransferTarget.did,
+    },
+  });
+  assertStatus('transferRequestChallenge', transferRequestChallenge, 200);
+
+  const transferRequestSig = await signMessage(
+    owner.privateKey,
+    String(transferRequestChallenge.json?.message ?? '')
+  );
+  const transferRequest = await requestJson(
+    `${baseUrls.clawclaim}/v1/control-plane/controllers/${encodeURIComponent(activeControllerDid)}/transfer/request`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        owner_did: owner.did,
+        transfer_to_owner_did: ownerTransferTarget.did,
+        challenge_id: transferRequestChallenge.json.challenge_id,
+        signature_b64u: transferRequestSig,
+      },
+    }
+  );
+  assertStatus('transferRequest', transferRequest, 200);
+
+  result.steps.transfer_request = safePick(transferRequest.json, ['status', 'event_key']);
+
+  const frozenChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: owner.did,
+      purpose: 'update_sensitive_policy',
+      controller_did: activeControllerDid,
+    },
+  });
+
+  result.steps.transfer_freeze_policy_challenge = {
+    status: frozenChallenge.status,
+    error: frozenChallenge.json?.error,
+    message: frozenChallenge.json?.message,
+  };
+
+  const transferConfirmChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: ownerTransferTarget.did,
+      purpose: 'transfer_controller_confirm',
+      controller_did: activeControllerDid,
+      transfer_to_owner_did: ownerTransferTarget.did,
+    },
+  });
+  assertStatus('transferConfirmChallenge', transferConfirmChallenge, 200);
+
+  const transferConfirmSig = await signMessage(
+    ownerTransferTarget.privateKey,
+    String(transferConfirmChallenge.json?.message ?? '')
+  );
+  const transferConfirm = await requestJson(
+    `${baseUrls.clawclaim}/v1/control-plane/controllers/${encodeURIComponent(activeControllerDid)}/transfer/confirm`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: {
+        owner_did: ownerTransferTarget.did,
+        transfer_to_owner_did: ownerTransferTarget.did,
+        challenge_id: transferConfirmChallenge.json.challenge_id,
+        signature_b64u: transferConfirmSig,
+      },
+    }
+  );
+  assertStatus('transferConfirm', transferConfirm, 200);
+
+  result.steps.transfer_confirm = safePick(transferConfirm.json, ['status', 'event_key']);
+
+  const activeOwner = ownerTransferTarget;
+
+  const exportChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      purpose: 'export_identity',
+      controller_did: activeControllerDid,
+    },
+  });
+  assertStatus('exportChallenge', exportChallenge, 200);
+
+  const exportSig = await signMessage(activeOwner.privateKey, String(exportChallenge.json?.message ?? ''));
+  const exportIdentity = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/identity/export`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      controller_did: activeControllerDid,
+      challenge_id: exportChallenge.json.challenge_id,
+      signature_b64u: exportSig,
+    },
+  });
+  assertStatus('exportIdentity', exportIdentity, 200);
+
+  result.steps.identity_export = {
+    status: exportIdentity.json?.status,
+    bundle_hash_b64u: exportIdentity.json?.export_bundle?.bundle_hash_b64u,
+    event_key: exportIdentity.json?.event_key,
+  };
+
+  const exportBundle = exportIdentity.json?.export_bundle;
+
+  const importChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      purpose: 'import_identity',
+      bundle_hash_b64u: exportBundle.bundle_hash_b64u,
+    },
+  });
+  assertStatus('importChallenge', importChallenge, 200);
+
+  const importSig = await signMessage(activeOwner.privateKey, String(importChallenge.json?.message ?? ''));
+  const importIdentity = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/identity/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      challenge_id: importChallenge.json.challenge_id,
+      signature_b64u: importSig,
+      bundle: exportBundle,
+    },
+  });
+  assertStatus('importIdentity', importIdentity, 200);
+
+  result.steps.identity_import = safePick(importIdentity.json, [
+    'status',
+    'bundle_hash_b64u',
+    'controller_did',
+    'event_key',
+  ]);
+
+  const reimportChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      purpose: 'import_identity',
+      bundle_hash_b64u: exportBundle.bundle_hash_b64u,
+    },
+  });
+  assertStatus('reimportChallenge', reimportChallenge, 200);
+
+  const reimportSig = await signMessage(activeOwner.privateKey, String(reimportChallenge.json?.message ?? ''));
+  const reimportIdentity = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/identity/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      challenge_id: reimportChallenge.json.challenge_id,
+      signature_b64u: reimportSig,
+      bundle: exportBundle,
+    },
+  });
+  assertStatus('reimportIdentity', reimportIdentity, 200);
+
+  result.steps.identity_reimport = safePick(reimportIdentity.json, ['status', 'bundle_hash_b64u']);
+
+  const tamperChallenge = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/challenges`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      purpose: 'import_identity',
+      bundle_hash_b64u: exportBundle.bundle_hash_b64u,
+    },
+  });
+  assertStatus('tamperChallenge', tamperChallenge, 200);
+
+  const tamperSig = await signMessage(activeOwner.privateKey, String(tamperChallenge.json?.message ?? ''));
+  const tamperedBundle = JSON.parse(JSON.stringify(exportBundle));
+  tamperedBundle.payload.owner_did = owner.did;
+
+  const tamperImport = await requestJson(`${baseUrls.clawclaim}/v1/control-plane/identity/import`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: {
+      owner_did: activeOwner.did,
+      challenge_id: tamperChallenge.json.challenge_id,
+      signature_b64u: tamperSig,
+      bundle: tamperedBundle,
+    },
+  });
+
+  result.steps.identity_import_tampered = {
+    status: tamperImport.status,
+    error: tamperImport.json?.error,
+    message: tamperImport.json?.message,
+  };
+
+  const chainRead = await requestJson(
+    `${baseUrls.clawclaim}/v1/control-plane/controllers/${encodeURIComponent(activeControllerDid)}/agents/${encodeURIComponent(agent.did)}`
   );
   assertStatus('chainRead', chainRead, 200);
 
@@ -339,6 +612,7 @@ async function main() {
       'agent_did',
       'policy_hash_b64u',
       'active',
+      'transfer_state',
     ]),
   };
 
@@ -350,8 +624,8 @@ async function main() {
     },
     body: {
       sub: agent.did,
-      owner_did: owner.did,
-      controller_did: controller.did,
+      owner_did: activeOwner.did,
+      controller_did: activeControllerDid,
       agent_did: agent.did,
       aud: 'staging.clawproxy.com',
       scope: ['control:token:issue_sensitive'],
@@ -464,8 +738,8 @@ async function main() {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: {
-      owner_did: owner.did,
-      controller_did: controller.did,
+      owner_did: activeOwner.did,
+      controller_did: activeControllerDid,
       agent_did: agent.did,
     },
   });
@@ -481,8 +755,8 @@ async function main() {
     headers: { 'content-type': 'application/json' },
     body: {
       token: canonicalToken,
-      expected_owner_did: owner.did,
-      expected_controller_did: controller.did,
+      expected_owner_did: activeOwner.did,
+      expected_controller_did: activeControllerDid,
       expected_agent_did: agent.did,
       required_audience: ['staging.clawproxy.com'],
       required_scope: ['control:token:issue_sensitive'],
@@ -563,6 +837,8 @@ async function main() {
   };
 
   result.deterministic_error_codes = {
+    transfer_freeze_policy_challenge: frozenChallenge.json?.error ?? null,
+    identity_import_tampered: tamperImport.json?.error ?? null,
     legacy_sensitive_issue: legacySensitive.json?.error ?? null,
     verify_token_control_denied: verifyTokenControlDenied.json?.error?.code ?? null,
     verify_token_control_revoked: verifyTokenControlRevoked.json?.error?.code ?? null,
@@ -571,11 +847,15 @@ async function main() {
   const summaryLines = [
     `env: ${result.env}`,
     `generated_at: ${result.generated_at}`,
-    `owner_did: ${result.identities.owner_did}`,
-    `controller_did: ${result.identities.controller_did}`,
+    `owner_initial_did: ${result.identities.owner_did}`,
+    `owner_current_did: ${activeOwner.did}`,
+    `controller_initial_did: ${result.identities.controller_did}`,
+    `controller_current_did: ${activeControllerDid}`,
     `agent_did: ${result.identities.agent_did}`,
     '',
     `canonical_issue: ${result.steps.canonical_issue?.token_hash}`,
+    `transfer_freeze_error: ${result.deterministic_error_codes.transfer_freeze_policy_challenge}`,
+    `identity_import_tampered_error: ${result.deterministic_error_codes.identity_import_tampered}`,
     `legacy_sensitive_issue_error: ${result.deterministic_error_codes.legacy_sensitive_issue}`,
     `verify_token_control_denied_error: ${result.deterministic_error_codes.verify_token_control_denied}`,
     `verify_token_control_revoked_error: ${result.deterministic_error_codes.verify_token_control_revoked}`,

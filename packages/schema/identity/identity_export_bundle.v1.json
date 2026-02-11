@@ -1,0 +1,129 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.identity.identity_export_bundle.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Identity Export Bundle v1",
+  "description": "Signed identity portability bundle exported by clawclaim control-plane.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "exported_at",
+    "exported_at_iso",
+    "bundle_hash_b64u",
+    "signature_algorithm",
+    "signature_b64u",
+    "payload"
+  ],
+  "properties": {
+    "envelope_version": { "const": "1" },
+    "envelope_type": { "const": "identity_export_bundle" },
+    "exported_at": { "type": "integer", "minimum": 0 },
+    "exported_at_iso": { "type": "string", "format": "date-time" },
+    "bundle_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "signature_algorithm": { "const": "HMAC-SHA256" },
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle_version",
+        "owner_did",
+        "controller",
+        "agent_bindings",
+        "rotation_aliases"
+      ],
+      "properties": {
+        "bundle_version": { "const": "1" },
+        "owner_did": {
+          "type": "string",
+          "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+        },
+        "controller": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["controller_did", "owner_did", "active", "policy"],
+          "properties": {
+            "controller_did": {
+              "type": "string",
+              "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+            },
+            "owner_did": {
+              "type": "string",
+              "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+            },
+            "active": { "type": "boolean" },
+            "policy": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["policy_hash_b64u", "owner_did"],
+              "properties": {
+                "policy_hash_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{43}$"
+                },
+                "owner_did": {
+                  "type": "string",
+                  "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+                }
+              }
+            }
+          }
+        },
+        "agent_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["controller_did", "agent_did", "owner_did", "active"],
+            "properties": {
+              "controller_did": {
+                "type": "string",
+                "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+              },
+              "agent_did": {
+                "type": "string",
+                "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+              },
+              "owner_did": {
+                "type": "string",
+                "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+              },
+              "active": { "type": "boolean" }
+            }
+          }
+        },
+        "rotation_aliases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["role", "from_did", "to_did", "owner_did", "active"],
+            "properties": {
+              "role": { "type": "string", "enum": ["controller", "agent"] },
+              "from_did": {
+                "type": "string",
+                "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+              },
+              "to_did": {
+                "type": "string",
+                "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+              },
+              "owner_did": {
+                "type": "string",
+                "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+              },
+              "active": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
