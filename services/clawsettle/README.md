@@ -12,6 +12,7 @@ Current scope:
 - Initiate payouts with deterministic ledger lock-before-provider semantics
 - Track payout lifecycle state machine with exact-once finalize/rollback behavior for `payout.paid` / `payout.failed`
 - Provide payout reconciliation + ops endpoints (stuck/failed visibility, targeted retry, JSON/CSV report artifacts)
+- Execute deterministic netting runs with replay-safe settlement moves and auditable JSON/CSV artifacts
 - Map verified provider events into clawledger settlement ingest API
 - Deduplicate replayed webhook events by Stripe `event.id`
 
@@ -26,6 +27,9 @@ Current scope:
 - `GET /v1/payouts/ops/stuck` (admin)
 - `GET /v1/payouts/ops/failed` (admin)
 - `GET /v1/reconciliation/payouts/daily?date=YYYY-MM-DD&format=json|csv` (admin)
+- `POST /v1/netting/runs` (admin; requires idempotency key header)
+- `GET /v1/netting/runs/:id` (admin)
+- `GET /v1/netting/runs/:id/report?format=json|csv` (admin)
 - `GET /health`
 
 ## Required secrets
@@ -38,6 +42,9 @@ Current scope:
 
 - `PAYOUTS_CLEARING_DOMAIN` (default: `clawsettle.payouts`)
 - `PAYOUT_STUCK_MINUTES_DEFAULT` (default: `60`)
+- `NETTING_SOURCE_CLEARING_DOMAIN` (default: `PAYOUTS_CLEARING_DOMAIN`)
+- `NETTING_TARGET_CLEARING_DOMAIN` (default: `clawsettle.netting`)
+- `NETTING_RUN_DEFAULT_LIMIT` (default: `100`, max `500`)
 - `STRIPE_CONNECT_ONBOARD_BASE_URL`
 
 ## Smoke
@@ -80,4 +87,13 @@ STRIPE_WEBHOOK_SIGNING_SECRET=*** \
 LEDGER_ADMIN_KEY=*** \
 SETTLE_ADMIN_KEY=*** \
 node scripts/poh/smoke-clawsettle-payout-reconciliation.mjs --env staging
+```
+
+Netting run deterministic/replay-safe smoke:
+
+```bash
+STRIPE_WEBHOOK_SIGNING_SECRET=*** \
+LEDGER_ADMIN_KEY=*** \
+SETTLE_ADMIN_KEY=*** \
+node scripts/poh/smoke-clawsettle-netting-runs.mjs --env staging
 ```

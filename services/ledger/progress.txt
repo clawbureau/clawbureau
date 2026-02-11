@@ -482,3 +482,23 @@ Started: 2026-02-02T03:08:26.936251
   - `cd services/ledger && npm run typecheck`
   - `cd services/ledger && npm test`
 ---
+
+## 2026-02-11T17:55:00Z - netting dependency compatibility (clearing-origin event write path)
+- Why this was needed
+  - clawsettle MPY-US-011 staging netting runs surfaced `LEDGER_INGEST_FAILED` with ledger `EVENT_WRITE_FAILED` on clearing-origin v1 transfers.
+  - Root cause: legacy `events.account_id` FK path expects `accounts.id`, while clearing-origin transfers use `clearing_accounts.id` values (`clr_*`).
+- What was implemented
+  - Added compatibility bridge in `services/ledger/src/index.ts`:
+    - `ensureClearingMirrorUserAccount(...)`
+    - when resolving `clearing:<domain>` refs for v1 transfers, ledger now best-effort ensures a deterministic internal mirror row exists in `accounts`:
+      - `id = <clearing_account_id>`
+      - `did = did:internal:clearing:<domain>`
+    - keeps current schema intact while unblocking event writes for clearing-origin transfers.
+- Deploy evidence
+  - Deployed `clawledger-staging`:
+    - version `ba6e2082-ffe1-4308-a690-89b790e44023`
+- Quality checks
+  - `cd services/ledger && npm run lint && npm run typecheck && npm test`
+- Validation signal
+  - clawsettle staging netting smoke progressed from failing runs (`EVENT_WRITE_FAILED`) to applied netting runs after ledger deploy.
+---

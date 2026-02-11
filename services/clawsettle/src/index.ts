@@ -4,6 +4,10 @@ import {
   extractIdempotencyKey,
   parseJsonRequestBody,
 } from './payouts';
+import {
+  NettingService,
+  parseNettingRequestBody,
+} from './netting';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
@@ -253,6 +257,68 @@ async function handleDailyReconciliation(url: URL, request: Request, env: Env): 
   return jsonResponse(report, 200, resolveVersion(env));
 }
 
+async function handleCreateNettingRun(request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const idempotencyKey = extractIdempotencyKey(request);
+  if (!idempotencyKey) {
+    throw new ClawSettleError('Missing idempotency key', 'INVALID_REQUEST', 400, {
+      field: 'idempotency_key',
+    });
+  }
+
+  const rawBody = await parseJsonRequestBody(request);
+  const body = parseNettingRequestBody(rawBody);
+
+  const service = new NettingService(env);
+  const response = await service.createAndExecuteRun(body, idempotencyKey);
+  const status = response.deduped ? 200 : 201;
+
+  return jsonResponse(response, status, resolveVersion(env));
+}
+
+async function handleGetNettingRun(runId: string, request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const service = new NettingService(env);
+  const response = await service.getRun(runId);
+  return jsonResponse(response, 200, resolveVersion(env));
+}
+
+async function handleGetNettingRunReport(
+  runId: string,
+  url: URL,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const format = (url.searchParams.get('format') || 'json').trim().toLowerCase();
+
+  const service = new NettingService(env);
+  const report = await service.buildRunReport(runId);
+
+  if (format === 'csv') {
+    const csv = service.toRunReportCsv(report);
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'x-clawsettle-version': resolveVersion(env),
+        'x-clawsettle-report-sha256': report.artifact_sha256,
+      },
+    });
+  }
+
+  if (format !== 'json') {
+    throw new ClawSettleError('format must be json or csv', 'INVALID_REQUEST', 400, {
+      field: 'format',
+    });
+  }
+
+  return jsonResponse(report, 200, resolveVersion(env));
+}
+
 async function router(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -284,6 +350,9 @@ async function router(request: Request, env: Env): Promise<Response> {
         <li><code>GET /v1/payouts/ops/stuck</code> (admin)</li>
         <li><code>GET /v1/payouts/ops/failed</code> (admin)</li>
         <li><code>GET /v1/reconciliation/payouts/daily?date=YYYY-MM-DD&amp;format=json|csv</code> (admin)</li>
+        <li><code>POST /v1/netting/runs</code> (admin, idempotency required)</li>
+        <li><code>GET /v1/netting/runs/:id</code> (admin)</li>
+        <li><code>GET /v1/netting/runs/:id/report?format=json|csv</code> (admin)</li>
       </ul>
     </main>
   </body>
@@ -326,6 +395,25 @@ async function router(request: Request, env: Env): Promise<Response> {
   const payoutRetry = path.match(/^\/v1\/payouts\/([^/]+)\/retry$/);
   if (payoutRetry && request.method === 'POST') {
     return handleRetryPayout(decodeURIComponent(payoutRetry[1] ?? ''), request, env);
+  }
+
+  if (request.method === 'POST' && path === '/v1/netting/runs') {
+    return handleCreateNettingRun(request, env);
+  }
+
+  const nettingRunById = path.match(/^\/v1\/netting\/runs\/([^/]+)$/);
+  if (nettingRunById && request.method === 'GET') {
+    return handleGetNettingRun(decodeURIComponent(nettingRunById[1] ?? ''), request, env);
+  }
+
+  const nettingRunReport = path.match(/^\/v1\/netting\/runs\/([^/]+)\/report$/);
+  if (nettingRunReport && request.method === 'GET') {
+    return handleGetNettingRunReport(
+      decodeURIComponent(nettingRunReport[1] ?? ''),
+      url,
+      request,
+      env
+    );
   }
 
   return errorResponse('Not found', 'NOT_FOUND', 404, undefined, resolveVersion(env));
