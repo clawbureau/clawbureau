@@ -100,6 +100,7 @@ const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
   validateWebReceiptEnvelopeV1: webReceiptEnvelope.$id,
+  validateExecutionAttestationEnvelopeV1: executionAttestationEnvelope.$id,
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,
   validateLogInclusionProofV1: logInclusionProof.$id,

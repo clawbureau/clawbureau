@@ -233,7 +233,8 @@ export type VerificationErrorCode =
   | 'CLAIM_NOT_FOUND'
   | 'DEPENDENCY_NOT_CONFIGURED'
   | 'PARSE_ERROR'
-  | 'INCLUSION_PROOF_INVALID';
+  | 'INCLUSION_PROOF_INVALID'
+  | 'REVOKED';
 
 /**
  * Structured error for verification failures
@@ -467,7 +468,34 @@ export interface ExecutionAttestationPayload {
     runtime?: string;
     config_hash_b64u?: string;
   };
-  runtime_metadata?: Record<string, unknown>;
+  runtime_metadata?: {
+    tee?: {
+      attestation_type:
+        | 'sgx_quote'
+        | 'tdx_quote'
+        | 'sev_snp_report'
+        | 'nitro_attestation_doc'
+        | 'generic_tee';
+      root_id: string;
+      tcb_version: string;
+      evidence_ref: {
+        resource_type: string;
+        resource_hash_b64u: string;
+        uri?: string;
+      };
+      measurements: {
+        measurement_hash_b64u: string;
+        runtime_digest_b64u?: string;
+        kernel_digest_b64u?: string;
+      };
+      tcb?: {
+        status?: 'up_to_date' | 'out_of_date' | 'configuration_needed' | 'revoked' | 'unknown';
+        advisory_ids?: string[];
+      };
+      metadata?: Record<string, unknown>;
+    };
+    [key: string]: unknown;
+  };
   issued_at: string;
   expires_at?: string;
   metadata?: Record<string, unknown>;
@@ -487,6 +515,8 @@ export interface VerifyExecutionAttestationResponse {
   proof_bundle_hash_b64u?: string;
   signer_did?: string;
   allowlisted?: boolean;
+  tee_root_id?: string;
+  tee_tcb_version?: string;
   error?: VerificationError;
 }
 

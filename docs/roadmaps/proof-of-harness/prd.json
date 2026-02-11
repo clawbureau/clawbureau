@@ -281,7 +281,7 @@
       "priority": 18,
       "passes": true,
       "notes": "Phase 1. This is the bridge to a future TEE path.",
-      "completionNotes": "Implemented in clawea private repo (PR #4) and propagated via submodule bump PR #110 with staging+prod rollout + smoke hardening PR #111. Execution attestations now include hardened harness/runtime metadata (image digest, sandbox/resource posture, WPC context), are stored as content-addressed R2 artifacts keyed by payload hash, and support feature-flagged clawlogs anchoring."
+      "completionNotes": "Implemented by Agent A in clawea private PR #8 (https://github.com/clawbureau/clawea/pull/8) and propagated to public monorepo via submodule bump PR #119 (https://github.com/clawbureau/clawbureau/pull/119). Execution attestations include hardened harness/runtime metadata (image digest, sandbox/resource posture, WPC context), are stored as content-addressed R2 artifacts keyed by payload hash, and support feature-flagged clawlogs anchoring."
     },
     {
       "id": "POHVN-US-007",
@@ -308,11 +308,12 @@
         "Document confidentiality vs integrity trade-offs across multiple TEEs"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": "Phase 2+. Explicitly out of scope for near-term closed-provider enterprise defaults."
+      "passes": true,
+      "notes": "Phase 2 baseline policy scaffolding shipped (without vendor-specific quote-chain cryptographic verification in this repo).",
+      "completionNotes": "Extended execution_attestation schema with structured `runtime_metadata.tee` claims (attestation type, root_id, tcb_version, evidence_ref, measurements). Added fail-closed TEE policy gates in clawverify for root/TCB allowlists and revocation deny lists (`TEE_ATTESTATION_ROOT_ALLOWLIST`, `TEE_ATTESTATION_TCB_ALLOWLIST`, `TEE_ATTESTATION_ROOT_REVOKED`, `TEE_ATTESTATION_TCB_REVOKED`) with deterministic invalid error codes. Added TEE policy/trade-off spec (`docs/specs/tee/TEE_ATTESTATION_POLICY_v1.md`) and validated staging+prod via `scripts/poh/smoke-tee-execution-attestation.mjs` (VALID + disallowed TCB INVALID)."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T04:40:00.000Z"
+    "updatedAt": "2026-02-11T23:20:00.000Z"
   }
 }

@@ -13,6 +13,7 @@ import {
   validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
   validateWebReceiptEnvelopeV1 as validateWebReceiptEnvelopeV1Generated,
+  validateExecutionAttestationEnvelopeV1 as validateExecutionAttestationEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
   validateLogInclusionProofV1 as validateLogInclusionProofV1Generated,
@@ -47,6 +48,9 @@ const validateGatewayReceiptEnvelopeV1Fn =
 
 const validateWebReceiptEnvelopeV1Fn =
   validateWebReceiptEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateExecutionAttestationEnvelopeV1Fn =
+  validateExecutionAttestationEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateDerivationAttestationEnvelopeV1Fn =
   validateDerivationAttestationEnvelopeV1Generated as StandaloneValidateFunction;
@@ -219,6 +223,16 @@ export function validateWebReceiptEnvelopeV1(
     validateWebReceiptEnvelopeV1Fn,
     envelope,
     'web_receipt_envelope.v1'
+  );
+}
+
+export function validateExecutionAttestationEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(
+    validateExecutionAttestationEnvelopeV1Fn,
+    envelope,
+    'execution_attestation_envelope.v1'
   );
 }
 

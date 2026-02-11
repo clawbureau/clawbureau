@@ -79,3 +79,11 @@ Started: 2026-02-03
   - `packages/schema/poh/web_receipt_envelope.v1.json`
 - Added deterministic web-receipt fixture:
   - `packages/schema/fixtures/web_receipt_golden.v1.json`
+
+## POHVN-US-008 — TEE execution attestation policy schema fields
+- Extended `execution_attestation.v1.json` for `execution_type=tee_execution`:
+  - standardized `runtime_metadata.tee` fields:
+    - `attestation_type`, `root_id`, `tcb_version`, `evidence_ref`, `measurements`
+    - optional `tcb` status/advisories
+  - added conditional schema rule requiring `runtime_metadata.tee` for `tee_execution`
+- Keeps strict `additionalProperties:false` within TEE sub-objects while preserving forward-compatible `runtime_metadata` top-level extension points.

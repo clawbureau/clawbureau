@@ -345,3 +345,24 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck
 ---
+
+## 2026-02-11 - POHVN-US-008 (TEE execution attestation policy checks)
+- What was implemented
+  - Added strict Ajv standalone validation for `execution_attestation_envelope.v1` in verifier path.
+  - Added `tee_execution` policy checks in `verify-execution-attestation.ts`:
+    - fail-closed required allowlists:
+      - `TEE_ATTESTATION_ROOT_ALLOWLIST`
+      - `TEE_ATTESTATION_TCB_ALLOWLIST`
+    - optional revocation deny lists:
+      - `TEE_ATTESTATION_ROOT_REVOKED`
+      - `TEE_ATTESTATION_TCB_REVOKED`
+    - deterministic invalid outcomes for missing policy, non-allowlisted claims, and revoked claims.
+  - Surfaced validated TEE policy identifiers in response (`tee_root_id`, `tee_tcb_version`).
+- Tests
+  - Extended `test/execution-attestation.test.ts` with tee_execution coverage:
+    - missing allowlists -> `DEPENDENCY_NOT_CONFIGURED`
+    - allowlisted -> VALID
+    - revoked TCB -> `REVOKED`
+- Ops
+  - Added smoke script: `scripts/poh/smoke-tee-execution-attestation.mjs` (valid + disallowed TCB invalid).
+---

@@ -28,6 +28,18 @@ ENVIRONMENT = "production"
 # Required for fail-closed execution attestation verification and proof_tier uplift.
 # EXECUTION_ATTESTATION_SIGNER_DIDS = "did:key:..."
 
+# Comma-separated allowlist of trusted TEE root IDs for tee_execution attestations (POHVN-US-008).
+# Required for fail-closed tee_execution verification.
+# TEE_ATTESTATION_ROOT_ALLOWLIST = "tee_root_prod_v1"
+
+# Comma-separated allowlist of trusted TCB versions for tee_execution attestations (POHVN-US-008).
+# Required for fail-closed tee_execution verification.
+# TEE_ATTESTATION_TCB_ALLOWLIST = "tcb_prod_2026q1"
+
+# Optional comma-separated revocation deny lists for tee_execution policy checks.
+# TEE_ATTESTATION_ROOT_REVOKED = "tee_root_compromised"
+# TEE_ATTESTATION_TCB_REVOKED = "tcb_revoked_2026q1"
+
 # Comma-separated allowlist of trusted repo_claim_id values for commit_proof verification.
 # Required for fail-closed commit proof verification.
 # Set via: wrangler secret put CLAWCLAIM_REPO_CLAIM_ALLOWLIST

@@ -98,6 +98,28 @@ export interface Env {
    * allowed to sign `execution_attestation` envelopes (CEA-US-010).
    */
   EXECUTION_ATTESTATION_SIGNER_DIDS?: string;
+
+  /**
+   * Comma-separated allowlist of trusted TEE root IDs for tee_execution attestations.
+   * Required for fail-closed TEE attestation verification (POHVN-US-008).
+   */
+  TEE_ATTESTATION_ROOT_ALLOWLIST?: string;
+
+  /**
+   * Comma-separated allowlist of trusted TCB versions for tee_execution attestations.
+   * Required for fail-closed TEE attestation verification (POHVN-US-008).
+   */
+  TEE_ATTESTATION_TCB_ALLOWLIST?: string;
+
+  /**
+   * Comma-separated revoked TEE root IDs (denylist, fail-closed when matched).
+   */
+  TEE_ATTESTATION_ROOT_REVOKED?: string;
+
+  /**
+   * Comma-separated revoked TCB versions (denylist, fail-closed when matched).
+   */
+  TEE_ATTESTATION_TCB_REVOKED?: string;
 }
 
 /**
@@ -536,8 +558,28 @@ async function handleVerifyExecutionAttestation(
     env.EXECUTION_ATTESTATION_SIGNER_DIDS
   );
 
+  const teeRootAllowlist = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_ROOT_ALLOWLIST
+  );
+
+  const teeTcbAllowlist = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_TCB_ALLOWLIST
+  );
+
+  const teeRootRevoked = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_ROOT_REVOKED
+  );
+
+  const teeTcbRevoked = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_TCB_REVOKED
+  );
+
   const verification = await verifyExecutionAttestation(envelope, {
     allowlistedSignerDids: signerAllowlist,
+    teeRootAllowlist,
+    teeTcbAllowlist,
+    teeRootRevoked,
+    teeTcbRevoked,
   });
 
   let auditReceipt: AuditLogReceipt | undefined;
