@@ -20,6 +20,10 @@ ENVIRONMENT = "production"
 # Without this, attestations do NOT uplift trust tiers (fail-closed).
 # ATTESTATION_SIGNER_DIDS = "did:key:..."
 
+# Comma-separated allowlist of trusted signer DIDs (did:key:...) for execution_attestation verification (CEA-US-010).
+# Required for fail-closed execution attestation verification and proof_tier uplift.
+# EXECUTION_ATTESTATION_SIGNER_DIDS = "did:key:..."
+
 # Comma-separated allowlist of trusted repo_claim_id values for commit_proof verification.
 # Required for fail-closed commit proof verification.
 # Set via: wrangler secret put CLAWCLAIM_REPO_CLAIM_ALLOWLIST

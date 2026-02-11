@@ -12,6 +12,7 @@ import { verifyBatch } from './verify-batch';
 import { verifyProofBundle } from './verify-proof-bundle';
 import { verifyEventChain } from './verify-event-chain';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
+import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { verifyDidRotation } from './verify-did-rotation';
 import { verifyCommitProof } from './verify-commit-proof';
 import { verifyAgent } from './verify-agent';
@@ -36,6 +37,7 @@ import type {
   VerifyBundleResponse,
   VerifyEventChainResponse,
   VerifyOwnerAttestationResponse,
+  VerifyExecutionAttestationResponse,
   VerifyDidRotationResponse,
   VerifyCommitProofResponse,
   VerifyAgentResponse,
@@ -80,6 +82,12 @@ export interface Env {
    * CVF-US-018: fail-closed verification.
    */
   AUDIT_RESULT_ATTESTATION_SIGNER_DIDS?: string;
+
+  /**
+   * Comma-separated list of trusted signer DIDs (did:key:...) that are
+   * allowed to sign `execution_attestation` envelopes (CEA-US-010).
+   */
+  EXECUTION_ATTESTATION_SIGNER_DIDS?: string;
 }
 
 /**
@@ -448,6 +456,55 @@ async function handleVerifyOwnerAttestation(
 }
 
 /**
+ * Handle POST /v1/verify/execution-attestation - Verify execution attestation envelopes
+ */
+async function handleVerifyExecutionAttestation(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('Invalid JSON in request body', 400);
+  }
+
+  if (typeof body !== 'object' || body === null || !('envelope' in body)) {
+    return errorResponse('Request must contain an "envelope" field', 400);
+  }
+
+  const { envelope } = body as { envelope: unknown };
+
+  const signerAllowlist = parseCommaSeparatedAllowlist(
+    env.EXECUTION_ATTESTATION_SIGNER_DIDS
+  );
+
+  const verification = await verifyExecutionAttestation(envelope, {
+    allowlistedSignerDids: signerAllowlist,
+  });
+
+  let auditReceipt: AuditLogReceipt | undefined;
+  if (env.AUDIT_LOG_DB && verification.signer_did) {
+    const requestHash = await computeRequestHash(body);
+    auditReceipt = await writeAuditLogEntry(
+      env.AUDIT_LOG_DB,
+      requestHash,
+      'execution_attestation' as EnvelopeType,
+      verification.result.status,
+      verification.signer_did
+    );
+  }
+
+  const response: VerifyExecutionAttestationResponse & { audit_receipt?: AuditLogReceipt } = {
+    ...verification,
+    audit_receipt: auditReceipt,
+  };
+
+  const status = verification.result.status === 'VALID' ? 200 : 422;
+  return jsonResponse(response, status);
+}
+
+/**
  * Handle POST /v1/verify/did-rotation - Verify DID rotation certificates
  */
 async function handleVerifyDidRotation(
@@ -576,9 +633,14 @@ async function handleVerifyAgent(request: Request, env: Env): Promise<Response> 
     env.ATTESTATION_SIGNER_DIDS
   );
 
+  const executionAttesterAllowlist = parseCommaSeparatedAllowlist(
+    env.EXECUTION_ATTESTATION_SIGNER_DIDS
+  );
+
   const verification = await verifyAgent(body, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
+    allowlistedExecutionAttesterDids: executionAttesterAllowlist,
   });
   const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(verification as VerifyAgentResponse, status);
@@ -731,7 +793,11 @@ async function handleVerifyBundle(
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
-  const { envelope, urm } = body as { envelope: unknown; urm?: unknown };
+  const { envelope, urm, execution_attestations } = body as {
+    envelope: unknown;
+    urm?: unknown;
+    execution_attestations?: unknown;
+  };
 
   // Verify the proof bundle
   const gatewaySignerAllowlist = parseCommaSeparatedAllowlist(
@@ -748,30 +814,205 @@ async function handleVerifyBundle(
     urm,
   });
 
+  let finalResult = verification.result;
+
+  // Optional execution attestations (CEA-US-010)
+  if (finalResult.status === 'VALID' && execution_attestations !== undefined) {
+    if (!Array.isArray(execution_attestations)) {
+      return errorResponse('execution_attestations must be an array when provided', 400);
+    }
+    if (execution_attestations.length === 0) {
+      return errorResponse('execution_attestations must be non-empty when provided', 400);
+    }
+
+    const executionAttesterAllowlist = parseCommaSeparatedAllowlist(
+      env.EXECUTION_ATTESTATION_SIGNER_DIDS
+    );
+
+    const bundleEnvelope = envelope as Record<string, any>;
+    const expectedBundleHash =
+      typeof bundleEnvelope?.payload_hash_b64u === 'string'
+        ? bundleEnvelope.payload_hash_b64u
+        : null;
+
+    const expectedAgentDid =
+      (typeof bundleEnvelope?.payload?.agent_did === 'string'
+        ? bundleEnvelope.payload.agent_did
+        : null) ?? finalResult.agent_did ?? null;
+
+    const expectedRunId =
+      typeof (urm as any)?.run_id === 'string'
+        ? (urm as any).run_id
+        : Array.isArray(bundleEnvelope?.payload?.event_chain) &&
+            bundleEnvelope.payload.event_chain.length > 0 &&
+            typeof bundleEnvelope.payload.event_chain[0]?.run_id === 'string'
+          ? bundleEnvelope.payload.event_chain[0].run_id
+          : null;
+
+    if (!expectedBundleHash || !expectedAgentDid || !expectedRunId) {
+      const invalid = {
+        ...verification,
+        result: {
+          ...finalResult,
+          status: 'INVALID' as const,
+          reason:
+            'Execution attestation binding requires bundle payload hash, agent_did, and run_id',
+          verified_at: new Date().toISOString(),
+        },
+        error: {
+          code: 'MISSING_REQUIRED_FIELD' as const,
+          message:
+            'When execution_attestations are provided, clawverify requires bundle payload_hash_b64u and a run_id (via urm.run_id or envelope.payload.event_chain[0].run_id).',
+        },
+      };
+      return jsonResponse(invalid, 422);
+    }
+
+    let verifiedCount = 0;
+    let bestTier: 'sandbox' | 'tee' = 'sandbox';
+
+    for (let i = 0; i < execution_attestations.length; i++) {
+      const att = execution_attestations[i];
+      const attV = await verifyExecutionAttestation(att, {
+        allowlistedSignerDids: executionAttesterAllowlist,
+      });
+
+      if (attV.result.status !== 'VALID') {
+        const invalid = {
+          ...verification,
+          result: {
+            ...finalResult,
+            status: 'INVALID' as const,
+            reason: `Execution attestation verification failed (index ${i})`,
+            verified_at: new Date().toISOString(),
+          },
+          error:
+            attV.error ??
+            ({
+              code: 'SIGNATURE_INVALID',
+              message: 'Execution attestation verification failed',
+              field: `execution_attestations[${i}]`,
+            } as const),
+        };
+        return jsonResponse(invalid, 422);
+      }
+
+      if (attV.agent_did !== expectedAgentDid) {
+        const invalid = {
+          ...verification,
+          result: {
+            ...finalResult,
+            status: 'INVALID' as const,
+            reason:
+              'Execution attestation agent_did does not match proof bundle agent_did',
+            verified_at: new Date().toISOString(),
+          },
+          error: {
+            code: 'HASH_MISMATCH' as const,
+            message: `execution_attestation.agent_did mismatch (expected ${expectedAgentDid}, got ${attV.agent_did})`,
+            field: `execution_attestations[${i}].payload.agent_did`,
+          },
+        };
+        return jsonResponse(invalid, 422);
+      }
+
+      if (attV.run_id !== expectedRunId) {
+        const invalid = {
+          ...verification,
+          result: {
+            ...finalResult,
+            status: 'INVALID' as const,
+            reason:
+              'Execution attestation run_id does not match proof bundle run_id',
+            verified_at: new Date().toISOString(),
+          },
+          error: {
+            code: 'HASH_MISMATCH' as const,
+            message: `execution_attestation.run_id mismatch (expected ${expectedRunId}, got ${attV.run_id})`,
+            field: `execution_attestations[${i}].payload.run_id`,
+          },
+        };
+        return jsonResponse(invalid, 422);
+      }
+
+      if (attV.proof_bundle_hash_b64u !== expectedBundleHash) {
+        const invalid = {
+          ...verification,
+          result: {
+            ...finalResult,
+            status: 'INVALID' as const,
+            reason:
+              'Execution attestation proof_bundle_hash_b64u does not match provided proof bundle envelope',
+            verified_at: new Date().toISOString(),
+          },
+          error: {
+            code: 'HASH_MISMATCH' as const,
+            message: 'execution_attestation.proof_bundle_hash_b64u mismatch',
+            field: `execution_attestations[${i}].payload.proof_bundle_hash_b64u`,
+          },
+        };
+        return jsonResponse(invalid, 422);
+      }
+
+      verifiedCount++;
+      if (attV.execution_type === 'tee_execution') bestTier = 'tee';
+    }
+
+    const tierRank: Record<string, number> = {
+      unknown: 0,
+      self: 1,
+      gateway: 2,
+      sandbox: 3,
+      tee: 4,
+      witnessed_web: 5,
+    };
+
+    const candidateTier = bestTier === 'tee' ? 'tee' : 'sandbox';
+    const currentRank = tierRank[finalResult.proof_tier ?? 'unknown'] ?? 0;
+    const candidateRank = tierRank[candidateTier] ?? 0;
+    const nextProofTier = candidateRank > currentRank ? candidateTier : finalResult.proof_tier;
+
+    const prevComponentResults = finalResult.component_results ?? {
+      envelope_valid: true,
+    };
+
+    finalResult = {
+      ...finalResult,
+      proof_tier: nextProofTier,
+      component_results: {
+        ...prevComponentResults,
+        execution_attestations_valid: true,
+        execution_attestations_count: execution_attestations.length,
+        execution_attestations_verified_count: verifiedCount,
+      },
+    };
+  }
+
   // Write audit log entry
   let auditReceipt: AuditLogReceipt | undefined;
-  if (env.AUDIT_LOG_DB && verification.result.agent_did) {
+  if (env.AUDIT_LOG_DB && finalResult.agent_did) {
     const requestHash = await computeRequestHash(body);
     auditReceipt = await writeAuditLogEntry(
       env.AUDIT_LOG_DB,
       requestHash,
       'proof_bundle' as EnvelopeType,
-      verification.result.status,
-      verification.result.agent_did
+      finalResult.status,
+      finalResult.agent_did
     );
   }
 
   const response: VerifyBundleResponse & { audit_receipt?: AuditLogReceipt } = {
     ...verification,
-    trust_tier: verification.result.trust_tier,
-    proof_tier: verification.result.proof_tier,
-    model_identity_tier: verification.result.model_identity_tier,
-    risk_flags: verification.result.risk_flags,
+    result: finalResult,
+    trust_tier: finalResult.trust_tier,
+    proof_tier: finalResult.proof_tier,
+    model_identity_tier: finalResult.model_identity_tier,
+    risk_flags: finalResult.risk_flags,
     audit_receipt: auditReceipt,
   };
 
   // Return 200 for valid, 422 for invalid
-  const status = verification.result.status === 'VALID' ? 200 : 422;
+  const status = finalResult.status === 'VALID' ? 200 : 422;
 
   return jsonResponse(response, status);
 }
@@ -1051,6 +1292,7 @@ export default {
         <li><code>POST /v1/verify/message</code> — message_signature verification</li>
         <li><code>POST /v1/verify/receipt</code> — gateway_receipt verification</li>
         <li><code>POST /v1/verify/owner-attestation</code> — owner_attestation verification</li>
+        <li><code>POST /v1/verify/execution-attestation</code> — execution_attestation verification</li>
         <li><code>POST /v1/verify/did-rotation</code> — did_rotation certificate verification</li>
         <li><code>POST /v1/verify/commit-proof</code> — commit_proof verification</li>
         <li><code>POST /v1/verify/batch</code> — batch verification</li>
@@ -1090,6 +1332,7 @@ export default {
             { method: 'POST', path: '/v1/verify/message' },
             { method: 'POST', path: '/v1/verify/receipt' },
             { method: 'POST', path: '/v1/verify/owner-attestation' },
+            { method: 'POST', path: '/v1/verify/execution-attestation' },
             { method: 'POST', path: '/v1/verify/did-rotation' },
             { method: 'POST', path: '/v1/verify/commit-proof' },
             { method: 'POST', path: '/v1/verify/batch' },
@@ -1196,6 +1439,11 @@ Canonical: ${url.origin}/.well-known/security.txt
     // POST /v1/verify/owner-attestation - Owner attestation verification
     if (url.pathname === '/v1/verify/owner-attestation' && method === 'POST') {
       return handleVerifyOwnerAttestation(request, env);
+    }
+
+    // POST /v1/verify/execution-attestation - Execution attestation verification
+    if (url.pathname === '/v1/verify/execution-attestation' && method === 'POST') {
+      return handleVerifyExecutionAttestation(request, env);
     }
 
     // POST /v1/verify/did-rotation - DID rotation certificate verification

@@ -20,10 +20,12 @@ import type {
   VerifyAgentRequest,
   VerifyAgentResponse,
   DidRotationCertificate,
+  ExecutionAttestationPayload,
 } from './types';
 import { isValidDidFormat } from './schema-registry';
 import { verifyOwnerAttestation } from './verify-owner-attestation';
 import { verifyProofBundle } from './verify-proof-bundle';
+import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { verifyDidRotation } from './verify-did-rotation';
 
 export interface VerifyAgentOptions {
@@ -32,6 +34,9 @@ export interface VerifyAgentOptions {
 
   /** Allowlisted attester DIDs for proof bundle attestations. */
   allowlistedAttesterDids?: readonly string[];
+
+  /** Allowlisted signer DIDs for execution attestations (CEA-US-010). */
+  allowlistedExecutionAttesterDids?: readonly string[];
 }
 
 function proofTierToPoHTier(proofTier: ProofTier): number {
@@ -528,6 +533,293 @@ export async function verifyAgent(
     }
   } else {
     riskFlags.push('MISSING_PROOF_BUNDLE');
+  }
+
+  // Verify execution attestations if provided (CEA-US-010)
+  if (req.execution_attestations !== undefined) {
+    if (!Array.isArray(req.execution_attestations)) {
+      components.execution_attestation = {
+        status: 'INVALID',
+        reason: 'execution_attestations must be an array when provided',
+      };
+
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'execution_attestations must be an array when provided',
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
+        components,
+        risk_flags: [...riskFlags, 'EXECUTION_ATTESTATIONS_MALFORMED'],
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'execution_attestations must be an array',
+          field: 'execution_attestations',
+        },
+      };
+    }
+
+    if (req.execution_attestations.length === 0) {
+      components.execution_attestation = {
+        status: 'INVALID',
+        reason: 'execution_attestations must be non-empty when provided',
+      };
+
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'execution_attestations must be non-empty when provided',
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
+        components,
+        risk_flags: [...riskFlags, 'EXECUTION_ATTESTATIONS_EMPTY'],
+        error: {
+          code: 'MISSING_REQUIRED_FIELD',
+          message: 'execution_attestations was provided but empty',
+          field: 'execution_attestations',
+        },
+      };
+    }
+
+    if (!proofBundleEnvelope) {
+      components.execution_attestation = {
+        status: 'INVALID',
+        reason: 'execution_attestations requires proof_bundle_envelope for binding',
+      };
+
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'execution_attestations requires proof_bundle_envelope for binding',
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
+        components,
+        risk_flags: [...riskFlags, 'EXECUTION_ATTESTATION_MISSING_BUNDLE'],
+        error: {
+          code: 'MISSING_REQUIRED_FIELD',
+          message:
+            'execution_attestations was provided but proof_bundle_envelope was not provided (required for binding)',
+          field: 'proof_bundle_envelope',
+        },
+      };
+    }
+
+    const expectedBundleHash = proofBundleEnvelope.payload_hash_b64u;
+
+    const expectedRunId =
+      typeof req.urm?.run_id === 'string'
+        ? req.urm.run_id
+        : Array.isArray(proofBundleEnvelope.payload?.event_chain) &&
+            proofBundleEnvelope.payload.event_chain.length > 0 &&
+            typeof proofBundleEnvelope.payload.event_chain[0]?.run_id === 'string'
+          ? proofBundleEnvelope.payload.event_chain[0].run_id
+          : null;
+
+    if (!expectedRunId) {
+      components.execution_attestation = {
+        status: 'INVALID',
+        reason:
+          'execution_attestations binding requires run_id (via urm.run_id or proof_bundle.event_chain[0].run_id)',
+      };
+
+      return {
+        result: {
+          status: 'INVALID',
+          reason:
+            'execution_attestations binding requires run_id (via urm.run_id or proof_bundle.event_chain[0].run_id)',
+          verified_at: now,
+        },
+        agent_did: agentDid,
+        did_valid: didValid,
+        owner_status: ownerStatus,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        poh_tier: proofTierToPoHTier(proofTier),
+        components,
+        risk_flags: [...riskFlags, 'EXECUTION_ATTESTATION_MISSING_RUN_ID'],
+        error: {
+          code: 'MISSING_REQUIRED_FIELD',
+          message:
+            'run_id is required to bind execution attestations to the proof bundle',
+        },
+      };
+    }
+
+    let verifiedCount = 0;
+    let bestTier: ProofTier = 'sandbox';
+
+    for (let i = 0; i < req.execution_attestations.length; i++) {
+      const attEnv = req.execution_attestations[i] as SignedEnvelope<ExecutionAttestationPayload>;
+      const attV = await verifyExecutionAttestation(attEnv, {
+        allowlistedSignerDids: options.allowlistedExecutionAttesterDids,
+      });
+
+      if (attV.result.status !== 'VALID') {
+        components.execution_attestation = {
+          status: 'INVALID',
+          reason: `execution_attestation verification failed (index ${i})`,
+          error: attV.error,
+        };
+
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Execution attestation verification failed',
+            verified_at: now,
+          },
+          agent_did: agentDid,
+          did_valid: didValid,
+          owner_status: ownerStatus,
+          trust_tier: trustTier,
+          proof_tier: proofTier,
+          poh_tier: proofTierToPoHTier(proofTier),
+          components,
+          risk_flags: [...riskFlags, 'EXECUTION_ATTESTATION_INVALID'],
+          error:
+            attV.error ??
+            ({
+              code: 'SIGNATURE_INVALID',
+              message: 'Execution attestation verification failed',
+              field: `execution_attestations[${i}]`,
+            } as const),
+        };
+      }
+
+      // Binding checks (fail-closed)
+      if (attV.agent_did && attV.agent_did !== agentDid) {
+        const canRotate = canRotateDidTo(attV.agent_did, agentDid, didRotationMap);
+        if (!canRotate) {
+          components.execution_attestation = {
+            status: 'INVALID',
+            reason: 'execution_attestation.agent_did does not match agent_did',
+          };
+
+          return {
+            result: {
+              status: 'INVALID',
+              reason: 'execution_attestation.agent_did does not match agent_did',
+              verified_at: now,
+            },
+            agent_did: agentDid,
+            did_valid: didValid,
+            owner_status: ownerStatus,
+            trust_tier: trustTier,
+            proof_tier: proofTier,
+            poh_tier: proofTierToPoHTier(proofTier),
+            components,
+            risk_flags: [...riskFlags, 'EXECUTION_ATTESTATION_AGENT_MISMATCH'],
+            error: {
+              code: 'HASH_MISMATCH',
+              message: 'execution_attestation.agent_did mismatch',
+              field: `execution_attestations[${i}].payload.agent_did`,
+            },
+          };
+        }
+
+        riskFlags.push('EXECUTION_ATTESTATION_AGENT_ROTATED');
+      }
+
+      if (attV.run_id !== expectedRunId) {
+        components.execution_attestation = {
+          status: 'INVALID',
+          reason: 'execution_attestation.run_id does not match proof bundle run_id',
+        };
+
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'execution_attestation.run_id does not match proof bundle run_id',
+            verified_at: now,
+          },
+          agent_did: agentDid,
+          did_valid: didValid,
+          owner_status: ownerStatus,
+          trust_tier: trustTier,
+          proof_tier: proofTier,
+          poh_tier: proofTierToPoHTier(proofTier),
+          components,
+          risk_flags: [...riskFlags, 'EXECUTION_ATTESTATION_RUN_ID_MISMATCH'],
+          error: {
+            code: 'HASH_MISMATCH',
+            message: 'execution_attestation.run_id mismatch',
+            field: `execution_attestations[${i}].payload.run_id`,
+          },
+        };
+      }
+
+      if (attV.proof_bundle_hash_b64u !== expectedBundleHash) {
+        components.execution_attestation = {
+          status: 'INVALID',
+          reason:
+            'execution_attestation.proof_bundle_hash_b64u does not match proof bundle payload hash',
+        };
+
+        return {
+          result: {
+            status: 'INVALID',
+            reason:
+              'execution_attestation.proof_bundle_hash_b64u does not match proof bundle payload hash',
+            verified_at: now,
+          },
+          agent_did: agentDid,
+          did_valid: didValid,
+          owner_status: ownerStatus,
+          trust_tier: trustTier,
+          proof_tier: proofTier,
+          poh_tier: proofTierToPoHTier(proofTier),
+          components,
+          risk_flags: [...riskFlags, 'EXECUTION_ATTESTATION_BUNDLE_HASH_MISMATCH'],
+          error: {
+            code: 'HASH_MISMATCH',
+            message: 'execution_attestation.proof_bundle_hash_b64u mismatch',
+            field: `execution_attestations[${i}].payload.proof_bundle_hash_b64u`,
+          },
+        };
+      }
+
+      verifiedCount++;
+      if (attV.execution_type === 'tee_execution') bestTier = 'tee';
+    }
+
+    const tierRank: Record<ProofTier, number> = {
+      unknown: 0,
+      self: 1,
+      gateway: 2,
+      sandbox: 3,
+      tee: 4,
+      witnessed_web: 5,
+    };
+
+    if (tierRank[bestTier] > (tierRank[proofTier] ?? 0)) {
+      proofTier = bestTier;
+    }
+
+    components.execution_attestation = {
+      status: 'VALID',
+      reason: `Verified ${verifiedCount} execution attestations`,
+      verified_count: verifiedCount,
+      proof_tier: bestTier,
+    };
+
+    riskFlags.push('EXECUTION_ATTESTATION_VERIFIED');
   }
 
   // Compute PoH tier (canonical numeric mapping of proof_tier)
