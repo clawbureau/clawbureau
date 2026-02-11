@@ -200,7 +200,8 @@
         "Tier uplift only happens when attestation is valid"
       ],
       "priority": 15,
-      "passes": false
+      "passes": true,
+      "notes": "Done end-to-end. Links: clawea private PR #3 https://github.com/clawbureau/clawea/pull/3; clawbureau PR #104 https://github.com/clawbureau/clawbureau/pull/104; submodule bump PR #105 https://github.com/clawbureau/clawbureau/pull/105; smoke: scripts/poh/smoke-execution-attestation.mjs"
     },
     {
       "id": "POH-US-018",
