@@ -104,19 +104,21 @@ Universal Run Manifest
     </section>
 
     <section class="section">
-      <div class="wrap faq">
+      <div class="wrap">
         <div class="sh"><h2>Frequently Asked Questions</h2></div>
-        <div class="faq-item">
-          <h3>How does Claw EA prove AI agent actions are legitimate?</h3>
-          <p>Every model call routes through clawproxy, which signs a gateway receipt with the request hash, response hash, model, provider, and timestamp. These receipts are compiled into proof bundles signed by the agent's DID. Any third party can verify the bundle independently.</p>
-        </div>
-        <div class="faq-item">
-          <h3>What is a Proof of Harness?</h3>
-          <p>Proof of Harness verifies that an AI agent ran inside a controlled execution environment. Gateway receipts from clawproxy prove that model calls were mediated, policy controls were active, and audit logging was operational during execution.</p>
-        </div>
-        <div class="faq-item">
-          <h3>Can proof bundles be tampered with?</h3>
-          <p>No. Proof bundles use Ed25519 signatures tied to the agent's DID and include Merkle root hashes over all events. Modifying any event invalidates the chain. Gateway receipts are independently signed by clawproxy.</p>
+        <div class="faq-accordion">
+          <details open>
+            <summary>How does Claw EA prove AI agent actions are legitimate?</summary>
+            <div class="faq-answer">Every model call routes through clawproxy, which signs a gateway receipt with the request hash, response hash, model, provider, and timestamp. These receipts are compiled into proof bundles signed by the agent's DID. Any third party can verify the bundle independently.</div>
+          </details>
+          <details>
+            <summary>What is a Proof of Harness?</summary>
+            <div class="faq-answer">Proof of Harness verifies that an AI agent ran inside a controlled execution environment. Gateway receipts from clawproxy prove that model calls were mediated, policy controls were active, and audit logging was operational during execution.</div>
+          </details>
+          <details>
+            <summary>Can proof bundles be tampered with?</summary>
+            <div class="faq-answer">No. Proof bundles use Ed25519 signatures tied to the agent's DID and include Merkle root hashes over all events. Modifying any event invalidates the chain. Gateway receipts are independently signed by clawproxy.</div>
+          </details>
         </div>
       </div>
     </section>

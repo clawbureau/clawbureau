@@ -1236,6 +1236,66 @@ function relatedLinksForArticle(article: Article): Array<{ name: string; path: s
   return uniqueLinks(links.filter((l) => l.path !== self)).slice(0, 8);
 }
 
+// ── Article Processing Helpers ────────────────────────────────────
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/<[^>]+>/g, "")
+    .replace(/&[^;]+;/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+interface TocEntry {
+  id: string;
+  text: string;
+  depth: number;
+}
+
+/** Inject `id` attributes + anchor links into h2/h3 elements, extract TOC. */
+function extractAndInjectHeadings(rawHtml: string): { html: string; toc: TocEntry[] } {
+  const toc: TocEntry[] = [];
+  const seen = new Set<string>();
+  const processed = rawHtml.replace(
+    /<(h[23])([^>]*)>([\s\S]*?)<\/\1>/gi,
+    (_match, tag: string, attrs: string, content: string) => {
+      if (attrs.includes(" id=")) return _match; // already has id
+      const text = content.replace(/<[^>]+>/g, "").trim();
+      let id = slugify(text);
+      if (!id) return _match;
+      if (seen.has(id)) id += "-" + seen.size;
+      seen.add(id);
+      const depth = tag.toLowerCase() === "h2" ? 2 : 3;
+      toc.push({ id, text, depth });
+      return `<${tag}${attrs} id="${id}">${content}<a href="#${id}" class="heading-anchor" aria-hidden="true">#</a></${tag}>`;
+    },
+  );
+  return { html: processed, toc };
+}
+
+/** Render a sticky sidebar Table of Contents from extracted headings. */
+function renderToc(toc: TocEntry[]): string {
+  if (toc.length < 3) return "";
+  const items = toc
+    .map((e) => `<li class="depth-${e.depth}"><a href="#${e.id}">${esc(e.text)}</a></li>`)
+    .join("");
+  return `
+  <aside class="toc" aria-label="Table of contents">
+    <details open>
+      <summary>On this page</summary>
+      <nav><ol>${items}</ol></nav>
+    </details>
+  </aside>`;
+}
+
+/** Wrap bare <table> elements in a responsive scroll container. */
+function wrapTables(rawHtml: string): string {
+  return rawHtml
+    .replace(/<table\b/g, '<div class="table-wrap" role="region" tabindex="0"><table')
+    .replace(/<\/table>/g, "</table></div>");
+}
+
 function articlePage(article: Article): string {
   const breadcrumbs = breadcrumbsFromSlug(article.slug);
   const schemas: string[] = [];
@@ -1272,12 +1332,28 @@ function articlePage(article: Article): string {
   }
 
   const updated = formatDateYmd(article.generatedAt);
+
+  // Process article body: inject heading IDs, extract TOC, wrap tables
+  const { html: processedHtml, toc } = extractAndInjectHeadings(article.html);
+  const bodyHtml = wrapTables(processedHtml);
+  const tocHtml = renderToc(toc);
+
+  // Key takeaways module (uses article description as summary)
+  const takeawaysHtml = article.description
+    ? `<div class="takeaways"><div class="takeaways-title">&#9672; Key takeaway</div><p>${esc(article.description)}</p></div>`
+    : "";
+
+  // Related content with card styling
   const related = relatedLinksForArticle(article);
   const relatedHtml = related.length
-    ? `<div class="related"><h3>Related playbooks</h3><div class="related-grid">${related
-        .map((l) => `<a href="${l.path}">${esc(l.name)}</a>`)
+    ? `<div class="related"><h3>Related</h3><div class="related-grid">${related
+        .map((l) => `<a href="${l.path}" class="related-card"><span class="related-label">${esc(l.name)}</span></a>`)
         .join("")}</div></div>`
     : "";
+
+  const categoryLabel = article.category
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return layout({
     meta: {
@@ -1293,11 +1369,17 @@ function articlePage(article: Article): string {
     body: `
     <section class="section content-page">
       <div class="wrap">
-        <span class="badge badge-blue">${article.category.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+        <span class="badge badge-blue">${categoryLabel}</span>
         <h1>${esc(headline)}</h1>
         <p class="article-meta">Updated <time datetime="${esc(article.generatedAt)}">${updated}</time>. Evidence is linked in Sources when available.</p>
-        <div class="article-body">${article.html}</div>
-        ${relatedHtml}
+        ${takeawaysHtml}
+        <div class="article-layout">
+          ${tocHtml}
+          <div class="article-main">
+            <div class="article-body">${bodyHtml}</div>
+            ${relatedHtml}
+          </div>
+        </div>
       </div>
     </section>`,
   });
