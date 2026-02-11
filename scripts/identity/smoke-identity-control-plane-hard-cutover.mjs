@@ -12,6 +12,9 @@ function parseArgs(argv) {
     env: 'staging',
     scopeAdminKey: process.env.SCOPE_ADMIN_KEY ?? '',
     outDir: '',
+    clawclaimVersion: '',
+    clawscopeVersion: '',
+    clawverifyVersion: '',
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -26,6 +29,18 @@ function parseArgs(argv) {
     }
     if (arg === '--out-dir' && argv[i + 1]) {
       out.outDir = String(argv[++i]);
+      continue;
+    }
+    if (arg === '--clawclaim-version' && argv[i + 1]) {
+      out.clawclaimVersion = String(argv[++i]);
+      continue;
+    }
+    if (arg === '--clawscope-version' && argv[i + 1]) {
+      out.clawscopeVersion = String(argv[++i]);
+      continue;
+    }
+    if (arg === '--clawverify-version' && argv[i + 1]) {
+      out.clawverifyVersion = String(argv[++i]);
       continue;
     }
   }
@@ -169,19 +184,26 @@ async function bindDid(claimBaseUrl, did, privateKey) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  if (args.env !== 'staging') {
-    throw new Error('This smoke script is restricted to --env staging for now.');
+  if (args.env !== 'staging' && args.env !== 'prod') {
+    throw new Error('--env must be one of: staging | prod');
   }
 
   if (!args.scopeAdminKey) {
     throw new Error('SCOPE_ADMIN_KEY is required (pass --scope-admin-key or env var).');
   }
 
-  const baseUrls = {
-    clawclaim: 'https://staging.clawclaim.com',
-    clawscope: 'https://staging.clawscope.com',
-    clawverify: 'https://staging.clawverify.com',
-  };
+  const baseUrls =
+    args.env === 'prod'
+      ? {
+          clawclaim: 'https://clawclaim.com',
+          clawscope: 'https://clawscope.com',
+          clawverify: 'https://clawverify.com',
+        }
+      : {
+          clawclaim: 'https://staging.clawclaim.com',
+          clawscope: 'https://staging.clawscope.com',
+          clawverify: 'https://staging.clawverify.com',
+        };
 
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
   const timestamp = timestampForPath();
@@ -197,7 +219,11 @@ async function main() {
     identities: {},
     steps: {},
     deterministic_error_codes: {},
-    staging_versions: {},
+    deployment_versions: {
+      clawclaim: args.clawclaimVersion || null,
+      clawscope: args.clawscopeVersion || null,
+      clawverify: args.clawverifyVersion || null,
+    },
   };
 
   const owner = await createDidKeyPair();

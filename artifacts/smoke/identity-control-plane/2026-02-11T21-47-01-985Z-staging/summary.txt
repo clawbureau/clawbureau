@@ -1,0 +1,10 @@
+env: staging
+generated_at: 2026-02-11T21:47:01.986Z
+owner_did: did:key:z6Mks2ZZaQJ7dvXY6JrcuHnahmQXtMbbaVVkA6L2MvQUdLpv
+controller_did: did:key:z6MktrR9agX7w93UeHXZsN6YAgLn13xJM1i95de9oeKvMJBk
+agent_did: did:key:z6MkwNDXSVsPSd6Ng7Xyqe8eWJXWUHZLtZt8Z6Yy29Q1nj7b
+
+canonical_issue: 839c7d2136c36ac2f31197f5eb60de69d9d8b1c52d41720b17de6be51a7e557c
+legacy_sensitive_issue_error: LEGACY_SENSITIVE_SCOPE_FORBIDDEN
+verify_token_control_denied_error: TOKEN_CONTROL_TRANSITION_FORBIDDEN
+verify_token_control_revoked_error: REVOKED

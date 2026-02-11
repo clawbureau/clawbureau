@@ -408,3 +408,13 @@ Started: 2026-02-02T03:08:26.937416
 - Smoke evidence
   - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
 ---
+
+## 2026-02-11 - M1 productionize ICP baseline (post-PR #145)
+- Rolled control-chain/token-control verifier baseline to staging + production.
+- Deploy versions:
+  - staging: `clawverify-staging` -> `db16bf9e-8c5a-49cb-a9f6-083efd86d476`
+  - prod: `clawverify` -> `9e4298b9-e129-44f8-ad3a-20a4e52cd15b`
+- Smoke evidence:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
+---

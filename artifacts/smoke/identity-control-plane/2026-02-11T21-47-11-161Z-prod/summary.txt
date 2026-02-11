@@ -1,0 +1,10 @@
+env: prod
+generated_at: 2026-02-11T21:47:11.162Z
+owner_did: did:key:z6Mkhd3i23n7gzQViHzCmjGvC3CKGbaJULtCiyRFSC8SnZsP
+controller_did: did:key:z6MkmM7BuET7nm6HLwFoe2o6QywtKTRduMEFDTQ9SkQcEaWo
+agent_did: did:key:z6MkohQB58u8xzp2myDB8RZnb9DFtyH2fyKmCpauCmSUhiGm
+
+canonical_issue: 1aca32d0c18ff073bb9460864c873afaf987069f63f8de79ec073e55703aa6a8
+legacy_sensitive_issue_error: LEGACY_SENSITIVE_SCOPE_FORBIDDEN
+verify_token_control_denied_error: TOKEN_CONTROL_TRANSITION_FORBIDDEN
+verify_token_control_revoked_error: REVOKED

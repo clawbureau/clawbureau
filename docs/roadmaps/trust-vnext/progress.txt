@@ -728,9 +728,13 @@ Started: 2026-02-07T19:53:07Z
 - Deployment status
   - Tracker complete in code + tests.
   - Staging deploy versions:
-    - `clawclaim-staging`: `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`
-    - `clawscope-staging`: `c250201a-bb1c-458f-8a87-e4f09270ab60`
-    - `clawverify-staging`: `799e87ff-0456-4690-8563-96b38f3ff26a`
-  - Staging smoke artifact:
-    - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
-  - **No production deploy executed** (await explicit GO PROD).
+    - `clawclaim-staging`: `7c1cf0b7-af77-4d21-b29d-b902055519a5`
+    - `clawscope-staging`: `37e14c8f-1016-4b5e-b117-70dd372e0131`
+    - `clawverify-staging`: `db16bf9e-8c5a-49cb-a9f6-083efd86d476`
+  - Production deploy versions:
+    - `clawclaim`: `4af46ea4-05b7-43de-ae1f-6f100b4fde56`
+    - `clawscope`: `2edbae03-adf5-4b8a-8cce-74ff3613cd79`
+    - `clawverify`: `9e4298b9-e129-44f8-ad3a-20a4e52cd15b`
+  - Smoke artifacts:
+    - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
+    - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`

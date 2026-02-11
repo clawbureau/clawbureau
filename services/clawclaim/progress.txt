@@ -63,3 +63,13 @@ Started: 2026-02-02T22:45:00Z
 - Cross-service smoke evidence:
   - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
 ---
+
+## 2026-02-11 - M1 productionize ICP baseline (post-PR #145)
+- Rolled merged ICP baseline to staging + production.
+- Deploy versions:
+  - staging: `clawclaim-staging` -> `7c1cf0b7-af77-4d21-b29d-b902055519a5`
+  - prod: `clawclaim` -> `4af46ea4-05b7-43de-ae1f-6f100b4fde56`
+- Smoke evidence (cross-service):
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
+---
