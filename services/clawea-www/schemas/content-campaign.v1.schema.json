@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clawea.com/schemas/content-campaign.v1.schema.json",
+  "title": "clawea-www content campaign manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "campaign",
+    "targets",
+    "model_pool",
+    "source_allowlist",
+    "council",
+    "publish",
+    "budgets"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "clawea.content_campaign"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "campaign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "seed"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9][a-z0-9-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "seed": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["dry-run", "full-run"]
+        },
+        "resume": {
+          "type": "boolean"
+        },
+        "simulate": {
+          "type": "boolean"
+        },
+        "run_root": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "slugs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "top_n": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "indexable_only": {
+          "type": "boolean"
+        },
+        "exclude_categories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        }
+      }
+    },
+    "source_allowlist": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domains"],
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "model_pool": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 160
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "cost_usd_per_1m_input_tokens": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cost_usd_per_1m_output_tokens": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "council": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min_mean_overall",
+        "min_dimension_score",
+        "max_stdev_overall"
+      ],
+      "properties": {
+        "min_mean_overall": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "min_dimension_score": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "max_stdev_overall": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "require_top3_votes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      }
+    },
+    "publish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "canary_size"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["canary", "full"]
+        },
+        "canary_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "apply_to_articles": {
+          "type": "boolean"
+        },
+        "upload_to_r2": {
+          "type": "boolean"
+        },
+        "auto_index": {
+          "type": "boolean"
+        },
+        "bucket": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_candidates",
+        "max_total_tokens",
+        "max_usd",
+        "max_retryable_failures"
+      ],
+      "properties": {
+        "max_candidates": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "max_prompt_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_completion_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_total_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_retryable_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        }
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90
+        }
+      }
+    }
+  }
+}
