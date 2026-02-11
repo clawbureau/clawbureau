@@ -543,3 +543,44 @@ Started: 2026-02-07T19:53:07Z
     - sensitiveProfile denial for `autoAllowBins=true`
   - `node --test test/*.test.mjs` passed.
 ---
+
+   ## 2026-02-11T22:45:00Z - clawea secure
+ hardening rollout (private clawea + public
+ submodule bump)
+
+   - Delivery completed in private repo:
+     - PR #8:
+ https://github.com/clawbureau/clawea/pull/8
+     - Merge:
+ 2f03e164e0e69d6aa16d20eccd0f1db5b9d8d344
+   - Public monorepo rollout:
+     - PR #119:
+ https://github.com/clawbureau/clawbureau/pull/11
+ 9
+     - Merge:
+ a0c81d1e83a91e8c22816f38427f444cd7671908
+   - Shipped scope highlights:
+     - secure deploy validation + safe-mode smoke
+     - real Ed25519 did:key generation
+     - secure posture endpoint
+     - expanded directive guard + tenant policy
+ controls + richer directive-block audit
+     - real `/v1/audit/runs` integration + signed
+ audit export
+     - tenant suspend hard-stop and
+ wake/deploy/ws denial when suspended
+     - budget/runtime enforcement and
+ connector/workspace fail-closed checks
+     - execution-attestation clawlogs anchoring
+ refs
+     - staging path fallback cleanup and CI
+ hardening
+   - Deploy evidence:
+     - staging version:
+ `2c007a9d-79e3-4aeb-84a6-d5fde64247ec`
+     - prod version:
+ `f16a3bc0-9527-4e98-9483-d58b32863329`
+   - Smoke evidence:
+     - secure deploy staging: PASS
+     - secure deploy prod safe-mode: PASS
+     - suspend hard-stop staging: PASS
