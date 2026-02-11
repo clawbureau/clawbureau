@@ -131,6 +131,43 @@ See:
 
 ---
 
+## OpenClaw Airlock pattern (OCL-US-001)
+
+### Goal
+Treat buyer-controlled repos/uploads as **untrusted JobRoot** while keeping bootstrap/personality/skills in a **trusted IdentityRoot**.
+
+### Recommended layout
+- `IdentityRoot` (trusted): immutable operator-managed files (bootstrap, personality, security policy, skills)
+- `JobRoot` (untrusted): buyer repo, uploads, artifacts
+
+### Enforced behavior
+In sensitive profiles, bootstrap/prompt-pack capture must only accept files from `IdentityRoot`.
+If bootstrap discovery yields files from `JobRoot` (or unknown roots), fail closed with:
+- `AIRLOCK_BOOTSTRAP_VIOLATION`
+
+### Plugin config (provider-clawproxy)
+```json
+{
+  "plugins": {
+    "entries": {
+      "provider-clawproxy": {
+        "config": {
+          "baseUrl": "https://clawproxy.com",
+          "airlock": {
+            "enabled": true,
+            "identityRoots": ["/opt/openclaw/identity"],
+            "jobRoots": ["/workspace/job"],
+            "requireTrustedBootstrap": true
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+This keeps trusted and untrusted contexts partitioned and prevents accidental bootstrap/skills auto-discovery from buyer mounts in sensitive runs.
+
 ## Notes / guardrails
 - Do not leak admin keys into LLM context; keep them in plugin config or gateway env.
 - Prefer offline verification (JWKS + EdDSA) for speed; introspection remains for revocation checks.

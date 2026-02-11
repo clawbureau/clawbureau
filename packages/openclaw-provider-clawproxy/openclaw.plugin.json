@@ -57,6 +57,31 @@
       "includeToolEvents": {
         "type": "boolean",
         "description": "Record tool_call events for Trust Pulse (default: true)"
+      },
+      "airlock": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "OpenClaw Airlock partitioning for trusted IdentityRoot vs untrusted JobRoot bootstrap files.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable Airlock bootstrap partition checks."
+          },
+          "identityRoots": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Trusted root paths for bootstrap/skills (IdentityRoot)."
+          },
+          "jobRoots": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Untrusted root paths for buyer repos/files (JobRoot)."
+          },
+          "requireTrustedBootstrap": {
+            "type": "boolean",
+            "description": "Fail closed on non-trusted bootstrap files (default: true when airlock enabled)."
+          }
+        }
       }
     }
   },
@@ -68,6 +93,11 @@
     "baseUrl": { "label": "clawproxy Base URL", "placeholder": "https://clawproxy.com" },
     "outputDir": { "label": "Output Directory", "placeholder": ".clawproof/openclaw" },
     "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawproof/keys/<agentId>.jwk.json", "advanced": true },
-    "mode": { "label": "Mode", "help": "Use enforce to make PoH non-optional." }
+    "mode": { "label": "Mode", "help": "Use enforce to make PoH non-optional." },
+    "airlock": {
+      "label": "Airlock (IdentityRoot vs JobRoot)",
+      "advanced": true,
+      "help": "Enable fail-closed bootstrap partitioning: trusted IdentityRoot files only; untrusted JobRoot files trigger AIRLOCK_BOOTSTRAP_VIOLATION."
+    }
   }
 }

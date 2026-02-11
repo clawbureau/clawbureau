@@ -226,8 +226,8 @@
         "Document the Airlock pattern in docs/integration/OPENCLAW_INTEGRATION.md"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": "May require upstream OpenClaw changes or an extension/plugin that enforces mount/path allowlists."
+      "passes": true,
+      "notes": "Implemented Airlock guardrails in provider-clawproxy plugin config (`airlock` block): classify bootstrap files by IdentityRoot vs JobRoot, include only trusted roots in prompt-pack capture, and fail closed with `AIRLOCK_BOOTSTRAP_VIOLATION` when non-trusted bootstrap files are detected in sensitive mode (`requireTrustedBootstrap=true`). Added regression tests and integration docs for the pattern."
     },
     {
       "id": "OCL-US-002",
@@ -329,7 +329,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-09T17:16:38Z",
+    "updatedAt": "2026-02-11T21:15:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
