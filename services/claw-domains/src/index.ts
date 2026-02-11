@@ -1,19 +1,15 @@
 /* ------------------------------------------------------------------ */
-/*  claw-domains — multi-domain landing page & inquiry capture        */
-/*                                                                    */
-/*  One Worker serves all parked/candidate Claw Bureau domains.       */
-/*  Routes:                                                           */
-/*    GET  /            → landing page (for_sale | coming_soon)       */
-/*    POST /api/inquiries → store offer in D1                         */
-/*    GET  /api/inquiries → list inquiries (admin, bearer-gated)      */
-/*    GET  /api/analytics → cross-domain summary (admin)              */
-/*    GET  /health       → health check                               */
+/*  claw-domains — multi-domain landing pages + analytics + inquiries */
 /* ------------------------------------------------------------------ */
 
-import type { Env, InquiryPayload } from "./types.js";
-import { DOMAIN_MAP } from "./config.js";
+import type { Env, InquiryPayload, TrackPayload } from "./types.js";
+import {
+  DOMAIN_MAP,
+  ECOSYSTEM_DOMAINS,
+  ECOSYSTEM_BY_DOMAIN,
+} from "./config.js";
 import { trackEvent } from "./analytics.js";
-import { forSalePage, comingSoonPage } from "./pages.js";
+import { comingSoonPage, ecosystemPage, forSalePage } from "./pages.js";
 
 /* ── helpers ──────────────────────────────────────────────────────── */
 
@@ -32,7 +28,7 @@ function html(body: string, status = 200): Response {
     status,
     headers: {
       "content-type": "text/html;charset=utf-8",
-      "cache-control": "public, max-age=3600, s-maxage=86400",
+      "cache-control": "public, max-age=300, s-maxage=3600",
       "x-robots-tag": "noindex",
     },
   });
@@ -46,13 +42,31 @@ function isAdminAuthed(request: Request, env: Env): boolean {
   return auth === `Bearer ${expected}`;
 }
 
+function getRelatedDomains(hostname: string): typeof ECOSYSTEM_DOMAINS {
+  const cfg = DOMAIN_MAP[hostname];
+  const related = (cfg?.related_domains ?? [])
+    .map((d) => ECOSYSTEM_BY_DOMAIN[d])
+    .filter((d): d is (typeof ECOSYSTEM_DOMAINS)[number] => Boolean(d));
+
+  if (related.length > 0) return related;
+
+  // Fallback: show domains in the same pillar as this host.
+  if (!cfg) return [];
+  return ECOSYSTEM_DOMAINS.filter(
+    (d) => d.pillar === cfg.pillar && d.domain !== hostname,
+  ).slice(0, 4);
+}
+
+function getFeaturedLiveDomains(limit = 6): typeof ECOSYSTEM_DOMAINS {
+  return ECOSYSTEM_DOMAINS.filter((d) => d.status === "live")
+    .sort((a, b) => a.domain.localeCompare(b.domain))
+    .slice(0, limit);
+}
+
 /* ── inquiry handler ──────────────────────────────────────────────── */
 
-async function handleInquiry(
-  request: Request,
-  env: Env,
-): Promise<Response> {
-  const hostname = new URL(request.url).hostname;
+async function handleInquiry(request: Request, env: Env): Promise<Response> {
+  const hostname = new URL(request.url).hostname.replace(/^www\./, "");
 
   let body: InquiryPayload;
   try {
@@ -85,23 +99,60 @@ async function handleInquiry(
     )
     .run();
 
-  // fire-and-forget analytics
   void trackEvent(
     env,
     request,
     body.offer_amount ? "offer" : "inquiry",
     body.offer_amount ?? 0,
+    {
+      label: `${hostname}:api_inquiry`,
+      target: "/api/inquiries",
+    },
   );
 
   return json({ ok: true, id });
 }
 
+/* ── lightweight click tracker ────────────────────────────────────── */
+
+const TRACK_ACTIONS = new Set([
+  "pageview",
+  "inquiry",
+  "offer",
+  "cta_click",
+  "nav_click",
+  "related_click",
+  "ecosystem_click",
+  "outbound_click",
+]);
+
+async function handleTrack(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return json({ error: "method not allowed" }, 405);
+  }
+
+  let body: TrackPayload;
+  try {
+    body = (await request.json()) as TrackPayload;
+  } catch {
+    return json({ error: "invalid JSON" }, 400);
+  }
+
+  if (!body?.action || !TRACK_ACTIONS.has(body.action)) {
+    return json({ error: "invalid action" }, 400);
+  }
+
+  void trackEvent(env, request, body.action, body.value ?? 0, {
+    label: body.label,
+    target: body.target,
+  });
+
+  return json({ ok: true });
+}
+
 /* ── admin: list inquiries ────────────────────────────────────────── */
 
-async function handleListInquiries(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+async function handleListInquiries(request: Request, env: Env): Promise<Response> {
   if (!isAdminAuthed(request, env)) {
     return json({ error: "unauthorized" }, 401);
   }
@@ -124,17 +175,13 @@ async function handleListInquiries(
   return json({ inquiries: results, count: results.length });
 }
 
-/* ── admin: cross-domain analytics summary ────────────────────────── */
+/* ── admin: D1 inquiry summary ────────────────────────────────────── */
 
-async function handleAnalyticsSummary(
-  request: Request,
-  env: Env,
-): Promise<Response> {
+async function handleAnalyticsSummary(request: Request, env: Env): Promise<Response> {
   if (!isAdminAuthed(request, env)) {
     return json({ error: "unauthorized" }, 401);
   }
 
-  // Summary from D1 (inquiries per domain + total offers)
   const { results } = await env.INQUIRIES_DB.prepare(
     `SELECT domain,
             COUNT(*) AS inquiry_count,
@@ -147,19 +194,18 @@ async function handleAnalyticsSummary(
   ).all();
 
   return json({
-    note: "For visit analytics, query Analytics Engine SQL API with dataset 'claw_domain_visits'",
+    note: "Visit/click analytics are in Analytics Engine dataset 'claw_domain_visits'",
     inquiry_summary: results,
   });
 }
 
-/* ── main router ──────────────────────────────────────────────────── */
+/* ── router ───────────────────────────────────────────────────────── */
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const hostname = url.hostname.replace(/^www\./, "");
 
-    /* CORS preflight */
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -170,44 +216,74 @@ export default {
       });
     }
 
-    /* health */
     if (url.pathname === "/health") {
       return json({ ok: true, domain: hostname, ts: new Date().toISOString() });
     }
 
-    /* API routes */
     if (url.pathname === "/api/inquiries") {
       if (request.method === "POST") return handleInquiry(request, env);
       if (request.method === "GET") return handleListInquiries(request, env);
       return json({ error: "method not allowed" }, 405);
     }
+
+    if (url.pathname === "/api/track") {
+      return handleTrack(request, env);
+    }
+
     if (url.pathname === "/api/analytics" && request.method === "GET") {
       return handleAnalyticsSummary(request, env);
     }
 
-    /* domain config lookup */
+    if (url.pathname === "/api/domains" && request.method === "GET") {
+      const host = url.searchParams.get("host")?.replace(/^www\./, "");
+      return json({
+        host,
+        host_config: host ? DOMAIN_MAP[host] ?? null : null,
+        related: host ? getRelatedDomains(host) : [],
+        domains: ECOSYSTEM_DOMAINS,
+      });
+    }
+
+    if (url.pathname === "/ecosystem") {
+      void trackEvent(env, request, "pageview", 0, {
+        label: `${hostname}:ecosystem`,
+        target: "/ecosystem",
+      });
+
+      return html(
+        ecosystemPage(hostname, env.CF_WEB_ANALYTICS_TOKEN ?? "", ECOSYSTEM_DOMAINS),
+      );
+    }
+
     const cfg = DOMAIN_MAP[hostname];
     if (!cfg) {
-      /* Unknown domain — generic redirect to clawbureau.com */
       return Response.redirect("https://clawbureau.com", 302);
     }
 
-    /* redirect mode */
     if (cfg.mode === "redirect" && cfg.redirect_url) {
       return Response.redirect(cfg.redirect_url, 301);
     }
 
-    /* track pageview (fire-and-forget) */
     void trackEvent(env, request, "pageview");
 
     const analyticsToken = env.CF_WEB_ANALYTICS_TOKEN ?? "";
     const contactEmail = env.INQUIRY_FORWARD_EMAIL ?? "domains@clawbureau.com";
+    const related = getRelatedDomains(hostname);
+    const featured = getFeaturedLiveDomains();
 
-    /* render page */
     if (cfg.mode === "for_sale") {
-      return html(forSalePage(hostname, cfg, analyticsToken, contactEmail));
+      return html(
+        forSalePage(
+          hostname,
+          cfg,
+          analyticsToken,
+          contactEmail,
+          related,
+          featured,
+        ),
+      );
     }
 
-    return html(comingSoonPage(hostname, cfg, analyticsToken));
+    return html(comingSoonPage(hostname, cfg, analyticsToken, related, featured));
   },
 } satisfies ExportedHandler<Env>;
