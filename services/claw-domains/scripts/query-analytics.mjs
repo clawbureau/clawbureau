@@ -3,8 +3,8 @@
 /*  Query Analytics Engine for cross-domain visit intelligence.       */
 /*                                                                    */
 /*  Usage:                                                            */
-/*    CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs           */
-/*    CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs --days 7  */
+/*    CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs          */
+/*    CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs --days 7 */
 /*    CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs --domain clawinsure.com */
 /* ------------------------------------------------------------------ */
 
@@ -45,20 +45,25 @@ async function query(sql) {
   return res.json();
 }
 
+function printRows(rows, formatter) {
+  for (const row of rows || []) {
+    console.log(formatter(row));
+  }
+}
+
 async function main() {
   console.log(`\n📊  Claw Domains — Analytics (last ${days} days)\n`);
 
-  // ── 1. Visits per domain ──────────────────────────────────────────
-  const domainFilter = filterDomain
-    ? `AND blob1 = '${filterDomain}'`
-    : "";
+  const domainFilter = filterDomain ? `AND blob1 = '${filterDomain}'` : "";
 
-  const visitsSql = `
+  // ── 1) Domain summary ───────────────────────────────────────────
+  const summarySql = `
     SELECT
       blob1 AS domain,
       COUNT(*) AS total_hits,
       SUM(CASE WHEN blob5 = 'pageview' THEN 1 ELSE 0 END) AS pageviews,
-      SUM(CASE WHEN blob5 = 'inquiry' THEN 1 ELSE 0 END) AS inquiries,
+      SUM(CASE WHEN blob5 IN ('inquiry','offer') THEN 1 ELSE 0 END) AS form_events,
+      SUM(CASE WHEN blob5 LIKE '%click' THEN 1 ELSE 0 END) AS click_events,
       SUM(CASE WHEN blob5 = 'offer' THEN 1 ELSE 0 END) AS offers,
       MAX(double2) AS max_offer_usd
     FROM ${DATASET}
@@ -66,23 +71,67 @@ async function main() {
       ${domainFilter}
     GROUP BY blob1
     ORDER BY total_hits DESC
-    LIMIT 50
+    LIMIT 60
   `;
 
   try {
-    const visitsData = await query(visitsSql);
-    console.log("Domain                     Pageviews  Inquiries  Offers  Max Offer");
-    console.log("─".repeat(72));
-    for (const row of visitsData.data || []) {
-      console.log(
-        `${(row.domain || "").padEnd(27)} ${String(row.pageviews || 0).padStart(8)}  ${String(row.inquiries || 0).padStart(9)}  ${String(row.offers || 0).padStart(6)}  ${row.max_offer_usd ? "$" + Number(row.max_offer_usd).toLocaleString() : "—"}`
-      );
-    }
+    const summaryData = await query(summarySql);
+    console.log("Domain                     Views  Forms  Clicks  Offers  Max Offer");
+    console.log("─".repeat(74));
+    printRows(summaryData.data, (row) =>
+      `${String(row.domain || "").padEnd(27)} ${String(row.pageviews || 0).padStart(5)}  ${String(row.form_events || 0).padStart(5)}  ${String(row.click_events || 0).padStart(6)}  ${String(row.offers || 0).padStart(6)}  ${row.max_offer_usd ? "$" + Number(row.max_offer_usd).toLocaleString() : "—"}`,
+    );
   } catch (e) {
-    console.log("  (no Analytics Engine data yet — deploy the worker first)\n");
+    console.log("  (no Analytics Engine data yet — ensure worker + dataset are configured)");
   }
 
-  // ── 2. Top referrers ─────────────────────────────────────────────
+  // ── 2) Action mix ───────────────────────────────────────────────
+  const actionSql = `
+    SELECT blob5 AS action, COUNT(*) AS hits
+    FROM ${DATASET}
+    WHERE timestamp >= NOW() - INTERVAL '${days}' DAY
+      ${domainFilter}
+    GROUP BY blob5
+    ORDER BY hits DESC
+    LIMIT 30
+  `;
+
+  try {
+    const actionData = await query(actionSql);
+    console.log("\n\nAction Mix");
+    console.log("─".repeat(50));
+    printRows(actionData.data, (row) =>
+      `  ${String(row.action || "unknown").padEnd(24)} ${row.hits}`,
+    );
+  } catch {
+    /* ignore */
+  }
+
+  // ── 3) Top click targets/labels (blob6 context) ────────────────
+  const clickSql = `
+    SELECT blob6 AS context, COUNT(*) AS hits
+    FROM ${DATASET}
+    WHERE timestamp >= NOW() - INTERVAL '${days}' DAY
+      AND blob5 LIKE '%click'
+      ${domainFilter}
+    GROUP BY blob6
+    ORDER BY hits DESC
+    LIMIT 20
+  `;
+
+  try {
+    const clickData = await query(clickSql);
+    console.log("\n\nTop click contexts");
+    console.log("─".repeat(50));
+    printRows(clickData.data, (row) => {
+      const context = row.context || "(none)";
+      return `  ${String(context).slice(0, 80).padEnd(82)} ${row.hits}`;
+    });
+  } catch {
+    /* ignore */
+  }
+
+  // ── 4) Top referrers ────────────────────────────────────────────
   const refSql = `
     SELECT blob3 AS referrer, COUNT(*) AS hits
     FROM ${DATASET}
@@ -95,17 +144,17 @@ async function main() {
   `;
 
   try {
+    const refData = await query(refSql);
     console.log("\n\nTop Referrers");
     console.log("─".repeat(50));
-    const refData = await query(refSql);
-    for (const row of refData.data || []) {
-      console.log(`  ${(row.referrer || "direct").padEnd(35)} ${row.hits}`);
-    }
+    printRows(refData.data, (row) =>
+      `  ${String(row.referrer || "direct").padEnd(35)} ${row.hits}`,
+    );
   } catch {
-    /* ignore if no data */
+    /* ignore */
   }
 
-  // ── 3. Top countries ──────────────────────────────────────────────
+  // ── 5) Top countries ────────────────────────────────────────────
   const geoSql = `
     SELECT blob4 AS country, COUNT(*) AS hits
     FROM ${DATASET}
@@ -118,17 +167,17 @@ async function main() {
   `;
 
   try {
+    const geoData = await query(geoSql);
     console.log("\n\nTop Countries");
     console.log("─".repeat(50));
-    const geoData = await query(geoSql);
-    for (const row of geoData.data || []) {
-      console.log(`  ${(row.country || "XX").padEnd(10)} ${row.hits}`);
-    }
+    printRows(geoData.data, (row) =>
+      `  ${String(row.country || "XX").padEnd(10)} ${row.hits}`,
+    );
   } catch {
-    /* ignore if no data */
+    /* ignore */
   }
 
-  // ── 4. Unique visitors (approximation via index1 hash) ───────────
+  // ── 6) Approx unique visitors ───────────────────────────────────
   const uvSql = `
     SELECT
       blob1 AS domain,
@@ -139,18 +188,18 @@ async function main() {
       ${domainFilter}
     GROUP BY blob1
     ORDER BY unique_visitors DESC
-    LIMIT 50
+    LIMIT 60
   `;
 
   try {
+    const uvData = await query(uvSql);
     console.log("\n\nUnique Visitors (approx)");
     console.log("─".repeat(50));
-    const uvData = await query(uvSql);
-    for (const row of uvData.data || []) {
-      console.log(`  ${(row.domain || "").padEnd(30)} ${row.unique_visitors}`);
-    }
+    printRows(uvData.data, (row) =>
+      `  ${String(row.domain || "").padEnd(30)} ${row.unique_visitors}`,
+    );
   } catch {
-    /* ignore if no data */
+    /* ignore */
   }
 
   console.log("\n");

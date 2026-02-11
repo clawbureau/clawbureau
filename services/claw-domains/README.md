@@ -1,70 +1,76 @@
 # claw-domains
 
-Multi-domain landing page & inquiry capture for parked Claw Bureau domains.
+Multi-domain landing and ecosystem navigation service for parked Claw Bureau domains.
 
-One Worker serves **20 domains** with two page types:
-- **For-sale** (5 domains) — branded "available" page + BIN price + offer form
-- **Coming-soon** (15 domains) — ecosystem holding page linking to clawbureau.com
+This Worker serves domain-specific pages with:
+- clearer purpose copy per domain
+- logical cross-domain links (related services + live surfaces)
+- richer event analytics (pageviews + click taxonomy + form intent)
+- ecosystem map UI (`/ecosystem`) and machine-readable catalog (`/api/domains`)
 
-## Live domains
+## Page modes
 
-### For sale
-| Domain | BIN Price | URL |
-|--------|----------|-----|
-| clawinsure.com | $79,000 | https://clawinsure.com |
-| clawsettle.com | $59,000 | https://clawsettle.com |
-| clawportfolio.com | $39,000 | https://clawportfolio.com |
-| clawadvisory.com | $29,000 | https://clawadvisory.com |
-| clawcareers.com | $24,000 | https://clawcareers.com |
+Configured in `src/config.ts`:
+- **for_sale**: premium domain page with BIN benchmark + inquiry form
+- **coming_soon**: purpose-forward page with related links and live alternatives
+- **redirect**: hard redirect to canonical destination
 
-### Coming soon
-clawrep · clawsig · clawea · clawsilo · clawdelegate · clawintel · clawtrials · clawcontrols · clawmanage · clawlogs · clawforhire · clawsupply · clawincome · clawgrant · clawgang
+## Public endpoints
 
-### Known issue
-`clawmerch.com` — Cloudflare Registrar parking override (172.16.16.16). Needs manual fix in CF dashboard.
+- `GET /health`
+- `GET /ecosystem` — full domain map grouped by pillar/status
+- `GET /api/domains[?host=<domain>]` — ecosystem/domain metadata JSON
+- `POST /api/inquiries` — submit offer/inquiry
+- `POST /api/track` — lightweight click/CTA tracking beacon
 
-## Infrastructure
+## Admin endpoints
 
-- **Worker:** `claw-domains` (Cloudflare Workers)
-- **D1:** `claw-domains` (inquiry storage)
-- **Analytics Engine:** `claw_domain_visits` (cross-domain visit tracking)
-- **SSL:** Full mode + Universal SSL + Always-Use-HTTPS on all 21 zones
+Require: `Authorization: Bearer <ADMIN_TOKEN>`
 
-## API
+- `GET /api/inquiries?domain=clawinsure.com&limit=100`
+- `GET /api/analytics` (D1 inquiry summary)
 
-### Public
-- `GET /health` — health check
-- `POST /api/inquiries` — submit an offer/inquiry (from landing page form)
+## Analytics dataset
 
-### Admin (requires `Authorization: Bearer <ADMIN_TOKEN>`)
-- `GET /api/inquiries?domain=clawinsure.com&limit=100` — list inquiries
-- `GET /api/analytics` — cross-domain inquiry summary
+Analytics Engine dataset: `claw_domain_visits`
 
-Admin token: `~/.clawbureau-secrets/claw_domains_admin_token.txt`
+Current event schema (`services/claw-domains/src/analytics.ts`):
+- `blob1` hostname
+- `blob2` path+query
+- `blob3` referrer domain
+- `blob4` country
+- `blob5` action (`pageview`, `inquiry`, `offer`, `*_click`)
+- `blob6` context (`label`, `target`, UA snippet)
+- `double2` numeric value (offer amount, if present)
+- `index1` pseudo visitor hash
 
-## Analytics scripts
+Query script:
 
 ```bash
-# Cross-domain visit analytics (requires CF API token with Analytics Engine read)
-CF_API_TOKEN=... node scripts/query-analytics.mjs
-CF_API_TOKEN=... node scripts/query-analytics.mjs --days 7 --domain clawinsure.com
+CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs
+CF_API_TOKEN=... CF_ACCOUNT_ID=... node scripts/query-analytics.mjs --days 7 --domain clawinsure.com
+```
 
-# DNS query volume across all claw* zones
-CF_API_TOKEN=... node scripts/query-dns.mjs
+DNS demand script:
+
+```bash
 CF_API_TOKEN=... node scripts/query-dns.mjs --days 7
 ```
 
-## Config
-
-Domain config lives in `src/config.ts`. To change pricing, add/remove domains, or switch modes, edit the config and redeploy:
+## Deploy
 
 ```bash
-cd monorepo/services/claw-domains
-npx wrangler deploy
+cd services/claw-domains
+npm install
+npm run typecheck
+npm run deploy
+# or staging
+npm run deploy:staging
 ```
 
 ## D1 migrations
 
 ```bash
 wrangler d1 migrations apply claw-domains --remote
+wrangler d1 migrations apply claw-domains-staging --env staging --remote
 ```

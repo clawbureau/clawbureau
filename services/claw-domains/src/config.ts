@@ -1,153 +1,457 @@
 /* ------------------------------------------------------------------ */
 /*  Per-domain configuration                                          */
 /*                                                                    */
-/*  Domains with active services (bounties, escrow, verify, etc.)     */
-/*  are NOT listed here — they have their own Workers.                */
-/*                                                                    */
-/*  Modes:                                                            */
-/*    for_sale     — "This domain may be available" + offer form      */
-/*    coming_soon  — branded holding page linking to clawbureau.com   */
-/*    redirect     — 301 to another URL                               */
+/*  Domains with active services are listed in ECOSYSTEM_DOMAINS,     */
+/*  but only parked/landing domains belong in DOMAIN_MAP routes here. */
 /* ------------------------------------------------------------------ */
 
-import type { DomainConfig } from "./types.js";
+import type { DomainConfig, EcosystemDomain } from "./types.js";
 
+export const ECOSYSTEM_DOMAINS: EcosystemDomain[] = [
+  // Live services
+  {
+    domain: "clawbounties.com",
+    status: "live",
+    active_service: true,
+    pillar: "Labor & Delegation",
+    tagline: "Verified AI work marketplace",
+    purpose: "Post, accept, and settle bounties with trust-tier and proof enforcement.",
+  },
+  {
+    domain: "clawbureau.com",
+    status: "live",
+    active_service: true,
+    pillar: "Governance & Risk Controls",
+    tagline: "Ecosystem control plane",
+    purpose: "Main ecosystem portal for docs, APIs, and service navigation.",
+  },
+  {
+    domain: "clawclaim.com",
+    status: "live",
+    active_service: true,
+    pillar: "Identity & Trust",
+    tagline: "DID claim and binding service",
+    purpose: "Bind and verify portable identity claims for agents and operators.",
+  },
+  {
+    domain: "clawcontrols.com",
+    status: "live",
+    active_service: true,
+    pillar: "Governance & Risk Controls",
+    tagline: "Policy controls and WPC registry",
+    purpose: "Manage signed Work Policy Contracts and policy constraints.",
+  },
+  {
+    domain: "clawcuts.com",
+    status: "live",
+    active_service: true,
+    pillar: "Economy & Settlement",
+    tagline: "Fee and pricing policy engine",
+    purpose: "Compute fee policy and cost disclosure used by market rails.",
+  },
+  {
+    domain: "clawescrow.com",
+    status: "live",
+    active_service: true,
+    pillar: "Economy & Settlement",
+    tagline: "Escrow rails for agent work",
+    purpose: "Hold, release, and reconcile milestone funds with dispute hooks.",
+  },
+  {
+    domain: "clawledger.com",
+    status: "live",
+    active_service: true,
+    pillar: "Economy & Settlement",
+    tagline: "Event ledger and balances",
+    purpose: "Durable ledger for balances, events, and settlement accounting.",
+  },
+  {
+    domain: "clawlogs.com",
+    status: "live",
+    active_service: true,
+    pillar: "Identity & Trust",
+    tagline: "Transparency log and inclusion proofs",
+    purpose: "Append-only Merkle transparency logs with signed roots and proofs.",
+  },
+  {
+    domain: "clawproxy.com",
+    status: "live",
+    active_service: true,
+    pillar: "Infrastructure",
+    tagline: "Receipted gateway for model calls",
+    purpose: "Policy-enforced model gateway issuing signed PoH receipts.",
+  },
+  {
+    domain: "clawscope.com",
+    status: "live",
+    active_service: true,
+    pillar: "Infrastructure",
+    tagline: "Scoped token issuer",
+    purpose: "Issue scoped CST tokens and deterministic scope hashes for receipt binding.",
+  },
+  {
+    domain: "clawverify.com",
+    status: "live",
+    active_service: true,
+    pillar: "Identity & Trust",
+    tagline: "Verification API",
+    purpose: "Fail-closed verification for receipts, bundles, attestations, and claims.",
+  },
+  {
+    domain: "joinclaw.com",
+    status: "live",
+    active_service: true,
+    pillar: "Community & Growth",
+    tagline: "Ecosystem onboarding",
+    purpose: "Entry point for onboarding, narrative, and ecosystem discovery.",
+  },
+
+  // Building / planned domains
+  {
+    domain: "clawea.com",
+    status: "building",
+    pillar: "Labor & Delegation",
+    tagline: "Enterprise hosted OpenClaw sandboxes",
+    purpose: "One-click secure enterprise agent deployment with execution attestations.",
+  },
+  {
+    domain: "clawsilo.com",
+    status: "building",
+    pillar: "Infrastructure",
+    tagline: "Artifact and workspace storage",
+    purpose: "Persist proof artifacts and long-running workspace state with controls.",
+  },
+  {
+    domain: "clawdelegate.com",
+    status: "building",
+    pillar: "Labor & Delegation",
+    tagline: "Delegation and approvals",
+    purpose: "Policy-scoped delegation workflows with approval gates and auditability.",
+  },
+  {
+    domain: "clawrep.com",
+    status: "building",
+    pillar: "Identity & Trust",
+    tagline: "Portable reputation layer",
+    purpose: "Compute and publish trust/reputation signals from verified outcomes.",
+  },
+  {
+    domain: "clawproviders.com",
+    status: "building",
+    pillar: "Labor & Delegation",
+    tagline: "Provider registry",
+    purpose: "Onboard and classify providers, connectors, and capability packs.",
+  },
+  {
+    domain: "clawmanage.com",
+    status: "building",
+    pillar: "Governance & Risk Controls",
+    tagline: "Operational admin cockpit",
+    purpose: "Case operations, policy controls, and fleet governance workflows.",
+  },
+  {
+    domain: "clawintel.com",
+    status: "planned",
+    pillar: "Infrastructure",
+    tagline: "Risk intelligence",
+    purpose: "Detect fraud, collusion, and anomalous behavior across ecosystem events.",
+  },
+  {
+    domain: "clawtrials.com",
+    status: "planned",
+    pillar: "Governance & Risk Controls",
+    tagline: "Dispute arbitration",
+    purpose: "Run dispute workflows with evidence review and deterministic outcomes.",
+  },
+  {
+    domain: "clawforhire.com",
+    status: "planned",
+    pillar: "Labor & Delegation",
+    tagline: "For-hire agent services",
+    purpose: "Long-form service engagements with policy and escrow-backed workflows.",
+  },
+  {
+    domain: "clawsupply.com",
+    status: "planned",
+    pillar: "Economy & Settlement",
+    tagline: "Supply marketplace",
+    purpose: "Coordinate compute/work supply and demand in trusted market rails.",
+  },
+  {
+    domain: "clawincome.com",
+    status: "planned",
+    pillar: "Economy & Settlement",
+    tagline: "Income and statements",
+    purpose: "Produce payout statements, exports, and accounting-ready records.",
+  },
+  {
+    domain: "clawgrant.com",
+    status: "planned",
+    pillar: "Community & Growth",
+    tagline: "Grant and incentives",
+    purpose: "Coordinate grants and incentive programs for ecosystem builders.",
+  },
+  {
+    domain: "clawgang.com",
+    status: "planned",
+    pillar: "Community & Growth",
+    tagline: "Community hub",
+    purpose: "Community activations, events, and social coordination.",
+  },
+  {
+    domain: "clawmerch.com",
+    status: "planned",
+    pillar: "Community & Growth",
+    tagline: "Official merch",
+    purpose: "Brand and community commerce storefront.",
+  },
+  {
+    domain: "clawsig.com",
+    status: "planned",
+    pillar: "Identity & Trust",
+    tagline: "Public signing services",
+    purpose: "Key management and signature workflows for portable proofs.",
+  },
+
+  // Strategic for-sale domains
+  {
+    domain: "clawinsure.com",
+    status: "for_sale",
+    pillar: "Economy & Settlement",
+    tagline: "Insurance rails",
+    purpose: "Insurance and underwriting surface for verified AI work.",
+  },
+  {
+    domain: "clawsettle.com",
+    status: "for_sale",
+    pillar: "Economy & Settlement",
+    tagline: "Settlement rails",
+    purpose: "Settlement and payout orchestration brand candidate.",
+  },
+  {
+    domain: "clawportfolio.com",
+    status: "for_sale",
+    pillar: "Community & Growth",
+    tagline: "Portfolio surface",
+    purpose: "Public proof-backed portfolio and capability showcase brand.",
+  },
+  {
+    domain: "clawadvisory.com",
+    status: "for_sale",
+    pillar: "Governance & Risk Controls",
+    tagline: "Advisory workflows",
+    purpose: "Advisory, policy, and compliance consulting brand candidate.",
+  },
+  {
+    domain: "clawcareers.com",
+    status: "for_sale",
+    pillar: "Labor & Delegation",
+    tagline: "Careers brand",
+    purpose: "Talent and hiring surface for agent-economy roles.",
+  },
+];
+
+export const ECOSYSTEM_BY_DOMAIN: Record<string, EcosystemDomain> = Object.fromEntries(
+  ECOSYSTEM_DOMAINS.map((d) => [d.domain, d]),
+);
+
+/**
+ * Domains served by this worker as parked/coming-soon pages.
+ * NOTE: Do not include domains with dedicated service workers unless this
+ * worker is intentionally used for apex marketing pages.
+ */
 export const DOMAIN_MAP: Record<string, DomainConfig> = {
-  /* ── For-sale candidates (highest resale / lowest ecosystem need) ── */
+  // For-sale candidates
   "clawinsure.com": {
     mode: "for_sale",
+    status_hint: "for_sale",
     bin_price: 79_000,
     tagline: "Insurance infrastructure for the agent economy",
     pillar: "Economy & Settlement",
+    purpose: "Brand candidate for insurance and underwriting layers over verified AI work.",
+    related_domains: ["clawescrow.com", "clawledger.com", "clawverify.com", "clawbounties.com"],
   },
   "clawsettle.com": {
     mode: "for_sale",
+    status_hint: "for_sale",
     bin_price: 59_000,
     tagline: "Settlement and payout rails",
     pillar: "Economy & Settlement",
+    purpose: "Brand candidate for global settlement, payouts, and netting services.",
+    related_domains: ["clawledger.com", "clawescrow.com", "clawincome.com", "clawcuts.com"],
   },
   "clawportfolio.com": {
     mode: "for_sale",
+    status_hint: "for_sale",
     bin_price: 39_000,
-    tagline: "Agent portfolio and showcase platform",
+    tagline: "Public proof-backed portfolio surface",
     pillar: "Community & Growth",
+    purpose: "Brand candidate for identity, showcase, and trust-backed profile experiences.",
+    related_domains: ["clawrep.com", "clawverify.com", "clawclaim.com", "joinclaw.com"],
   },
   "clawadvisory.com": {
     mode: "for_sale",
+    status_hint: "for_sale",
     bin_price: 29_000,
-    tagline: "Governance and advisory services",
+    tagline: "Advisory and governance consulting",
     pillar: "Governance & Risk Controls",
+    purpose: "Brand candidate for advisory and governance offerings around policy and trust.",
+    related_domains: ["clawcontrols.com", "clawmanage.com", "clawverify.com", "clawtrials.com"],
   },
   "clawcareers.com": {
     mode: "for_sale",
+    status_hint: "for_sale",
     bin_price: 24_000,
-    tagline: "Careers in the agent economy",
+    tagline: "Careers in the verified agent economy",
     pillar: "Labor & Delegation",
+    purpose: "Brand candidate for roles, hiring pipelines, and talent marketplace expansion.",
+    related_domains: ["clawbounties.com", "clawforhire.com", "joinclaw.com", "clawproviders.com"],
   },
 
-  /* ── Coming-soon — planned ecosystem services, not yet live ─────── */
+  // Coming-soon branded pages
   "clawrep.com": {
     mode: "coming_soon",
+    status_hint: "building",
     tagline: "Portable reputation for AI agents",
     pillar: "Identity & Trust",
+    purpose: "Reputation and trust-score services built from verified market outcomes.",
+    related_domains: ["clawverify.com", "clawclaim.com", "clawbounties.com", "clawlogs.com"],
   },
   "clawsig.com": {
     mode: "coming_soon",
-    tagline: "Public signing and attestation service",
+    status_hint: "planned",
+    tagline: "Signing and attestation service",
     pillar: "Identity & Trust",
+    purpose: "Portable signing services for artifacts, attestations, and workflow decisions.",
+    related_domains: ["clawverify.com", "clawclaim.com", "clawlogs.com", "clawrep.com"],
   },
   "clawea.com": {
     mode: "coming_soon",
-    tagline: "Execution attestation and sandbox proofs",
+    status_hint: "building",
+    tagline: "Secure hosted OpenClaw execution",
     pillar: "Labor & Delegation",
+    purpose: "Enterprise hosted OpenClaw sandboxes with policy controls and execution attestations.",
+    related_domains: ["clawproxy.com", "clawcontrols.com", "clawverify.com", "clawlogs.com"],
   },
   "clawsilo.com": {
     mode: "coming_soon",
-    tagline: "Encrypted artifact storage for proof bundles",
+    status_hint: "building",
+    tagline: "Artifact and workspace storage",
     pillar: "Infrastructure",
+    purpose: "Content-addressed storage for proof artifacts and persistent workspaces.",
+    related_domains: ["clawverify.com", "clawlogs.com", "clawea.com", "clawproxy.com"],
   },
   "clawdelegate.com": {
     mode: "coming_soon",
+    status_hint: "building",
     tagline: "Delegation and approval workflows",
     pillar: "Labor & Delegation",
+    purpose: "Role-aware delegation workflows with policy-scoped approvals and audit trails.",
+    related_domains: ["clawcontrols.com", "clawscope.com", "clawea.com", "clawmanage.com"],
   },
   "clawintel.com": {
     mode: "coming_soon",
-    tagline: "Fraud detection and risk intelligence",
+    status_hint: "planned",
+    tagline: "Risk and fraud intelligence",
     pillar: "Infrastructure",
+    purpose: "Detection and intelligence services for abuse, collusion, and policy anomalies.",
+    related_domains: ["clawlogs.com", "clawverify.com", "clawrep.com", "clawmanage.com"],
   },
   "clawtrials.com": {
     mode: "coming_soon",
-    tagline: "Dispute arbitration and resolution",
+    status_hint: "planned",
+    tagline: "Dispute arbitration",
     pillar: "Governance & Risk Controls",
-  },
-  "clawcontrols.com": {
-    mode: "coming_soon",
-    tagline: "Policy controls and kill switches",
-    pillar: "Governance & Risk Controls",
+    purpose: "Evidence-driven dispute workflows and arbitration outcomes for marketplace actions.",
+    related_domains: ["clawescrow.com", "clawverify.com", "clawlogs.com", "clawmanage.com"],
   },
   "clawmanage.com": {
     mode: "coming_soon",
-    tagline: "Admin operations and case management",
+    status_hint: "building",
+    tagline: "Operations and governance cockpit",
     pillar: "Governance & Risk Controls",
-  },
-  "clawlogs.com": {
-    mode: "coming_soon",
-    tagline: "Tamper-evident audit logging",
-    pillar: "Identity & Trust",
+    purpose: "Central operating cockpit for policy, case ops, and fleet governance workflows.",
+    related_domains: ["clawcontrols.com", "clawscope.com", "clawea.com", "clawlogs.com"],
   },
   "clawforhire.com": {
     mode: "coming_soon",
-    tagline: "Agent services marketplace",
+    status_hint: "planned",
+    tagline: "For-hire agent services",
     pillar: "Labor & Delegation",
+    purpose: "Service engagements and talent matching for enterprise AI operations.",
+    related_domains: ["clawbounties.com", "clawproviders.com", "clawdelegate.com", "joinclaw.com"],
   },
   "clawproviders.com": {
     mode: "coming_soon",
+    status_hint: "building",
     tagline: "Provider registry and onboarding",
     pillar: "Labor & Delegation",
+    purpose: "Provider onboarding and capability registry for connectors, models, and operations.",
+    related_domains: ["clawbounties.com", "clawscope.com", "clawproxy.com", "joinclaw.com"],
   },
   "clawsupply.com": {
     mode: "coming_soon",
+    status_hint: "planned",
     tagline: "Compute and work supply marketplace",
     pillar: "Economy & Settlement",
+    purpose: "Supply-side marketplace for trusted compute and delivery capacity.",
+    related_domains: ["clawproviders.com", "clawledger.com", "clawescrow.com", "clawintel.com"],
   },
   "clawincome.com": {
     mode: "coming_soon",
-    tagline: "Statements, invoices, and tax exports",
+    status_hint: "planned",
+    tagline: "Statements and payout exports",
     pillar: "Economy & Settlement",
+    purpose: "Income statements, invoicing surfaces, and accounting exports.",
+    related_domains: ["clawledger.com", "clawsettle.com", "clawcuts.com", "clawbounties.com"],
   },
   "clawgrant.com": {
     mode: "coming_soon",
-    tagline: "Protocol grants and funding",
+    status_hint: "planned",
+    tagline: "Grants and ecosystem incentives",
     pillar: "Community & Growth",
+    purpose: "Grant and incentive workflows to accelerate ecosystem builders.",
+    related_domains: ["joinclaw.com", "clawgang.com", "clawbureau.com", "clawbounties.com"],
   },
   "clawgang.com": {
     mode: "coming_soon",
-    tagline: "Community hub and events",
+    status_hint: "planned",
+    tagline: "Community and events hub",
     pillar: "Community & Growth",
+    purpose: "Community coordination for contributors, teams, and ecosystem events.",
+    related_domains: ["joinclaw.com", "clawgrant.com", "clawportfolio.com", "clawbureau.com"],
   },
   "clawmerch.com": {
     mode: "coming_soon",
-    tagline: "Official Claw Bureau merchandise",
+    status_hint: "planned",
+    tagline: "Official ecosystem merch",
     pillar: "Community & Growth",
+    purpose: "Brand and community commerce surfaces.",
+    related_domains: ["clawgang.com", "joinclaw.com", "clawbureau.com", "clawgrant.com"],
   },
   "clawscope.com": {
     mode: "redirect",
+    status_hint: "live",
     tagline: "Scoped tokens and observability",
     pillar: "Infrastructure",
+    purpose: "Token scope and observability controls behind core service APIs.",
     redirect_url: "https://clawbureau.com",
+    related_domains: ["clawproxy.com", "clawverify.com", "clawcontrols.com", "clawmanage.com"],
   },
 };
 
-/** Domains that already have their own Workers — never match here */
+/** Domains that currently have dedicated service workers. */
 export const ACTIVE_SERVICE_DOMAINS = new Set([
   "clawbounties.com",
   "clawbureau.com",
   "clawclaim.com",
+  "clawcontrols.com",
   "clawcuts.com",
   "clawescrow.com",
   "clawledger.com",
+  "clawlogs.com",
   "clawproxy.com",
+  "clawscope.com",
   "clawverify.com",
   "joinclaw.com",
 ]);

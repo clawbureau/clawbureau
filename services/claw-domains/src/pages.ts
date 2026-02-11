@@ -1,251 +1,548 @@
 /* ------------------------------------------------------------------ */
-/*  HTML page generators                                              */
+/*  HTML page generators                                               */
 /* ------------------------------------------------------------------ */
 
-import type { DomainConfig } from "./types.js";
-
-/* ── shared CSS ───────────────────────────────────────────────────── */
+import type { DomainConfig, EcosystemDomain } from "./types.js";
 
 const CSS = /* css */ `
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  *,*::before,*::after{box-sizing:border-box}
   :root{
-    --bg:#09090b;--surface:#18181b;--border:#27272a;
-    --text:#fafafa;--muted:#a1a1aa;--accent:#3b82f6;
-    --accent-hover:#2563eb;--green:#22c55e;--amber:#f59e0b;
+    --bg:#070910;
+    --surface:#0f1422;
+    --surface-2:#131a2c;
+    --border:rgba(148,163,184,.22);
+    --text:#e5ecf8;
+    --muted:#9fb2d1;
+    --primary:#62a7ff;
+    --primary-2:#8ed1ff;
+    --green:#3ddc97;
+    --amber:#ffbf5f;
+    --rose:#ff6b8a;
+    --shadow:0 25px 80px rgba(0,0,0,.38);
   }
-  html{font-family:system-ui,-apple-system,BlinkMacSystemFont,
-    'Segoe UI',Roboto,sans-serif;color:var(--text);
-    background:var(--bg);min-height:100vh}
-  body{display:flex;flex-direction:column;align-items:center;
-    justify-content:center;min-height:100vh;padding:2rem 1rem;
-    line-height:1.6}
+  html,body{
+    margin:0;
+    padding:0;
+    min-height:100%;
+    background:
+      radial-gradient(1200px 700px at -15% -15%, rgba(98,167,255,.25), transparent 65%),
+      radial-gradient(900px 520px at 110% -10%, rgba(142,209,255,.18), transparent 60%),
+      linear-gradient(180deg, #070910 0%, #070c16 100%);
+    color:var(--text);
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height:1.6;
+  }
+  a{color:var(--primary);text-decoration:none}
+  a:hover{text-decoration:underline}
 
-  /* layout */
-  .card{background:var(--surface);border:1px solid var(--border);
-    border-radius:1rem;padding:3rem 2.5rem;max-width:540px;
-    width:100%;text-align:center;position:relative;overflow:hidden}
-  .card::before{content:'';position:absolute;inset:0;
-    background:radial-gradient(ellipse at 50% -20%,
-      rgba(59,130,246,.08) 0%,transparent 70%);pointer-events:none}
+  .shell{max-width:1120px;margin:0 auto;padding:24px 18px 56px}
+  .nav{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:14px;padding:12px 14px;border:1px solid var(--border);
+    border-radius:14px;background:rgba(12,17,29,.78);backdrop-filter:blur(8px);
+  }
+  .nav-brand{font-weight:700;letter-spacing:.02em;color:#f4f8ff}
+  .nav-links{display:flex;flex-wrap:wrap;gap:10px 14px;font-size:.9rem}
+  .nav-links a{color:var(--muted)}
+  .nav-links a:hover{color:var(--text);text-decoration:none}
 
-  /* typography */
-  .domain{font-size:clamp(1.6rem,5vw,2.4rem);font-weight:700;
-    letter-spacing:-.02em;margin-bottom:.25rem}
-  .tagline{color:var(--muted);font-size:.95rem;margin-bottom:1.5rem}
-  .pillar{display:inline-block;font-size:.7rem;text-transform:uppercase;
-    letter-spacing:.08em;color:var(--accent);background:rgba(59,130,246,.1);
-    padding:.25rem .75rem;border-radius:9999px;margin-bottom:2rem}
-  .badge{display:inline-block;font-size:.65rem;text-transform:uppercase;
-    letter-spacing:.1em;padding:.2rem .6rem;border-radius:9999px;
-    margin-bottom:1.5rem}
-  .badge-sale{color:var(--green);background:rgba(34,197,94,.1);
-    border:1px solid rgba(34,197,94,.2)}
-  .badge-soon{color:var(--amber);background:rgba(245,158,11,.1);
-    border:1px solid rgba(245,158,11,.2)}
+  .hero{
+    margin-top:16px;
+    background:linear-gradient(165deg, rgba(20,27,46,.84), rgba(10,14,24,.92));
+    border:1px solid var(--border);
+    border-radius:22px;
+    box-shadow:var(--shadow);
+    padding:28px;
+    position:relative;overflow:hidden;
+  }
+  .hero::before{
+    content:"";position:absolute;inset:-30% -10% auto auto;width:420px;height:420px;
+    background:radial-gradient(circle, rgba(98,167,255,.26), transparent 72%);
+    pointer-events:none;
+  }
 
-  /* price */
-  .price{font-size:2rem;font-weight:700;margin-bottom:.25rem}
-  .price-note{color:var(--muted);font-size:.8rem;margin-bottom:2rem}
+  .kicker{font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:var(--primary-2);margin-bottom:10px}
+  .domain{font-size:clamp(1.8rem,4vw,3rem);font-weight:780;line-height:1.1;letter-spacing:-.02em;margin:0 0 10px}
+  .tagline{font-size:1.05rem;color:#c2d5f1;max-width:760px;margin:0}
+  .purpose{margin-top:12px;color:var(--muted);max-width:820px}
 
-  /* form */
-  .form-group{text-align:left;margin-bottom:1rem}
-  label{display:block;font-size:.75rem;text-transform:uppercase;
-    letter-spacing:.06em;color:var(--muted);margin-bottom:.35rem}
-  input,textarea{width:100%;padding:.6rem .8rem;font-size:.9rem;
-    color:var(--text);background:var(--bg);border:1px solid var(--border);
-    border-radius:.5rem;outline:none;transition:border-color .15s}
-  input:focus,textarea:focus{border-color:var(--accent)}
-  textarea{resize:vertical;min-height:80px}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--border);font-size:.78rem;color:#c5d7f5;background:rgba(12,18,32,.8)}
+  .dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+  .dot-live{background:var(--green)}
+  .dot-building{background:var(--amber)}
+  .dot-planned{background:#8b9cb9}
+  .dot-sale{background:var(--rose)}
 
-  button{width:100%;padding:.75rem;font-size:.95rem;font-weight:600;
-    color:#fff;background:var(--accent);border:none;border-radius:.5rem;
-    cursor:pointer;transition:background .15s;margin-top:.5rem}
-  button:hover{background:var(--accent-hover)}
-  button:disabled{opacity:.5;cursor:not-allowed}
+  .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:14px}
+  @media (max-width:920px){.grid{grid-template-columns:1fr}}
 
-  .divider{display:flex;align-items:center;gap:.75rem;
-    margin:1.5rem 0;color:var(--muted);font-size:.8rem}
-  .divider::before,.divider::after{content:'';flex:1;
-    border-top:1px solid var(--border)}
+  .panel{
+    border:1px solid var(--border);border-radius:16px;background:rgba(10,14,24,.72);
+    padding:18px;
+  }
+  .panel h2{margin:0 0 10px;font-size:1rem;letter-spacing:.01em}
+  .panel p{margin:0;color:var(--muted)}
 
-  .or-email{color:var(--muted);font-size:.8rem}
-  .or-email a{color:var(--accent);text-decoration:none}
-  .or-email a:hover{text-decoration:underline}
+  .price-box{margin-top:12px;padding:14px;border-radius:14px;border:1px solid rgba(61,220,151,.28);background:rgba(22,56,42,.22)}
+  .price{font-size:2rem;line-height:1.1;font-weight:760;color:#d7ffe8;margin:0 0 4px}
+  .price-note{margin:0;color:#95c8ac;font-size:.86rem}
 
-  .success{color:var(--green);font-size:.9rem;margin-top:1rem;display:none}
-  .error{color:#ef4444;font-size:.85rem;margin-top:.5rem;display:none}
+  .form{display:grid;gap:10px}
+  .form-row{display:grid;gap:6px}
+  .form-row label{font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:#acc2e6}
+  .form-row input,.form-row textarea{
+    width:100%;border-radius:12px;border:1px solid var(--border);
+    background:rgba(7,11,20,.8);color:var(--text);padding:11px 12px;
+    font:inherit;font-size:.95rem;outline:none;
+  }
+  .form-row input:focus,.form-row textarea:focus{border-color:rgba(98,167,255,.7)}
+  .form-row textarea{min-height:94px;resize:vertical}
 
-  /* footer */
-  footer{margin-top:2.5rem;text-align:center;color:var(--muted);
-    font-size:.75rem}
-  footer a{color:var(--muted);text-decoration:none}
-  footer a:hover{color:var(--text)}
-  .eco-link{display:inline-flex;align-items:center;gap:.35rem}
-  .eco-link svg{width:14px;height:14px}
+  .btn{
+    border:none;border-radius:12px;padding:11px 14px;cursor:pointer;font-weight:640;
+    background:linear-gradient(90deg, #4e8fff, #7db3ff);color:#061225;
+  }
+  .btn:hover{filter:brightness(1.05)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
 
-  /* coming-soon specifics */
-  .cta-link{display:inline-block;margin-top:1.5rem;padding:.6rem 1.5rem;
-    font-size:.9rem;font-weight:600;color:var(--accent);
-    border:1px solid var(--accent);border-radius:.5rem;
-    text-decoration:none;transition:all .15s}
-  .cta-link:hover{background:var(--accent);color:#fff}
+  .status-ok,.status-err{display:none;font-size:.9rem;margin-top:6px}
+  .status-ok{color:#73e2b0}
+  .status-err{color:#ff8da5}
+
+  .cards{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px;margin-top:10px}
+  @media (max-width:760px){.cards{grid-template-columns:1fr}}
+  .card{
+    border:1px solid var(--border);border-radius:14px;background:rgba(12,18,30,.72);
+    padding:12px;
+  }
+  .card .title{font-weight:640;color:#d8e6ff;margin-bottom:4px}
+  .card .desc{font-size:.88rem;color:var(--muted)}
+  .card .meta{margin-top:8px}
+
+  .footer{margin-top:20px;text-align:center;color:var(--muted);font-size:.82rem}
+  .footer a{color:#bfd3f5}
+
+  .ecosystem-wrap{margin-top:16px;display:grid;gap:14px}
+  .pillar{
+    border:1px solid var(--border);border-radius:16px;background:rgba(10,14,24,.74);
+    padding:14px;
+  }
+  .pillar h3{margin:0 0 10px;font-size:1.02rem}
+  .pill-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  @media (max-width:860px){.pill-grid{grid-template-columns:1fr}}
+
+  .domain-link{display:inline-flex;align-items:center;gap:7px;font-weight:650}
+
+  .tiny{font-size:.78rem;color:var(--muted)}
 `;
 
-/* ── JS for the offer form ────────────────────────────────────────── */
+function esc(v: string): string {
+  return v
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
-const FORM_JS = /* js */ `
-(function(){
-  var f=document.getElementById('offer-form');
-  if(!f)return;
-  var btn=f.querySelector('button');
-  var ok=document.getElementById('success');
-  var err=document.getElementById('error');
-  f.addEventListener('submit',function(e){
-    e.preventDefault();
-    btn.disabled=true;btn.textContent='Sending…';
-    err.style.display='none';
-    var d={
-      name:f.elements.name.value,
-      email:f.elements.email.value,
-      offer_amount:parseFloat(f.elements.offer_amount.value)||null,
-      message:f.elements.message.value
-    };
-    fetch('/api/inquiries',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(d)
-    }).then(function(r){
-      if(!r.ok)throw new Error('Failed');
-      f.style.display='none';ok.style.display='block';
-    }).catch(function(){
-      err.style.display='block';err.textContent='Something went wrong. Try emailing us directly.';
-      btn.disabled=false;btn.textContent='Make an Offer';
-    });
-  });
-})();
-`;
-
-/* ── helpers ──────────────────────────────────────────────────────── */
-
-function fmt(n: number): string {
+function fmtUsd(n: number): string {
   return "$" + n.toLocaleString("en-US");
 }
 
-function footerHtml(): string {
-  return `
-  <footer>
-    <a href="https://clawbureau.com" class="eco-link" target="_blank" rel="noopener">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-      </svg>
-      Part of the Claw Bureau ecosystem
-    </a>
-  </footer>`;
+function statusDot(status: string): string {
+  if (status === "live") return "dot-live";
+  if (status === "building") return "dot-building";
+  if (status === "for_sale") return "dot-sale";
+  return "dot-planned";
 }
 
-function beacon(token: string): string {
+function prettyStatus(status: string): string {
+  if (status === "for_sale") return "For sale";
+  if (status === "building") return "Building";
+  if (status === "live") return "Live";
+  return "Planned";
+}
+
+function statusHint(cfg: DomainConfig): string {
+  return prettyStatus(cfg.status_hint ?? (cfg.mode === "for_sale" ? "for_sale" : "building"));
+}
+
+function nav(hostname: string): string {
+  const e = encodeURIComponent(hostname);
+  return `<header class="nav">
+    <div class="nav-brand">Claw Bureau Ecosystem</div>
+    <nav class="nav-links">
+      <a href="https://clawbureau.com" data-track-action="nav_click" data-track-label="nav_bureau" data-track-target="https://clawbureau.com">clawbureau.com</a>
+      <a href="https://clawbounties.com" data-track-action="nav_click" data-track-label="nav_bounties" data-track-target="https://clawbounties.com">clawbounties.com</a>
+      <a href="https://clawproxy.com" data-track-action="nav_click" data-track-label="nav_proxy" data-track-target="https://clawproxy.com">clawproxy.com</a>
+      <a href="https://clawverify.com" data-track-action="nav_click" data-track-label="nav_verify" data-track-target="https://clawverify.com">clawverify.com</a>
+      <a href="/ecosystem" data-track-action="nav_click" data-track-label="nav_ecosystem" data-track-target="/ecosystem">ecosystem map</a>
+      <a href="/api/domains?host=${e}" data-track-action="nav_click" data-track-label="nav_domains_api" data-track-target="/api/domains">domain API</a>
+    </nav>
+  </header>`;
+}
+
+function relatedCards(hostname: string, related: EcosystemDomain[]): string {
+  if (related.length === 0) {
+    return `<p class="tiny">No related links configured yet.</p>`;
+  }
+
+  return `<div class="cards">${related
+    .map((d) => {
+      const href = `https://${d.domain}`;
+      return `<article class="card">
+        <div class="title"><a class="domain-link" href="${href}" target="_blank" rel="noopener" data-track-action="related_click" data-track-label="${esc(hostname)}:related" data-track-target="${esc(href)}"><span class="dot ${statusDot(d.status)}"></span>${esc(d.domain)}</a></div>
+        <div class="desc">${esc(d.purpose)}</div>
+        <div class="meta"><span class="chip">${esc(d.pillar)}</span><span class="chip">${esc(prettyStatus(d.status))}</span></div>
+      </article>`;
+    })
+    .join("")}</div>`;
+}
+
+function featuredCards(hostname: string, domains: EcosystemDomain[]): string {
+  return `<div class="cards">${domains
+    .map((d) => {
+      const href = `https://${d.domain}`;
+      return `<article class="card">
+        <div class="title"><a class="domain-link" href="${href}" target="_blank" rel="noopener" data-track-action="outbound_click" data-track-label="${esc(hostname)}:featured" data-track-target="${esc(href)}"><span class="dot ${statusDot(d.status)}"></span>${esc(d.domain)}</a></div>
+        <div class="desc">${esc(d.tagline)}</div>
+        <div class="tiny">${esc(d.purpose)}</div>
+      </article>`;
+    })
+    .join("")}</div>`;
+}
+
+function analyticsBeacon(token: string): string {
   if (!token) return "";
   return `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"${token}"}'></script>`;
 }
 
-/* ── for-sale page ────────────────────────────────────────────────── */
+function trackingScript(): string {
+  return `<script>
+  (function(){
+    const TRACK_ENDPOINT = '/api/track';
+    function safeJson(data){ try { return JSON.stringify(data); } catch { return null; } }
+    function send(payload){
+      const body = safeJson(payload);
+      if(!body) return;
+      try {
+        if (navigator.sendBeacon) {
+          const blob = new Blob([body], { type: 'application/json' });
+          navigator.sendBeacon(TRACK_ENDPOINT, blob);
+          return;
+        }
+      } catch {}
+      fetch(TRACK_ENDPOINT, {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body,
+        keepalive:true,
+      }).catch(()=>{});
+    }
+
+    window.__clawTrack = send;
+
+    document.addEventListener('click', function(ev){
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const el = t.closest('[data-track-action]');
+      if (!el) return;
+      const action = el.getAttribute('data-track-action');
+      if (!action) return;
+      send({
+        action,
+        label: el.getAttribute('data-track-label') || undefined,
+        target: el.getAttribute('data-track-target') || (el instanceof HTMLAnchorElement ? el.href : undefined),
+      });
+    }, { passive: true });
+  })();
+  </script>`;
+}
+
+function layout(opts: {
+  hostname: string;
+  title: string;
+  description: string;
+  body: string;
+  analyticsToken: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>${esc(opts.title)}</title>
+  <meta name="description" content="${esc(opts.description)}" />
+  <meta name="theme-color" content="#090f1b" />
+  <style>${CSS}</style>
+</head>
+<body>
+  <main class="shell">
+    ${nav(opts.hostname)}
+    ${opts.body}
+    <footer class="footer">
+      Part of the <a href="https://clawbureau.com" target="_blank" rel="noopener" data-track-action="nav_click" data-track-label="footer_bureau" data-track-target="https://clawbureau.com">Claw Bureau ecosystem</a> ·
+      <a href="/ecosystem" data-track-action="nav_click" data-track-label="footer_ecosystem" data-track-target="/ecosystem">view ecosystem map</a>
+    </footer>
+  </main>
+  ${trackingScript()}
+  ${analyticsBeacon(opts.analyticsToken)}
+</body>
+</html>`;
+}
 
 export function forSalePage(
   hostname: string,
   cfg: DomainConfig,
   analyticsToken: string,
   contactEmail: string,
+  related: EcosystemDomain[],
+  featured: EcosystemDomain[],
 ): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>${hostname} — Premium Domain Available</title>
-  <meta name="description" content="${hostname} is a premium domain in the Claw Bureau ecosystem. Make an offer.">
-  <meta name="robots" content="noindex">
-  <style>${CSS}</style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge badge-sale">Available</span>
-    <h1 class="domain">${hostname}</h1>
-    <p class="tagline">${cfg.tagline}</p>
-    <span class="pillar">${cfg.pillar}</span>
+  const formScript = `<script>
+    (function(){
+      const form = document.getElementById('offer-form');
+      if (!form) return;
+      const btn = form.querySelector('button');
+      const ok = document.getElementById('status-ok');
+      const err = document.getElementById('status-err');
 
-    ${cfg.bin_price ? `<div class="price">${fmt(cfg.bin_price)}</div><p class="price-note">Buy it now — or make an offer</p>` : ""}
+      form.addEventListener('submit', async function(e){
+        e.preventDefault();
+        if (!(btn instanceof HTMLButtonElement)) return;
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+        if (ok) ok.style.display = 'none';
+        if (err) err.style.display = 'none';
 
-    <form id="offer-form" autocomplete="on">
-      <div class="form-group">
-        <label for="name">Your name</label>
-        <input id="name" name="name" type="text" required placeholder="Jane Smith">
-      </div>
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input id="email" name="email" type="email" required placeholder="jane@company.com">
-      </div>
-      <div class="form-group">
-        <label for="offer_amount">Your offer (USD)</label>
-        <input id="offer_amount" name="offer_amount" type="number" min="100" step="100"
-          placeholder="${cfg.bin_price ? Math.round(cfg.bin_price * 0.6).toLocaleString("en-US") : "10000"}">
-      </div>
-      <div class="form-group">
-        <label for="message">Message (optional)</label>
-        <textarea id="message" name="message" rows="3" placeholder="Tell us about your project…"></textarea>
-      </div>
-      <button type="submit">Make an Offer</button>
-      <div id="error" class="error"></div>
-    </form>
-    <div id="success" class="success">
-      ✓ Offer received — we'll be in touch within 48 hours.
+        const payload = {
+          name: form.name.value,
+          email: form.email.value,
+          offer_amount: form.offer_amount.value ? Number(form.offer_amount.value) : null,
+          message: form.message.value,
+        };
+
+        try {
+          const res = await fetch('/api/inquiries', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) throw new Error('submit_failed');
+
+          if (window.__clawTrack) {
+            window.__clawTrack({
+              action: payload.offer_amount ? 'offer' : 'inquiry',
+              label: '${esc(hostname)}:form_submit',
+              target: '/api/inquiries',
+              value: payload.offer_amount || 0,
+            });
+          }
+
+          form.reset();
+          if (ok) ok.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Submit interest';
+        } catch {
+          if (err) err.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Submit interest';
+        }
+      });
+    })();
+  </script>`;
+
+  const body = `
+  <section class="hero">
+    <div class="kicker">Premium domain opportunity</div>
+    <h1 class="domain">${esc(hostname)}</h1>
+    <p class="tagline">${esc(cfg.tagline)}</p>
+    <p class="purpose">${esc(cfg.purpose)}</p>
+    <div class="meta">
+      <span class="chip"><span class="dot ${statusDot(cfg.status_hint ?? "for_sale")}"></span>${esc(statusHint(cfg))}</span>
+      <span class="chip">${esc(cfg.pillar)}</span>
+      ${cfg.bin_price ? `<span class="chip">BIN ${fmtUsd(cfg.bin_price)}</span>` : ""}
     </div>
+  </section>
 
-    <div class="divider">or</div>
-    <p class="or-email">
-      Email us at <a href="mailto:${contactEmail}?subject=Inquiry: ${hostname}">${contactEmail}</a>
-    </p>
-  </div>
-  ${footerHtml()}
-  ${beacon(analyticsToken)}
-  <script>${FORM_JS}</script>
-</body>
-</html>`;
+  <section class="grid">
+    <article class="panel">
+      <h2>Why this domain matters</h2>
+      <p>This domain aligns to the <strong>${esc(cfg.pillar)}</strong> pillar and can anchor a focused product narrative in the Claw ecosystem.</p>
+      ${cfg.bin_price ? `<div class="price-box"><p class="price">${fmtUsd(cfg.bin_price)}</p><p class="price-note">Buy-it-now benchmark · open to strategic offers</p></div>` : ""}
+
+      <h2 style="margin-top:14px">Related ecosystem services</h2>
+      ${relatedCards(hostname, related)}
+    </article>
+
+    <article class="panel">
+      <h2>Express interest</h2>
+      <p class="tiny" style="margin-bottom:10px">We review strategic offers quickly. Tell us your intended use and timing.</p>
+      <form id="offer-form" class="form" autocomplete="on">
+        <div class="form-row">
+          <label for="name">Name</label>
+          <input id="name" name="name" required placeholder="Jane Smith" />
+        </div>
+        <div class="form-row">
+          <label for="email">Email</label>
+          <input id="email" type="email" name="email" required placeholder="jane@company.com" />
+        </div>
+        <div class="form-row">
+          <label for="offer_amount">Offer amount (USD)</label>
+          <input id="offer_amount" name="offer_amount" type="number" min="100" step="100" placeholder="${cfg.bin_price ? Math.round(cfg.bin_price * 0.65).toLocaleString("en-US") : "10000"}" />
+        </div>
+        <div class="form-row">
+          <label for="message">Message</label>
+          <textarea id="message" name="message" placeholder="Intended product, budget range, and timing"></textarea>
+        </div>
+        <button class="btn" type="submit">Submit interest</button>
+        <div id="status-ok" class="status-ok">✓ Received. We will reply within 48 hours.</div>
+        <div id="status-err" class="status-err">Could not submit. Please email ${esc(contactEmail)} directly.</div>
+      </form>
+
+      <p class="tiny" style="margin-top:10px">
+        Or email
+        <a href="mailto:${esc(contactEmail)}?subject=${encodeURIComponent(`Domain inquiry: ${hostname}`)}" data-track-action="cta_click" data-track-label="${esc(hostname)}:email_cta" data-track-target="mailto:${esc(contactEmail)}">${esc(contactEmail)}</a>
+      </p>
+    </article>
+  </section>
+
+  <section class="panel" style="margin-top:14px">
+    <h2>Explore live ecosystem surfaces</h2>
+    <p class="tiny">These services are already running and can inform acquisition strategy.</p>
+    ${featuredCards(hostname, featured)}
+  </section>
+
+  ${formScript}
+  `;
+
+  return layout({
+    hostname,
+    title: `${hostname} — premium domain opportunity`,
+    description: cfg.purpose,
+    body,
+    analyticsToken,
+  });
 }
-
-/* ── coming-soon page ─────────────────────────────────────────────── */
 
 export function comingSoonPage(
   hostname: string,
   cfg: DomainConfig,
   analyticsToken: string,
+  related: EcosystemDomain[],
+  featured: EcosystemDomain[],
 ): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>${hostname} — Coming Soon</title>
-  <meta name="description" content="${hostname} — ${cfg.tagline}. Part of the Claw Bureau agent economy.">
-  <style>${CSS}</style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge badge-soon">Coming Soon</span>
-    <h1 class="domain">${hostname}</h1>
-    <p class="tagline">${cfg.tagline}</p>
-    <span class="pillar">${cfg.pillar}</span>
+  const body = `
+  <section class="hero">
+    <div class="kicker">Ecosystem build track</div>
+    <h1 class="domain">${esc(hostname)}</h1>
+    <p class="tagline">${esc(cfg.tagline)}</p>
+    <p class="purpose">${esc(cfg.purpose)}</p>
+    <div class="meta">
+      <span class="chip"><span class="dot ${statusDot(cfg.status_hint ?? "building")}"></span>${esc(statusHint(cfg))}</span>
+      <span class="chip">${esc(cfg.pillar)}</span>
+    </div>
+  </section>
 
-    <p style="color:var(--muted);font-size:.9rem;margin-top:1rem">
-      This service is under development as part of the
-      <strong style="color:var(--text)">Claw Bureau</strong> ecosystem.
+  <section class="grid">
+    <article class="panel">
+      <h2>Current purpose</h2>
+      <p>${esc(cfg.purpose)}</p>
+
+      <h2 style="margin-top:14px">Related services</h2>
+      ${relatedCards(hostname, related)}
+    </article>
+
+    <article class="panel">
+      <h2>What to use now</h2>
+      <p class="tiny" style="margin-bottom:10px">While this domain is in build/planning, use the live services below.</p>
+      ${featuredCards(hostname, featured)}
+
+      <p class="tiny" style="margin-top:10px">
+        Want updates? Start at
+        <a href="https://joinclaw.com" target="_blank" rel="noopener" data-track-action="cta_click" data-track-label="${esc(hostname)}:joinclaw" data-track-target="https://joinclaw.com">joinclaw.com</a>
+        or browse
+        <a href="https://clawbureau.com" target="_blank" rel="noopener" data-track-action="cta_click" data-track-label="${esc(hostname)}:bureau" data-track-target="https://clawbureau.com">clawbureau.com</a>.
+      </p>
+    </article>
+  </section>
+
+  <section class="panel" style="margin-top:14px">
+    <h2>Ecosystem navigation</h2>
+    <p class="tiny">See all domains, status, and purpose on the ecosystem map.</p>
+    <p style="margin-top:10px">
+      <a class="btn" style="display:inline-block;text-decoration:none" href="/ecosystem" data-track-action="ecosystem_click" data-track-label="${esc(hostname)}:ecosystem_cta" data-track-target="/ecosystem">Open ecosystem map</a>
     </p>
+  </section>
+  `;
 
-    <a href="https://clawbureau.com" class="cta-link" target="_blank" rel="noopener">
-      Explore the Ecosystem →
-    </a>
-  </div>
-  ${footerHtml()}
-  ${beacon(analyticsToken)}
-</body>
-</html>`;
+  return layout({
+    hostname,
+    title: `${hostname} — ${cfg.tagline}`,
+    description: cfg.purpose,
+    body,
+    analyticsToken,
+  });
+}
+
+export function ecosystemPage(
+  hostname: string,
+  analyticsToken: string,
+  domains: EcosystemDomain[],
+): string {
+  const grouped = new Map<string, EcosystemDomain[]>();
+  for (const d of domains) {
+    const key = d.pillar;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(d);
+  }
+
+  const sections = [...grouped.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([pillar, items]) => {
+      const cards = items
+        .sort((a, b) => a.domain.localeCompare(b.domain))
+        .map((d) => {
+          const href = `https://${d.domain}`;
+          return `<article class="card">
+            <div class="title"><a class="domain-link" href="${href}" target="_blank" rel="noopener" data-track-action="ecosystem_click" data-track-label="ecosystem:${esc(pillar)}" data-track-target="${esc(href)}"><span class="dot ${statusDot(d.status)}"></span>${esc(d.domain)}</a></div>
+            <div class="desc">${esc(d.tagline)}</div>
+            <div class="tiny">${esc(d.purpose)}</div>
+            <div class="meta"><span class="chip">${esc(prettyStatus(d.status))}</span>${d.active_service ? '<span class="chip">active service</span>' : ''}</div>
+          </article>`;
+        })
+        .join("");
+
+      return `<section class="pillar"><h3>${esc(pillar)}</h3><div class="pill-grid">${cards}</div></section>`;
+    })
+    .join("");
+
+  const body = `
+    <section class="hero">
+      <div class="kicker">Claw Bureau domain architecture</div>
+      <h1 class="domain">Ecosystem map</h1>
+      <p class="tagline">Clear status, purpose, and links across live, building, planned, and strategic domains.</p>
+      <p class="purpose">Use this map to navigate logical service relationships, discover current entry points, and track where each domain fits in the ecosystem.</p>
+      <div class="meta">
+        <span class="chip"><span class="dot dot-live"></span>${domains.filter((d) => d.status === "live").length} live</span>
+        <span class="chip"><span class="dot dot-building"></span>${domains.filter((d) => d.status === "building").length} building</span>
+        <span class="chip"><span class="dot dot-planned"></span>${domains.filter((d) => d.status === "planned").length} planned</span>
+        <span class="chip"><span class="dot dot-sale"></span>${domains.filter((d) => d.status === "for_sale").length} for sale</span>
+      </div>
+    </section>
+
+    <section class="ecosystem-wrap">
+      ${sections}
+    </section>
+  `;
+
+  return layout({
+    hostname,
+    title: "Claw Bureau ecosystem map",
+    description: "Status and purpose map for Claw Bureau domains.",
+    body,
+    analyticsToken,
+  });
 }
