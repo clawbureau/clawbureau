@@ -20,6 +20,11 @@ routes = [
 [vars]
 ENVIRONMENT = "production"
 SITE_URL = "https://www.clawea.com"
+INDEXNOW_KEY = "edf20368863e485aa92e1b95fa15872a"
+
+# Secrets (set with `wrangler secret put <NAME>`):
+# - INDEX_AUTOMATION_TOKEN
+# - GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON
 
 [placement]
 mode = "smart"
@@ -39,6 +44,7 @@ routes = [
 [env.staging.vars]
 ENVIRONMENT = "staging"
 SITE_URL = "https://staging-www.clawea.com"
+INDEXNOW_KEY = "edf20368863e485aa92e1b95fa15872a"
 
 [[env.staging.r2_buckets]]
 binding = "ARTICLES"

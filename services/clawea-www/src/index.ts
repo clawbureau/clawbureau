@@ -39,6 +39,8 @@
  *
  *   System endpoints:
  *   GET /sitemap.xml, /robots.txt, /health
+ *   GET /<INDEXNOW_KEY>.txt
+ *   POST /api/indexnow, /api/google-index, /api/index-urls
  *
  * Dynamic article routing:
  * - Any non-static route attempts to load articles/<slug>.json from R2.
@@ -61,6 +63,11 @@ interface Env {
   ARTICLES: R2Bucket;
   SITE_URL: string;
   ENVIRONMENT: string;
+
+  // Indexing automation
+  INDEXNOW_KEY?: string;
+  INDEX_AUTOMATION_TOKEN?: string;
+  GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON?: string;
 }
 
 interface Article {
@@ -97,6 +104,305 @@ function html(body: string, status = 200, cacheSeconds = 3600): Response {
       "cache-control": `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds * 24}`,
     },
   });
+}
+
+function apiHeaders(extra: HeadersInit = {}): Headers {
+  const h = new Headers(extra);
+  h.set("access-control-allow-origin", "*");
+  h.set("access-control-allow-methods", "POST,OPTIONS");
+  h.set("access-control-allow-headers", "content-type,authorization");
+  h.set("cache-control", "no-store");
+  return h;
+}
+
+function apiJson(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: apiHeaders({ "content-type": "application/json" }),
+  });
+}
+
+function apiError(code: string, message: string, status = 400): Response {
+  return apiJson({ ok: false, error: { code, message } }, status);
+}
+
+function getBearerToken(request: Request): string | null {
+  const auth = request.headers.get("authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  return m?.[1]?.trim() ?? null;
+}
+
+function checkAutomationAuth(request: Request, env: Env): Response | null {
+  const secret = env.INDEX_AUTOMATION_TOKEN?.trim();
+  if (!secret) {
+    return apiError("INDEX_AUTOMATION_NOT_CONFIGURED", "Indexing automation token is not configured", 503);
+  }
+
+  const token = getBearerToken(request);
+  if (!token || token !== secret) {
+    return apiError("UNAUTHORIZED", "Missing or invalid bearer token", 401);
+  }
+
+  return null;
+}
+
+const INDEXABLE_HOSTS = new Set(["clawea.com", "www.clawea.com"]);
+
+function normalizeIndexingUrl(input: string): string | null {
+  try {
+    const u = new URL(input);
+    if (u.protocol !== "https:") return null;
+    const host = u.hostname.toLowerCase();
+    if (!INDEXABLE_HOSTS.has(host)) return null;
+
+    u.hash = "";
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeUrlList(input: unknown, maxUrls = 500): { accepted: string[]; rejected: string[] } {
+  const accepted: string[] = [];
+  const rejected: string[] = [];
+
+  if (!Array.isArray(input)) {
+    return { accepted, rejected: ["urls_must_be_array"] };
+  }
+
+  for (const raw of input) {
+    if (accepted.length >= maxUrls) break;
+    if (typeof raw !== "string") {
+      rejected.push(String(raw));
+      continue;
+    }
+
+    const normalized = normalizeIndexingUrl(raw.trim());
+    if (!normalized) {
+      rejected.push(raw);
+      continue;
+    }
+
+    if (!accepted.includes(normalized)) accepted.push(normalized);
+  }
+
+  return { accepted, rejected };
+}
+
+type IndexNowResult = {
+  ok: boolean;
+  submitted: number;
+  status: number;
+  body?: unknown;
+  error?: string;
+};
+
+async function submitIndexNow(urls: string[], env: Env): Promise<IndexNowResult> {
+  const key = env.INDEXNOW_KEY?.trim();
+  if (!key) {
+    return {
+      ok: false,
+      submitted: 0,
+      status: 503,
+      error: "INDEXNOW_KEY_NOT_CONFIGURED",
+    };
+  }
+
+  const payload = {
+    host: "clawea.com",
+    key,
+    keyLocation: `https://clawea.com/${key}.txt`,
+    urlList: urls,
+  };
+
+  const res = await fetch("https://api.indexnow.org/IndexNow", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const raw = await res.text();
+  let parsed: unknown = raw;
+  try {
+    parsed = raw ? JSON.parse(raw) : null;
+  } catch {
+    // keep raw text body
+  }
+
+  return {
+    ok: res.ok,
+    submitted: res.ok ? urls.length : 0,
+    status: res.status,
+    body: parsed,
+    error: res.ok ? undefined : "INDEXNOW_REQUEST_FAILED",
+  };
+}
+
+type GoogleServiceAccount = {
+  client_email: string;
+  private_key: string;
+  token_uri?: string;
+};
+
+type GoogleIndexResult = {
+  ok: boolean;
+  submitted: number;
+  failed: number;
+  status: number;
+  details: Array<{ url: string; ok: boolean; status: number; body?: unknown }>;
+  error?: string;
+};
+
+function b64Url(input: string | Uint8Array): string {
+  const str =
+    typeof input === "string"
+      ? input
+      : String.fromCharCode(...input);
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function pemToPkcs8Bytes(pem: string): Uint8Array {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function buildGoogleAccessToken(env: Env): Promise<string> {
+  const raw = env.GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON?.trim();
+  if (!raw) {
+    throw new Error("GOOGLE_INDEXING_NOT_CONFIGURED");
+  }
+
+  let sa: GoogleServiceAccount;
+  try {
+    sa = JSON.parse(raw) as GoogleServiceAccount;
+  } catch {
+    throw new Error("GOOGLE_INDEXING_SERVICE_ACCOUNT_INVALID_JSON");
+  }
+
+  if (!sa.client_email || !sa.private_key) {
+    throw new Error("GOOGLE_INDEXING_SERVICE_ACCOUNT_FIELDS_MISSING");
+  }
+
+  const tokenUri = sa.token_uri ?? "https://oauth2.googleapis.com/token";
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + 3600;
+
+  const header = { alg: "RS256", typ: "JWT" };
+  const claim = {
+    iss: sa.client_email,
+    scope: "https://www.googleapis.com/auth/indexing",
+    aud: tokenUri,
+    iat,
+    exp,
+  };
+
+  const encodedHeader = b64Url(JSON.stringify(header));
+  const encodedClaim = b64Url(JSON.stringify(claim));
+  const signingInput = `${encodedHeader}.${encodedClaim}`;
+
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToPkcs8Bytes(sa.private_key),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const sig = await crypto.subtle.sign(
+    { name: "RSASSA-PKCS1-v1_5" },
+    key,
+    new TextEncoder().encode(signingInput),
+  );
+
+  const jwt = `${signingInput}.${b64Url(new Uint8Array(sig))}`;
+
+  const tokenRes = await fetch(tokenUri, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }).toString(),
+  });
+
+  if (!tokenRes.ok) {
+    const errBody = await tokenRes.text();
+    throw new Error(`GOOGLE_OAUTH_FAILED:${tokenRes.status}:${errBody.slice(0, 400)}`);
+  }
+
+  const tokenJson = await tokenRes.json<any>();
+  const accessToken = tokenJson?.access_token;
+  if (!accessToken || typeof accessToken !== "string") {
+    throw new Error("GOOGLE_OAUTH_NO_ACCESS_TOKEN");
+  }
+
+  return accessToken;
+}
+
+async function submitGoogleIndexing(
+  urls: string[],
+  action: "URL_UPDATED" | "URL_DELETED",
+  env: Env,
+): Promise<GoogleIndexResult> {
+  try {
+    const accessToken = await buildGoogleAccessToken(env);
+
+    const details: GoogleIndexResult["details"] = [];
+    let submitted = 0;
+    let failed = 0;
+
+    for (const url of urls) {
+      const res = await fetch("https://indexing.googleapis.com/v3/urlNotifications:publish", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          url,
+          type: action,
+        }),
+      });
+
+      const raw = await res.text();
+      let parsed: unknown = raw;
+      try {
+        parsed = raw ? JSON.parse(raw) : null;
+      } catch {
+        // leave as text
+      }
+
+      const ok = res.ok;
+      if (ok) submitted += 1;
+      else failed += 1;
+
+      details.push({ url, ok, status: res.status, body: parsed });
+    }
+
+    return {
+      ok: failed === 0,
+      submitted,
+      failed,
+      status: failed === 0 ? 200 : 207,
+      details,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      submitted: 0,
+      failed: urls.length,
+      status: 503,
+      details: [],
+      error: String(err?.message ?? err),
+    };
+  }
 }
 
 async function loadArticle(env: Env, slug: string): Promise<Article | null> {
@@ -614,6 +920,126 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+
+    // ── IndexNow key file ──
+    if ((request.method === "GET" || request.method === "HEAD") && env.INDEXNOW_KEY && path === `/${env.INDEXNOW_KEY}.txt`) {
+      return new Response(request.method === "HEAD" ? null : `${env.INDEXNOW_KEY}\n`, {
+        headers: {
+          "content-type": "text/plain;charset=utf-8",
+          "cache-control": "public, max-age=86400",
+        },
+      });
+    }
+
+    // ── API routes (indexing automation) ──
+    if (path.startsWith("/api/")) {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: apiHeaders() });
+      }
+
+      const authError = checkAutomationAuth(request, env);
+      if (authError) return authError;
+
+      if (request.method !== "POST") {
+        return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+      }
+
+      let body: any;
+      try {
+        body = await request.json<any>();
+      } catch {
+        return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
+      }
+
+      const { accepted, rejected } = normalizeUrlList(body?.urls, 500);
+      if (accepted.length === 0) {
+        return apiError("URLS_INVALID", "No valid clawea.com URLs were provided", 400);
+      }
+
+      if (path === "/api/indexnow") {
+        const result = await submitIndexNow(accepted, env);
+        return apiJson({
+          ok: result.ok,
+          engine: "indexnow",
+          submitted: result.submitted,
+          requested: accepted.length,
+          rejected,
+          status: result.status,
+          body: result.body,
+          error: result.error,
+        }, result.ok ? 200 : 502);
+      }
+
+      if (path === "/api/google-index") {
+        const action = body?.action === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED";
+        const result = await submitGoogleIndexing(accepted, action, env);
+        return apiJson({
+          ok: result.ok,
+          engine: "google",
+          action,
+          submitted: result.submitted,
+          failed: result.failed,
+          requested: accepted.length,
+          rejected,
+          status: result.status,
+          details: result.details,
+          error: result.error,
+        }, result.ok ? 200 : result.status);
+      }
+
+      if (path === "/api/index-urls") {
+        const action = body?.action === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED";
+        const enginesRaw = body?.engines;
+        const enginesInput = Array.isArray(enginesRaw)
+          ? enginesRaw.map((x) => String(x).toLowerCase())
+          : [String(enginesRaw ?? "all").toLowerCase()];
+
+        const useAll = enginesInput.includes("all");
+        const useIndexNow = useAll || enginesInput.includes("indexnow");
+        const useGoogle = useAll || enginesInput.includes("google");
+
+        const out: Record<string, unknown> = {
+          ok: true,
+          requested: accepted.length,
+          rejected,
+          action,
+          engines: enginesInput,
+        };
+
+        if (useIndexNow) {
+          const r = await submitIndexNow(accepted, env);
+          out.indexnow = {
+            ok: r.ok,
+            submitted: r.submitted,
+            status: r.status,
+            body: r.body,
+            error: r.error,
+          };
+          if (!r.ok) out.ok = false;
+        }
+
+        if (useGoogle) {
+          const r = await submitGoogleIndexing(accepted, action, env);
+          out.google = {
+            ok: r.ok,
+            submitted: r.submitted,
+            failed: r.failed,
+            status: r.status,
+            details: r.details,
+            error: r.error,
+          };
+          if (!r.ok) out.ok = false;
+        }
+
+        if (!useIndexNow && !useGoogle) {
+          return apiError("ENGINES_INVALID", "engines must include indexnow, google, or all", 400);
+        }
+
+        return apiJson(out, out.ok ? 200 : 207);
+      }
+
+      return apiError("NOT_FOUND", "Unknown API route", 404);
+    }
 
     // ── Static routes ──
     if (path === "/health") return json({ ok: true, service: "clawea-www", ts: new Date().toISOString() });
