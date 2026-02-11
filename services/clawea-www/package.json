@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "upload:r2": "tsx scripts/upload-to-r2.ts",
     "index:replay": "tsx scripts/upload-to-r2.ts --auto-index --replay-failures articles/_indexing_failures.json",
-    "conversion:weekly": "tsx scripts/weekly-conversion-summary.ts"
+    "conversion:weekly": "tsx scripts/weekly-conversion-summary.ts",
+    "growth:weekly": "tsx scripts/weekly-growth-report.ts",
+    "ops:artifacts": "tsx scripts/build-growth-engine-artifacts.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250121.0",
