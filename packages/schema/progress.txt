@@ -87,3 +87,14 @@ Started: 2026-02-03
     - optional `tcb` status/advisories
   - added conditional schema rule requiring `runtime_metadata.tee` for `tee_execution`
 - Keeps strict `additionalProperties:false` within TEE sub-objects while preserving forward-compatible `runtime_metadata` top-level extension points.
+
+## AEM-US-015 — Machine payment settlement schemas (provider-agnostic)
+- Added payment settlement schemas:
+  - `packages/schema/payments/machine_payment_settlement.v1.json`
+  - `packages/schema/payments/machine_payment_settlement_envelope.v1.json`
+- Captures canonical settlement fields for provider-neutral ingestion:
+  - natural key inputs (`provider`, `external_payment_id`, `direction`)
+  - status machine (`pending|confirmed|failed|reversed`)
+  - ledger mapping context (`account_id`, `amount_minor`, `currency`)
+  - optional rail/network + provider timestamps metadata
+- Updated `packages/schema/README.md` with new `payments/` directory and schema listing.

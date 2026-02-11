@@ -352,3 +352,53 @@ Started: 2026-02-02T03:08:26.936251
   - GET /health (public)
   - GET /v1/balances + POST /v1/transfers (authorized)
 ---
+
+## 2026-02-11T23:15:00Z - CLD-US-015
+- What was implemented
+  - Added provider-agnostic machine-payment settlement foundation in `services/ledger`:
+    - new migration `migrations/0007_create_payment_settlements.sql`
+      - `payment_settlements` table with canonical fields + natural-key uniqueness:
+        - unique `(provider, external_payment_id, direction)`
+      - `payment_settlement_ingestions` table for idempotency replay records
+    - new service module `src/payment-settlements.ts`
+      - fail-closed ingest validation + status transition policy
+      - idempotency replay protection (`IDEMPOTENCY_KEY_REUSED` on payload mismatch)
+      - natural-key dedupe without duplicate side effects
+      - deterministic lookup/list semantics with cursor pagination
+  - Added ledger event types and validator support:
+    - `payin_settle`
+    - `payin_reverse`
+    - `payout_settle`
+  - Added endpoints:
+    - `POST /v1/payments/settlements/ingest`
+    - `GET /v1/payments/settlements/:provider/:external_payment_id`
+    - `GET /v1/payments/settlements?account_id=&status=&provider=&direction=&limit=&cursor=`
+  - Added settlement smoke script:
+    - `scripts/poh/smoke-ledger-payment-settlements.mjs`
+- Tests
+  - Added `test/payment-settlements.test.ts` with coverage for:
+    - duplicate ingest dedupe
+    - idempotency replay
+    - invalid status transitions
+    - reversal insufficient funds fail-closed
+    - event hash-chain integrity for new settlement event types
+  - Quality checks:
+    - `npm test`
+    - `npm run typecheck`
+    - `npm run lint`
+- Deploy + migration evidence
+  - Applied remote D1 migration staging:
+    - `wrangler d1 migrations apply clawledger-staging --env staging --remote`
+  - Applied remote D1 migration production:
+    - `wrangler d1 migrations apply clawledger --remote`
+  - Deployed staging worker:
+    - version `0cd3d69f-b6cc-4640-b237-48571fd66f5b`
+  - Deployed production worker:
+    - version `8d305316-7b15-445f-82d8-2ad5d7927bde`
+- Smoke evidence
+  - `node scripts/poh/smoke-ledger-payment-settlements.mjs --env staging` ✅
+  - `node scripts/poh/smoke-ledger-payment-settlements.mjs --env prod` ✅
+  - Health checks:
+    - `GET https://staging.clawledger.com/health` ✅
+    - `GET https://clawledger.com/health` ✅
+---

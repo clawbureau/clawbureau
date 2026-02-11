@@ -40,6 +40,9 @@ export type EventHash = string;
  * clearing_deposit - Deposit to clearing account
  * clearing_withdraw - Withdraw from clearing account
  * settlement - Settlement between accounts with batch reference
+ * payin_settle - Confirmed inbound machine payment credited to account
+ * payin_reverse - Inbound payment reversal/refund debited from account
+ * payout_settle - Outbound payout settlement event (no implicit balance mutation)
  */
 export type EventType =
   | 'mint'
@@ -55,7 +58,10 @@ export type EventType =
   | 'promo_burn'
   | 'clearing_deposit'
   | 'clearing_withdraw'
-  | 'settlement';
+  | 'settlement'
+  | 'payin_settle'
+  | 'payin_reverse'
+  | 'payout_settle';
 
 /**
  * Balance bucket names
@@ -906,6 +912,100 @@ export interface SettlementResponse {
   createdAt: Timestamp;
   /** Metadata */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Provider-agnostic settlement direction.
+ */
+export type PaymentSettlementDirection = 'payin' | 'refund' | 'payout';
+
+/**
+ * Provider-agnostic settlement status.
+ */
+export type PaymentSettlementStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'failed'
+  | 'reversed';
+
+/**
+ * Canonical machine-payment settlement record.
+ */
+export interface MachinePaymentSettlement {
+  id: string;
+  provider: string;
+  external_payment_id: string;
+  direction: PaymentSettlementDirection;
+  status: PaymentSettlementStatus;
+  account_id: AccountId;
+  amount_minor: string;
+  currency: string;
+  network?: string;
+  rail?: string;
+  metadata?: Record<string, unknown>;
+  provider_created_at?: Timestamp;
+  provider_updated_at?: Timestamp;
+  settled_at?: Timestamp;
+  latest_event_id?: EventId;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+/**
+ * Ingest request for machine-payment settlement updates.
+ */
+export interface PaymentSettlementIngestRequest {
+  provider: string;
+  external_payment_id: string;
+  direction: PaymentSettlementDirection;
+  status: PaymentSettlementStatus;
+  account_id: AccountId;
+  amount_minor: string;
+  currency: string;
+  network?: string;
+  rail?: string;
+  metadata?: Record<string, unknown>;
+  provider_created_at?: Timestamp;
+  provider_updated_at?: Timestamp;
+  settled_at?: Timestamp;
+}
+
+/**
+ * Ingest response for machine-payment settlement updates.
+ */
+export interface PaymentSettlementIngestResponse {
+  settlement: MachinePaymentSettlement;
+  idempotency: {
+    key: string;
+    replayed: boolean;
+    deduped: boolean;
+  };
+  event?: {
+    id: EventId;
+    event_type: EventType;
+    event_hash: EventHash;
+    created_at: Timestamp;
+  };
+}
+
+/**
+ * Settlement list query params.
+ */
+export interface PaymentSettlementListQuery {
+  account_id?: string;
+  status?: PaymentSettlementStatus;
+  provider?: string;
+  direction?: PaymentSettlementDirection;
+  limit?: number;
+  cursor?: string;
+}
+
+/**
+ * Settlement list response.
+ */
+export interface PaymentSettlementListResponse {
+  settlements: MachinePaymentSettlement[];
+  next_cursor?: string;
 }
 
 /**

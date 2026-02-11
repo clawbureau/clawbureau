@@ -15,3 +15,5 @@
   - `docs/specs/clawlogs/MERKLE_TRANSPARENCY_LOG_v1.md`
 - TEE attestation policy:
   - `docs/specs/tee/TEE_ATTESTATION_POLICY_v1.md`
+- Machine payment settlement:
+  - `docs/specs/payments/MACHINE_PAYMENT_SETTLEMENT_v1.md`

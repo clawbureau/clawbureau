@@ -82,6 +82,9 @@ export function isValidEventType(type: string): type is EventType {
     'clearing_deposit',
     'clearing_withdraw',
     'settlement',
+    'payin_settle',
+    'payin_reverse',
+    'payout_settle',
   ].includes(type);
 }
 
@@ -97,6 +100,13 @@ export function isClearingEventType(type: string): boolean {
  */
 export function isSettlementEventType(type: string): boolean {
   return type === 'settlement';
+}
+
+/**
+ * Check if event type is a payment-settlement event.
+ */
+export function isPaymentSettlementEventType(type: string): boolean {
+  return ['payin_settle', 'payin_reverse', 'payout_settle'].includes(type);
 }
 
 /**
@@ -278,7 +288,8 @@ export class EventRepository {
     previousHash: EventHash,
     eventHash: EventHash,
     toAccountId?: AccountId,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    createdAt?: string
   ): Promise<LedgerEvent> {
     // Check for existing event with same idempotency key
     const existing = await this.findByIdempotencyKey(idempotencyKey);
@@ -287,7 +298,7 @@ export class EventRepository {
     }
 
     const id = generateEventId();
-    const now = new Date().toISOString();
+    const now = createdAt ?? new Date().toISOString();
     const metadataJson = metadata ? JSON.stringify(metadata) : null;
 
     await this.db
@@ -346,7 +357,7 @@ export class EventService {
     // Validate event type
     if (!isValidEventType(request.eventType)) {
       throw new Error(
-        `Invalid event type: ${request.eventType}. Must be one of: mint, burn, transfer, hold, release`
+        `Invalid event type: ${request.eventType}. Must be a supported ledger event type`
       );
     }
 

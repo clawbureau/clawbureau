@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/economy
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/ledger/{prd.json,progress.txt}`
 >
 > **Scope:**
@@ -170,6 +170,16 @@ Event-sourced ledger for balances, holds, and transfers. Idempotent and auditabl
 - GET /skill.md returns integration docs + example curl commands
 - GET /robots.txt and /sitemap.xml exist (minimal)
 - GET /.well-known/security.txt exists
+
+### CLD-US-015 — Machine payment settlement provenance foundation
+**As a** platform, **I want** provider-agnostic settlement ingestion and lookup **so that** external payment providers (including future Stripe machine payments) can plug in without changing core ledger semantics.
+
+**Acceptance Criteria:**
+- Canonical settlement schema + payment spec doc exist
+- Settlement ingest endpoint is admin-only + idempotency-key required
+- Ingest supports fail-closed status transitions and deterministic error codes
+- Event model supports `payin_settle`, `payin_reverse`, `payout_settle`
+- Lookup/list endpoints provide deterministic pagination behavior
 
 ## 8) Success Metrics
 - Ledger events/day
