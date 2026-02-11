@@ -624,3 +624,29 @@ Started: 2026-02-07T19:53:07Z
     - `services/clawea/artifacts/smoke/productization-next/2026-02-11T11-03-52Z-prod/result.json` (PASS)
 - Notes
   - D1 remote migration path rejected CREATE TRIGGER statements with `SQLITE_ERROR code 7500 (incomplete input)` in this environment; equivalent relationship checks are enforced fail-closed in app logic.
+
+## 2026-02-11T16:33:00Z - clawea Finance M2.1 closure (CEA-US-046H + CEA-US-047H)
+- What was implemented
+  - Private clawea PR #14 merged:
+    - https://github.com/clawbureau/clawea/pull/14
+    - Merge: `3562b7a125638ac91742d41eba4fd7e67fb376bf`
+  - Closed non-degraded settlement verification posture:
+    - strict modes now required in clawea (`INVOICE_SETTLEMENT_VERIFICATION_MODE=required`, `INVOICE_SETTLEMENT_OWNERSHIP_MODE=required`)
+    - upstream ledger auth contract closed via public PR #134 (`LEDGER_SETTLEMENT_VERIFY_TOKEN` read-path support, mutating endpoints still admin-key gated)
+  - Added operator reliability controls:
+    - `GET /v1/billing/reconciliation/failures`
+    - `GET /v1/billing/settlement-events`
+    - `POST /v1/billing/settlement-events/:ingest_id/retry`
+    - `POST /v1/billing/invoices/reconcile/retry`
+  - Added replay-safe retry outcome upserts + aggregate event status recomputation + explicit retry audit events.
+  - Added helper module/tests and expanded finance smoke coverage for operator controls.
+- Rollout evidence
+  - Migrations:
+    - staging/prod apply => `No migrations to apply` (schema unchanged for this increment)
+  - Deploy versions:
+    - staging: `c52d6df6-b8e8-4524-a824-e5524bd30644`
+    - prod: `bb384493-de95-4473-bf91-c9bb7c931508`
+  - Smoke artifacts:
+    - `services/clawea/artifacts/smoke/finance-m2/2026-02-11T16-26-37Z-staging-nondegraded-npm/result.json` (PASS)
+    - `services/clawea/artifacts/smoke/finance-m2/2026-02-11T16-26-44Z-prod-nondegraded-npm/result.json` (PASS)
+    - `services/clawea/artifacts/smoke/finance-m2/2026-02-11T16-26-17Z-retry-repair/result.json` (PASS, failed->retry->paid)
