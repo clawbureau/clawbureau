@@ -287,6 +287,14 @@ export interface Env {
    */
   LEDGER_ADMIN_KEY?: string;
 
+  /**
+   * Optional read-only verification token for settlement lookup endpoints.
+   *
+   * When configured, GET settlement verification paths may authenticate with this token
+   * instead of LEDGER_ADMIN_KEY.
+   */
+  LEDGER_SETTLEMENT_VERIFY_TOKEN?: string;
+
   /** Optional webhook URL for reconciliation alerts */
   ALERT_WEBHOOK_URL?: string;
   /** Optional webhook URL for event notifications */
