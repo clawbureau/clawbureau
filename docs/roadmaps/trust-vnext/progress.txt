@@ -459,3 +459,12 @@ Started: 2026-02-07T19:53:07Z
   - cd packages/openclaw-provider-clawproxy && npm run typecheck && npm test
   - cd packages/clawproof-adapters && npm run typecheck && npm test
 ---
+
+## 2026-02-11T01:00:00Z - CEA-US-010 (sandbox execution attestation MVP)
+- What was implemented
+  - Marked CEA-US-010 as passing in the trust-vnext execution tracker.
+  - Notes link: clawea private PR #3, clawbureau PR #104, submodule bump PR #105, and smoke script `scripts/poh/smoke-execution-attestation.mjs`.
+- Files changed
+  - docs/roadmaps/trust-vnext/prd.json
+  - docs/roadmaps/trust-vnext/progress.txt
+---
