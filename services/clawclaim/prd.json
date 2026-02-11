@@ -143,7 +143,7 @@
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Implemented control-plane provisioning in `services/clawclaim/src/index.ts`: challenge purposes (`register_controller`, `register_agent`, `update_sensitive_policy`), owner-signed controller registration, controller-scoped agent registration, owner-bound sensitive policy updates, and deterministic read/list chain endpoints (`/v1/control-plane/controllers/*`). Added coverage in `services/clawclaim/test/control-plane.test.ts` and passed `npm run typecheck && npm test`. Staging deploy: `clawclaim-staging` version `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`; smoke: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`."
+      "notes": "Implemented control-plane provisioning in `services/clawclaim/src/index.ts`: challenge purposes (`register_controller`, `register_agent`, `update_sensitive_policy`), owner-signed controller registration, controller-scoped agent registration, owner-bound sensitive policy updates, and deterministic read/list chain endpoints (`/v1/control-plane/controllers/*`). Added coverage in `services/clawclaim/test/control-plane.test.ts` and passed `npm run typecheck && npm test`. Deploys: staging `7c1cf0b7-af77-4d21-b29d-b902055519a5`, prod `4af46ea4-05b7-43de-ae1f-6f100b4fde56`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
     }
   ]
 }

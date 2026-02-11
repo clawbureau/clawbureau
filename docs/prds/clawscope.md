@@ -230,8 +230,12 @@ Schema contract updates:
 - `packages/schema/auth/scoped_token_claims.v1.json` now includes canonical chain claims (`owner_did`, `controller_did`, `agent_did`), `control_plane_policy_hash_b64u`, and `token_lane`.
 
 Delivery evidence:
-- Staging deploy: `clawscope-staging` version `c250201a-bb1c-458f-8a87-e4f09270ab60`
-- Smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+- Deploys:
+  - staging: `clawscope-staging` version `37e14c8f-1016-4b5e-b117-70dd372e0131`
+  - prod: `clawscope` version `2edbae03-adf5-4b8a-8cce-74ff3613cd79`
+- Smoke artifacts:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
 
 ---
 

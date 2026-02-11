@@ -196,8 +196,12 @@ Shipped in `services/clawclaim/src/index.ts`:
 - deterministic chain read/list endpoints under `/v1/control-plane/controllers/*`
 
 Delivery evidence:
-- Staging deploy: `clawclaim-staging` version `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`
-- Smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+- Deploys:
+  - staging: `clawclaim-staging` version `7c1cf0b7-af77-4d21-b29d-b902055519a5`
+  - prod: `clawclaim` version `4af46ea4-05b7-43de-ae1f-6f100b4fde56`
+- Smoke artifacts:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
 
 ---
 

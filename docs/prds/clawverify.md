@@ -360,8 +360,12 @@ Key deterministic error codes (new):
 - `TOKEN_CONTROL_SUBJECT_MISMATCH`
 
 Delivery evidence:
-- Staging deploy: `clawverify-staging` version `799e87ff-0456-4690-8563-96b38f3ff26a`
-- Smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+- Deploys:
+  - staging: `clawverify-staging` version `db16bf9e-8c5a-49cb-a9f6-083efd86d476`
+  - prod: `clawverify` version `9e4298b9-e129-44f8-ad3a-20a4e52cd15b`
+- Smoke artifacts:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
 
 ---
 
