@@ -833,3 +833,45 @@ Started: 2026-02-07T19:53:07Z
     - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`
   - key interop blocker validation:
     - `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`
+
+## 2026-02-11T23:50:00Z - ICP-M5 identity + observability lane closure (CCL-US-004..009, CSC-US-007..013)
+- What was implemented
+  - `clawclaim` M5 identity productization shipped (new module `services/clawclaim/src/m5-identity.ts` + route wiring):
+    - platform claims (`/v1/platform-claims/*`)
+    - primary DID/profile (`/v1/accounts/*/primary-did`, `/profile`)
+    - binding audit trail + compliance export (`/v1/bindings/audit*`)
+    - owner attestation registry + provider lookup (`/v1/owner-attestations/*`)
+    - challenge->CST exchange (`/v1/scoped-tokens/challenges`, `/v1/scoped-tokens/exchange`)
+    - org/team roster manifests (`/v1/orgs/*/roster-*`)
+  - `clawscope` observability/reporting stack shipped (`services/clawscope/src/observability.ts` + index integration):
+    - dashboard/reports (`/v1/metrics/dashboard`, `/v1/reports/*`, `/v1/analytics/cost`, `/v1/missions/aggregate`)
+    - alerting + traces (`/v1/alerts/*`, `/v1/traces*`)
+    - queue + D1 + DO + R2 + Analytics Engine + cron materialization flow
+    - deterministic admin overlap-key support (`SCOPE_ADMIN_KEYS_JSON`) for safe key rotation/testing
+- Cloudflare provisioning + hygiene
+  - D1 migrations applied:
+    - `services/clawclaim/migrations/0001_identity_registry.sql`
+    - `services/clawscope/migrations/0001_observability_stack.sql`
+  - `wrangler deploy --dry-run` executed for staging/prod env separation across clawclaim/clawscope/clawverify
+- Quality checks
+  - `cd services/clawclaim && npm run typecheck && npm test`
+  - `cd services/clawscope && npm run typecheck && npm test`
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Deployment status
+  - staging:
+    - `clawclaim-staging`: `2204a9ff-2376-4910-944c-8b517a526122`
+    - `clawscope-staging`: `aa78cace-a561-4efe-908a-8696cbbc40f8`
+  - prod:
+    - `clawclaim`: `b2be579c-eb85-4c41-b3cd-80a439848368`
+    - `clawscope`: `56b88b3f-7914-42dc-a680-a6a9b43f3d8d`
+- Smoke artifacts (production evidence gate)
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-28-476Z-staging-m5/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-48-765Z-prod-m5/result.json`
+- Baseline identity gate re-run (post-M5 deploys)
+  - hard-cutover staging: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-12-636Z-staging/result.json`
+  - hard-cutover prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-22-079Z-prod/result.json`
+  - kid interop: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-43-712Z-kid-interop/result.json`
+- Deterministic fail-closed outcomes validated in smoke
+  - `TOKEN_EXCHANGE_CHALLENGE_USED`
+  - `TRANSITION_UNKNOWN`
+  - revoked-token introspection state (`active=false`, `revoked=true`)

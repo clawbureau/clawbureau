@@ -273,4 +273,46 @@ Compatibility note for Agent C:
 
 ---
 
+## 11) 2026-02-11 addendum — ICP-M5 observability/control reporting (CSC-US-007..013)
+
+Shipped in `services/clawscope/src/observability.ts` + integration in `services/clawscope/src/index.ts`:
+- Dashboard + reporting:
+  - `GET /v1/metrics/dashboard`
+  - `POST /v1/reports/rollups/run`
+  - `GET /v1/reports/usage` (`format=json|csv`)
+  - `GET /v1/reports/sla`
+  - `GET /v1/analytics/cost`
+  - `GET /v1/missions/aggregate`
+- Alerting + traces:
+  - `POST /v1/alerts/rules`
+  - `GET /v1/alerts/events`
+  - `GET /v1/traces/{trace_id}`
+  - `GET /v1/traces?correlation_id=...`
+- Runtime event ingestion:
+  - token issue/revoke/introspect/matrix routes emit observability events (best-effort)
+  - queue consumer persists events to D1 + updates trace index
+  - scheduled/manual rollups materialize daily usage/cost/mission/SLA tables
+
+Cloudflare-native stack used:
+- D1: `SCOPE_OBSERVABILITY_DB` (`clawscope-observability`, `clawscope-observability-staging`)
+- Queues: `SCOPE_OBS_EVENTS` (`clawscope-obs-events`, `clawscope-obs-events-staging`)
+- Analytics Engine dataset: `SCOPE_METRICS`
+- R2: `SCOPE_REPORTS_BUCKET` (`clawscope-obs-reports*`)
+- Durable Object: `ScopeObservabilityCoordinator` (alert dedupe)
+- Cron trigger: hourly rollup schedule (`5 * * * *`)
+
+Validation + rollout evidence:
+- Quality checks:
+  - `cd services/clawscope && npm run typecheck && npm test`
+  - `cd services/clawclaim && npm run typecheck && npm test`
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Deploys:
+  - staging: `clawscope-staging` version `aa78cace-a561-4efe-908a-8696cbbc40f8`
+  - prod: `clawscope` version `56b88b3f-7914-42dc-a680-a6a9b43f3d8d`
+- Smoke artifacts:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-28-476Z-staging-m5/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-48-765Z-prod-m5/result.json`
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*

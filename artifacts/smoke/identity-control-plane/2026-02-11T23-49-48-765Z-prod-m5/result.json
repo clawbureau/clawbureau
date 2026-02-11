@@ -1,0 +1,277 @@
+{
+  "env": "prod",
+  "generated_at": "2026-02-11T23:49:48.765Z",
+  "urls": {
+    "clawclaim": "https://clawclaim.com",
+    "clawscope": "https://clawscope.com",
+    "clawverify": "https://clawverify.com"
+  },
+  "versions": {
+    "clawclaim": "b2be579c-eb85-4c41-b3cd-80a439848368",
+    "clawscope": "56b88b3f-7914-42dc-a680-a6a9b43f3d8d",
+    "clawverify": "1"
+  },
+  "identities": {
+    "owner_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm",
+    "controller_did": "did:key:z6MkvNVDmAuQz1aRcKzc8v6rWPSfghAeosvou9Mqi4FZou3Z",
+    "agent_did": "did:key:z6Mkiw1d47CdWiNWFZnZ64TEEwFLpPeZ37ZJkgGsJHChHcSG",
+    "member_did": "did:key:z6Mkt91yMgngWc248VPySShY9oQhaJ3zJ3scNNwnqJB5zy9J"
+  },
+  "steps": {
+    "health": {
+      "clawclaim": {
+        "status": 200,
+        "ok": true
+      },
+      "clawscope": {
+        "status": 200,
+        "ok": true
+      },
+      "clawverify": {
+        "status": 200,
+        "ok": true
+      }
+    },
+    "bindings": {
+      "owner": {
+        "challenge": {
+          "challenge_id": "17d44aee-53b2-46af-8d51-785f8065343d",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm",
+          "bound_at": 1770853789
+        }
+      },
+      "controller": {
+        "challenge": {
+          "challenge_id": "9b0977d3-4029-4025-81b7-05f548dd41d6",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MkvNVDmAuQz1aRcKzc8v6rWPSfghAeosvou9Mqi4FZou3Z",
+          "bound_at": 1770853789
+        }
+      },
+      "agent": {
+        "challenge": {
+          "challenge_id": "fee3c64c-049c-4564-9e7f-9422f6664cb4",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6Mkiw1d47CdWiNWFZnZ64TEEwFLpPeZ37ZJkgGsJHChHcSG",
+          "bound_at": 1770853789
+        }
+      },
+      "member": {
+        "challenge": {
+          "challenge_id": "d5b45cdd-aeda-4afd-a975-7d8a00aad276",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6Mkt91yMgngWc248VPySShY9oQhaJ3zJ3scNNwnqJB5zy9J",
+          "bound_at": 1770853790
+        }
+      }
+    },
+    "control_chain": {
+      "register_controller": {
+        "status": "registered"
+      },
+      "register_agent": {
+        "status": "registered"
+      }
+    },
+    "platform_claims": {
+      "register": {
+        "status": "registered",
+        "claim": {
+          "claim_id": "78518fdf461d0af1af30429f468d5f22ca51285b1042b0b89faa9e828e834f8b",
+          "owner_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm",
+          "platform": "github",
+          "handle": "smoke_mliomiga",
+          "proof_url": "https://github.com/smoke_mliomiga",
+          "verification_ref": "wdIigH3IQhK5dKuac5owo0TzcYptgjvIY1B3wlBacmc",
+          "verifier_signer_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm"
+        }
+      },
+      "list_count": 1
+    },
+    "primary_did": {
+      "set": {
+        "status": "updated",
+        "account_id": "acct-m5-prod-1770853788765",
+        "primary_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm"
+      },
+      "profile": {
+        "status": 200,
+        "x_cache": "miss",
+        "platform_claims": 1
+      }
+    },
+    "binding_audit": {
+      "list_count": 12,
+      "export": {
+        "status": "exported",
+        "key": "binding-audit/2026-02-11T23-49-52-781Z.csv",
+        "format": "csv",
+        "rows": 12,
+        "sha256": "4ed96fd95e963894c7aed0767d60ff1d3b21981fbf9059fbc26855de8fcf6b23"
+      }
+    },
+    "owner_attestations": {
+      "register": {
+        "status": "registered",
+        "attestation": {
+          "attestation_id": "att_1770853793462",
+          "owner_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm",
+          "owner_provider": "oauth",
+          "provider_ref": "provider-ref-m5-prod-1770853788765",
+          "verification_level": "high",
+          "expires_at": null,
+          "verifier_owner_status": "verified"
+        }
+      },
+      "list_count": 1,
+      "lookup_count": 1
+    },
+    "scope_exchange": {
+      "challenge": {
+        "challenge_id": "scope_chl_94766ccd-9c4a-49a7-8ac6-224509f0b7d2",
+        "owner_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm",
+        "expires_at": 1770854393,
+        "ttl_sec": 600
+      },
+      "exchange": {
+        "status": "issued",
+        "owner_did": "did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm",
+        "token_hash": "968803d640879a6d476b11dc618a87c33d9502bc8ba11d43a574c4587020177d",
+        "policy_version": "1",
+        "token_lane": "canonical",
+        "kid": "66a63dae7bbf4bda",
+        "clawlogs_status": "skipped"
+      },
+      "replay_denied": {
+        "status": 409,
+        "error": "TOKEN_EXCHANGE_CHALLENGE_USED"
+      }
+    },
+    "org_roster": {
+      "register": {
+        "status": "registered"
+      },
+      "latest": {
+        "status": 200,
+        "members": 1,
+        "manifest": {
+          "manifest_id": "ee3915e657166daf5d00f5542e51f5c04980a93f88242409598fb06bf7b6217b",
+          "manifest_hash_b64u": "ttjGefj3RRPDoQKZCkDdPzkMBj9IjYd_GBLSib01InM",
+          "member_count": 1
+        }
+      }
+    },
+    "observability": {
+      "alert_rule": {
+        "status": "created",
+        "rule": {
+          "rule_id": "rule_7dd5bbbd-bda5-4994-8a1c-82a8ef963d03",
+          "metric_name": "request_count",
+          "comparison": "gte",
+          "threshold": 1,
+          "window_minutes": 120,
+          "service": "clawscope",
+          "route": "/v1/tokens/introspect",
+          "mission_id": "mission-m5-prod-1770853788765"
+        }
+      },
+      "introspect_active": {
+        "active": true,
+        "token_hash": "968803d640879a6d476b11dc618a87c33d9502bc8ba11d43a574c4587020177d",
+        "kid": "66a63dae7bbf4bda",
+        "kid_source": "header",
+        "mission_id": "mission-m5-prod-1770853788765"
+      },
+      "matrix_allowed": {
+        "active": true,
+        "transition": "token.revoke",
+        "transition_result": {
+          "allowed": true,
+          "reason_code": "ALLOWED",
+          "reason": "Transition requirements satisfied"
+        }
+      },
+      "matrix_unknown_transition": {
+        "status": 400,
+        "error": "TRANSITION_UNKNOWN"
+      },
+      "revoke": {
+        "status": "revoked",
+        "token_hash": "968803d640879a6d476b11dc618a87c33d9502bc8ba11d43a574c4587020177d",
+        "revoked_at_iso": "2026-02-11T23:49:55.000Z"
+      },
+      "introspect_revoked": {
+        "active": false,
+        "revoked": true,
+        "token_hash": "968803d640879a6d476b11dc618a87c33d9502bc8ba11d43a574c4587020177d"
+      },
+      "rollups": {
+        "status": "ok",
+        "day": "2026-02-11",
+        "generated_at": 1770853806
+      },
+      "dashboard": {
+        "status": "ok",
+        "window_minutes": 60
+      },
+      "usage_json_rows": 4,
+      "usage_csv": {
+        "status": 200,
+        "report_key": "usage/usage-2026-02-11T23-50-07-772Z.csv",
+        "bytes": 397
+      },
+      "alert_events_count": 3,
+      "cost_totals": {
+        "requests": 12,
+        "compute_usd": 0.000014,
+        "storage_usd": 0.000002,
+        "total_usd": 0.000016
+      },
+      "trace_event_count": 1,
+      "traces_count": 1,
+      "sla_rows": 0,
+      "mission_rows": 3
+    }
+  },
+  "summary": {
+    "pass": true,
+    "stories": {
+      "clawclaim": [
+        "CCL-US-004",
+        "CCL-US-005",
+        "CCL-US-006",
+        "CCL-US-007",
+        "CCL-US-008",
+        "CCL-US-009"
+      ],
+      "clawscope": [
+        "CSC-US-007",
+        "CSC-US-008",
+        "CSC-US-009",
+        "CSC-US-010",
+        "CSC-US-011",
+        "CSC-US-012",
+        "CSC-US-013"
+      ]
+    },
+    "checks": {
+      "replay_denied": true,
+      "unknown_transition_denied": true,
+      "token_revoked_state": true,
+      "trace_present": true
+    }
+  }
+}

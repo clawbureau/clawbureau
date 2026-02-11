@@ -1,0 +1,12 @@
+identity-control-plane-m5 smoke (prod)
+generated_at=2026-02-11T23:49:48.765Z
+clawclaim_version=b2be579c-eb85-4c41-b3cd-80a439848368
+clawscope_version=56b88b3f-7914-42dc-a680-a6a9b43f3d8d
+clawverify_version=1
+owner_did=did:key:z6Mkjoa9YFB48d4Zn2afzDwQBzKtxM1pWZQzNJsiBMQVXbrm
+token_hash=968803d640879a6d476b11dc618a87c33d9502bc8ba11d43a574c4587020177d
+trace_id=trace-m5-prod-1770853788765
+usage_rows=4
+alert_events=3
+mission_rows=3
+status=PASS

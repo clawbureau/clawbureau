@@ -98,8 +98,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented observability ingestion + dashboard endpoint `GET /v1/metrics/dashboard` in `services/clawscope/src/observability.ts` backed by D1 event storage, queue consumers, and analytics writes. Token issue/revoke/introspect/matrix flows now emit best-effort observability events with latency/error context and mission correlation IDs. Validated in staging/prod M5 smoke with non-empty dashboard/report output."
     },
     {
       "id": "CSC-US-008",
@@ -112,8 +112,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented daily rollups (`scope_daily_usage_rollups`) and usage APIs: `POST /v1/reports/rollups/run` and `GET /v1/reports/usage` (+ `format=csv` export with optional R2 persistence). Reports are segmented by service/route and generated from persisted observability events. Verified via staging/prod M5 smoke artifacts with JSON row sets and CSV export keys."
     },
     {
       "id": "CSC-US-009",
@@ -126,8 +126,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Shipped deterministic alert rule/event pipeline: `POST /v1/alerts/rules` and `GET /v1/alerts/events` with metric thresholds (`error_rate_percent`, `p95_latency_ms`, `request_count`). Alert dedupe is coordinated through Durable Object `ScopeObservabilityCoordinator` and event records persist to D1 (`scope_alert_events`). Smoke evidence shows alert-event creation under M5 workloads in staging/prod."
     },
     {
       "id": "CSC-US-010",
@@ -140,8 +140,8 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented cost rollups (`scope_daily_cost_rollups`) and API `GET /v1/analytics/cost` providing service-level request and estimated compute/storage cost totals. Rollups run through scheduled/manual aggregation and are persisted/exportable for finance tracking. Validated in M5 smoke with populated cost totals for both staging and prod." 
     },
     {
       "id": "CSC-US-011",
@@ -154,8 +154,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented trace index + viewer APIs: `GET /v1/traces/{trace_id}` and `GET /v1/traces?correlation_id=...`. Request trace IDs/correlation IDs are persisted from emitted scope events into `scope_trace_index` with event timelines for root-cause workflows. M5 smoke validates deterministic trace retrieval (`trace_present=true`) across staging/prod." 
     },
     {
       "id": "CSC-US-012",
@@ -168,8 +168,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented SLA rollup/report pipeline (`scope_sla_reports`) with endpoint `GET /v1/reports/sla`, built from daily event error/latency aggregates. Scheduled/manual rollup execution exports report artifacts to R2 for compliance retention. Verified endpoint behavior in staging/prod M5 smoke runs." 
     },
     {
       "id": "CSC-US-013",
@@ -182,8 +182,8 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented mission rollups (`scope_daily_mission_rollups`) and API `GET /v1/missions/aggregate?mission_id=...` aggregating request/error/token issuance activity per mission. Mission IDs are propagated from CST flows into observability events, then materialized through rollups for export/reporting. Staging/prod M5 smoke artifacts show non-zero mission rows after end-to-end issuance/introspection/revocation flows." 
     },
     {
       "id": "CSC-US-014",

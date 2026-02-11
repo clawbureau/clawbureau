@@ -1,0 +1,61 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.identity.org_roster_claim_manifest.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Org Team Roster Claim Manifest v1",
+  "description": "Owner-signed organization roster claim manifest for deterministic team membership assertions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifest_version",
+    "org_id",
+    "owner_did",
+    "issued_at",
+    "members",
+    "signature_b64u"
+  ],
+  "properties": {
+    "manifest_version": { "const": "1" },
+    "org_id": { "type": "string", "minLength": 1 },
+    "owner_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "issued_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix epoch seconds."
+    },
+    "manifest_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "Optional deterministic manifest hash for traceability."
+    },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["member_did", "team_role"],
+        "properties": {
+          "member_did": {
+            "type": "string",
+            "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+          },
+          "team_role": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      }
+    },
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Owner DID signature over canonical manifest statement."
+    },
+    "metadata": { "type": "object" }
+  }
+}

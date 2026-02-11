@@ -236,4 +236,46 @@ Validation evidence:
 
 ---
 
+## 11) 2026-02-11 addendum — ICP-M5 identity productization (CCL-US-004..009)
+
+Shipped in `services/clawclaim/src/m5-identity.ts` + route wiring in `services/clawclaim/src/index.ts`:
+- Platform claims:
+  - `POST /v1/platform-claims/register`
+  - `GET /v1/platform-claims/{owner_did}`
+- Primary DID + profile:
+  - `POST /v1/accounts/{account_id}/primary-did`
+  - `GET /v1/accounts/{account_id}/profile`
+- Binding audit + export:
+  - `GET /v1/bindings/audit`
+  - `GET /v1/bindings/audit/export`
+- Owner attestation registry:
+  - `POST /v1/owner-attestations/register`
+  - `GET /v1/owner-attestations/{owner_did}`
+  - `GET /v1/owner-attestations/lookup`
+- Challenge→CST exchange:
+  - `POST /v1/scoped-tokens/challenges`
+  - `POST /v1/scoped-tokens/exchange`
+- Org/team roster claims:
+  - `POST /v1/orgs/{org_id}/roster-manifests`
+  - `GET /v1/orgs/{org_id}/roster/latest`
+
+Cloudflare runtime/storage stack:
+- D1: `CLAIM_DB` (`clawclaim-identity-registry`, `clawclaim-identity-registry-staging`)
+- KV: `CLAIM_STORE`, `CLAIM_CACHE`
+- R2: `CLAIM_AUDIT_EXPORTS` (compliance export persistence)
+
+Validation + rollout evidence:
+- Quality checks:
+  - `cd services/clawclaim && npm run typecheck && npm test`
+  - `cd services/clawscope && npm run typecheck && npm test`
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Deploys:
+  - staging: `clawclaim-staging` version `2204a9ff-2376-4910-944c-8b517a526122`
+  - prod: `clawclaim` version `b2be579c-eb85-4c41-b3cd-80a439848368`
+- Smoke artifacts:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-28-476Z-staging-m5/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-48-765Z-prod-m5/result.json`
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*
