@@ -1,12 +1,17 @@
 import type {
   Env,
   PaymentSettlementIngestPayload,
+  RetryForwardingResponse,
   StripeEvent,
+  StripeWebhookOutboxRecord,
   StripeWebhookRecord,
   StripeWebhookResponse,
 } from './types';
 
 const DEFAULT_STRIPE_TOLERANCE_SECONDS = 300;
+const DEFAULT_RETRY_BATCH_LIMIT = 25;
+const DEFAULT_RETRY_BASE_SECONDS = 15;
+const DEFAULT_RETRY_MAX_SECONDS = 300;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -43,6 +48,60 @@ function parseBooleanFlag(value: string | undefined): boolean {
 
   const normalized = value.trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'y';
+}
+
+function parsePositiveIntegerEnv(
+  value: string | undefined,
+  fallback: number,
+  field: string
+): number {
+  if (!value || value.trim().length === 0) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new ClawSettleError(
+      'Invalid numeric environment configuration',
+      'DEPENDENCY_NOT_CONFIGURED',
+      503,
+      { field }
+    );
+  }
+
+  return parsed;
+}
+
+function toOutboxBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  }
+
+  return false;
+}
+
+function computeRetryDelaySeconds(
+  attempts: number,
+  baseSeconds: number,
+  maxSeconds: number
+): number {
+  const boundedAttempts = Math.max(1, attempts);
+  const delay = baseSeconds * Math.pow(2, boundedAttempts - 1);
+  return Math.min(maxSeconds, Math.max(baseSeconds, Math.floor(delay)));
+}
+
+function truncateErrorMessage(value: unknown): string {
+  const text = value instanceof Error ? value.message : String(value ?? 'Unknown ledger failure');
+  return text.length > 500 ? text.slice(0, 500) : text;
 }
 
 type SettleEnvironment = 'staging' | 'production';
@@ -188,6 +247,17 @@ interface ParsedStripeSignature {
   v1Signatures: string[];
 }
 
+interface ForwardAttemptResult {
+  ok: boolean;
+  eventId: string;
+  eventType: string;
+  idempotencyKey: string;
+  ledgerStatus?: number;
+  settlementId?: string;
+  retryScheduled?: boolean;
+  nextRetryAt?: string;
+}
+
 export class ClawSettleError extends Error {
   constructor(
     message: string,
@@ -203,6 +273,28 @@ export class ClawSettleError extends Error {
 export interface StripeWebhookRepositoryLike {
   findByEventId(eventId: string): Promise<StripeWebhookRecord | null>;
   create(record: StripeWebhookRecord): Promise<void>;
+}
+
+export interface StripeWebhookOutboxRepositoryLike {
+  findByEventId(eventId: string): Promise<StripeWebhookOutboxRecord | null>;
+  create(record: StripeWebhookOutboxRecord): Promise<void>;
+  incrementAttempt(eventId: string, attemptedAt: string, updatedAt: string): Promise<void>;
+  markForwarded(params: {
+    eventId: string;
+    settlementId?: string;
+    ledgerStatus?: number;
+    forwardedAt: string;
+    updatedAt: string;
+  }): Promise<void>;
+  markFailed(params: {
+    eventId: string;
+    ledgerStatus?: number;
+    nextRetryAt: string;
+    errorCode: string;
+    errorMessage: string;
+    updatedAt: string;
+  }): Promise<void>;
+  listRetryable(nowIso: string, limit: number): Promise<StripeWebhookOutboxRecord[]>;
 }
 
 export interface LedgerSettlementClientLike {
@@ -485,6 +577,35 @@ function parseWebhookRecord(row: Record<string, unknown>): StripeWebhookRecord {
   };
 }
 
+function parseOutboxRecord(row: Record<string, unknown>): StripeWebhookOutboxRecord {
+  return {
+    event_id: String(row.event_id),
+    event_type: String(row.event_type),
+    idempotency_key: String(row.idempotency_key),
+    livemode: toOutboxBoolean(row.livemode),
+    settlement_payload_json: String(row.settlement_payload_json),
+    status:
+      row.status === 'pending' || row.status === 'failed' || row.status === 'forwarded'
+        ? row.status
+        : 'pending',
+    attempts: Number.isFinite(Number(row.attempts)) ? Number(row.attempts) : 0,
+    next_retry_at: typeof row.next_retry_at === 'string' ? row.next_retry_at : undefined,
+    last_attempted_at:
+      typeof row.last_attempted_at === 'string' ? row.last_attempted_at : undefined,
+    last_error_code: typeof row.last_error_code === 'string' ? row.last_error_code : undefined,
+    last_error_message:
+      typeof row.last_error_message === 'string' ? row.last_error_message : undefined,
+    ledger_status:
+      Number.isFinite(Number(row.ledger_status)) && row.ledger_status !== null
+        ? Number(row.ledger_status)
+        : undefined,
+    settlement_id: typeof row.settlement_id === 'string' ? row.settlement_id : undefined,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+    forwarded_at: typeof row.forwarded_at === 'string' ? row.forwarded_at : undefined,
+  };
+}
+
 export class StripeWebhookRepository implements StripeWebhookRepositoryLike {
   constructor(private db: D1Database) {}
 
@@ -522,6 +643,196 @@ export class StripeWebhookRepository implements StripeWebhookRepositoryLike {
         record.processed_at
       )
       .run();
+  }
+}
+
+export class StripeWebhookOutboxRepository implements StripeWebhookOutboxRepositoryLike {
+  constructor(private db: D1Database) {}
+
+  async findByEventId(eventId: string): Promise<StripeWebhookOutboxRecord | null> {
+    const result = await this.db
+      .prepare(
+        `SELECT
+          event_id,
+          event_type,
+          idempotency_key,
+          livemode,
+          settlement_payload_json,
+          status,
+          attempts,
+          next_retry_at,
+          last_attempted_at,
+          last_error_code,
+          last_error_message,
+          ledger_status,
+          settlement_id,
+          created_at,
+          updated_at,
+          forwarded_at
+         FROM stripe_webhook_outbox
+         WHERE event_id = ?
+         LIMIT 1`
+      )
+      .bind(eventId)
+      .first();
+
+    if (!result) {
+      return null;
+    }
+
+    return parseOutboxRecord(result);
+  }
+
+  async create(record: StripeWebhookOutboxRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO stripe_webhook_outbox (
+          event_id,
+          event_type,
+          idempotency_key,
+          livemode,
+          settlement_payload_json,
+          status,
+          attempts,
+          next_retry_at,
+          last_attempted_at,
+          last_error_code,
+          last_error_message,
+          ledger_status,
+          settlement_id,
+          created_at,
+          updated_at,
+          forwarded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        record.event_id,
+        record.event_type,
+        record.idempotency_key,
+        record.livemode ? 1 : 0,
+        record.settlement_payload_json,
+        record.status,
+        record.attempts,
+        record.next_retry_at ?? null,
+        record.last_attempted_at ?? null,
+        record.last_error_code ?? null,
+        record.last_error_message ?? null,
+        record.ledger_status ?? null,
+        record.settlement_id ?? null,
+        record.created_at,
+        record.updated_at,
+        record.forwarded_at ?? null
+      )
+      .run();
+  }
+
+  async incrementAttempt(eventId: string, attemptedAt: string, updatedAt: string): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE stripe_webhook_outbox
+         SET attempts = attempts + 1,
+             last_attempted_at = ?,
+             updated_at = ?
+         WHERE event_id = ?
+           AND status != 'forwarded'`
+      )
+      .bind(attemptedAt, updatedAt, eventId)
+      .run();
+  }
+
+  async markForwarded(params: {
+    eventId: string;
+    settlementId?: string;
+    ledgerStatus?: number;
+    forwardedAt: string;
+    updatedAt: string;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE stripe_webhook_outbox
+         SET status = 'forwarded',
+             settlement_id = ?,
+             ledger_status = ?,
+             forwarded_at = ?,
+             next_retry_at = NULL,
+             last_error_code = NULL,
+             last_error_message = NULL,
+             updated_at = ?
+         WHERE event_id = ?
+           AND status != 'forwarded'`
+      )
+      .bind(
+        params.settlementId ?? null,
+        params.ledgerStatus ?? null,
+        params.forwardedAt,
+        params.updatedAt,
+        params.eventId
+      )
+      .run();
+  }
+
+  async markFailed(params: {
+    eventId: string;
+    ledgerStatus?: number;
+    nextRetryAt: string;
+    errorCode: string;
+    errorMessage: string;
+    updatedAt: string;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE stripe_webhook_outbox
+         SET status = 'failed',
+             ledger_status = ?,
+             next_retry_at = ?,
+             last_error_code = ?,
+             last_error_message = ?,
+             updated_at = ?
+         WHERE event_id = ?
+           AND status != 'forwarded'`
+      )
+      .bind(
+        params.ledgerStatus ?? null,
+        params.nextRetryAt,
+        params.errorCode,
+        params.errorMessage,
+        params.updatedAt,
+        params.eventId
+      )
+      .run();
+  }
+
+  async listRetryable(nowIso: string, limit: number): Promise<StripeWebhookOutboxRecord[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT
+          event_id,
+          event_type,
+          idempotency_key,
+          livemode,
+          settlement_payload_json,
+          status,
+          attempts,
+          next_retry_at,
+          last_attempted_at,
+          last_error_code,
+          last_error_message,
+          ledger_status,
+          settlement_id,
+          created_at,
+          updated_at,
+          forwarded_at
+         FROM stripe_webhook_outbox
+         WHERE status IN ('pending', 'failed')
+           AND (next_retry_at IS NULL OR next_retry_at <= ?)
+         ORDER BY created_at ASC
+         LIMIT ?`
+      )
+      .bind(nowIso, limit)
+      .all();
+
+    const rows = Array.isArray(result.results) ? result.results : [];
+    return rows.map((row) => parseOutboxRecord(row));
   }
 }
 
@@ -568,6 +879,7 @@ export class LedgerSettlementClient implements LedgerSettlementClientLike {
 
 interface StripeWebhookServiceDeps {
   repository?: StripeWebhookRepositoryLike;
+  outboxRepository?: StripeWebhookOutboxRepositoryLike;
   ledgerClient?: LedgerSettlementClientLike;
   now?: () => string;
   nowMs?: () => number;
@@ -575,15 +887,36 @@ interface StripeWebhookServiceDeps {
 
 export class StripeWebhookService {
   private readonly repository: StripeWebhookRepositoryLike;
+  private readonly outboxRepository: StripeWebhookOutboxRepositoryLike;
   private readonly ledgerClient?: LedgerSettlementClientLike;
   private readonly now: () => string;
   private readonly nowMs: () => number;
+  private readonly retryBatchLimit: number;
+  private readonly retryBaseSeconds: number;
+  private readonly retryMaxSeconds: number;
 
   constructor(private env: Env, deps: StripeWebhookServiceDeps = {}) {
     this.repository = deps.repository ?? new StripeWebhookRepository(env.DB);
+    this.outboxRepository = deps.outboxRepository ?? new StripeWebhookOutboxRepository(env.DB);
     this.ledgerClient = deps.ledgerClient;
     this.now = deps.now ?? (() => new Date().toISOString());
     this.nowMs = deps.nowMs ?? (() => Date.now());
+
+    this.retryBatchLimit = parsePositiveIntegerEnv(
+      env.FORWARDING_RETRY_BATCH_LIMIT,
+      DEFAULT_RETRY_BATCH_LIMIT,
+      'env.FORWARDING_RETRY_BATCH_LIMIT'
+    );
+    this.retryBaseSeconds = parsePositiveIntegerEnv(
+      env.FORWARDING_RETRY_BASE_SECONDS,
+      DEFAULT_RETRY_BASE_SECONDS,
+      'env.FORWARDING_RETRY_BASE_SECONDS'
+    );
+    this.retryMaxSeconds = parsePositiveIntegerEnv(
+      env.FORWARDING_RETRY_MAX_SECONDS,
+      DEFAULT_RETRY_MAX_SECONDS,
+      'env.FORWARDING_RETRY_MAX_SECONDS'
+    );
   }
 
   private requireSigningSecret(): string {
@@ -651,6 +984,10 @@ export class StripeWebhookService {
           typeof parsed.settlement_id === 'string'
             ? parsed.settlement_id
             : record.settlement_id,
+        retry_scheduled:
+          typeof parsed.retry_scheduled === 'boolean' ? parsed.retry_scheduled : undefined,
+        next_retry_at:
+          typeof parsed.next_retry_at === 'string' ? parsed.next_retry_at : undefined,
       };
     } catch {
       throw new ClawSettleError(
@@ -731,6 +1068,244 @@ export class StripeWebhookService {
     }
   }
 
+  private parseSettlementPayloadJson(raw: string): PaymentSettlementIngestPayload {
+    try {
+      const parsed = JSON.parse(raw);
+      if (!isRecord(parsed)) {
+        throw new Error('invalid payload');
+      }
+      return parsed as unknown as PaymentSettlementIngestPayload;
+    } catch {
+      throw new ClawSettleError(
+        'Corrupt settlement outbox payload',
+        'INTERNAL_ERROR',
+        500
+      );
+    }
+  }
+
+  private async ensureOutboxRecord(
+    event: StripeEvent,
+    idempotencyKey: string,
+    settlementPayload: PaymentSettlementIngestPayload
+  ): Promise<StripeWebhookOutboxRecord> {
+    const existing = await this.outboxRepository.findByEventId(event.id);
+    if (existing) {
+      return existing;
+    }
+
+    const nowIso = this.now();
+    const candidate: StripeWebhookOutboxRecord = {
+      event_id: event.id,
+      event_type: event.type,
+      idempotency_key: idempotencyKey,
+      livemode: Boolean(event.livemode),
+      settlement_payload_json: JSON.stringify(settlementPayload),
+      status: 'pending',
+      attempts: 0,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    try {
+      await this.outboxRepository.create(candidate);
+      return candidate;
+    } catch (err) {
+      if (!isSqliteUniqueConstraintError(err)) {
+        throw err;
+      }
+
+      const raced = await this.outboxRepository.findByEventId(event.id);
+      if (!raced) {
+        throw err;
+      }
+      return raced;
+    }
+  }
+
+  private buildForwardedResponse(params: {
+    eventId: string;
+    eventType: string;
+    idempotencyKey: string;
+    settlementId?: string;
+    ledgerStatus?: number;
+    deduped: boolean;
+  }): StripeWebhookResponse {
+    return {
+      ok: true,
+      deduped: params.deduped,
+      event_id: params.eventId,
+      event_type: params.eventType,
+      idempotency_key: params.idempotencyKey,
+      forwarded_to_ledger: true,
+      ledger_status: params.ledgerStatus,
+      settlement_id: params.settlementId,
+    };
+  }
+
+  private async forwardOutboxEvent(eventId: string): Promise<ForwardAttemptResult> {
+    const existing = await this.outboxRepository.findByEventId(eventId);
+    if (!existing) {
+      throw new ClawSettleError(
+        'Missing outbox event record',
+        'INTERNAL_ERROR',
+        500,
+        { event_id: eventId }
+      );
+    }
+
+    if (existing.status === 'forwarded') {
+      return {
+        ok: true,
+        eventId: existing.event_id,
+        eventType: existing.event_type,
+        idempotencyKey: existing.idempotency_key,
+        ledgerStatus: existing.ledger_status,
+        settlementId: existing.settlement_id,
+      };
+    }
+
+    const attemptTime = this.now();
+    await this.outboxRepository.incrementAttempt(existing.event_id, attemptTime, attemptTime);
+
+    const current = await this.outboxRepository.findByEventId(existing.event_id);
+    if (!current) {
+      throw new ClawSettleError(
+        'Outbox event disappeared during forwarding',
+        'INTERNAL_ERROR',
+        500,
+        { event_id: existing.event_id }
+      );
+    }
+
+    if (current.status === 'forwarded') {
+      return {
+        ok: true,
+        eventId: current.event_id,
+        eventType: current.event_type,
+        idempotencyKey: current.idempotency_key,
+        ledgerStatus: current.ledger_status,
+        settlementId: current.settlement_id,
+      };
+    }
+
+    const payload = this.parseSettlementPayloadJson(current.settlement_payload_json);
+
+    let ledgerStatus: number | undefined;
+    let settlementId: string | undefined;
+    let ingestErrorMessage: string | undefined;
+
+    try {
+      const ledger = await this.getLedgerClient().ingest(payload, current.idempotency_key);
+      ledgerStatus = ledger.status;
+
+      if (ledger.status >= 200 && ledger.status < 300) {
+        settlementId =
+          isRecord(ledger.json?.settlement) &&
+          typeof ledger.json?.settlement?.id === 'string'
+            ? String(ledger.json?.settlement?.id)
+            : undefined;
+
+        const doneAt = this.now();
+        await this.outboxRepository.markForwarded({
+          eventId: current.event_id,
+          settlementId,
+          ledgerStatus,
+          forwardedAt: doneAt,
+          updatedAt: doneAt,
+        });
+
+        return {
+          ok: true,
+          eventId: current.event_id,
+          eventType: current.event_type,
+          idempotencyKey: current.idempotency_key,
+          ledgerStatus,
+          settlementId,
+        };
+      }
+
+      ingestErrorMessage = `Ledger HTTP ${ledger.status}`;
+    } catch (err) {
+      ingestErrorMessage = truncateErrorMessage(err);
+    }
+
+    const attempts = Math.max(1, current.attempts);
+    const retryDelaySeconds = computeRetryDelaySeconds(
+      attempts,
+      this.retryBaseSeconds,
+      this.retryMaxSeconds
+    );
+    const nextRetryAt = new Date(this.nowMs() + retryDelaySeconds * 1000).toISOString();
+
+    await this.outboxRepository.markFailed({
+      eventId: current.event_id,
+      ledgerStatus,
+      nextRetryAt,
+      errorCode: 'LEDGER_INGEST_FAILED',
+      errorMessage: ingestErrorMessage ?? 'Ledger settlement ingest failed',
+      updatedAt: this.now(),
+    });
+
+    return {
+      ok: false,
+      eventId: current.event_id,
+      eventType: current.event_type,
+      idempotencyKey: current.idempotency_key,
+      ledgerStatus,
+      retryScheduled: true,
+      nextRetryAt,
+    };
+  }
+
+  private async persistForwardedWebhookRecord(params: {
+    eventId: string;
+    eventType: string;
+    idempotencyKey: string;
+    settlementId?: string;
+    ledgerStatus?: number;
+  }): Promise<void> {
+    const existing = await this.repository.findByEventId(params.eventId);
+    if (existing) {
+      return;
+    }
+
+    const response = this.buildForwardedResponse({
+      eventId: params.eventId,
+      eventType: params.eventType,
+      idempotencyKey: params.idempotencyKey,
+      settlementId: params.settlementId,
+      ledgerStatus: params.ledgerStatus,
+      deduped: false,
+    });
+
+    const record: StripeWebhookRecord = {
+      event_id: params.eventId,
+      event_type: params.eventType,
+      idempotency_key: params.idempotencyKey,
+      settlement_id: params.settlementId,
+      response_json: JSON.stringify(response),
+      processed_at: this.now(),
+    };
+
+    await this.persistAndReturn(record, response);
+  }
+
+  private resolveRetryLimit(limit?: number): number {
+    if (typeof limit !== 'number' || !Number.isFinite(limit)) {
+      return this.retryBatchLimit;
+    }
+
+    const parsed = Math.floor(limit);
+    if (parsed <= 0) {
+      throw new ClawSettleError('Invalid retry limit', 'INVALID_REQUEST', 400, {
+        field: 'limit',
+      });
+    }
+
+    return Math.min(parsed, 200);
+  }
+
   async processWebhook(
     rawBody: string,
     signatureHeader: string | null
@@ -785,46 +1360,113 @@ export class StripeWebhookService {
       return this.persistAndReturn(record, ignoredResponse);
     }
 
-    const ledgerClient = this.getLedgerClient();
-    const ledger = await ledgerClient.ingest(settlementPayload, idempotencyKey);
+    await this.ensureOutboxRecord(event, idempotencyKey, settlementPayload);
 
-    if (ledger.status < 200 || ledger.status >= 300) {
+    const forwardAttempt = await this.forwardOutboxEvent(event.id);
+
+    if (!forwardAttempt.ok) {
       throw new ClawSettleError(
         'Ledger settlement ingest failed',
         'LEDGER_INGEST_FAILED',
         502,
         {
-          ledger_status: ledger.status,
+          event_id: event.id,
+          ledger_status: forwardAttempt.ledgerStatus,
+          retry_scheduled: true,
+          next_retry_at: forwardAttempt.nextRetryAt,
         }
       );
     }
 
-    const settlementId =
-      isRecord(ledger.json?.settlement) &&
-      typeof ledger.json?.settlement?.id === 'string'
-        ? String(ledger.json?.settlement?.id)
-        : undefined;
-
-    const response: StripeWebhookResponse = {
-      ok: true,
+    const response = this.buildForwardedResponse({
+      eventId: forwardAttempt.eventId,
+      eventType: forwardAttempt.eventType,
+      idempotencyKey: forwardAttempt.idempotencyKey,
+      ledgerStatus: forwardAttempt.ledgerStatus,
+      settlementId: forwardAttempt.settlementId,
       deduped: false,
-      event_id: event.id,
-      event_type: event.type,
-      idempotency_key: idempotencyKey,
-      forwarded_to_ledger: true,
-      ledger_status: ledger.status,
-      settlement_id: settlementId,
-    };
+    });
 
     const record: StripeWebhookRecord = {
-      event_id: event.id,
-      event_type: event.type,
-      idempotency_key: idempotencyKey,
-      settlement_id: settlementId,
+      event_id: forwardAttempt.eventId,
+      event_type: forwardAttempt.eventType,
+      idempotency_key: forwardAttempt.idempotencyKey,
+      settlement_id: forwardAttempt.settlementId,
       response_json: JSON.stringify(response),
       processed_at: this.now(),
     };
 
     return this.persistAndReturn(record, response);
+  }
+
+  async retryFailedForwarding(
+    limit?: number,
+    force = false,
+    eventId?: string
+  ): Promise<RetryForwardingResponse> {
+    const retryLimit = this.resolveRetryLimit(limit);
+    const nowIso = this.now();
+
+    let candidates: StripeWebhookOutboxRecord[];
+
+    if (typeof eventId === 'string' && eventId.trim().length > 0) {
+      const event = await this.outboxRepository.findByEventId(eventId.trim());
+      if (!event || event.status === 'forwarded') {
+        return {
+          ok: true,
+          attempted: 0,
+          forwarded: 0,
+          failed: 0,
+        };
+      }
+
+      if (
+        !force &&
+        event.next_retry_at &&
+        Number.isFinite(Date.parse(event.next_retry_at)) &&
+        Date.parse(event.next_retry_at) > Date.parse(nowIso)
+      ) {
+        return {
+          ok: true,
+          attempted: 0,
+          forwarded: 0,
+          failed: 0,
+        };
+      }
+
+      candidates = [event];
+    } else {
+      const dueIso = force ? '9999-12-31T23:59:59.999Z' : nowIso;
+      candidates = await this.outboxRepository.listRetryable(dueIso, retryLimit);
+    }
+
+    let attempted = 0;
+    let forwarded = 0;
+    let failed = 0;
+
+    for (const candidate of candidates) {
+      attempted += 1;
+
+      const result = await this.forwardOutboxEvent(candidate.event_id);
+      if (result.ok) {
+        forwarded += 1;
+        await this.persistForwardedWebhookRecord({
+          eventId: result.eventId,
+          eventType: result.eventType,
+          idempotencyKey: result.idempotencyKey,
+          settlementId: result.settlementId,
+          ledgerStatus: result.ledgerStatus,
+        });
+      } else {
+        failed += 1;
+      }
+    }
+
+    return {
+      ok: true,
+      attempted,
+      forwarded,
+      failed,
+    };
   }
 }

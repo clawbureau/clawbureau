@@ -123,3 +123,71 @@ Started: 2026-02-12
   - MPY-US-006 shipped to staging + production.
   - MPY-US-007 queued next (durable outbox + retry exact-once hardening).
 ---
+
+## 2026-02-11T16:28:00Z - MPY-US-007 (durable forwarding outbox + retry)
+- What was implemented
+  - Added durable forwarding outbox persistence in `services/clawsettle/src/stripe.ts`:
+    - verified + mapped settlement events are persisted before any ledger forwarding attempt
+    - outbox rows track status (`pending|failed|forwarded`), attempts, next retry time, last error metadata, settlement id
+  - Added reliable forwarding retry paths:
+    - scheduled retry via Worker cron (`*/2 * * * *`)
+    - admin-triggered retry endpoint: `POST /v1/stripe/forwarding/retry`
+      - requires `SETTLE_ADMIN_KEY`
+      - supports deterministic controls `{ limit, force, event_id }`
+  - Added deterministic failure signaling on initial forward failure:
+    - webhook returns `502 LEDGER_INGEST_FAILED`
+    - details include `retry_scheduled: true`, `next_retry_at`, `ledger_status`
+  - Preserved exact-once semantics under replay/retry races:
+    - forwarding remains keyed by `stripe:event:<event_id>` idempotency key
+    - once outbox is `forwarded`, further retries do not re-forward
+    - webhook dedupe record persists successful forwarded result for deterministic replays
+- Schema/migration
+  - Added migration:
+    - `services/clawsettle/migrations/0002_create_stripe_webhook_outbox.sql`
+  - Applied migrations:
+    - staging: `wrangler d1 migrations apply clawsettle-staging --env staging --remote` (applied 0002)
+    - production: `wrangler d1 migrations apply clawsettle --remote` (applied 0002)
+- Tests + quality checks
+  - `cd services/clawsettle && npm test && npm run lint && npm run typecheck`
+  - Extended tests (`services/clawsettle/test/stripe-webhook.test.ts`):
+    - fail-first forward -> retry success -> replay dedupe -> no extra forwarding
+    - livemode guard and signature/replay coverage preserved
+  - `node scripts/docs/lint-prds.mjs`
+- Deploy evidence
+  - Deployed staging service:
+    - `clawsettle-staging` version: `cf0acb43-52a3-415f-9b05-06d32db15636`
+  - Deployed production service:
+    - `clawsettle` version: `5ab4669c-3f86-4514-8b2a-36b259aea078`
+  - Cron active in both environments:
+    - `schedule: */2 * * * *`
+  - Secrets updated (names only):
+    - staging: `SETTLE_ADMIN_KEY`
+    - production: `SETTLE_ADMIN_KEY`
+- Staging smoke evidence
+  - Livemode + webhook baseline:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env staging`
+    - pass: accept/replay/tamper/livemode mismatch/settlement/account all expected
+  - Retry/outbox exact-once:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-forwarding-retry.mjs --env staging`
+    - highlights:
+      - first webhook: `502 LEDGER_INGEST_FAILED` with `retry_scheduled=true`
+      - retry #1 for event: `attempted=1`, `forwarded=1`, `failed=0`
+      - retry #2 for same event: `attempted=0`, `forwarded=0`
+      - replay webhook: `200 deduped=true`
+      - settlement confirmed; account available `1234` (no double-credit)
+- Production smoke evidence
+  - Livemode + webhook baseline:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env prod`
+    - pass: accept/replay/tamper/livemode mismatch/settlement/account all expected
+  - Retry/outbox exact-once:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-forwarding-retry.mjs --env prod`
+    - highlights:
+      - first webhook: `502 LEDGER_INGEST_FAILED` with `retry_scheduled=true`
+      - retry #1 for event: `attempted=1`, `forwarded=1`, `failed=0`
+      - retry #2 for same event: `attempted=0`, `forwarded=0`
+      - replay webhook: `200 deduped=true`
+      - settlement confirmed; account available `1234` (no double-credit)
+- Release status
+  - MPY-US-007 shipped to staging + production.
+  - M3 package (MPY-US-006 + MPY-US-007) complete.
+---

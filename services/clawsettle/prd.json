@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/economy/MPY-US-006-clawsettle-prod-livemode-guard",
+  "branchName": "feat/economy/MPY-US-007-clawsettle-forwarding-outbox-retry",
   "description": "clawsettle.com (Settlement) — provider adapter layer for external rails mapped into clawledger settlement semantics.",
   "userStories": [
     {
@@ -46,8 +46,8 @@
         "Add smoke: initial failure -> retry success -> no double-credit"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Queued after MPY-US-006"
+      "passes": true,
+      "notes": "Shipped to staging + production: verified webhook events now persist in durable outbox before forwarding, failed forwards are retried (cron + admin endpoint), replay/retry races remain idempotent with exactly-once economic outcomes."
     }
   ]
 }
