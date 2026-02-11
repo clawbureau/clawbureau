@@ -312,3 +312,13 @@ Started: 2026-02-05T21:49:28Z
   - `smoke-export-bundle.mjs --env staging` => VALID + tampered INVALID
   - `smoke-export-bundle.mjs --env prod` => VALID + tampered INVALID
 ---
+## 2026-02-11T22:40:00Z - POHVN-US-006 (tracker sync)
+- What was updated
+  - Marked POHVN-US-006 as complete in `docs/roadmaps/proof-of-harness/prd.json` (tracker drift fix).
+  - Added completion notes pointing to shipped private/public rollout chain:
+    - clawea private PR #4 (execution attestation hardening)
+    - clawbureau PR #110 (submodule bump)
+    - clawbureau PR #111 (smoke hardening and rollout validation)
+- Notes
+  - No new runtime behavior introduced in this sync; this change aligns tracker truth with already-shipped implementation.
+---
