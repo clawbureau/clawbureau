@@ -48,6 +48,15 @@ export interface Env {
   /** Timeout in ms for requester token introspection (defaults to 5000). */
   REQUESTER_AUTH_TIMEOUT_MS?: string;
 
+  /** Compatibility path: allow local worker DB tokens (disabled by default). */
+  WORKER_AUTH_COMPAT_LEGACY?: string;
+
+  /** Required audience for worker scoped tokens (defaults to requester audience). */
+  WORKER_AUTH_REQUIRED_AUDIENCE?: string;
+
+  /** Timeout in ms for worker token introspection (defaults to requester timeout). */
+  WORKER_AUTH_TIMEOUT_MS?: string;
+
   /** D1 database binding */
   BOUNTIES_DB: D1Database;
 }
@@ -60,6 +69,16 @@ type VerificationStatus = 'VALID' | 'INVALID';
 
 type RequesterAuthAction = 'post_bounty' | 'approve_bounty' | 'reject_bounty' | 'read_submission';
 type RequesterAuthMode = 'scoped_token' | 'legacy_admin_header';
+type WorkerAuthAction =
+  | 'worker_self'
+  | 'accept_bounty'
+  | 'submit_bounty'
+  | 'issue_bounty_cst'
+  | 'read_submission'
+  | 'read_trust_pulse'
+  | 'reregister_worker';
+
+type ScopedTokenLane = 'legacy' | 'canonical';
 
 interface RequesterAuthContext {
   requester_did: string;
@@ -67,6 +86,27 @@ interface RequesterAuthContext {
   token_hash: string | null;
   scope: string[];
   aud: string[];
+  token_scope_hash_b64u: string | null;
+  token_lane: ScopedTokenLane | null;
+  payment_account_did: string | null;
+  iat: number | null;
+  exp: number | null;
+  bearer_token: string | null;
+}
+
+interface WorkerAuthContext {
+  worker_did: string;
+  auth_mode: WorkerAuthMode;
+  token_hash: string | null;
+  scope: string[];
+  aud: string[];
+  token_scope_hash_b64u: string | null;
+  token_lane: ScopedTokenLane | null;
+  payment_account_did: string | null;
+  agent_did: string | null;
+  iat: number | null;
+  exp: number | null;
+  bearer_token: string | null;
 }
 
 interface ScopeIntrospectionSuccess {
@@ -75,6 +115,19 @@ interface ScopeIntrospectionSuccess {
   sub?: unknown;
   aud?: unknown;
   scope?: unknown;
+  owner_ref?: unknown;
+  owner_did?: unknown;
+  controller_did?: unknown;
+  agent_did?: unknown;
+  policy_hash_b64u?: unknown;
+  control_plane_policy_hash_b64u?: unknown;
+  token_scope_hash_b64u?: unknown;
+  payment_account_did?: unknown;
+  spend_cap?: unknown;
+  mission_id?: unknown;
+  token_lane?: unknown;
+  iat?: unknown;
+  exp?: unknown;
 }
 
 interface ScopeIntrospectionInactive {
@@ -84,6 +137,19 @@ interface ScopeIntrospectionInactive {
   sub?: unknown;
   aud?: unknown;
   scope?: unknown;
+  owner_ref?: unknown;
+  owner_did?: unknown;
+  controller_did?: unknown;
+  agent_did?: unknown;
+  policy_hash_b64u?: unknown;
+  control_plane_policy_hash_b64u?: unknown;
+  token_scope_hash_b64u?: unknown;
+  payment_account_did?: unknown;
+  spend_cap?: unknown;
+  mission_id?: unknown;
+  token_lane?: unknown;
+  iat?: unknown;
+  exp?: unknown;
 }
 
 type ScopeIntrospectionResponse = ScopeIntrospectionSuccess | ScopeIntrospectionInactive;
@@ -93,6 +159,16 @@ const REQUESTER_AUTH_SCOPE_BY_ACTION: Record<RequesterAuthAction, string> = {
   approve_bounty: 'clawbounties:bounty:approve',
   reject_bounty: 'clawbounties:bounty:reject',
   read_submission: 'clawbounties:bounty:read',
+};
+
+const WORKER_AUTH_SCOPE_BY_ACTION: Record<WorkerAuthAction, string> = {
+  worker_self: 'clawbounties:worker:self:read',
+  accept_bounty: 'clawbounties:bounty:accept',
+  submit_bounty: 'clawbounties:bounty:submit',
+  issue_bounty_cst: 'clawbounties:bounty:cst:issue',
+  read_submission: 'clawbounties:submission:read',
+  read_trust_pulse: 'clawbounties:submission:trust-pulse:read',
+  reregister_worker: 'clawbounties:worker:register',
 };
 
 type FeePayer = 'buyer' | 'worker';
@@ -520,7 +596,7 @@ interface RejectBountyResponseV1 {
 }
 
 type WorkerStatus = 'online' | 'offline' | 'paused';
-type WorkerAuthMode = 'token';
+type WorkerAuthMode = 'token' | 'scoped_token';
 type WorkerAvailabilityMode = 'manual' | 'auto';
 
 interface WorkerListingV1 {
@@ -938,10 +1014,202 @@ function requireAdmin(request: Request, env: Env, version: string): Response | n
   return null;
 }
 
-async function requireWorker(request: Request, env: Env, version: string): Promise<{ worker: WorkerRecordV1 } | { error: Response }> {
+async function requireWorker(
+  request: Request,
+  env: Env,
+  version: string,
+  params?: {
+    action?: WorkerAuthAction;
+    worker_did_hint?: string | null;
+    allow_legacy_local_token?: boolean;
+  }
+): Promise<{ worker: WorkerRecordV1; auth: WorkerAuthContext } | { error: Response }> {
+  const action = params?.action ?? 'worker_self';
   const token = getBearerToken(request.headers.get('authorization'));
   if (!token) {
-    return { error: errorResponse('UNAUTHORIZED', 'Missing worker token', 401, undefined, version) };
+    return { error: errorResponse('WORKER_TOKEN_REQUIRED', 'Missing worker token', 401, undefined, version) };
+  }
+
+  const workerHint = params?.worker_did_hint?.trim() || null;
+
+  if (looksLikeJwtToken(token)) {
+    const introspection = await introspectWorkerToken(env, token, version);
+    if ('error' in introspection) return introspection;
+
+    const data = introspection.data;
+    if (!data.active) {
+      return {
+        error: errorResponse('WORKER_TOKEN_INVALID', 'Worker scoped token is inactive', 401, undefined, version),
+      };
+    }
+
+    const worker_did = isNonEmptyString(data.sub) ? data.sub.trim() : null;
+    if (!worker_did || !worker_did.startsWith('did:')) {
+      return {
+        error: errorResponse('WORKER_SUB_INVALID', 'Worker token subject must be a DID', 401, undefined, version),
+      };
+    }
+
+    if (workerHint && workerHint !== worker_did) {
+      return {
+        error: errorResponse(
+          'WORKER_SUB_MISMATCH',
+          'worker_did does not match worker token subject',
+          401,
+          { worker_did, requested_worker_did: workerHint },
+          version
+        ),
+      };
+    }
+
+    const controlClaims = validateControlPlaneTokenContract({
+      actor: 'WORKER',
+      introspection: data,
+      version,
+    });
+    if ('error' in controlClaims) return controlClaims;
+
+    const scope = parseTokenScopeClaim(data.scope);
+    if (!hasWorkerScope(scope, action)) {
+      return {
+        error: errorResponse(
+          'WORKER_SCOPE_REQUIRED',
+          'Worker token does not include the required scope for this action',
+          403,
+          { required_scope: WORKER_AUTH_SCOPE_BY_ACTION[action], scope },
+          version
+        ),
+      };
+    }
+
+    const requiredAudience = resolveWorkerAuthRequiredAudience(env);
+    const aud = parseTokenAudClaim(data.aud);
+    if (!aud.includes(requiredAudience)) {
+      return {
+        error: errorResponse(
+          'WORKER_AUDIENCE_REQUIRED',
+          'Worker token audience does not include clawbounties',
+          403,
+          { required_audience: requiredAudience, aud },
+          version
+        ),
+      };
+    }
+
+    const agentDid = isNonEmptyString(data.agent_did) ? data.agent_did.trim() : null;
+    if (!agentDid) {
+      return {
+        error: errorResponse(
+          'WORKER_CONTROL_CLAIM_REQUIRED',
+          'Worker token is missing required control-plane claim',
+          403,
+          { claim: 'agent_did' },
+          version
+        ),
+      };
+    }
+
+    if (!agentDid.startsWith('did:')) {
+      return {
+        error: errorResponse(
+          'WORKER_CONTROL_CLAIM_INVALID',
+          'Worker token control-plane claim is invalid',
+          403,
+          { claim: 'agent_did' },
+          version
+        ),
+      };
+    }
+
+    if (agentDid !== worker_did) {
+      return {
+        error: errorResponse(
+          'WORKER_CONTROL_BINDING_MISMATCH',
+          'Worker control-plane claim does not match token subject',
+          403,
+          { claim: 'agent_did', token_sub: worker_did, agent_did: agentDid },
+          version
+        ),
+      };
+    }
+
+    const expectedScopeHash = await computeTokenScopeHashB64uV1({
+      sub: worker_did,
+      aud,
+      scope,
+      owner_ref: isNonEmptyString(data.owner_ref) ? data.owner_ref.trim() : undefined,
+      owner_did: isNonEmptyString(data.owner_did) ? data.owner_did.trim() : undefined,
+      controller_did: isNonEmptyString(data.controller_did) ? data.controller_did.trim() : undefined,
+      agent_did: agentDid,
+      policy_hash_b64u: isNonEmptyString(data.policy_hash_b64u) ? data.policy_hash_b64u.trim() : undefined,
+      control_plane_policy_hash_b64u: isNonEmptyString(data.control_plane_policy_hash_b64u)
+        ? data.control_plane_policy_hash_b64u.trim()
+        : undefined,
+      payment_account_did: isNonEmptyString(data.payment_account_did) ? data.payment_account_did.trim() : undefined,
+      spend_cap: typeof data.spend_cap === 'number' && Number.isFinite(data.spend_cap) ? data.spend_cap : undefined,
+      mission_id: isNonEmptyString(data.mission_id) ? data.mission_id.trim() : undefined,
+    });
+
+    if (controlClaims.token_scope_hash_b64u !== expectedScopeHash) {
+      return {
+        error: errorResponse(
+          'WORKER_CONTROL_BINDING_MISMATCH',
+          'Worker token scope hash does not match deterministic control-plane contract',
+          403,
+          {
+            claim: 'token_scope_hash_b64u',
+            expected_token_scope_hash_b64u: expectedScopeHash,
+            token_scope_hash_b64u: controlClaims.token_scope_hash_b64u,
+          },
+          version
+        ),
+      };
+    }
+
+    let worker: WorkerRecordV1 | null;
+    try {
+      worker = await getWorkerByDid(env.BOUNTIES_DB, worker_did);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return { error: errorResponse('DB_READ_FAILED', message, 500, undefined, version) };
+    }
+
+    if (!worker) {
+      return {
+        error: errorResponse('WORKER_NOT_REGISTERED', 'Worker is not registered in marketplace', 404, undefined, version),
+      };
+    }
+
+    return {
+      worker,
+      auth: {
+        worker_did,
+        auth_mode: 'scoped_token',
+        token_hash: controlClaims.token_hash,
+        scope,
+        aud,
+        token_scope_hash_b64u: controlClaims.token_scope_hash_b64u,
+        token_lane: controlClaims.token_lane,
+        payment_account_did: controlClaims.payment_account_did,
+        agent_did: agentDid,
+        iat: controlClaims.iat,
+        exp: controlClaims.exp,
+        bearer_token: token,
+      },
+    };
+  }
+
+  const allowLegacy = params?.allow_legacy_local_token ?? resolveWorkerAuthCompatLegacy(env);
+  if (!allowLegacy) {
+    return {
+      error: errorResponse(
+        'WORKER_TOKEN_CANONICAL_REQUIRED',
+        'Worker scoped token must be a canonical clawscope JWT',
+        401,
+        undefined,
+        version
+      ),
+    };
   }
 
   let worker: WorkerRecordV1 | null;
@@ -953,10 +1221,38 @@ async function requireWorker(request: Request, env: Env, version: string): Promi
   }
 
   if (!worker) {
-    return { error: errorResponse('UNAUTHORIZED', 'Invalid or expired worker token', 401, undefined, version) };
+    return { error: errorResponse('WORKER_TOKEN_INVALID', 'Invalid or expired worker token', 401, undefined, version) };
   }
 
-  return { worker };
+  if (workerHint && workerHint !== worker.worker_did) {
+    return {
+      error: errorResponse(
+        'WORKER_SUB_MISMATCH',
+        'worker_did does not match legacy worker token subject',
+        401,
+        { worker_did: worker.worker_did, requested_worker_did: workerHint },
+        version
+      ),
+    };
+  }
+
+  return {
+    worker,
+    auth: {
+      worker_did: worker.worker_did,
+      auth_mode: 'token',
+      token_hash: worker.auth_token_hash_hex,
+      scope: [WORKER_AUTH_SCOPE_BY_ACTION[action]],
+      aud: [],
+      token_scope_hash_b64u: null,
+      token_lane: null,
+      payment_account_did: null,
+      agent_did: worker.worker_did,
+      iat: null,
+      exp: null,
+      bearer_token: null,
+    },
+  };
 }
 
 function requireRequesterDidLegacy(request: Request, version: string): { requester_did: string } | { error: Response } {
@@ -1014,6 +1310,29 @@ function resolveRequesterAuthTimeoutMs(env: Env): number {
   return timeout;
 }
 
+function resolveWorkerAuthCompatLegacy(env: Env): boolean {
+  return parseBooleanEnv(env.WORKER_AUTH_COMPAT_LEGACY, false);
+}
+
+function resolveWorkerAuthRequiredAudience(env: Env): string {
+  const raw = env.WORKER_AUTH_REQUIRED_AUDIENCE?.trim();
+  if (raw && raw.length > 0) return raw;
+  return resolveRequesterAuthRequiredAudience(env);
+}
+
+function resolveWorkerAuthTimeoutMs(env: Env): number {
+  const raw = env.WORKER_AUTH_TIMEOUT_MS?.trim();
+  if (!raw) return resolveRequesterAuthTimeoutMs(env);
+
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return resolveRequesterAuthTimeoutMs(env);
+
+  const timeout = Math.floor(n);
+  if (timeout < 1000) return resolveRequesterAuthTimeoutMs(env);
+  if (timeout > 30000) return 30000;
+  return timeout;
+}
+
 function normalizeTokenClaimStringList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
 
@@ -1053,15 +1372,169 @@ function hasRequesterScope(scope: readonly string[], action: RequesterAuthAction
   return scope.includes(required);
 }
 
-async function introspectRequesterToken(
+function hasWorkerScope(scope: readonly string[], action: WorkerAuthAction): boolean {
+  const required = WORKER_AUTH_SCOPE_BY_ACTION[action];
+  return scope.includes(required);
+}
+
+function isHexSha256(value: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(value);
+}
+
+function parseScopedTokenLane(value: unknown): ScopedTokenLane | null {
+  if (!isNonEmptyString(value)) return null;
+  const lane = value.trim();
+  if (lane === 'legacy' || lane === 'canonical') return lane;
+  return null;
+}
+
+type ControlPlaneClaimValidationSuccess = {
+  token_hash: string;
+  token_scope_hash_b64u: string;
+  token_lane: ScopedTokenLane;
+  payment_account_did: string | null;
+  iat: number;
+  exp: number;
+};
+
+function validateControlPlaneTokenContract(params: {
+  actor: 'REQUESTER' | 'WORKER';
+  introspection: ScopeIntrospectionResponse;
+  version: string;
+}): ControlPlaneClaimValidationSuccess | { error: Response } {
+  const prefix = params.actor;
+  const claims = params.introspection;
+
+  const tokenHashRaw = claims.token_hash;
+  if (!isNonEmptyString(tokenHashRaw)) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_REQUIRED`,
+        `${prefix.toLowerCase()} token is missing required control-plane claim`,
+        403,
+        { claim: 'token_hash' },
+        params.version
+      ),
+    };
+  }
+
+  const token_hash = tokenHashRaw.trim();
+  if (!isHexSha256(token_hash)) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_INVALID`,
+        `${prefix.toLowerCase()} token control-plane claim is invalid`,
+        403,
+        { claim: 'token_hash' },
+        params.version
+      ),
+    };
+  }
+
+  const tokenScopeHashRaw = claims.token_scope_hash_b64u;
+  if (!isNonEmptyString(tokenScopeHashRaw)) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_REQUIRED`,
+        `${prefix.toLowerCase()} token is missing required control-plane claim`,
+        403,
+        { claim: 'token_scope_hash_b64u' },
+        params.version
+      ),
+    };
+  }
+
+  const token_scope_hash_b64u = tokenScopeHashRaw.trim();
+  if (!isSha256B64u(token_scope_hash_b64u)) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_INVALID`,
+        `${prefix.toLowerCase()} token control-plane claim is invalid`,
+        403,
+        { claim: 'token_scope_hash_b64u' },
+        params.version
+      ),
+    };
+  }
+
+  const tokenLane = parseScopedTokenLane(claims.token_lane);
+  if (!tokenLane) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_REQUIRED`,
+        `${prefix.toLowerCase()} token is missing required control-plane claim`,
+        403,
+        { claim: 'token_lane' },
+        params.version
+      ),
+    };
+  }
+
+  const iat = typeof claims.iat === 'number' && Number.isFinite(claims.iat) ? Math.floor(claims.iat) : null;
+  const exp = typeof claims.exp === 'number' && Number.isFinite(claims.exp) ? Math.floor(claims.exp) : null;
+  if (iat === null || exp === null) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_REQUIRED`,
+        `${prefix.toLowerCase()} token is missing required control-plane claim`,
+        403,
+        { claim: iat === null ? 'iat' : 'exp' },
+        params.version
+      ),
+    };
+  }
+
+  if (exp <= iat) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_INVALID`,
+        `${prefix.toLowerCase()} token control-plane claim is invalid`,
+        403,
+        { claim: 'exp' },
+        params.version
+      ),
+    };
+  }
+
+  const paymentAccountDid = isNonEmptyString(claims.payment_account_did) ? claims.payment_account_did.trim() : null;
+  if (paymentAccountDid && !paymentAccountDid.startsWith('did:')) {
+    return {
+      error: errorResponse(
+        `${prefix}_CONTROL_CLAIM_INVALID`,
+        `${prefix.toLowerCase()} token control-plane claim is invalid`,
+        403,
+        { claim: 'payment_account_did' },
+        params.version
+      ),
+    };
+  }
+
+  return {
+    token_hash,
+    token_scope_hash_b64u,
+    token_lane: tokenLane,
+    payment_account_did: paymentAccountDid,
+    iat,
+    exp,
+  };
+}
+
+async function introspectScopedToken(
   env: Env,
   token: string,
-  version: string
+  version: string,
+  params: {
+    timeoutMs: number;
+    upstreamInvalidCode: string;
+    upstreamInvalidMessage: string;
+    upstreamErrorCode: string;
+    upstreamErrorPrefix: string;
+    upstreamUnavailableCode: string;
+  }
 ): Promise<{ data: ScopeIntrospectionResponse } | { error: Response }> {
   const baseUrl = resolveScopeBaseUrl(env);
   const controller = new AbortController();
-  const timeoutMs = resolveRequesterAuthTimeoutMs(env);
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => controller.abort(), params.timeoutMs);
 
   try {
     const response = await fetch(`${baseUrl}/v1/tokens/introspect`, {
@@ -1084,8 +1557,8 @@ async function introspectRequesterToken(
         const upstreamCode = isRecord(payload) && isNonEmptyString(payload.error) ? payload.error.trim() : null;
         return {
           error: errorResponse(
-            'REQUESTER_TOKEN_INVALID',
-            'Requester scoped token is invalid or expired',
+            params.upstreamInvalidCode,
+            params.upstreamInvalidMessage,
             401,
             upstreamCode ? { upstream_error: upstreamCode } : undefined,
             version
@@ -1095,8 +1568,8 @@ async function introspectRequesterToken(
 
       return {
         error: errorResponse(
-          'REQUESTER_AUTH_UPSTREAM_ERROR',
-          `Requester token introspection failed with status ${response.status}`,
+          params.upstreamErrorCode,
+          `${params.upstreamErrorPrefix} ${response.status}`,
           502,
           undefined,
           version
@@ -1107,8 +1580,8 @@ async function introspectRequesterToken(
     if (!isRecord(payload) || typeof payload.active !== 'boolean') {
       return {
         error: errorResponse(
-          'REQUESTER_AUTH_UPSTREAM_ERROR',
-          'Requester token introspection returned invalid payload',
+          params.upstreamErrorCode,
+          `${params.upstreamErrorPrefix} invalid payload`,
           502,
           undefined,
           version
@@ -1120,11 +1593,179 @@ async function introspectRequesterToken(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return {
+      error: errorResponse(params.upstreamUnavailableCode, message, 502, undefined, version),
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function introspectRequesterToken(
+  env: Env,
+  token: string,
+  version: string
+): Promise<{ data: ScopeIntrospectionResponse } | { error: Response }> {
+  return introspectScopedToken(env, token, version, {
+    timeoutMs: resolveRequesterAuthTimeoutMs(env),
+    upstreamInvalidCode: 'REQUESTER_TOKEN_INVALID',
+    upstreamInvalidMessage: 'Requester scoped token is invalid or expired',
+    upstreamErrorCode: 'REQUESTER_AUTH_UPSTREAM_ERROR',
+    upstreamErrorPrefix: 'Requester token introspection failed with status',
+    upstreamUnavailableCode: 'REQUESTER_AUTH_UPSTREAM_UNAVAILABLE',
+  });
+}
+
+async function introspectWorkerToken(
+  env: Env,
+  token: string,
+  version: string
+): Promise<{ data: ScopeIntrospectionResponse } | { error: Response }> {
+  return introspectScopedToken(env, token, version, {
+    timeoutMs: resolveWorkerAuthTimeoutMs(env),
+    upstreamInvalidCode: 'WORKER_TOKEN_INVALID',
+    upstreamInvalidMessage: 'Worker scoped token is invalid or expired',
+    upstreamErrorCode: 'WORKER_AUTH_UPSTREAM_ERROR',
+    upstreamErrorPrefix: 'Worker token introspection failed with status',
+    upstreamUnavailableCode: 'WORKER_AUTH_UPSTREAM_UNAVAILABLE',
+  });
+}
+
+async function validateRequesterSensitiveTransition(
+  env: Env,
+  version: string,
+  params: {
+    auth: RequesterAuthContext;
+    transition: 'post_bounty' | 'approve_bounty' | 'reject_bounty';
+  }
+): Promise<{ evidence: Record<string, unknown> } | { error: Response }> {
+  if (params.auth.auth_mode !== 'scoped_token' || !isNonEmptyString(params.auth.bearer_token)) {
+    return {
+      error: errorResponse(
+        'SENSITIVE_TRANSITION_REQUIRES_SCOPED_TOKEN',
+        'Sensitive transitions require scoped requester token auth',
+        403,
+        undefined,
+        version
+      ),
+    };
+  }
+
+  const baseUrl = resolveScopeBaseUrl(env);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), resolveRequesterAuthTimeoutMs(env));
+
+  try {
+    const response = await fetch(`${baseUrl}/v1/tokens/introspect/matrix`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ token: params.auth.bearer_token }),
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let payload: unknown = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 400) {
+        const upstreamCode = isRecord(payload) && isNonEmptyString(payload.error) ? payload.error.trim() : null;
+        return {
+          error: errorResponse(
+            'REQUESTER_SENSITIVE_AUTH_REVALIDATION_FAILED',
+            'Requester sensitive-transition token revalidation failed',
+            401,
+            upstreamCode ? { upstream_error: upstreamCode } : undefined,
+            version
+          ),
+        };
+      }
+
+      return {
+        error: errorResponse(
+          'REQUESTER_AUTH_UPSTREAM_ERROR',
+          `Requester sensitive-transition token revalidation failed with status ${response.status}`,
+          502,
+          undefined,
+          version
+        ),
+      };
+    }
+
+    if (!isRecord(payload) || typeof payload.active !== 'boolean') {
+      return {
+        error: errorResponse(
+          'REQUESTER_AUTH_UPSTREAM_ERROR',
+          'Requester sensitive-transition revalidation returned invalid payload',
+          502,
+          undefined,
+          version
+        ),
+      };
+    }
+
+    const active = payload.active;
+    const revoked = payload.revoked === true;
+    if (!active || revoked) {
+      return {
+        error: errorResponse(
+          'REQUESTER_SENSITIVE_AUTH_REVALIDATION_FAILED',
+          'Requester token is inactive or revoked for sensitive transition',
+          401,
+          {
+            active,
+            revoked,
+            transition: params.transition,
+            token_hash: isNonEmptyString(payload.token_hash) ? payload.token_hash.trim() : null,
+            upstream_error: isNonEmptyString(payload.error) ? payload.error.trim() : null,
+          },
+          version
+        ),
+      };
+    }
+
+    const matrixTokenHash = isNonEmptyString(payload.token_hash) ? payload.token_hash.trim() : null;
+    if (matrixTokenHash && params.auth.token_hash && matrixTokenHash !== params.auth.token_hash) {
+      return {
+        error: errorResponse(
+          'REQUESTER_CONTROL_BINDING_MISMATCH',
+          'Requester token hash mismatch between introspection and matrix revalidation',
+          403,
+          {
+            token_hash: params.auth.token_hash,
+            matrix_token_hash: matrixTokenHash,
+          },
+          version
+        ),
+      };
+    }
+
+    const checked_at = new Date().toISOString();
+    return {
+      evidence: {
+        transition: params.transition,
+        checked_at,
+        active,
+        revoked,
+        token_hash: matrixTokenHash,
+        matrix: isRecord(payload.matrix) ? payload.matrix : null,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
       error: errorResponse('REQUESTER_AUTH_UPSTREAM_UNAVAILABLE', message, 502, undefined, version),
     };
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function isSensitiveRequesterAction(action: RequesterAuthAction): boolean {
+  return action === 'post_bounty' || action === 'approve_bounty' || action === 'reject_bounty';
 }
 
 async function requireRequesterAuth(
@@ -1134,10 +1775,12 @@ async function requireRequesterAuth(
   params: {
     action: RequesterAuthAction;
     requester_did_hint?: string | null;
+    enforce_sensitive_transition?: boolean;
   }
 ): Promise<{ auth: RequesterAuthContext } | { error: Response }> {
   const bearerToken = getBearerToken(request.headers.get('authorization'));
   const compatLegacyEnabled = resolveRequesterAuthCompatLegacy(env);
+  const enforceSensitiveTransition = params.enforce_sensitive_transition ?? isSensitiveRequesterAction(params.action);
 
   const useLegacyCompatPath =
     compatLegacyEnabled &&
@@ -1175,6 +1818,13 @@ async function requireRequesterAuth(
       };
     }
 
+    const controlClaims = validateControlPlaneTokenContract({
+      actor: 'REQUESTER',
+      introspection: data,
+      version,
+    });
+    if ('error' in controlClaims) return controlClaims;
+
     const scope = parseTokenScopeClaim(data.scope);
     if (!hasRequesterScope(scope, params.action)) {
       return {
@@ -1202,17 +1852,82 @@ async function requireRequesterAuth(
       };
     }
 
-    const token_hash = isNonEmptyString(data.token_hash)
-      ? data.token_hash.trim()
-      : await sha256HexUtf8(bearerToken);
+    const expectedScopeHash = await computeTokenScopeHashB64uV1({
+      sub: requester_did,
+      aud,
+      scope,
+      owner_ref: isNonEmptyString(data.owner_ref) ? data.owner_ref.trim() : undefined,
+      owner_did: isNonEmptyString(data.owner_did) ? data.owner_did.trim() : undefined,
+      controller_did: isNonEmptyString(data.controller_did) ? data.controller_did.trim() : undefined,
+      agent_did: isNonEmptyString(data.agent_did) ? data.agent_did.trim() : undefined,
+      policy_hash_b64u: isNonEmptyString(data.policy_hash_b64u) ? data.policy_hash_b64u.trim() : undefined,
+      control_plane_policy_hash_b64u: isNonEmptyString(data.control_plane_policy_hash_b64u)
+        ? data.control_plane_policy_hash_b64u.trim()
+        : undefined,
+      payment_account_did: isNonEmptyString(data.payment_account_did) ? data.payment_account_did.trim() : undefined,
+      spend_cap: typeof data.spend_cap === 'number' && Number.isFinite(data.spend_cap) ? data.spend_cap : undefined,
+      mission_id: isNonEmptyString(data.mission_id) ? data.mission_id.trim() : undefined,
+    });
+
+    if (controlClaims.token_scope_hash_b64u !== expectedScopeHash) {
+      return {
+        error: errorResponse(
+          'REQUESTER_CONTROL_BINDING_MISMATCH',
+          'Requester token scope hash does not match deterministic control-plane contract',
+          403,
+          {
+            claim: 'token_scope_hash_b64u',
+            expected_token_scope_hash_b64u: expectedScopeHash,
+            token_scope_hash_b64u: controlClaims.token_scope_hash_b64u,
+          },
+          version
+        ),
+      };
+    }
+
+    if (enforceSensitiveTransition) {
+      if (!controlClaims.payment_account_did) {
+        return {
+          error: errorResponse(
+            'REQUESTER_CONTROL_CLAIM_REQUIRED',
+            'Requester token is missing required control-plane claim',
+            403,
+            { claim: 'payment_account_did' },
+            version
+          ),
+        };
+      }
+
+      if (controlClaims.payment_account_did !== requester_did) {
+        return {
+          error: errorResponse(
+            'REQUESTER_CONTROL_BINDING_MISMATCH',
+            'Requester payment_account_did must match requester token subject for sensitive transitions',
+            403,
+            {
+              claim: 'payment_account_did',
+              payment_account_did: controlClaims.payment_account_did,
+              requester_did,
+            },
+            version
+          ),
+        };
+      }
+    }
 
     return {
       auth: {
         requester_did,
         auth_mode: 'scoped_token',
-        token_hash,
+        token_hash: controlClaims.token_hash,
         scope,
         aud,
+        token_scope_hash_b64u: controlClaims.token_scope_hash_b64u,
+        token_lane: controlClaims.token_lane,
+        payment_account_did: controlClaims.payment_account_did,
+        iat: controlClaims.iat,
+        exp: controlClaims.exp,
+        bearer_token: bearerToken,
       },
     };
   }
@@ -1223,6 +1938,18 @@ async function requireRequesterAuth(
         'REQUESTER_TOKEN_REQUIRED',
         'Missing requester scoped token. Provide Authorization: Bearer <requester CST/JWT>.',
         401,
+        undefined,
+        version
+      ),
+    };
+  }
+
+  if (enforceSensitiveTransition) {
+    return {
+      error: errorResponse(
+        'SENSITIVE_TRANSITION_REQUIRES_SCOPED_TOKEN',
+        'Sensitive transitions require scoped requester token auth (legacy compat path forbidden)',
+        403,
         undefined,
         version
       ),
@@ -1255,6 +1982,12 @@ async function requireRequesterAuth(
       token_hash: null,
       scope: [REQUESTER_AUTH_SCOPE_BY_ACTION[params.action]],
       aud: [],
+      token_scope_hash_b64u: null,
+      token_lane: null,
+      payment_account_did: null,
+      iat: null,
+      exp: null,
+      bearer_token: null,
     },
   };
 }
@@ -1274,25 +2007,35 @@ async function resolveSubmissionViewerContext(
   const token = getBearerToken(request.headers.get('authorization'));
   if (token) {
     if (looksLikeJwtToken(token)) {
-      const authResult = await requireRequesterAuth(request, env, version, {
+      const requesterAuth = await requireRequesterAuth(request, env, version, {
         action: 'read_submission',
         requester_did_hint: params?.requester_did_hint ?? null,
+        enforce_sensitive_transition: false,
       });
-      if ('error' in authResult) {
-        return { ok: false, error: authResult.error };
+      if (!('error' in requesterAuth)) {
+        return {
+          ok: true,
+          context: {
+            kind: 'requester',
+            requester_did: requesterAuth.auth.requester_did,
+            auth: requesterAuth.auth,
+          },
+        };
       }
 
-      return {
-        ok: true,
-        context: {
-          kind: 'requester',
-          requester_did: authResult.auth.requester_did,
-          auth: authResult.auth,
-        },
-      };
+      const workerAuth = await requireWorker(request, env, version, {
+        action: 'read_submission',
+      });
+      if (!('error' in workerAuth)) {
+        return { ok: true, context: { kind: 'worker', worker: workerAuth.worker } };
+      }
+
+      return { ok: false, error: requesterAuth.error };
     }
 
-    const workerAuth = await requireWorker(request, env, version);
+    const workerAuth = await requireWorker(request, env, version, {
+      action: 'read_submission',
+    });
     if ('error' in workerAuth) {
       return { ok: false, error: workerAuth.error };
     }
@@ -1426,7 +2169,14 @@ type TokenScopeHashInputV1 = {
   sub: string;
   aud: string[];
   scope: string[];
+  owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
+  payment_account_did?: string;
+  spend_cap?: number;
   mission_id?: string;
 };
 
@@ -1455,7 +2205,14 @@ async function computeTokenScopeHashB64uV1(input: {
   sub: string;
   aud: string | string[];
   scope: string[];
+  owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
+  payment_account_did?: string;
+  spend_cap?: number;
   mission_id?: string;
 }): Promise<string> {
   const out: TokenScopeHashInputV1 = {
@@ -1465,8 +2222,39 @@ async function computeTokenScopeHashB64uV1(input: {
     scope: normalizeScope(input.scope),
   };
 
+  if (typeof input.owner_ref === 'string' && input.owner_ref.trim().length > 0) {
+    out.owner_ref = input.owner_ref.trim();
+  }
+
+  if (typeof input.owner_did === 'string' && input.owner_did.trim().length > 0) {
+    out.owner_did = input.owner_did.trim();
+  }
+
+  if (typeof input.controller_did === 'string' && input.controller_did.trim().length > 0) {
+    out.controller_did = input.controller_did.trim();
+  }
+
+  if (typeof input.agent_did === 'string' && input.agent_did.trim().length > 0) {
+    out.agent_did = input.agent_did.trim();
+  }
+
   if (typeof input.policy_hash_b64u === 'string' && input.policy_hash_b64u.trim().length > 0) {
     out.policy_hash_b64u = input.policy_hash_b64u.trim();
+  }
+
+  if (
+    typeof input.control_plane_policy_hash_b64u === 'string' &&
+    input.control_plane_policy_hash_b64u.trim().length > 0
+  ) {
+    out.control_plane_policy_hash_b64u = input.control_plane_policy_hash_b64u.trim();
+  }
+
+  if (typeof input.payment_account_did === 'string' && input.payment_account_did.trim().length > 0) {
+    out.payment_account_did = input.payment_account_did.trim();
+  }
+
+  if (typeof input.spend_cap === 'number' && Number.isFinite(input.spend_cap) && input.spend_cap >= 0) {
+    out.spend_cap = input.spend_cap;
   }
 
   if (typeof input.mission_id === 'string' && input.mission_id.trim().length > 0) {
@@ -4278,6 +5066,8 @@ async function insertRequesterAuthEvent(
     submission_id: string | null;
     auth: RequesterAuthContext;
     created_at: string;
+    sensitive_transition: boolean;
+    control_plane_check?: Record<string, unknown> | null;
   }
 ): Promise<void> {
   await db
@@ -4292,8 +5082,15 @@ async function insertRequesterAuthEvent(
          token_hash,
          scope_json,
          aud_json,
+         token_scope_hash_b64u,
+         token_lane,
+         payment_account_did,
+         token_iat,
+         token_exp,
+         sensitive_transition,
+         control_plane_check_json,
          created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       `rae_${crypto.randomUUID()}`,
@@ -4305,6 +5102,13 @@ async function insertRequesterAuthEvent(
       params.auth.token_hash,
       JSON.stringify(params.auth.scope),
       JSON.stringify(params.auth.aud),
+      params.auth.token_scope_hash_b64u,
+      params.auth.token_lane,
+      params.auth.payment_account_did,
+      params.auth.iat,
+      params.auth.exp,
+      params.sensitive_transition ? 1 : 0,
+      params.control_plane_check ? JSON.stringify(params.control_plane_check) : null,
       params.created_at
     )
     .run();
@@ -5678,25 +6482,13 @@ async function handleRegisterWorker(request: Request, env: Env, version: string)
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
   }
 
-  // Prevent trivial DID takeover: if a worker DID already exists, require the existing bearer token
-  // to rotate the token / update the record.
+  // Prevent trivial DID takeover: if a worker DID already exists, require authenticated worker ownership.
   if (existing) {
-    const token = getBearerToken(request.headers.get('authorization'));
-    if (!token) {
-      return errorResponse('UNAUTHORIZED', 'Missing worker token for re-registration', 401, undefined, version);
-    }
-
-    let authed: WorkerRecordV1 | null;
-    try {
-      authed = await getWorkerByAuthToken(env.BOUNTIES_DB, token);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
-    }
-
-    if (!authed || authed.worker_did !== worker_did) {
-      return errorResponse('UNAUTHORIZED', 'Invalid or expired worker token', 401, undefined, version);
-    }
+    const auth = await requireWorker(request, env, version, {
+      action: 'worker_self',
+      worker_did_hint: worker_did,
+    });
+    if ('error' in auth) return auth.error;
   }
 
   const worker_id = existing?.worker_id ?? `wrk_${crypto.randomUUID()}`;
@@ -5800,7 +6592,9 @@ async function handleListWorkers(url: URL, env: Env, version: string): Promise<R
 }
 
 async function handleGetWorkerSelf(request: Request, env: Env, version: string): Promise<Response> {
-  const auth = await requireWorker(request, env, version);
+  const auth = await requireWorker(request, env, version, {
+    action: 'worker_self',
+  });
   if ('error' in auth) return auth.error;
 
   const w = auth.worker;
@@ -5815,7 +6609,14 @@ async function handleGetWorkerSelf(request: Request, env: Env, version: string):
       offers: w.offers,
       pricing: w.pricing,
       availability: w.availability,
-      auth: { mode: w.auth_mode, expires_at: w.auth_token_expires_at },
+      auth: {
+        mode: auth.auth.auth_mode,
+        expires_at:
+          auth.auth.auth_mode === 'scoped_token' && typeof auth.auth.exp === 'number'
+            ? new Date(auth.auth.exp * 1000).toISOString()
+            : w.auth_token_expires_at,
+        token_lane: auth.auth.token_lane,
+      },
       created_at: w.created_at,
       updated_at: w.updated_at,
     },
@@ -5848,7 +6649,9 @@ function parseEscrowFailedError(err: unknown): { status: number; payload: Record
 }
 
 async function handleAcceptBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
-  const auth = await requireWorker(request, env, version);
+  const auth = await requireWorker(request, env, version, {
+    action: 'accept_bounty',
+  });
   if ('error' in auth) return auth.error;
 
   const bodyRaw = await parseJsonBody(request);
@@ -6333,7 +7136,9 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
 }
 
 async function handleIssueBountyCst(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
-  const auth = await requireWorker(request, env, version);
+  const auth = await requireWorker(request, env, version, {
+    action: 'issue_bounty_cst',
+  });
   if ('error' in auth) return auth.error;
 
   const worker_did = auth.worker.worker_did;
@@ -6524,7 +7329,9 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
 }
 
 async function handleSubmitBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
-  const auth = await requireWorker(request, env, version);
+  const auth = await requireWorker(request, env, version, {
+    action: 'submit_bounty',
+  });
   if ('error' in auth) return auth.error;
 
   const bodyRaw = await parseJsonBody(request);
@@ -7291,6 +8098,12 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
 
   const requesterAuth = requesterAuthResult.auth;
 
+  const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
+    auth: requesterAuth,
+    transition: 'approve_bounty',
+  });
+  if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+
   if (!isNonEmptyString(submission_id_raw)) {
     return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
   }
@@ -7337,6 +8150,8 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
       submission_id,
       auth: requesterAuth,
       created_at: new Date().toISOString(),
+      sensitive_transition: true,
+      control_plane_check: transitionAuthCheck.evidence,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -7571,6 +8386,12 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
 
   const requesterAuth = requesterAuthResult.auth;
 
+  const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
+    auth: requesterAuth,
+    transition: 'reject_bounty',
+  });
+  if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+
   if (!isNonEmptyString(submission_id_raw)) {
     return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
   }
@@ -7622,6 +8443,8 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       submission_id,
       auth: requesterAuth,
       created_at: new Date().toISOString(),
+      sensitive_transition: true,
+      control_plane_check: transitionAuthCheck.evidence,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -7838,6 +8661,12 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
 
   const requesterAuth = requesterAuthResult.auth;
 
+  const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
+    auth: requesterAuth,
+    transition: 'post_bounty',
+  });
+  if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+
   const title = bodyRaw.title;
   const description = bodyRaw.description;
   const reward = bodyRaw.reward;
@@ -8033,6 +8862,8 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
         submission_id: null,
         auth: requesterAuth,
         created_at: new Date().toISOString(),
+        sensitive_transition: true,
+        control_plane_check: transitionAuthCheck.evidence,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -8092,6 +8923,8 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
       submission_id: null,
       auth: requesterAuth,
       created_at: new Date().toISOString(),
+      sensitive_transition: true,
+      control_plane_check: transitionAuthCheck.evidence,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -8247,7 +9080,9 @@ async function handleListBounties(url: URL, env: Env, version: string): Promise<
 }
 
 async function handleListBountiesForWorker(request: Request, url: URL, env: Env, version: string): Promise<Response> {
-  const auth = await requireWorker(request, env, version);
+  const auth = await requireWorker(request, env, version, {
+    action: 'worker_self',
+  });
   if ('error' in auth) return auth.error;
 
   const statusRaw = url.searchParams.get('status') ?? 'open';
@@ -8360,6 +9195,8 @@ async function handleListBountySubmissions(
         submission_id: null,
         auth: viewer.context.auth,
         created_at: new Date().toISOString(),
+        sensitive_transition: false,
+        control_plane_check: null,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -8463,6 +9300,8 @@ async function handleGetSubmissionDetail(
         submission_id: submission.submission_id,
         auth: viewer.context.auth,
         created_at: new Date().toISOString(),
+        sensitive_transition: false,
+        control_plane_check: null,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -8491,7 +9330,9 @@ async function handleGetSubmissionTrustPulse(
 
   let worker: WorkerRecordV1 | null = null;
   if (!admin) {
-    const auth = await requireWorker(request, env, version);
+    const auth = await requireWorker(request, env, version, {
+      action: 'read_trust_pulse',
+    });
     if ('error' in auth) return auth.error;
     worker = auth.worker;
   }

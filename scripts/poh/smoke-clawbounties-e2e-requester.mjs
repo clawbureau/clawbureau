@@ -10,7 +10,10 @@ import {
   resolveScopeBaseUrl,
   resolveRequesterAudience,
   resolveRequesterScopes,
+  resolveWorkerAudience,
+  resolveWorkerScopes,
   issueRequesterScopedToken,
+  issueWorkerScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -31,6 +34,12 @@ async function main() {
   const envName = resolveEnvName(args.get('env'));
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
 
+  const strictAuthRaw = String(args.get('strict-auth') ?? 'true').trim().toLowerCase();
+  const strictAuth = !(strictAuthRaw === 'false' || strictAuthRaw === '0' || strictAuthRaw === 'no' || strictAuthRaw === 'off');
+
+  const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+  const scopeAdminKey = String(args.get('scope-admin-key') || process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
+
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
 
@@ -40,13 +49,11 @@ async function main() {
   let requesterTokenHash = null;
 
   if (!requesterToken) {
-    const scopeAdminKey = String(args.get('scope-admin-key') || process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
     assert(
       scopeAdminKey.length > 0,
       'Missing requester auth input. Provide --requester-token / REQUESTER_SCOPED_TOKEN or set --scope-admin-key / SCOPE_ADMIN_KEY for clawscope issuance.'
     );
 
-    const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
     const audience = resolveRequesterAudience(envName, args.get('requester-audience'));
     const scopes = resolveRequesterScopes(args.get('requester-scopes'));
     const ttlSec = Number.parseInt(String(args.get('requester-token-ttl-sec') || '3600'), 10);
@@ -71,10 +78,37 @@ async function main() {
   const identity = await generateAgentIdentity();
   const workerDid = identity.did;
 
+  let workerToken = String(args.get('worker-token') || process.env.WORKER_SCOPED_TOKEN || '').trim();
+  let workerTokenSource = workerToken ? 'provided' : 'clawscope-issue';
+  let workerTokenKid = null;
+  let workerTokenHash = null;
+
   const steps = [];
 
   const worker = await registerWorker(baseUrl, workerDid, ['simulation', 'requester-flow']);
   steps.push({ step: 'register_worker', ok: true, elapsed_ms: worker.elapsed_ms });
+
+  if (!workerToken) {
+    assert(scopeAdminKey.length > 0, 'scope-admin-key / SCOPE_ADMIN_KEY is required to mint worker scoped token');
+    const audience = resolveWorkerAudience(envName, args.get('worker-audience'));
+    const scopes = resolveWorkerScopes(args.get('worker-scopes'));
+    const ttlSec = Number.parseInt(String(args.get('worker-token-ttl-sec') || '3600'), 10);
+    assert(Number.isFinite(ttlSec) && ttlSec > 0, 'worker-token-ttl-sec must be a positive integer');
+
+    const issuedWorker = await issueWorkerScopedToken({
+      scopeBaseUrl,
+      scopeAdminKey,
+      workerDid,
+      audience,
+      scopes,
+      ttlSec,
+      source: 'smoke-clawbounties-e2e-requester',
+    });
+
+    workerToken = issuedWorker.token;
+    workerTokenKid = issuedWorker.kid;
+    workerTokenHash = issuedWorker.token_hash;
+  }
 
   const postRes = await postBounty({
     baseUrl,
@@ -88,6 +122,7 @@ async function main() {
     tags: ['simulation', 'requester'],
     metadata: { simulation: true, flow: 'requester' },
     idempotencyKey: `sim:req:post:${crypto.randomUUID()}`,
+    strictAuth,
   });
 
   assert(postRes.status === 200 || postRes.status === 201, `post bounty failed (${postRes.status}): ${postRes.text}`);
@@ -99,7 +134,7 @@ async function main() {
     baseUrl,
     bountyId,
     workerDid,
-    workerToken: worker.token,
+    workerToken,
     idempotencyKey: `sim:req:accept:${crypto.randomUUID()}`,
   });
 
@@ -118,7 +153,7 @@ async function main() {
     baseUrl,
     bountyId,
     workerDid,
-    workerToken: worker.token,
+    workerToken,
     idempotencyKey: `sim:req:submit:${crypto.randomUUID()}`,
     proofBundleEnvelope: proof.envelope,
     urm: proof.urm,
@@ -137,6 +172,7 @@ async function main() {
     requesterToken,
     requesterDid,
     params: { limit: 20 },
+    strictAuth,
   });
   assert(listRes.status === 200, `list submissions failed (${listRes.status}): ${listRes.text}`);
   assert(Array.isArray(listRes.json?.submissions), 'list submissions response missing array');
@@ -148,6 +184,7 @@ async function main() {
     submissionId,
     requesterToken,
     requesterDid,
+    strictAuth,
   });
   assert(detailBefore.status === 200, `get submission detail failed (${detailBefore.status}): ${detailBefore.text}`);
   assert(detailBefore.json?.submission?.status === 'pending_review', `expected pending_review before approval, got ${detailBefore.json?.submission?.status}`);
@@ -160,6 +197,7 @@ async function main() {
     requesterDid,
     submissionId,
     idempotencyKey: `sim:req:approve:${crypto.randomUUID()}`,
+    strictAuth,
   });
 
   assert(approveRes.status === 200, `approve failed (${approveRes.status}): ${approveRes.text}`);
@@ -173,6 +211,7 @@ async function main() {
     requesterDid,
     timeoutMs: 20_000,
     intervalMs: 1_000,
+    strictAuth,
   });
 
   assert(terminal?.status === 200, `poll submission terminal failed (${terminal?.status}): ${terminal?.text}`);
@@ -192,6 +231,10 @@ async function main() {
     requester_token_kid: requesterTokenKid,
     requester_token_hash: requesterTokenHash,
     worker_did: workerDid,
+    worker_token_source: workerTokenSource,
+    worker_token_kid: workerTokenKid,
+    worker_token_hash: workerTokenHash,
+    strict_auth: strictAuth,
     bounty_id: bountyId,
     submission_id: submissionId,
     steps,

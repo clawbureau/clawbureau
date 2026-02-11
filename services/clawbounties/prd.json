@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/marketplace/CBT-OPS-004-control-plane-assimilation-kickoff",
+  "branchName": "feat/marketplace/CBT-OPS-004-control-plane-assimilation-finalize",
   "description": "clawbounties.com (Bounty Marketplace) \u2014 PRD \u2014 Marketplace for agent work with test/quorum/requester closures.",
   "userStories": [
     {
@@ -423,8 +423,8 @@
         "Add deterministic contract smoke assertions for identity-control-plane compatibility"
       ],
       "priority": 29,
-      "passes": false,
-      "notes": "Added for CBT-OPS-004 kickoff. Keep false until implementation + staging/prod evidence are complete."
+      "passes": true,
+      "notes": "Production complete. Requester/worker auth now enforces control-plane claims (`token_hash`, `token_scope_hash_b64u`, `token_lane`, `iat`, `exp`) with deterministic scope+audience contract checks and fail-closed legacy rejection for worker local tokens. Evidence: staging gate `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`, prod gate `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`, staging requester/test e2e `artifacts/simulations/clawbounties/2026-02-11T23-06-24-298Z-requester-e2e/requester-smoke.json`, `artifacts/simulations/clawbounties/2026-02-11T23-06-32-801Z-test-e2e/test-smoke.json`, prod requester/test e2e `artifacts/simulations/clawbounties/2026-02-11T23-10-20-634Z-requester-e2e/requester-smoke.json`, `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`."
     },
     {
       "id": "CBT-US-029",
@@ -436,8 +436,8 @@
         "Add deterministic error contracts for sensitive transition denials"
       ],
       "priority": 30,
-      "passes": false,
-      "notes": "Added for CBT-OPS-004 kickoff. Keep false until implementation + staging/prod evidence are complete."
+      "passes": true,
+      "notes": "Production complete. Sensitive transitions (`post_bounty`, `approve_bounty`, `reject_bounty`) now require scoped requester auth, enforce `payment_account_did` binding to `sub`, revalidate revocation/activity via clawscope `/v1/tokens/introspect/matrix`, and persist control-plane audit evidence in `requester_auth_events` (`token_scope_hash_b64u`, `token_lane`, `payment_account_did`, `token_iat`, `token_exp`, `sensitive_transition`, `control_plane_check_json`) via migration `0015_requester_auth_events_control_plane.sql`. Deterministic denials include `SENSITIVE_TRANSITION_REQUIRES_SCOPED_TOKEN`, `REQUESTER_CONTROL_CLAIM_REQUIRED`, `REQUESTER_CONTROL_BINDING_MISMATCH`, `REQUESTER_SENSITIVE_AUTH_REVALIDATION_FAILED`. Evidence: staging/prod gates `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`, `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`."
     },
     {
       "id": "CBT-US-030",
@@ -449,8 +449,8 @@
         "Define rollout and rollback playbook for CBT-OPS-004 productionization"
       ],
       "priority": 31,
-      "passes": false,
-      "notes": "Added for CBT-OPS-004 kickoff. Keep false until implementation + staging/prod evidence are complete."
+      "passes": true,
+      "notes": "Production complete. Simulation/gate pack is strict-auth API-only: requester legacy header path is explicitly rejected (`REQUESTER_TOKEN_REQUIRED`), worker legacy registration token path is explicitly rejected (`WORKER_TOKEN_CANONICAL_REQUIRED`), and worker/requester scoped tokens are auto-issued through clawscope for deterministic replay. Staging artifacts: requester e2e `artifacts/simulations/clawbounties/2026-02-11T23-06-24-298Z-requester-e2e/requester-smoke.json`, test e2e `artifacts/simulations/clawbounties/2026-02-11T23-06-32-801Z-test-e2e/test-smoke.json`, batch 10/50/200 `artifacts/simulations/clawbounties/2026-02-11T23-06-49-664Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-07-27-180Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-09-15-458Z-batch-200/summary.json`, gate (includes invalid-harness replay) `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`. Prod artifacts: requester/test e2e `artifacts/simulations/clawbounties/2026-02-11T23-10-20-634Z-requester-e2e/requester-smoke.json`, `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`; batch 10/50/200 `artifacts/simulations/clawbounties/2026-02-11T23-10-42-942Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-11-14-085Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-12-36-717Z-batch-200/summary.json`; gate (includes invalid-harness replay) `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`."
     }
   ]
 }

@@ -11,7 +11,10 @@ import {
   resolveScopeBaseUrl,
   resolveRequesterAudience,
   resolveRequesterScopes,
+  resolveWorkerAudience,
+  resolveWorkerScopes,
   issueRequesterScopedToken,
+  issueWorkerScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -38,6 +41,12 @@ async function main() {
   const harnessId = String(args.get('harness-id') || 'th_smoke_pass_v1');
   const expectFinal = String(args.get('expect-final') || 'approved').trim();
 
+  const strictAuthRaw = String(args.get('strict-auth') ?? 'true').trim().toLowerCase();
+  const strictAuth = !(strictAuthRaw === 'false' || strictAuthRaw === '0' || strictAuthRaw === 'no' || strictAuthRaw === 'off');
+
+  const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+  const scopeAdminKey = String(args.get('scope-admin-key') || process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
+
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
 
@@ -47,13 +56,11 @@ async function main() {
   let requesterTokenHash = null;
 
   if (!requesterToken) {
-    const scopeAdminKey = String(args.get('scope-admin-key') || process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
     assert(
       scopeAdminKey.length > 0,
       'Missing requester auth input. Provide --requester-token / REQUESTER_SCOPED_TOKEN or set --scope-admin-key / SCOPE_ADMIN_KEY for clawscope issuance.'
     );
 
-    const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
     const audience = resolveRequesterAudience(envName, args.get('requester-audience'));
     const scopes = resolveRequesterScopes(args.get('requester-scopes'));
     const ttlSec = Number.parseInt(String(args.get('requester-token-ttl-sec') || '3600'), 10);
@@ -84,6 +91,11 @@ async function main() {
   const identity = await generateAgentIdentity();
   const workerDid = identity.did;
 
+  let workerToken = String(args.get('worker-token') || process.env.WORKER_SCOPED_TOKEN || '').trim();
+  let workerTokenSource = workerToken ? 'provided' : 'clawscope-issue';
+  let workerTokenKid = null;
+  let workerTokenHash = null;
+
   const steps = [
     { step: 'check_harness_health', ok: true, elapsed_ms: harnessHealth.elapsed_ms },
     {
@@ -96,6 +108,28 @@ async function main() {
 
   const worker = await registerWorker(baseUrl, workerDid, ['simulation', 'test-flow']);
   steps.push({ step: 'register_worker', ok: true, elapsed_ms: worker.elapsed_ms });
+
+  if (!workerToken) {
+    assert(scopeAdminKey.length > 0, 'scope-admin-key / SCOPE_ADMIN_KEY is required to mint worker scoped token');
+    const audience = resolveWorkerAudience(envName, args.get('worker-audience'));
+    const scopes = resolveWorkerScopes(args.get('worker-scopes'));
+    const ttlSec = Number.parseInt(String(args.get('worker-token-ttl-sec') || '3600'), 10);
+    assert(Number.isFinite(ttlSec) && ttlSec > 0, 'worker-token-ttl-sec must be a positive integer');
+
+    const issuedWorker = await issueWorkerScopedToken({
+      scopeBaseUrl,
+      scopeAdminKey,
+      workerDid,
+      audience,
+      scopes,
+      ttlSec,
+      source: 'smoke-clawbounties-e2e-test',
+    });
+
+    workerToken = issuedWorker.token;
+    workerTokenKid = issuedWorker.kid;
+    workerTokenHash = issuedWorker.token_hash;
+  }
 
   const postRes = await postBounty({
     baseUrl,
@@ -110,6 +144,7 @@ async function main() {
     tags: ['simulation', 'test-lane'],
     metadata: { simulation: true, flow: 'test' },
     idempotencyKey: `sim:test:post:${crypto.randomUUID()}`,
+    strictAuth,
   });
 
   assert(postRes.status === 200 || postRes.status === 201, `post bounty failed (${postRes.status}): ${postRes.text}`);
@@ -121,7 +156,7 @@ async function main() {
     baseUrl,
     bountyId,
     workerDid,
-    workerToken: worker.token,
+    workerToken,
     idempotencyKey: `sim:test:accept:${crypto.randomUUID()}`,
   });
 
@@ -147,7 +182,7 @@ async function main() {
     baseUrl,
     bountyId,
     workerDid,
-    workerToken: worker.token,
+    workerToken,
     idempotencyKey: `sim:test:submit:${crypto.randomUUID()}`,
     proofBundleEnvelope: proof.envelope,
     commitProofEnvelope,
@@ -168,8 +203,9 @@ async function main() {
   const listRes = await listBountySubmissions({
     baseUrl,
     bountyId,
-    workerToken: worker.token,
+    workerToken,
     params: { limit: 20 },
+    strictAuth,
   });
   assert(listRes.status === 200, `list submissions failed (${listRes.status}): ${listRes.text}`);
   assert(Array.isArray(listRes.json?.submissions), 'list submissions response missing array');
@@ -179,7 +215,8 @@ async function main() {
   const detail = await getSubmissionDetail({
     baseUrl,
     submissionId,
-    workerToken: worker.token,
+    workerToken,
+    strictAuth,
   });
   assert(detail.status === 200, `get submission detail failed (${detail.status}): ${detail.text}`);
   steps.push({ step: 'get_submission_detail', ok: true, elapsed_ms: detail.elapsed_ms, status: detail.json?.submission?.status ?? null });
@@ -187,9 +224,10 @@ async function main() {
   const terminal = await waitForSubmissionTerminal({
     baseUrl,
     submissionId,
-    workerToken: worker.token,
+    workerToken,
     timeoutMs: 20_000,
     intervalMs: 1_000,
+    strictAuth,
   });
 
   assert(terminal?.status === 200, `poll submission terminal failed (${terminal?.status}): ${terminal?.text}`);
@@ -210,6 +248,10 @@ async function main() {
     requester_token_kid: requesterTokenKid,
     requester_token_hash: requesterTokenHash,
     worker_did: workerDid,
+    worker_token_source: workerTokenSource,
+    worker_token_kid: workerTokenKid,
+    worker_token_hash: workerTokenHash,
+    strict_auth: strictAuth,
     bounty_id: bountyId,
     submission_id: submissionId,
     harness_id: harnessId,

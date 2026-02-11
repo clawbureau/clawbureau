@@ -11,7 +11,10 @@ import {
   resolveScopeBaseUrl,
   resolveRequesterAudience,
   resolveRequesterScopes,
+  resolveWorkerAudience,
+  resolveWorkerScopes,
   issueRequesterScopedToken,
+  issueWorkerScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -112,6 +115,46 @@ async function resolveRequesterAuth({
   };
 }
 
+async function issueWorkerTokenForJob({
+  workerDid,
+  strictAuth,
+  scopeAdminKey,
+  scopeBaseUrl,
+  workerAudience,
+  workerScopes,
+  workerTokenTtlSec,
+  source,
+  legacyWorkerToken,
+}) {
+  if (!strictAuth) {
+    return {
+      token: legacyWorkerToken,
+      source: 'legacy-register',
+      kid: null,
+      token_hash: null,
+    };
+  }
+
+  assert(scopeAdminKey, 'scope-admin-key / SCOPE_ADMIN_KEY is required in strict auth mode');
+
+  const issued = await issueWorkerScopedToken({
+    scopeBaseUrl,
+    scopeAdminKey,
+    workerDid,
+    audience: workerAudience,
+    scopes: workerScopes,
+    ttlSec: workerTokenTtlSec,
+    source,
+  });
+
+  return {
+    token: issued.token,
+    source: 'clawscope-issue',
+    kid: issued.kid,
+    token_hash: issued.token_hash,
+  };
+}
+
 function classifyErrorBucket(errorCode, errorMessage) {
   const code = String(errorCode || 'UNKNOWN').trim().toUpperCase();
   const message = String(errorMessage || '').toUpperCase();
@@ -126,6 +169,21 @@ function classifyErrorBucket(errorCode, errorMessage) {
     code === 'REQUESTER_SUB_MISMATCH' ||
     code === 'REQUESTER_AUDIENCE_REQUIRED' ||
     code === 'REQUESTER_SUB_INVALID' ||
+    code === 'REQUESTER_CONTROL_CLAIM_REQUIRED' ||
+    code === 'REQUESTER_CONTROL_CLAIM_INVALID' ||
+    code === 'REQUESTER_CONTROL_BINDING_MISMATCH' ||
+    code === 'REQUESTER_SENSITIVE_AUTH_REVALIDATION_FAILED' ||
+    code === 'SENSITIVE_TRANSITION_REQUIRES_SCOPED_TOKEN' ||
+    code === 'WORKER_TOKEN_REQUIRED' ||
+    code === 'WORKER_TOKEN_INVALID' ||
+    code === 'WORKER_SCOPE_REQUIRED' ||
+    code === 'WORKER_SUB_MISMATCH' ||
+    code === 'WORKER_SUB_INVALID' ||
+    code === 'WORKER_AUDIENCE_REQUIRED' ||
+    code === 'WORKER_CONTROL_CLAIM_REQUIRED' ||
+    code === 'WORKER_CONTROL_CLAIM_INVALID' ||
+    code === 'WORKER_CONTROL_BINDING_MISMATCH' ||
+    code === 'WORKER_TOKEN_CANONICAL_REQUIRED' ||
     code === 'UNAUTHORIZED' ||
     code === 'FORBIDDEN'
   ) {
@@ -192,6 +250,12 @@ async function runRequesterJob({
   requesterToken,
   requesterDid,
   rewardMinor,
+  strictAuth,
+  scopeAdminKey,
+  scopeBaseUrl,
+  workerAudience,
+  workerScopes,
+  workerTokenTtlSec,
 }) {
   const startedAt = nowIso();
   const stepResults = [];
@@ -207,6 +271,19 @@ async function runRequesterJob({
     const worker = await registerWorker(baseUrl, workerDid, ['simulation', 'batch', 'requester']);
     pushStep({ step: 'register_worker', ok: true, elapsed_ms: worker.elapsed_ms, status: 201 });
 
+    const workerAuth = await issueWorkerTokenForJob({
+      workerDid,
+      strictAuth,
+      scopeAdminKey,
+      scopeBaseUrl,
+      workerAudience,
+      workerScopes,
+      workerTokenTtlSec,
+      source: `simulate-clawbounties-batch:requester:${jobId}`,
+      legacyWorkerToken: worker.token,
+    });
+    pushStep({ step: 'issue_worker_token', ok: true, source: workerAuth.source, kid: workerAuth.kid });
+
     const postRes = await postBounty({
       baseUrl,
       requesterToken,
@@ -219,6 +296,7 @@ async function runRequesterJob({
       tags: ['simulation', 'batch', 'requester'],
       metadata: { simulation: true, flow: 'requester', job_id: jobId },
       idempotencyKey: `sim:batch:req:post:${jobId}`,
+      strictAuth,
     });
 
     if (!(postRes.status === 200 || postRes.status === 201)) {
@@ -242,7 +320,7 @@ async function runRequesterJob({
       baseUrl,
       bountyId,
       workerDid,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
       idempotencyKey: `sim:batch:req:accept:${jobId}`,
     });
 
@@ -275,7 +353,7 @@ async function runRequesterJob({
       baseUrl,
       bountyId,
       workerDid,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
       idempotencyKey: `sim:batch:req:submit:${jobId}`,
       proofBundleEnvelope: proof.envelope,
       urm: proof.urm,
@@ -307,6 +385,7 @@ async function runRequesterJob({
       requesterToken,
       requesterDid,
       params: { limit: 20 },
+      strictAuth,
     });
 
     if (listRes.status !== 200) {
@@ -320,6 +399,7 @@ async function runRequesterJob({
       submissionId,
       requesterToken,
       requesterDid,
+      strictAuth,
     });
 
     if (detailBefore.status !== 200) {
@@ -357,6 +437,7 @@ async function runRequesterJob({
         requesterDid,
         submissionId,
         idempotencyKey: `sim:batch:req:approve:${jobId}`,
+        strictAuth,
       });
     } else {
       decisionRes = await rejectBounty({
@@ -367,6 +448,7 @@ async function runRequesterJob({
         submissionId,
         idempotencyKey: `sim:batch:req:reject:${jobId}`,
         reason: `batch deterministic rejection ${jobId}`,
+        strictAuth,
       });
     }
 
@@ -406,6 +488,7 @@ async function runRequesterJob({
       requesterDid,
       timeoutMs: 20_000,
       intervalMs: 700,
+      strictAuth,
     });
 
     const finalStatus = terminal?.json?.submission?.status ?? null;
@@ -458,6 +541,12 @@ async function runTestJob({
   requesterDid,
   harnessId,
   rewardMinor,
+  strictAuth,
+  scopeAdminKey,
+  scopeBaseUrl,
+  workerAudience,
+  workerScopes,
+  workerTokenTtlSec,
 }) {
   const startedAt = nowIso();
   const stepResults = [];
@@ -473,6 +562,19 @@ async function runTestJob({
     const worker = await registerWorker(baseUrl, workerDid, ['simulation', 'batch', 'test']);
     pushStep({ step: 'register_worker', ok: true, elapsed_ms: worker.elapsed_ms, status: 201 });
 
+    const workerAuth = await issueWorkerTokenForJob({
+      workerDid,
+      strictAuth,
+      scopeAdminKey,
+      scopeBaseUrl,
+      workerAudience,
+      workerScopes,
+      workerTokenTtlSec,
+      source: `simulate-clawbounties-batch:test:${jobId}`,
+      legacyWorkerToken: worker.token,
+    });
+    pushStep({ step: 'issue_worker_token', ok: true, source: workerAuth.source, kid: workerAuth.kid });
+
     const postRes = await postBounty({
       baseUrl,
       requesterToken,
@@ -486,6 +588,7 @@ async function runTestJob({
       tags: ['simulation', 'batch', 'test'],
       metadata: { simulation: true, flow: 'test', job_id: jobId },
       idempotencyKey: `sim:batch:test:post:${jobId}`,
+      strictAuth,
     });
 
     if (!(postRes.status === 200 || postRes.status === 201)) {
@@ -509,7 +612,7 @@ async function runTestJob({
       baseUrl,
       bountyId,
       workerDid,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
       idempotencyKey: `sim:batch:test:accept:${jobId}`,
     });
 
@@ -549,7 +652,7 @@ async function runTestJob({
       baseUrl,
       bountyId,
       workerDid,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
       idempotencyKey: `sim:batch:test:submit:${jobId}`,
       proofBundleEnvelope: proof.envelope,
       commitProofEnvelope,
@@ -579,8 +682,9 @@ async function runTestJob({
     const listRes = await listBountySubmissions({
       baseUrl,
       bountyId,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
       params: { limit: 20 },
+      strictAuth,
     });
 
     if (listRes.status !== 200) {
@@ -592,7 +696,8 @@ async function runTestJob({
     const detail = await getSubmissionDetail({
       baseUrl,
       submissionId,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
+      strictAuth,
     });
 
     if (detail.status !== 200) {
@@ -622,9 +727,10 @@ async function runTestJob({
     const terminal = await waitForSubmissionTerminal({
       baseUrl,
       submissionId,
-      workerToken: worker.token,
+      workerToken: workerAuth.token,
       timeoutMs: 20_000,
       intervalMs: 700,
+      strictAuth,
     });
 
     const finalStatus = terminal?.json?.submission?.status ?? null;
@@ -673,6 +779,7 @@ async function runFundingPreflight({
   requesterDid,
   amountMinor,
   runLabel,
+  strictAuth,
 }) {
   const startedAt = nowIso();
 
@@ -692,6 +799,7 @@ async function runFundingPreflight({
       run_label: runLabel,
     },
     idempotencyKey: `sim:batch:funding-preflight:${runLabel}:${requesterDid}:${amountMinor}`,
+    strictAuth,
   });
 
   const errorCode = response.ok ? null : extractErrorCode(response);
@@ -833,6 +941,7 @@ function summarize(results, {
   requesterTokenHash,
   requesterAudience,
   scopeBaseUrl,
+  strictAuth,
   fundingPreflight,
   backpressure,
 }) {
@@ -952,6 +1061,7 @@ function summarize(results, {
     clawtrials_base_url: trialsBaseUrl,
     scope_base_url: scopeBaseUrl,
     requester_audience: requesterAudience,
+    strict_auth: strictAuth,
     requester_token_source: requesterTokenSource,
     requester_token_kid: requesterTokenKid,
     requester_token_hash: requesterTokenHash,
@@ -1002,6 +1112,8 @@ async function main() {
   const runLabel = String(args.get('label') || `batch-${total}`);
   const harnessId = String(args.get('harness-id') || 'th_smoke_pass_v1');
 
+  const strictAuth = parseBoolean(args.get('strict-auth'), true);
+
   const fundingPreflightEnabled = parseBoolean(args.get('funding-preflight'), true);
   const fundingPreflightAmountMinor = String(args.get('funding-preflight-amount-minor') || rewardMinor).trim();
   assert(/^[0-9]+$/.test(fundingPreflightAmountMinor), 'funding-preflight-amount-minor must be an integer string');
@@ -1027,6 +1139,17 @@ async function main() {
 
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
   const trialsBaseUrl = resolveTrialsBaseUrl(envName, args.get('clawtrials-base-url'));
+
+  const scopeAdminKey = resolveScopeAdminKey(args);
+  const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+  const workerAudience = resolveWorkerAudience(envName, args.get('worker-audience'));
+  const workerScopes = resolveWorkerScopes(args.get('worker-scopes'));
+  const workerTokenTtlSec = Number.parseInt(String(args.get('worker-token-ttl-sec') || '3600'), 10);
+  assert(Number.isFinite(workerTokenTtlSec) && workerTokenTtlSec > 0, 'worker-token-ttl-sec must be a positive integer');
+
+  if (strictAuth) {
+    assert(scopeAdminKey, 'scope-admin-key / SCOPE_ADMIN_KEY is required in strict auth mode');
+  }
 
   const requesterDidRaw = String(args.get('requester-did') || '').trim();
   const requesterDid = requesterDidRaw.length > 0 ? requesterDidRaw : randomDid('requester-batch');
@@ -1063,6 +1186,7 @@ async function main() {
         requesterDid: fundingRequesterDid,
         amountMinor: fundingPreflightAmountMinor,
         runLabel,
+        strictAuth,
       })
     : {
         ok: true,
@@ -1111,6 +1235,12 @@ async function main() {
             requesterToken,
             requesterDid: job.requester_did,
             rewardMinor,
+            strictAuth,
+            scopeAdminKey,
+            scopeBaseUrl,
+            workerAudience,
+            workerScopes,
+            workerTokenTtlSec,
           });
         }
 
@@ -1121,6 +1251,12 @@ async function main() {
           requesterDid: job.requester_did,
           harnessId,
           rewardMinor,
+          strictAuth,
+          scopeAdminKey,
+          scopeBaseUrl,
+          workerAudience,
+          workerScopes,
+          workerTokenTtlSec,
         });
       }
     );
@@ -1145,6 +1281,7 @@ async function main() {
     requesterTokenHash: requesterAuth.requesterTokenHash,
     requesterAudience: requesterAuth.requesterAudience,
     scopeBaseUrl: requesterAuth.scopeBaseUrl,
+    strictAuth,
     fundingPreflight,
     backpressure,
   });

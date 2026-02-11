@@ -1,0 +1,75 @@
+{
+  "ok": true,
+  "env": "prod",
+  "base_url": "https://clawbounties.com",
+  "clawtrials_base_url": "https://clawtrials.com",
+  "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+  "requester_token_source": "clawscope-issue",
+  "requester_token_kid": "66a63dae7bbf4bda",
+  "requester_token_hash": "f60ffb1eebee999981f6127a06315102723c39c3bf503a544689e39279e87efa",
+  "worker_did": "did:key:z6MksadrNRGzKNqd8NQAfSwMuhoeHnJadYVzq41YfEAFDisy",
+  "worker_token_source": "clawscope-issue",
+  "worker_token_kid": "66a63dae7bbf4bda",
+  "worker_token_hash": "e2ffc7d0933f07d9e9b2d5fb5bdefa947482a03a103a11ebe17347dc1828fa06",
+  "strict_auth": true,
+  "bounty_id": "bty_dc2db2fd-5542-4b67-b71e-58d6593b1ae9",
+  "submission_id": "sub_c8dfd1f0-8d71-4e9d-aa7b-4b952fd1a934",
+  "harness_id": "th_smoke_pass_v1",
+  "expected_final_status": "approved",
+  "final_submission_status": "approved",
+  "steps": [
+    {
+      "step": "check_harness_health",
+      "ok": true,
+      "elapsed_ms": 109
+    },
+    {
+      "step": "check_harness_catalog",
+      "ok": true,
+      "elapsed_ms": 27,
+      "harness_count": 3
+    },
+    {
+      "step": "register_worker",
+      "ok": true,
+      "elapsed_ms": 163
+    },
+    {
+      "step": "post_bounty",
+      "ok": true,
+      "elapsed_ms": 522,
+      "bounty_id": "bty_dc2db2fd-5542-4b67-b71e-58d6593b1ae9",
+      "harness_id": "th_smoke_pass_v1"
+    },
+    {
+      "step": "accept_bounty",
+      "ok": true,
+      "elapsed_ms": 373
+    },
+    {
+      "step": "submit",
+      "ok": true,
+      "elapsed_ms": 1365,
+      "submission_id": "sub_c8dfd1f0-8d71-4e9d-aa7b-4b952fd1a934"
+    },
+    {
+      "step": "list_submissions",
+      "ok": true,
+      "elapsed_ms": 168,
+      "count": 1
+    },
+    {
+      "step": "get_submission_detail",
+      "ok": true,
+      "elapsed_ms": 185,
+      "status": "approved"
+    },
+    {
+      "step": "wait_terminal",
+      "ok": true,
+      "elapsed_ms": 165,
+      "final_status": "approved"
+    }
+  ],
+  "generated_at": "2026-02-11T23:10:29.162Z"
+}

@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "requester_token_source": "clawscope-issue",
+  "requester_token_kid": "66a63dae7bbf4bda",
+  "requester_token_hash": "34ec07ed2313e3bef39a1354b735ec7f565bc2d5c125c7c914d495f005951570",
+  "worker_did": "did:key:z6MkivEXPpgFKDiRMUZfp3mKJzqZBRKXG3GKrsFWR1f9Qc3N",
+  "worker_token_source": "clawscope-issue",
+  "worker_token_kid": "66a63dae7bbf4bda",
+  "worker_token_hash": "045c1f8ef6f4114289d28e30e41ab2c4998697156e20d9ca793e1ff408ab422b",
+  "strict_auth": true,
+  "bounty_id": "bty_b12b3e23-427f-40b6-8865-092670087208",
+  "submission_id": "sub_12462b21-c116-480b-90e1-b3bcca93242a",
+  "steps": [
+    {
+      "step": "register_worker",
+      "ok": true,
+      "elapsed_ms": 247
+    },
+    {
+      "step": "post_bounty",
+      "ok": true,
+      "elapsed_ms": 559,
+      "bounty_id": "bty_b12b3e23-427f-40b6-8865-092670087208"
+    },
+    {
+      "step": "accept_bounty",
+      "ok": true,
+      "elapsed_ms": 345
+    },
+    {
+      "step": "submit",
+      "ok": true,
+      "elapsed_ms": 653,
+      "submission_id": "sub_12462b21-c116-480b-90e1-b3bcca93242a"
+    },
+    {
+      "step": "list_submissions",
+      "ok": true,
+      "elapsed_ms": 159,
+      "count": 1
+    },
+    {
+      "step": "get_submission_before_approval",
+      "ok": true,
+      "elapsed_ms": 147,
+      "status": "pending_review"
+    },
+    {
+      "step": "approve",
+      "ok": true,
+      "elapsed_ms": 1139
+    },
+    {
+      "step": "wait_terminal",
+      "ok": true,
+      "elapsed_ms": 147,
+      "final_status": "approved"
+    }
+  ],
+  "final_submission_status": "approved",
+  "generated_at": "2026-02-11T23:06:24.299Z"
+}
