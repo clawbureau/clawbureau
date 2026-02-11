@@ -369,4 +369,31 @@ Delivery evidence:
 
 ---
 
+## 10) 2026-02-11 addendum — CVF-US-031/032/033 key-overlap verification semantics
+
+Shipped in `services/clawverify/src/verify-token-control.ts`:
+- deterministic upstream mapping:
+  - clawscope `TOKEN_UNKNOWN_KID` -> verifier `TOKEN_CONTROL_KEY_UNKNOWN`
+  - clawscope `TOKEN_KID_EXPIRED` -> verifier `TOKEN_CONTROL_KEY_EXPIRED`
+- deterministic remediation hints for overlap operations:
+  - token reissue
+  - overlap contract/jwks synchronization
+
+Validation evidence:
+- tests: `services/clawverify/test/token-control.test.ts`
+- operational runbook: `scripts/identity/RUNBOOK-identity-control-plane-operations.md`
+- deploys:
+  - staging: `clawverify-staging` version `c2602134-d6ad-4110-b71e-2837edf59082`
+  - prod: `clawverify` version `8d79f1f9-1a97-4b61-a796-0d1622f0181e`
+- smoke artifacts:
+  - cross-service: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`
+  - cross-service: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`
+  - kid interop: `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`
+
+Compatibility note for Agent C:
+- published note: `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md`
+- treat `TOKEN_CONTROL_KEY_UNKNOWN` and `TOKEN_CONTROL_KEY_EXPIRED` as deterministic fail-closed auth failures requiring token reissue (not retry loops against same token).
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*

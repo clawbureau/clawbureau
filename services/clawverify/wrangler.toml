@@ -1,7 +1,7 @@
 name = "clawverify"
 account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2026-02-11"
 
 routes = [
   { pattern = "clawverify.com/*", zone_name = "clawverify.com" },

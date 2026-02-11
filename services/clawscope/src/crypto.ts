@@ -60,6 +60,32 @@ export interface Ed25519KeyPair {
  *
  * Key format: 32 bytes seed (private key) or 64 bytes (seed + public key)
  */
+export async function importEd25519PublicKey(base64urlX: string): Promise<{
+  publicKey: CryptoKey;
+  publicKeyBytes: Uint8Array;
+}> {
+  const publicKeyBytes = base64urlDecode(base64urlX);
+  if (publicKeyBytes.length !== 32) {
+    throw new Error(`Invalid Ed25519 public key length: ${publicKeyBytes.length}. Expected 32 bytes.`);
+  }
+
+  const publicKey = await crypto.subtle.importKey(
+    'jwk',
+    {
+      kty: 'OKP',
+      crv: 'Ed25519',
+      x: base64urlX,
+      ext: true,
+      key_ops: ['verify'],
+    },
+    { name: 'Ed25519' },
+    true,
+    ['verify']
+  );
+
+  return { publicKey, publicKeyBytes };
+}
+
 export async function importEd25519Key(base64urlKey: string): Promise<Ed25519KeyPair> {
   const keyBytes = base64urlDecode(base64urlKey);
 

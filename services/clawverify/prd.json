@@ -258,7 +258,47 @@
       ],
       "priority": 18,
       "passes": true,
-      "notes": "Implemented `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` in `services/clawverify/src/index.ts` with new modules `verify-control-chain.ts` and `verify-token-control.ts`. Verification is fail-closed with deterministic error codes (`CONTROL_CHAIN_NOT_FOUND`, `CONTROL_CHAIN_CONTEXT_MISMATCH`, `TOKEN_CONTROL_SCOPE_HASH_MISMATCH`, `TOKEN_CONTROL_SCOPE_MISSING`, `TOKEN_CONTROL_AUDIENCE_MISMATCH`, `TOKEN_CONTROL_TRANSITION_FORBIDDEN`, etc.) and deterministic remediation hints. Added tests `test/control-chain.test.ts` and `test/token-control.test.ts`; passed `npm run typecheck && npm test`. Deploys: staging `db16bf9e-8c5a-49cb-a9f6-083efd86d476`, prod `9e4298b9-e129-44f8-ad3a-20a4e52cd15b`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
+      "notes": "Implemented `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` in `services/clawverify/src/index.ts` with new modules `verify-control-chain.ts` and `verify-token-control.ts`. Verification is fail-closed with deterministic error codes (`CONTROL_CHAIN_NOT_FOUND`, `CONTROL_CHAIN_CONTEXT_MISMATCH`, `TOKEN_CONTROL_SCOPE_HASH_MISMATCH`, `TOKEN_CONTROL_SCOPE_MISSING`, `TOKEN_CONTROL_AUDIENCE_MISMATCH`, `TOKEN_CONTROL_TRANSITION_FORBIDDEN`, etc.) and deterministic remediation hints. Added tests `test/control-chain.test.ts` and `test/token-control.test.ts`; passed `npm run typecheck && npm test`. Updated deploys: staging `c2602134-d6ad-4110-b71e-2837edf59082`, prod `8d79f1f9-1a97-4b61-a796-0d1622f0181e`; updated smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`."
+    },
+    {
+      "id": "CVF-US-031",
+      "title": "Deterministic key-interoperability error mapping",
+      "description": "As downstream gates, we need token-control verifier errors to map upstream kid failures deterministically for automated remediation.",
+      "acceptanceCriteria": [
+        "Map clawscope `TOKEN_UNKNOWN_KID` to `TOKEN_CONTROL_KEY_UNKNOWN`",
+        "Map clawscope `TOKEN_KID_EXPIRED` to `TOKEN_CONTROL_KEY_EXPIRED`",
+        "Preserve fail-closed verification behavior",
+        "Typecheck and tests pass"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Implemented in `services/clawverify/src/verify-token-control.ts` with new deterministic mapping logic. Added tests in `services/clawverify/test/token-control.test.ts` covering both mappings."
+    },
+    {
+      "id": "CVF-US-032",
+      "title": "Verifier remediation semantics for key-overlap operations",
+      "description": "As operators, we need remediation hints that explicitly point to key-overlap synchronization and reissue flows.",
+      "acceptanceCriteria": [
+        "Key-unknown and key-expired failures include deterministic remediation hints",
+        "Hints reference overlap contract/jwks refresh semantics",
+        "Typecheck and tests pass"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Added deterministic remediation hints for key overlap failures (`REISSUE_TOKEN`, `SYNC_REVOCATION_STREAM`) in token-control verification responses."
+    },
+    {
+      "id": "CVF-US-033",
+      "title": "Token-control compatibility contract for downstream integrators",
+      "description": "As integration teams, we need a stable compatibility note for kid-overlap transitions and deterministic fail-closed behavior.",
+      "acceptanceCriteria": [
+        "Publish compatibility guidance with explicit error semantics",
+        "Demonstrate behavior with staging/prod interop smoke evidence",
+        "Typecheck/tests/smoke pass"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Published compatibility guidance in `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md` and identity runbook `scripts/identity/RUNBOOK-identity-control-plane-operations.md`; validated cross-environment interop via `scripts/identity/smoke-scope-kid-interop.mjs` artifact `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`."
     }
   ]
 }

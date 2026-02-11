@@ -140,6 +140,14 @@ function getUpstreamErrorMessage(payload: unknown): string | null {
   return null;
 }
 
+function getUpstreamErrorCode(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.error === 'string' && p.error.trim().length > 0) return p.error.trim();
+  if (typeof p.code === 'string' && p.code.trim().length > 0) return p.code.trim();
+  return null;
+}
+
 function validateRequest(
   body: unknown,
   now: string
@@ -426,14 +434,62 @@ export async function verifyTokenControl(
   }
 
   if (introspectResponse.status !== 200 || !introspectResponse.json) {
+    const upstreamCode = getUpstreamErrorCode(introspectResponse.json);
+    const upstreamMessage =
+      getUpstreamErrorMessage(introspectResponse.json) ??
+      `clawscope introspection failed with status ${introspectResponse.status}`;
+
+    if (upstreamCode === 'TOKEN_UNKNOWN_KID') {
+      return buildInvalidResponse(
+        now,
+        'Token kid is not accepted by clawscope key contract',
+        {
+          code: 'TOKEN_CONTROL_KEY_UNKNOWN',
+          message: upstreamMessage,
+          field: 'token',
+        },
+        {},
+        [
+          hint(
+            'REISSUE_TOKEN',
+            'Token was issued under a kid that is not present in the active overlap window',
+            'Reissue the token using current canonical keyset'
+          ),
+          hint(
+            'SYNC_REVOCATION_STREAM',
+            'Control-plane consumers must use synchronized accepted_kids during overlap',
+            'Refresh /v1/keys/rotation-contract and /v1/jwks before retrying'
+          ),
+        ]
+      );
+    }
+
+    if (upstreamCode === 'TOKEN_KID_EXPIRED') {
+      return buildInvalidResponse(
+        now,
+        'Token kid overlap window has expired',
+        {
+          code: 'TOKEN_CONTROL_KEY_EXPIRED',
+          message: upstreamMessage,
+          field: 'token',
+        },
+        {},
+        [
+          hint(
+            'REISSUE_TOKEN',
+            'Token uses an expired overlap key',
+            'Reissue token with the current active key'
+          ),
+        ]
+      );
+    }
+
     return buildInvalidResponse(
       now,
       'clawscope introspection rejected token',
       {
         code: introspectResponse.status >= 500 ? 'DEPENDENCY_NOT_CONFIGURED' : 'PARSE_ERROR',
-        message:
-          getUpstreamErrorMessage(introspectResponse.json) ??
-          `clawscope introspection failed with status ${introspectResponse.status}`,
+        message: upstreamMessage,
       },
       {},
       [

@@ -355,7 +355,7 @@
       ],
       "priority": 26,
       "passes": true,
-      "notes": "Delivered in `services/clawclaim/src/index.ts`: control-plane challenge endpoint, owner-signed controller registration, controller->agent registration, owner-bound sensitive policy update, and deterministic controller/agent read/list endpoints; later extended with lifecycle portability endpoints (rotation/transfer/export/import). Test coverage: `services/clawclaim/test/control-plane.test.ts`, `services/clawclaim/test/claim-lifecycle-portability.test.ts`. Latest deploy versions: staging `ace3a741-85e3-4fcb-b582-aac6993d974f`, prod `2b45efe3-7bfd-48b2-a9c2-df5250f51488`; latest smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`."
+      "notes": "Delivered in `services/clawclaim/src/index.ts`: control-plane challenge endpoint, owner-signed controller registration, controller->agent registration, owner-bound sensitive policy update, and deterministic controller/agent read/list endpoints; later extended with lifecycle portability endpoints (rotation/transfer/export/import). Test coverage: `services/clawclaim/test/control-plane.test.ts`, `services/clawclaim/test/claim-lifecycle-portability.test.ts`. Latest deploy versions: staging `d8df6360-b7b8-4800-9bf7-c7a899c4dd73`, prod `247f3971-fbb1-4e31-8cd0-1287ac960b07`; latest smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`."
     },
     {
       "id": "ICP-US-002",
@@ -368,7 +368,7 @@
       ],
       "priority": 27,
       "passes": true,
-      "notes": "Delivered in `services/clawscope/src/index.ts`: `POST /v1/tokens/issue/canonical`, migration-gated legacy `POST /v1/tokens/issue`, deterministic matrix endpoint `POST /v1/tokens/introspect/matrix`, revocation stream `GET /v1/revocations/stream`, and key overlap contract `GET /v1/keys/rotation-contract`. Added canonical claim fields to `packages/schema/auth/scoped_token_claims.v1.json`. Deploy versions: staging `37e14c8f-e14f-4ec7-b2d7-9c22a6d9ce9b`, prod `2edbae03-cf2e-4ba9-9be4-18f9786dd9a5`."
+      "notes": "Delivered in `services/clawscope/src/index.ts`: `POST /v1/tokens/issue/canonical`, migration-gated legacy `POST /v1/tokens/issue`, deterministic matrix endpoint `POST /v1/tokens/introspect/matrix`, revocation stream `GET /v1/revocations/stream`, and key overlap contract `GET /v1/keys/rotation-contract`. Added canonical claim fields to `packages/schema/auth/scoped_token_claims.v1.json`. Latest deploy versions: staging `30cb1291-9cf1-467d-ac2c-f697a9a7b422`, prod `b45c4100-8ba5-44ba-b2e6-e715329bc744`; kid interop smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`."
     },
     {
       "id": "ICP-US-003",
@@ -381,7 +381,7 @@
       ],
       "priority": 28,
       "passes": true,
-      "notes": "Delivered in `services/clawverify/src/index.ts` with new endpoints `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` plus deterministic remediation hints. New verification modules: `verify-control-chain.ts`, `verify-token-control.ts`; tests: `test/control-chain.test.ts`, `test/token-control.test.ts`. Deploy versions: staging `db16bf9e-af27-499e-a523-f180f9dd8dc0`, prod `9e4298b9-5bf0-415c-8fa4-920242d6fef9`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
+      "notes": "Delivered in `services/clawverify/src/index.ts` with new endpoints `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` plus deterministic remediation hints. New verification modules: `verify-control-chain.ts`, `verify-token-control.ts`; tests: `test/control-chain.test.ts`, `test/token-control.test.ts`. Latest deploy versions: staging `c2602134-d6ad-4110-b71e-2837edf59082`, prod `8d79f1f9-1a97-4b61-a796-0d1622f0181e`; latest smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`."
     },
     {
       "id": "CCL-US-013",
@@ -421,10 +421,88 @@
       "priority": 31,
       "passes": true,
       "notes": "Shipped in clawclaim with `POST /v1/control-plane/identity/export` and `/identity/import`, HMAC signing (`CLAIM_EXPORT_SIGNING_KEY`), deterministic import operation keys, and fail-closed tamper/stale checks. Added schema `packages/schema/identity/identity_export_bundle.v1.json`. Validated by unit tests + staging/prod identity smoke."
+    },
+    {
+      "id": "CSC-US-016",
+      "title": "Cross-environment kid interoperability",
+      "description": "As operations, we need deterministic key interoperability so CST introspection does not fail with TOKEN_UNKNOWN_KID during overlap windows.",
+      "acceptanceCriteria": [
+        "Support verify-only overlap public keys without granting signing rights",
+        "Expose kid diagnostics in introspection responses",
+        "Validate staging<->prod introspection interoperability in smoke artifacts"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Implemented via `SCOPE_VERIFY_PUBLIC_KEYS_JSON` and introspection `kid`/`kid_source` diagnostics in clawscope. Cross-env interop smoke: `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`."
+    },
+    {
+      "id": "CSC-US-017",
+      "title": "Rotation overlap contract v2",
+      "description": "As integrators, we need deterministic overlap metadata for accepted key windows.",
+      "acceptanceCriteria": [
+        "Rotation contract includes signing/verify-only/expiring kid sets",
+        "JWKS exposes accepted keys only",
+        "Typecheck/tests pass"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": "`GET /v1/keys/rotation-contract` upgraded to `contract_version=2` with `signing_kids`, `verify_only_kids`, `expiring_kids`; JWKS filtered to accepted keys."
+    },
+    {
+      "id": "CSC-US-018",
+      "title": "Deterministic kid error taxonomy",
+      "description": "As downstream callers, we need stable kid-failure semantics for fail-closed automation.",
+      "acceptanceCriteria": [
+        "Unknown kid yields TOKEN_UNKNOWN_KID",
+        "Expired overlap yields TOKEN_KID_EXPIRED",
+        "Behavior documented for downstream consumers"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": "Implemented deterministic `TOKEN_KID_EXPIRED` while preserving `TOKEN_UNKNOWN_KID`; consumed downstream by clawverify mapping and Agent C compatibility note."
+    },
+    {
+      "id": "CVF-US-031",
+      "title": "Verifier mapping for key-overlap failures",
+      "description": "As downstream systems, we need token-control verification to map upstream kid failures deterministically.",
+      "acceptanceCriteria": [
+        "Map TOKEN_UNKNOWN_KID -> TOKEN_CONTROL_KEY_UNKNOWN",
+        "Map TOKEN_KID_EXPIRED -> TOKEN_CONTROL_KEY_EXPIRED",
+        "Typecheck/tests pass"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": "Implemented in `services/clawverify/src/verify-token-control.ts`; covered by `services/clawverify/test/token-control.test.ts`."
+    },
+    {
+      "id": "CVF-US-032",
+      "title": "Verifier remediation semantics for key overlap",
+      "description": "As operators, we need explicit remediation hints for key overlap failures.",
+      "acceptanceCriteria": [
+        "Provide deterministic reissue/sync hints for key errors",
+        "Keep fail-closed verification status",
+        "Typecheck/tests pass"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": "Added deterministic remediation hints for key overlap mapping outcomes in token-control verification responses."
+    },
+    {
+      "id": "CVF-US-033",
+      "title": "Downstream compatibility contract for token key transitions",
+      "description": "As integration teams, we need a stable compatibility contract for kid transition behavior and error handling.",
+      "acceptanceCriteria": [
+        "Publish compatibility note for Agent C",
+        "Back guidance with staging/prod interop artifacts",
+        "Keep contract deterministic"
+      ],
+      "priority": 37,
+      "passes": true,
+      "notes": "Compatibility guidance published in `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md` + identity runbook, validated by `scripts/identity/smoke-scope-kid-interop.mjs` artifact set."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T23:15:00Z",
+    "updatedAt": "2026-02-11T23:45:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

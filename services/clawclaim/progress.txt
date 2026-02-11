@@ -112,3 +112,14 @@ Started: 2026-02-02T22:45:00Z
   - staging: `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json`
   - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`
 ---
+
+## 2026-02-11 - M3/M4 Cloudflare runtime hygiene uplift
+- Updated Worker runtime compatibility baseline:
+  - `services/clawclaim/wrangler.toml` now uses `compatibility_date = "2026-02-11"`
+- Re-deployed clawclaim to keep staging/prod runtime parity with identity lane hardening rollout:
+  - staging: `clawclaim-staging` -> `d8df6360-b7b8-4800-9bf7-c7a899c4dd73`
+  - prod: `clawclaim` -> `247f3971-fbb1-4e31-8cd0-1287ac960b07`
+- Cross-service smoke evidence (same tranche):
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-34-634Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-42-46-640Z-prod/result.json`
+---
