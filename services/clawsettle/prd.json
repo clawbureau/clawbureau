@@ -1,0 +1,23 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/economy/MPY-US-003-clawsettle-stripe-webhook",
+  "description": "clawsettle.com (Settlement) — provider adapter layer for external rails mapped into clawledger settlement semantics.",
+  "userStories": [
+    {
+      "id": "MPY-US-003",
+      "title": "Stripe webhook verification + ledger settlement forwarding",
+      "description": "As a settlement adapter, I want to verify Stripe webhooks fail-closed and forward canonical settlement updates to clawledger using deterministic idempotency keys.",
+      "acceptanceCriteria": [
+        "Create services/clawsettle worker scaffold with staging/prod wrangler config",
+        "Implement POST /v1/stripe/webhook with fail-closed signature verification",
+        "Map verified Stripe events to clawledger POST /v1/payments/settlements/ingest with idempotency key stripe:event:<event_id>",
+        "Add tests for valid signature, tampered signature, and replay dedupe",
+        "Add staging smoke script and run staging deploy/smoke evidence",
+        "Do not deploy production in this phase"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Shipped to staging only: fail-closed Stripe webhook verification, deterministic forwarding idempotency key stripe:event:<event_id>, replay dedupe persistence, staging deploy + smoke evidence captured in progress.txt"
+    }
+  ]
+}

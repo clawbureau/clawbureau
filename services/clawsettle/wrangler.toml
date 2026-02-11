@@ -1,0 +1,34 @@
+name = "clawsettle"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "clawsettle.com/*", zone_name = "clawsettle.com" },
+  { pattern = "www.clawsettle.com/*", zone_name = "clawsettle.com" }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "clawsettle"
+database_id = "1f2be28f-dfb5-4dd5-baa5-c23828ef26b0"
+
+[vars]
+SETTLE_VERSION = "0.1.0"
+LEDGER_BASE_URL = "https://clawledger.com"
+
+[env.staging]
+name = "clawsettle-staging"
+routes = [
+  { pattern = "staging.clawsettle.com/*", zone_name = "clawsettle.com" }
+]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "clawsettle-staging"
+database_id = "9edcb398-ac3e-4f78-be41-13470a5c2155"
+
+[env.staging.vars]
+SETTLE_VERSION = "0.1.0"
+LEDGER_BASE_URL = "https://staging.clawledger.com"
