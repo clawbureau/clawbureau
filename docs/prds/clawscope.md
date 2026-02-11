@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/infra
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/clawscope/{prd.json,progress.txt}` + `packages/schema/auth/scoped_token_claims.v1.json`
 >
 > **Scope:**
@@ -214,6 +214,24 @@ Define and enforce scoped token access (CST), issue/introspect/revoke tokens, an
 - Revocation time
 - % offline JWKS verifications vs introspection
 - Audit export success rate
+
+---
+
+## 9) 2026-02-11 addendum — ICP-US-002 canonical CST lane hard cutover
+
+Shipped in `services/clawscope/src/index.ts`:
+- canonical issuance: `POST /v1/tokens/issue/canonical`
+- migration-gated legacy issuance: `POST /v1/tokens/issue` (`SCOPE_LEGACY_EXCHANGE_MODE`)
+- sensitive transition matrix: `POST /v1/tokens/introspect/matrix`
+- revocation stream contract: `GET /v1/revocations/stream`
+- key overlap contract: `GET /v1/keys/rotation-contract`
+
+Schema contract updates:
+- `packages/schema/auth/scoped_token_claims.v1.json` now includes canonical chain claims (`owner_did`, `controller_did`, `agent_did`), `control_plane_policy_hash_b64u`, and `token_lane`.
+
+Delivery evidence:
+- Staging deploy: `clawscope-staging` version `c250201a-bb1c-458f-8a87-e4f09270ab60`
+- Smoke artifact: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
 
 ---
 

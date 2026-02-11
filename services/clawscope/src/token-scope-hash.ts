@@ -8,7 +8,11 @@ export type TokenScopeHashInputV1 = {
   scope: string[];
 
   owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
@@ -41,7 +45,8 @@ export function normalizeScope(scope: string[]): string[] {
  *
  * Algorithm:
  *   token_scope_hash_b64u = sha256_b64u( JCS({
- *     token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?
+ *     token_version, sub, aud[], scope[], owner_ref?, owner_did?, controller_did?, agent_did?,
+ *     policy_hash_b64u?, control_plane_policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?
  *   }) )
  *
  * Notes:
@@ -53,7 +58,11 @@ export async function computeTokenScopeHashB64u(input: {
   aud: string | string[];
   scope: string[];
   owner_ref?: string;
+  owner_did?: string;
+  controller_did?: string;
+  agent_did?: string;
   policy_hash_b64u?: string;
+  control_plane_policy_hash_b64u?: string;
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
@@ -72,8 +81,27 @@ export async function computeTokenScopeHashB64u(input: {
     out.owner_ref = input.owner_ref.trim();
   }
 
+  if (typeof input.owner_did === 'string' && input.owner_did.trim().length > 0) {
+    out.owner_did = input.owner_did.trim();
+  }
+
+  if (typeof input.controller_did === 'string' && input.controller_did.trim().length > 0) {
+    out.controller_did = input.controller_did.trim();
+  }
+
+  if (typeof input.agent_did === 'string' && input.agent_did.trim().length > 0) {
+    out.agent_did = input.agent_did.trim();
+  }
+
   if (typeof input.policy_hash_b64u === 'string' && input.policy_hash_b64u.trim().length > 0) {
     out.policy_hash_b64u = input.policy_hash_b64u.trim();
+  }
+
+  if (
+    typeof input.control_plane_policy_hash_b64u === 'string' &&
+    input.control_plane_policy_hash_b64u.trim().length > 0
+  ) {
+    out.control_plane_policy_hash_b64u = input.control_plane_policy_hash_b64u.trim();
   }
 
   if (typeof input.payment_account_did === 'string' && input.payment_account_did.trim().length > 0) {

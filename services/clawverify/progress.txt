@@ -366,3 +366,45 @@ Started: 2026-02-02T03:08:26.937416
 - Ops
   - Added smoke script: `scripts/poh/smoke-tee-execution-attestation.mjs` (valid + disallowed TCB invalid).
 ---
+
+## 2026-02-11 - CVF-US-018 / ICP-US-003 (control-chain + token-control verification)
+- What was implemented
+  - Added one-call control-chain verification endpoint:
+    - `POST /v1/verify/control-chain`
+    - validates owner/controller/agent relation via clawclaim control-plane read API
+    - deterministic invalid codes and remediation hints for not-found/mismatch/inactive paths
+  - Added one-call token-control verification endpoint:
+    - `POST /v1/verify/token-control`
+    - validates canonical lane claims (owner/controller/agent + token_lane)
+    - recomputes and checks `token_scope_hash_b64u`
+    - enforces expected audience/scope constraints
+    - checks sensitive transition permissions via clawscope matrix endpoint
+    - returns deterministic remediation hints for all invalid outcomes
+  - Added integration env wiring:
+    - `CLAWCLAIM_BASE_URL`
+    - `CLAWSCOPE_BASE_URL`
+    - `CONTROL_VERIFY_TIMEOUT_MS`
+  - Added deterministic error codes:
+    - `CONTROL_CHAIN_NOT_FOUND`
+    - `CONTROL_CHAIN_CONTEXT_MISMATCH`
+    - `TOKEN_CONTROL_SCOPE_HASH_MISMATCH`
+    - `TOKEN_CONTROL_AUDIENCE_MISMATCH`
+    - `TOKEN_CONTROL_SCOPE_MISSING`
+    - `TOKEN_CONTROL_TRANSITION_FORBIDDEN`
+    - `TOKEN_CONTROL_CHAIN_MISSING`
+    - `TOKEN_CONTROL_SUBJECT_MISMATCH`
+- Files changed
+  - `services/clawverify/src/index.ts`
+  - `services/clawverify/src/types.ts`
+  - `services/clawverify/src/verify-control-chain.ts`
+  - `services/clawverify/src/verify-token-control.ts`
+  - `services/clawverify/wrangler.toml`
+  - `services/clawverify/test/control-chain.test.ts`
+  - `services/clawverify/test/token-control.test.ts`
+- Quality checks
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Staging deploy
+  - `clawverify-staging` version `799e87ff-0456-4690-8563-96b38f3ff26a`
+- Smoke evidence
+  - `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`
+---

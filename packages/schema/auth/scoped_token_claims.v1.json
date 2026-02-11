@@ -16,6 +16,21 @@
     "token_version": { "const": "1" },
     "sub": { "type": "string", "description": "Agent DID" },
     "owner_ref": { "type": "string", "description": "Optional owner attestation hash" },
+    "owner_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$",
+      "description": "Optional owner DID claim for canonical control-plane lane."
+    },
+    "controller_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$",
+      "description": "Optional controller DID claim for canonical control-plane lane."
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$",
+      "description": "Optional explicit agent DID claim for canonical control-plane lane."
+    },
     "aud": { "type": ["string", "array"], "items": { "type": "string" } },
     "scope": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
     "policy_hash_b64u": {
@@ -23,10 +38,15 @@
       "pattern": "^[A-Za-z0-9_-]{43}$",
       "description": "Optional pinned Work Policy Contract hash (policy_hash_b64u = sha256(JCS(wpc_payload)) base64url)."
     },
+    "control_plane_policy_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "Optional control-plane sensitive policy hash bound to canonical owner/controller/agent lane."
+    },
     "token_scope_hash_b64u": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$",
-      "description": "Deterministic scope hash derived from the token authorization-relevant claims: token_scope_hash_b64u = sha256(JCS({token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?})) base64url. Excludes iat/exp/jti/nonce to remain stable across re-issuance."
+      "description": "Deterministic scope hash derived from token authorization-relevant claims: token_scope_hash_b64u = sha256(JCS({token_version, sub, aud[], scope[], owner_ref?, owner_did?, controller_did?, agent_did?, policy_hash_b64u?, control_plane_policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?})) base64url. Excludes iat/exp/jti/nonce to remain stable across re-issuance."
     },
     "payment_account_did": {
       "type": "string",
@@ -35,6 +55,11 @@
     },
     "spend_cap": { "type": "number", "minimum": 0 },
     "mission_id": { "type": "string" },
+    "token_lane": {
+      "type": "string",
+      "enum": ["legacy", "canonical"],
+      "description": "Issuance lane used for this CST. canonical requires owner/controller/agent control-plane binding."
+    },
     "jti": { "type": "string" },
     "iat": { "type": "integer", "description": "Issued-at (epoch seconds)" },
     "exp": { "type": "integer", "description": "Expiry (epoch seconds)" },

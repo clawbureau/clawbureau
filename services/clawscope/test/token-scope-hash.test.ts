@@ -74,4 +74,39 @@ describe('token_scope_hash_b64u', () => {
     expect(h1).not.toBe(h2);
     expect(h2).toBe(h3);
   });
+
+  it('changes when control-chain claims change and is stable under trimming', async () => {
+    const h1 = await computeTokenScopeHashB64u({
+      sub: 'did:key:zAgent',
+      aud: ['staging.clawscope.com'],
+      scope: ['control:token:issue_sensitive'],
+      owner_did: 'did:key:zOwnerA',
+      controller_did: 'did:key:zControllerA',
+      agent_did: 'did:key:zAgent',
+      control_plane_policy_hash_b64u: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    });
+
+    const h2 = await computeTokenScopeHashB64u({
+      sub: 'did:key:zAgent',
+      aud: ['staging.clawscope.com'],
+      scope: ['control:token:issue_sensitive'],
+      owner_did: 'did:key:zOwnerB',
+      controller_did: 'did:key:zControllerA',
+      agent_did: 'did:key:zAgent',
+      control_plane_policy_hash_b64u: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    });
+
+    const h3 = await computeTokenScopeHashB64u({
+      sub: 'did:key:zAgent',
+      aud: ['staging.clawscope.com'],
+      scope: ['control:token:issue_sensitive'],
+      owner_did: '  did:key:zOwnerA  ',
+      controller_did: ' did:key:zControllerA ',
+      agent_did: ' did:key:zAgent ',
+      control_plane_policy_hash_b64u: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    });
+
+    expect(h1).not.toBe(h2);
+    expect(h1).toBe(h3);
+  });
 });

@@ -206,7 +206,7 @@
     {
       "id": "POH-US-018",
       "title": "Witnessed-web receipts for subscription/web auth",
-      "description": "As a platform, I want a credible path for subscription-web usage evidence (ChatGPT/Claude/Gemini web) that does not rely on a worker’s local machine.",
+      "description": "As a platform, I want a credible path for subscription-web usage evidence (ChatGPT/Claude/Gemini web) that does not rely on a worker\u2019s local machine.",
       "acceptanceCriteria": [
         "Define a web_receipt schema and signed envelope type",
         "Introduce an allowlisted witness service that can sign web receipts",
@@ -343,10 +343,49 @@
       "priority": 25,
       "passes": true,
       "notes": "Implemented scoped requester auth + usage logging in services/clawbounties, added reviewer endpoints + migration 0014_requester_auth_events.sql, added clawea endpoint POST /v1/billing/clawbounties/requester-token (operator-only) backed by clawscope issue flow with audit logs, and added scripts/clawbounties/smoke-requester-closure-simulation.mjs for real staging flow execution. Added staging route override for /v1/bounties* to prevent legacy route shadowing. Captured deterministic auth smoke evidence at artifacts/smoke/requester-auth/2026-02-11T19-25-45Z-staging/result.json and requester-closure simulation PASS evidence at artifacts/simulations/clawbounties-requester-closure/2026-02-11T19-20-52-597Z-staging-runs-3/result.json."
+    },
+    {
+      "id": "ICP-US-001",
+      "title": "Controller-first provisioning hard cutover",
+      "description": "As identity operations, we need controller-first registration (owner->controller->agent) with owner-bound sensitive policy so token control can fail closed.",
+      "acceptanceCriteria": [
+        "Controller registration endpoint with signed owner challenge and deterministic error codes",
+        "Agent registration under controller with deterministic chain persistence",
+        "Owner-bound sensitive authorization policy update endpoint + read models"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Delivered in `services/clawclaim/src/index.ts`: control-plane challenge endpoint, owner-signed controller registration, controller->agent registration, owner-bound sensitive policy update, and deterministic controller/agent read/list endpoints. Test coverage: `services/clawclaim/test/control-plane.test.ts`. Staging deploy version: `b5c965a6-eb1d-46a4-b5d5-22152e0bc08b`."
+    },
+    {
+      "id": "ICP-US-002",
+      "title": "Canonical CST lane + migration gate",
+      "description": "As platform security, we need canonical CST issuance bound to control chains while legacy exchange remains temporary and explicitly gated.",
+      "acceptanceCriteria": [
+        "Canonical issuance endpoint enforces owner/controller/agent chain checks for sensitive scopes",
+        "Legacy issuance mode is explicitly configurable (enabled|migration|disabled) and deterministic for sensitive scope handling",
+        "Sensitive-transition introspection matrix and key-rotation/revocation stream contract endpoints are available"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "Delivered in `services/clawscope/src/index.ts`: `POST /v1/tokens/issue/canonical`, migration-gated legacy `POST /v1/tokens/issue`, deterministic matrix endpoint `POST /v1/tokens/introspect/matrix`, revocation stream `GET /v1/revocations/stream`, and key overlap contract `GET /v1/keys/rotation-contract`. Added canonical claim fields to `packages/schema/auth/scoped_token_claims.v1.json`. Staging deploy version: `c250201a-bb1c-458f-8a87-e4f09270ab60`."
+    },
+    {
+      "id": "ICP-US-003",
+      "title": "Verification APIs for control chain + token control",
+      "description": "As integrators, we need deterministic verification APIs for owner/controller/agent chains and token-control semantics with remediation hints.",
+      "acceptanceCriteria": [
+        "Add one-call owner/controller/agent chain verification endpoint in clawverify",
+        "Add token-control verification endpoint validating scope hash, aud/scope, exp, revocation and transition matrix decisions",
+        "Responses include deterministic remediation hints"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "Delivered in `services/clawverify/src/index.ts` with new endpoints `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` plus deterministic remediation hints. New verification modules: `verify-control-chain.ts`, `verify-token-control.ts`; tests: `test/control-chain.test.ts`, `test/token-control.test.ts`. Staging deploy version: `799e87ff-0456-4690-8563-96b38f3ff26a`; smoke: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T20:31:00Z",
+    "updatedAt": "2026-02-11T22:20:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

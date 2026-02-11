@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawverify-phase1-trust",
-  "description": "clawverify.com (Verification API) — PRD — Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
+  "description": "clawverify.com (Verification API) \u2014 PRD \u2014 Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
   "userStories": [
     {
       "id": "CVF-US-001",
@@ -169,7 +169,7 @@
       ],
       "priority": 12,
       "passes": true,
-      "notes": "Added POST /v1/verify/agent endpoint aggregating DID validity, owner attestation status, and PoH tier (mapped from proof bundle trust_tier). Optional policy_hash support returns policy_compliance when present and includes risk_flags + component results; verification fails closed (422) when provided components fail or mismatched subjects." 
+      "notes": "Added POST /v1/verify/agent endpoint aggregating DID validity, owner attestation status, and PoH tier (mapped from proof bundle trust_tier). Optional policy_hash support returns policy_compliance when present and includes risk_flags + component results; verification fails closed (422) when provided components fail or mismatched subjects."
     },
     {
       "id": "CVF-US-013",
@@ -183,7 +183,7 @@
       ],
       "priority": 13,
       "passes": true,
-      "notes": "Added POST /v1/introspect/scoped-token: validates scoped_token envelope signature + expires_at, returns scope/audience/owner_ref and token_hash_b64u. Logs token hash via structured console log and anchors audit log request_hash_b64u to token_hash_b64u for correlation." 
+      "notes": "Added POST /v1/introspect/scoped-token: validates scoped_token envelope signature + expires_at, returns scope/audience/owner_ref and token_hash_b64u. Logs token hash via structured console log and anchors audit log request_hash_b64u to token_hash_b64u for correlation."
     },
     {
       "id": "CVF-US-014",
@@ -244,7 +244,21 @@
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old→new rotation is proven. Added vitest coverage for rotated owner attestations."
+      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old\u2192new rotation is proven. Added vitest coverage for rotated owner attestations."
+    },
+    {
+      "id": "CVF-US-018",
+      "title": "Identity control-chain + token-control verification",
+      "description": "As an operator, I want deterministic verification of owner/controller/agent chains and token-control claims so sensitive auth decisions are auditable and fail-closed.",
+      "acceptanceCriteria": [
+        "Add one-call owner/controller/agent chain verification endpoint",
+        "Add token-control verification endpoint (scope hash, aud/scope, exp, revocation, transition matrix)",
+        "Return deterministic remediation hints for invalid outcomes",
+        "Typecheck and tests pass"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Implemented `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` in `services/clawverify/src/index.ts` with new modules `verify-control-chain.ts` and `verify-token-control.ts`. Verification is fail-closed with deterministic error codes (`CONTROL_CHAIN_NOT_FOUND`, `CONTROL_CHAIN_CONTEXT_MISMATCH`, `TOKEN_CONTROL_SCOPE_HASH_MISMATCH`, `TOKEN_CONTROL_SCOPE_MISSING`, `TOKEN_CONTROL_AUDIENCE_MISMATCH`, `TOKEN_CONTROL_TRANSITION_FORBIDDEN`, etc.) and deterministic remediation hints. Added tests `test/control-chain.test.ts` and `test/token-control.test.ts`; passed `npm run typecheck && npm test`. Staging deploy: `clawverify-staging` version `799e87ff-0456-4690-8563-96b38f3ff26a`; smoke: `artifacts/smoke/identity-control-plane/2026-02-11T21-24-17-199Z-staging/result.json`."
     }
   ]
 }
