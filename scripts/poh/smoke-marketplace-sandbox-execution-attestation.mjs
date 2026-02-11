@@ -5,20 +5,21 @@
  *
  * Staging-only mutating flow:
  *  1) Register a worker (public) to obtain worker auth token.
- *  2) Inject an OPEN bounty into staging D1 with min_proof_tier = "sandbox" (avoid cuts/escrow side effects).
- *  3) Accept the bounty via API.
- *  4) Submit a valid self-tier proof bundle WITHOUT execution attestation → expect 422 (tier gate failure).
- *  5) Mint an execution attestation from clawea (bound to run_id + proof bundle hash).
- *  6) Submit again WITH execution_attestations[] → expect 201 and stored proof_tier = "sandbox".
+ *  2) Inject an ACCEPTED bounty into staging D1 with min_proof_tier = "sandbox".
+ *     - We intentionally bypass POST /v1/bounties + /accept to avoid cuts/escrow side effects.
+ *  3) Mint a job-scoped CST via POST /v1/bounties/{id}/cst.
+ *  4) Produce a gateway receipt via clawproxy (CST-bound) and build a gateway-tier proof bundle.
+ *  5) Submit WITHOUT execution_attestations → expect 422 (min_proof_tier sandbox not met; tier should be gateway).
+ *  6) Produce a second gateway-tier proof bundle, mint execution attestation from clawea, then submit WITH
+ *     execution_attestations[] → expect 201 and stored proof_tier = "sandbox".
  *  7) Query staging D1 to confirm execution_attestations_json was persisted.
  *
  * Usage:
- *   CLAWEA_TENANT_KEY=... node scripts/poh/smoke-marketplace-sandbox-execution-attestation.mjs \
- *     --env staging --clawea-agent <claweaAgentId>
+ *   OPENAI_API_KEY=... CLAWEA_TENANT_KEY=... node scripts/poh/smoke-marketplace-sandbox-execution-attestation.mjs \
+ *     --env staging --clawea-agent <claweaAgentId> --provider openai --model gpt-4o-mini
  *
  * Notes:
  * - Requires wrangler login (uses: wrangler d1 execute --remote --env staging).
- * - Intentionally avoids POST /v1/bounties (cuts/escrow side effects).
  */
 
 import process from 'node:process';
@@ -52,111 +53,67 @@ function isRecord(x) {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
 
-function base64urlEncode(data) {
-  return Buffer.from(data)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+function base64UrlEncode(bytes) {
+  const base64 = Buffer.from(bytes).toString('base64');
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function sha256B64u(data) {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return base64UrlEncode(new Uint8Array(hashBuffer));
+}
+
+async function hashJsonB64u(value) {
+  const data = new TextEncoder().encode(JSON.stringify(value));
+  return sha256B64u(data);
 }
 
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function base58Encode(bytes) {
-  if (bytes.length === 0) return '';
+  let leadingZeros = 0;
+  for (const b of bytes) {
+    if (b !== 0) break;
+    leadingZeros++;
+  }
 
   const digits = [0];
   for (const byte of bytes) {
     let carry = byte;
     for (let i = 0; i < digits.length; i++) {
-      const x = digits[i] * 256 + carry;
-      digits[i] = x % 58;
-      carry = Math.floor(x / 58);
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = (carry / 58) | 0;
     }
     while (carry) {
       digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
+      carry = (carry / 58) | 0;
     }
   }
 
-  // leading zeros
-  for (let i = 0; i < bytes.length && bytes[i] === 0; i++) {
-    digits.push(0);
-  }
-
-  return digits
-    .reverse()
-    .map((d) => BASE58_ALPHABET[d])
-    .join('');
+  let out = '';
+  for (let i = 0; i < leadingZeros; i++) out += '1';
+  for (let i = digits.length - 1; i >= 0; i--) out += BASE58_ALPHABET[digits[i]];
+  return out;
 }
 
-async function sha256B64uJson(value) {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  const hash = await crypto.subtle.digest('SHA-256', bytes);
-  return base64urlEncode(new Uint8Array(hash));
+async function didFromPublicKey(publicKey) {
+  const raw = await crypto.subtle.exportKey('raw', publicKey);
+  const pubBytes = new Uint8Array(raw);
+  const multicodec = new Uint8Array(2 + pubBytes.length);
+  multicodec[0] = 0xed;
+  multicodec[1] = 0x01;
+  multicodec.set(pubBytes, 2);
+  return `did:key:z${base58Encode(multicodec)}`;
 }
 
-async function makeDidKeyEd25519() {
-  const keypair = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
-
-  const publicKeyBytes = new Uint8Array(await crypto.subtle.exportKey('raw', keypair.publicKey));
-
-  const prefixed = new Uint8Array(2 + publicKeyBytes.length);
-  prefixed[0] = 0xed;
-  prefixed[1] = 0x01;
-  prefixed.set(publicKeyBytes, 2);
-
-  const did = `did:key:z${base58Encode(prefixed)}`;
-  return { did, privateKey: keypair.privateKey };
+async function signEd25519(privateKey, messageBytes) {
+  const sigBuffer = await crypto.subtle.sign('Ed25519', privateKey, messageBytes);
+  return base64UrlEncode(new Uint8Array(sigBuffer));
 }
 
-async function signB64uEd25519(privateKey, msg) {
-  const msgBytes = new TextEncoder().encode(msg);
-  const sigBuf = await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, msgBytes);
-  return base64urlEncode(new Uint8Array(sigBuf));
-}
-
-async function buildProofBundleEnvelope({ agentDid, agentPrivateKey, runId }) {
-  // Minimal 1-event chain
-  const e1PayloadHash = await sha256B64uJson({ type: 'llm_call' });
-  const e1Header = {
-    event_id: `evt_${crypto.randomUUID()}`,
-    run_id: runId,
-    event_type: 'llm_call',
-    timestamp: new Date().toISOString(),
-    payload_hash_b64u: e1PayloadHash,
-    prev_hash_b64u: null,
-  };
-  const e1Hash = await sha256B64uJson(e1Header);
-
-  const bundlePayload = {
-    bundle_version: '1',
-    bundle_id: `bundle_${crypto.randomUUID()}`,
-    agent_did: agentDid,
-    event_chain: [
-      {
-        ...e1Header,
-        event_hash_b64u: e1Hash,
-      },
-    ],
-  };
-
-  const payloadHash = await sha256B64uJson(bundlePayload);
-  const signature = await signB64uEd25519(agentPrivateKey, payloadHash);
-
-  const envelope = {
-    envelope_version: '1',
-    envelope_type: 'proof_bundle',
-    payload: bundlePayload,
-    payload_hash_b64u: payloadHash,
-    hash_algorithm: 'SHA-256',
-    signature_b64u: signature,
-    algorithm: 'Ed25519',
-    signer_did: agentDid,
-    issued_at: new Date().toISOString(),
-  };
-
-  return { envelope, payloadHash };
+function sqlStringLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
 }
 
 async function httpJson(url, init) {
@@ -171,9 +128,21 @@ async function httpJson(url, init) {
   return { res, status: res.status, text, json };
 }
 
-function sqlStringLiteral(value) {
-  return `'${String(value).replaceAll("'", "''")}'`;
-}
+const args = parseArgs(process.argv.slice(2));
+const envName = (args.get('env') || 'staging').toLowerCase();
+const provider = (args.get('provider') || 'openai').toLowerCase();
+const model = args.get('model') || 'gpt-4o-mini';
+const claweaAgentId = args.get('clawea-agent') || process.env.CLAWEA_AGENT_ID;
+
+assert(envName === 'staging', 'This smoke is staging-only (mutating)');
+assert(typeof claweaAgentId === 'string' && claweaAgentId.trim().length > 0, 'Missing --clawea-agent <id> (or CLAWEA_AGENT_ID)');
+
+const bountiesBaseUrl = 'https://staging.clawbounties.com';
+const proxyBaseUrl = 'https://staging.clawproxy.com';
+const claweaBaseUrl = 'https://staging.clawea.com';
+
+const tenantKey = process.env.CLAWEA_TENANT_KEY;
+assert(typeof tenantKey === 'string' && tenantKey.trim().length > 0, 'Missing CLAWEA_TENANT_KEY');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
@@ -194,7 +163,7 @@ function runWranglerD1Execute({ dbName, env, sql, json = false }) {
   return out;
 }
 
-function insertOpenBountyStaging({ title, minProofTier }) {
+function insertAcceptedBountyStaging({ workerDid, title }) {
   const bountyId = `bty_${crypto.randomUUID()}`;
   const now = new Date().toISOString();
 
@@ -227,20 +196,23 @@ function insertOpenBountyStaging({ title, minProofTier }) {
     escrow_id,
     status,
     created_at,
-    updated_at
+    updated_at,
+    worker_did,
+    accept_idempotency_key,
+    accepted_at
   ) VALUES (
     ${sqlStringLiteral(bountyId)},
     ${sqlStringLiteral(`post:smoke:${crypto.randomUUID()}`)},
     ${sqlStringLiteral('did:key:zSmokeRequester')},
     ${sqlStringLiteral(title)},
-    ${sqlStringLiteral('Smoke bounty (injected; avoid cuts/escrow side effects)')},
+    ${sqlStringLiteral('Smoke bounty (injected; avoids cuts/escrow)')},
     ${sqlStringLiteral(rewardMinor)},
     ${sqlStringLiteral('USD')},
     ${sqlStringLiteral('requester')},
     1.0,
     0,
     ${sqlStringLiteral(tagsJson)},
-    ${sqlStringLiteral(minProofTier)},
+    ${sqlStringLiteral('sandbox')},
     0,
     NULL,
     ${sqlStringLiteral(metadataJson)},
@@ -248,17 +220,19 @@ function insertOpenBountyStaging({ title, minProofTier }) {
     ${sqlStringLiteral('smoke')},
     ${sqlStringLiteral(allInCostJson)},
     ${sqlStringLiteral(`escrow_smoke_${crypto.randomUUID()}`)},
-    ${sqlStringLiteral('open')},
+    ${sqlStringLiteral('accepted')},
     ${sqlStringLiteral(now)},
+    ${sqlStringLiteral(now)},
+    ${sqlStringLiteral(workerDid)},
+    ${sqlStringLiteral(`accept:smoke:${crypto.randomUUID()}`)},
     ${sqlStringLiteral(now)}
   );`;
 
   runWranglerD1Execute({ dbName: 'clawbounties-staging', env: 'staging', sql });
-
   return { bountyId };
 }
 
-async function registerWorker({ baseUrl, did }) {
+async function registerWorker({ did }) {
   const body = {
     worker_did: did,
     worker_version: 'smoke/0.1.0',
@@ -285,7 +259,7 @@ async function registerWorker({ baseUrl, did }) {
     },
   };
 
-  const out = await httpJson(`${baseUrl}/v1/workers/register`, {
+  const out = await httpJson(`${bountiesBaseUrl}/v1/workers/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json; charset=utf-8' },
     body: JSON.stringify(body),
@@ -294,73 +268,176 @@ async function registerWorker({ baseUrl, did }) {
   assert(out.status === 200 || out.status === 201, `worker register expected 200/201, got ${out.status}: ${out.text}`);
   assert(isRecord(out.json) && isRecord(out.json.auth) && typeof out.json.auth.token === 'string', 'worker register response missing auth.token');
 
-  return { token: out.json.auth.token };
+  return { token: out.json.auth.token.trim() };
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const envName = (args.get('env') || 'staging').toLowerCase();
-  const claweaAgentId = args.get('clawea-agent') || process.env.CLAWEA_AGENT_ID;
+async function issueJobCst({ bountyId, workerToken }) {
+  const out = await httpJson(`${bountiesBaseUrl}/v1/bounties/${bountyId}/cst`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${workerToken}`,
+    },
+  });
 
-  assert(envName === 'staging', 'This smoke script is staging-only (mutating)');
+  assert(out.status === 200, `issue CST expected 200, got ${out.status}: ${out.text}`);
 
-  const bountiesBaseUrl = 'https://staging.clawbounties.com';
-  const claweaBaseUrl = 'https://staging.clawea.com';
+  const jobAuth = out.json?.job_auth;
+  assert(isRecord(jobAuth) && typeof jobAuth.cst === 'string', 'issue CST response missing job_auth.cst');
+  assert(typeof jobAuth.token_scope_hash_b64u === 'string', 'issue CST response missing job_auth.token_scope_hash_b64u');
 
-  const tenantKey = process.env.CLAWEA_TENANT_KEY;
-  assert(typeof tenantKey === 'string' && tenantKey.trim().length > 0, 'Missing CLAWEA_TENANT_KEY');
-  assert(typeof claweaAgentId === 'string' && claweaAgentId.trim().length > 0, 'Missing --clawea-agent <id> (or CLAWEA_AGENT_ID)');
+  return {
+    cst: jobAuth.cst.trim(),
+    token_scope_hash_b64u: jobAuth.token_scope_hash_b64u.trim(),
+  };
+}
 
-  // 1) Worker DID + token
-  const worker = await makeDidKeyEd25519();
-  const reg = await registerWorker({ baseUrl: bountiesBaseUrl, did: worker.did });
+async function buildEventChain({ runId }) {
+  const now = new Date();
+  const t0 = new Date(now.getTime()).toISOString();
+  const t1 = new Date(now.getTime() + 500).toISOString();
+  const t2 = new Date(now.getTime() + 1000).toISOString();
 
-  // 2) Inject open bounty (sandbox tier)
-  const bountyTitle = `Smoke: sandbox-tier submission (${new Date().toISOString()})`;
-  const injected = insertOpenBountyStaging({ title: bountyTitle, minProofTier: 'sandbox' });
+  const e1PayloadHash = await hashJsonB64u({ type: 'run_start' });
+  const e1Header = {
+    event_id: `evt_${crypto.randomUUID()}`,
+    run_id: runId,
+    event_type: 'run_start',
+    timestamp: t0,
+    payload_hash_b64u: e1PayloadHash,
+    prev_hash_b64u: null,
+  };
+  const e1Hash = await hashJsonB64u(e1Header);
 
-  // 3) Accept via API
-  const accept = await httpJson(`${bountiesBaseUrl}/v1/bounties/${injected.bountyId}/accept`, {
+  const e2PayloadHash = await hashJsonB64u({ type: 'llm_call', provider, model });
+  const e2Header = {
+    event_id: `evt_${crypto.randomUUID()}`,
+    run_id: runId,
+    event_type: 'llm_call',
+    timestamp: t1,
+    payload_hash_b64u: e2PayloadHash,
+    prev_hash_b64u: e1Hash,
+  };
+  const e2Hash = await hashJsonB64u(e2Header);
+
+  const e3PayloadHash = await hashJsonB64u({ type: 'run_end' });
+  const e3Header = {
+    event_id: `evt_${crypto.randomUUID()}`,
+    run_id: runId,
+    event_type: 'run_end',
+    timestamp: t2,
+    payload_hash_b64u: e3PayloadHash,
+    prev_hash_b64u: e2Hash,
+  };
+  const e3Hash = await hashJsonB64u(e3Header);
+
+  const eventChain = [
+    { ...e1Header, event_hash_b64u: e1Hash },
+    { ...e2Header, event_hash_b64u: e2Hash },
+    { ...e3Header, event_hash_b64u: e3Hash },
+  ];
+
+  return { eventChain, llmEventHash: e2Hash };
+}
+
+async function callClawproxy({ cst, runId, eventHash, nonce }) {
+  let providerKey = null;
+  if (provider === 'openai') providerKey = process.env.OPENAI_API_KEY;
+  if (provider === 'anthropic') providerKey = process.env.ANTHROPIC_API_KEY;
+  if (provider === 'google') providerKey = process.env.GOOGLE_API_KEY;
+
+  assert(providerKey && providerKey.trim().length > 0, `Missing provider API key env var for provider=${provider} (expected OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY)`);
+
+  const url =
+    provider === 'openai'
+      ? `${proxyBaseUrl}/v1/chat/completions`
+      : provider === 'anthropic'
+        ? `${proxyBaseUrl}/v1/messages`
+        : `${proxyBaseUrl}/v1/proxy/google`;
+
+  const body = {
+    model,
+    messages: [{ role: 'user', content: 'smoke: sandbox-tier submission' }],
+    max_tokens: 1,
+    temperature: 0,
+  };
+
+  const out = await httpJson(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${reg.token}`,
+      'x-cst': cst,
+      'x-provider-api-key': providerKey.trim(),
+      'x-run-id': runId,
+      'x-event-hash': eventHash,
+      'x-idempotency-key': nonce,
     },
-    body: JSON.stringify({
-      idempotency_key: `accept:smoke:${crypto.randomUUID()}`,
-      worker_did: worker.did,
-    }),
+    body: JSON.stringify(body),
   });
 
-  assert(accept.status === 200 || accept.status === 201, `accept expected 200/201, got ${accept.status}: ${accept.text}`);
+  assert(out.status === 200, `clawproxy call expected 200, got ${out.status}: ${out.text}`);
+  assert(isRecord(out.json) && out.json._receipt_envelope, 'clawproxy response missing _receipt_envelope');
 
-  // 4) Build minimal proof bundle (self-tier)
-  const runId = `run_${crypto.randomUUID()}`;
-  const { envelope: proofBundleEnvelope } = await buildProofBundleEnvelope({
-    agentDid: worker.did,
-    agentPrivateKey: worker.privateKey,
-    runId,
-  });
+  return out.json._receipt_envelope;
+}
 
-  const submitNoAtt = await httpJson(`${bountiesBaseUrl}/v1/bounties/${injected.bountyId}/submit`, {
+async function buildProofBundleEnvelope({ agentDid, privateKey, eventChain, receiptEnvelope }) {
+  const harness = { id: 'smoke', version: '1', runtime: 'host' };
+  const configHash = await hashJsonB64u(harness);
+
+  const payload = {
+    bundle_version: '1',
+    bundle_id: `bundle_${crypto.randomUUID()}`,
+    agent_did: agentDid,
+    event_chain: eventChain,
+    receipts: [receiptEnvelope],
+    metadata: {
+      harness: {
+        id: harness.id,
+        version: harness.version,
+        runtime: harness.runtime,
+        config_hash_b64u: configHash,
+      },
+    },
+  };
+
+  const payloadHash = await hashJsonB64u(payload);
+  const signature = await signEd25519(privateKey, new TextEncoder().encode(payloadHash));
+
+  return {
+    envelope_version: '1',
+    envelope_type: 'proof_bundle',
+    payload,
+    payload_hash_b64u: payloadHash,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: signature,
+    algorithm: 'Ed25519',
+    signer_did: agentDid,
+    issued_at: new Date().toISOString(),
+  };
+}
+
+async function submit({ bountyId, workerDid, workerToken, proofBundleEnvelope, executionAttestations, idempotencyKey }) {
+  const body = {
+    worker_did: workerDid,
+    idempotency_key: idempotencyKey,
+    proof_bundle_envelope: proofBundleEnvelope,
+    artifacts: [],
+    result_summary: 'smoke submission',
+    ...(executionAttestations ? { execution_attestations: executionAttestations } : {}),
+  };
+
+  return httpJson(`${bountiesBaseUrl}/v1/bounties/${bountyId}/submit`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${reg.token}`,
+      authorization: `Bearer ${workerToken}`,
     },
-    body: JSON.stringify({
-      worker_did: worker.did,
-      idempotency_key: `submit:smoke:noatt:${crypto.randomUUID()}`,
-      proof_bundle_envelope: proofBundleEnvelope,
-      artifacts: [],
-      result_summary: 'smoke: missing execution attestation',
-    }),
+    body: JSON.stringify(body),
   });
+}
 
-  assert(submitNoAtt.status === 422, `submit without execution attestation expected 422, got ${submitNoAtt.status}: ${submitNoAtt.text}`);
-
-  // 5) Mint execution attestation
-  const mint = await httpJson(`${claweaBaseUrl}/v1/agents/${claweaAgentId}/execution-attestation`, {
+async function mintExecutionAttestation({ proofBundleEnvelope }) {
+  const out = await httpJson(`${claweaBaseUrl}/v1/agents/${claweaAgentId}/execution-attestation`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json; charset=utf-8',
@@ -369,78 +446,137 @@ async function main() {
     body: JSON.stringify({ proof_bundle_envelope: proofBundleEnvelope }),
   });
 
-  assert(mint.status === 200, `clawea mint expected 200, got ${mint.status}: ${mint.text}`);
-  assert(isRecord(mint.json) && mint.json.ok === true && isRecord(mint.json.envelope), 'clawea mint response missing envelope');
+  assert(out.status === 200, `clawea mint expected 200, got ${out.status}: ${out.text}`);
+  assert(isRecord(out.json) && out.json.ok === true && isRecord(out.json.envelope), 'clawea mint response missing envelope');
 
-  const execEnvelope = mint.json.envelope;
+  return out.json.envelope;
+}
 
-  // 6) Submit with execution attestation
-  const submitWithAtt = await httpJson(`${bountiesBaseUrl}/v1/bounties/${injected.bountyId}/submit`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${reg.token}`,
-    },
-    body: JSON.stringify({
-      worker_did: worker.did,
-      idempotency_key: `submit:smoke:withatt:${crypto.randomUUID()}`,
-      proof_bundle_envelope: proofBundleEnvelope,
-      execution_attestations: [execEnvelope],
-      artifacts: [],
-      result_summary: 'smoke: sandbox attested',
-    }),
+async function main() {
+  // 1) Worker DID + token
+  const kp = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
+  const workerDid = await didFromPublicKey(kp.publicKey);
+  const workerToken = (await registerWorker({ did: workerDid })).token;
+
+  // 2) Inject accepted bounty requiring sandbox tier
+  const bountyTitle = `Smoke: sandbox-tier bounty (${new Date().toISOString()})`;
+  const { bountyId } = insertAcceptedBountyStaging({ workerDid, title: bountyTitle });
+
+  // 3) Job CST
+  const { cst } = await issueJobCst({ bountyId, workerToken });
+
+  // 4) Run A: gateway-tier bundle
+  const runIdA = `run_${crypto.randomUUID()}`;
+  const chainA = await buildEventChain({ runId: runIdA });
+  const receiptA = await callClawproxy({
+    cst,
+    runId: runIdA,
+    eventHash: chainA.llmEventHash,
+    nonce: `nonce_${crypto.randomUUID()}`,
   });
 
-  assert(submitWithAtt.status === 201, `submit with execution attestation expected 201, got ${submitWithAtt.status}: ${submitWithAtt.text}`);
-  assert(isRecord(submitWithAtt.json) && isRecord(submitWithAtt.json.verification) && isRecord(submitWithAtt.json.verification.proof_bundle), 'submit response missing verification');
-  const tier = submitWithAtt.json.verification.proof_bundle.tier;
-  assert(tier === 'sandbox', `expected stored tier sandbox, got ${tier}`);
+  const bundleA = await buildProofBundleEnvelope({
+    agentDid: workerDid,
+    privateKey: kp.privateKey,
+    eventChain: chainA.eventChain,
+    receiptEnvelope: receiptA,
+  });
 
-  const submissionId = submitWithAtt.json.submission_id;
-  assert(typeof submissionId === 'string' && submissionId.startsWith('sub_'), 'submit response missing submission_id');
+  const subA = await submit({
+    bountyId,
+    workerDid,
+    workerToken,
+    proofBundleEnvelope: bundleA,
+    executionAttestations: null,
+    idempotencyKey: `submit:smoke:noatt:${crypto.randomUUID()}`,
+  });
 
-  // 7) Confirm evidence persisted
+  assert(subA.status === 422, `submit without execution attestation expected 422, got ${subA.status}: ${subA.text}`);
+  const tierA = subA.json?.verification?.proof_bundle?.tier ?? null;
+  assert(tierA === 'gateway', `expected tier=gateway on 422, got ${tierA}`);
+
+  // 5) Run B: gateway-tier bundle + execution attestation → sandbox
+  const runIdB = `run_${crypto.randomUUID()}`;
+  const chainB = await buildEventChain({ runId: runIdB });
+  const receiptB = await callClawproxy({
+    cst,
+    runId: runIdB,
+    eventHash: chainB.llmEventHash,
+    nonce: `nonce_${crypto.randomUUID()}`,
+  });
+
+  const bundleB = await buildProofBundleEnvelope({
+    agentDid: workerDid,
+    privateKey: kp.privateKey,
+    eventChain: chainB.eventChain,
+    receiptEnvelope: receiptB,
+  });
+
+  const execEnvelope = await mintExecutionAttestation({ proofBundleEnvelope: bundleB });
+
+  const subB = await submit({
+    bountyId,
+    workerDid,
+    workerToken,
+    proofBundleEnvelope: bundleB,
+    executionAttestations: [execEnvelope],
+    idempotencyKey: `submit:smoke:withatt:${crypto.randomUUID()}`,
+  });
+
+  assert(subB.status === 201, `submit with execution attestation expected 201, got ${subB.status}: ${subB.text}`);
+  const tierB = subB.json?.verification?.proof_bundle?.tier ?? null;
+  assert(tierB === 'sandbox', `expected tier=sandbox on 201, got ${tierB}`);
+
+  const submissionIdB = subB.json?.submission_id;
+  assert(typeof submissionIdB === 'string' && submissionIdB.startsWith('sub_'), 'submit response missing submission_id');
+
+  // 6) Confirm persistence
   const sel = runWranglerD1Execute({
     dbName: 'clawbounties-staging',
     env: 'staging',
     json: true,
-    sql: `SELECT submission_id, proof_tier, execution_attestations_json FROM submissions WHERE submission_id = ${sqlStringLiteral(submissionId)} LIMIT 1;`,
+    sql: `SELECT submission_id, proof_tier, execution_attestations_json FROM submissions WHERE submission_id = ${sqlStringLiteral(submissionIdB)} LIMIT 1;`,
   });
 
   let persisted = null;
   try {
     const parsed = JSON.parse(sel);
-    const row = parsed?.[0]?.results?.[0];
-    persisted = row ?? null;
+    persisted = parsed?.[0]?.results?.[0] ?? null;
   } catch {
     persisted = null;
   }
 
   assert(persisted && typeof persisted.execution_attestations_json === 'string' && persisted.execution_attestations_json.length > 0, 'execution_attestations_json not persisted');
 
-  const out = {
-    ok: true,
-    env: envName,
-    bounty_id: injected.bountyId,
-    submission_id: submissionId,
-    worker_did: worker.did,
-    clawea_agent_id: claweaAgentId,
-    submit_without_attestation: {
-      status: submitNoAtt.status,
-      proof_tier: submitNoAtt.json?.verification?.proof_bundle?.tier ?? null,
-      reason: submitNoAtt.json?.verification?.proof_bundle?.reason ?? null,
-    },
-    submit_with_attestation: {
-      status: submitWithAtt.status,
-      proof_tier: tier,
-    },
-    persisted: {
-      proof_tier: persisted?.proof_tier ?? null,
-      execution_attestations_json_bytes: persisted?.execution_attestations_json ? String(persisted.execution_attestations_json).length : 0,
-    },
-  };
-
-  console.log(JSON.stringify(out, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        env: envName,
+        provider,
+        model,
+        bounty_id: bountyId,
+        worker_did: workerDid,
+        clawea_agent_id: claweaAgentId,
+        submit_without_attestation: {
+          status: subA.status,
+          tier: tierA,
+          reason: subA.json?.verification?.proof_bundle?.reason ?? null,
+        },
+        submit_with_attestation: {
+          status: subB.status,
+          tier: tierB,
+          submission_id: submissionIdB,
+        },
+        persisted: {
+          proof_tier: persisted?.proof_tier ?? null,
+          execution_attestations_json_bytes: String(persisted.execution_attestations_json).length,
+        },
+      },
+      null,
+      2
+    )
+  );
 }
 
 main().catch((err) => {
