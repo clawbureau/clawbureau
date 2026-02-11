@@ -10,42 +10,64 @@ export interface PageMeta {
   title: string;
   description: string;
   path: string;
+  canonicalPath?: string;
   ogType?: string;
   ogImage?: string;
+  ogImageAlt?: string;
+  twitterSite?: string;
+  articleSection?: string;
   noindex?: boolean;
   publishedTime?: string;
   modifiedTime?: string;
 }
 
+function normalizePath(path: string): string {
+  let out = (path || "/").trim();
+  if (!out.startsWith("/")) out = `/${out}`;
+  out = out.replace(/\/+/g, "/");
+  if (out.length > 1) out = out.replace(/\/+$/, "");
+  return out || "/";
+}
+
 export function canonical(path: string): string {
-  return `${SITE}${path}`;
+  return `${SITE}${normalizePath(path)}`;
 }
 
 export function metaTags(m: PageMeta): string {
-  const url = canonical(m.path);
+  const url = canonical(m.canonicalPath ?? m.path);
   const ogImage = m.ogImage ?? `${SITE}/og-default.png`;
+  const ogImageAlt = m.ogImageAlt ?? `${m.title} social preview`;
+  const twitterSite = m.twitterSite ?? "@clawbureau";
   // For Plan A index gating: keep long-tail pages noindex but allow discovery via internal links.
   const robots = m.noindex ? "noindex,follow" : "index,follow,max-snippet:-1,max-image-preview:large";
   return `
     <title>${esc(m.title)}</title>
     <meta name="description" content="${esc(m.description)}">
     <meta name="robots" content="${robots}">
-    <link rel="canonical" href="${url}">
+    <link rel="canonical" href="${esc(url)}">
 
-    <meta property="og:type" content="${m.ogType ?? "website"}">
-    <meta property="og:url" content="${url}">
+    <meta property="og:type" content="${esc(m.ogType ?? "website")}">
+    <meta property="og:url" content="${esc(url)}">
     <meta property="og:title" content="${esc(m.title)}">
     <meta property="og:description" content="${esc(m.description)}">
-    <meta property="og:image" content="${ogImage}">
-    <meta property="og:site_name" content="${ORG_NAME}">
+    <meta property="og:image" content="${esc(ogImage)}">
+    <meta property="og:image:alt" content="${esc(ogImageAlt)}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:site_name" content="${esc(ORG_NAME)}">
+    <meta property="og:locale" content="en_US">
 
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="${esc(twitterSite)}">
+    <meta name="twitter:url" content="${esc(url)}">
     <meta name="twitter:title" content="${esc(m.title)}">
     <meta name="twitter:description" content="${esc(m.description)}">
-    <meta name="twitter:image" content="${ogImage}">
+    <meta name="twitter:image" content="${esc(ogImage)}">
+    <meta name="twitter:image:alt" content="${esc(ogImageAlt)}">
 
-    ${m.publishedTime ? `<meta property="article:published_time" content="${m.publishedTime}">` : ""}
-    ${m.modifiedTime ? `<meta property="article:modified_time" content="${m.modifiedTime}">` : ""}
+    ${m.articleSection ? `<meta property="article:section" content="${esc(m.articleSection)}">` : ""}
+    ${m.publishedTime ? `<meta property="article:published_time" content="${esc(m.publishedTime)}">` : ""}
+    ${m.modifiedTime ? `<meta property="article:modified_time" content="${esc(m.modifiedTime)}">` : ""}
   `;
 }
 

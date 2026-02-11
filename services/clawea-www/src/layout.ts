@@ -77,7 +77,53 @@ function interactiveScript(): string {
         document.body.style.overflow='';
       });
     });
+    document.addEventListener('keydown',function(e){
+      if(e.key==='Escape'&&menu.classList.contains('open')){
+        toggle.setAttribute('aria-expanded','false');
+        menu.classList.remove('open');
+        document.body.style.overflow='';
+      }
+    });
   }
+
+  /* Global search shortcut (/) */
+  var searchForms=document.querySelectorAll('.nav-search');
+  var searchInputs=document.querySelectorAll('[data-global-search]');
+
+  function isEditable(el){
+    if(!el||!(el instanceof HTMLElement))return false;
+    var tag=(el.tagName||'').toLowerCase();
+    return tag==='input'||tag==='textarea'||tag==='select'||el.isContentEditable;
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(e.defaultPrevented||e.key!=='/'||e.metaKey||e.ctrlKey||e.altKey)return;
+    if(isEditable(document.activeElement))return;
+
+    var target=null;
+    for(var i=0;i<searchInputs.length;i++){
+      var candidate=searchInputs[i];
+      if(candidate&&candidate.offsetParent!==null){target=candidate;break;}
+    }
+    if(!target&&searchInputs.length>0)target=searchInputs[0];
+    if(!target)return;
+
+    e.preventDefault();
+    target.focus();
+    if(typeof target.select==='function')target.select();
+  });
+
+  searchForms.forEach(function(form){
+    form.addEventListener('submit',function(e){
+      var input=form.querySelector('[data-global-search]');
+      if(!input)return;
+      var q=(input.value||'').trim();
+      if(!q){
+        e.preventDefault();
+        window.location.href='/glossary';
+      }
+    });
+  });
 
   /* Reading progress bar */
   var bar=document.querySelector('.progress-bar');
@@ -103,6 +149,49 @@ function interactiveScript(): string {
       window.scrollTo({top:0,behavior:'smooth'});
     });
   }
+
+  /* FAQ accordion semantics + keyboard nav */
+  var accordions=document.querySelectorAll('[data-accordion]');
+  accordions.forEach(function(acc){
+    var triggers=Array.prototype.slice.call(acc.querySelectorAll('[data-accordion-trigger]'));
+    if(triggers.length===0)return;
+
+    function setExpanded(trigger,expanded){
+      trigger.setAttribute('aria-expanded',String(expanded));
+      var panelId=trigger.getAttribute('aria-controls');
+      if(!panelId)return;
+      var panel=document.getElementById(panelId);
+      if(!panel)return;
+      if(expanded)panel.removeAttribute('hidden');
+      else panel.setAttribute('hidden','');
+    }
+
+    function openOnly(target){
+      triggers.forEach(function(trigger){
+        setExpanded(trigger,trigger===target);
+      });
+    }
+
+    triggers.forEach(function(trigger,index){
+      trigger.addEventListener('click',function(){
+        var isOpen=trigger.getAttribute('aria-expanded')==='true';
+        if(isOpen){setExpanded(trigger,false);return;}
+        openOnly(trigger);
+      });
+
+      trigger.addEventListener('keydown',function(e){
+        var next=index;
+        if(e.key==='ArrowDown')next=(index+1)%triggers.length;
+        else if(e.key==='ArrowUp')next=(index-1+triggers.length)%triggers.length;
+        else if(e.key==='Home')next=0;
+        else if(e.key==='End')next=triggers.length-1;
+        else return;
+
+        e.preventDefault();
+        triggers[next].focus();
+      });
+    });
+  });
 
   /* TOC active heading tracking */
   var tocLinks=document.querySelectorAll('.toc a');
@@ -330,6 +419,22 @@ function nav(currentPath: string): string {
         </svg>
         claw<span>ea</span>
       </a>
+      <form class="nav-search" role="search" action="/glossary" method="get" aria-label="Search glossary and guides">
+        <label for="nav-search-input" class="sr-only">Search glossary and guides</label>
+        <span class="nav-search-icon" aria-hidden="true">⌕</span>
+        <input
+          id="nav-search-input"
+          name="q"
+          type="search"
+          data-global-search
+          placeholder="Search playbooks"
+          autocapitalize="off"
+          autocomplete="off"
+          spellcheck="false"
+          enterkeyhint="search"
+        >
+        <span class="nav-search-hint" aria-hidden="true">/</span>
+      </form>
       <button class="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Toggle navigation">
         <span></span><span></span><span></span>
       </button>

@@ -6,6 +6,87 @@
 import { layout } from "../layout";
 import { faqSchema, serviceSchema } from "../seo";
 
+type StaticFaq = { q: string; a: string };
+
+const TRUST_FAQS: StaticFaq[] = [
+  {
+    q: "How does Claw EA prove AI agent actions are legitimate?",
+    a: "Every model call routes through clawproxy, which signs a gateway receipt with the request hash, response hash, model, provider, and timestamp. These receipts are compiled into proof bundles signed by the agent's DID. Any third party can verify the bundle independently.",
+  },
+  {
+    q: "What is a Proof of Harness?",
+    a: "Proof of Harness verifies that an AI agent ran inside a controlled execution environment. Gateway receipts from clawproxy prove that model calls were mediated, policy controls were active, and audit logging was operational during execution.",
+  },
+  {
+    q: "Can proof bundles be tampered with?",
+    a: "No. Proof bundles use Ed25519 signatures tied to the agent's DID and include Merkle root hashes over all events. Modifying any event invalidates the chain. Gateway receipts are independently signed by clawproxy.",
+  },
+];
+
+const SECURE_WORKERS_FAQS: StaticFaq[] = [
+  {
+    q: "How are secure workers isolated from each other?",
+    a: "Each agent runs in its own Cloudflare Sandbox with separate process and filesystem boundaries. Agent state is synchronized to tenant/agent-scoped R2 prefixes, so one agent cannot read another agent's persisted data.",
+  },
+  {
+    q: "Can we restrict where workers send data?",
+    a: "Yes. Work Policy Contracts enforce explicit egress allowlists and approval gates. Unauthorized destinations are denied at execution time and reflected in audit evidence.",
+  },
+  {
+    q: "What happens when a worker sleeps or restarts?",
+    a: "Runtime state is synced to scoped storage before sleep and restored on wake. Restart events and lifecycle transitions are logged so operations teams can verify continuity.",
+  },
+];
+
+const CONSULTING_FAQS: StaticFaq[] = [
+  {
+    q: "Do you help with pilot-to-production rollout?",
+    a: "Yes. We can support design, rollout sequencing, policy authoring, and operational readiness from first proof-of-concept through production deployment.",
+  },
+  {
+    q: "Can consulting engagements include compliance mapping?",
+    a: "Yes. We map controls and evidence outputs to frameworks such as SOC 2, HIPAA, and GDPR, and help prepare audit-friendly runbooks and artifacts.",
+  },
+  {
+    q: "Can you customize integrations and workflows for our stack?",
+    a: "Yes. We can implement scoped skills, policy packs, and workflow templates aligned with your existing identity, ticketing, collaboration, and SIEM systems.",
+  },
+];
+
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderFaqAccordion(id: string, faqs: StaticFaq[]): string {
+  return `<div class="faq-accordion" data-accordion aria-label="Frequently asked questions">${faqs
+    .map((faq, i) => {
+      const buttonId = `${id}-trigger-${i}`;
+      const panelId = `${id}-panel-${i}`;
+      const expanded = i === 0;
+      return `<div class="faq-item">
+          <h3>
+            <button
+              type="button"
+              class="faq-trigger"
+              id="${buttonId}"
+              aria-expanded="${expanded ? "true" : "false"}"
+              aria-controls="${panelId}"
+              data-accordion-trigger
+            >${esc(faq.q)}</button>
+          </h3>
+          <div id="${panelId}" class="faq-panel" role="region" aria-labelledby="${buttonId}" ${expanded ? "" : "hidden"}>
+            <p>${esc(faq.a)}</p>
+          </div>
+        </div>`;
+    })
+    .join("")}</div>`;
+}
+
 export function trustPage(): string {
   return layout({
     meta: {
@@ -16,11 +97,7 @@ export function trustPage(): string {
     breadcrumbs: [{ name: "Home", path: "/" }, { name: "Trust", path: "/trust" }],
     schemas: [
       serviceSchema("Claw EA Trust Layer", "Cryptographic verification infrastructure for enterprise AI agents", "https://www.clawea.com/trust"),
-      faqSchema([
-        { q: "How does Claw EA prove AI agent actions are legitimate?", a: "Every model call routes through clawproxy, which signs a gateway receipt with the request hash, response hash, model, provider, and timestamp. These receipts are compiled into proof bundles signed by the agent's DID. Any third party can verify the bundle independently." },
-        { q: "What is a Proof of Harness?", a: "Proof of Harness verifies that an AI agent ran inside a controlled execution environment. Gateway receipts from clawproxy prove that model calls were mediated, policy controls were active, and audit logging was operational during execution." },
-        { q: "Can proof bundles be tampered with?", a: "No. Proof bundles use Ed25519 signatures tied to the agent's DID and include Merkle root hashes over all events. Modifying any event invalidates the chain. Gateway receipts are independently signed by clawproxy." },
-      ]),
+      faqSchema(TRUST_FAQS),
     ],
     body: `
     <section class="hero">
@@ -106,20 +183,7 @@ Universal Run Manifest
     <section class="section">
       <div class="wrap">
         <div class="sh"><h2>Frequently Asked Questions</h2></div>
-        <div class="faq-accordion">
-          <details open>
-            <summary>How does Claw EA prove AI agent actions are legitimate?</summary>
-            <div class="faq-answer">Every model call routes through clawproxy, which signs a gateway receipt with the request hash, response hash, model, provider, and timestamp. These receipts are compiled into proof bundles signed by the agent's DID. Any third party can verify the bundle independently.</div>
-          </details>
-          <details>
-            <summary>What is a Proof of Harness?</summary>
-            <div class="faq-answer">Proof of Harness verifies that an AI agent ran inside a controlled execution environment. Gateway receipts from clawproxy prove that model calls were mediated, policy controls were active, and audit logging was operational during execution.</div>
-          </details>
-          <details>
-            <summary>Can proof bundles be tampered with?</summary>
-            <div class="faq-answer">No. Proof bundles use Ed25519 signatures tied to the agent's DID and include Merkle root hashes over all events. Modifying any event invalidates the chain. Gateway receipts are independently signed by clawproxy.</div>
-          </details>
-        </div>
+        ${renderFaqAccordion("trust-faq", TRUST_FAQS)}
       </div>
     </section>
 
@@ -143,6 +207,10 @@ export function secureWorkersPage(): string {
       path: "/secure-workers",
     },
     breadcrumbs: [{ name: "Home", path: "/" }, { name: "Secure Workers", path: "/secure-workers" }],
+    schemas: [
+      serviceSchema("Secure AI Workers", "Hardware-isolated enterprise AI workers with policy-enforced execution", "https://www.clawea.com/secure-workers"),
+      faqSchema(SECURE_WORKERS_FAQS),
+    ],
     body: `
     <section class="hero">
       <div class="wrap">
@@ -207,6 +275,13 @@ export function secureWorkersPage(): string {
 
     <section class="section">
       <div class="wrap">
+        <div class="sh"><h2>Frequently Asked Questions</h2></div>
+        ${renderFaqAccordion("secure-workers-faq", SECURE_WORKERS_FAQS)}
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
         <div class="cta-banner">
           <h2>Deploy Secure AI Workers Today</h2>
           <p>Hardware-isolated, policy-enforced, cryptographically attested.</p>
@@ -226,6 +301,10 @@ export function consultingPage(): string {
       path: "/consulting",
     },
     breadcrumbs: [{ name: "Home", path: "/" }, { name: "Consulting", path: "/consulting" }],
+    schemas: [
+      serviceSchema("Enterprise AI Consulting", "Consulting services for enterprise AI agent strategy, deployment, and operations", "https://www.clawea.com/consulting"),
+      faqSchema(CONSULTING_FAQS),
+    ],
     body: `
     <section class="hero">
       <div class="wrap">
@@ -272,6 +351,13 @@ export function consultingPage(): string {
             <p>Train your team on agent management, WPC design, proof bundle verification, and fleet operations. Role-based training for admins, developers, and compliance officers.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap">
+        <div class="sh"><h2>Frequently Asked Questions</h2></div>
+        ${renderFaqAccordion("consulting-faq", CONSULTING_FAQS)}
       </div>
     </section>
 
