@@ -2,7 +2,7 @@
   "name": "@clawbureau/clawsettle",
   "version": "0.1.0",
   "private": true,
-  "description": "Settlement rail adapter service (Stripe webhook ingestion -> clawledger settlements)",
+  "description": "Settlement + payout rail adapter service (Stripe webhook ingestion, payout lifecycle, reconciliation)",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",

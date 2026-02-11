@@ -1,5 +1,10 @@
 import { ClawSettleError, StripeWebhookService } from './stripe';
-import type { Env, ErrorResponse } from './types';
+import {
+  PayoutService,
+  extractIdempotencyKey,
+  parseJsonRequestBody,
+} from './payouts';
+import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
   return new Response(JSON.stringify(data), {
@@ -76,11 +81,20 @@ function assertSettleAdmin(request: Request, env: Env): void {
   }
 }
 
+function createStripeWebhookService(env: Env): StripeWebhookService {
+  const payoutService = new PayoutService(env);
+  return new StripeWebhookService(env, {
+    onForwarded: async (input: PayoutLifecycleHookInput) => {
+      await payoutService.applyStripeLifecycle(input);
+    },
+  });
+}
+
 async function handleStripeWebhook(request: Request, env: Env): Promise<Response> {
   const signature = request.headers.get('stripe-signature');
   const rawBody = await request.text();
 
-  const service = new StripeWebhookService(env);
+  const service = createStripeWebhookService(env);
   const response = await service.processWebhook(rawBody, signature);
 
   return jsonResponse(response, 200, resolveVersion(env));
@@ -138,10 +152,105 @@ async function handleRetryForwarding(request: Request, env: Env): Promise<Respon
     }
   }
 
-  const service = new StripeWebhookService(env);
+  const service = createStripeWebhookService(env);
   const response = await service.retryFailedForwarding(limit, force, eventId);
 
   return jsonResponse(response, 200, resolveVersion(env));
+}
+
+async function handleConnectOnboard(request: Request, env: Env): Promise<Response> {
+  const body = await parseJsonRequestBody(request);
+  const service = new PayoutService(env);
+  const response = await service.onboardConnectAccount(body);
+  const status = response.deduped ? 200 : 201;
+  return jsonResponse(response, status, resolveVersion(env));
+}
+
+async function handleCreatePayout(request: Request, env: Env): Promise<Response> {
+  const idempotencyKey = extractIdempotencyKey(request);
+  if (!idempotencyKey) {
+    throw new ClawSettleError('Missing idempotency key', 'INVALID_REQUEST', 400, {
+      field: 'idempotency_key',
+    });
+  }
+
+  const body = await parseJsonRequestBody(request);
+  const service = new PayoutService(env);
+  const response = await service.createPayout(body, idempotencyKey);
+  const status = response.deduped ? 200 : 201;
+  return jsonResponse(response, status, resolveVersion(env));
+}
+
+async function handleGetPayout(payoutId: string, env: Env): Promise<Response> {
+  const service = new PayoutService(env);
+  const response = await service.getPayoutById(payoutId);
+  return jsonResponse(response, 200, resolveVersion(env));
+}
+
+async function handleRetryPayout(payoutId: string, request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+  const service = new PayoutService(env);
+  const response = await service.retryPayout(payoutId);
+  return jsonResponse(response, 200, resolveVersion(env));
+}
+
+async function handleListStuckPayouts(url: URL, request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const service = new PayoutService(env);
+  const response = await service.listStuckPayouts({
+    olderThanMinutes: url.searchParams.get('older_than_minutes'),
+    limit: url.searchParams.get('limit'),
+  });
+
+  return jsonResponse(response, 200, resolveVersion(env));
+}
+
+async function handleListFailedPayouts(url: URL, request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const service = new PayoutService(env);
+  const response = await service.listFailedPayouts({
+    limit: url.searchParams.get('limit'),
+  });
+
+  return jsonResponse(response, 200, resolveVersion(env));
+}
+
+async function handleDailyReconciliation(url: URL, request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const date = url.searchParams.get('date');
+  if (!date || date.trim().length === 0) {
+    throw new ClawSettleError('Missing required query parameter: date', 'INVALID_REQUEST', 400, {
+      field: 'date',
+    });
+  }
+
+  const format = (url.searchParams.get('format') || 'json').trim().toLowerCase();
+
+  const service = new PayoutService(env);
+  const report = await service.buildDailyReconciliationReport(date.trim());
+
+  if (format === 'csv') {
+    const csv = service.toDailyReconciliationCsv(report);
+    return new Response(csv, {
+      status: 200,
+      headers: {
+        'content-type': 'text/csv; charset=utf-8',
+        'x-clawsettle-version': resolveVersion(env),
+        'x-clawsettle-report-sha256': report.artifact_sha256,
+      },
+    });
+  }
+
+  if (format !== 'json') {
+    throw new ClawSettleError('format must be json or csv', 'INVALID_REQUEST', 400, {
+      field: 'format',
+    });
+  }
+
+  return jsonResponse(report, 200, resolveVersion(env));
 }
 
 async function router(request: Request, env: Env): Promise<Response> {
@@ -168,6 +277,13 @@ async function router(request: Request, env: Env): Promise<Response> {
         <li><code>GET /health</code></li>
         <li><code>POST /v1/stripe/webhook</code></li>
         <li><code>POST /v1/stripe/forwarding/retry</code> (admin)</li>
+        <li><code>POST /v1/payouts/connect/onboard</code></li>
+        <li><code>POST /v1/payouts</code> (idempotency required)</li>
+        <li><code>GET /v1/payouts/:id</code></li>
+        <li><code>POST /v1/payouts/:id/retry</code> (admin)</li>
+        <li><code>GET /v1/payouts/ops/stuck</code> (admin)</li>
+        <li><code>GET /v1/payouts/ops/failed</code> (admin)</li>
+        <li><code>GET /v1/reconciliation/payouts/daily?date=YYYY-MM-DD&amp;format=json|csv</code> (admin)</li>
       </ul>
     </main>
   </body>
@@ -180,6 +296,36 @@ async function router(request: Request, env: Env): Promise<Response> {
 
   if (request.method === 'POST' && path === '/v1/stripe/forwarding/retry') {
     return handleRetryForwarding(request, env);
+  }
+
+  if (request.method === 'POST' && path === '/v1/payouts/connect/onboard') {
+    return handleConnectOnboard(request, env);
+  }
+
+  if (request.method === 'POST' && path === '/v1/payouts') {
+    return handleCreatePayout(request, env);
+  }
+
+  if (request.method === 'GET' && path === '/v1/payouts/ops/stuck') {
+    return handleListStuckPayouts(url, request, env);
+  }
+
+  if (request.method === 'GET' && path === '/v1/payouts/ops/failed') {
+    return handleListFailedPayouts(url, request, env);
+  }
+
+  if (request.method === 'GET' && path === '/v1/reconciliation/payouts/daily') {
+    return handleDailyReconciliation(url, request, env);
+  }
+
+  const payoutById = path.match(/^\/v1\/payouts\/([^/]+)$/);
+  if (payoutById && request.method === 'GET') {
+    return handleGetPayout(decodeURIComponent(payoutById[1] ?? ''), env);
+  }
+
+  const payoutRetry = path.match(/^\/v1\/payouts\/([^/]+)\/retry$/);
+  if (payoutRetry && request.method === 'POST') {
+    return handleRetryPayout(decodeURIComponent(payoutRetry[1] ?? ''), request, env);
   }
 
   return errorResponse('Not found', 'NOT_FOUND', 404, undefined, resolveVersion(env));
@@ -206,7 +352,7 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const service = new StripeWebhookService(env);
+    const service = createStripeWebhookService(env);
     ctx.waitUntil(
       service.retryFailedForwarding().catch((err) => {
         console.error('scheduled-forwarding-retry-failed', err);

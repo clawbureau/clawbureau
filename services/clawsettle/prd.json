@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/economy/MPY-US-007-clawsettle-forwarding-outbox-retry",
+  "branchName": "feat/economy/MPY-US-008-010-clawsettle-payout-lifecycle-recon",
   "description": "clawsettle.com (Settlement) — provider adapter layer for external rails mapped into clawledger settlement semantics.",
   "userStories": [
     {
@@ -48,6 +48,51 @@
       "priority": 3,
       "passes": true,
       "notes": "Shipped to staging + production: verified webhook events now persist in durable outbox before forwarding, failed forwards are retried (cron + admin endpoint), replay/retry races remain idempotent with exactly-once economic outcomes."
+    },
+    {
+      "id": "MPY-US-008",
+      "title": "CST-US-001 payout initiation + deterministic ledger lock",
+      "description": "As a payout operator, I want deterministic payout initiation with pre-flight balance checks and lock-before-provider semantics so funds cannot be over-released under retries.",
+      "acceptanceCriteria": [
+        "Implement POST /v1/payouts/connect/onboard",
+        "Implement POST /v1/payouts",
+        "Enforce ledger balance checks before payout lock",
+        "Apply deterministic lock semantics before external payout submission",
+        "Enforce idempotent payout request keys with fail-closed deterministic errors"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Shipped to staging + production: added payout onboarding + payout initiation endpoints with deterministic idempotency keys, explicit balance checks, and lock-before-provider semantics."
+    },
+    {
+      "id": "MPY-US-009",
+      "title": "CST-US-003 payout lifecycle state machine + status endpoint",
+      "description": "As finance ops, I want payout status transitions to be explicit and exact-once so webhook replay/retry races cannot cause double-release or double-credit outcomes.",
+      "acceptanceCriteria": [
+        "Implement payout state machine + GET /v1/payouts/:id",
+        "Wire payout.paid to exact-once finalize behavior",
+        "Wire payout.failed to exact-once rollback behavior",
+        "Preserve deterministic lifecycle errors (including INVALID_STATUS_TRANSITION)",
+        "Prove no double-credit / double-release under replay + retry races"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Shipped to staging + production: payout lifecycle state machine + GET /v1/payouts/:id + exact-once payout.paid finalize and payout.failed rollback behavior with replay/race safety."
+    },
+    {
+      "id": "MPY-US-010",
+      "title": "CST-US-004 payout reconciliation + ops reporting",
+      "description": "As finance ops, I want deterministic reconciliation exports and stuck/failed payout controls so operational recovery is auditable and repeatable.",
+      "acceptanceCriteria": [
+        "Implement daily payout reconciliation report",
+        "Add deterministic CSV/export output",
+        "Provide stuck/failed payout visibility endpoints",
+        "Add targeted payout retry controls",
+        "Emit deterministic audit artifacts for finance operations"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Shipped to staging + production: daily payout reconciliation JSON/CSV with deterministic artifact hash, stuck/failed ops visibility, and targeted payout retry controls."
     }
   ]
 }

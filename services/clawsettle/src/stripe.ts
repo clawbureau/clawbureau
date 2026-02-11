@@ -1,6 +1,7 @@
 import type {
   Env,
   PaymentSettlementIngestPayload,
+  PayoutLifecycleHookInput,
   RetryForwardingResponse,
   StripeEvent,
   StripeWebhookOutboxRecord,
@@ -252,6 +253,7 @@ interface ForwardAttemptResult {
   eventId: string;
   eventType: string;
   idempotencyKey: string;
+  payload: PaymentSettlementIngestPayload;
   ledgerStatus?: number;
   settlementId?: string;
   retryScheduled?: boolean;
@@ -877,10 +879,13 @@ export class LedgerSettlementClient implements LedgerSettlementClientLike {
   }
 }
 
+export type StripeForwardedHook = (input: PayoutLifecycleHookInput) => Promise<void>;
+
 interface StripeWebhookServiceDeps {
   repository?: StripeWebhookRepositoryLike;
   outboxRepository?: StripeWebhookOutboxRepositoryLike;
   ledgerClient?: LedgerSettlementClientLike;
+  onForwarded?: StripeForwardedHook;
   now?: () => string;
   nowMs?: () => number;
 }
@@ -889,6 +894,7 @@ export class StripeWebhookService {
   private readonly repository: StripeWebhookRepositoryLike;
   private readonly outboxRepository: StripeWebhookOutboxRepositoryLike;
   private readonly ledgerClient?: LedgerSettlementClientLike;
+  private readonly onForwarded?: StripeForwardedHook;
   private readonly now: () => string;
   private readonly nowMs: () => number;
   private readonly retryBatchLimit: number;
@@ -899,6 +905,7 @@ export class StripeWebhookService {
     this.repository = deps.repository ?? new StripeWebhookRepository(env.DB);
     this.outboxRepository = deps.outboxRepository ?? new StripeWebhookOutboxRepository(env.DB);
     this.ledgerClient = deps.ledgerClient;
+    this.onForwarded = deps.onForwarded;
     this.now = deps.now ?? (() => new Date().toISOString());
     this.nowMs = deps.nowMs ?? (() => Date.now());
 
@@ -1143,6 +1150,28 @@ export class StripeWebhookService {
     };
   }
 
+  private async applyForwardedHook(input: {
+    eventId: string;
+    eventType: string;
+    idempotencyKey: string;
+    payload: PaymentSettlementIngestPayload;
+    ledgerStatus?: number;
+    settlementId?: string;
+  }): Promise<void> {
+    if (!this.onForwarded) {
+      return;
+    }
+
+    await this.onForwarded({
+      event_id: input.eventId,
+      event_type: input.eventType,
+      idempotency_key: input.idempotencyKey,
+      payload: input.payload,
+      ledger_status: input.ledgerStatus,
+      settlement_id: input.settlementId,
+    });
+  }
+
   private async forwardOutboxEvent(eventId: string): Promise<ForwardAttemptResult> {
     const existing = await this.outboxRepository.findByEventId(eventId);
     if (!existing) {
@@ -1160,6 +1189,7 @@ export class StripeWebhookService {
         eventId: existing.event_id,
         eventType: existing.event_type,
         idempotencyKey: existing.idempotency_key,
+        payload: this.parseSettlementPayloadJson(existing.settlement_payload_json),
         ledgerStatus: existing.ledger_status,
         settlementId: existing.settlement_id,
       };
@@ -1184,6 +1214,7 @@ export class StripeWebhookService {
         eventId: current.event_id,
         eventType: current.event_type,
         idempotencyKey: current.idempotency_key,
+        payload: this.parseSettlementPayloadJson(current.settlement_payload_json),
         ledgerStatus: current.ledger_status,
         settlementId: current.settlement_id,
       };
@@ -1194,6 +1225,7 @@ export class StripeWebhookService {
     let ledgerStatus: number | undefined;
     let settlementId: string | undefined;
     let ingestErrorMessage: string | undefined;
+    let failureCode = 'LEDGER_INGEST_FAILED';
 
     try {
       const ledger = await this.getLedgerClient().ingest(payload, current.idempotency_key);
@@ -1206,26 +1238,43 @@ export class StripeWebhookService {
             ? String(ledger.json?.settlement?.id)
             : undefined;
 
-        const doneAt = this.now();
-        await this.outboxRepository.markForwarded({
-          eventId: current.event_id,
-          settlementId,
-          ledgerStatus,
-          forwardedAt: doneAt,
-          updatedAt: doneAt,
-        });
+        try {
+          await this.applyForwardedHook({
+            eventId: current.event_id,
+            eventType: current.event_type,
+            idempotencyKey: current.idempotency_key,
+            payload,
+            ledgerStatus,
+            settlementId,
+          });
+        } catch (hookErr) {
+          failureCode = hookErr instanceof ClawSettleError ? hookErr.code : 'PAYOUT_LIFECYCLE_FAILED';
+          ingestErrorMessage = truncateErrorMessage(hookErr);
+        }
 
-        return {
-          ok: true,
-          eventId: current.event_id,
-          eventType: current.event_type,
-          idempotencyKey: current.idempotency_key,
-          ledgerStatus,
-          settlementId,
-        };
+        if (!ingestErrorMessage) {
+          const doneAt = this.now();
+          await this.outboxRepository.markForwarded({
+            eventId: current.event_id,
+            settlementId,
+            ledgerStatus,
+            forwardedAt: doneAt,
+            updatedAt: doneAt,
+          });
+
+          return {
+            ok: true,
+            eventId: current.event_id,
+            eventType: current.event_type,
+            idempotencyKey: current.idempotency_key,
+            payload,
+            ledgerStatus,
+            settlementId,
+          };
+        }
+      } else {
+        ingestErrorMessage = `Ledger HTTP ${ledger.status}`;
       }
-
-      ingestErrorMessage = `Ledger HTTP ${ledger.status}`;
     } catch (err) {
       ingestErrorMessage = truncateErrorMessage(err);
     }
@@ -1242,7 +1291,7 @@ export class StripeWebhookService {
       eventId: current.event_id,
       ledgerStatus,
       nextRetryAt,
-      errorCode: 'LEDGER_INGEST_FAILED',
+      errorCode: failureCode,
       errorMessage: ingestErrorMessage ?? 'Ledger settlement ingest failed',
       updatedAt: this.now(),
     });
@@ -1252,6 +1301,7 @@ export class StripeWebhookService {
       eventId: current.event_id,
       eventType: current.event_type,
       idempotencyKey: current.idempotency_key,
+      payload,
       ledgerStatus,
       retryScheduled: true,
       nextRetryAt,
