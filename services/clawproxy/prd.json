@@ -246,7 +246,7 @@
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Shipped to staging: platform-paid calls now perform clawledger funding precheck and fail with deterministic 402 PAYMENT_REQUIRED for unbound/unfunded accounts; receipt/payment metadata includes signed funding-check context."
+      "notes": "Shipped to staging + production: platform-paid calls now perform clawledger funding precheck and fail with deterministic 402 PAYMENT_REQUIRED for unbound/unfunded accounts; funded path emits signed payment_funding_check receipt metadata. Production deploy version: fce7d81c-392c-4454-92dc-a898bbad9147."
     },
     {
       "id": "MPY-US-005",

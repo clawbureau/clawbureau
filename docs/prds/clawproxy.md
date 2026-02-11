@@ -280,7 +280,7 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 - Include signed receipt/payment metadata proving funding-check context
 - Add tests + staging smoke (`deny-before-fund`, `allow-after-fund`)
 
-**Current Status:** ✅ Shipped to staging (staging deploy + smoke evidence in `services/clawproxy/progress.txt`)
+**Current Status:** ✅ Shipped to staging + production (deploy + smoke evidence in `services/clawproxy/progress.txt`)
 
 ### MPY-US-005 — CST payment account binding
 **As a** security owner, **I want** payment account identity bound into CST claims **so that** callers cannot spoof payment account context via headers.

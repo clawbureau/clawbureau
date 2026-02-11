@@ -431,7 +431,26 @@ Started: 2026-02-02T03:08:26.937763
     - deny-before-fund: `402`, code `PAYMENT_REQUIRED`
     - funding step: settlement ingest `201`, account available `1500`
     - allow-after-fund: request no longer blocked (`status 401` upstream with receipt context), `payment.mode=platform`, `fundingCheck.status=funded`
+- Production deploy + smoke evidence
+  - Security hygiene completed before rollout:
+    - rotated/revoked previously exposed Cloudflare API token (old token now rejected as invalid)
+  - Rotated production clawledger admin key and updated production dependents (names only):
+    - `services/ledger`: `LEDGER_ADMIN_KEY`
+    - `services/clawproxy`: `LEDGER_ADMIN_KEY`, `PLATFORM_PAID_ENABLED`, `PLATFORM_OPENAI_API_KEY`
+    - `services/escrow`: `LEDGER_ADMIN_KEY`
+  - Deployed `clawproxy` production version:
+    - `fce7d81c-392c-4454-92dc-a898bbad9147`
+  - Production smoke command:
+    - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-platform-paid-funding.mjs --env prod`
+  - Production smoke highlights:
+    - deny-before-fund: `402`, code `PAYMENT_REQUIRED`, message `Platform-paid account is not bound in ledger`
+    - funding step: settlement ingest `201`, account available `1500`
+    - allow-after-fund: not blocked by funding gate (`status 401` upstream in smoke setup), receipt context contains:
+      - `_receipt.payment.mode=platform`
+      - `_receipt.payment.paid=true`
+      - `_receipt.payment.fundingCheck.status=funded`
+      - `_receipt_envelope.payload.metadata.payment_funding_check.account_id=acc_5d40c61d`
 - Release status
-  - MPY-US-004 shipped to staging only in this PR.
+  - MPY-US-004 shipped to staging + production.
   - MPY-US-005 queued next (CST payment-account claim binding + mismatch fail-closed).
 ---
