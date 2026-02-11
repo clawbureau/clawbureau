@@ -402,3 +402,48 @@ Started: 2026-02-02T03:08:26.937005
 - Persistence:
   - Added D1 migration `migrations/0010_confidential_work_contract.sql`.
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-11 - CBT-OPS-001 / CEA-US-049H (requester scoped auth + simulation launcher)
+- Replaced temporary requester identity path for requester closure actions with scoped requester CST/JWT auth:
+  - `POST /v1/bounties`
+  - `POST /v1/bounties/{bounty_id}/approve`
+  - `POST /v1/bounties/{bounty_id}/reject`
+- Fail-closed requester auth behavior:
+  - Token introspection via `clawscope /v1/tokens/introspect`
+  - DID-bound `sub` enforcement with deterministic mismatch code (`REQUESTER_SUB_MISMATCH`)
+  - Explicit scope enforcement (`REQUESTER_SCOPE_REQUIRED`)
+  - Missing token fail-closed (`REQUESTER_TOKEN_REQUIRED`)
+  - Audience enforcement via `REQUESTER_AUTH_REQUIRED_AUDIENCE`
+- Compatibility path retained behind explicit flag:
+  - `REQUESTER_AUTH_COMPAT_LEGACY=true` allows legacy `admin + x-requester-did`
+  - Default remains disabled (staging var set to false)
+- Added reviewer ergonomics endpoints (fail-closed auth):
+  - `GET /v1/bounties/{bounty_id}/submissions`
+  - `GET /v1/submissions/{submission_id}`
+- Added requester auth usage context persistence:
+  - D1 migration `migrations/0014_requester_auth_events.sql`
+  - table `requester_auth_events` captures action, requester DID, auth mode, token hash, scope/audience snapshot.
+- Added staging simulation launcher:
+  - `scripts/clawbounties/smoke-requester-closure-simulation.mjs`
+  - Runs real post/accept/submit/review/approve-or-reject flow with `closure_type=requester` (no D1 injection)
+  - Parameterized run size (`--runs`) and writes artifacts under `artifacts/simulations/clawbounties-requester-closure/...`
+- Docs:
+  - Updated `/docs` + `/skill.md` auth guidance for scoped requester tokens and new reviewer endpoints.
+- Typecheck:
+  - `cd services/clawbounties && npm run typecheck`
+
+## 2026-02-11 - CBT-OPS-001 follow-up (staging route shadow fix + smoke evidence)
+- Resolved staging-only `POST /v1/bounties` regression returning legacy `UNAUTHORIZED/Invalid admin token`:
+  - Added explicit staging route mapping `staging.clawbounties.com/v1/bounties*` in `services/clawbounties/wrangler.toml` before wildcard route.
+  - Redeployed clawbounties-staging and validated requester token path now reaches scoped-auth handler (legacy admin-token error removed).
+- Added deterministic auth smoke artifact:
+  - `artifacts/smoke/requester-auth/2026-02-11T19-25-45Z-staging/result.json`
+  - Confirms:
+    - missing token => `401 REQUESTER_TOKEN_REQUIRED`
+    - scope mismatch => `403 REQUESTER_SCOPE_REQUIRED`
+    - requester DID mismatch => `401 REQUESTER_SUB_MISMATCH`
+- Simulation evidence:
+  - PASS runset artifact: `artifacts/simulations/clawbounties-requester-closure/2026-02-11T19-20-52-597Z-staging-runs-3/result.json` (3/3 success, mixed approve/reject).
+  - Updated simulation launcher to accept `--reward-minor` and tolerate `accept` 200/201 responses for endpoint shape parity.
+- Ops note:
+  - Staging requester account is low-balance; larger runsets can fail at post with deterministic upstream `ESCROW_FAILED -> LEDGER_TRANSFER_FAILED -> INSUFFICIENT_FUNDS`.

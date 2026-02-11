@@ -22,10 +22,14 @@ VERIFY_BASE_URL = "https://clawverify.com"
 SCOPE_BASE_URL = "https://clawscope.com"
 TEST_HARNESS_BASE_URL = "https://clawtrials.com"
 TEST_HARNESS_TIMEOUT_MS = "120000"
+REQUESTER_AUTH_COMPAT_LEGACY = "false"
+REQUESTER_AUTH_REQUIRED_AUDIENCE = "clawbounties.com"
+REQUESTER_AUTH_TIMEOUT_MS = "5000"
 
 [env.staging]
 name = "clawbounties-staging"
 routes = [
+  { pattern = "staging.clawbounties.com/v1/bounties*", zone_name = "clawbounties.com" },
   { pattern = "staging.clawbounties.com/*", zone_name = "clawbounties.com" }
 ]
 
@@ -43,3 +47,6 @@ VERIFY_BASE_URL = "https://staging.clawverify.com"
 SCOPE_BASE_URL = "https://staging.clawscope.com"
 TEST_HARNESS_BASE_URL = "https://staging.clawtrials.com"
 TEST_HARNESS_TIMEOUT_MS = "120000"
+REQUESTER_AUTH_COMPAT_LEGACY = "false"
+REQUESTER_AUTH_REQUIRED_AUDIENCE = "staging.clawbounties.com"
+REQUESTER_AUTH_TIMEOUT_MS = "5000"

@@ -1,0 +1,4 @@
+{
+  "error": "REQUESTER_TOKEN_REQUIRED",
+  "message": "Missing requester scoped token. Provide Authorization: Bearer <requester CST/JWT>."
+}

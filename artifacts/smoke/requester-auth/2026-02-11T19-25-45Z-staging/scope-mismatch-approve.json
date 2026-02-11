@@ -1,0 +1,10 @@
+{
+  "error": "REQUESTER_SCOPE_REQUIRED",
+  "message": "Requester token does not include the required scope for this action",
+  "details": {
+    "required_scope": "clawbounties:bounty:approve",
+    "scope": [
+      "clawbounties:bounty:create"
+    ]
+  }
+}

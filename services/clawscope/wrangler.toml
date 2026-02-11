@@ -20,7 +20,7 @@ SCOPE_POLICY_TIER = "default"
 
 # Simple policy knobs (used if SCOPE_POLICY_JSON is not set):
 SCOPE_ALLOW_WILDCARDS = "0"
-SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:"
+SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:"
 SCOPE_ALLOWED_SCOPES = ""
 
 # Limits (also used as fallback defaults for tiers):
@@ -54,7 +54,7 @@ SCOPE_VERSION = "0.1.0"
 SCOPE_POLICY_VERSION = "1"
 SCOPE_POLICY_TIER = "default"
 SCOPE_ALLOW_WILDCARDS = "0"
-SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:"
+SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:"
 SCOPE_ALLOWED_SCOPES = ""
 SCOPE_MAX_TTL_SECONDS = "3600"
 SCOPE_MAX_SCOPE_ITEMS = "64"

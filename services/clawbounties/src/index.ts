@@ -2,7 +2,7 @@
  * clawbounties.com worker
  *
  * - Public discovery endpoints (landing/docs/skill/health/robots/sitemap/security)
- * - Admin-gated marketplace API (MVP): post + list + get bounties (schema v2 aligned)
+ * - Scoped requester-token + worker-token marketplace API (schema v2 aligned)
  */
 
 export interface Env {
@@ -39,6 +39,15 @@ export interface Env {
   /** Worker auth token TTL in seconds for /v1/workers/register (defaults to 86400). */
   WORKER_TOKEN_TTL_SECONDS?: string;
 
+  /** Compatibility path: allow admin + x-requester-did requester auth (disabled by default). */
+  REQUESTER_AUTH_COMPAT_LEGACY?: string;
+
+  /** Required audience for requester scoped tokens (defaults to clawbounties.com). */
+  REQUESTER_AUTH_REQUIRED_AUDIENCE?: string;
+
+  /** Timeout in ms for requester token introspection (defaults to 5000). */
+  REQUESTER_AUTH_TIMEOUT_MS?: string;
+
   /** D1 database binding */
   BOUNTIES_DB: D1Database;
 }
@@ -48,6 +57,43 @@ type BountyStatus = 'open' | 'accepted' | 'pending_review' | 'approved' | 'rejec
 type ProofTier = 'self' | 'gateway' | 'sandbox';
 type SubmissionStatus = 'pending_review' | 'invalid' | 'approved' | 'rejected';
 type VerificationStatus = 'VALID' | 'INVALID';
+
+type RequesterAuthAction = 'post_bounty' | 'approve_bounty' | 'reject_bounty' | 'read_submission';
+type RequesterAuthMode = 'scoped_token' | 'legacy_admin_header';
+
+interface RequesterAuthContext {
+  requester_did: string;
+  auth_mode: RequesterAuthMode;
+  token_hash: string | null;
+  scope: string[];
+  aud: string[];
+}
+
+interface ScopeIntrospectionSuccess {
+  active: true;
+  token_hash?: unknown;
+  sub?: unknown;
+  aud?: unknown;
+  scope?: unknown;
+}
+
+interface ScopeIntrospectionInactive {
+  active: false;
+  revoked?: unknown;
+  token_hash?: unknown;
+  sub?: unknown;
+  aud?: unknown;
+  scope?: unknown;
+}
+
+type ScopeIntrospectionResponse = ScopeIntrospectionSuccess | ScopeIntrospectionInactive;
+
+const REQUESTER_AUTH_SCOPE_BY_ACTION: Record<RequesterAuthAction, string> = {
+  post_bounty: 'clawbounties:bounty:create',
+  approve_bounty: 'clawbounties:bounty:approve',
+  reject_bounty: 'clawbounties:bounty:reject',
+  read_submission: 'clawbounties:bounty:read',
+};
 
 type FeePayer = 'buyer' | 'worker';
 
@@ -342,6 +388,34 @@ interface SubmitBountyResponseV1 {
       verified_at?: string;
     };
   };
+}
+
+interface SubmissionReviewItemV1 {
+  submission_id: string;
+  bounty_id: string;
+  worker_did: string;
+  status: SubmissionStatus;
+  created_at: string;
+  updated_at: string;
+  result_summary: string | null;
+  proof_tier: ProofTier | null;
+  verification: {
+    proof_bundle: {
+      status: 'valid' | 'invalid';
+      reason?: string;
+      verified_at?: string;
+    };
+    commit_proof?: {
+      status: 'valid' | 'invalid';
+      reason?: string;
+      verified_at?: string;
+    };
+  };
+}
+
+interface BountySubmissionsResponseV1 {
+  bounty_id: string;
+  submissions: SubmissionReviewItemV1[];
 }
 
 interface EscrowReleaseResponse {
@@ -766,6 +840,10 @@ function getBearerToken(header: string | null): string | null {
   return trimmed;
 }
 
+function looksLikeJwtToken(token: string): boolean {
+  return token.split('.').length === 3;
+}
+
 function isAdminAuthorized(request: Request, env: Env): boolean {
   if (!env.BOUNTIES_ADMIN_KEY || env.BOUNTIES_ADMIN_KEY.trim().length === 0) return false;
   const token = getBearerToken(request.headers.get('authorization')) ?? request.headers.get('x-admin-key')?.trim() ?? null;
@@ -811,13 +889,13 @@ async function requireWorker(request: Request, env: Env, version: string): Promi
   return { worker };
 }
 
-function requireRequesterDid(request: Request, version: string): { requester_did: string } | { error: Response } {
+function requireRequesterDidLegacy(request: Request, version: string): { requester_did: string } | { error: Response } {
   const didHeader = request.headers.get('x-requester-did');
   if (!didHeader || didHeader.trim().length === 0) {
     return {
       error: errorResponse(
         'REQUESTER_DID_REQUIRED',
-        'Missing requester DID. Provide header: x-requester-did: did:key:... (until CST auth is wired).',
+        'Missing requester DID. Provide header: x-requester-did: did:key:... (legacy compatibility path).',
         400,
         undefined,
         version
@@ -833,6 +911,282 @@ function requireRequesterDid(request: Request, version: string): { requester_did
   }
 
   return { requester_did };
+}
+
+function parseBooleanEnv(raw: string | undefined, fallback: boolean): boolean {
+  if (!raw) return fallback;
+  const v = raw.trim().toLowerCase();
+  if (v === 'true' || v === '1' || v === 'yes' || v === 'on') return true;
+  if (v === 'false' || v === '0' || v === 'no' || v === 'off') return false;
+  return fallback;
+}
+
+function resolveRequesterAuthCompatLegacy(env: Env): boolean {
+  return parseBooleanEnv(env.REQUESTER_AUTH_COMPAT_LEGACY, false);
+}
+
+function resolveRequesterAuthRequiredAudience(env: Env): string {
+  const raw = env.REQUESTER_AUTH_REQUIRED_AUDIENCE?.trim();
+  if (raw && raw.length > 0) return raw;
+  return 'clawbounties.com';
+}
+
+function resolveRequesterAuthTimeoutMs(env: Env): number {
+  const raw = env.REQUESTER_AUTH_TIMEOUT_MS?.trim();
+  if (!raw) return 5000;
+
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 5000;
+
+  const timeout = Math.floor(n);
+  if (timeout < 1000) return 5000;
+  if (timeout > 30000) return 30000;
+  return timeout;
+}
+
+function normalizeTokenClaimStringList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+
+  const out: string[] = [];
+  for (const item of input) {
+    if (!isNonEmptyString(item)) continue;
+    const v = item.trim();
+    if (!v) continue;
+    if (!out.includes(v)) out.push(v);
+  }
+
+  return out;
+}
+
+function parseTokenScopeClaim(scope: unknown): string[] {
+  if (typeof scope === 'string') {
+    return scope
+      .split(/\s+/g)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  return normalizeTokenClaimStringList(scope);
+}
+
+function parseTokenAudClaim(aud: unknown): string[] {
+  if (typeof aud === 'string') {
+    const value = aud.trim();
+    return value ? [value] : [];
+  }
+
+  return normalizeTokenClaimStringList(aud);
+}
+
+function hasRequesterScope(scope: readonly string[], action: RequesterAuthAction): boolean {
+  const required = REQUESTER_AUTH_SCOPE_BY_ACTION[action];
+  return scope.includes(required);
+}
+
+async function introspectRequesterToken(
+  env: Env,
+  token: string,
+  version: string
+): Promise<{ data: ScopeIntrospectionResponse } | { error: Response }> {
+  const baseUrl = resolveScopeBaseUrl(env);
+  const controller = new AbortController();
+  const timeoutMs = resolveRequesterAuthTimeoutMs(env);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${baseUrl}/v1/tokens/introspect`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ token }),
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let payload: unknown = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 400) {
+        const upstreamCode = isRecord(payload) && isNonEmptyString(payload.error) ? payload.error.trim() : null;
+        return {
+          error: errorResponse(
+            'REQUESTER_TOKEN_INVALID',
+            'Requester scoped token is invalid or expired',
+            401,
+            upstreamCode ? { upstream_error: upstreamCode } : undefined,
+            version
+          ),
+        };
+      }
+
+      return {
+        error: errorResponse(
+          'REQUESTER_AUTH_UPSTREAM_ERROR',
+          `Requester token introspection failed with status ${response.status}`,
+          502,
+          undefined,
+          version
+        ),
+      };
+    }
+
+    if (!isRecord(payload) || typeof payload.active !== 'boolean') {
+      return {
+        error: errorResponse(
+          'REQUESTER_AUTH_UPSTREAM_ERROR',
+          'Requester token introspection returned invalid payload',
+          502,
+          undefined,
+          version
+        ),
+      };
+    }
+
+    return { data: payload as unknown as ScopeIntrospectionResponse };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
+      error: errorResponse('REQUESTER_AUTH_UPSTREAM_UNAVAILABLE', message, 502, undefined, version),
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function requireRequesterAuth(
+  request: Request,
+  env: Env,
+  version: string,
+  params: {
+    action: RequesterAuthAction;
+    requester_did_hint?: string | null;
+  }
+): Promise<{ auth: RequesterAuthContext } | { error: Response }> {
+  const bearerToken = getBearerToken(request.headers.get('authorization'));
+  const compatLegacyEnabled = resolveRequesterAuthCompatLegacy(env);
+
+  const useLegacyCompatPath =
+    compatLegacyEnabled &&
+    isAdminAuthorized(request, env) &&
+    isNonEmptyString(request.headers.get('x-requester-did'));
+
+  if (bearerToken && !useLegacyCompatPath) {
+    const introspection = await introspectRequesterToken(env, bearerToken, version);
+    if ('error' in introspection) return introspection;
+
+    const data = introspection.data;
+    if (!data.active) {
+      return {
+        error: errorResponse('REQUESTER_TOKEN_INVALID', 'Requester scoped token is inactive', 401, undefined, version),
+      };
+    }
+
+    const requester_did = isNonEmptyString(data.sub) ? data.sub.trim() : null;
+    if (!requester_did || !requester_did.startsWith('did:')) {
+      return {
+        error: errorResponse('REQUESTER_SUB_INVALID', 'Requester token subject must be a DID', 401, undefined, version),
+      };
+    }
+
+    const requesterHint = params.requester_did_hint?.trim();
+    if (requesterHint && requesterHint !== requester_did) {
+      return {
+        error: errorResponse(
+          'REQUESTER_SUB_MISMATCH',
+          'requester_did does not match requester token subject',
+          401,
+          { requester_did, requested_requester_did: requesterHint },
+          version
+        ),
+      };
+    }
+
+    const scope = parseTokenScopeClaim(data.scope);
+    if (!hasRequesterScope(scope, params.action)) {
+      return {
+        error: errorResponse(
+          'REQUESTER_SCOPE_REQUIRED',
+          'Requester token does not include the required scope for this action',
+          403,
+          { required_scope: REQUESTER_AUTH_SCOPE_BY_ACTION[params.action], scope },
+          version
+        ),
+      };
+    }
+
+    const requiredAudience = resolveRequesterAuthRequiredAudience(env);
+    const aud = parseTokenAudClaim(data.aud);
+    if (!aud.includes(requiredAudience)) {
+      return {
+        error: errorResponse(
+          'REQUESTER_AUDIENCE_REQUIRED',
+          'Requester token audience does not include clawbounties',
+          403,
+          { required_audience: requiredAudience, aud },
+          version
+        ),
+      };
+    }
+
+    const token_hash = isNonEmptyString(data.token_hash)
+      ? data.token_hash.trim()
+      : await sha256HexUtf8(bearerToken);
+
+    return {
+      auth: {
+        requester_did,
+        auth_mode: 'scoped_token',
+        token_hash,
+        scope,
+        aud,
+      },
+    };
+  }
+
+  if (!compatLegacyEnabled) {
+    return {
+      error: errorResponse(
+        'REQUESTER_TOKEN_REQUIRED',
+        'Missing requester scoped token. Provide Authorization: Bearer <requester CST/JWT>.',
+        401,
+        undefined,
+        version
+      ),
+    };
+  }
+
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return { error: adminError };
+
+  const requester = requireRequesterDidLegacy(request, version);
+  if ('error' in requester) return requester;
+
+  const requesterHint = params.requester_did_hint?.trim();
+  if (requesterHint && requesterHint !== requester.requester_did) {
+    return {
+      error: errorResponse(
+        'REQUESTER_SUB_MISMATCH',
+        'requester_did does not match legacy requester header',
+        401,
+        { requester_did: requester.requester_did, requested_requester_did: requesterHint },
+        version
+      ),
+    };
+  }
+
+  return {
+    auth: {
+      requester_did: requester.requester_did,
+      auth_mode: 'legacy_admin_header',
+      token_hash: null,
+      scope: [REQUESTER_AUTH_SCOPE_BY_ACTION[params.action]],
+      aud: [],
+    },
+  };
 }
 
 async function parseJsonBody(request: Request): Promise<unknown | null> {
@@ -2172,6 +2526,36 @@ function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
   return response;
 }
 
+function buildSubmissionReviewItem(record: SubmissionRecord): SubmissionReviewItemV1 {
+  const response: SubmissionReviewItemV1 = {
+    submission_id: record.submission_id,
+    bounty_id: record.bounty_id,
+    worker_did: record.worker_did,
+    status: record.status,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+    result_summary: record.result_summary ?? null,
+    proof_tier: record.proof_tier ?? null,
+    verification: {
+      proof_bundle: {
+        status: record.proof_verify_status,
+        reason: record.proof_verify_reason ?? undefined,
+        verified_at: record.proof_verified_at ?? undefined,
+      },
+    },
+  };
+
+  if (record.commit_proof_verify_status) {
+    response.verification.commit_proof = {
+      status: record.commit_proof_verify_status,
+      reason: record.commit_proof_verify_reason ?? undefined,
+      verified_at: record.commit_proof_verified_at ?? undefined,
+    };
+  }
+
+  return response;
+}
+
 function parseNonNegativeMinor(input: unknown): bigint | null {
   if (typeof input !== 'string') return null;
   const s = input.trim();
@@ -3481,10 +3865,67 @@ async function insertTestResult(db: D1Database, record: TestResultRecord): Promi
     .run();
 }
 
+async function insertRequesterAuthEvent(
+  db: D1Database,
+  params: {
+    action: RequesterAuthAction;
+    bounty_id: string | null;
+    submission_id: string | null;
+    auth: RequesterAuthContext;
+    created_at: string;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO requester_auth_events (
+         auth_event_id,
+         action,
+         bounty_id,
+         submission_id,
+         requester_did,
+         auth_mode,
+         token_hash,
+         scope_json,
+         aud_json,
+         created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      `rae_${crypto.randomUUID()}`,
+      params.action,
+      params.bounty_id,
+      params.submission_id,
+      params.auth.requester_did,
+      params.auth.auth_mode,
+      params.auth.token_hash,
+      JSON.stringify(params.auth.scope),
+      JSON.stringify(params.auth.aud),
+      params.created_at
+    )
+    .run();
+}
+
 async function getSubmissionById(db: D1Database, submissionId: string): Promise<SubmissionRecord | null> {
   const row = await db.prepare('SELECT * FROM submissions WHERE submission_id = ?').bind(submissionId).first();
   if (!row || !isRecord(row)) return null;
   return parseSubmissionRow(row);
+}
+
+async function listSubmissionsByBounty(db: D1Database, bountyId: string, limit = 100): Promise<SubmissionRecord[]> {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.floor(limit))) : 100;
+  const rows = await db
+    .prepare('SELECT * FROM submissions WHERE bounty_id = ? ORDER BY created_at DESC LIMIT ?')
+    .bind(bountyId, safeLimit)
+    .all();
+
+  const out: SubmissionRecord[] = [];
+  for (const row of rows.results ?? []) {
+    if (!isRecord(row)) continue;
+    const parsed = parseSubmissionRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
 }
 
 async function getSubmissionByIdempotencyKey(
@@ -4246,34 +4687,37 @@ function docsPage(origin: string): string {
     "trust_pulse": {"trust_pulse_version": "1", "evidence_class": "self_reported", "tier_uplift": false, "run_id": "run_...", "agent_did": "did:key:...", "tools": [], "files": []}
   }'</pre>
 
-      <h3>Bounties API (admin)</h3>
-      <p>Requester/admin bounty endpoints require <code>Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;</code>. Admin auth also allows listing any status via <code>GET /v1/bounties</code>. Worker tokens may list open bounties and accept assignments.</p>
-      <p><strong>Until CST auth is wired</strong>, posting or approving/rejecting a bounty requires an extra header:
-        <code>x-requester-did: did:key:...</code>
-      </p>
+      <h3>Requester API (scoped CST/JWT)</h3>
+      <p>Requester bounty actions are fail-closed and require <code>Authorization: Bearer &lt;REQUESTER_TOKEN&gt;</code>. Tokens are introspected against clawscope and must include explicit scopes + requester DID subject. The temporary legacy path (<code>admin + x-requester-did</code>) remains behind <code>REQUESTER_AUTH_COMPAT_LEGACY=true</code> only.</p>
+      <ul>
+        <li><code>clawbounties:bounty:create</code> → <code>POST /v1/bounties</code></li>
+        <li><code>clawbounties:bounty:approve</code> → <code>POST /v1/bounties/{bounty_id}/approve</code></li>
+        <li><code>clawbounties:bounty:reject</code> → <code>POST /v1/bounties/{bounty_id}/reject</code></li>
+        <li><code>clawbounties:bounty:read</code> → <code>GET /v1/bounties/{bounty_id}/submissions</code>, <code>GET /v1/submissions/{submission_id}</code></li>
+      </ul>
+      <p>Admin auth still supports operational endpoints like <code>GET /v1/bounties</code> and <code>GET /v1/bounties/{bounty_id}</code>.</p>
 
       <ul>
         <li><code>POST /v1/bounties</code> — post a bounty (schema v2; calls clawcuts + clawescrow)</li>
-        <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list bounties</li>
-        <li><code>GET /v1/bounties/{bounty_id}</code> — fetch a bounty</li>
         <li><code>POST /v1/bounties/{bounty_id}/approve</code> — approve requester-closure bounty (release escrow)</li>
         <li><code>POST /v1/bounties/{bounty_id}/reject</code> — reject requester-closure bounty (dispute escrow)</li>
+        <li><code>GET /v1/bounties/{bounty_id}/submissions</code> — list bounty submissions (requester read scope or admin)</li>
+        <li><code>GET /v1/submissions/{submission_id}</code> — submission detail (requester read scope, owning worker, or admin)</li>
       </ul>
 
       <h3>POST /v1/bounties (v2)</h3>
       <pre>curl -sS \
   -X POST "${o}/v1/bounties" \
-  -H "Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;" \
-  -H "x-requester-did: did:key:z..." \
+  -H "Authorization: Bearer &lt;REQUESTER_TOKEN&gt;" \
   -H 'content-type: application/json' \
   -d '{
+    "requester_did": "did:key:zRequester...",
     "title": "Fix failing unit tests",
     "description": "...",
     "reward": {"amount_minor": "5000", "currency": "USD"},
-    "closure_type": "test",
+    "closure_type": "requester",
     "difficulty_scalar": 1.0,
-    "is_code_bounty": true,
-    "test_harness_id": "th_123",
+    "is_code_bounty": false,
     "min_proof_tier": "self",
     "tags": ["typescript", "testing"],
     "idempotency_key": "post:example:001",
@@ -4283,8 +4727,7 @@ function docsPage(origin: string): string {
       <h3>POST /v1/bounties/{bounty_id}/approve</h3>
       <pre>curl -sS \
   -X POST "${o}/v1/bounties/bty_.../approve" \
-  -H "Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;" \
-  -H "x-requester-did: did:key:z..." \
+  -H "Authorization: Bearer &lt;REQUESTER_TOKEN&gt;" \
   -H 'content-type: application/json' \
   -d '{
     "idempotency_key": "bounty:bty_123:approve",
@@ -4295,8 +4738,7 @@ function docsPage(origin: string): string {
       <h3>POST /v1/bounties/{bounty_id}/reject</h3>
       <pre>curl -sS \
   -X POST "${o}/v1/bounties/bty_.../reject" \
-  -H "Authorization: Bearer &lt;BOUNTIES_ADMIN_KEY&gt;" \
-  -H "x-requester-did: did:key:z..." \
+  -H "Authorization: Bearer &lt;REQUESTER_TOKEN&gt;" \
   -H 'content-type: application/json' \
   -d '{
     "idempotency_key": "bounty:bty_123:reject",
@@ -4304,6 +4746,14 @@ function docsPage(origin: string): string {
     "submission_id": "sub_123",
     "reason": "Missing required deliverables"
   }'</pre>
+
+      <h3>GET /v1/bounties/{bounty_id}/submissions</h3>
+      <pre>curl -sS "${o}/v1/bounties/bty_.../submissions?limit=20" \
+  -H "Authorization: Bearer &lt;REQUESTER_TOKEN&gt;"</pre>
+
+      <h3>GET /v1/submissions/{submission_id}</h3>
+      <pre>curl -sS "${o}/v1/submissions/sub_..." \
+  -H "Authorization: Bearer &lt;REQUESTER_TOKEN_OR_WORKER_TOKEN&gt;"</pre>
 
       <p style="margin-top: 24px;">Quick start:</p>
       <pre>curl -sS "${o}/skill.md"</pre>
@@ -4604,9 +5054,12 @@ function skillMarkdown(origin: string): string {
       { method: 'GET', path: '/v1/workers' },
       { method: 'GET', path: '/v1/workers/self' },
       { method: 'GET', path: '/v1/bounties' },
+      { method: 'POST', path: '/v1/bounties' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/accept' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/submit' },
       { method: 'GET', path: '/v1/submissions/{submission_id}/trust-pulse' },
+      { method: 'GET', path: '/v1/bounties/{bounty_id}/submissions' },
+      { method: 'GET', path: '/v1/submissions/{submission_id}' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/approve' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/reject' },
     ],
@@ -4630,11 +5083,16 @@ Public worker endpoints:
 - POST ${origin}/v1/bounties/{bounty_id}/submit (requires Authorization: Bearer <token>)
 - GET ${origin}/v1/submissions/{submission_id}/trust-pulse (requires Authorization: Bearer <worker token> OR admin key)
 
-Admin bounty endpoints (require BOUNTIES_ADMIN_KEY):
-- POST ${origin}/v1/bounties
+Requester bounty endpoints (require Authorization: Bearer <requester token>):
+- POST ${origin}/v1/bounties (scope: clawbounties:bounty:create)
+- POST ${origin}/v1/bounties/{bounty_id}/approve (scope: clawbounties:bounty:approve)
+- POST ${origin}/v1/bounties/{bounty_id}/reject (scope: clawbounties:bounty:reject)
+- GET ${origin}/v1/bounties/{bounty_id}/submissions (scope: clawbounties:bounty:read)
+- GET ${origin}/v1/submissions/{submission_id} (scope: clawbounties:bounty:read; workers can read their own submission by worker token)
+
+Admin ops endpoints (require BOUNTIES_ADMIN_KEY):
 - GET ${origin}/v1/bounties
-- POST ${origin}/v1/bounties/{bounty_id}/approve (requires x-requester-did)
-- POST ${origin}/v1/bounties/{bounty_id}/reject (requires x-requester-did)
+- GET ${origin}/v1/bounties/{bounty_id}
 
 Docs: ${origin}/docs
 `;
@@ -6265,9 +6723,6 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
 }
 
 async function handleApproveBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
-  const requesterHeader = requireRequesterDid(request, version);
-  if ('error' in requesterHeader) return requesterHeader.error;
-
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
@@ -6282,9 +6737,13 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
   }
 
   const requester_did = requester_did_raw.trim();
-  if (requester_did !== requesterHeader.requester_did) {
-    return errorResponse('UNAUTHORIZED', 'requester_did must match x-requester-did header', 401, undefined, version);
-  }
+  const requesterAuthResult = await requireRequesterAuth(request, env, version, {
+    action: 'approve_bounty',
+    requester_did_hint: requester_did,
+  });
+  if ('error' in requesterAuthResult) return requesterAuthResult.error;
+
+  const requesterAuth = requesterAuthResult.auth;
 
   if (!isNonEmptyString(submission_id_raw)) {
     return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
@@ -6317,12 +6776,25 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
     return errorResponse('INVALID_STATUS', 'Bounty closure_type must be requester', 409, undefined, version);
   }
 
-  if (bounty.requester_did !== requester_did) {
+  if (bounty.requester_did !== requesterAuth.requester_did) {
     return errorResponse('UNAUTHORIZED', 'requester_did does not match bounty requester', 401, undefined, version);
   }
 
   if (!bounty.worker_did) {
     return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
+  }
+
+  try {
+    await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+      action: 'approve_bounty',
+      bounty_id: bounty.bounty_id,
+      submission_id,
+      auth: requesterAuth,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
   const alreadyApproved = bounty.status === 'approved';
@@ -6444,7 +6916,7 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
     escrowResponse = await escrowRelease(env, {
       escrow_id: bounty.escrow_id,
       idempotency_key,
-      approved_by: requester_did,
+      approved_by: requesterAuth.requester_did,
       verification,
     });
   } catch (err) {
@@ -6530,9 +7002,6 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
 }
 
 async function handleRejectBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
-  const requesterHeader = requireRequesterDid(request, version);
-  if ('error' in requesterHeader) return requesterHeader.error;
-
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
@@ -6548,9 +7017,13 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
   }
 
   const requester_did = requester_did_raw.trim();
-  if (requester_did !== requesterHeader.requester_did) {
-    return errorResponse('UNAUTHORIZED', 'requester_did must match x-requester-did header', 401, undefined, version);
-  }
+  const requesterAuthResult = await requireRequesterAuth(request, env, version, {
+    action: 'reject_bounty',
+    requester_did_hint: requester_did,
+  });
+  if ('error' in requesterAuthResult) return requesterAuthResult.error;
+
+  const requesterAuth = requesterAuthResult.auth;
 
   if (!isNonEmptyString(submission_id_raw)) {
     return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
@@ -6588,12 +7061,25 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('INVALID_STATUS', 'Bounty closure_type must be requester', 409, undefined, version);
   }
 
-  if (bounty.requester_did !== requester_did) {
+  if (bounty.requester_did !== requesterAuth.requester_did) {
     return errorResponse('UNAUTHORIZED', 'requester_did does not match bounty requester', 401, undefined, version);
   }
 
   if (!bounty.worker_did) {
     return errorResponse('BOUNTY_NOT_ASSIGNED', 'Bounty has no assigned worker', 409, undefined, version);
+  }
+
+  try {
+    await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+      action: 'reject_bounty',
+      bounty_id: bounty.bounty_id,
+      submission_id,
+      auth: requesterAuth,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
   }
 
   const alreadyDisputed = bounty.status === 'disputed';
@@ -6698,7 +7184,7 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     escrowResponse = await escrowDispute(env, {
       escrow_id: bounty.escrow_id,
       idempotency_key,
-      disputed_by: requester_did,
+      disputed_by: requesterAuth.requester_did,
       reason,
     });
   } catch (err) {
@@ -6783,13 +7269,28 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
 }
 
 async function handlePostBounty(request: Request, env: Env, version: string): Promise<Response> {
-  const requesterHeader = requireRequesterDid(request, version);
-  if ('error' in requesterHeader) return requesterHeader.error;
-
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
   }
+
+  const requester_did_hint_raw = bodyRaw.requester_did;
+  if (
+    requester_did_hint_raw !== undefined &&
+    requester_did_hint_raw !== null &&
+    (!isNonEmptyString(requester_did_hint_raw) || !requester_did_hint_raw.trim().startsWith('did:'))
+  ) {
+    return errorResponse('INVALID_REQUEST', 'requester_did must be a DID string when provided', 400, undefined, version);
+  }
+
+  const requester_did_hint = isNonEmptyString(requester_did_hint_raw) ? requester_did_hint_raw.trim() : null;
+  const requesterAuthResult = await requireRequesterAuth(request, env, version, {
+    action: 'post_bounty',
+    requester_did_hint,
+  });
+  if ('error' in requesterAuthResult) return requesterAuthResult.error;
+
+  const requesterAuth = requesterAuthResult.auth;
 
   const title = bodyRaw.title;
   const description = bodyRaw.description;
@@ -6923,8 +7424,14 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     const buyerDid = verified.payload.buyer_did.trim();
     const workerDid = verified.payload.worker_did.trim();
 
-    if (buyerDid !== requesterHeader.requester_did) {
-      return errorResponse('UNAUTHORIZED', 'CWC buyer_did must match x-requester-did', 401, { buyer_did: buyerDid }, version);
+    if (buyerDid !== requesterAuth.requester_did) {
+      return errorResponse(
+        'REQUESTER_SUB_MISMATCH',
+        'CWC buyer_did must match requester token subject',
+        401,
+        { buyer_did: buyerDid },
+        version
+      );
     }
 
     if (envelope.signer_did.trim() !== buyerDid) {
@@ -6968,11 +7475,24 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     }
     idempotency_key = idempotency_key_raw.trim();
   } else {
-    idempotency_key = await deriveIdempotencyKey(requesterHeader.requester_did, bodyRaw);
+    idempotency_key = await deriveIdempotencyKey(requesterAuth.requester_did, bodyRaw);
   }
 
   const existing = await getBountyByIdempotencyKey(env.BOUNTIES_DB, idempotency_key);
   if (existing) {
+    try {
+      await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+        action: 'post_bounty',
+        bounty_id: existing.bounty_id,
+        submission_id: null,
+        auth: requesterAuth,
+        created_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+
     const response: PostBountyResponseV2 = {
       schema_version: '2',
       bounty_id: existing.bounty_id,
@@ -6989,7 +7509,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   let feeQuote: CutsSimulateResponse;
   try {
     feeQuote = await cutsSimulateFees(env, {
-      requester_did: requesterHeader.requester_did,
+      requester_did: requesterAuth.requester_did,
       amount_minor: amountMinor.toString(),
       closure_type,
       is_code_bounty,
@@ -7019,6 +7539,19 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   // 2) Create escrow hold (clawescrow)
   const bounty_id = `bty_${crypto.randomUUID()}`;
 
+  try {
+    await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+      action: 'post_bounty',
+      bounty_id,
+      submission_id: null,
+      auth: requesterAuth,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
   const escrowFeeSnapshot: EscrowFeeQuoteSnapshot = {
     policy_id: feeQuote.policy.id,
     policy_version: feeQuote.policy.version,
@@ -7032,7 +7565,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   try {
     const escrow = await escrowCreateHold(env, {
       idempotency_key: `bounty:${idempotency_key}:escrow`,
-      buyer_did: requesterHeader.requester_did,
+      buyer_did: requesterAuth.requester_did,
       amount_minor: amountMinor.toString(),
       fee_quote: escrowFeeSnapshot,
       metadata: {
@@ -7066,7 +7599,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   const record: BountyV2 = {
     schema_version: '2',
     bounty_id,
-    requester_did: requesterHeader.requester_did,
+    requester_did: requesterAuth.requester_did,
     title: title.trim(),
     description: description.trim(),
     reward: { amount_minor: amountMinor.toString(), currency: 'USD' },
@@ -7217,6 +7750,111 @@ async function handleGetBounty(bountyId: string, env: Env, version: string): Pro
   return jsonResponse(bounty, 200, version);
 }
 
+async function handleListBountySubmissions(
+  bountyId: string,
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
+  }
+
+  if (!isAdminAuthorized(request, env)) {
+    const authResult = await requireRequesterAuth(request, env, version, {
+      action: 'read_submission',
+      requester_did_hint: bounty.requester_did,
+    });
+    if ('error' in authResult) return authResult.error;
+
+    try {
+      await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+        action: 'read_submission',
+        bounty_id: bounty.bounty_id,
+        submission_id: null,
+        auth: authResult.auth,
+        created_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  const limitRaw = new URL(request.url).searchParams.get('limit');
+  let limit = 100;
+  if (limitRaw !== null) {
+    const n = Number(limitRaw);
+    if (!Number.isFinite(n)) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a finite integer', 400, undefined, version);
+    }
+    limit = Math.max(1, Math.min(200, Math.floor(n)));
+  }
+
+  const submissions = await listSubmissionsByBounty(env.BOUNTIES_DB, bounty.bounty_id, limit);
+  const response: BountySubmissionsResponseV1 = {
+    bounty_id: bounty.bounty_id,
+    submissions: submissions.map((entry) => buildSubmissionReviewItem(entry)),
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
+async function handleGetSubmission(
+  submissionId: string,
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const submission = await getSubmissionById(env.BOUNTIES_DB, submissionId);
+  if (!submission) {
+    return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id: submissionId }, version);
+  }
+
+  const bounty = await getBountyById(env.BOUNTIES_DB, submission.bounty_id);
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found for submission', 404, { bounty_id: submission.bounty_id }, version);
+  }
+
+  if (!isAdminAuthorized(request, env)) {
+    const token = getBearerToken(request.headers.get('authorization'));
+    if (!token) {
+      return errorResponse('UNAUTHORIZED', 'Missing authorization token', 401, undefined, version);
+    }
+
+    if (looksLikeJwtToken(token)) {
+      const authResult = await requireRequesterAuth(request, env, version, {
+        action: 'read_submission',
+        requester_did_hint: bounty.requester_did,
+      });
+      if ('error' in authResult) return authResult.error;
+
+      try {
+        await insertRequesterAuthEvent(env.BOUNTIES_DB, {
+          action: 'read_submission',
+          bounty_id: bounty.bounty_id,
+          submission_id: submission.submission_id,
+          auth: authResult.auth,
+          created_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+      }
+    } else {
+      const workerAuth = await requireWorker(request, env, version);
+      if ('error' in workerAuth) return workerAuth.error;
+
+      if (workerAuth.worker.worker_did !== submission.worker_did) {
+        return errorResponse('FORBIDDEN', 'Not allowed to access this submission', 403, undefined, version);
+      }
+    }
+  }
+
+  return jsonResponse(buildSubmissionReviewItem(submission), 200, version);
+}
+
 async function handleGetSubmissionTrustPulse(
   submissionId: string,
   request: Request,
@@ -7357,26 +7995,6 @@ export default {
         return handleSubmitBounty(bountyId, request, env, version);
       }
 
-      if (path === '/v1/bounties' && method === 'GET') {
-        if (isAdminAuthorized(request, env)) {
-          return handleListBounties(url, env, version);
-        }
-        return handleListBountiesForWorker(request, url, env, version);
-      }
-
-      const submissionTrustPulseMatch = path.match(/^\/v1\/submissions\/(sub_[a-f0-9-]+)\/trust-pulse$/);
-      if (submissionTrustPulseMatch && method === 'GET') {
-        const submissionId = submissionTrustPulseMatch[1];
-        if (!submissionId) {
-          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
-        }
-        return handleGetSubmissionTrustPulse(submissionId, request, env, version);
-      }
-
-      // Bounties API (admin)
-      const adminError = requireAdmin(request, env, version);
-      if (adminError) return adminError;
-
       if (path === '/v1/bounties' && method === 'POST') {
         return handlePostBounty(request, env, version);
       }
@@ -7398,6 +8016,44 @@ export default {
         }
         return handleRejectBounty(bountyId, request, env, version);
       }
+
+      const bountySubmissionsMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/submissions$/);
+      if (bountySubmissionsMatch && method === 'GET') {
+        const bountyId = bountySubmissionsMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleListBountySubmissions(bountyId, request, env, version);
+      }
+
+      if (path === '/v1/bounties' && method === 'GET') {
+        if (isAdminAuthorized(request, env)) {
+          return handleListBounties(url, env, version);
+        }
+        return handleListBountiesForWorker(request, url, env, version);
+      }
+
+      const submissionTrustPulseMatch = path.match(/^\/v1\/submissions\/(sub_[a-f0-9-]+)\/trust-pulse$/);
+      if (submissionTrustPulseMatch && method === 'GET') {
+        const submissionId = submissionTrustPulseMatch[1];
+        if (!submissionId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleGetSubmissionTrustPulse(submissionId, request, env, version);
+      }
+
+      const submissionMatch = path.match(/^\/v1\/submissions\/(sub_[a-f0-9-]+)$/);
+      if (submissionMatch && method === 'GET') {
+        const submissionId = submissionMatch[1];
+        if (!submissionId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleGetSubmission(submissionId, request, env, version);
+      }
+
+      // Bounties API (admin)
+      const adminError = requireAdmin(request, env, version);
+      if (adminError) return adminError;
 
       const bountyMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)$/);
       if (bountyMatch && method === 'GET') {
