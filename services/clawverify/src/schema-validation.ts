@@ -14,6 +14,7 @@ import {
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
+  validateLogInclusionProofV1 as validateLogInclusionProofV1Generated,
   validateModelIdentityV1 as validateModelIdentityV1Generated,
   validateUrmV1 as validateUrmV1Generated,
   validatePromptPackV1 as validatePromptPackV1Generated,
@@ -47,6 +48,9 @@ const validateDerivationAttestationEnvelopeV1Fn =
 
 const validateAuditResultAttestationEnvelopeV1Fn =
   validateAuditResultAttestationEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateLogInclusionProofV1Fn =
+  validateLogInclusionProofV1Generated as StandaloneValidateFunction;
 
 const validateModelIdentityV1Fn =
   validateModelIdentityV1Generated as StandaloneValidateFunction;
@@ -218,6 +222,10 @@ export function validateAuditResultAttestationEnvelopeV1(
     envelope,
     'audit_result_attestation_envelope.v1'
   );
+}
+
+export function validateLogInclusionProofV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateLogInclusionProofV1Fn, value, 'log_inclusion_proof.v1');
 }
 
 export function validateModelIdentityV1(value: unknown): SchemaValidationResult {

@@ -98,10 +98,15 @@ DoD:
 
 ---
 
-## PR-4 (clawlogs): Minimal transparency log (optional Phase 0b)
+## PR-4 (clawlogs): Minimal transparency log (Phase 0b)
 
-Ship only if we’re ready to implement `clawlogs` as a service.
-Otherwise Phase 0 is “schemas+docs” only.
+Status: shipped in POHVN-US-004 workstream.
+
+Delivered:
+- `services/clawlogs` Worker + Durable Object per `log_id`
+- append/root/proof endpoints
+- signed roots (Ed25519 over `root_hash_b64u` string)
+- deterministic Merkle construction + inclusion-proof spec
 
 ---
 

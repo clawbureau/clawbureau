@@ -258,3 +258,17 @@ Started: 2026-02-05T21:49:28Z
 - Notes
   - Enforcement of `required_audit_packs` is deferred to verify-under-policy / workflow gating.
 ---
+
+## 2026-02-11T04:35:00Z - POHVN-US-004 (clawlogs transparency + inclusion proofs) (implemented)
+- What was implemented
+  - Added `services/clawlogs` Worker + Durable Object (`log_id`-scoped append-only leaves).
+  - Exposed endpoints:
+    - `POST /v1/logs/:log_id/append` (admin-gated)
+    - `GET /v1/logs/:log_id/root` (signed root)
+    - `GET /v1/logs/:log_id/proof/:leaf_hash_b64u` (`log_inclusion_proof.v1`)
+  - Documented exact Merkle/proof algorithm:
+    - `docs/specs/clawlogs/MERKLE_TRANSPARENCY_LOG_v1.md`
+  - Extended clawverify attestation verifiers to validate inclusion proofs (when present) and fail closed on invalid proofs.
+- Notes
+  - Proof verification is optional-field strictness: no proof => no gate; proof present => must verify.
+---

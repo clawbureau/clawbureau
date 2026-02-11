@@ -1,0 +1,17 @@
+# Ralph Progress Log — services/clawlogs
+
+Started: 2026-02-11
+
+## CLG-US-001 / CLG-US-002 / POHVN-US-004 — Transparency log MVP
+- Implemented `services/clawlogs` Worker + `LogDurableObject` (per `log_id`) to store append-only leaf hashes.
+- Added API endpoints:
+  - `POST /v1/logs/:log_id/append` (admin-gated)
+  - `GET /v1/logs/:log_id/root` (signed root)
+  - `GET /v1/logs/:log_id/proof/:leaf_hash_b64u` (`log_inclusion_proof.v1` payload)
+- Implemented deterministic Merkle algorithm:
+  - parent = `sha256(left || right)`
+  - duplicate-last for odd levels
+  - proof path is sibling hashes from leaf→root
+- Root signing:
+  - Ed25519 signature over UTF-8 bytes of `root_hash_b64u`.
+- Added tests + golden vectors for root/proof generation and verification.

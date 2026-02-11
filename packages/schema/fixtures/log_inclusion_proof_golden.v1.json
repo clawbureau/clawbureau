@@ -1,0 +1,49 @@
+{
+  "vector_version": "1",
+  "description": "Golden vector for clawlogs Merkle construction + root signature",
+  "leaves": [
+    "0tvwBvlt0FBEqPY9jxGPI5JbpMxXUPi2yOKH_VBsgYg",
+    "QUC_DoVp7QPsg4hx_y8ZDps-qGvAg9fpkBBJ918A6FU",
+    "ZJg33ct-GWcIbX01qu97l1xROBXZb8bnABXpOiv-D5o",
+    "n95Ww3Z2C9OZuC64VpIpot_xkhlBGscRVN_qss9QJFQ",
+    "aX-UO57F-Q7d2ornRz9etogYfjRn8xL--oZ33eJVBCw"
+  ],
+  "target_leaf_hash_b64u": "n95Ww3Z2C9OZuC64VpIpot_xkhlBGscRVN_qss9QJFQ",
+  "proof": {
+    "leaf_hash_b64u": "n95Ww3Z2C9OZuC64VpIpot_xkhlBGscRVN_qss9QJFQ",
+    "leaf_index": 3,
+    "tree_size": 5,
+    "audit_path": [
+      "ZJg33ct-GWcIbX01qu97l1xROBXZb8bnABXpOiv-D5o",
+      "iw9WMQYHAEihBXkmggxxGN7CC4pzcVVE9FKEh8FtwNc",
+      "17co8mIcX0LM67kEB3j-Y7Mg-sgU-dul7LbCd3hcSx4"
+    ],
+    "root_hash_b64u": "OtSr7F1Drgn1J1z3znfYYV4ehxZLJVqnZh4jexmCpb8"
+  },
+  "signed_root": {
+    "root_hash_b64u": "OtSr7F1Drgn1J1z3znfYYV4ehxZLJVqnZh4jexmCpb8",
+    "signer_did": "did:key:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+    "sig_b64u": "-eeETOAyc_x8YNJ2d3PqoJPCMPU8SjV6uvKEZwZMa0J4iai-wDs7x8xdrlfottKHsS9HT-EtGaOE85xGcu5ZBA"
+  },
+  "inclusion_proof_v1": {
+    "proof_version": "1",
+    "log_id": "golden-log",
+    "tree_size": 5,
+    "leaf_hash_b64u": "n95Ww3Z2C9OZuC64VpIpot_xkhlBGscRVN_qss9QJFQ",
+    "root_hash_b64u": "OtSr7F1Drgn1J1z3znfYYV4ehxZLJVqnZh4jexmCpb8",
+    "audit_path": [
+      "ZJg33ct-GWcIbX01qu97l1xROBXZb8bnABXpOiv-D5o",
+      "iw9WMQYHAEihBXkmggxxGN7CC4pzcVVE9FKEh8FtwNc",
+      "17co8mIcX0LM67kEB3j-Y7Mg-sgU-dul7LbCd3hcSx4"
+    ],
+    "root_published_at": "2026-02-11T00:00:00.000Z",
+    "root_signature": {
+      "signer_did": "did:key:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd",
+      "sig_b64u": "-eeETOAyc_x8YNJ2d3PqoJPCMPU8SjV6uvKEZwZMa0J4iai-wDs7x8xdrlfottKHsS9HT-EtGaOE85xGcu5ZBA"
+    },
+    "metadata": {
+      "leaf_index": 3,
+      "merkle_algorithm": "sha256(left||right), duplicate-last for odd levels"
+    }
+  }
+}

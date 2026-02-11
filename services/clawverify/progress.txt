@@ -289,3 +289,20 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks
   - cd services/clawverify && npm test && npm run typecheck && npm run lint
 ---
+
+## 2026-02-11 - POHVN-US-004 / CVF-US-019 (clawlogs inclusion proof verification)
+- What was implemented
+  - Added `verify-log-inclusion-proof.ts`:
+    - strict `log_inclusion_proof.v1` schema validation
+    - Merkle path verification (`sha256(left||right)`, duplicate-last-compatible)
+    - root signature verification (Ed25519 over `root_hash_b64u` string)
+  - Extended derivation + audit-result attestation verifiers:
+    - if `payload.clawlogs.inclusion_proof` is present, verification is fail-closed on invalid proof
+    - returns `clawlogs_inclusion_proof_validated=true` when supplied proof verifies
+  - Added standalone Ajv validator export for `log_inclusion_proof.v1`.
+- Tests
+  - Added golden-vector tests for inclusion proof + root signature verification.
+  - Extended attestation tests with valid/invalid inclusion-proof scenarios.
+- Quality checks
+  - cd services/clawverify && npm test && npm run typecheck
+---

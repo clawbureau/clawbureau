@@ -1,7 +1,7 @@
 > **Type:** Roadmap
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-10
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** PoH PRD tracker + schema package
 >
 > **Scope:**
@@ -75,7 +75,7 @@ Primary tracker:
 
 #### clawlogs
 - Define portable inclusion proof object (`log_inclusion_proof.v1`).
-- Implement service in later phase; Phase 0 ships schema + docs.
+- Implemented MVP transparency log service (`services/clawlogs`) with append/root/proof endpoints and signed roots.
 
 #### clawcontrols
 - WPC hooks: minimum model identity tier + required audit packs/attesters.
