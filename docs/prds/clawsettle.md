@@ -12,7 +12,7 @@
 
 **Domain:** clawsettle.com  
 **Pillar:** Economy & Settlement  
-**Status:** Active (MPY-US-003/006/007 shipped to staging + production)  
+**Status:** Active (MPY-US-003/006/007/008/009/010 shipped to staging + production)  
 
 ---
 
@@ -26,6 +26,9 @@
   - `MPY-US-003` — Stripe webhook verification + deterministic ledger forwarding
   - `MPY-US-006` — production activation + strict livemode environment guard
   - `MPY-US-007` — durable forwarding outbox + retry (cron/manual) with exact-once side effects
+  - `MPY-US-008` (`CST-US-001`) — payout initiation + deterministic lock semantics
+  - `MPY-US-009` (`CST-US-003`) — payout lifecycle state machine + status endpoint
+  - `MPY-US-010` (`CST-US-004`) — reconciliation reports + ops controls
   - **Environment:** staging + production (`clawsettle-staging`, `clawsettle`), smoke passed
 
 ---
@@ -89,14 +92,17 @@ Payouts, netting, and external rails (Stripe/USDC).
 
 **Current Status:** ✅ Shipped to staging + production (failure→retry→no-double-credit smoke evidence in `services/clawsettle/progress.txt`)
 
-### CST-US-001 — Initiate payout
-**As a** agent, **I want** to withdraw funds **so that** I can cash out.
+### MPY-US-008 (CST-US-001) — Initiate payout + deterministic lock semantics
+**As an** agent/operator, **I want** payout initiation to lock funds deterministically before provider submission **so that** retries cannot over-release funds.
 
 **Acceptance Criteria:**
-  - Create payout request
-  - Validate balance
-  - Generate transfer reference
+  - `POST /v1/payouts/connect/onboard`
+  - `POST /v1/payouts`
+  - Enforce ledger balance check before lock
+  - Deterministic lock semantics before external payout submission
+  - Idempotent payout request keys + fail-closed deterministic errors
 
+**Current Status:** ✅ Shipped to staging + production (onboarding + payout initiation with deterministic idempotency and lock semantics)
 
 ### CST-US-002 — Netting engine
 **As a** operator, **I want** to net transfers **so that** fees are minimized.
@@ -107,23 +113,28 @@ Payouts, netting, and external rails (Stripe/USDC).
   - Provide audit trail
 
 
-### CST-US-003 — Payout status
-**As a** agent, **I want** status updates **so that** I know when paid.
+### MPY-US-009 (CST-US-003) — Payout lifecycle state machine + status endpoint
+**As an** operator, **I want** payout lifecycle transitions to be explicit and exact-once **so that** webhook replays/retries cannot cause double-release or double-credit behavior.
 
 **Acceptance Criteria:**
-  - Status states
-  - Webhook notifications
-  - Failure reasons
+  - Add payout state machine + `GET /v1/payouts/:id`
+  - Wire `payout.paid` into exact-once finalize behavior
+  - Wire `payout.failed` into exact-once rollback behavior
+  - Deterministic lifecycle errors (including `INVALID_STATUS_TRANSITION`)
+  - Demonstrate no double-credit / double-release under replay+retry races
 
+**Current Status:** ✅ Shipped to staging + production (state machine + payout webhook finalize/rollback exact-once path live)
 
-### CST-US-004 — Reconciliation
-**As a** finance, **I want** reconciliation reports **so that** books are accurate.
+### MPY-US-010 (CST-US-004) — Reconciliation + ops reporting
+**As** finance ops, **I want** deterministic payout reconciliation outputs and operational controls **so that** incident response and reporting are auditable.
 
 **Acceptance Criteria:**
-  - Daily reports
-  - CSV export
-  - Include ledger references
+  - Daily reconciliation report + CSV/export
+  - Stuck/failed payout visibility
+  - Targeted retry controls
+  - Deterministic audit artifacts for finance ops
 
+**Current Status:** ✅ Shipped to staging + production (daily JSON/CSV reconciliation + ops visibility + targeted retry controls live)
 
 ### CST-US-005 — Compliance checks
 **As a** operator, **I want** basic compliance gates **so that** risk is reduced.

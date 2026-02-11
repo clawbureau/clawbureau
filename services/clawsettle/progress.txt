@@ -191,3 +191,84 @@ Started: 2026-02-12
   - MPY-US-007 shipped to staging + production.
   - M3 package (MPY-US-006 + MPY-US-007) complete.
 ---
+
+## 2026-02-11T17:20:00Z - MPY-US-008/009/010 (payout initiation + lifecycle + reconciliation)
+- What was implemented
+  - Added payout domain module `services/clawsettle/src/payouts.ts` with:
+    - deterministic payout initiation + idempotency key handling
+    - deterministic lock-before-provider semantics via ledger bucket move (A -> H)
+    - payout lifecycle state machine (`initiated`, `submitted`, `finalizing_paid`, `finalizing_failed`, `paid`, `failed`)
+    - exact-once finalize/rollback semantics:
+      - `payout.paid` -> held to clearing drain (`H -> clearing:A`)
+      - `payout.failed` -> held rollback (`H -> A`)
+    - lifecycle-safe retry API for stuck transitional statuses
+    - daily reconciliation report generator + deterministic CSV exporter + artifact hash
+    - ops visibility APIs for stuck/failed payouts
+  - Added new HTTP endpoints in `services/clawsettle/src/index.ts`:
+    - `POST /v1/payouts/connect/onboard`
+    - `POST /v1/payouts`
+    - `GET /v1/payouts/:id`
+    - `POST /v1/payouts/:id/retry` (admin)
+    - `GET /v1/payouts/ops/stuck` (admin)
+    - `GET /v1/payouts/ops/failed` (admin)
+    - `GET /v1/reconciliation/payouts/daily?date=YYYY-MM-DD&format=json|csv` (admin)
+  - Integrated payout lifecycle hook into Stripe webhook forwarding path:
+    - `StripeWebhookService` now runs lifecycle hook only after successful settlement ingest and retries hook failures through outbox retry lifecycle.
+  - Added deterministic payout/reconciliation persistence schema:
+    - `services/clawsettle/migrations/0003_create_payouts.sql`
+    - tables:
+      - `payout_connect_accounts`
+      - `payouts`
+      - `payout_audit_events`
+- Config updates
+  - `services/clawsettle/wrangler.toml` new vars:
+    - `PAYOUTS_CLEARING_DOMAIN`
+    - `PAYOUT_STUCK_MINUTES_DEFAULT`
+    - `STRIPE_CONNECT_ONBOARD_BASE_URL`
+- Tests + quality checks
+  - `cd services/clawsettle && npm test && npm run lint && npm run typecheck`
+  - Added test suite:
+    - `services/clawsettle/test/payouts.test.ts`
+      - onboarding + payout creation + idempotency reuse mismatch protection
+      - payout.paid exact-once finalize semantics
+      - payout.failed exact-once rollback + targeted retry from stuck finalizing state
+      - deterministic reconciliation report + CSV export
+  - Extended `services/clawsettle/test/stripe-webhook.test.ts`:
+    - lifecycle-hook failure is retried via forwarding outbox without double side effects
+  - `node scripts/docs/lint-prds.mjs`
+- Migration/deploy evidence
+  - Applied migrations:
+    - staging: `wrangler d1 migrations apply clawsettle-staging --env staging --remote` (applied `0003_create_payouts.sql`)
+    - production: `wrangler d1 migrations apply clawsettle --remote` (applied `0003_create_payouts.sql`)
+  - Deployed staging:
+    - `clawsettle-staging` version `291d87ef-b966-4248-bb2f-7fb16534fae6`
+  - Deployed production:
+    - `clawsettle` version `cc3bd7ed-9fc3-44d4-9ef4-f3638b0524fb`
+- Staging smoke evidence
+  - Payout lifecycle smoke:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-lifecycle.mjs --env staging`
+    - highlights:
+      - payout create idempotent replay (`201` then `200 deduped=true`)
+      - lock semantics visible (`available 3800`, `held 1200` after lock)
+      - `payout.paid` finalizes exact-once (`status=paid`, held->0)
+      - `payout.failed` rollbacks exact-once (`status=failed`, no double-credit on replay)
+  - Reconciliation + ops smoke:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-reconciliation.mjs --env staging`
+    - highlights:
+      - forced stuck state (failed webhook returns `502 LEDGER_INGEST_FAILED`)
+      - stuck visibility includes payout (`GET /v1/payouts/ops/stuck`)
+      - targeted retry transitions payout to `failed`
+      - failed visibility endpoint lists payout (`GET /v1/payouts/ops/failed`)
+      - reconciliation JSON and CSV hash match (`x-clawsettle-report-sha256` == `artifact_sha256`)
+- Production smoke evidence
+  - Payout lifecycle smoke:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-lifecycle.mjs --env prod`
+    - same deterministic outcomes as staging for idempotency/lock/finalize/rollback/replay.
+  - Reconciliation + ops smoke:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** SETTLE_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-payout-reconciliation.mjs --env prod`
+    - same deterministic outcomes as staging, including stuck visibility + targeted retry + hash-stable report exports.
+- Release status
+  - MPY-US-008 shipped to staging + production.
+  - MPY-US-009 shipped to staging + production.
+  - MPY-US-010 shipped to staging + production.
+---

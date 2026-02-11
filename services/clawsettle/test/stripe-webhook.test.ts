@@ -170,6 +170,14 @@ function makeService(opts?: {
   repository?: StripeWebhookRepositoryLike;
   outboxRepository?: StripeWebhookOutboxRepositoryLike;
   ledgerClient?: LedgerSettlementClientLike;
+  onForwarded?: (input: {
+    event_id: string;
+    event_type: string;
+    idempotency_key: string;
+    payload: PaymentSettlementIngestPayload;
+    ledger_status?: number;
+    settlement_id?: string;
+  }) => Promise<void>;
   now?: () => string;
   nowMs?: () => number;
   settleEnv?: 'staging' | 'production';
@@ -191,6 +199,7 @@ function makeService(opts?: {
     repository: opts?.repository,
     outboxRepository: opts?.outboxRepository,
     ledgerClient: opts?.ledgerClient,
+    onForwarded: opts?.onForwarded,
     now: opts?.now,
     nowMs: opts?.nowMs,
   });
@@ -343,6 +352,66 @@ describe('stripe webhook service', () => {
     expect(replay.idempotency_key).toBe('stripe:event:evt_replay_001');
 
     expect(ledger.calls).toHaveLength(1);
+  });
+
+  it('retries lifecycle hook failures through forwarding outbox without double side effects', async () => {
+    const repo = new InMemoryWebhookRepository();
+    const outbox = new InMemoryOutboxRepository();
+    const ledger = new SequenceLedgerClient([
+      {
+        status: 201,
+        json: { settlement: { id: 'set_hook_retry_1' } },
+        text: '{"ok":true}',
+      },
+      {
+        status: 201,
+        json: { settlement: { id: 'set_hook_retry_2' } },
+        text: '{"ok":true}',
+      },
+    ]);
+
+    const hookCalls: string[] = [];
+    let failFirstHook = true;
+
+    const timestamp = 1739290005;
+    const service = makeService({
+      repository: repo,
+      outboxRepository: outbox,
+      ledgerClient: ledger,
+      onForwarded: async (input) => {
+        hookCalls.push(input.event_id);
+        if (failFirstHook) {
+          failFirstHook = false;
+          throw new ClawSettleError('Lifecycle hook failed', 'INVALID_STATUS_TRANSITION', 409);
+        }
+      },
+      now: () => '2026-02-12T00:00:00.000Z',
+      nowMs: () => timestamp * 1000,
+    });
+
+    const payload = makeStripeEventPayload({ id: 'evt_hook_retry_001' });
+    const rawBody = JSON.stringify(payload);
+    const signature = await makeSignatureHeader('whsec_test', timestamp, rawBody);
+
+    await expect(service.processWebhook(rawBody, signature)).rejects.toMatchObject({
+      code: 'LEDGER_INGEST_FAILED',
+      status: 502,
+    });
+
+    const retry = await service.retryFailedForwarding(undefined, true, 'evt_hook_retry_001');
+    expect(retry).toMatchObject({
+      ok: true,
+      attempted: 1,
+      forwarded: 1,
+      failed: 0,
+    });
+
+    const replay = await service.processWebhook(rawBody, signature);
+    expect(replay.deduped).toBe(true);
+    expect(replay.forwarded_to_ledger).toBe(true);
+
+    expect(hookCalls).toEqual(['evt_hook_retry_001', 'evt_hook_retry_001']);
+    expect(ledger.calls).toHaveLength(2);
   });
 
   it('persists failed forwarding and retries exactly once after recovery', async () => {
