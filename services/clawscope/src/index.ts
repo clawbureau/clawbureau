@@ -47,6 +47,7 @@ export interface ScopedTokenClaims {
   owner_ref?: string;
   policy_hash_b64u?: string;
   token_scope_hash_b64u?: string;
+  payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
   jti?: string;
@@ -61,6 +62,7 @@ export interface IssueTokenRequest {
   exp?: number;
   owner_ref?: string;
   policy_hash_b64u?: string;
+  payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
   tier?: string;
@@ -128,6 +130,7 @@ interface IssuanceRecord {
   owner_ref?: string;
   policy_hash_b64u?: string;
   token_scope_hash_b64u?: string;
+  payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
   jti?: string;
@@ -214,9 +217,14 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 const SHA256_B64U_RE = /^[A-Za-z0-9_-]{43}$/;
+const DID_RE = /^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$/;
 
 function isSha256B64u(value: string): boolean {
   return SHA256_B64U_RE.test(value);
+}
+
+function isDid(value: string): boolean {
+  return DID_RE.test(value);
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -455,6 +463,22 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
     req.policy_hash_b64u = policyHashInput;
   }
 
+  const paymentAccountDidInput =
+    typeof b.payment_account_did === 'string' ? b.payment_account_did.trim() : '';
+  if (paymentAccountDidInput) {
+    if (!isDid(paymentAccountDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'PAYMENT_ACCOUNT_CLAIM_INVALID',
+          'payment_account_did must be a valid DID string',
+          400
+        ),
+      };
+    }
+    req.payment_account_did = paymentAccountDidInput;
+  }
+
   if (typeof b.spend_cap === 'number') req.spend_cap = b.spend_cap;
   if (typeof b.mission_id === 'string') req.mission_id = b.mission_id;
 
@@ -567,6 +591,11 @@ function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
   if (typeof p.iat !== 'number' || !Number.isFinite(p.iat)) return false;
   if (typeof p.exp !== 'number' || !Number.isFinite(p.exp)) return false;
 
+  if (p.payment_account_did !== undefined) {
+    if (!isNonEmptyString(p.payment_account_did)) return false;
+    if (!isDid(p.payment_account_did.trim())) return false;
+  }
+
   return true;
 }
 
@@ -610,6 +639,7 @@ async function issueToken(
     scope: req.scope,
     owner_ref: req.owner_ref,
     policy_hash_b64u: req.policy_hash_b64u,
+    payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
   });
@@ -624,6 +654,7 @@ async function issueToken(
     owner_ref: req.owner_ref,
     policy_hash_b64u: req.policy_hash_b64u,
     token_scope_hash_b64u,
+    payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
     jti: crypto.randomUUID(),
@@ -766,6 +797,7 @@ export default {
             owner_ref: claims.owner_ref,
             policy_hash_b64u: claims.policy_hash_b64u,
             token_scope_hash_b64u: claims.token_scope_hash_b64u,
+            payment_account_did: claims.payment_account_did,
             spend_cap: claims.spend_cap,
             mission_id: claims.mission_id,
             jti: claims.jti,
@@ -780,6 +812,7 @@ export default {
           token_hash,
           policy_hash_b64u: claims.policy_hash_b64u,
           token_scope_hash_b64u: claims.token_scope_hash_b64u,
+          payment_account_did: claims.payment_account_did,
           policy_version: policy.policy_version,
           policy_tier: policy.tier,
           kid,
@@ -1182,6 +1215,7 @@ export default {
           owner_ref: payload.owner_ref,
           policy_hash_b64u: payload.policy_hash_b64u,
           token_scope_hash_b64u: payload.token_scope_hash_b64u,
+          payment_account_did: payload.payment_account_did,
           spend_cap: payload.spend_cap,
           mission_id: payload.mission_id,
           iat: payload.iat,
@@ -1200,6 +1234,7 @@ export default {
         owner_ref: payload.owner_ref,
         policy_hash_b64u: payload.policy_hash_b64u,
         token_scope_hash_b64u: payload.token_scope_hash_b64u,
+        payment_account_did: payload.payment_account_did,
         spend_cap: payload.spend_cap,
         mission_id: payload.mission_id,
         iat: payload.iat,

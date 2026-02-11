@@ -18,6 +18,7 @@ export interface ScopedTokenClaims {
   owner_ref?: string;
   policy_hash_b64u?: string;
   token_scope_hash_b64u?: string;
+  payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
   jti?: string;
@@ -114,6 +115,11 @@ function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
   if (!isNonEmptyStringArray(p.scope)) return false;
   if (typeof p.iat !== 'number' || !Number.isFinite(p.iat)) return false;
   if (typeof p.exp !== 'number' || !Number.isFinite(p.exp)) return false;
+
+  if (p.payment_account_did !== undefined) {
+    if (typeof p.payment_account_did !== 'string') return false;
+    if (p.payment_account_did.trim().length === 0) return false;
+  }
 
   return true;
 }

@@ -15,6 +15,7 @@ import type {
   Receipt,
   ReceiptPayment,
   PlatformFundingCheckContext,
+  PlatformPaymentAccountBindingContext,
   PaymentAccountDidSource,
   VerifyReceiptRequest,
   VerifyReceiptResponse,
@@ -251,6 +252,24 @@ type PlatformFundingCheckResult =
       message: string;
     };
 
+type PlatformPaymentAccountBindingResult =
+  | {
+      ok: true;
+      accountDid: string;
+      accountDidSource: PaymentAccountDidSource;
+      context: PlatformPaymentAccountBindingContext;
+    }
+  | {
+      ok: false;
+      code:
+        | 'PAYMENT_ACCOUNT_BINDING_REQUIRED'
+        | 'PAYMENT_ACCOUNT_CLAIM_MISMATCH'
+        | 'PAYMENT_ACCOUNT_CLAIM_INVALID'
+        | 'PAYMENT_REQUIRED';
+      status: 401 | 402;
+      message: string;
+    };
+
 function readNonEmptyHeader(request: Request, name: string): string | undefined {
   const raw = request.headers.get(name);
   if (!raw) return undefined;
@@ -279,6 +298,23 @@ function parsePlatformPaidMinimumMinor(raw: string | undefined): bigint {
   return BigInt(trimmed);
 }
 
+function parseBooleanFlag(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const normalized = raw.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'y';
+}
+
+const DID_RE = /^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$/;
+
+function normalizeDid(did: string): string {
+  const trimmed = did.trim();
+  return trimmed.startsWith('did:') ? trimmed : `did:${trimmed}`;
+}
+
+function isDid(value: string): boolean {
+  return DID_RE.test(normalizeDid(value));
+}
+
 function resolvePaymentAccountDid(params: {
   request: Request;
   clientDidHeader: string | null;
@@ -300,6 +336,115 @@ function resolvePaymentAccountDid(params: {
   }
 
   return {};
+}
+
+function resolvePlatformPaymentAccountBinding(params: {
+  resolvedRequestAccount: { accountDid?: string; source?: PaymentAccountDidSource };
+  claimPaymentAccountDid?: string;
+  claimRequired: boolean;
+}): PlatformPaymentAccountBindingResult {
+  const claimRaw = params.claimPaymentAccountDid?.trim();
+  const claimPresent = !!claimRaw && claimRaw.length > 0;
+
+  if (claimPresent) {
+    if (!isDid(claimRaw)) {
+      return {
+        ok: false,
+        code: 'PAYMENT_ACCOUNT_CLAIM_INVALID',
+        status: 401,
+        message: 'CST payment_account_did claim is invalid',
+      };
+    }
+
+    const normalizedClaimDid = normalizeDid(claimRaw);
+
+    const requestAccountRaw = params.resolvedRequestAccount.accountDid?.trim();
+    const requestAccountSource = params.resolvedRequestAccount.source;
+
+    if (requestAccountRaw && requestAccountRaw.length > 0) {
+      if (!isDid(requestAccountRaw)) {
+        return {
+          ok: false,
+          code: 'PAYMENT_ACCOUNT_CLAIM_INVALID',
+          status: 401,
+          message: 'Payment account context is invalid',
+        };
+      }
+
+      const normalizedRequestDid = normalizeDid(requestAccountRaw);
+      if (normalizedRequestDid !== normalizedClaimDid) {
+        return {
+          ok: false,
+          code: 'PAYMENT_ACCOUNT_CLAIM_MISMATCH',
+          status: 401,
+          message: 'CST payment_account_did claim does not match request payment account context',
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      accountDid: normalizedClaimDid,
+      accountDidSource: 'cst-payment-account-did',
+      context: {
+        status: 'matched',
+        claimRequired: params.claimRequired,
+        claimPresent: true,
+        claimAccountDid: normalizedClaimDid,
+        requestAccountDid: requestAccountRaw ? normalizeDid(requestAccountRaw) : undefined,
+        requestAccountDidSource: requestAccountSource,
+        effectiveAccountDid: normalizedClaimDid,
+        effectiveAccountDidSource: 'cst-payment-account-did',
+      },
+    };
+  }
+
+  if (params.claimRequired) {
+    return {
+      ok: false,
+      code: 'PAYMENT_ACCOUNT_BINDING_REQUIRED',
+      status: 401,
+      message: 'CST payment_account_did claim is required for platform-paid requests',
+    };
+  }
+
+  const fallbackDid = params.resolvedRequestAccount.accountDid?.trim();
+  const fallbackSource = params.resolvedRequestAccount.source;
+
+  if (!fallbackDid || !fallbackSource) {
+    return {
+      ok: false,
+      code: 'PAYMENT_REQUIRED',
+      status: 402,
+      message: 'Payment account context is required for platform-paid requests',
+    };
+  }
+
+  if (!isDid(fallbackDid)) {
+    return {
+      ok: false,
+      code: 'PAYMENT_ACCOUNT_CLAIM_INVALID',
+      status: 401,
+      message: 'Payment account context is invalid',
+    };
+  }
+
+  const normalizedFallbackDid = normalizeDid(fallbackDid);
+
+  return {
+    ok: true,
+    accountDid: normalizedFallbackDid,
+    accountDidSource: fallbackSource,
+    context: {
+      status: 'matched',
+      claimRequired: false,
+      claimPresent: false,
+      requestAccountDid: normalizedFallbackDid,
+      requestAccountDidSource: fallbackSource,
+      effectiveAccountDid: normalizedFallbackDid,
+      effectiveAccountDidSource: fallbackSource,
+    },
+  };
 }
 
 async function verifyPlatformPaidFunding(params: {
@@ -553,7 +698,7 @@ curl -sS -X POST "${escapeHtml(origin)}/v1/proxy/openai" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hello"}]}'</pre>
 
-      <p>Platform-paid calls fail-closed with <code>402 PAYMENT_REQUIRED</code> if the payment account is unbound or unfunded in clawledger.</p>
+      <p>Platform-paid calls fail-closed: account-claim binding errors return deterministic <code>401</code> codes, and unbound/unfunded accounts return <code>402 PAYMENT_REQUIRED</code>.</p>
       <p>See also: <a href="/skill.md">/skill.md</a></p>
     </main>
   </body>
@@ -605,7 +750,7 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 - \`X-Scoped-Token: <CST>\` (alternate)
 - \`Authorization: Bearer <CST>\` (legacy; disabled when \`STRICT_AUTH_HEADERS=true\`)
 - When \`X-Client-DID\` is set, a valid CST token is required (fail-closed).
-- The gateway recomputes and verifies \`token_scope_hash_b64u\` from canonical token claims (fail-closed).
+- The gateway recomputes and verifies \`token_scope_hash_b64u\` from canonical token claims (including \`payment_account_did\` when present) (fail-closed).
 
 ### BYOK provider keys
 - Recommended (all providers): \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
@@ -622,12 +767,18 @@ When \`STRICT_AUTH_HEADERS=true\`:
 - Requires CST via \`X-CST\`/\`X-Scoped-Token\` and provider keys via \`X-Provider-API-Key\`
 
 ### Platform-paid funding precheck
-For platform-paid calls (no provider BYOK key), clawproxy performs a fail-closed funding check against clawledger before provider routing:
-- Payment account DID is read from \`X-Payment-Account-DID\` (fallback: \`X-Client-DID\`, then CST \`sub\`)
+For platform-paid calls (no provider BYOK key), clawproxy performs fail-closed payment account binding + funding checks before provider routing:
+- Payment account DID request context is read from \`X-Payment-Account-DID\` (fallback: \`X-Client-DID\`, then CST \`sub\`)
+- CST claim \`payment_account_did\` is authoritative when present
+  - mismatch with request account context => deterministic \`401\` \`PAYMENT_ACCOUNT_CLAIM_MISMATCH\`
+  - invalid claim format => deterministic \`401\` \`PAYMENT_ACCOUNT_CLAIM_INVALID\`
+  - when \`PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM=true\`, missing claim => deterministic \`401\` \`PAYMENT_ACCOUNT_BINDING_REQUIRED\`
 - Account must be bound in clawledger and have enough available balance (default minimum: \`1\` minor unit)
 - If unbound or unfunded, clawproxy returns deterministic \`402\` with code \`PAYMENT_REQUIRED\`
-- Successful platform-paid receipts include signed payment funding context in:
+- Successful platform-paid receipts include signed payment binding + funding context in:
+  - \`_receipt.payment.accountBinding\`
   - \`_receipt.payment.fundingCheck\`
+  - \`_receipt_envelope.payload.metadata.payment_account_binding\`
   - \`_receipt_envelope.payload.metadata.payment_funding_check\`
 
 ## Receipt Binding Headers
@@ -1311,6 +1462,7 @@ async function handleProxy(
           scope: string[];
           token_scope_hash_b64u: string;
           policy_hash_b64u?: string;
+          payment_account_did?: string;
         };
       }
     | undefined;
@@ -1355,9 +1507,6 @@ async function handleProxy(
 
     // Ensure DID header matches the token subject when both are present
     if (clientDidHeader) {
-      const normalizeDid = (did: string): string =>
-        did.startsWith('did:') ? did : `did:${did}`;
-
       if (normalizeDid(clientDidHeader) !== normalizeDid(tokenValidation.claims.sub)) {
         return errorResponseWithRateLimit(
           'TOKEN_SUB_MISMATCH',
@@ -1383,6 +1532,12 @@ async function handleProxy(
         ? tokenValidation.claims.policy_hash_b64u.trim()
         : undefined;
 
+    const paymentAccountDidFromToken =
+      typeof tokenValidation.claims.payment_account_did === 'string' &&
+      tokenValidation.claims.payment_account_did.trim().length > 0
+        ? tokenValidation.claims.payment_account_did.trim()
+        : undefined;
+
     const tokenScopeHashFromToken = tokenValidation.claims.token_scope_hash_b64u.trim();
 
     // CPX-US-035: Recompute token_scope_hash_b64u from canonical claims (fail-closed).
@@ -1394,6 +1549,7 @@ async function handleProxy(
         scope: tokenValidation.claims.scope,
         owner_ref: typeof tokenValidation.claims.owner_ref === 'string' ? tokenValidation.claims.owner_ref : undefined,
         policy_hash_b64u: policyHashFromToken,
+        payment_account_did: paymentAccountDidFromToken,
         spend_cap: typeof tokenValidation.claims.spend_cap === 'number' ? tokenValidation.claims.spend_cap : undefined,
         mission_id: typeof tokenValidation.claims.mission_id === 'string' ? tokenValidation.claims.mission_id : undefined,
       });
@@ -1424,6 +1580,7 @@ async function handleProxy(
         scope: tokenValidation.claims.scope,
         token_scope_hash_b64u: tokenScopeHashFromToken,
         policy_hash_b64u: policyHashFromToken,
+        payment_account_did: paymentAccountDidFromToken,
       },
     };
   }
@@ -1533,19 +1690,29 @@ async function handleProxy(
       cstSub: validatedCst?.claims.sub,
     });
 
-    if (!resolvedPaymentAccount.accountDid || !resolvedPaymentAccount.source) {
+    const paymentAccountClaimRequired = parseBooleanFlag(
+      env.PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM
+    );
+
+    const accountBinding = resolvePlatformPaymentAccountBinding({
+      resolvedRequestAccount: resolvedPaymentAccount,
+      claimPaymentAccountDid: validatedCst?.claims.payment_account_did,
+      claimRequired: paymentAccountClaimRequired,
+    });
+
+    if (!accountBinding.ok) {
       return errorResponseWithRateLimit(
-        'PAYMENT_REQUIRED',
-        'Payment account context is required for platform-paid requests',
-        402,
+        accountBinding.code,
+        accountBinding.message,
+        accountBinding.status,
         rateLimitInfo
       );
     }
 
     const fundingCheck = await verifyPlatformPaidFunding({
       env,
-      accountDid: resolvedPaymentAccount.accountDid,
-      accountDidSource: resolvedPaymentAccount.source,
+      accountDid: accountBinding.accountDid,
+      accountDidSource: accountBinding.accountDidSource,
     });
 
     if (!fundingCheck.ok) {
@@ -1583,12 +1750,23 @@ async function handleProxy(
       mode: 'platform',
       paid: true,
       ledgerRef,
+      accountBinding: accountBinding.context,
       fundingCheck: fundingCheck.context,
     };
 
     platformFundingCheckMeta = {
       payment_mode: 'platform',
       payment_ledger_ref: ledgerRef,
+      payment_account_binding: {
+        status: accountBinding.context.status,
+        claim_required: accountBinding.context.claimRequired,
+        claim_present: accountBinding.context.claimPresent,
+        claim_account_did: accountBinding.context.claimAccountDid,
+        request_account_did: accountBinding.context.requestAccountDid,
+        request_account_did_source: accountBinding.context.requestAccountDidSource,
+        effective_account_did: accountBinding.context.effectiveAccountDid,
+        effective_account_did_source: accountBinding.context.effectiveAccountDidSource,
+      },
       payment_funding_check: {
         status: fundingCheck.context.status,
         source: fundingCheck.context.source,

@@ -452,5 +452,65 @@ Started: 2026-02-02T03:08:26.937763
       - `_receipt_envelope.payload.metadata.payment_funding_check.account_id=acc_5d40c61d`
 - Release status
   - MPY-US-004 shipped to staging + production.
-  - MPY-US-005 queued next (CST payment-account claim binding + mismatch fail-closed).
+---
+
+## 2026-02-11 - MPY-US-005 (CST payment account binding + fail-closed mismatch enforcement)
+- What was implemented
+  - Extended canonical CST token hash binding in both gateway + issuer:
+    - `services/clawproxy/src/token-scope-hash.ts`
+    - `services/clawscope/src/token-scope-hash.ts`
+    - now includes optional `payment_account_did` in deterministic `token_scope_hash_b64u` input.
+  - Added platform-paid claim binding enforcement in `services/clawproxy/src/index.ts`:
+    - CST claim `payment_account_did` is authoritative when present.
+    - deterministic fail-closed 401 errors:
+      - `PAYMENT_ACCOUNT_CLAIM_MISMATCH` (claim differs from request account context)
+      - `PAYMENT_ACCOUNT_BINDING_REQUIRED` (missing claim when env requires claim)
+      - `PAYMENT_ACCOUNT_CLAIM_INVALID` (malformed claim / invalid account context)
+    - new env gate:
+      - `PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM=true` enforces claim-required mode.
+  - Added signed receipt binding context for successful platform-paid path:
+    - `_receipt.payment.accountBinding`
+    - `_receipt_envelope.payload.metadata.payment_account_binding`
+  - Preserved BYOK path behavior (no claim-binding gate on BYOK requests).
+- Tests
+  - Extended `services/clawproxy/test/platform-paid-funding.test.ts` with MPY-US-005 cases:
+    - claim/header mismatch denial
+    - required-claim missing denial
+    - invalid claim denial
+    - matched+funded allow path with signed binding+funding metadata
+    - BYOK unchanged
+  - Extended `services/clawproxy/test/token-scope-hash.test.ts` for payment_account_did hash binding.
+- Quality checks
+  - `cd services/clawproxy && npm test && npm run typecheck`
+- Staging deploy + smoke evidence
+  - Updated staging secret (name only):
+    - `PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM`
+  - Deployed `clawproxy-staging` version:
+    - `a1d78191-ad6f-4b90-abbc-eee55e188549`
+  - Added smoke script:
+    - `scripts/poh/smoke-clawproxy-payment-account-binding.mjs`
+  - Staging smoke command:
+    - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-payment-account-binding.mjs --env staging`
+  - Staging smoke highlights:
+    - mismatch denial: `401 PAYMENT_ACCOUNT_CLAIM_MISMATCH`
+    - required-claim missing denial: `401 PAYMENT_ACCOUNT_BINDING_REQUIRED`
+    - matched+funded path: request allowed past gate (upstream `401` in smoke setup), receipt includes:
+      - `payment.accountBinding.status=matched`
+      - `payment.accountBinding.effectiveAccountDidSource=cst-payment-account-did`
+      - `payment.fundingCheck.status=funded`
+    - BYOK unchanged: no payment-account-binding error code
+- Production deploy + smoke evidence
+  - Updated production secret (name only):
+    - `PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM`
+  - Deployed `clawproxy` production version:
+    - `4f07e4fa-33e3-4eeb-be36-084edc288232`
+  - Production smoke command:
+    - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-payment-account-binding.mjs --env prod`
+  - Production smoke highlights:
+    - mismatch denial: `401 PAYMENT_ACCOUNT_CLAIM_MISMATCH`
+    - required-claim missing denial: `401 PAYMENT_ACCOUNT_BINDING_REQUIRED`
+    - matched+funded path: receipt includes signed payment_account_binding + payment_funding_check context
+    - BYOK unchanged: no payment-account-binding error code
+- Release status
+  - MPY-US-005 shipped to staging + production.
 ---

@@ -259,8 +259,8 @@
         "Add tests and smoke coverage for mismatch denial"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "Queued after MPY-US-004"
+      "passes": true,
+      "notes": "Shipped to staging + production: CST payment_account_did is now bound into deterministic token_scope_hash and enforced fail-closed on platform-paid path. Deterministic mismatch/required/invalid claim errors: PAYMENT_ACCOUNT_CLAIM_MISMATCH, PAYMENT_ACCOUNT_BINDING_REQUIRED, PAYMENT_ACCOUNT_CLAIM_INVALID."
     }
   ]
 }

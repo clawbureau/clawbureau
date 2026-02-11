@@ -288,10 +288,10 @@ Gateway proxy that issues signed receipts for model calls (proof-of-harness). BY
 **Acceptance Criteria:**
 - Bind payment account identity claim into CST issuance/validation path
 - Fail closed on claim/account mismatch
-- Preserve deterministic error semantics for mismatch denials
+- Preserve deterministic error semantics (`PAYMENT_ACCOUNT_BINDING_REQUIRED`, `PAYMENT_ACCOUNT_CLAIM_MISMATCH`, `PAYMENT_ACCOUNT_CLAIM_INVALID`)
 - Add tests + smoke for mismatch path
 
-**Current Status:** ⏳ Queued next (after MPY-US-004)
+**Current Status:** ✅ Shipped to staging + production (deploy + smoke evidence in `services/clawproxy/progress.txt`)
 
 ## 8) Success Metrics
 - Receipts issued/day

@@ -26,7 +26,12 @@
     "token_scope_hash_b64u": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$",
-      "description": "Deterministic scope hash derived from the token authorization-relevant claims: token_scope_hash_b64u = sha256(JCS({token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, spend_cap?, mission_id?})) base64url. Excludes iat/exp/jti/nonce to remain stable across re-issuance."
+      "description": "Deterministic scope hash derived from the token authorization-relevant claims: token_scope_hash_b64u = sha256(JCS({token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?})) base64url. Excludes iat/exp/jti/nonce to remain stable across re-issuance."
+    },
+    "payment_account_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$",
+      "description": "Optional payment account DID bound to token authorization context for platform-paid routing."
     },
     "spend_cap": { "type": "number", "minimum": 0 },
     "mission_id": { "type": "string" },

@@ -9,6 +9,7 @@ export type TokenScopeHashInputV1 = {
 
   owner_ref?: string;
   policy_hash_b64u?: string;
+  payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
 };
@@ -40,7 +41,7 @@ export function normalizeScope(scope: string[]): string[] {
  *
  * Algorithm:
  *   token_scope_hash_b64u = sha256_b64u( JCS({
- *     token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, spend_cap?, mission_id?
+ *     token_version, sub, aud[], scope[], owner_ref?, policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?
  *   }) )
  *
  * Notes:
@@ -53,6 +54,7 @@ export async function computeTokenScopeHashB64u(input: {
   scope: string[];
   owner_ref?: string;
   policy_hash_b64u?: string;
+  payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
 }): Promise<string> {
@@ -72,6 +74,10 @@ export async function computeTokenScopeHashB64u(input: {
 
   if (typeof input.policy_hash_b64u === 'string' && input.policy_hash_b64u.trim().length > 0) {
     out.policy_hash_b64u = input.policy_hash_b64u.trim();
+  }
+
+  if (typeof input.payment_account_did === 'string' && input.payment_account_did.trim().length > 0) {
+    out.payment_account_did = input.payment_account_did.trim();
   }
 
   if (typeof input.spend_cap === 'number' && Number.isFinite(input.spend_cap) && input.spend_cap >= 0) {

@@ -41,6 +41,7 @@ LEDGER_BASE_URL = "https://clawledger.com"
 # - PLATFORM_OPENAI_API_KEY / PLATFORM_ANTHROPIC_API_KEY / PLATFORM_GOOGLE_API_KEY (optional)
 # - LEDGER_ADMIN_KEY (required when PLATFORM_PAID_ENABLED=true)
 # - PLATFORM_PAID_MIN_AVAILABLE_MINOR (optional, default "1")
+# - PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM ("true" => require CST payment_account_did claim)
 # - STRICT_AUTH_HEADERS ("true" to disable Authorization overload; require X-CST + X-Provider-API-Key; optional)
 
 [env.staging]

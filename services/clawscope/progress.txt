@@ -86,3 +86,28 @@ Started: 2026-02-02T22:30:00Z
   - `npm run typecheck`
   - `npm test`
 ---
+
+## 2026-02-11 - MPY-US-005 (CST payment account claim binding)
+- What was implemented
+  - Extended CST claim flow in `services/clawscope/src/index.ts`:
+    - `POST /v1/tokens/issue` now accepts optional `payment_account_did`.
+    - claim is validated as DID format at issuance time (deterministic 400 `PAYMENT_ACCOUNT_CLAIM_INVALID` on malformed input).
+    - issued JWT claims include `payment_account_did` when provided.
+    - `/v1/tokens/issue` response includes `payment_account_did`.
+    - `/v1/tokens/introspect` now returns `payment_account_did` for active/revoked tokens.
+    - issuance audit records now include `payment_account_did`.
+  - Updated deterministic token scope hashing:
+    - `services/clawscope/src/token-scope-hash.ts` now binds `payment_account_did` into canonical `token_scope_hash_b64u` derivation when present.
+- Tests
+  - Added `services/clawscope/test/payment-account-claim.test.ts`.
+  - Extended `services/clawscope/test/token-scope-hash.test.ts` with payment-account hash binding coverage.
+- Quality checks
+  - `cd services/clawscope && npm test && npm run typecheck`
+- Deploy evidence
+  - Deployed `clawscope-staging` version: `202270d3-60f1-44ed-b2a6-af2de074b477`
+  - Deployed `clawscope` production version: `64dfb32c-e3c7-482e-9f34-971b5ae7801e`
+- Cross-service smoke evidence
+  - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-payment-account-binding.mjs --env staging`
+  - `LEDGER_ADMIN_KEY=*** SCOPE_ADMIN_KEY=*** node scripts/poh/smoke-clawproxy-payment-account-binding.mjs --env prod`
+  - both smokes successfully exercised clawscope issuance with/without `payment_account_did` and downstream enforcement outcomes.
+---

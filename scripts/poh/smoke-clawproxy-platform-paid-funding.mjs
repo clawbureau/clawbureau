@@ -71,6 +71,7 @@ async function issueCst({ scopeBaseUrl, scopeAdminKey, did }) {
       sub: did,
       aud: 'clawproxy.com',
       scope: ['proxy:call', 'clawproxy:call'],
+      payment_account_did: did,
       ttl_sec: 900,
     }),
   });
