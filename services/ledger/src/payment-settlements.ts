@@ -5,6 +5,7 @@
  * - idempotent ingest
  * - fail-closed status transitions
  * - deterministic settlement lookups/pagination
+ * - exactly-once side effects under natural-key ingest races
  */
 
 import { AccountRepository, InsufficientFundsError } from './accounts';
@@ -37,6 +38,7 @@ const PAYMENT_SETTLEMENT_STATUSES: readonly PaymentSettlementStatus[] = [
 ] as const;
 
 const MAX_LIST_LIMIT = 200;
+const MAX_SETTLEMENT_RACE_RETRIES = 6;
 
 interface NormalizedSettlementInput {
   provider: string;
@@ -55,6 +57,17 @@ interface NormalizedSettlementInput {
   settled_at?: string;
 }
 
+interface SettlementStatusUpdate {
+  status: PaymentSettlementStatus;
+  network?: string;
+  rail?: string;
+  metadata?: Record<string, unknown>;
+  provider_created_at?: string;
+  provider_updated_at?: string;
+  settled_at?: string;
+  updated_at: string;
+}
+
 export interface PaymentSettlementIngestionRecord {
   idempotency_key: string;
   request_hash: string;
@@ -64,6 +77,8 @@ export interface PaymentSettlementIngestionRecord {
 }
 
 export interface PaymentSettlementRepositoryLike {
+  findById(id: string): Promise<MachinePaymentSettlement | null>;
+
   findByNaturalKey(
     provider: string,
     externalPaymentId: string,
@@ -77,7 +92,23 @@ export interface PaymentSettlementRepositoryLike {
   ): Promise<MachinePaymentSettlement[]>;
 
   createSettlement(settlement: MachinePaymentSettlement): Promise<void>;
-  updateSettlement(settlement: MachinePaymentSettlement): Promise<void>;
+
+  updateStatusIfCurrent(
+    settlementId: string,
+    fromStatus: PaymentSettlementStatus,
+    update: SettlementStatusUpdate
+  ): Promise<boolean>;
+
+  updateLatestEventId(
+    settlementId: string,
+    latestEventId: string,
+    updatedAt: string
+  ): Promise<void>;
+
+  deleteByIdIfStatusAndNoEvent(
+    settlementId: string,
+    status: PaymentSettlementStatus
+  ): Promise<boolean>;
 
   listSettlements(query: PaymentSettlementListQuery): Promise<PaymentSettlementListResponse>;
 
@@ -226,6 +257,20 @@ function parseCursorParts(cursor: string | undefined): CursorParts | null {
   return { created_at, id };
 }
 
+function getD1Changes(result: unknown): number {
+  if (!isRecord(result)) {
+    return 0;
+  }
+
+  const meta = result.meta;
+  if (!isRecord(meta)) {
+    return 0;
+  }
+
+  const changes = meta.changes;
+  return typeof changes === 'number' ? changes : 0;
+}
+
 export function encodeSettlementCursor(createdAt: string, id: string): string {
   return `${createdAt}::${id}`;
 }
@@ -347,6 +392,27 @@ export class PaymentSettlementError extends Error {
 export class PaymentSettlementRepository implements PaymentSettlementRepositoryLike {
   constructor(private db: D1Database) {}
 
+  async findById(id: string): Promise<MachinePaymentSettlement | null> {
+    const result = await this.db
+      .prepare(
+        `SELECT id, provider, external_payment_id, direction, status, account_id,
+                amount_minor, currency, network, rail, metadata,
+                provider_created_at, provider_updated_at, settled_at,
+                latest_event_id, created_at, updated_at
+         FROM payment_settlements
+         WHERE id = ?
+         LIMIT 1`
+      )
+      .bind(id)
+      .first();
+
+    if (!result) {
+      return null;
+    }
+
+    return parseSettlementRow(result);
+  }
+
   async findByNaturalKey(
     provider: string,
     externalPaymentId: string,
@@ -434,8 +500,12 @@ export class PaymentSettlementRepository implements PaymentSettlementRepositoryL
       .run();
   }
 
-  async updateSettlement(settlement: MachinePaymentSettlement): Promise<void> {
-    await this.db
+  async updateStatusIfCurrent(
+    settlementId: string,
+    fromStatus: PaymentSettlementStatus,
+    update: SettlementStatusUpdate
+  ): Promise<boolean> {
+    const result = await this.db
       .prepare(
         `UPDATE payment_settlements
          SET status = ?,
@@ -445,23 +515,54 @@ export class PaymentSettlementRepository implements PaymentSettlementRepositoryL
              provider_created_at = ?,
              provider_updated_at = ?,
              settled_at = ?,
-             latest_event_id = ?,
              updated_at = ?
-         WHERE id = ?`
+         WHERE id = ? AND status = ?`
       )
       .bind(
-        settlement.status,
-        settlement.network ?? null,
-        settlement.rail ?? null,
-        settlement.metadata ? JSON.stringify(settlement.metadata) : null,
-        settlement.provider_created_at ?? null,
-        settlement.provider_updated_at ?? null,
-        settlement.settled_at ?? null,
-        settlement.latest_event_id ?? null,
-        settlement.updated_at,
-        settlement.id
+        update.status,
+        update.network ?? null,
+        update.rail ?? null,
+        update.metadata ? JSON.stringify(update.metadata) : null,
+        update.provider_created_at ?? null,
+        update.provider_updated_at ?? null,
+        update.settled_at ?? null,
+        update.updated_at,
+        settlementId,
+        fromStatus
       )
       .run();
+
+    return getD1Changes(result) === 1;
+  }
+
+  async updateLatestEventId(
+    settlementId: string,
+    latestEventId: string,
+    updatedAt: string
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE payment_settlements
+         SET latest_event_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .bind(latestEventId, updatedAt, settlementId)
+      .run();
+  }
+
+  async deleteByIdIfStatusAndNoEvent(
+    settlementId: string,
+    status: PaymentSettlementStatus
+  ): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `DELETE FROM payment_settlements
+         WHERE id = ? AND status = ? AND latest_event_id IS NULL`
+      )
+      .bind(settlementId, status)
+      .run();
+
+    return getD1Changes(result) === 1;
   }
 
   async listSettlements(query: PaymentSettlementListQuery): Promise<PaymentSettlementListResponse> {
@@ -721,8 +822,111 @@ export class PaymentSettlementService {
     }
   }
 
+  private buildCreateSettlement(
+    input: NormalizedSettlementInput,
+    now: string
+  ): MachinePaymentSettlement {
+    return {
+      id: generateSettlementId(),
+      provider: input.provider,
+      external_payment_id: input.external_payment_id,
+      direction: input.direction,
+      status: input.status,
+      account_id: input.account_id,
+      amount_minor: input.amount_minor,
+      currency: input.currency,
+      network: input.network,
+      rail: input.rail,
+      metadata: input.metadata,
+      provider_created_at: input.provider_created_at,
+      provider_updated_at: input.provider_updated_at,
+      settled_at:
+        input.settled_at ??
+        (input.status === 'confirmed' || input.status === 'reversed' ? now : undefined),
+      latest_event_id: undefined,
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  private assertImmutableSettlementFields(
+    existing: MachinePaymentSettlement,
+    input: NormalizedSettlementInput
+  ): void {
+    if (
+      existing.account_id !== input.account_id ||
+      existing.amount_minor !== input.amount_minor ||
+      existing.currency !== input.currency
+    ) {
+      throw new PaymentSettlementError(
+        'Natural-key duplicate conflicts with immutable settlement fields',
+        'DUPLICATE_CONFLICT',
+        409,
+        {
+          provider: input.provider,
+          external_payment_id: input.external_payment_id,
+          direction: input.direction,
+        }
+      );
+    }
+  }
+
+  private buildStatusUpdate(
+    previous: MachinePaymentSettlement,
+    input: NormalizedSettlementInput,
+    status: PaymentSettlementStatus,
+    now: string
+  ): SettlementStatusUpdate {
+    return {
+      status,
+      network: input.network ?? previous.network,
+      rail: input.rail ?? previous.rail,
+      metadata: input.metadata ?? previous.metadata,
+      provider_created_at: input.provider_created_at ?? previous.provider_created_at,
+      provider_updated_at: input.provider_updated_at ?? previous.provider_updated_at,
+      settled_at:
+        input.settled_at ??
+        previous.settled_at ??
+        (status === 'confirmed' || status === 'reversed' ? now : undefined),
+      updated_at: now,
+    };
+  }
+
+  private applyStatusUpdate(
+    previous: MachinePaymentSettlement,
+    update: SettlementStatusUpdate
+  ): MachinePaymentSettlement {
+    return {
+      ...previous,
+      status: update.status,
+      network: update.network,
+      rail: update.rail,
+      metadata: update.metadata,
+      provider_created_at: update.provider_created_at,
+      provider_updated_at: update.provider_updated_at,
+      settled_at: update.settled_at,
+      updated_at: update.updated_at,
+    };
+  }
+
+  private buildRollbackUpdate(
+    previous: MachinePaymentSettlement,
+    now: string
+  ): SettlementStatusUpdate {
+    return {
+      status: previous.status,
+      network: previous.network,
+      rail: previous.rail,
+      metadata: previous.metadata,
+      provider_created_at: previous.provider_created_at,
+      provider_updated_at: previous.provider_updated_at,
+      settled_at: previous.settled_at,
+      updated_at: now,
+    };
+  }
+
   private async createSettlementEvent(
-    idempotencyKey: string,
+    settlementId: string,
     input: NormalizedSettlementInput,
     eventType: EventType,
     now: string
@@ -761,7 +965,7 @@ export class PaymentSettlementService {
     // payout_settle intentionally does not mutate balances here to avoid double-debit behavior.
 
     const previousHash = await this.eventRepository.getLastEventHash();
-    const eventIdempotencyKey = `payment_settlement:${idempotencyKey}`;
+    const eventIdempotencyKey = `payment_settlement:${settlementId}:${eventType}`;
 
     const eventHash = await computeEventHash(
       previousHash,
@@ -776,6 +980,7 @@ export class PaymentSettlementService {
 
     const metadata: Record<string, unknown> = {
       payment_settlement: {
+        settlement_id: settlementId,
         provider: input.provider,
         external_payment_id: input.external_payment_id,
         direction: input.direction,
@@ -798,6 +1003,50 @@ export class PaymentSettlementService {
       metadata,
       now
     );
+  }
+
+  private async persistIngestionRecord(
+    idempotencyKey: string,
+    requestHash: string,
+    settlementId: string,
+    response: PaymentSettlementIngestResponse,
+    now: string
+  ): Promise<PaymentSettlementIngestResponse> {
+    const ingestionRecord: PaymentSettlementIngestionRecord = {
+      idempotency_key: idempotencyKey,
+      request_hash: requestHash,
+      settlement_id: settlementId,
+      response_json: JSON.stringify(response),
+      created_at: now,
+    };
+
+    try {
+      await this.settlementRepository.createIngestion(ingestionRecord);
+    } catch (err) {
+      if (!isSqliteUniqueConstraintError(err)) {
+        throw err;
+      }
+
+      const raced = await this.settlementRepository.findIngestionByIdempotencyKey(
+        idempotencyKey
+      );
+
+      if (!raced) {
+        throw err;
+      }
+
+      if (raced.request_hash !== requestHash) {
+        throw new PaymentSettlementError(
+          'Idempotency key already used with a different payload',
+          'IDEMPOTENCY_KEY_REUSED',
+          409
+        );
+      }
+
+      return this.parseCachedResponse(raced, idempotencyKey);
+    }
+
+    return response;
   }
 
   async ingest(
@@ -838,163 +1087,163 @@ export class PaymentSettlementService {
       });
     }
 
-    const existing = await this.settlementRepository.findByNaturalKey(
-      normalized.provider,
-      normalized.external_payment_id,
-      normalized.direction
-    );
+    for (let attempt = 0; attempt < MAX_SETTLEMENT_RACE_RETRIES; attempt += 1) {
+      const now = this.now();
+      let claimedCreate = false;
 
-    if (existing) {
-      if (
-        existing.account_id !== normalized.account_id ||
-        existing.amount_minor !== normalized.amount_minor ||
-        existing.currency !== normalized.currency
-      ) {
-        throw new PaymentSettlementError(
-          'Natural-key duplicate conflicts with immutable settlement fields',
-          'DUPLICATE_CONFLICT',
-          409,
-          {
-            provider: normalized.provider,
-            external_payment_id: normalized.external_payment_id,
-            direction: normalized.direction,
+      let settlement = await this.settlementRepository.findByNaturalKey(
+        normalized.provider,
+        normalized.external_payment_id,
+        normalized.direction
+      );
+
+      if (!settlement) {
+        const candidate = this.buildCreateSettlement(normalized, now);
+
+        try {
+          await this.settlementRepository.createSettlement(candidate);
+          settlement = candidate;
+          claimedCreate = true;
+        } catch (err) {
+          if (isSqliteUniqueConstraintError(err)) {
+            // Lost the natural-key create race. Re-read in next attempt.
+            continue;
           }
-        );
+          throw err;
+        }
       }
 
-      if (!isValidPaymentStatusTransition(existing.status, normalized.status)) {
-        throw new PaymentSettlementError(
-          `Invalid status transition: ${existing.status} -> ${normalized.status}`,
-          'INVALID_STATUS_TRANSITION',
-          409,
-          {
-            from: existing.status,
-            to: normalized.status,
-          }
+      this.assertImmutableSettlementFields(settlement, normalized);
+
+      const previousSnapshot = settlement;
+      let transitioned = false;
+
+      if (!claimedCreate && settlement.status !== normalized.status) {
+        if (!isValidPaymentStatusTransition(settlement.status, normalized.status)) {
+          throw new PaymentSettlementError(
+            `Invalid status transition: ${settlement.status} -> ${normalized.status}`,
+            'INVALID_STATUS_TRANSITION',
+            409,
+            {
+              from: settlement.status,
+              to: normalized.status,
+            }
+          );
+        }
+
+        const statusUpdate = this.buildStatusUpdate(
+          settlement,
+          normalized,
+          normalized.status,
+          now
         );
+
+        const claimedTransition = await this.settlementRepository.updateStatusIfCurrent(
+          settlement.id,
+          settlement.status,
+          statusUpdate
+        );
+
+        if (!claimedTransition) {
+          // Lost race to another transition writer. Retry with fresh state.
+          continue;
+        }
+
+        settlement = this.applyStatusUpdate(settlement, statusUpdate);
+        transitioned = true;
       }
-    }
 
-    const now = this.now();
-    const deduped = Boolean(existing && existing.status === normalized.status);
-    const shouldApplyEvent = !existing || existing.status !== normalized.status;
+      const deduped = !claimedCreate && !transitioned;
 
-    let createdEvent: LedgerEvent | null = null;
-    const eventType = shouldApplyEvent
-      ? resolveSettlementEventType(normalized.direction, normalized.status)
-      : null;
+      const eventType =
+        claimedCreate || transitioned
+          ? resolveSettlementEventType(normalized.direction, normalized.status)
+          : null;
 
-    if (eventType) {
-      createdEvent = await this.createSettlementEvent(
+      let createdEvent: LedgerEvent | null = null;
+
+      if (eventType) {
+        try {
+          createdEvent = await this.createSettlementEvent(
+            settlement.id,
+            normalized,
+            eventType,
+            this.now()
+          );
+
+          await this.settlementRepository.updateLatestEventId(
+            settlement.id,
+            createdEvent.id,
+            this.now()
+          );
+        } catch (err) {
+          if (err instanceof PaymentSettlementError && err.code === 'INSUFFICIENT_FUNDS') {
+            if (claimedCreate) {
+              try {
+                await this.settlementRepository.deleteByIdIfStatusAndNoEvent(
+                  settlement.id,
+                  settlement.status
+                );
+              } catch {
+                // best effort rollback
+              }
+            } else if (transitioned) {
+              const rollbackUpdate = this.buildRollbackUpdate(previousSnapshot, this.now());
+              try {
+                await this.settlementRepository.updateStatusIfCurrent(
+                  settlement.id,
+                  settlement.status,
+                  rollbackUpdate
+                );
+              } catch {
+                // best effort rollback
+              }
+            }
+          }
+
+          throw err;
+        }
+      }
+
+      const persisted =
+        (await this.settlementRepository.findById(settlement.id)) ??
+        {
+          ...settlement,
+          latest_event_id: createdEvent?.id ?? settlement.latest_event_id,
+          updated_at: this.now(),
+        };
+
+      const response: PaymentSettlementIngestResponse = {
+        settlement: persisted,
+        idempotency: {
+          key: idempotencyKey,
+          replayed: false,
+          deduped,
+        },
+        event: createdEvent
+          ? {
+              id: createdEvent.id,
+              event_type: createdEvent.eventType,
+              event_hash: createdEvent.eventHash,
+              created_at: createdEvent.createdAt,
+            }
+          : undefined,
+      };
+
+      return this.persistIngestionRecord(
         idempotencyKey,
-        normalized,
-        eventType,
+        requestHash,
+        persisted.id,
+        response,
         now
       );
     }
 
-    const persisted: MachinePaymentSettlement = existing
-      ? {
-          ...existing,
-          status: normalized.status,
-          network: normalized.network ?? existing.network,
-          rail: normalized.rail ?? existing.rail,
-          metadata: normalized.metadata ?? existing.metadata,
-          provider_created_at:
-            normalized.provider_created_at ?? existing.provider_created_at,
-          provider_updated_at:
-            normalized.provider_updated_at ?? existing.provider_updated_at,
-          settled_at:
-            normalized.settled_at ??
-            existing.settled_at ??
-            (normalized.status === 'confirmed' || normalized.status === 'reversed'
-              ? now
-              : undefined),
-          latest_event_id: createdEvent?.id ?? existing.latest_event_id,
-          updated_at: now,
-        }
-      : {
-          id: generateSettlementId(),
-          provider: normalized.provider,
-          external_payment_id: normalized.external_payment_id,
-          direction: normalized.direction,
-          status: normalized.status,
-          account_id: normalized.account_id,
-          amount_minor: normalized.amount_minor,
-          currency: normalized.currency,
-          network: normalized.network,
-          rail: normalized.rail,
-          metadata: normalized.metadata,
-          provider_created_at: normalized.provider_created_at,
-          provider_updated_at: normalized.provider_updated_at,
-          settled_at:
-            normalized.settled_at ??
-            (normalized.status === 'confirmed' || normalized.status === 'reversed'
-              ? now
-              : undefined),
-          latest_event_id: createdEvent?.id,
-          created_at: now,
-          updated_at: now,
-        };
-
-    if (existing) {
-      await this.settlementRepository.updateSettlement(persisted);
-    } else {
-      await this.settlementRepository.createSettlement(persisted);
-    }
-
-    const response: PaymentSettlementIngestResponse = {
-      settlement: persisted,
-      idempotency: {
-        key: idempotencyKey,
-        replayed: false,
-        deduped,
-      },
-      event: createdEvent
-        ? {
-            id: createdEvent.id,
-            event_type: createdEvent.eventType,
-            event_hash: createdEvent.eventHash,
-            created_at: createdEvent.createdAt,
-          }
-        : undefined,
-    };
-
-    const ingestionRecord: PaymentSettlementIngestionRecord = {
-      idempotency_key: idempotencyKey,
-      request_hash: requestHash,
-      settlement_id: persisted.id,
-      response_json: JSON.stringify(response),
-      created_at: now,
-    };
-
-    try {
-      await this.settlementRepository.createIngestion(ingestionRecord);
-    } catch (err) {
-      if (!isSqliteUniqueConstraintError(err)) {
-        throw err;
-      }
-
-      const raced = await this.settlementRepository.findIngestionByIdempotencyKey(
-        idempotencyKey
-      );
-
-      if (!raced) {
-        throw err;
-      }
-
-      if (raced.request_hash !== requestHash) {
-        throw new PaymentSettlementError(
-          'Idempotency key already used with a different payload',
-          'IDEMPOTENCY_KEY_REUSED',
-          409
-        );
-      }
-
-      return this.parseCachedResponse(raced, idempotencyKey);
-    }
-
-    return response;
+    throw new PaymentSettlementError(
+      'Settlement ingest contention exceeded retry budget',
+      'CONCURRENT_INGESTION_CONFLICT',
+      409
+    );
   }
 
   async getByProviderExternal(

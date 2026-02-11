@@ -7,6 +7,7 @@
  *  - confirmed payin settlement ingest
  *  - idempotency replay on same key
  *  - reversal path (confirmed -> reversed)
+ *  - optional parallel ingest burst (exactly-once side effects)
  */
 
 import process from 'node:process';
@@ -55,9 +56,30 @@ function authHeaders(adminKey) {
   };
 }
 
+async function ingestSettlement(ledgerBaseUrl, adminKey, idempotencyKey, payload) {
+  return httpJson(`${ledgerBaseUrl}/v1/payments/settlements/ingest`, {
+    method: 'POST',
+    headers: {
+      ...authHeaders(adminKey),
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const envName = String(args.get('env') || 'staging').toLowerCase();
+
+  const parallelBurstRaw = args.get('parallel-burst');
+  const parallelBurst = parallelBurstRaw === undefined
+    ? 6
+    : Number.parseInt(String(parallelBurstRaw), 10);
+
+  assert(
+    Number.isFinite(parallelBurst) && parallelBurst >= 0,
+    'parallel-burst must be an integer >= 0'
+  );
 
   const ledgerBaseUrl =
     String(args.get('ledger-base-url') || '') ||
@@ -105,14 +127,12 @@ async function main() {
     },
   };
 
-  const confirmed = await httpJson(`${ledgerBaseUrl}/v1/payments/settlements/ingest`, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(adminKey.trim()),
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify(confirmedPayload),
-  });
+  const confirmed = await ingestSettlement(
+    ledgerBaseUrl,
+    adminKey.trim(),
+    idempotencyKey,
+    confirmedPayload
+  );
 
   assert(
     confirmed.status === 201,
@@ -127,14 +147,12 @@ async function main() {
     `confirmed ingest expected payin_settle event, got ${confirmed.text}`
   );
 
-  const replay = await httpJson(`${ledgerBaseUrl}/v1/payments/settlements/ingest`, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(adminKey.trim()),
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify(confirmedPayload),
-  });
+  const replay = await ingestSettlement(
+    ledgerBaseUrl,
+    adminKey.trim(),
+    idempotencyKey,
+    confirmedPayload
+  );
 
   assert(
     replay.status === 200,
@@ -145,17 +163,15 @@ async function main() {
     `replay expected idempotency.replayed=true, got ${replay.text}`
   );
 
-  const reversal = await httpJson(`${ledgerBaseUrl}/v1/payments/settlements/ingest`, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(adminKey.trim()),
-      'Idempotency-Key': `payset:${envName}:${suffix}:2`,
-    },
-    body: JSON.stringify({
+  const reversal = await ingestSettlement(
+    ledgerBaseUrl,
+    adminKey.trim(),
+    `payset:${envName}:${suffix}:2`,
+    {
       ...confirmedPayload,
       status: 'reversed',
-    }),
-  });
+    }
+  );
 
   assert(
     reversal.status === 200 || reversal.status === 201,
@@ -205,6 +221,158 @@ async function main() {
 
   assert(list.status === 200, `list expected 200, got ${list.status}: ${list.text}`);
 
+  let burst = null;
+
+  if (parallelBurst >= 2) {
+    const burstExternalPaymentId = `pay_burst_${envName}_${suffix}`;
+    const burstAmountMinor = '777';
+
+    const burstPayload = {
+      provider,
+      external_payment_id: burstExternalPaymentId,
+      direction: 'payin',
+      status: 'confirmed',
+      account_id: accountId,
+      amount_minor: burstAmountMinor,
+      currency: 'USD',
+      metadata: {
+        smoke: true,
+        env: envName,
+        burst: true,
+      },
+    };
+
+    const confirmedBurstResults = await Promise.all(
+      Array.from({ length: parallelBurst }, (_, i) =>
+        ingestSettlement(
+          ledgerBaseUrl,
+          adminKey.trim(),
+          `payset:${envName}:${suffix}:burst:confirmed:${i + 1}`,
+          burstPayload
+        )
+      )
+    );
+
+    for (const [i, result] of confirmedBurstResults.entries()) {
+      assert(
+        result.status === 200 || result.status === 201,
+        `burst confirmed[${i}] expected 200/201, got ${result.status}: ${result.text}`
+      );
+    }
+
+    const burstLookupAfterConfirm = await httpJson(
+      `${ledgerBaseUrl}/v1/payments/settlements/${encodeURIComponent(provider)}/${encodeURIComponent(burstExternalPaymentId)}?direction=payin`,
+      {
+        method: 'GET',
+        headers: authHeaders(adminKey.trim()),
+      }
+    );
+
+    assert(
+      burstLookupAfterConfirm.status === 200,
+      `burst confirm lookup expected 200, got ${burstLookupAfterConfirm.status}: ${burstLookupAfterConfirm.text}`
+    );
+
+    const accountAfterBurstConfirm = await httpJson(
+      `${ledgerBaseUrl}/accounts/id/${encodeURIComponent(accountId)}`,
+      {
+        method: 'GET',
+        headers: authHeaders(adminKey.trim()),
+      }
+    );
+
+    assert(
+      accountAfterBurstConfirm.status === 200,
+      `account after burst confirm expected 200, got ${accountAfterBurstConfirm.status}: ${accountAfterBurstConfirm.text}`
+    );
+
+    assert(
+      accountAfterBurstConfirm.json?.balances?.available === burstAmountMinor,
+      `account after burst confirm expected available=${burstAmountMinor}, got ${accountAfterBurstConfirm.text}`
+    );
+
+    const reversalBurstResults = await Promise.all(
+      Array.from({ length: parallelBurst }, (_, i) =>
+        ingestSettlement(
+          ledgerBaseUrl,
+          adminKey.trim(),
+          `payset:${envName}:${suffix}:burst:reversed:${i + 1}`,
+          {
+            ...burstPayload,
+            status: 'reversed',
+          }
+        )
+      )
+    );
+
+    for (const [i, result] of reversalBurstResults.entries()) {
+      assert(
+        result.status === 200 || result.status === 201,
+        `burst reversal[${i}] expected 200/201, got ${result.status}: ${result.text}`
+      );
+    }
+
+    const accountAfterBurstReversal = await httpJson(
+      `${ledgerBaseUrl}/accounts/id/${encodeURIComponent(accountId)}`,
+      {
+        method: 'GET',
+        headers: authHeaders(adminKey.trim()),
+      }
+    );
+
+    assert(
+      accountAfterBurstReversal.status === 200,
+      `account after burst reversal expected 200, got ${accountAfterBurstReversal.status}: ${accountAfterBurstReversal.text}`
+    );
+
+    assert(
+      accountAfterBurstReversal.json?.balances?.available === '0',
+      `account after burst reversal expected available=0, got ${accountAfterBurstReversal.text}`
+    );
+
+    const burstLookupAfterReversal = await httpJson(
+      `${ledgerBaseUrl}/v1/payments/settlements/${encodeURIComponent(provider)}/${encodeURIComponent(burstExternalPaymentId)}?direction=payin`,
+      {
+        method: 'GET',
+        headers: authHeaders(adminKey.trim()),
+      }
+    );
+
+    assert(
+      burstLookupAfterReversal.status === 200,
+      `burst reversal lookup expected 200, got ${burstLookupAfterReversal.status}: ${burstLookupAfterReversal.text}`
+    );
+
+    const confirmedDedupedCount = confirmedBurstResults.filter(
+      (x) => x.json?.idempotency?.deduped === true
+    ).length;
+
+    const reversalDedupedCount = reversalBurstResults.filter(
+      (x) => x.json?.idempotency?.deduped === true
+    ).length;
+
+    burst = {
+      enabled: true,
+      parallel_burst: parallelBurst,
+      external_payment_id: burstExternalPaymentId,
+      confirmed: {
+        total_requests: confirmedBurstResults.length,
+        success_2xx: confirmedBurstResults.filter((x) => x.status >= 200 && x.status < 300).length,
+        deduped_count: confirmedDedupedCount,
+      },
+      reversal: {
+        total_requests: reversalBurstResults.length,
+        success_2xx: reversalBurstResults.filter((x) => x.status >= 200 && x.status < 300).length,
+        deduped_count: reversalDedupedCount,
+      },
+      account_available_after_confirm: accountAfterBurstConfirm.json?.balances?.available,
+      account_available_after_reversal: accountAfterBurstReversal.json?.balances?.available,
+      lookup_after_reversal_status: Array.isArray(burstLookupAfterReversal.json?.settlements)
+        ? burstLookupAfterReversal.json.settlements[0]?.status
+        : undefined,
+    };
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -246,6 +414,7 @@ async function main() {
           count: Array.isArray(list.json?.settlements) ? list.json.settlements.length : 0,
           next_cursor: list.json?.next_cursor,
         },
+        burst,
       },
       null,
       2

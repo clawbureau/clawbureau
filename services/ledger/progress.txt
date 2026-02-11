@@ -402,3 +402,40 @@ Started: 2026-02-02T03:08:26.936251
     - `GET https://staging.clawledger.com/health` ✅
     - `GET https://clawledger.com/health` ✅
 ---
+
+## 2026-02-11T23:55:00Z - CLD-US-016 (settlement ingest concurrency hardening)
+- What was implemented
+  - Hardened `POST /v1/payments/settlements/ingest` for exactly-once side effects under natural-key races:
+    - create path now claims settlement row first (insert-natural-key winner), then applies side effects.
+    - transition path now claims status change via CAS (`from_status -> to_status`) first, then applies side effects.
+    - race losers re-read persisted state and return deduped responses (`idempotency.deduped=true`) with no duplicate side effects.
+  - Updated settlement service internals in `services/ledger/src/payment-settlements.ts`:
+    - deterministic race retry loop (`MAX_SETTLEMENT_RACE_RETRIES`)
+    - immutable-field conflict checks retained (`DUPLICATE_CONFLICT`)
+    - idempotency replay key mismatch retained (`IDEMPOTENCY_KEY_REUSED`)
+    - invalid transition guard retained (`INVALID_STATUS_TRANSITION`)
+    - insufficient reversal funds retained (`INSUFFICIENT_FUNDS`) with best-effort rollback for claimed rows/transitions.
+  - Settlement event idempotency key now binds to settlement identity + event type:
+    - `payment_settlement:<settlement_id>:<event_type>`
+- Tests
+  - Extended `services/ledger/test/payment-settlements.test.ts` with race-focused coverage:
+    - parallel confirmed payin ingests (same natural key, different idempotency keys) => balance increment once
+    - parallel reversal attempts => balance decrement once
+  - Existing deterministic error tests remain green.
+- Smoke
+  - Extended `scripts/poh/smoke-ledger-payment-settlements.mjs` with `--parallel-burst` mode.
+  - Burst validates concurrent ingest dedupe behavior for both confirm and reversal phases.
+- Deploy evidence (staging only)
+  - Deployed `clawledger-staging` version:
+    - `3c3f7271-9ddb-43e8-be78-0e5fec2b6495`
+  - Smoke command:
+    - `LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-ledger-payment-settlements.mjs --env staging --parallel-burst 8`
+  - Smoke result highlights:
+    - baseline confirmed/replay/reversal path: pass
+    - burst confirmed deduped count: 7/8 (one winner)
+    - burst reversal deduped count: 7/8 (one winner)
+    - account available after burst confirm: `777`
+    - account available after burst reversal: `0`
+- Release status
+  - Production deploy intentionally not executed in this CLD-US-016 iteration pending explicit approval.
+---
