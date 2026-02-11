@@ -42,6 +42,13 @@ import type {
 
 type PluginMode = 'enforce' | 'best_effort';
 
+export type DirectiveAuthConfig = {
+  enabled?: boolean;
+  operatorRoles?: string[];
+  buyerRoles?: string[];
+  restrictedDirectives?: string[];
+};
+
 type AirlockConfig = {
   enabled?: boolean;
   identityRoots?: string[];
@@ -77,6 +84,7 @@ type PluginConfig = {
   includePromptPack?: boolean;
   includeToolEvents?: boolean;
   airlock?: AirlockConfig;
+  directiveAuth?: DirectiveAuthConfig;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -121,6 +129,7 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
       : undefined;
 
   const airlockObj = asObject(obj.airlock);
+  const directiveAuthObj = asObject(obj.directiveAuth);
 
   return {
     baseUrl,
@@ -146,6 +155,14 @@ function parsePluginConfig(raw: unknown): PluginConfig | null {
           identityRoots: asStringArray(airlockObj.identityRoots),
           jobRoots: asStringArray(airlockObj.jobRoots),
           requireTrustedBootstrap: asBoolean(airlockObj.requireTrustedBootstrap),
+        }
+      : undefined,
+    directiveAuth: directiveAuthObj
+      ? {
+          enabled: asBoolean(directiveAuthObj.enabled),
+          operatorRoles: asStringArray(directiveAuthObj.operatorRoles),
+          buyerRoles: asStringArray(directiveAuthObj.buyerRoles),
+          restrictedDirectives: asStringArray(directiveAuthObj.restrictedDirectives),
         }
       : undefined,
   };
@@ -231,6 +248,165 @@ export function partitionBootstrapFilesForAirlock(
   }
 
   return { trustedFiles, untrustedFiles, unknownFiles };
+}
+
+function normalizeRole(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeDirectiveToken(token: string): string {
+  const trimmed = token.trim().toLowerCase();
+  if (trimmed.startsWith('/')) return trimmed;
+  return `/${trimmed}`;
+}
+
+/**
+ * Extract slash-directive commands from free text (e.g. `/exec`, `/elevated`, `/model`).
+ */
+export function extractInlineDirectives(text: string): string[] {
+  const directives = new Set<string>();
+
+  const re = /(?:^|\s)(\/[a-z][a-z0-9_-]*)/gi;
+  for (const match of text.matchAll(re)) {
+    const cmd = match[1];
+    if (cmd) directives.add(normalizeDirectiveToken(cmd));
+  }
+
+  return [...directives.values()];
+}
+
+function extractDirectivesFromEvent(event: unknown): string[] {
+  const eventObj = asObject(event) ?? {};
+  const texts: string[] = [];
+
+  const prompt = asString(eventObj.prompt);
+  if (prompt) texts.push(prompt);
+
+  const messagesRaw = eventObj.messages;
+  if (Array.isArray(messagesRaw)) {
+    for (const item of messagesRaw) {
+      const msg = asObject(item);
+      if (!msg) continue;
+
+      const direct = asString(msg.content) ?? asString(msg.text);
+      if (direct) {
+        texts.push(direct);
+        continue;
+      }
+
+      const contentArray = msg.content;
+      if (Array.isArray(contentArray)) {
+        for (const part of contentArray) {
+          const po = asObject(part);
+          if (!po) continue;
+          const maybeText = asString(po.text) ?? asString(po.content);
+          if (maybeText) texts.push(maybeText);
+        }
+      }
+    }
+  }
+
+  const directives = new Set<string>();
+  for (const text of texts) {
+    for (const d of extractInlineDirectives(text)) {
+      directives.add(d);
+    }
+  }
+
+  return [...directives.values()];
+}
+
+function extractSenderRole(event: unknown, ctx: unknown): string | undefined {
+  const eventObj = asObject(event) ?? {};
+  const ctxObj = asObject(ctx) ?? {};
+
+  const direct =
+    normalizeRole(asString(ctxObj.senderRole)) ??
+    normalizeRole(asString(eventObj.senderRole)) ??
+    normalizeRole(asString(ctxObj.actorRole)) ??
+    normalizeRole(asString(eventObj.actorRole)) ??
+    normalizeRole(asString(ctxObj.requestRole)) ??
+    normalizeRole(asString(eventObj.requestRole));
+
+  if (direct) return direct;
+
+  const messagesRaw = eventObj.messages;
+  if (!Array.isArray(messagesRaw) || messagesRaw.length === 0) return undefined;
+
+  // Scan from latest → earliest and try common metadata role fields.
+  for (let i = messagesRaw.length - 1; i >= 0; i--) {
+    const msg = asObject(messagesRaw[i]);
+    if (!msg) continue;
+
+    const role =
+      normalizeRole(asString(msg.senderRole)) ??
+      normalizeRole(asString(msg.actorRole)) ??
+      normalizeRole(asString(msg.requestRole)) ??
+      normalizeRole(asString(msg.ownerRole));
+
+    if (role) return role;
+  }
+
+  return undefined;
+}
+
+export type DirectiveAuthorizationResult =
+  | { allowed: true }
+  | { allowed: false; code: 'DIRECTIVE_AUTH_ROLE_REQUIRED' | 'DIRECTIVE_AUTH_DENIED'; reason: string };
+
+export function evaluateDirectiveAuthorization(params: {
+  senderRole: string | undefined;
+  directives: string[];
+  config: DirectiveAuthConfig;
+}): DirectiveAuthorizationResult {
+  const senderRole = normalizeRole(params.senderRole);
+  const directives = params.directives.map((d) => normalizeDirectiveToken(d));
+
+  const restricted = new Set(
+    (params.config.restrictedDirectives ?? ['/elevated', '/exec', '/model'])
+      .map((d) => normalizeDirectiveToken(d)),
+  );
+
+  const restrictedUsed = directives.filter((d) => restricted.has(d));
+  if (restrictedUsed.length === 0) {
+    return { allowed: true };
+  }
+
+  if (!senderRole) {
+    return {
+      allowed: false,
+      code: 'DIRECTIVE_AUTH_ROLE_REQUIRED',
+      reason: `Restricted directives require sender role context: ${restrictedUsed.join(', ')}`,
+    };
+  }
+
+  const operatorRoles = new Set(
+    (params.config.operatorRoles ?? ['operator', 'admin', 'owner']).map((r) => r.toLowerCase()),
+  );
+
+  const buyerRoles = new Set(
+    (params.config.buyerRoles ?? ['buyer', 'customer', 'external']).map((r) => r.toLowerCase()),
+  );
+
+  if (operatorRoles.has(senderRole)) {
+    return { allowed: true };
+  }
+
+  if (buyerRoles.has(senderRole)) {
+    return {
+      allowed: false,
+      code: 'DIRECTIVE_AUTH_DENIED',
+      reason: `Role '${senderRole}' is not allowed to apply restricted directives: ${restrictedUsed.join(', ')}`,
+    };
+  }
+
+  return {
+    allowed: false,
+    code: 'DIRECTIVE_AUTH_DENIED',
+    reason: `Role '${senderRole}' is not in operator allowlist for restricted directives: ${restrictedUsed.join(', ')}`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1211,6 +1387,8 @@ export default {
     const airlockIdentityRoots = cfg.airlock?.identityRoots ?? [];
     const airlockJobRoots = cfg.airlock?.jobRoots ?? [];
 
+    const directiveAuthEnabled = cfg.directiveAuth?.enabled ?? false;
+
     // Patch fetch once for this process.
     patchFetch({
       proxyBaseUrl,
@@ -1293,6 +1471,22 @@ export default {
       const agentId = asString(ctx?.agentId) ?? 'default';
       const sessionKey = asString(ctx?.sessionKey) ?? asString(ctx?.sessionId) ?? undefined;
       const workspaceDir = asString(ctx?.workspaceDir) ?? process.cwd();
+
+      if (directiveAuthEnabled) {
+        const directives = extractDirectivesFromEvent(event);
+        if (directives.length > 0) {
+          const senderRole = extractSenderRole(event, ctx);
+          const authz = evaluateDirectiveAuthorization({
+            senderRole,
+            directives,
+            config: cfg.directiveAuth ?? { enabled: true },
+          });
+
+          if (!authz.allowed) {
+            throw new Error(`${authz.code}: ${authz.reason}`);
+          }
+        }
+      }
 
       if (airlockEnabled && airlockRequireTrustedBootstrap && sessionKey) {
         const violation = airlockViolationsBySession.get(sessionKey);

@@ -82,6 +82,32 @@
             "description": "Fail closed on non-trusted bootstrap files (default: true when airlock enabled)."
           }
         }
+      },
+      "directiveAuth": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Role-based authorization for security-sensitive directives.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable directive authorization checks."
+          },
+          "operatorRoles": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Roles allowed to apply restricted directives."
+          },
+          "buyerRoles": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Roles explicitly denied restricted directives."
+          },
+          "restrictedDirectives": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Restricted slash directives (default: /elevated, /exec, /model)."
+          }
+        }
       }
     }
   },
@@ -98,6 +124,11 @@
       "label": "Airlock (IdentityRoot vs JobRoot)",
       "advanced": true,
       "help": "Enable fail-closed bootstrap partitioning: trusted IdentityRoot files only; untrusted JobRoot files trigger AIRLOCK_BOOTSTRAP_VIOLATION."
+    },
+    "directiveAuth": {
+      "label": "Directive Auth (operator vs buyer)",
+      "advanced": true,
+      "help": "Enable role-based deny for security-sensitive directives (e.g. /exec, /elevated, /model)."
     }
   }
 }
