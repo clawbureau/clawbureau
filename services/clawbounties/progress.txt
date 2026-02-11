@@ -629,3 +629,42 @@ Started: 2026-02-02T03:08:26.937005
   - preserve API-only simulation discipline for all validation flows
 - Governance:
   - kickoff only; no implementation or pass flips in this PR.
+
+## 2026-02-11 - CBT-OPS-004 production closeout (CBT-US-028/029/030)
+- Implemented control-plane auth assimilation in `services/clawbounties/src/index.ts`:
+  - requester + worker scoped-token contract enforcement now validates deterministic control claims (`token_hash`, `token_scope_hash_b64u`, `token_lane`, `iat`, `exp`) plus scope/audience/subject invariants.
+  - worker lane now supports scoped JWT contract checks with deterministic errors and fail-closed legacy token rejection when compat is disabled.
+  - requester sensitive transitions (`post_bounty`, `approve_bounty`, `reject_bounty`) require scoped auth and enforce `payment_account_did` binding.
+  - sensitive-transition revalidation calls clawscope `/v1/tokens/introspect/matrix` to enforce active/non-revoked token state.
+- Added sensitive audit evidence persistence:
+  - migration: `services/clawbounties/migrations/0015_requester_auth_events_control_plane.sql`
+  - requester auth events now persist control-plane fields and revalidation evidence (`control_plane_check_json`).
+- Simulation/gate strict-auth hardening (`scripts/poh/*`):
+  - requester + worker scoped token auto-issuance via clawscope.
+  - strict mode drops legacy requester header fallback and verifies legacy-path rejection deterministically.
+  - gate pack now includes explicit legacy requester header rejection check and legacy worker-token rejection check.
+- Config + deploy + data operations:
+  - rotated `SCOPE_ADMIN_KEY` on `clawscope-staging` and `clawscope` to restore deterministic token issuance.
+  - rotated `LEDGER_ADMIN_KEY` on `clawledger-staging`/`clawledger` and aligned `clawescrow-staging`/`clawescrow` secret for ledger auth continuity.
+  - deployed clawbounties:
+    - staging: `ab0888b6-f03f-4481-ae41-07335e4751b2`
+    - production: `f096c101-1fea-402a-9ca6-42ea7a72dbc1`
+  - applied remote D1 migration `0015_requester_auth_events_control_plane.sql`:
+    - staging DB `clawbounties-staging`
+    - production DB `clawbounties`
+- Evidence (staging):
+  - requester e2e: `artifacts/simulations/clawbounties/2026-02-11T23-06-24-298Z-requester-e2e/requester-smoke.json`
+  - test e2e: `artifacts/simulations/clawbounties/2026-02-11T23-06-32-801Z-test-e2e/test-smoke.json`
+  - batch 10: `artifacts/simulations/clawbounties/2026-02-11T23-06-49-664Z-batch-10/summary.json`
+  - batch 50: `artifacts/simulations/clawbounties/2026-02-11T23-07-27-180Z-batch-50/summary.json`
+  - batch 200: `artifacts/simulations/clawbounties/2026-02-11T23-09-15-458Z-batch-200/summary.json`
+  - gate + invalid harness replay evidence: `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
+- Evidence (production):
+  - requester e2e: `artifacts/simulations/clawbounties/2026-02-11T23-10-20-634Z-requester-e2e/requester-smoke.json`
+  - test e2e: `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`
+  - batch 10: `artifacts/simulations/clawbounties/2026-02-11T23-10-42-942Z-batch-10/summary.json`
+  - batch 50: `artifacts/simulations/clawbounties/2026-02-11T23-11-14-085Z-batch-50/summary.json`
+  - batch 200: `artifacts/simulations/clawbounties/2026-02-11T23-12-36-717Z-batch-200/summary.json`
+  - gate + invalid harness replay evidence: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
+- Story closure:
+  - flipped `CBT-US-028`, `CBT-US-029`, `CBT-US-030` to `passes=true` with production evidence.

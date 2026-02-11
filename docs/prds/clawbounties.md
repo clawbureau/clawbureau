@@ -12,7 +12,7 @@
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
-**Status:** Active (CBT-US-001..027 shipped with staging+prod evidence; CBT-US-028..030 opened as planned for CBT-OPS-004)  
+**Status:** Active (CBT-US-001..030 shipped with staging+prod evidence; CBT-OPS-004 productionized)  
 
 ---
 
@@ -38,7 +38,7 @@
   - `CBT-US-025` — production gate preflight pack
   - `CBT-US-026` — 200+ batch reliability mode with bounded concurrency/backpressure
   - `CBT-US-027` — funding-aware orchestration + insufficient-funds classification
-- **CBT-OPS-004 kickoff (planned, passes=false by design):**
+- **CBT-OPS-004 tranche (production complete):**
   - `CBT-US-028` — identity control-plane contract assimilation
   - `CBT-US-029` — sensitive transition enforcement hardening
   - `CBT-US-030` — API-only simulation discipline for control-plane lane
@@ -221,7 +221,18 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Document required audience/scope/subject invariants.
 - Add deterministic compatibility smoke assertions.
 
-**Current Status:** ⚪ Planned (`passes=false`) — CBT-OPS-004 kickoff only.
+**Current Status:** ✅ Production complete (`passes=true`).  
+**Evidence:**
+- Staging gate contract checks (legacy worker token rejected, scoped token accepted):
+  - `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
+- Production gate contract checks:
+  - `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
+- Staging requester/test E2E:
+  - `artifacts/simulations/clawbounties/2026-02-11T23-06-24-298Z-requester-e2e/requester-smoke.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T23-06-32-801Z-test-e2e/test-smoke.json`
+- Production requester/test E2E:
+  - `artifacts/simulations/clawbounties/2026-02-11T23-10-20-634Z-requester-e2e/requester-smoke.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`
 
 ### CBT-US-029 — Sensitive transition enforcement hardening
 **As marketplace ops, I want** sensitive production transitions guarded by canonical control-plane semantics  
@@ -232,7 +243,15 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Fail-closed on missing/invalid sensitive transition evidence.
 - Add deterministic sensitive-transition denial errors.
 
-**Current Status:** ⚪ Planned (`passes=false`) — CBT-OPS-004 kickoff only.
+**Current Status:** ✅ Production complete (`passes=true`).  
+**Evidence:**
+- Sensitive-transition revalidation + audit persistence verified in staging/prod gates:
+  - `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
+- Deterministic invalid-harness replay remains fail-closed (422 / `TEST_HARNESS_INVALID`) in both envs:
+  - included under `harness.integration.invalid-replay` in the gate reports above.
+- Migration + persistence:
+  - `services/clawbounties/migrations/0015_requester_auth_events_control_plane.sql`
 
 ### CBT-US-030 — API-only simulation discipline for control-plane lane
 **As marketplace ops, I want** control-plane assimilation validated via API-only simulation flows  
@@ -243,7 +262,18 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Emit deterministic artifacts for control-plane auth outcomes.
 - Define rollout/rollback runbook for CBT-OPS-004 productionization.
 
-**Current Status:** ⚪ Planned (`passes=false`) — CBT-OPS-004 kickoff only.
+**Current Status:** ✅ Production complete (`passes=true`).  
+**Evidence:**
+- Staging API-only strict-auth runs:
+  - requester E2E: `artifacts/simulations/clawbounties/2026-02-11T23-06-24-298Z-requester-e2e/requester-smoke.json`
+  - test E2E: `artifacts/simulations/clawbounties/2026-02-11T23-06-32-801Z-test-e2e/test-smoke.json`
+  - batch 10/50/200: `artifacts/simulations/clawbounties/2026-02-11T23-06-49-664Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-07-27-180Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-09-15-458Z-batch-200/summary.json`
+  - gate (legacy header rejection + invalid-harness replay): `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
+- Production API-only strict-auth runs:
+  - requester E2E: `artifacts/simulations/clawbounties/2026-02-11T23-10-20-634Z-requester-e2e/requester-smoke.json`
+  - test E2E: `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`
+  - batch 10/50/200: `artifacts/simulations/clawbounties/2026-02-11T23-10-42-942Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-11-14-085Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-12-36-717Z-batch-200/summary.json`
+  - gate (legacy header rejection + invalid-harness replay): `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
 
 ---
 

@@ -30,9 +30,9 @@
     - `clawtrials.com/health`
   - latest production version: `e61dde2b-06a5-4c99-9e6d-6010f8d5412c`
 - Evidence artifacts:
-  - staging gate report: `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.json`
-  - prod gate report: `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`
-  - prod test-lane smoke: `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
+  - staging gate report: `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
+  - prod gate report: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
+  - prod test-lane smoke: `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`
 
 ### Not yet implemented
 - Full dispute intake / judge assignment / arbitration workflows remain roadmap scope.

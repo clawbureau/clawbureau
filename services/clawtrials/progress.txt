@@ -50,3 +50,17 @@
     - `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
 - Status:
   - CBT-US-022 production verification complete.
+
+## 2026-02-11 — CBT-OPS-004 control-plane assimilation verification (staging + production)
+- Revalidated clawtrials harness lane as dependency for clawbounties strict-auth control-plane rollout.
+- Deterministic checks exercised via gate pack:
+  - `GET /health`
+  - `GET /v1/harness/catalog`
+  - `POST /v1/harness/run`
+  - invalid-harness replay remains deterministic (`422 TEST_HARNESS_INVALID`) through clawbounties integration.
+- Evidence:
+  - staging gate: `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
+  - production gate: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
+  - production test-lane e2e: `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`
+- Status:
+  - Harness dependency remained green while CBT-US-028..030 moved to `passes=true`.

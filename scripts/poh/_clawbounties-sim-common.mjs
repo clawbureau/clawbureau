@@ -60,6 +60,11 @@ export function resolveRequesterAudience(envName, override) {
   return envName === 'prod' ? 'clawbounties.com' : 'staging.clawbounties.com';
 }
 
+export function resolveWorkerAudience(envName, override) {
+  if (override && override.trim().length > 0) return override.trim();
+  return resolveRequesterAudience(envName, null);
+}
+
 export function resolveRequesterScopes(rawOverride) {
   if (Array.isArray(rawOverride) && rawOverride.length > 0) return rawOverride;
   if (typeof rawOverride === 'string' && rawOverride.trim().length > 0) {
@@ -77,6 +82,25 @@ export function resolveRequesterScopes(rawOverride) {
   ];
 }
 
+export function resolveWorkerScopes(rawOverride) {
+  if (Array.isArray(rawOverride) && rawOverride.length > 0) return rawOverride;
+  if (typeof rawOverride === 'string' && rawOverride.trim().length > 0) {
+    return rawOverride
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  return [
+    'clawbounties:worker:self:read',
+    'clawbounties:bounty:accept',
+    'clawbounties:bounty:submit',
+    'clawbounties:bounty:cst:issue',
+    'clawbounties:submission:read',
+    'clawbounties:trust_pulse:read',
+  ];
+}
+
 export async function issueRequesterScopedToken({
   scopeBaseUrl,
   scopeAdminKey,
@@ -85,6 +109,11 @@ export async function issueRequesterScopedToken({
   scopes,
   ttlSec = 3600,
   source = 'clawbounties-sim',
+  tokenLane = 'legacy',
+  ownerDid = null,
+  controllerDid = null,
+  agentDid = null,
+  paymentAccountDid = null,
 }) {
   assert(scopeBaseUrl && scopeBaseUrl.trim().length > 0, 'scopeBaseUrl is required');
   assert(scopeAdminKey && scopeAdminKey.trim().length > 0, 'scopeAdminKey is required');
@@ -97,7 +126,11 @@ export async function issueRequesterScopedToken({
     aud: audience,
     scope: scopes,
     ttl_sec: ttlSec,
-    token_lane: 'legacy',
+    token_lane: tokenLane,
+    owner_did: ownerDid ?? requesterDid,
+    controller_did: controllerDid ?? requesterDid,
+    agent_did: agentDid ?? requesterDid,
+    payment_account_did: paymentAccountDid ?? requesterDid,
     mission_id: `${source}:${requesterDid}`,
   };
 
@@ -116,6 +149,64 @@ export async function issueRequesterScopedToken({
   }
 
   assert(out.json && typeof out.json.token === 'string', 'requester token issue response missing token');
+
+  return {
+    token: out.json.token,
+    token_hash: typeof out.json.token_hash === 'string' ? out.json.token_hash : null,
+    kid: typeof out.json.kid === 'string' ? out.json.kid : null,
+    token_lane: typeof out.json.token_lane === 'string' ? out.json.token_lane : null,
+    issued_response: out.json,
+    elapsed_ms: out.elapsed_ms,
+  };
+}
+
+export async function issueWorkerScopedToken({
+  scopeBaseUrl,
+  scopeAdminKey,
+  workerDid,
+  audience,
+  scopes,
+  ttlSec = 3600,
+  source = 'clawbounties-sim',
+  tokenLane = 'legacy',
+  ownerDid = null,
+  controllerDid = null,
+  paymentAccountDid = null,
+}) {
+  assert(scopeBaseUrl && scopeBaseUrl.trim().length > 0, 'scopeBaseUrl is required');
+  assert(scopeAdminKey && scopeAdminKey.trim().length > 0, 'scopeAdminKey is required');
+  assert(workerDid && workerDid.trim().length > 0, 'workerDid is required');
+  assert(audience && audience.trim().length > 0, 'audience is required');
+  assert(Array.isArray(scopes) && scopes.length > 0, 'scopes must be a non-empty array');
+
+  const payload = {
+    sub: workerDid,
+    aud: audience,
+    scope: scopes,
+    ttl_sec: ttlSec,
+    token_lane: tokenLane,
+    owner_did: ownerDid ?? workerDid,
+    controller_did: controllerDid ?? workerDid,
+    agent_did: workerDid,
+    payment_account_did: paymentAccountDid ?? workerDid,
+    mission_id: `${source}:${workerDid}`,
+  };
+
+  const out = await httpJson(`${scopeBaseUrl.replace(/\/$/, '')}/v1/tokens/issue`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${scopeAdminKey}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!(out.status === 200 || out.status === 201)) {
+    const code = extractErrorCode(out);
+    throw new Error(`worker token issue failed (${out.status}, ${code}): ${out.text}`);
+  }
+
+  assert(out.json && typeof out.json.token === 'string', 'worker token issue response missing token');
 
   return {
     token: out.json.token,
@@ -227,7 +318,7 @@ export async function httpJson(url, init) {
   };
 }
 
-function authHeaders({ adminKey, requesterToken, workerToken, requesterDid, contentType = true } = {}) {
+function authHeaders({ adminKey, requesterToken, workerToken, requesterDid, contentType = true, strictAuth = true } = {}) {
   const headers = {};
   if (contentType) {
     headers['content-type'] = 'application/json; charset=utf-8';
@@ -241,7 +332,7 @@ function authHeaders({ adminKey, requesterToken, workerToken, requesterDid, cont
   if (workerToken) {
     headers.authorization = `Bearer ${workerToken}`;
   }
-  if (requesterDid) {
+  if (!strictAuth && requesterDid) {
     headers['x-requester-did'] = requesterDid;
   }
   return headers;
@@ -306,6 +397,7 @@ export async function postBounty({
   tags = ['simulation'],
   metadata = {},
   idempotencyKey,
+  strictAuth = true,
 }) {
   const body = {
     requester_did: requesterDid,
@@ -325,9 +417,17 @@ export async function postBounty({
     idempotency_key: idempotencyKey,
   };
 
+  if (strictAuth) {
+    assert(requesterToken && requesterToken.trim().length > 0, 'requesterToken is required in strict auth mode');
+  }
+
   const out = await httpJson(`${baseUrl}/v1/bounties`, {
     method: 'POST',
-    headers: authHeaders({ requesterToken: requesterToken ?? adminKey, requesterDid }),
+    headers: authHeaders({
+      requesterToken: strictAuth ? requesterToken : (requesterToken ?? adminKey),
+      requesterDid,
+      strictAuth,
+    }),
     body: JSON.stringify(body),
   });
 
@@ -384,10 +484,19 @@ export async function approveBounty({
   requesterDid,
   submissionId,
   idempotencyKey,
+  strictAuth = true,
 }) {
+  if (strictAuth) {
+    assert(requesterToken && requesterToken.trim().length > 0, 'requesterToken is required in strict auth mode');
+  }
+
   return httpJson(`${baseUrl}/v1/bounties/${encodeURIComponent(bountyId)}/approve`, {
     method: 'POST',
-    headers: authHeaders({ requesterToken: requesterToken ?? adminKey, requesterDid }),
+    headers: authHeaders({
+      requesterToken: strictAuth ? requesterToken : (requesterToken ?? adminKey),
+      requesterDid,
+      strictAuth,
+    }),
     body: JSON.stringify({
       requester_did: requesterDid,
       submission_id: submissionId,
@@ -405,10 +514,19 @@ export async function rejectBounty({
   submissionId,
   idempotencyKey,
   reason = 'simulation rejection',
+  strictAuth = true,
 }) {
+  if (strictAuth) {
+    assert(requesterToken && requesterToken.trim().length > 0, 'requesterToken is required in strict auth mode');
+  }
+
   return httpJson(`${baseUrl}/v1/bounties/${encodeURIComponent(bountyId)}/reject`, {
     method: 'POST',
-    headers: authHeaders({ requesterToken: requesterToken ?? adminKey, requesterDid }),
+    headers: authHeaders({
+      requesterToken: strictAuth ? requesterToken : (requesterToken ?? adminKey),
+      requesterDid,
+      strictAuth,
+    }),
     body: JSON.stringify({
       requester_did: requesterDid,
       submission_id: submissionId,
@@ -433,6 +551,7 @@ export async function listBountySubmissions({
   requesterDid = null,
   workerToken = null,
   params = {},
+  strictAuth = true,
 }) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -444,10 +563,10 @@ export async function listBountySubmissions({
   return httpJson(url, {
     method: 'GET',
     headers: {
-      ...(adminKey ? authHeaders({ adminKey, contentType: false }) : {}),
-      ...(requesterToken ? authHeaders({ requesterToken, contentType: false }) : {}),
-      ...(workerToken ? authHeaders({ workerToken, contentType: false }) : {}),
-      ...(requesterDid ? { 'x-requester-did': requesterDid } : {}),
+      ...(adminKey ? authHeaders({ adminKey, contentType: false, strictAuth }) : {}),
+      ...(requesterToken ? authHeaders({ requesterToken, contentType: false, strictAuth }) : {}),
+      ...(workerToken ? authHeaders({ workerToken, contentType: false, strictAuth }) : {}),
+      ...(!strictAuth && requesterDid ? { 'x-requester-did': requesterDid } : {}),
     },
   });
 }
@@ -459,14 +578,15 @@ export async function getSubmissionDetail({
   requesterToken = null,
   requesterDid = null,
   workerToken = null,
+  strictAuth = true,
 }) {
   return httpJson(`${baseUrl}/v1/submissions/${encodeURIComponent(submissionId)}`, {
     method: 'GET',
     headers: {
-      ...(adminKey ? authHeaders({ adminKey, contentType: false }) : {}),
-      ...(requesterToken ? authHeaders({ requesterToken, contentType: false }) : {}),
-      ...(workerToken ? authHeaders({ workerToken, contentType: false }) : {}),
-      ...(requesterDid ? { 'x-requester-did': requesterDid } : {}),
+      ...(adminKey ? authHeaders({ adminKey, contentType: false, strictAuth }) : {}),
+      ...(requesterToken ? authHeaders({ requesterToken, contentType: false, strictAuth }) : {}),
+      ...(workerToken ? authHeaders({ workerToken, contentType: false, strictAuth }) : {}),
+      ...(!strictAuth && requesterDid ? { 'x-requester-did': requesterDid } : {}),
     },
   });
 }
@@ -629,6 +749,7 @@ export async function waitForSubmissionTerminal({
   adminKey,
   timeoutMs = 15_000,
   intervalMs = 800,
+  strictAuth = true,
 }) {
   const start = Date.now();
   let last = null;
@@ -641,6 +762,7 @@ export async function waitForSubmissionTerminal({
       requesterToken,
       requesterDid,
       adminKey,
+      strictAuth,
     });
     last = res;
 

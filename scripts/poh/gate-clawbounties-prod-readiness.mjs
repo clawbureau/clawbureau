@@ -12,7 +12,10 @@ import {
   resolveScopeBaseUrl,
   resolveRequesterAudience,
   resolveRequesterScopes,
+  resolveWorkerAudience,
+  resolveWorkerScopes,
   issueRequesterScopedToken,
+  issueWorkerScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -31,6 +34,14 @@ import {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function parseBoolean(raw, fallback = false) {
+  if (raw === undefined || raw === null) return fallback;
+  const value = String(raw).trim().toLowerCase();
+  if (value === '1' || value === 'true' || value === 'yes' || value === 'on') return true;
+  if (value === '0' || value === 'false' || value === 'no' || value === 'off') return false;
+  return fallback;
 }
 
 function resolveScopeAdminKey(args) {
@@ -200,6 +211,18 @@ async function main() {
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('gate-requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
 
+  const strictAuth = parseBoolean(args.get('strict-auth'), true);
+  const scopeAdminKey = resolveScopeAdminKey(args);
+  const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+  const workerAudience = resolveWorkerAudience(envName, args.get('worker-audience'));
+  const workerScopes = resolveWorkerScopes(args.get('worker-scopes'));
+  const workerTokenTtlSec = Number.parseInt(String(args.get('worker-token-ttl-sec') || '3600'), 10);
+  assert(Number.isFinite(workerTokenTtlSec) && workerTokenTtlSec > 0, 'worker-token-ttl-sec must be a positive integer');
+
+  if (strictAuth) {
+    assert(scopeAdminKey, 'scope-admin-key / SCOPE_ADMIN_KEY is required in strict auth mode');
+  }
+
   const requesterAuth = await resolveRequesterAuth({ args, envName, requesterDid });
   const requesterToken = requesterAuth.requesterToken;
   const adminKey = resolveAdminKey(args);
@@ -325,6 +348,34 @@ async function main() {
   });
 
   await runCheck(checks, blockers, {
+    id: 'auth.requester.legacy-header-rejected',
+    description: 'Legacy requester header path is rejected in strict auth mode',
+    fn: async () => {
+      const payload = buildPostPayload(requesterDid, {
+        closureType: 'requester',
+        amountMinor: String(args.get('amount-minor') || '50'),
+      });
+
+      const res = await httpJson(`${baseUrl}/v1/bounties`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          'x-requester-did': requesterDid,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      assert(res.status === 401, `expected 401, got ${res.status}`);
+      assert(res.json?.error === 'REQUESTER_TOKEN_REQUIRED', `expected REQUESTER_TOKEN_REQUIRED, got ${res.json?.error}`);
+
+      return {
+        status: res.status,
+        error: res.json?.error ?? null,
+      };
+    },
+  });
+
+  await runCheck(checks, blockers, {
     id: 'auth.requester.post-valid-token',
     description: 'POST /v1/bounties succeeds with valid requester scoped token',
     fn: async () => {
@@ -340,6 +391,7 @@ async function main() {
         tags: ['simulation', 'prod-gate', 'requester-auth'],
         metadata: { gate: true, check: 'requester_post_valid' },
         idempotencyKey: `sim:prod-gate:req:${crypto.randomUUID()}`,
+        strictAuth,
       });
 
       if (!(postRes.status === 200 || postRes.status === 201)) {
@@ -360,19 +412,56 @@ async function main() {
 
   await runCheck(checks, blockers, {
     id: 'auth.worker.register-and-self',
-    description: 'worker token can be minted and used for /v1/workers/self',
+    description: 'worker token contract enforces strict lane and allows scoped token for /v1/workers/self',
     fn: async () => {
       const identity = await generateAgentIdentity();
       const workerDid = identity.did;
       const worker = await registerWorker(baseUrl, workerDid, ['simulation', 'prod-gate']);
 
       context.workerDid = workerDid;
-      workerToken = worker.token;
       workerPrivateKey = identity.privateKey;
+
+      let legacySelfStatus = null;
+      let legacySelfError = null;
+
+      if (strictAuth) {
+        const legacySelf = await httpJson(`${baseUrl}/v1/workers/self`, {
+          method: 'GET',
+          headers: { authorization: `Bearer ${worker.token}` },
+        });
+
+        legacySelfStatus = legacySelf.status;
+        legacySelfError = legacySelf.json?.error ?? null;
+
+        assert(legacySelf.status === 401, `expected legacy worker token to fail with 401, got ${legacySelf.status}`);
+        assert(
+          legacySelf.json?.error === 'WORKER_TOKEN_CANONICAL_REQUIRED',
+          `expected WORKER_TOKEN_CANONICAL_REQUIRED, got ${legacySelf.json?.error}`
+        );
+      }
+
+      const issuedWorker = strictAuth
+        ? await issueWorkerScopedToken({
+            scopeBaseUrl,
+            scopeAdminKey,
+            workerDid,
+            audience: workerAudience,
+            scopes: workerScopes,
+            ttlSec: workerTokenTtlSec,
+            source: 'gate-clawbounties-prod-readiness',
+          })
+        : {
+            token: worker.token,
+            token_hash: null,
+            kid: null,
+            token_lane: 'legacy',
+          };
+
+      workerToken = issuedWorker.token;
 
       const selfRes = await httpJson(`${baseUrl}/v1/workers/self`, {
         method: 'GET',
-        headers: { authorization: `Bearer ${worker.token}` },
+        headers: { authorization: `Bearer ${workerToken}` },
       });
 
       assert(selfRes.status === 200, `expected 200, got ${selfRes.status}`);
@@ -380,8 +469,13 @@ async function main() {
 
       return {
         register_status: 201,
+        legacy_self_status: legacySelfStatus,
+        legacy_self_error: legacySelfError,
         self_status: selfRes.status,
         worker_did: workerDid,
+        worker_token_kid: issuedWorker.kid ?? null,
+        worker_token_hash: issuedWorker.token_hash ?? null,
+        worker_token_lane: issuedWorker.token_lane ?? null,
       };
     },
   });
@@ -398,6 +492,7 @@ async function main() {
         requesterToken,
         requesterDid,
         params: { limit: 10 },
+        strictAuth,
       });
 
       assert(listRes.status === 200, `expected 200, got ${listRes.status}`);
@@ -429,6 +524,7 @@ async function main() {
         tags: ['simulation', 'prod-gate', 'test-lane'],
         metadata: { gate: true, check: 'test_lane_auto_decision' },
         idempotencyKey: `sim:prod-gate:test:${crypto.randomUUID()}`,
+        strictAuth,
       });
 
       if (!(postRes.status === 200 || postRes.status === 201)) {
@@ -492,6 +588,7 @@ async function main() {
         workerToken,
         timeoutMs: 25_000,
         intervalMs: 1000,
+        strictAuth,
       });
 
       assert(terminal?.status === 200, `terminal poll failed (${terminal?.status}): ${terminal?.text}`);
@@ -526,6 +623,7 @@ async function main() {
         tags: ['simulation', 'prod-gate', 'invalid-harness'],
         metadata: { gate: true, check: 'invalid_harness_replay' },
         idempotencyKey: `sim:prod-gate:invalid:${crypto.randomUUID()}`,
+        strictAuth,
       });
 
       if (!(postRes.status === 200 || postRes.status === 201)) {
@@ -638,6 +736,7 @@ async function main() {
     requester_token_source: requesterAuth.requesterTokenSource,
     requester_token_kid: requesterAuth.requesterTokenKid,
     requester_token_hash: requesterAuth.requesterTokenHash,
+    strict_auth: strictAuth,
     recommendation: {
       status: recommendation,
       blockers,
