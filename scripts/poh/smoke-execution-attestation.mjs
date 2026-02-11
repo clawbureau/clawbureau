@@ -20,6 +20,7 @@
 
 import process from 'node:process';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 function parseArgs(argv) {
   const args = new Map();
@@ -141,6 +142,23 @@ function resolveBaseUrls(envName) {
   return { claweaBaseUrl, clawverifyBaseUrl };
 }
 
+function resolveClaweaR2Bucket(envName) {
+  const envNorm = envName === 'prod' ? 'production' : envName;
+  return envNorm === 'staging' ? 'clawea-tenants-staging' : 'clawea-tenants';
+}
+
+function wranglerR2GetJson(objectPath) {
+  const stdout = execFileSync('wrangler', ['r2', 'object', 'get', objectPath, '--remote', '--pipe'], {
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  // Defensive: strip any leading wrangler noise.
+  const start = stdout.indexOf('{');
+  assert(start !== -1, `wrangler r2 object get returned non-JSON output for ${objectPath}`);
+  return JSON.parse(stdout.slice(start));
+}
+
 async function buildProofBundleEnvelope({ agentDid, agentPrivateKey, runId }) {
   // Build a minimal 1-event chain
   const e1PayloadHash = await sha256B64uJson({ type: 'llm_call' });
@@ -218,6 +236,56 @@ async function main() {
   assert(mint.json && mint.json.ok === true, 'clawea mint response missing ok=true');
   const execEnvelope = mint.json.envelope;
   const attesterDid = mint.json.attester_did;
+  const artifactKey = mint.json?.artifact?.r2_key;
+
+  assert(
+    typeof artifactKey === 'string' && artifactKey.trim().length > 0,
+    'clawea mint response missing artifact.r2_key (POHVN-US-006)'
+  );
+
+  // POHVN-US-006: runtime_metadata + harness expectations
+  assert(execEnvelope?.payload?.harness, 'execution attestation missing payload.harness');
+  assert(
+    typeof execEnvelope.payload.harness.config_hash_b64u === 'string' &&
+      execEnvelope.payload.harness.config_hash_b64u.length > 0,
+    'execution attestation missing payload.harness.config_hash_b64u'
+  );
+
+  const rm = execEnvelope?.payload?.runtime_metadata;
+  assert(rm && typeof rm === 'object', 'execution attestation missing payload.runtime_metadata');
+  assert(rm.clawea && typeof rm.clawea === 'object', 'runtime_metadata missing clawea');
+  assert('wpc_hash' in rm.clawea, 'runtime_metadata.clawea missing wpc_hash');
+
+  assert(rm.sandbox && typeof rm.sandbox === 'object', 'runtime_metadata missing sandbox');
+  assert(
+    typeof rm.sandbox.sdk_version === 'string' && rm.sandbox.sdk_version.length > 0,
+    'runtime_metadata.sandbox missing sdk_version'
+  );
+  assert(
+    typeof rm.sandbox.instance_type === 'string' && rm.sandbox.instance_type.length > 0,
+    'runtime_metadata.sandbox missing instance_type'
+  );
+  assert(rm.sandbox.resource_limits && typeof rm.sandbox.resource_limits === 'object', 'runtime_metadata.sandbox missing resource_limits');
+
+  assert(rm.image && typeof rm.image === 'object', 'runtime_metadata missing image');
+  assert('enterprise_image_digest' in rm.image, 'runtime_metadata.image missing enterprise_image_digest');
+
+  assert(rm.network_posture && typeof rm.network_posture === 'object', 'runtime_metadata missing network_posture');
+  assert(
+    rm.network_posture.ai_egress === 'clawproxy',
+    `expected runtime_metadata.network_posture.ai_egress=clawproxy, got ${rm.network_posture.ai_egress}`
+  );
+
+  const checkR2 = args.get('check-r2') === 'true' || process.env.CHECK_R2_ARTIFACT === '1';
+  if (checkR2) {
+    const bucket = resolveClaweaR2Bucket(envName);
+    const stored = wranglerR2GetJson(`${bucket}/${artifactKey}`);
+    assert(stored?.envelope_type === 'execution_attestation', 'stored artifact envelope_type mismatch');
+    assert(
+      stored?.payload_hash_b64u === execEnvelope?.payload_hash_b64u,
+      'stored artifact payload_hash_b64u mismatch'
+    );
+  }
 
   // 3) Verify execution attestation
   const vExec = await httpJson(`${clawverifyBaseUrl}/v1/verify/execution-attestation`, {
@@ -271,6 +339,18 @@ async function main() {
       attester_did: attesterDid,
       signer_did: execEnvelope?.signer_did,
       payload_hash_b64u: execEnvelope?.payload_hash_b64u,
+      artifact_r2_key: artifactKey,
+      harness: {
+        id: execEnvelope?.payload?.harness?.id,
+        version: execEnvelope?.payload?.harness?.version,
+        runtime: execEnvelope?.payload?.harness?.runtime,
+        config_hash_b64u: execEnvelope?.payload?.harness?.config_hash_b64u,
+      },
+      runtime_metadata: {
+        sandbox_sdk_version: execEnvelope?.payload?.runtime_metadata?.sandbox?.sdk_version,
+        sandbox_instance_type: execEnvelope?.payload?.runtime_metadata?.sandbox?.instance_type,
+        ai_egress: execEnvelope?.payload?.runtime_metadata?.network_posture?.ai_egress,
+      },
     },
     clawverify_verify_execution_attestation: {
       status: vExec.status,
