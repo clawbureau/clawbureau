@@ -279,8 +279,9 @@
         "Attestation is stored as a content-addressed artifact and anchored in clawlogs (when enabled)"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "Phase 1. This is the bridge to a future TEE path."
+      "passes": true,
+      "notes": "Phase 1. This is the bridge to a future TEE path.",
+      "completionNotes": "Implemented in clawea private repo (PR #4) and propagated via submodule bump PR #110 with staging+prod rollout + smoke hardening PR #111. Execution attestations now include hardened harness/runtime metadata (image digest, sandbox/resource posture, WPC context), are stored as content-addressed R2 artifacts keyed by payload hash, and support feature-flagged clawlogs anchoring."
     },
     {
       "id": "POHVN-US-007",
