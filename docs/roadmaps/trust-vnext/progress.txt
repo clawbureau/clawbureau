@@ -650,3 +650,30 @@ Started: 2026-02-07T19:53:07Z
     - `services/clawea/artifacts/smoke/finance-m2/2026-02-11T16-26-37Z-staging-nondegraded-npm/result.json` (PASS)
     - `services/clawea/artifacts/smoke/finance-m2/2026-02-11T16-26-44Z-prod-nondegraded-npm/result.json` (PASS)
     - `services/clawea/artifacts/smoke/finance-m2/2026-02-11T16-26-17Z-retry-repair/result.json` (PASS, failed->retry->paid)
+
+## 2026-02-11T18:30:00Z - clawea Finance stripe lane (CEA-US-048H) production closure
+- What was implemented
+  - Private clawea PR #15 merged:
+    - https://github.com/clawbureau/clawea/pull/15
+    - Merge: `26302c8f4349e310b50b53aa515ab8d1ba68fef1`
+  - Added finance reliability baseline snapshot script + artifacts:
+    - `scripts/ops-finance-health-snapshot.mjs`
+    - `artifacts/ops/finance-health/*/{summary.json,summary.md}` for staging + prod
+  - Added stripe invoice billing bridge in clawea:
+    - `POST /v1/billing/invoices/:id/stripe/initiate`
+    - `POST /v1/settlements/stripe/webhook`
+  - Preserved fail-closed invariant:
+    - stripe webhook path does not directly set invoice `paid`
+    - webhook feeds settlement ingest + reconciliation state machine
+  - Added migration:
+    - `migrations/0010_stripe_invoice_payments.sql`
+- Rollout evidence
+  - Migrations:
+    - staging: `0010_stripe_invoice_payments.sql` applied ✅
+    - prod: `0010_stripe_invoice_payments.sql` applied ✅
+  - Deploy versions:
+    - staging: `92897166-0150-4349-97d7-04306382153d`
+    - prod: `0ba0be8d-f112-413f-9e5d-5acab1e1c925`
+  - Smoke artifacts:
+    - `services/clawea/artifacts/smoke/finance-stripe/2026-02-11T17-37-15Z-staging/result.json` (PASS)
+    - `services/clawea/artifacts/smoke/finance-stripe/2026-02-11T18-24-18Z-prod/result.json` (PASS)
