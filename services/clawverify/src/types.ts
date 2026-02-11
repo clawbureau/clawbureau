@@ -12,6 +12,7 @@ export const ENVELOPE_TYPES = [
   'artifact_signature',
   'message_signature',
   'gateway_receipt',
+  'web_receipt',
   'proof_bundle',
   'event_chain',
   'owner_attestation',
@@ -276,6 +277,36 @@ export interface VerifyReceiptResponse {
   gateway_id?: string;
   model_identity_tier?: ModelIdentityTier;
   risk_flags?: string[];
+  error?: VerificationError;
+}
+
+/**
+ * Witnessed web receipt types
+ * POH-US-018: Verify witnessed-web receipts (distinct from gateway API receipts)
+ */
+export interface WebReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  witness_id: string;
+  source: 'chatgpt_web' | 'claude_web' | 'gemini_web' | 'other';
+  request_hash_b64u: string;
+  response_hash_b64u: string;
+  session_hash_b64u?: string;
+  timestamp: string;
+  binding?: ReceiptBinding;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyWebReceiptRequest {
+  envelope: SignedEnvelope<WebReceiptPayload>;
+}
+
+export interface VerifyWebReceiptResponse {
+  result: VerificationResult;
+  witness_id?: string;
+  source?: WebReceiptPayload['source'];
+  proof_tier?: ProofTier;
+  equivalent_to_gateway?: boolean;
   error?: VerificationError;
 }
 

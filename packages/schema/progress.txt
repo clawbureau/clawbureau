@@ -72,3 +72,10 @@ Started: 2026-02-03
   - `packages/schema/poh/export_bundle.v1.json`
 - Added deterministic export-bundle fixture:
   - `packages/schema/fixtures/export_bundle_golden.v1.json`
+
+## POH-US-018 — witnessed-web receipt schemas + fixture
+- Added witnessed-web schemas:
+  - `packages/schema/poh/web_receipt.v1.json`
+  - `packages/schema/poh/web_receipt_envelope.v1.json`
+- Added deterministic web-receipt fixture:
+  - `packages/schema/fixtures/web_receipt_golden.v1.json`

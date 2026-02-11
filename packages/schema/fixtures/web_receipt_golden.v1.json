@@ -1,0 +1,29 @@
+{
+  "vector_version": "1",
+  "description": "Golden fixture for witnessed web receipt envelope verification",
+  "envelope": {
+    "envelope_version": "1",
+    "envelope_type": "web_receipt",
+    "payload": {
+      "receipt_version": "1",
+      "receipt_id": "web_rcpt_fixture_001",
+      "witness_id": "witness_cluster_fixture",
+      "source": "chatgpt_web",
+      "request_hash_b64u": "requestHASHb64u_fixture_1234",
+      "response_hash_b64u": "responseHASHb64u_fixture_1234",
+      "session_hash_b64u": "sessionHASHb64u_fixture_1234",
+      "timestamp": "2026-02-11T00:00:00.000Z",
+      "binding": {
+        "run_id": "run_fixture_001",
+        "event_hash_b64u": "eventHASHb64u_fixture_1234",
+        "nonce": "nonce_fixture_001"
+      }
+    },
+    "payload_hash_b64u": "KUTvlaQN8N_zWIUFEQAkjAmp963RhFflBIzsXasPxEU",
+    "hash_algorithm": "SHA-256",
+    "signature_b64u": "cideENGYlNIVIpIuGWDKP09f12xJzYd7ApcZGWFqfj4faQS1leWusFQ7v9Vtwy7TfEExEhrpSEYN87t67WxzAg",
+    "algorithm": "Ed25519",
+    "signer_did": "did:key:z6Mkjxmoj3xapmSnsMM9SuAbnT8dxqRurBubCm89RPaWSzFW",
+    "issued_at": "2026-02-11T00:00:00.000Z"
+  }
+}

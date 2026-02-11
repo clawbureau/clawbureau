@@ -42,6 +42,8 @@ Shared JSON schemas for Claw Bureau services.
 - `commit_proof.v1.json`
 - `gateway_receipt.v1.json`
 - `gateway_receipt_envelope.v1.json`
+- `web_receipt.v1.json`
+- `web_receipt_envelope.v1.json`
 - `proof_bundle.v1.json`
 - `proof_bundle_envelope.v1.json`
 - `event_chain.v1.json`
@@ -64,4 +66,5 @@ Shared JSON schemas for Claw Bureau services.
 ### `fixtures/`
 - `protocol-m-golden-vector.v1.json`
 - `log_inclusion_proof_golden.v1.json`
+- `web_receipt_golden.v1.json`
 - `export_bundle_golden.v1.json`
