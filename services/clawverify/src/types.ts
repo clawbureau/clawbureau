@@ -31,6 +31,9 @@ export interface VerifyAgentRequest {
   /** Optional materialized URM document for the provided proof_bundle_envelope (POH-US-015). */
   urm?: URMDocument;
 
+  /** Optional execution attestations (CEA-US-010). */
+  execution_attestations?: SignedEnvelope<ExecutionAttestationPayload>[];
+
   /**
    * Optional DID rotation certificates.
    *
@@ -74,6 +77,14 @@ export interface VerifyAgentResponse {
       trust_tier?: TrustTier;
       proof_tier?: ProofTier;
       model_identity_tier?: ModelIdentityTier;
+      error?: VerificationError;
+    };
+
+    execution_attestation?: {
+      status: VerificationStatus;
+      reason: string;
+      verified_count?: number;
+      proof_tier?: ProofTier;
       error?: VerificationError;
     };
   };
@@ -289,6 +300,47 @@ export interface VerifyOwnerAttestationResponse {
   subject_did?: string;
   provider_ref?: string;
   expires_at?: string;
+  error?: VerificationError;
+}
+
+/**
+ * Execution Attestation types
+ * CEA-US-010: Sandbox execution attestation verification
+ */
+export interface ExecutionAttestationPayload {
+  attestation_version: '1';
+  attestation_id: string;
+  execution_type: 'sandbox_execution' | 'tee_execution';
+  agent_did: string;
+  attester_did: string;
+  run_id?: string;
+  proof_bundle_hash_b64u?: string;
+  harness?: {
+    id?: string;
+    version?: string;
+    runtime?: string;
+    config_hash_b64u?: string;
+  };
+  runtime_metadata?: Record<string, unknown>;
+  issued_at: string;
+  expires_at?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface VerifyExecutionAttestationRequest {
+  envelope: SignedEnvelope<ExecutionAttestationPayload>;
+}
+
+export interface VerifyExecutionAttestationResponse {
+  result: VerificationResult;
+  attestation_id?: string;
+  execution_type?: ExecutionAttestationPayload['execution_type'];
+  agent_did?: string;
+  attester_did?: string;
+  run_id?: string;
+  proof_bundle_hash_b64u?: string;
+  signer_did?: string;
+  allowlisted?: boolean;
   error?: VerificationError;
 }
 
@@ -630,6 +682,11 @@ export interface ProofBundleVerificationResult {
     attestations_signature_verified_count?: number;
     /** Number of attestations that counted for tier uplift (signature + allowlist + subject binding). */
     attestations_verified_count?: number;
+
+    /** CEA-US-010: optional execution attestation evidence (outside the proof bundle). */
+    execution_attestations_valid?: boolean;
+    execution_attestations_count?: number;
+    execution_attestations_verified_count?: number;
   };
 }
 
@@ -638,6 +695,9 @@ export interface VerifyBundleRequest {
   envelope: SignedEnvelope<ProofBundlePayload>;
   /** Optional materialized URM document bytes (JSON object). */
   urm?: URMDocument;
+
+  /** Optional execution attestations (CEA-US-010). */
+  execution_attestations?: SignedEnvelope<ExecutionAttestationPayload>[];
 }
 
 /** Verify bundle response */
