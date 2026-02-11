@@ -181,6 +181,18 @@ Event-sourced ledger for balances, holds, and transfers. Idempotent and auditabl
 - Event model supports `payin_settle`, `payin_reverse`, `payout_settle`
 - Lookup/list endpoints provide deterministic pagination behavior
 
+### CLD-US-016 — Settlement ingest concurrency hardening (exactly-once side effects)
+**Status:** Shipped (staging + production validated)
+
+**As a** platform, **I want** settlement side effects to be race-safe under natural-key concurrency **so that** retries and parallel ingests cannot double-credit/debit balances.
+
+**Acceptance Criteria:**
+- Create path claims settlement row first, then applies side effects
+- Transition path claims CAS (`from_status -> to_status`) first, then applies side effects
+- Race losers re-read persisted settlement and return deduped responses
+- No duplicate balance mutation or duplicate settlement event under concurrent same-natural-key ingest
+- Parallel race tests + burst smoke path validate exact-once behavior
+
 ## 8) Success Metrics
 - Ledger events/day
 - Idempotent replay success

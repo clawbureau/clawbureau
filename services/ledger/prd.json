@@ -216,6 +216,22 @@
       "priority": 15,
       "passes": true,
       "notes": "Added payment settlement spec/schemas, migration 0007 (payment_settlements + idempotency replay table), ingest + lookup/list endpoints, fail-closed transition checks, and settlement smoke test for staging/prod." 
+    },
+    {
+      "id": "CLD-US-016",
+      "title": "Settlement ingest concurrency hardening (exactly-once side effects)",
+      "description": "As a platform, I want settlement ingest side effects to execute exactly once under natural-key races so concurrent retries cannot double-credit/debit balances.",
+      "acceptanceCriteria": [
+        "Create path claims natural key row before side effects",
+        "Transition path uses CAS from_status->to_status claim before side effects",
+        "Race losers re-read persisted settlement and return deduped responses",
+        "No duplicate balance mutations or duplicate settlement events under concurrent same-natural-key ingest",
+        "Race-focused tests + smoke burst mode pass",
+        "Staging deploy + smoke evidence captured"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Implemented exact-once ingest hardening via create-claim/CAS-claim flow, race-loser dedupe behavior, parallel race tests, and burst smoke validation. Rolled out to staging + production with successful burst-mode smoke evidence."
     }
   ]
 }

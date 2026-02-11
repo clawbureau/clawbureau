@@ -15,6 +15,7 @@ import type {
   PaymentSettlementIngestRequest,
   PaymentSettlementListQuery,
   PaymentSettlementListResponse,
+  PaymentSettlementStatus,
 } from '../src/types';
 
 function makeNowClock(start = '2026-02-11T00:00:00.000Z'): () => string {
@@ -35,10 +36,46 @@ function settlementKey(
   return `${provider}::${externalPaymentId}::${direction}`;
 }
 
+function makeRaceBarrier(participants: number): () => Promise<void> {
+  let waiting = 0;
+  let release: (() => void) | null = null;
+  let released = false;
+
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  return async () => {
+    if (released) {
+      return;
+    }
+
+    waiting += 1;
+    if (waiting >= participants) {
+      released = true;
+      release?.();
+    }
+
+    await gate;
+  };
+}
+
+interface InMemorySettlementRepoOptions {
+  beforeCreateSettlement?: () => Promise<void>;
+  beforeUpdateStatus?: () => Promise<void>;
+}
+
 class InMemorySettlementRepository implements PaymentSettlementRepositoryLike {
   private settlements = new Map<string, MachinePaymentSettlement>();
   private byNatural = new Map<string, string>();
   private ingestions = new Map<string, PaymentSettlementIngestionRecord>();
+
+  constructor(private options: InMemorySettlementRepoOptions = {}) {}
+
+  async findById(id: string): Promise<MachinePaymentSettlement | null> {
+    const row = this.settlements.get(id);
+    return row ? { ...row } : null;
+  }
 
   async findByNaturalKey(
     provider: string,
@@ -74,19 +111,99 @@ class InMemorySettlementRepository implements PaymentSettlementRepositoryLike {
   }
 
   async createSettlement(settlement: MachinePaymentSettlement): Promise<void> {
-    this.settlements.set(settlement.id, { ...settlement });
-    this.byNatural.set(
-      settlementKey(
-        settlement.provider,
-        settlement.external_payment_id,
-        settlement.direction
-      ),
-      settlement.id
+    await this.options.beforeCreateSettlement?.();
+
+    const key = settlementKey(
+      settlement.provider,
+      settlement.external_payment_id,
+      settlement.direction
     );
+
+    if (this.byNatural.has(key)) {
+      throw new Error(
+        'UNIQUE constraint failed: payment_settlements.provider, payment_settlements.external_payment_id, payment_settlements.direction'
+      );
+    }
+
+    this.settlements.set(settlement.id, { ...settlement });
+    this.byNatural.set(key, settlement.id);
   }
 
-  async updateSettlement(settlement: MachinePaymentSettlement): Promise<void> {
-    this.settlements.set(settlement.id, { ...settlement });
+  async updateStatusIfCurrent(
+    settlementId: string,
+    fromStatus: PaymentSettlementStatus,
+    update: {
+      status: PaymentSettlementStatus;
+      network?: string;
+      rail?: string;
+      metadata?: Record<string, unknown>;
+      provider_created_at?: string;
+      provider_updated_at?: string;
+      settled_at?: string;
+      updated_at: string;
+    }
+  ): Promise<boolean> {
+    await this.options.beforeUpdateStatus?.();
+
+    const current = this.settlements.get(settlementId);
+    if (!current) {
+      return false;
+    }
+
+    if (current.status !== fromStatus) {
+      return false;
+    }
+
+    this.settlements.set(settlementId, {
+      ...current,
+      status: update.status,
+      network: update.network,
+      rail: update.rail,
+      metadata: update.metadata,
+      provider_created_at: update.provider_created_at,
+      provider_updated_at: update.provider_updated_at,
+      settled_at: update.settled_at,
+      updated_at: update.updated_at,
+    });
+
+    return true;
+  }
+
+  async updateLatestEventId(
+    settlementId: string,
+    latestEventId: string,
+    updatedAt: string
+  ): Promise<void> {
+    const current = this.settlements.get(settlementId);
+    if (!current) {
+      return;
+    }
+
+    this.settlements.set(settlementId, {
+      ...current,
+      latest_event_id: latestEventId,
+      updated_at: updatedAt,
+    });
+  }
+
+  async deleteByIdIfStatusAndNoEvent(
+    settlementId: string,
+    status: PaymentSettlementStatus
+  ): Promise<boolean> {
+    const current = this.settlements.get(settlementId);
+    if (!current) {
+      return false;
+    }
+
+    if (current.status !== status || current.latest_event_id !== undefined) {
+      return false;
+    }
+
+    this.settlements.delete(settlementId);
+    this.byNatural.delete(
+      settlementKey(current.provider, current.external_payment_id, current.direction)
+    );
+    return true;
   }
 
   async listSettlements(_query: PaymentSettlementListQuery): Promise<PaymentSettlementListResponse> {
@@ -224,23 +341,34 @@ function makePayinRequest(
   };
 }
 
+function makeService(options?: InMemorySettlementRepoOptions): {
+  service: PaymentSettlementService;
+  settlementRepo: InMemorySettlementRepository;
+  accountRepo: InMemoryAccountRepository;
+  eventRepo: InMemoryEventRepository;
+} {
+  const settlementRepo = new InMemorySettlementRepository(options);
+  const accountRepo = new InMemoryAccountRepository();
+  const eventRepo = new InMemoryEventRepository();
+
+  accountRepo.createAccount('acc_test_001', 0n);
+
+  const service = new PaymentSettlementService(
+    { DB: {} as D1Database },
+    {
+      settlementRepository: settlementRepo,
+      accountRepository: accountRepo,
+      eventRepository: eventRepo,
+      now: makeNowClock(),
+    }
+  );
+
+  return { service, settlementRepo, accountRepo, eventRepo };
+}
+
 describe('machine payment settlements', () => {
   it('supports idempotency replay for same key + same payload', async () => {
-    const settlementRepo = new InMemorySettlementRepository();
-    const accountRepo = new InMemoryAccountRepository();
-    const eventRepo = new InMemoryEventRepository();
-
-    accountRepo.createAccount('acc_test_001', 0n);
-
-    const service = new PaymentSettlementService(
-      { DB: {} as D1Database },
-      {
-        settlementRepository: settlementRepo,
-        accountRepository: accountRepo,
-        eventRepository: eventRepo,
-        now: makeNowClock(),
-      }
-    );
+    const { service, accountRepo, eventRepo } = makeService();
 
     const request = makePayinRequest();
 
@@ -255,21 +383,7 @@ describe('machine payment settlements', () => {
   });
 
   it('dedupes duplicate natural-key ingest without replay side effects', async () => {
-    const settlementRepo = new InMemorySettlementRepository();
-    const accountRepo = new InMemoryAccountRepository();
-    const eventRepo = new InMemoryEventRepository();
-
-    accountRepo.createAccount('acc_test_001', 0n);
-
-    const service = new PaymentSettlementService(
-      { DB: {} as D1Database },
-      {
-        settlementRepository: settlementRepo,
-        accountRepository: accountRepo,
-        eventRepository: eventRepo,
-        now: makeNowClock(),
-      }
-    );
+    const { service, accountRepo, eventRepo } = makeService();
 
     const request = makePayinRequest();
 
@@ -284,21 +398,7 @@ describe('machine payment settlements', () => {
   });
 
   it('rejects invalid status transitions fail-closed', async () => {
-    const settlementRepo = new InMemorySettlementRepository();
-    const accountRepo = new InMemoryAccountRepository();
-    const eventRepo = new InMemoryEventRepository();
-
-    accountRepo.createAccount('acc_test_001', 0n);
-
-    const service = new PaymentSettlementService(
-      { DB: {} as D1Database },
-      {
-        settlementRepository: settlementRepo,
-        accountRepository: accountRepo,
-        eventRepository: eventRepo,
-        now: makeNowClock(),
-      }
-    );
+    const { service } = makeService();
 
     const pending = makePayinRequest({ status: 'pending' });
     const failed = makePayinRequest({ status: 'failed' });
@@ -313,21 +413,7 @@ describe('machine payment settlements', () => {
   });
 
   it('fails closed when reversal/refund exceeds available balance', async () => {
-    const settlementRepo = new InMemorySettlementRepository();
-    const accountRepo = new InMemoryAccountRepository();
-    const eventRepo = new InMemoryEventRepository();
-
-    accountRepo.createAccount('acc_test_001', 0n);
-
-    const service = new PaymentSettlementService(
-      { DB: {} as D1Database },
-      {
-        settlementRepository: settlementRepo,
-        accountRepository: accountRepo,
-        eventRepository: eventRepo,
-        now: makeNowClock(),
-      }
-    );
+    const { service, accountRepo, eventRepo } = makeService();
 
     const confirmed = makePayinRequest({ status: 'confirmed', amount_minor: '1000' });
     await service.ingest(confirmed, 'idem_reverse_001');
@@ -427,21 +513,7 @@ describe('machine payment settlements', () => {
   });
 
   it('throws a structured idempotency-key reuse error for payload mismatch', async () => {
-    const settlementRepo = new InMemorySettlementRepository();
-    const accountRepo = new InMemoryAccountRepository();
-    const eventRepo = new InMemoryEventRepository();
-
-    accountRepo.createAccount('acc_test_001', 0n);
-
-    const service = new PaymentSettlementService(
-      { DB: {} as D1Database },
-      {
-        settlementRepository: settlementRepo,
-        accountRepository: accountRepo,
-        eventRepository: eventRepo,
-        now: makeNowClock(),
-      }
-    );
+    const { service } = makeService();
 
     await service.ingest(makePayinRequest({ amount_minor: '1000' }), 'idem_conflict_001');
 
@@ -452,5 +524,83 @@ describe('machine payment settlements', () => {
     await expect(
       service.ingest(makePayinRequest({ amount_minor: '999' }), 'idem_conflict_001')
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+  });
+
+  it('applies confirmed payin side effects exactly once under parallel natural-key ingests', async () => {
+    const barrier = makeRaceBarrier(2);
+
+    const { service, accountRepo, eventRepo } = makeService({
+      beforeCreateSettlement: barrier,
+    });
+
+    const request = makePayinRequest({
+      external_payment_id: 'pay_race_confirmed_001',
+      amount_minor: '1500',
+    });
+
+    const [a, b] = await Promise.all([
+      service.ingest(request, 'idem_race_confirmed_a'),
+      service.ingest(request, 'idem_race_confirmed_b'),
+    ]);
+
+    expect(accountRepo.getAvailable('acc_test_001')).toBe(1500n);
+    expect(eventRepo.events.filter((evt) => evt.eventType === 'payin_settle')).toHaveLength(1);
+
+    const records = await service.getByProviderExternal(
+      'provider_sim',
+      'pay_race_confirmed_001',
+      'payin'
+    );
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.status).toBe('confirmed');
+
+    const dedupedCount = [a, b].filter((x) => x.idempotency.deduped).length;
+    expect(dedupedCount).toBe(1);
+  });
+
+  it('applies reversal side effects exactly once under parallel transition attempts', async () => {
+    const barrier = makeRaceBarrier(2);
+
+    const { service, accountRepo, eventRepo } = makeService({
+      beforeUpdateStatus: barrier,
+    });
+
+    await service.ingest(
+      makePayinRequest({
+        external_payment_id: 'pay_race_reverse_001',
+        amount_minor: '800',
+        status: 'confirmed',
+      }),
+      'idem_race_reverse_seed'
+    );
+
+    expect(accountRepo.getAvailable('acc_test_001')).toBe(800n);
+
+    const reversalRequest = makePayinRequest({
+      external_payment_id: 'pay_race_reverse_001',
+      amount_minor: '800',
+      status: 'reversed',
+    });
+
+    const [a, b] = await Promise.all([
+      service.ingest(reversalRequest, 'idem_race_reverse_a'),
+      service.ingest(reversalRequest, 'idem_race_reverse_b'),
+    ]);
+
+    expect(accountRepo.getAvailable('acc_test_001')).toBe(0n);
+    expect(eventRepo.events.filter((evt) => evt.eventType === 'payin_reverse')).toHaveLength(1);
+
+    const records = await service.getByProviderExternal(
+      'provider_sim',
+      'pay_race_reverse_001',
+      'payin'
+    );
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.status).toBe('reversed');
+
+    const dedupedCount = [a, b].filter((x) => x.idempotency.deduped).length;
+    expect(dedupedCount).toBe(1);
   });
 });
