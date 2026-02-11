@@ -1,0 +1,5868 @@
+{
+  "schema_name": "clawea.integration_manifest",
+  "schema_version": 1,
+  "manifest": {
+    "id": "integration_manifest_v1_2026_02_11",
+    "generated_at": "2026-02-11T00:00:00.000Z",
+    "owner": "@clawbureau/core",
+    "source_repo": "services/clawea-www",
+    "notes": "Canonical integration/addon manifest for SEO/AEO fail-closed generation and claim safety."
+  },
+  "platform": {
+    "truths": {
+      "shipped": [
+        {
+          "key": "wpc_registry",
+          "label": "WPC registry plus proxy fetch/verify"
+        },
+        {
+          "key": "cst_scope_hash",
+          "label": "CST scope hash and optional policy hash pinning"
+        },
+        {
+          "key": "gateway_receipts",
+          "label": "Gateway receipts for model calls"
+        },
+        {
+          "key": "proof_bundles",
+          "label": "Proof bundles"
+        },
+        {
+          "key": "anti_replay_binding",
+          "label": "Marketplace anti-replay binding (job-scoped CST binding)"
+        },
+        {
+          "key": "trust_pulse",
+          "label": "Trust Pulse artifact storage/viewer"
+        },
+        {
+          "key": "openrouter_via_fal",
+          "label": "OpenRouter via fal routed through clawproxy"
+        }
+      ],
+      "planned_or_optional": [
+        {
+          "key": "egress_outside_clawproxy",
+          "label": "Egress allowlists enforced outside clawproxy"
+        },
+        {
+          "key": "automatic_budget_enforcement",
+          "label": "Automatic cost budget enforcement"
+        },
+        {
+          "key": "transparency_log_inclusion_proofs",
+          "label": "Transparency log inclusion proofs"
+        }
+      ]
+    },
+    "capabilities": {
+      "wpc": {
+        "status": "shipped",
+        "notes": "Work Policy Contracts enforced via clawcontrols."
+      },
+      "cst": {
+        "status": "shipped",
+        "notes": "Scoped tokens issued by clawscope."
+      },
+      "receipts": {
+        "status": "shipped",
+        "notes": "Gateway receipts emitted by clawproxy."
+      },
+      "proof_bundles": {
+        "status": "shipped",
+        "notes": "Proof bundle verification in production path."
+      },
+      "trust_pulse": {
+        "status": "shipped",
+        "notes": "Trust Pulse storage/viewer available."
+      },
+      "egress_outside_clawproxy": {
+        "status": "planned",
+        "notes": "Outside-clawproxy egress enforcement is planned."
+      },
+      "automatic_budget_enforcement": {
+        "status": "planned",
+        "notes": "Automatic budget enforcement is planned."
+      },
+      "transparency_log_inclusion_proofs": {
+        "status": "planned",
+        "notes": "Transparency log inclusion proofs are planned."
+      }
+    }
+  },
+  "integrations": [
+    {
+      "id": "microsoft-graph",
+      "name": "Microsoft Graph",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "identity",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "graph.microsoft.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/graph/overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Microsoft Graph can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "microsoft-graph",
+        "workflow_slugs": [
+          "access-request-automation",
+          "onboarding-offboarding"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Microsoft Graph mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "outlook-exchange",
+      "name": "Outlook / Exchange",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "collaboration",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "graph.microsoft.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/graph/outlook-concept-overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/outlook-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/outlook-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/outlook-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/outlook-concept-overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Outlook / Exchange can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "outlook-exchange",
+        "workflow_slugs": [
+          "customer-email-send"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Outlook / Exchange mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "sharepoint",
+      "name": "SharePoint",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "collaboration",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "graph.microsoft.com",
+        "*.sharepoint.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/graph/sharepoint-concept-overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/sharepoint-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/sharepoint-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/sharepoint-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/sharepoint-concept-overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "SharePoint can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "sharepoint",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "SharePoint mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "onedrive",
+      "name": "OneDrive",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "storage",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "graph.microsoft.com",
+        "*.sharepoint.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/graph/onedrive-concept-overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/onedrive-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/onedrive-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/onedrive-concept-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/onedrive-concept-overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "OneDrive can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "onedrive",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "OneDrive mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "microsoft-calendar",
+      "name": "Microsoft Calendar",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "collaboration",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "graph.microsoft.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/graph/api/resources/calendar"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/api/resources/calendar"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/api/resources/calendar"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/api/resources/calendar"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/graph/api/resources/calendar"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Microsoft Calendar can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "microsoft-calendar",
+        "workflow_slugs": [
+          "access-request-automation"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Microsoft Calendar mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "power-automate",
+      "name": "Power Automate",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "devops",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.api.flow.microsoft.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/power-automate/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-automate/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-automate/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-automate/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-automate/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Power Automate can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "power-automate",
+        "workflow_slugs": [
+          "change-management"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Power Automate mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "powerbi",
+      "name": "Power BI",
+      "vendor": "Microsoft",
+      "suite": "Microsoft 365",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "api.powerbi.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "optional",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/power-bi/developer/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-bi/developer/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-bi/developer/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-bi/developer/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/power-bi/developer/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Power BI can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "powerbi",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Power BI mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "entra-id",
+      "name": "Microsoft Entra ID (Azure AD)",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "identity",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "graph.microsoft.com",
+        "login.microsoftonline.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/entra/identity/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/entra/identity/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/entra/identity/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/entra/identity/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/entra/identity/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Microsoft Entra ID (Azure AD) can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "entra-id",
+        "workflow_slugs": [
+          "access-request-automation",
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Microsoft Entra ID (Azure AD) mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "azure-devops",
+      "name": "Azure DevOps",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "devops",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "dev.azure.com",
+        "*.visualstudio.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/azure/devops/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/devops/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/devops/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/devops/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/devops/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Azure DevOps can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "azure-devops",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Azure DevOps mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "azure-sentinel",
+      "name": "Microsoft Sentinel",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "security",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "management.azure.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/azure/sentinel/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/sentinel/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/sentinel/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/sentinel/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/sentinel/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Microsoft Sentinel can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "azure-sentinel",
+        "workflow_slugs": [
+          "siem-evidence-collection",
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Microsoft Sentinel mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "microsoft-defender",
+      "name": "Microsoft Defender",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "security",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.security.microsoft.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/defender/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/defender/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/defender/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/defender/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/defender/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Microsoft Defender can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "microsoft-defender",
+        "workflow_slugs": [
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Microsoft Defender mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "microsoft-purview",
+      "name": "Microsoft Purview",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "security",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "purview.azure.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/purview/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/purview/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/purview/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/purview/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/purview/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Microsoft Purview can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "microsoft-purview",
+        "workflow_slugs": [
+          "sox-control-testing"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Microsoft Purview mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "azure-key-vault",
+      "name": "Azure Key Vault",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "security",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.vault.azure.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/azure/key-vault/general/overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/key-vault/general/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/key-vault/general/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/key-vault/general/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/key-vault/general/overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Azure Key Vault can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "azure-key-vault",
+        "workflow_slugs": [
+          "credential-rotation"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Azure Key Vault mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "azure-storage",
+      "name": "Azure Storage",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "storage",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.blob.core.windows.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/azure/storage/common/storage-introduction"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/storage/common/storage-introduction"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/storage/common/storage-introduction"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/storage/common/storage-introduction"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/storage/common/storage-introduction"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Azure Storage can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "azure-storage",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Azure Storage mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "azure-event-grid",
+      "name": "Azure Event Grid",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "events",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "event"
+      ],
+      "auth_modes": [
+        "service_account",
+        "webhook",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "*.eventgrid.azure.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/azure/event-grid/overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/event-grid/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/event-grid/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/event-grid/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/event-grid/overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Azure Event Grid can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "azure-event-grid",
+        "workflow_slugs": [
+          "change-management"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Azure Event Grid mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "azure-service-bus",
+      "name": "Azure Service Bus",
+      "vendor": "Microsoft",
+      "suite": "Azure",
+      "category": "events",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "event"
+      ],
+      "auth_modes": [
+        "service_account",
+        "webhook",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "*.servicebus.windows.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-messaging-overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-messaging-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-messaging-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-messaging-overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-messaging-overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Azure Service Bus can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "azure-service-bus",
+        "workflow_slugs": [
+          "change-management"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Azure Service Bus mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "gmail",
+      "name": "Gmail",
+      "vendor": "Google",
+      "suite": "Google Workspace",
+      "category": "collaboration",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "gmail.googleapis.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developers.google.com/workspace/gmail/api/guides"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/gmail/api/guides"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/gmail/api/guides"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/gmail/api/guides"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/gmail/api/guides"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Gmail can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "gmail",
+        "workflow_slugs": [
+          "customer-email-send"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Gmail mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "vendor": "Google",
+      "suite": "Google Workspace",
+      "category": "storage",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "www.googleapis.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developers.google.com/drive/api/guides/about-sdk"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/drive/api/guides/about-sdk"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/drive/api/guides/about-sdk"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/drive/api/guides/about-sdk"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/drive/api/guides/about-sdk"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Google Drive can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "google-drive",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Google Drive mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "google-calendar",
+      "name": "Google Calendar",
+      "vendor": "Google",
+      "suite": "Google Workspace",
+      "category": "collaboration",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "www.googleapis.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developers.google.com/workspace/calendar/api/guides/overview"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/calendar/api/guides/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/calendar/api/guides/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/calendar/api/guides/overview"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/workspace/calendar/api/guides/overview"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Google Calendar can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "google-calendar",
+        "workflow_slugs": [
+          "access-request-automation"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Google Calendar mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "google-admin",
+      "name": "Google Workspace Admin",
+      "vendor": "Google",
+      "suite": "Google Workspace",
+      "category": "identity",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "admin.googleapis.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developers.google.com/admin-sdk"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/admin-sdk"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/admin-sdk"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/admin-sdk"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.google.com/admin-sdk"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Google Workspace Admin can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "google-admin",
+        "workflow_slugs": [
+          "access-request-automation"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Google Workspace Admin mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "jira",
+      "name": "Jira",
+      "vendor": "Atlassian",
+      "suite": "Atlassian",
+      "category": "devops",
+      "modes_supported": [
+        "mcp",
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.atlassian.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developer.atlassian.com/cloud/jira/platform/rest/v3/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Jira can be connected via official API and MCP-compatible tooling with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "jira",
+        "workflow_slugs": [
+          "change-management",
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ],
+        "mcp_server_slug": "atlassian"
+      },
+      "notes": "Jira mapped from taxonomy mode=mcp-official."
+    },
+    {
+      "id": "confluence",
+      "name": "Confluence",
+      "vendor": "Atlassian",
+      "suite": "Atlassian",
+      "category": "collaboration",
+      "modes_supported": [
+        "mcp",
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.atlassian.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developer.atlassian.com/cloud/confluence/rest/v2/intro/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/confluence/rest/v2/intro/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/confluence/rest/v2/intro/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/confluence/rest/v2/intro/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/confluence/rest/v2/intro/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Confluence can be connected via official API and MCP-compatible tooling with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "confluence",
+        "workflow_slugs": [
+          "sox-control-testing"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ],
+        "mcp_server_slug": "atlassian"
+      },
+      "notes": "Confluence mapped from taxonomy mode=mcp-official."
+    },
+    {
+      "id": "opsgenie",
+      "name": "Opsgenie",
+      "vendor": "Atlassian",
+      "suite": "Atlassian",
+      "category": "observability",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "event"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.opsgenie.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://support.atlassian.com/opsgenie/docs/opsgenie-api-overview/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://support.atlassian.com/opsgenie/docs/opsgenie-api-overview/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://support.atlassian.com/opsgenie/docs/opsgenie-api-overview/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://support.atlassian.com/opsgenie/docs/opsgenie-api-overview/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://support.atlassian.com/opsgenie/docs/opsgenie-api-overview/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Opsgenie can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "opsgenie",
+        "workflow_slugs": [
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Opsgenie mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "vendor": "GitHub",
+      "suite": "Developer",
+      "category": "devops",
+      "modes_supported": [
+        "mcp",
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.github.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.github.com/en/rest"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/rest"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/rest"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/rest"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/rest"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "GitHub can be connected via official API and MCP-compatible tooling with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "github",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ],
+        "mcp_server_slug": "github"
+      },
+      "notes": "GitHub mapped from taxonomy mode=mcp-official."
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
+      "vendor": "GitLab",
+      "suite": "Developer",
+      "category": "devops",
+      "modes_supported": [
+        "mcp",
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "gitlab.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://docs.gitlab.com/api/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.gitlab.com/api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.gitlab.com/api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.gitlab.com/api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.gitlab.com/api/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "GitLab can be connected via official API and MCP-compatible tooling with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "gitlab",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ],
+        "mcp_server_slug": "gitlab"
+      },
+      "notes": "GitLab mapped from taxonomy mode=mcp-community."
+    },
+    {
+      "id": "bitbucket",
+      "name": "Bitbucket",
+      "vendor": "Atlassian",
+      "suite": "Developer",
+      "category": "devops",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.bitbucket.org"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developer.atlassian.com/cloud/bitbucket/rest/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/bitbucket/rest/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/bitbucket/rest/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/bitbucket/rest/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.atlassian.com/cloud/bitbucket/rest/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Bitbucket can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "bitbucket",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run"
+        ]
+      },
+      "notes": "Bitbucket mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "github-actions",
+      "name": "GitHub Actions",
+      "vendor": "GitHub",
+      "suite": "CI/CD",
+      "category": "devops",
+      "modes_supported": [
+        "api",
+        "ai_tool",
+        "plugin"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin",
+        "event"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.github.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.github.com/en/actions"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/actions"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/actions"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/actions"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.github.com/en/actions"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "GitHub Actions can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "github-actions",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "GitHub Actions mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "terraform-cloud",
+      "name": "Terraform Cloud",
+      "vendor": "HashiCorp",
+      "suite": "Infra",
+      "category": "cloud",
+      "modes_supported": [
+        "api",
+        "ai_tool",
+        "plugin"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "app.terraform.io"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.hashicorp.com/terraform/cloud-docs/api-docs"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "Terraform Cloud can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "terraform-cloud",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Terraform Cloud mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "vendor": "CNCF",
+      "suite": "Infra",
+      "category": "cloud",
+      "modes_supported": [
+        "api",
+        "ai_tool",
+        "plugin"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "kubernetes.default.svc"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://kubernetes.io/docs/reference/generated/kubernetes-api/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://kubernetes.io/docs/reference/generated/kubernetes-api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://kubernetes.io/docs/reference/generated/kubernetes-api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://kubernetes.io/docs/reference/generated/kubernetes-api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://kubernetes.io/docs/reference/generated/kubernetes-api/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Kubernetes can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "kubernetes",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Kubernetes mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "argo-cd",
+      "name": "Argo CD",
+      "vendor": "Argo Project",
+      "suite": "Infra",
+      "category": "devops",
+      "modes_supported": [
+        "api",
+        "ai_tool",
+        "plugin"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "argocd-server.argocd.svc"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://argo-cd.readthedocs.io/en/stable/operator-manual/api-docs/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://argo-cd.readthedocs.io/en/stable/operator-manual/api-docs/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://argo-cd.readthedocs.io/en/stable/operator-manual/api-docs/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://argo-cd.readthedocs.io/en/stable/operator-manual/api-docs/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://argo-cd.readthedocs.io/en/stable/operator-manual/api-docs/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "Argo CD can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "argo-cd",
+        "workflow_slugs": [
+          "production-deploy-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Argo CD mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "servicenow",
+      "name": "ServiceNow",
+      "vendor": "ServiceNow",
+      "suite": "ITSM",
+      "category": "itsm",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.service-now.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developer.servicenow.com/dev.do#!/reference"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.servicenow.com/dev.do#!/reference"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.servicenow.com/dev.do#!/reference"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.servicenow.com/dev.do#!/reference"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.servicenow.com/dev.do#!/reference"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "ServiceNow can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "servicenow",
+        "workflow_slugs": [
+          "change-management",
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "ServiceNow mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "okta",
+      "name": "Okta",
+      "vendor": "Okta",
+      "suite": "Identity",
+      "category": "identity",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.okta.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developer.okta.com/docs/reference/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.okta.com/docs/reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.okta.com/docs/reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.okta.com/docs/reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.okta.com/docs/reference/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Okta can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "okta",
+        "workflow_slugs": [
+          "access-request-automation"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "Okta mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "onepassword",
+      "name": "1Password",
+      "vendor": "1Password",
+      "suite": "Secrets",
+      "category": "security",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "events.1password.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://developer.1password.com/docs/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.1password.com/docs/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.1password.com/docs/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.1password.com/docs/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.1password.com/docs/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "1Password can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "onepassword",
+        "workflow_slugs": [
+          "credential-rotation"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule"
+        ]
+      },
+      "notes": "1Password mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "salesforce",
+      "name": "Salesforce",
+      "vendor": "Salesforce",
+      "suite": "CRM",
+      "category": "crm",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.salesforce.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Salesforce can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "salesforce",
+        "workflow_slugs": [
+          "ticket-auto-routing",
+          "customer-email-send"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Salesforce mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "zendesk",
+      "name": "Zendesk",
+      "vendor": "Zendesk",
+      "suite": "Support",
+      "category": "crm",
+      "modes_supported": [
+        "mcp",
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.zendesk.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "beta",
+      "source_urls": [
+        "https://developer.zendesk.com/api-reference/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.zendesk.com/api-reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.zendesk.com/api-reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.zendesk.com/api-reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developer.zendesk.com/api-reference/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "beta",
+        "allowed": [
+          "Zendesk can be connected via official API and MCP-compatible tooling with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "zendesk",
+        "workflow_slugs": [
+          "ticket-auto-routing"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ],
+        "mcp_server_slug": "zendesk"
+      },
+      "notes": "Zendesk mapped from taxonomy mode=mcp-community."
+    },
+    {
+      "id": "hubspot",
+      "name": "HubSpot",
+      "vendor": "HubSpot",
+      "suite": "CRM",
+      "category": "crm",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.hubapi.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developers.hubspot.com/docs/reference/api"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.hubspot.com/docs/reference/api"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.hubspot.com/docs/reference/api"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.hubspot.com/docs/reference/api"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.hubspot.com/docs/reference/api"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "HubSpot can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "hubspot",
+        "workflow_slugs": [
+          "customer-email-send"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "HubSpot mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "intercom",
+      "name": "Intercom",
+      "vendor": "Intercom",
+      "suite": "Support",
+      "category": "crm",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.intercom.io"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://developers.intercom.com/docs/references/rest-api/api.intercom.io/introduction"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.intercom.com/docs/references/rest-api/api.intercom.io/introduction"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.intercom.com/docs/references/rest-api/api.intercom.io/introduction"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.intercom.com/docs/references/rest-api/api.intercom.io/introduction"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://developers.intercom.com/docs/references/rest-api/api.intercom.io/introduction"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Intercom can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "intercom",
+        "workflow_slugs": [
+          "ticket-auto-routing"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Intercom mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "workday",
+      "name": "Workday",
+      "vendor": "Workday",
+      "suite": "HR",
+      "category": "erp",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.workday.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://docs.workday.com/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.workday.com/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.workday.com/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.workday.com/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.workday.com/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "Workday can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "workday",
+        "workflow_slugs": [
+          "onboarding-offboarding"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Workday mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "sap",
+      "name": "SAP",
+      "vendor": "SAP",
+      "suite": "ERP",
+      "category": "erp",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.sap.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://api.sap.com/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://api.sap.com/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://api.sap.com/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://api.sap.com/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://api.sap.com/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "SAP can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "sap",
+        "workflow_slugs": [
+          "payment-approval",
+          "sox-control-testing"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "SAP mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "netsuite",
+      "name": "NetSuite",
+      "vendor": "Oracle",
+      "suite": "ERP",
+      "category": "erp",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.netsuite.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "NetSuite can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "netsuite",
+        "workflow_slugs": [
+          "payment-approval",
+          "sox-control-testing"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "NetSuite mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "coupa",
+      "name": "Coupa",
+      "vendor": "Coupa",
+      "suite": "Procurement",
+      "category": "erp",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write",
+        "admin"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.coupa.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "two-person-rule",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "required",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "planned",
+      "source_urls": [
+        "https://compass.coupa.com/en-us/products/product-documentation/integration-technical-documentation"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://compass.coupa.com/en-us/products/product-documentation/integration-technical-documentation"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://compass.coupa.com/en-us/products/product-documentation/integration-technical-documentation"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://compass.coupa.com/en-us/products/product-documentation/integration-technical-documentation"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://compass.coupa.com/en-us/products/product-documentation/integration-technical-documentation"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "planned",
+        "allowed": [
+          "Coupa can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "coupa",
+        "workflow_slugs": [
+          "payment-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "two-person-rule",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Coupa mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "vendor": "Stripe",
+      "suite": "Payments",
+      "category": "crm",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "api_key",
+        "webhook"
+      ],
+      "required_egress_hosts": [
+        "api.stripe.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.stripe.com/api"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.stripe.com/api"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.stripe.com/api"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.stripe.com/api"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.stripe.com/api"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Stripe can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "stripe",
+        "workflow_slugs": [
+          "payment-approval"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Stripe mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "snowflake",
+      "name": "Snowflake",
+      "vendor": "Snowflake",
+      "suite": "Data",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "*.snowflakecomputing.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "optional",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.snowflake.com/en/developer-guide/sql-api/index"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.snowflake.com/en/developer-guide/sql-api/index"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.snowflake.com/en/developer-guide/sql-api/index"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.snowflake.com/en/developer-guide/sql-api/index"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.snowflake.com/en/developer-guide/sql-api/index"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Snowflake can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "snowflake",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Snowflake mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "databricks",
+      "name": "Databricks",
+      "vendor": "Databricks",
+      "suite": "Data",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "*.databricks.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.databricks.com/api/workspace/introduction.html"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.databricks.com/api/workspace/introduction.html"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.databricks.com/api/workspace/introduction.html"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.databricks.com/api/workspace/introduction.html"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.databricks.com/api/workspace/introduction.html"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Databricks can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "databricks",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Databricks mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "bigquery",
+      "name": "BigQuery",
+      "vendor": "Google Cloud",
+      "suite": "Data",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "bigquery.googleapis.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "optional",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://cloud.google.com/bigquery/docs/reference/rest"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://cloud.google.com/bigquery/docs/reference/rest"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://cloud.google.com/bigquery/docs/reference/rest"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://cloud.google.com/bigquery/docs/reference/rest"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://cloud.google.com/bigquery/docs/reference/rest"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "BigQuery can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "bigquery",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "BigQuery mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "vendor": "PostgreSQL",
+      "suite": "Data",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "postgresql.internal"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://www.postgresql.org/docs/current/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.postgresql.org/docs/current/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.postgresql.org/docs/current/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.postgresql.org/docs/current/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.postgresql.org/docs/current/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "PostgreSQL can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "postgres",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "PostgreSQL mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "vendor": "Redis",
+      "suite": "Data",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "redis.internal"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://redis.io/docs/latest/develop/reference/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://redis.io/docs/latest/develop/reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://redis.io/docs/latest/develop/reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://redis.io/docs/latest/develop/reference/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://redis.io/docs/latest/develop/reference/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Redis can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "redis",
+        "workflow_slugs": [
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "Redis mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "mongodb",
+      "name": "MongoDB",
+      "vendor": "MongoDB",
+      "suite": "Data",
+      "category": "data",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read",
+        "write"
+      ],
+      "auth_modes": [
+        "service_account",
+        "api_key"
+      ],
+      "required_egress_hosts": [
+        "*.mongodb.net"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements",
+        "approval-gates",
+        "forced-dry-run",
+        "dlp-redaction",
+        "data-residency"
+      ],
+      "approval_requirements": {
+        "write": "required",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://www.mongodb.com/docs/atlas/api/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.mongodb.com/docs/atlas/api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.mongodb.com/docs/atlas/api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.mongodb.com/docs/atlas/api/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://www.mongodb.com/docs/atlas/api/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "MongoDB can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "mongodb",
+        "workflow_slugs": [
+          "siem-evidence-collection"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements",
+          "approval-gates",
+          "forced-dry-run",
+          "dlp-redaction",
+          "data-residency"
+        ]
+      },
+      "notes": "MongoDB mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "datadog",
+      "name": "Datadog",
+      "vendor": "Datadog",
+      "suite": "Observability",
+      "category": "observability",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "api.datadoghq.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements"
+      ],
+      "approval_requirements": {
+        "write": "optional",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.datadoghq.com/api/latest/"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.datadoghq.com/api/latest/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.datadoghq.com/api/latest/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.datadoghq.com/api/latest/"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.datadoghq.com/api/latest/"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Datadog can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "datadog",
+        "workflow_slugs": [
+          "incident-triage",
+          "cloud-cost-anomaly-response"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements"
+        ]
+      },
+      "notes": "Datadog mapped from taxonomy mode=api-only."
+    },
+    {
+      "id": "splunk",
+      "name": "Splunk",
+      "vendor": "Splunk",
+      "suite": "SIEM",
+      "category": "observability",
+      "modes_supported": [
+        "api",
+        "ai_tool"
+      ],
+      "operations": [
+        "read"
+      ],
+      "auth_modes": [
+        "oauth",
+        "api_key",
+        "service_account"
+      ],
+      "required_egress_hosts": [
+        "*.splunkcloud.com"
+      ],
+      "default_wpc_controls": [
+        "tool-allow-deny",
+        "secret-boundary",
+        "egress-allowlist",
+        "rate-limits",
+        "replay-requirements"
+      ],
+      "approval_requirements": {
+        "write": "optional",
+        "admin": "optional",
+        "notes": "Write/admin paths require fail-closed approvals and replay-safe controls."
+      },
+      "proof_artifacts": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle"
+      ],
+      "status": "implementable",
+      "source_urls": [
+        "https://docs.splunk.com/Documentation/Splunk/latest/RESTUM/RESTusing"
+      ],
+      "release_gates": {
+        "security_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.splunk.com/Documentation/Splunk/latest/RESTUM/RESTusing"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "ops_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.splunk.com/Documentation/Splunk/latest/RESTUM/RESTusing"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "proof_review": {
+          "status": "fail",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.splunk.com/Documentation/Splunk/latest/RESTUM/RESTusing"
+          ],
+          "notes": "Release gate pending implementation validation"
+        },
+        "docs_review": {
+          "status": "pass",
+          "approved_by": "@clawbureau/core",
+          "approved_at": "2026-02-11T00:00:00.000Z",
+          "evidence_urls": [
+            "https://docs.splunk.com/Documentation/Splunk/latest/RESTUM/RESTusing"
+          ],
+          "notes": "Official docs verified"
+        }
+      },
+      "claims": {
+        "public_availability": "implementable",
+        "allowed": [
+          "Splunk can be connected via official API with enterprise buildout controls.",
+          "Write and admin actions require WPC approval gates, scoped tokens, and explicit least-privilege auth scopes.",
+          "Model-assisted runs can produce gateway receipts and proof bundles for audit and replay checks."
+        ],
+        "must_not_imply": [
+          "Do not imply this integration is available now as a native connector.",
+          "Do not claim out-of-the-box or fully shipped support before release gates pass."
+        ]
+      },
+      "taxonomy_refs": {
+        "tool_slug": "splunk",
+        "workflow_slugs": [
+          "siem-evidence-collection",
+          "incident-triage"
+        ],
+        "control_slugs": [
+          "tool-allow-deny",
+          "secret-boundary",
+          "egress-allowlist",
+          "rate-limits",
+          "replay-requirements"
+        ]
+      },
+      "notes": "Splunk mapped from taxonomy mode=api-only."
+    }
+  ]
+}

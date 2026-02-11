@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clawea.com/schemas/integration-manifest.v1.schema.json",
+  "title": "clawea integration manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "manifest",
+    "platform",
+    "integrations"
+  ],
+  "properties": {
+    "schema_name": { "const": "clawea.integration_manifest" },
+    "schema_version": { "const": 1 },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "generated_at", "owner", "source_repo"],
+      "properties": {
+        "id": { "type": "string", "minLength": 8 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "owner": { "type": "string", "minLength": 2 },
+        "source_repo": { "type": "string", "minLength": 3 },
+        "notes": { "type": "string" }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["truths", "capabilities"],
+      "properties": {
+        "truths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shipped", "planned_or_optional"],
+          "properties": {
+            "shipped": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/platform_capability" }
+            },
+            "planned_or_optional": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/platform_capability" }
+            }
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wpc",
+            "cst",
+            "receipts",
+            "proof_bundles",
+            "trust_pulse",
+            "egress_outside_clawproxy",
+            "automatic_budget_enforcement",
+            "transparency_log_inclusion_proofs"
+          ],
+          "properties": {
+            "wpc": { "$ref": "#/$defs/capability_status" },
+            "cst": { "$ref": "#/$defs/capability_status" },
+            "receipts": { "$ref": "#/$defs/capability_status" },
+            "proof_bundles": { "$ref": "#/$defs/capability_status" },
+            "trust_pulse": { "$ref": "#/$defs/capability_status" },
+            "egress_outside_clawproxy": { "$ref": "#/$defs/capability_status" },
+            "automatic_budget_enforcement": { "$ref": "#/$defs/capability_status" },
+            "transparency_log_inclusion_proofs": { "$ref": "#/$defs/capability_status" }
+          }
+        }
+      }
+    },
+    "integrations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/integration" }
+    }
+  },
+  "$defs": {
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["shipped", "beta", "planned", "implementable", "deprecated"]
+    },
+    "capability_word": {
+      "type": "string",
+      "enum": ["shipped", "planned", "optional", "not_supported"]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["mcp", "api", "plugin", "ai_tool"]
+    },
+    "operation": {
+      "type": "string",
+      "enum": ["read", "write", "admin", "event"]
+    },
+    "auth_mode": {
+      "type": "string",
+      "enum": ["oauth", "api_key", "service_account", "webhook"]
+    },
+    "approval_level": {
+      "type": "string",
+      "enum": ["required", "optional", "not_supported"]
+    },
+    "proof_artifact": {
+      "type": "string",
+      "enum": [
+        "wpc",
+        "cst",
+        "gateway_receipt",
+        "proof_bundle",
+        "trust_pulse",
+        "execution_attestation",
+        "urm"
+      ]
+    },
+    "platform_capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label"],
+      "properties": {
+        "key": { "type": "string", "minLength": 2 },
+        "label": { "type": "string", "minLength": 2 }
+      }
+    },
+    "capability_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "notes"],
+      "properties": {
+        "status": { "$ref": "#/$defs/capability_word" },
+        "notes": { "type": "string", "minLength": 2 }
+      }
+    },
+    "review_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence_urls"],
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail"] },
+        "approved_by": { "type": "string" },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "evidence_urls": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "format": "uri" }
+        },
+        "notes": { "type": "string" }
+      }
+    },
+    "release_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["security_review", "ops_review", "proof_review", "docs_review"],
+      "properties": {
+        "security_review": { "$ref": "#/$defs/review_gate" },
+        "ops_review": { "$ref": "#/$defs/review_gate" },
+        "proof_review": { "$ref": "#/$defs/review_gate" },
+        "docs_review": { "$ref": "#/$defs/review_gate" }
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["public_availability", "allowed", "must_not_imply"],
+      "properties": {
+        "public_availability": { "$ref": "#/$defs/lifecycle_state" },
+        "allowed": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 6 }
+        },
+        "must_not_imply": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 6 }
+        }
+      }
+    },
+    "taxonomy_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "mcp_server_slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "event_source_slugs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        },
+        "workflow_slugs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        },
+        "control_slugs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        }
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "vendor",
+        "category",
+        "modes_supported",
+        "operations",
+        "auth_modes",
+        "required_egress_hosts",
+        "default_wpc_controls",
+        "approval_requirements",
+        "proof_artifacts",
+        "status",
+        "source_urls",
+        "release_gates",
+        "claims"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "name": { "type": "string", "minLength": 2 },
+        "vendor": { "type": "string", "minLength": 2 },
+        "suite": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": [
+            "cloud",
+            "identity",
+            "collaboration",
+            "crm",
+            "erp",
+            "itsm",
+            "data",
+            "observability",
+            "events",
+            "devops",
+            "security",
+            "storage",
+            "other"
+          ]
+        },
+        "modes_supported": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/mode" }
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/operation" }
+        },
+        "auth_modes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/auth_mode" }
+        },
+        "required_egress_hosts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 2 }
+        },
+        "default_wpc_controls": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        },
+        "approval_requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["write", "admin"],
+          "properties": {
+            "write": { "$ref": "#/$defs/approval_level" },
+            "admin": { "$ref": "#/$defs/approval_level" },
+            "notes": { "type": "string" }
+          }
+        },
+        "proof_artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/proof_artifact" }
+        },
+        "status": { "$ref": "#/$defs/lifecycle_state" },
+        "source_urls": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "format": "uri" }
+        },
+        "release_gates": { "$ref": "#/$defs/release_gates" },
+        "claims": { "$ref": "#/$defs/claims" },
+        "taxonomy_refs": { "$ref": "#/$defs/taxonomy_refs" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

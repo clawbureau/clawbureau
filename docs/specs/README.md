@@ -17,3 +17,5 @@
   - `docs/specs/tee/TEE_ATTESTATION_POLICY_v1.md`
 - Machine payment settlement:
   - `docs/specs/payments/MACHINE_PAYMENT_SETTLEMENT_v1.md`
+- clawea:
+  - `docs/specs/clawea/INTEGRATION_MANIFEST_v1.md`

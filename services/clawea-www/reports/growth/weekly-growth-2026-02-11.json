@@ -1,0 +1,44 @@
+{
+  "weekEnding": "2026-02-11",
+  "scope": "clawea-www M1 growth",
+  "content": {
+    "coreSitemapPages": 117,
+    "newBofuPages": 21
+  },
+  "indexing": {
+    "runId": "2026-02-11-bofu-index-only-03",
+    "artifact": "articles/_indexing_runs/2026-02-11-bofu-index-only-03.json",
+    "requestedUrls": 118,
+    "submittedUrls": 0,
+    "failedUrls": 118,
+    "retriedBatches": 6,
+    "retryAttempts": 18,
+    "failureQueue": {
+      "path": "articles/_indexing_failures.json",
+      "pending": 118
+    },
+    "engineStatus": {
+      "indexnow": "429 TooManyRequests",
+      "google": "429 RESOURCE_EXHAUSTED"
+    }
+  },
+  "search": {
+    "queryDataReady": false,
+    "ctrDataReady": false,
+    "note": "Baseline week; pull from GSC after crawl/index latency and quota reset"
+  },
+  "conversion": {
+    "summaryArtifact": "reports/conversion/weekly-2026-02-11.json",
+    "totalEvents": 1,
+    "contactIntentViews": 0,
+    "contactIntentActions": 0,
+    "intentToActionRate": 0
+  },
+  "nextActions": [
+    "Replay pending queue after quota reset",
+    "Throttle/slice replay batches to reduce IndexNow lockouts",
+    "Add quota-aware engine mode for replay",
+    "Collect first non-smoke conversion week",
+    "Collect first GSC query+CTR extract for BOFU refresh prioritization"
+  ]
+}

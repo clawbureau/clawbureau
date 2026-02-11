@@ -1,0 +1,59 @@
+{
+  "runId": "2026-02-11-bofu-index-only-03",
+  "mode": "index-only",
+  "requestedUrls": 118,
+  "submittedUrls": 0,
+  "failedUrls": 118,
+  "retriedBatches": 6,
+  "retryAttempts": 18,
+  "batchCount": 6,
+  "batchSize": 20,
+  "firstBatchLastAttempt": {
+    "ok": false,
+    "requested": 20,
+    "rejectedCount": 0,
+    "action": "URL_UPDATED",
+    "indexnow": {
+      "ok": false,
+      "submitted": 0,
+      "status": 429,
+      "attempts": 4,
+      "retried": 3,
+      "retryableFailures": 3,
+      "error": "INDEXNOW_REQUEST_FAILED",
+      "body": {
+        "code": "TooManyRequests",
+        "message": "We're sorry, but you have sent too many requests to us recently."
+      }
+    },
+    "google": {
+      "ok": false,
+      "submitted": 0,
+      "failed": 20,
+      "status": 207,
+      "detailsCount": 20,
+      "failedDetails": [
+        {
+          "url": "https://clawea.com/",
+          "status": 429
+        },
+        {
+          "url": "https://clawea.com/agent-audit-and-replay",
+          "status": 429
+        },
+        {
+          "url": "https://clawea.com/agent-proof-and-attestation",
+          "status": 429
+        },
+        {
+          "url": "https://clawea.com/agent-supply-chain-security",
+          "status": 429
+        },
+        {
+          "url": "https://clawea.com/audit/replay-and-rollback",
+          "status": 429
+        }
+      ]
+    }
+  }
+}

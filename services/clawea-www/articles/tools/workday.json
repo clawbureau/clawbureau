@@ -1,0 +1,66 @@
+{
+  "slug": "tools/workday",
+  "title": "Workday for Permissioned Agents | Claw EA",
+  "category": "tools",
+  "html": "<p>Workday for permissioned agents means connecting AI agents to HR and finance data via official APIs, but only under machine enforced policy. If an agent can read or write employee records, compensation, or job changes, it must operate under a signed Work Policy Contract and scoped tokens, not just a prompt.</p>\n<p>Claw EA runs OpenClaw as the baseline agent runtime and adds a permissioned execution layer. Every Workday call is gated by policy as code, authenticated with a CST, and auditable through gateway receipts and proof bundles.</p>\n\n<h2>Step-by-step runbook</h2>\n<ol>\n<li><strong>Define the Work Policy Contract.</strong> Author a WPC that specifies allowed Workday API domains, read versus write operations, field level constraints, and approval gates. Register the signed, hash addressed policy in the WPC registry.</li>\n<li><strong>Issue scoped tokens.</strong> Use clawscope to mint a CST tied to the WPC scope hash and optionally pin the policy hash. Keep TTL short and bind the CST to a specific job when appropriate.</li>\n<li><strong>Configure OpenClaw tool policy and sandbox.</strong> Enable sandbox mode for the agent and restrict tool profiles so only the Workday integration tool can execute. Avoid elevated host execution unless explicitly approved.</li>\n<li><strong>Route model traffic through clawproxy.</strong> All model calls go through clawproxy to emit gateway receipts. This creates a tamper evident record of prompts and tool invocation decisions.</li>\n<li><strong>Connect to Workday via official API.</strong> Use enterprise OAuth, service accounts, or API keys as supported by Workday. Map API scopes to the WPC and deny anything not explicitly listed.</li>\n<li><strong>Generate and store proof bundles.</strong> For each run, produce a proof bundle containing gateway receipts, CST claims, and policy references. Store the artifact and optionally publish a Trust Pulse for review.</li>\n</ol>\n\n<h2>Threat model</h2>\n<p>Workday is a system of record for people and pay. A misconfigured or malicious skill can cause irreversible impact.</p>\n<table>\n<thead>\n<tr>\n<th>Threat</th>\n<th>What happens</th>\n<th>Control and Action</th>\n<th>Evidence</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Prompt injection triggers unauthorized write</td>\n<td>Agent updates compensation or job title based on manipulated input</td>\n<td>WPC restricts write endpoints and requires approval gate; CST pinned to policy hash; OpenClaw tool allowlist limits callable tools</td>\n<td>Proof bundle with WPC hash and gateway receipts</td>\n</tr>\n<tr>\n<td>Overbroad API scopes</td>\n<td>Agent can read full employee dataset instead of scoped population</td>\n<td>Map Workday OAuth scopes to least privilege; encode allowed resources in WPC; short TTL CST</td>\n<td>CST claims and policy scope hash in bundle</td>\n</tr>\n<tr>\n<td>Sandbox escape via elevated tool</td>\n<td>Agent executes host level command and exfiltrates credentials</td>\n<td>Disable elevated tools; run sandbox mode all or non-main; audit with openclaw security audit</td>\n<td>OpenClaw config plus run receipts</td>\n</tr>\n<tr>\n<td>Replay of previous approval</td>\n<td>Old approval reused to justify new change</td>\n<td>Marketplace anti-replay binding with job scoped CST binding</td>\n<td>Job bound CST reference in bundle</td>\n</tr>\n<tr>\n<td>Silent model drift</td>\n<td>Different model behavior causes unexpected HR action</td>\n<td>Route through clawproxy; compare gateway receipts across runs</td>\n<td>Signed gateway receipts per model call</td>\n</tr>\n</tbody>\n</table>\n\n<h2>Policy-as-code example</h2>\n<p>Below is a simplified JSON style WPC snippet for a Workday compensation review assistant. It allows read access to worker profiles and proposes changes, but blocks direct writes without approval.</p>\n<pre>{\n  \"tool\": \"workday_api\",\n  \"allowed_actions\": [\"get_worker\", \"list_comp_plans\", \"propose_comp_change\"],\n  \"denied_actions\": [\"update_compensation\", \"terminate_worker\"],\n  \"resource_constraints\": {\n    \"worker_population\": \"cost_center:ENG\",\n    \"fields\": [\"base_pay\", \"job_profile\", \"manager\"]\n  },\n  \"approval_required_for\": [\"update_compensation\"],\n  \"cst\": {\n    \"max_ttl_minutes\": 30,\n    \"policy_hash_pinned\": true\n  }\n}</pre>\n<p>This WPC is signed and stored in clawcontrols. The agent runtime fetches and verifies it before any Workday call is executed.</p>\n\n<h2>What proof do you get?</h2>\n<p>Each model call that leads to a Workday action emits gateway receipts from clawproxy. These receipts bind model input, output, and metadata in a signed record.</p>\n<p>The run produces a proof bundle that includes gateway receipts, the WPC hash, and the CST claims used for authentication. This can be verified independently and attached to a Trust Pulse for audit teams.</p>\n<p>If an HR leader asks why a compensation change was proposed or executed, you can show the exact policy, token scope, and model decision path that led to it.</p>\n\n<h2>Rollback posture</h2>\n<p>Rollback in HR systems is operational, not just technical. You need both Workday level remediation and agent level containment.</p>\n<table>\n<thead>\n<tr>\n<th>Scenario</th>\n<th>Immediate action</th>\n<th>Safe rollback</th>\n<th>Evidence retained</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Incorrect data write</td>\n<td>Revoke CST; disable agent in OpenClaw; correct record in Workday via official process</td>\n<td>Re issue CST with narrowed scope; require approval gate for similar actions</td>\n<td>Original proof bundle and new corrective bundle</td>\n</tr>\n<tr>\n<td>Policy misconfiguration</td>\n<td>Deprecate WPC hash in registry; pin new policy</td>\n<td>Re run impacted jobs under new WPC</td>\n<td>Old and new WPC hashes in registry</td>\n</tr>\n<tr>\n<td>Credential exposure</td>\n<td>Rotate Workday OAuth or service account credentials</td>\n<td>Shorten CST TTL; review sandbox and tool policy</td>\n<td>Gateway receipts and CST issuance logs</td>\n</tr>\n</tbody>\n</table>\n\n<h2>FAQ</h2>\n<h3>Is there a native Workday connector?</h3>\n<p>No. Workday can be connected via official API with enterprise buildout controls. Write and admin actions require WPC approval gates, scoped tokens, and explicit least privilege auth scopes.</p>\n\n<h3>Why is prompt-only control insufficient for HR agents?</h3>\n<p>Prompts are advisory. They cannot enforce API scope, TTL, or approval gates at execution time. Policy as code with WPC and CST enforces constraints even if the model output is wrong.</p>\n\n<h3>How does OpenClaw fit into this?</h3>\n<p>OpenClaw is the baseline agent runtime handling skills, tools, and sandboxing. Claw EA layers WPC enforcement, CST authentication, gateway receipts, and proof bundles on top of that runtime.</p>\n\n<h3>Can we limit access to a specific worker population?</h3>\n<p>Yes. Encode cost center, region, or business unit constraints in the WPC and map them to Workday API filters. The CST is issued against that scoped policy hash.</p>\n\n<h3>What auditors actually see?</h3>\n<p>Auditors review the proof bundle, including gateway receipts and policy hashes. Optionally, they can view a Trust Pulse artifact that packages the run for marketplace style review.</p>\n\n<h2>Sources</h2>\n<ul>\n<li><a href=\"https://github.com/openclaw/openclaw/blob/5d4f42016f3afdbd5218843648d3ea594541dedc/docs/gateway/security/index.md\">OpenClaw Gateway Security</a></li>\n<li><a href=\"https://github.com/openclaw/openclaw/blob/5d4f42016f3afdbd5218843648d3ea594541dedc/docs/gateway/sandboxing.md\">OpenClaw Sandboxing</a></li>\n<li><a href=\"https://newsroom.workday.com/2025-02-11-The-Next-Generation-of-Workforce-Management-is-Here-Workday-Unveils-New-Agent-System-of-Record\">Workday Agent System of Record Press Release</a></li>\n<li><a href=\"https://www.workday.com/en-us/artificial-intelligence/agentic-ai.html\">Workday Agentic AI Overview</a></li>\n</ul>\n\n<div class=\"cta-banner\" data-cta=\"bofu-endcap\">\n  <h2>Ready to put this workflow into production?</h2>\n  <p>Get a scoped deployment plan with Work Policy Contracts, approval gates, and cryptographic proof bundles for your team.</p>\n  <a href=\"/contact\" class=\"cta-btn cta-btn-lg\" data-cta=\"bofu-talk-to-sales\">Talk to Sales</a>\n  <a href=\"/trust\" class=\"cta-btn cta-btn-outline cta-btn-lg\" style=\"margin-left:.75rem\" data-cta=\"bofu-trust-layer\">Review Trust Layer</a>\n</div>\n",
+  "description": "Workday for permissioned agents means connecting AI agents to HR and finance data via official APIs, but only under machine enforced policy. If an agent can read or write employee records, compensation, or job changes, i",
+  "faqs": [
+    {
+      "q": "Is there a native Workday connector?",
+      "a": "No. Workday can be connected via official API with enterprise buildout controls. Write and admin actions require WPC approval gates, scoped tokens, and explicit least privilege auth scopes."
+    },
+    {
+      "q": "Why is prompt-only control insufficient for HR agents?",
+      "a": "Prompts are advisory. They cannot enforce API scope, TTL, or approval gates at execution time. Policy as code with WPC and CST enforces constraints even if the model output is wrong."
+    },
+    {
+      "q": "How does OpenClaw fit into this?",
+      "a": "OpenClaw is the baseline agent runtime handling skills, tools, and sandboxing. Claw EA layers WPC enforcement, CST authentication, gateway receipts, and proof bundles on top of that runtime."
+    },
+    {
+      "q": "Can we limit access to a specific worker population?",
+      "a": "Yes. Encode cost center, region, or business unit constraints in the WPC and map them to Workday API filters. The CST is issued against that scoped policy hash."
+    },
+    {
+      "q": "What auditors actually see?",
+      "a": "Auditors review the proof bundle, including gateway receipts and policy hashes. Optionally, they can view a Trust Pulse artifact that packages the run for marketplace style review."
+    }
+  ],
+  "sources": [
+    {
+      "title": "Workday and Microsoft to Deliver Unified AI Agent Experience for the Enterprise",
+      "uri": "https://investor.workday.com/2025-09-16-Workday-and-Microsoft-to-Deliver-Unified-AI-Agent-Experience-for-the-Enterprise"
+    },
+    {
+      "title": "The Next Generation of Workforce Management is Here–Workday Unveils New Agent System of Record",
+      "uri": "https://newsroom.workday.com/2025-02-11-The-Next-Generation-of-Workforce-Management-is-Here-Workday-Unveils-New-Agent-System-of-Record"
+    },
+    {
+      "title": "The Agent System of Record is here.",
+      "uri": "https://www.workday.com/en-us/artificial-intelligence/agentic-ai.html"
+    },
+    {
+      "title": "The Next Generation of Workforce Management is Here--Workday Unveils New Agent System of Record",
+      "uri": "https://en-hk.newsroom.workday.com/2025-02-11-The-Next-Generation-of-Workforce-Management-is-Here-Workday-Unveils-New-Agent-System-of-Record"
+    },
+    {
+      "title": "The Agent System of Record is here.",
+      "uri": "https://www.workday.com/en-gb/artificial-intelligence/agentic-ai.html"
+    },
+    {
+      "title": "The Agent System of Record is here.",
+      "uri": "https://workday.com/en-se/artificial-intelligence/agentic-ai.html"
+    },
+    {
+      "title": "The Agent System of Record is here.",
+      "uri": "https://www.workday.com/en-hk/artificial-intelligence/agentic-ai.html"
+    },
+    {
+      "title": "The Agentic Wave: A New Era of Workforce Management",
+      "uri": "https://blog.workday.com/en-au/the-agentic-wave-new-era-workforce-management.html?refCamp=7014X000002s3hcQAA"
+    }
+  ],
+  "model": "candidate-01",
+  "generatedAt": "2026-02-11T16:57:39.078Z",
+  "indexable": true
+}

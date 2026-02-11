@@ -1,0 +1,15 @@
+node_modules/
+.wrangler/
+
+# Large local generation/test artifacts
+sample-output/
+test-output/
+oracle/
+
+# Runtime indexing artifacts
+articles/_indexing_runs/
+articles/_indexing_push.json
+articles/_indexing_failures.json
+articles/_indexing_replay.json
+articles/_progress.json
+articles/_publish_summary.json
