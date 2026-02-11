@@ -86,7 +86,7 @@ function interactiveScript(): string {
     });
   }
 
-  /* Global search shortcut (/) */
+  /* Global search shortcut (/) + live search */
   var searchForms=document.querySelectorAll('.nav-search');
   var searchInputs=document.querySelectorAll('[data-global-search]');
 
@@ -94,6 +94,27 @@ function interactiveScript(): string {
     if(!el||!(el instanceof HTMLElement))return false;
     var tag=(el.tagName||'').toLowerCase();
     return tag==='input'||tag==='textarea'||tag==='select'||el.isContentEditable;
+  }
+
+  function trackSearch(eventType,payload){
+    if(window.__claweaTrack){
+      window.__claweaTrack(eventType,payload||{});
+      return;
+    }
+    try {
+      var body=JSON.stringify({
+        eventType:eventType,
+        ts:new Date().toISOString(),
+        page:window.location.pathname,
+        pageFamily:'search',
+        ...(payload||{})
+      });
+      if(navigator.sendBeacon){
+        navigator.sendBeacon('/api/events',new Blob([body],{type:'application/json'}));
+      } else {
+        fetch('/api/events',{method:'POST',headers:{'content-type':'application/json'},body:body,keepalive:true}).catch(function(){});
+      }
+    } catch {}
   }
 
   document.addEventListener('keydown',function(e){
@@ -114,14 +135,149 @@ function interactiveScript(): string {
   });
 
   searchForms.forEach(function(form){
+    var input=form.querySelector('[data-global-search]');
+    var clearBtn=form.querySelector('[data-search-clear]');
+    var resultsEl=form.querySelector('[data-search-results]');
+    if(!input||!resultsEl)return;
+
+    var controller=null;
+    var debounceTimer=null;
+    var activeIndex=-1;
+    var currentQuery='';
+    var currentResults=[];
+
+    function setClearVisible(visible){
+      if(!clearBtn)return;
+      if(visible){clearBtn.removeAttribute('hidden');}
+      else{clearBtn.setAttribute('hidden','');}
+    }
+
+    function closeResults(){
+      resultsEl.setAttribute('hidden','');
+      resultsEl.innerHTML='';
+      resultsEl.removeAttribute('aria-activedescendant');
+      activeIndex=-1;
+      currentResults=[];
+    }
+
+    function renderResults(query,items){
+      currentQuery=query;
+      currentResults=items||[];
+      activeIndex=-1;
+
+      if(!items||items.length===0){
+        resultsEl.innerHTML='<div class="nav-search-empty">No matching pages</div>';
+        resultsEl.removeAttribute('hidden');
+        return;
+      }
+
+      resultsEl.innerHTML=items.map(function(item,idx){
+        return '<a class="nav-search-result" role="option" id="nav-search-opt-'+idx+'" href="'+item.path+'" data-search-target="'+item.path+'">'
+          +'<span class="nav-search-result-title">'+item.title.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</span>'
+          +'<span class="nav-search-result-meta">'+item.path+' · '+item.category+'</span>'
+          +'</a>';
+      }).join('');
+      resultsEl.removeAttribute('hidden');
+
+      resultsEl.querySelectorAll('a[data-search-target]').forEach(function(link){
+        link.addEventListener('click',function(){
+          var targetPath=link.getAttribute('data-search-target')||undefined;
+          trackSearch('search_result_click',{
+            query: currentQuery,
+            resultCount: currentResults.length,
+            targetPath: targetPath,
+            actionOutcome: 'clicked'
+          });
+        },{passive:true});
+      });
+    }
+
+    function updateActiveResult(next){
+      var options=resultsEl.querySelectorAll('.nav-search-result');
+      if(options.length===0)return;
+      activeIndex=(next+options.length)%options.length;
+      options.forEach(function(opt){opt.classList.remove('active');});
+      var active=options[activeIndex];
+      if(active){
+        active.classList.add('active');
+        resultsEl.setAttribute('aria-activedescendant',active.id||'');
+        active.scrollIntoView({block:'nearest'});
+      }
+    }
+
+    async function fetchResults(query){
+      if(controller){controller.abort();}
+      controller=new AbortController();
+
+      try {
+        var res=await fetch('/api/search?q='+encodeURIComponent(query)+'&limit=8',{signal:controller.signal});
+        if(!res.ok){closeResults();return;}
+        var payload=await res.json();
+        var items=Array.isArray(payload&&payload.results)?payload.results:[];
+        renderResults(query,items);
+        trackSearch('search_query',{
+          query: query,
+          resultCount: items.length,
+          actionOutcome: items.length>0?'results':'empty'
+        });
+      } catch(err){
+        if(err&&err.name==='AbortError')return;
+        closeResults();
+      }
+    }
+
+    input.addEventListener('input',function(){
+      var q=(input.value||'').trim();
+      setClearVisible(Boolean(q));
+
+      if(debounceTimer)clearTimeout(debounceTimer);
+
+      if(q.length<2){
+        closeResults();
+        return;
+      }
+
+      debounceTimer=setTimeout(function(){fetchResults(q);},180);
+    });
+
+    input.addEventListener('keydown',function(e){
+      if(e.key==='ArrowDown'){
+        e.preventDefault();
+        updateActiveResult(activeIndex+1);
+      } else if(e.key==='ArrowUp'){
+        e.preventDefault();
+        updateActiveResult(activeIndex-1);
+      } else if(e.key==='Escape'){
+        closeResults();
+      } else if(e.key==='Enter'){
+        if(activeIndex>=0&&currentResults[activeIndex]){
+          e.preventDefault();
+          window.location.href=currentResults[activeIndex].path;
+        }
+      }
+    });
+
+    if(clearBtn){
+      clearBtn.addEventListener('click',function(){
+        input.value='';
+        input.focus();
+        closeResults();
+        setClearVisible(false);
+        trackSearch('search_clear',{actionOutcome:'cleared'});
+      });
+    }
+
     form.addEventListener('submit',function(e){
-      var input=form.querySelector('[data-global-search]');
-      if(!input)return;
       var q=(input.value||'').trim();
       if(!q){
         e.preventDefault();
         window.location.href='/glossary';
       }
+    });
+
+    document.addEventListener('click',function(e){
+      if(form.contains(e.target))return;
+      closeResults();
     });
   });
 
@@ -247,6 +403,18 @@ function trackingScript(): string {
     return v.slice(0, maxLen);
   }
 
+  function derivePageFamily(pathname){
+    const path = (pathname || '/').replace(/^\/+|\/+$/g, '');
+    if (!path) return 'home';
+    const first = path.split('/')[0];
+    const known = new Set([
+      'controls','workflows','tools','channels','policy','proof','verify','audit',
+      'mcp','supply-chain','events','compliance','guides','glossary',
+      'trust','secure-workers','consulting','pricing','contact','about'
+    ]);
+    return known.has(first) ? first : 'root';
+  }
+
   function readStored(){
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -355,10 +523,13 @@ function trackingScript(): string {
       eventType,
       ts: new Date().toISOString(),
       page: window.location.pathname,
+      pageFamily: derivePageFamily(window.location.pathname),
       attribution: currentAttribution(),
       ...(extra || {}),
     });
   }
+
+  window.__claweaTrack = track;
 
   captureAttribution();
 
@@ -378,17 +549,26 @@ function trackingScript(): string {
     el.addEventListener("click", () => {
       const href = clip(el.getAttribute("href"), 600);
       const ctaId = clip(el.getAttribute("data-cta") || el.textContent || "cta", 120);
+      const ctaVariant = clip(
+        el.getAttribute("data-cta-variant")
+          || (el.classList.contains("cta-btn-outline") ? "outline" : "primary"),
+        80,
+      );
 
       if (href && href.toLowerCase().startsWith("mailto:")) {
-        track("contact_email_click", { href, ctaId });
+        track("contact_email_click", { href, ctaId, ctaVariant, actionOutcome: "clicked" });
       } else {
-        track("cta_click", { href, ctaId });
+        track("cta_click", { href, ctaId, ctaVariant, actionOutcome: "clicked" });
       }
     }, { passive: true });
   });
 
   if (INTENT_PATHS.has(window.location.pathname)) {
-    track("contact_intent_view", { ctaId: window.location.pathname });
+    track("contact_intent_view", {
+      ctaId: window.location.pathname,
+      ctaVariant: "intent",
+      actionOutcome: "view",
+    });
   }
 })();
 </script>`;
@@ -432,8 +612,12 @@ function nav(currentPath: string): string {
           autocomplete="off"
           spellcheck="false"
           enterkeyhint="search"
+          aria-autocomplete="list"
+          aria-controls="nav-search-results"
         >
+        <button type="button" class="nav-search-clear" data-search-clear aria-label="Clear search" hidden>×</button>
         <span class="nav-search-hint" aria-hidden="true">/</span>
+        <div class="nav-search-results" id="nav-search-results" data-search-results role="listbox" hidden></div>
       </form>
       <button class="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Toggle navigation">
         <span></span><span></span><span></span>

@@ -24,6 +24,15 @@ INDEXNOW_KEY = "edf20368863e485aa92e1b95fa15872a"
 INDEXNOW_MAX_ATTEMPTS = "4"
 INDEXNOW_RETRY_BASE_MS = "900"
 INDEXNOW_RETRY_MAX_MS = "30000"
+GOOGLE_INDEX_MAX_ATTEMPTS = "4"
+GOOGLE_INDEX_RETRY_BASE_MS = "1200"
+GOOGLE_INDEX_RETRY_MAX_MS = "45000"
+INDEX_QUEUE_ENABLED = "1"
+INDEX_QUEUE_MAX_ENTRIES_PER_RUN = "40"
+INDEX_QUEUE_INDEXNOW_MAX_ATTEMPTS = "8"
+INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS = "6"
+INDEX_QUEUE_RETRY_BASE_MS = "60000"
+INDEX_QUEUE_RETRY_MAX_MS = "3600000"
 
 # Secrets (set with `wrangler secret put <NAME>`):
 # - INDEX_AUTOMATION_TOKEN
@@ -31,6 +40,9 @@ INDEXNOW_RETRY_MAX_MS = "30000"
 
 [placement]
 mode = "smart"
+
+[triggers]
+crons = ["*/20 * * * *"]
 
 # ---------- R2 (article storage) ----------
 [[r2_buckets]]
@@ -44,6 +56,9 @@ routes = [
   { pattern = "staging-www.clawea.com/*", zone_name = "clawea.com" }
 ]
 
+[env.staging.triggers]
+crons = ["*/20 * * * *"]
+
 [env.staging.vars]
 ENVIRONMENT = "staging"
 SITE_URL = "https://staging-www.clawea.com"
@@ -51,6 +66,15 @@ INDEXNOW_KEY = "edf20368863e485aa92e1b95fa15872a"
 INDEXNOW_MAX_ATTEMPTS = "4"
 INDEXNOW_RETRY_BASE_MS = "900"
 INDEXNOW_RETRY_MAX_MS = "30000"
+GOOGLE_INDEX_MAX_ATTEMPTS = "4"
+GOOGLE_INDEX_RETRY_BASE_MS = "1200"
+GOOGLE_INDEX_RETRY_MAX_MS = "45000"
+INDEX_QUEUE_ENABLED = "1"
+INDEX_QUEUE_MAX_ENTRIES_PER_RUN = "20"
+INDEX_QUEUE_INDEXNOW_MAX_ATTEMPTS = "6"
+INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS = "6"
+INDEX_QUEUE_RETRY_BASE_MS = "30000"
+INDEX_QUEUE_RETRY_MAX_MS = "1800000"
 
 [[env.staging.r2_buckets]]
 binding = "ARTICLES"

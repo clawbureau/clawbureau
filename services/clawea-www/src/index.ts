@@ -40,7 +40,10 @@
  *   System endpoints:
  *   GET /sitemap.xml, /robots.txt, /health
  *   GET /<INDEXNOW_KEY>.txt
+ *   GET /api/search?q=...
  *   POST /api/indexnow, /api/google-index, /api/index-urls
+ *   GET /api/index-queue/status
+ *   POST /api/index-queue/enqueue, /api/index-queue/replay
  *   POST /api/events (public conversion telemetry)
  *   POST /api/events/summary (token-protected weekly summary)
  *
@@ -73,6 +76,17 @@ interface Env {
   INDEXNOW_MAX_ATTEMPTS?: string;
   INDEXNOW_RETRY_BASE_MS?: string;
   INDEXNOW_RETRY_MAX_MS?: string;
+  GOOGLE_INDEX_MAX_ATTEMPTS?: string;
+  GOOGLE_INDEX_RETRY_BASE_MS?: string;
+  GOOGLE_INDEX_RETRY_MAX_MS?: string;
+
+  // Durable indexing queue
+  INDEX_QUEUE_ENABLED?: string;
+  INDEX_QUEUE_MAX_ENTRIES_PER_RUN?: string;
+  INDEX_QUEUE_INDEXNOW_MAX_ATTEMPTS?: string;
+  INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS?: string;
+  INDEX_QUEUE_RETRY_BASE_MS?: string;
+  INDEX_QUEUE_RETRY_MAX_MS?: string;
 }
 
 interface Article {
@@ -99,11 +113,17 @@ interface ManifestEntry {
   indexable?: boolean;
 }
 
-interface SearchResult {
-  slug: string;
+type SearchDocumentKind = "article" | "static";
+
+interface SearchDocument {
+  path: string;
   title: string;
   description: string;
   category: string;
+  kind: SearchDocumentKind;
+}
+
+interface SearchResult extends SearchDocument {
   score: number;
 }
 
@@ -129,7 +149,7 @@ function html(body: string, status = 200, cacheSeconds = 3600): Response {
 function apiHeaders(extra: HeadersInit = {}): Headers {
   const h = new Headers(extra);
   h.set("access-control-allow-origin", "*");
-  h.set("access-control-allow-methods", "POST,OPTIONS");
+  h.set("access-control-allow-methods", "GET,POST,OPTIONS");
   h.set("access-control-allow-headers", "content-type,authorization");
   h.set("cache-control", "no-store");
   return h;
@@ -412,12 +432,31 @@ type GoogleServiceAccount = {
   token_uri?: string;
 };
 
+type GoogleAttempt = {
+  attempt: number;
+  status: number;
+  ok: boolean;
+  retryable: boolean;
+  waitMs?: number;
+};
+
+type GoogleIndexDetail = {
+  url: string;
+  ok: boolean;
+  status: number;
+  body?: unknown;
+  attempts: number;
+  retried: number;
+  retryableFailures: number;
+  attemptLog: GoogleAttempt[];
+};
+
 type GoogleIndexResult = {
   ok: boolean;
   submitted: number;
   failed: number;
   status: number;
-  details: Array<{ url: string; ok: boolean; status: number; body?: unknown }>;
+  details: GoogleIndexDetail[];
   error?: string;
 };
 
@@ -526,32 +565,100 @@ async function submitGoogleIndexing(
     let submitted = 0;
     let failed = 0;
 
-    for (const url of urls) {
-      const res = await fetch("https://indexing.googleapis.com/v3/urlNotifications:publish", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          url,
-          type: action,
-        }),
-      });
+    const maxAttempts = Math.max(1, Number(env.GOOGLE_INDEX_MAX_ATTEMPTS ?? "4"));
+    const baseBackoffMs = Math.max(250, Number(env.GOOGLE_INDEX_RETRY_BASE_MS ?? "1200"));
+    const maxBackoffMs = Math.max(baseBackoffMs, Number(env.GOOGLE_INDEX_RETRY_MAX_MS ?? "45000"));
 
-      const raw = await res.text();
-      let parsed: unknown = raw;
-      try {
-        parsed = raw ? JSON.parse(raw) : null;
-      } catch {
-        // leave as text
+    for (const url of urls) {
+      const attemptLog: GoogleAttempt[] = [];
+      let retried = 0;
+      let retryableFailures = 0;
+      let finalOk = false;
+      let finalStatus = 503;
+      let finalBody: unknown = null;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await fetch("https://indexing.googleapis.com/v3/urlNotifications:publish", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              url,
+              type: action,
+            }),
+          });
+
+          const raw = await res.text();
+          let parsed: unknown = raw;
+          try {
+            parsed = raw ? JSON.parse(raw) : null;
+          } catch {
+            // leave as text
+          }
+
+          const retryable = isRetryableStatus(res.status);
+          const shouldRetry = !res.ok && retryable && attempt < maxAttempts;
+          const retryAfterMs = shouldRetry ? parseRetryAfterMs(res.headers.get("retry-after")) : null;
+          const waitMs = shouldRetry ? (retryAfterMs ?? backoffMs(attempt, baseBackoffMs, maxBackoffMs)) : undefined;
+
+          attemptLog.push({
+            attempt,
+            status: res.status,
+            ok: res.ok,
+            retryable,
+            waitMs,
+          });
+
+          finalOk = res.ok;
+          finalStatus = res.status;
+          finalBody = parsed;
+
+          if (res.ok) break;
+          if (!shouldRetry) break;
+
+          retryableFailures += 1;
+          retried += 1;
+          await sleep(waitMs ?? backoffMs(attempt, baseBackoffMs, maxBackoffMs));
+        } catch (err: any) {
+          const shouldRetry = attempt < maxAttempts;
+          const waitMs = shouldRetry ? backoffMs(attempt, baseBackoffMs, maxBackoffMs) : undefined;
+
+          attemptLog.push({
+            attempt,
+            status: 0,
+            ok: false,
+            retryable: shouldRetry,
+            waitMs,
+          });
+
+          finalOk = false;
+          finalStatus = 503;
+          finalBody = { message: String(err?.message ?? err) };
+
+          if (!shouldRetry) break;
+
+          retryableFailures += 1;
+          retried += 1;
+          await sleep(waitMs ?? backoffMs(attempt, baseBackoffMs, maxBackoffMs));
+        }
       }
 
-      const ok = res.ok;
-      if (ok) submitted += 1;
+      if (finalOk) submitted += 1;
       else failed += 1;
 
-      details.push({ url, ok, status: res.status, body: parsed });
+      details.push({
+        url,
+        ok: finalOk,
+        status: finalStatus,
+        body: finalBody,
+        attempts: attemptLog.length,
+        retried,
+        retryableFailures,
+        attemptLog,
+      });
     }
 
     return {
@@ -570,6 +677,577 @@ async function submitGoogleIndexing(
       details: [],
       error: String(err?.message ?? err),
     };
+  }
+}
+
+// ── Durable Indexing Queue ──────────────────────────────────────
+
+type IndexEngine = "indexnow" | "google";
+type IndexAction = "URL_UPDATED" | "URL_DELETED";
+type IndexQueueEngineStatus = "queued" | "retry" | "done" | "failed";
+
+const INDEX_ENGINES: IndexEngine[] = ["indexnow", "google"];
+const INDEX_QUEUE_KEY = "articles/_indexing_queue.v1.json";
+const INDEX_QUEUE_SUMMARY_KEY = "articles/_indexing_queue_summary.json";
+
+interface IndexQueueEngineState {
+  status: IndexQueueEngineStatus;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  lastStatus?: number;
+  lastError?: string;
+  lastProcessedAt?: string;
+}
+
+interface IndexQueueEntry {
+  id: string;
+  url: string;
+  action: IndexAction;
+  engines: Partial<Record<IndexEngine, IndexQueueEngineState>>;
+  createdAt: string;
+  updatedAt: string;
+  source?: string;
+}
+
+interface IndexQueueState {
+  version: 1;
+  updatedAt: string;
+  entries: Record<string, IndexQueueEntry>;
+}
+
+interface IndexQueueRunEngineResult {
+  engine: IndexEngine;
+  ok: boolean;
+  status: number;
+  retryable: boolean;
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  error?: string;
+}
+
+interface IndexQueueRunItem {
+  id: string;
+  url: string;
+  action: IndexAction;
+  engineResults: IndexQueueRunEngineResult[];
+}
+
+interface IndexQueueRunArtifact {
+  runId: string;
+  source: string;
+  startedAt: string;
+  finishedAt: string;
+  processedEntries: number;
+  processedEngines: number;
+  succeeded: number;
+  scheduledRetry: number;
+  failed: number;
+  clearedEntries: number;
+  simulate429: boolean;
+  items: IndexQueueRunItem[];
+  queueAfter: ReturnType<typeof summarizeIndexQueue>;
+}
+
+interface QueueStatusSummary {
+  totalEntries: number;
+  byEngine: Record<IndexEngine, { queued: number; retry: number; done: number; failed: number }>;
+  nextAttemptAt?: string;
+}
+
+interface EnqueueQueueOptions {
+  urls: string[];
+  action: IndexAction;
+  engines: IndexEngine[];
+  force?: boolean;
+  source?: string;
+}
+
+interface ProcessQueueOptions {
+  source: string;
+  maxEntries?: number;
+  simulate429?: boolean;
+}
+
+interface ProcessQueueResult {
+  run: IndexQueueRunArtifact;
+  artifactKey: string;
+}
+
+function envInt(raw: string | undefined, fallback: number, min = 1): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.floor(n));
+}
+
+function queueEnabled(env: Env): boolean {
+  return env.INDEX_QUEUE_ENABLED !== "0";
+}
+
+function queueMaxEntriesPerRun(env: Env): number {
+  return envInt(env.INDEX_QUEUE_MAX_ENTRIES_PER_RUN, 40, 1);
+}
+
+function queueMaxAttemptsForEngine(env: Env, engine: IndexEngine): number {
+  if (engine === "indexnow") {
+    return envInt(env.INDEX_QUEUE_INDEXNOW_MAX_ATTEMPTS, 8, 1);
+  }
+  return envInt(env.INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS, 6, 1);
+}
+
+function deterministicJitter(seed: string, limit: number): number {
+  if (limit <= 0) return 0;
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % Math.max(1, limit);
+}
+
+function queueBackoffMs(env: Env, seed: string, attempt: number): number {
+  const baseMs = envInt(env.INDEX_QUEUE_RETRY_BASE_MS, 60_000, 250);
+  const maxMs = envInt(env.INDEX_QUEUE_RETRY_MAX_MS, 3_600_000, baseMs);
+  const exp = Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt - 1));
+  const jitter = deterministicJitter(`${seed}:${attempt}`, Math.floor(exp * 0.25));
+  return Math.min(maxMs, exp + jitter);
+}
+
+function parseDueMs(iso: string | undefined): number {
+  if (!iso) return 0;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function isPendingState(status: IndexQueueEngineStatus): boolean {
+  return status === "queued" || status === "retry";
+}
+
+async function queueEntryId(url: string, action: IndexAction): Promise<string> {
+  const input = new TextEncoder().encode(`${action}|${url}`);
+  const digest = await crypto.subtle.digest("SHA-256", input);
+  return b64Url(new Uint8Array(digest));
+}
+
+async function loadIndexQueue(env: Env): Promise<IndexQueueState> {
+  const obj = await env.ARTICLES.get(INDEX_QUEUE_KEY);
+  if (!obj) {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      entries: {},
+    };
+  }
+
+  try {
+    const parsed = await obj.json<IndexQueueState>();
+    if (!parsed || typeof parsed !== "object" || parsed.version !== 1 || typeof parsed.entries !== "object") {
+      throw new Error("invalid_queue_shape");
+    }
+
+    return {
+      version: 1,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+      entries: parsed.entries ?? {},
+    };
+  } catch {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      entries: {},
+    };
+  }
+}
+
+async function saveIndexQueue(env: Env, state: IndexQueueState): Promise<void> {
+  state.updatedAt = new Date().toISOString();
+  await env.ARTICLES.put(INDEX_QUEUE_KEY, JSON.stringify(state, null, 2), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
+function summarizeIndexQueue(state: IndexQueueState): QueueStatusSummary {
+  const byEngine: QueueStatusSummary["byEngine"] = {
+    indexnow: { queued: 0, retry: 0, done: 0, failed: 0 },
+    google: { queued: 0, retry: 0, done: 0, failed: 0 },
+  };
+
+  let nextAttemptMs = Number.POSITIVE_INFINITY;
+
+  for (const entry of Object.values(state.entries)) {
+    for (const engine of INDEX_ENGINES) {
+      const s = entry.engines[engine];
+      if (!s) continue;
+      byEngine[engine][s.status] += 1;
+      if (isPendingState(s.status)) {
+        const due = parseDueMs(s.nextAttemptAt);
+        if (due > 0 && due < nextAttemptMs) nextAttemptMs = due;
+      }
+    }
+  }
+
+  return {
+    totalEntries: Object.keys(state.entries).length,
+    byEngine,
+    nextAttemptAt: Number.isFinite(nextAttemptMs) ? new Date(nextAttemptMs).toISOString() : undefined,
+  };
+}
+
+function summarizeQueueForResponse(state: IndexQueueState) {
+  const summary = summarizeIndexQueue(state);
+  const pending = Object.values(state.entries)
+    .filter((entry) =>
+      INDEX_ENGINES.some((engine) => {
+        const s = entry.engines[engine];
+        return s && isPendingState(s.status);
+      }),
+    )
+    .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt, "en"))
+    .slice(0, 25)
+    .map((entry) => ({
+      id: entry.id,
+      url: entry.url,
+      action: entry.action,
+      engines: entry.engines,
+      updatedAt: entry.updatedAt,
+    }));
+
+  return { summary, pending };
+}
+
+function parseIndexingEngines(input: unknown): IndexEngine[] {
+  const raw = Array.isArray(input)
+    ? input.map((x) => String(x).toLowerCase())
+    : [String(input ?? "all").toLowerCase()];
+
+  const useAll = raw.includes("all");
+  const out: IndexEngine[] = [];
+  if (useAll || raw.includes("indexnow")) out.push("indexnow");
+  if (useAll || raw.includes("google")) out.push("google");
+  return out;
+}
+
+async function enqueueIndexQueue(
+  env: Env,
+  options: EnqueueQueueOptions,
+): Promise<{ created: number; updated: number; deduped: number; state: IndexQueueState; summary: ReturnType<typeof summarizeQueueForResponse> }> {
+  const state = await loadIndexQueue(env);
+
+  const nowIso = new Date().toISOString();
+  let created = 0;
+  let updated = 0;
+  let deduped = 0;
+
+  for (const url of options.urls) {
+    const id = await queueEntryId(url, options.action);
+    let entry = state.entries[id];
+    const wasExisting = Boolean(entry);
+    let changed = false;
+
+    if (!entry) {
+      entry = {
+        id,
+        url,
+        action: options.action,
+        engines: {},
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        source: options.source,
+      };
+      state.entries[id] = entry;
+      created += 1;
+      changed = true;
+    }
+
+    for (const engine of options.engines) {
+      const maxAttempts = queueMaxAttemptsForEngine(env, engine);
+      const existing = entry.engines[engine];
+
+      if (!existing) {
+        entry.engines[engine] = {
+          status: "queued",
+          attempts: 0,
+          maxAttempts,
+          nextAttemptAt: nowIso,
+        };
+        changed = true;
+        continue;
+      }
+
+      if (options.force) {
+        entry.engines[engine] = {
+          status: "queued",
+          attempts: 0,
+          maxAttempts,
+          nextAttemptAt: nowIso,
+        };
+        changed = true;
+        continue;
+      }
+
+      existing.maxAttempts = maxAttempts;
+
+      if (existing.status === "done") {
+        deduped += 1;
+        continue;
+      }
+
+      if (existing.status === "failed" && existing.attempts >= existing.maxAttempts) {
+        deduped += 1;
+        continue;
+      }
+
+      if (existing.status === "failed" || existing.status === "retry") {
+        existing.status = "queued";
+        existing.nextAttemptAt = nowIso;
+        existing.lastError = undefined;
+        changed = true;
+        continue;
+      }
+
+      deduped += 1;
+    }
+
+    if (changed) {
+      entry.updatedAt = nowIso;
+      entry.source = options.source ?? entry.source;
+      if (!entry.createdAt) entry.createdAt = nowIso;
+      if (wasExisting) updated += 1;
+    }
+  }
+
+  await saveIndexQueue(env, state);
+  return {
+    created,
+    updated,
+    deduped,
+    state,
+    summary: summarizeQueueForResponse(state),
+  };
+}
+
+async function forceRequeueFailedEntries(env: Env): Promise<{ requeued: number; state: IndexQueueState }> {
+  const state = await loadIndexQueue(env);
+  const nowIso = new Date().toISOString();
+  let requeued = 0;
+
+  for (const entry of Object.values(state.entries)) {
+    let changed = false;
+    for (const engine of INDEX_ENGINES) {
+      const s = entry.engines[engine];
+      if (!s || s.status !== "failed") continue;
+      s.status = "queued";
+      s.nextAttemptAt = nowIso;
+      s.lastError = undefined;
+      changed = true;
+      requeued += 1;
+    }
+    if (changed) entry.updatedAt = nowIso;
+  }
+
+  if (requeued > 0) await saveIndexQueue(env, state);
+  return { requeued, state };
+}
+
+function googleFailureStatus(result: GoogleIndexResult, url: string): { status: number; retryable: boolean; error?: string } {
+  const detail = result.details.find((d) => d.url === url) ?? result.details[0];
+  if (detail) {
+    return {
+      status: detail.status,
+      retryable: isRetryableStatus(detail.status),
+      error: detail.ok ? undefined : "GOOGLE_INDEXING_REQUEST_FAILED",
+    };
+  }
+
+  return {
+    status: result.status,
+    retryable: isRetryableStatus(result.status),
+    error: result.error,
+  };
+}
+
+async function processIndexQueue(env: Env, options: ProcessQueueOptions): Promise<ProcessQueueResult> {
+  const startedAt = new Date().toISOString();
+  const runId = startedAt.replace(/[:.]/g, "-");
+
+  if (!queueEnabled(env)) {
+    const disabledRun: IndexQueueRunArtifact = {
+      runId,
+      source: options.source,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      processedEntries: 0,
+      processedEngines: 0,
+      succeeded: 0,
+      scheduledRetry: 0,
+      failed: 0,
+      clearedEntries: 0,
+      simulate429: Boolean(options.simulate429),
+      items: [],
+      queueAfter: {
+        totalEntries: 0,
+        byEngine: {
+          indexnow: { queued: 0, retry: 0, done: 0, failed: 0 },
+          google: { queued: 0, retry: 0, done: 0, failed: 0 },
+        },
+      },
+    };
+
+    const disabledKey = `articles/_indexing_runs/queue-${runId}.json`;
+    await env.ARTICLES.put(disabledKey, JSON.stringify(disabledRun, null, 2), {
+      httpMetadata: { contentType: "application/json" },
+    });
+
+    return { run: disabledRun, artifactKey: disabledKey };
+  }
+
+  const state = await loadIndexQueue(env);
+  const maxEntries = Math.max(1, options.maxEntries ?? queueMaxEntriesPerRun(env));
+  const nowMs = Date.now();
+
+  const candidates = Object.values(state.entries)
+    .map((entry) => {
+      const dueEngines = INDEX_ENGINES.filter((engine) => {
+        const s = entry.engines[engine];
+        if (!s || !isPendingState(s.status)) return false;
+        return parseDueMs(s.nextAttemptAt) <= nowMs;
+      });
+      return { entry, dueEngines };
+    })
+    .filter((x) => x.dueEngines.length > 0)
+    .sort((a, b) => a.entry.updatedAt.localeCompare(b.entry.updatedAt, "en"))
+    .slice(0, maxEntries);
+
+  const items: IndexQueueRunItem[] = [];
+  let succeeded = 0;
+  let scheduledRetry = 0;
+  let failed = 0;
+  let clearedEntries = 0;
+
+  for (const candidate of candidates) {
+    const entry = candidate.entry;
+    const engineResults: IndexQueueRunEngineResult[] = [];
+
+    for (const engine of candidate.dueEngines) {
+      const stateForEngine = entry.engines[engine];
+      if (!stateForEngine) continue;
+
+      stateForEngine.attempts += 1;
+      stateForEngine.lastProcessedAt = new Date().toISOString();
+
+      let ok = false;
+      let status = 503;
+      let retryable = false;
+      let error: string | undefined;
+
+      if (options.simulate429) {
+        status = 429;
+        retryable = true;
+        error = "SIMULATED_429";
+      } else if (engine === "indexnow") {
+        const result = await submitIndexNow([entry.url], env);
+        ok = result.ok;
+        status = result.status;
+        retryable = isRetryableStatus(result.status);
+        error = result.error;
+      } else {
+        const result = await submitGoogleIndexing([entry.url], entry.action, env);
+        ok = result.ok;
+        const failure = googleFailureStatus(result, entry.url);
+        status = ok ? 200 : failure.status;
+        retryable = !ok && failure.retryable;
+        error = ok ? undefined : (failure.error ?? result.error);
+      }
+
+      if (ok) {
+        stateForEngine.status = "done";
+        stateForEngine.nextAttemptAt = undefined;
+        stateForEngine.lastStatus = status;
+        stateForEngine.lastError = undefined;
+        succeeded += 1;
+      } else if (retryable && stateForEngine.attempts < stateForEngine.maxAttempts) {
+        stateForEngine.status = "retry";
+        const waitMs = queueBackoffMs(env, `${entry.id}:${engine}`, stateForEngine.attempts);
+        stateForEngine.nextAttemptAt = new Date(Date.now() + waitMs).toISOString();
+        stateForEngine.lastStatus = status;
+        stateForEngine.lastError = error ?? "INDEXING_RETRY_SCHEDULED";
+        scheduledRetry += 1;
+      } else {
+        stateForEngine.status = "failed";
+        stateForEngine.nextAttemptAt = undefined;
+        stateForEngine.lastStatus = status;
+        stateForEngine.lastError = error ?? "INDEXING_FAILED";
+        failed += 1;
+      }
+
+      engineResults.push({
+        engine,
+        ok,
+        status,
+        retryable,
+        attempts: stateForEngine.attempts,
+        maxAttempts: stateForEngine.maxAttempts,
+        nextAttemptAt: stateForEngine.nextAttemptAt,
+        error: stateForEngine.lastError,
+      });
+    }
+
+    entry.updatedAt = new Date().toISOString();
+    items.push({
+      id: entry.id,
+      url: entry.url,
+      action: entry.action,
+      engineResults,
+    });
+
+    const allDone = INDEX_ENGINES.every((engine) => {
+      const s = entry.engines[engine];
+      return !s || s.status === "done";
+    });
+
+    if (allDone) {
+      delete state.entries[entry.id];
+      clearedEntries += 1;
+    }
+  }
+
+  await saveIndexQueue(env, state);
+
+  const run: IndexQueueRunArtifact = {
+    runId,
+    source: options.source,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    processedEntries: items.length,
+    processedEngines: items.reduce((sum, item) => sum + item.engineResults.length, 0),
+    succeeded,
+    scheduledRetry,
+    failed,
+    clearedEntries,
+    simulate429: Boolean(options.simulate429),
+    items,
+    queueAfter: summarizeIndexQueue(state),
+  };
+
+  const artifactKey = `articles/_indexing_runs/queue-${runId}.json`;
+  await env.ARTICLES.put(artifactKey, JSON.stringify(run, null, 2), {
+    httpMetadata: { contentType: "application/json" },
+  });
+  await env.ARTICLES.put(INDEX_QUEUE_SUMMARY_KEY, JSON.stringify(run, null, 2), {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  return { run, artifactKey };
+}
+
+async function loadLastQueueRun(env: Env): Promise<IndexQueueRunArtifact | null> {
+  const obj = await env.ARTICLES.get(INDEX_QUEUE_SUMMARY_KEY);
+  if (!obj) return null;
+  try {
+    return await obj.json<IndexQueueRunArtifact>();
+  } catch {
+    return null;
   }
 }
 
@@ -605,44 +1283,120 @@ function normalizeSearchQuery(raw: string | null): string {
     .slice(0, 120);
 }
 
-function searchManifest(manifest: Record<string, ManifestEntry>, query: string, limit = 30): SearchResult[] {
+function categoryLabel(category: string): string {
+  return category.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const STATIC_SEARCH_DOCS: SearchDocument[] = [
+  {
+    path: "/",
+    title: "Claw EA | Enterprise AI Agents, Deployed and Verified",
+    description: "Deploy managed AI agents for your enterprise with cryptographic attestation and policy controls.",
+    category: "landing",
+    kind: "static",
+  },
+  {
+    path: "/pricing",
+    title: "Pricing | Claw EA Enterprise AI Agents",
+    description: "Pricing plans for enterprise AI agent infrastructure.",
+    category: "pricing",
+    kind: "static",
+  },
+  {
+    path: "/contact",
+    title: "Contact Sales | Claw EA Enterprise AI Agents",
+    description: "Talk to Claw EA enterprise sales.",
+    category: "contact",
+    kind: "static",
+  },
+  {
+    path: "/trust",
+    title: "Trust Layer | Verified AI Agent Execution | Claw EA",
+    description: "Cryptographic proof of AI agent actions.",
+    category: "trust",
+    kind: "static",
+  },
+  {
+    path: "/secure-workers",
+    title: "Secure AI Workers | Sandboxed Enterprise Agents | Claw EA",
+    description: "Hardware-isolated secure AI workers with strict policy enforcement.",
+    category: "trust",
+    kind: "static",
+  },
+  {
+    path: "/consulting",
+    title: "Enterprise AI Consulting | Agent Strategy & Deployment | Claw EA",
+    description: "Consulting services for deployment and governance of AI agent programs.",
+    category: "consulting",
+    kind: "static",
+  },
+  {
+    path: "/about",
+    title: "About Claw Bureau | Enterprise AI Trust Infrastructure",
+    description: "About Claw Bureau and the trust infrastructure approach for enterprise AI.",
+    category: "about",
+    kind: "static",
+  },
+  {
+    path: "/glossary",
+    title: "Glossary | Claw EA",
+    description: "Glossary of enterprise AI policy, proof, and control terms.",
+    category: "glossary",
+    kind: "static",
+  },
+];
+
+function buildSearchCorpus(manifest: Record<string, ManifestEntry>): SearchDocument[] {
+  const manifestDocs: SearchDocument[] = Object.entries(manifest)
+    .filter(([, entry]) => Boolean(entry?.title))
+    .map(([slug, entry]) => ({
+      path: `/${slug}`,
+      title: entry.title,
+      description: entry.description,
+      category: entry.category,
+      kind: "article" as const,
+    }));
+
+  const map = new Map<string, SearchDocument>();
+  for (const doc of [...manifestDocs, ...STATIC_SEARCH_DOCS]) {
+    map.set(doc.path, doc);
+  }
+  return [...map.values()];
+}
+
+function searchCorpus(corpus: SearchDocument[], query: string, limit = 30): SearchResult[] {
   if (!query) return [];
   const tokens = [...new Set(query.split(/[^a-z0-9]+/g).filter((t) => t.length >= 2))];
   const out: SearchResult[] = [];
 
-  for (const [slug, entry] of Object.entries(manifest)) {
-    if (!entry || typeof entry.title !== "string") continue;
-
-    const title = entry.title.toLowerCase();
-    const desc = (entry.description ?? "").toLowerCase();
-    const slugText = slug.toLowerCase().replace(/\//g, " ");
+  for (const doc of corpus) {
+    const title = doc.title.toLowerCase();
+    const desc = (doc.description ?? "").toLowerCase();
+    const pathText = doc.path.toLowerCase().replace(/\//g, " ");
+    const categoryText = doc.category.toLowerCase();
 
     let score = 0;
     if (title.includes(query)) score += 120;
-    if (slugText.includes(query)) score += 90;
+    if (pathText.includes(query)) score += 95;
     if (desc.includes(query)) score += 45;
+    if (categoryText.includes(query)) score += 30;
 
     for (const t of tokens) {
       if (title.startsWith(t)) score += 25;
       if (title.includes(t)) score += 18;
-      if (slugText.includes(t)) score += 15;
+      if (pathText.includes(t)) score += 15;
       if (desc.includes(t)) score += 8;
+      if (categoryText.includes(t)) score += 6;
     }
 
-    if (entry.indexable === true) score += 8;
+    if (doc.kind === "article") score += 6;
     if (score <= 0) continue;
 
-    out.push({
-      slug,
-      title: entry.title,
-      description: entry.description,
-      category: entry.category,
-      score,
-    });
+    out.push({ ...doc, score });
   }
 
   return out
-    .sort((a, b) => (b.score - a.score) || a.slug.localeCompare(b.slug, "en"))
+    .sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path, "en"))
     .slice(0, limit);
 }
 
@@ -658,10 +1412,10 @@ function glossarySearchPage(query: string, results: SearchResult[]): string {
   const body = hasResults
     ? `<div class="search-results">${results
         .map(
-          (r) => `<a class="search-result-card" href="/${r.slug}">
+          (r) => `<a class="search-result-card" href="${r.path}">
             <div class="search-result-meta">
-              <span class="badge badge-blue">${esc(r.category.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()))}</span>
-              <span class="search-pill">/${esc(r.slug)}</span>
+              <span class="badge badge-blue">${esc(categoryLabel(r.category))}</span>
+              <span class="search-pill">${esc(r.path)}</span>
             </div>
             <div class="search-result-title">${esc(r.title.replace(/ \| Claw EA$/, ""))}</div>
             <p class="search-result-desc">${esc(previewText(r.description, 240))}</p>
@@ -669,7 +1423,7 @@ function glossarySearchPage(query: string, results: SearchResult[]): string {
         )
         .join("")}</div>`
     : `<div class="search-empty">
-        No exact matches for <strong>${esc(q)}</strong>. Try a tool name (e.g. <em>Okta</em>), a control (e.g. <em>DLP</em>), or a workflow phrase (e.g. <em>approval gate</em>).
+        No exact matches for <strong>${esc(q)}</strong>. Try a tool name (e.g. <em>okta</em>), a control (e.g. <em>dlp</em>), or a workflow phrase (e.g. <em>approval gate</em>).
       </div>`;
 
   return layout({
@@ -709,13 +1463,22 @@ type TrackingEventType =
   | "cta_click"
   | "contact_intent_view"
   | "contact_email_click"
-  | "contact_intent_submit";
+  | "contact_intent_submit"
+  | "search_query"
+  | "search_result_click"
+  | "search_clear";
 
 type TrackingEvent = {
   eventType: TrackingEventType;
   page: string;
+  pageFamily: string;
   href?: string;
   ctaId?: string;
+  ctaVariant?: string;
+  actionOutcome?: string;
+  query?: string;
+  resultCount?: number;
+  targetPath?: string;
   ts: string;
   source: string;
   attribution: Record<string, string>;
@@ -732,6 +1495,9 @@ const TRACKING_EVENT_TYPES = new Set<TrackingEventType>([
   "contact_intent_view",
   "contact_email_click",
   "contact_intent_submit",
+  "search_query",
+  "search_result_click",
+  "search_clear",
 ]);
 
 function clipString(input: unknown, maxLen: number): string | undefined {
@@ -739,6 +1505,46 @@ function clipString(input: unknown, maxLen: number): string | undefined {
   const v = input.trim();
   if (!v) return undefined;
   return v.slice(0, maxLen);
+}
+
+function pageFamilyFromPath(input: string | undefined): string {
+  const path = (input ?? "/").trim();
+  if (!path || path === "/") return "home";
+  const parts = path.replace(/^\//, "").split("/").filter(Boolean);
+  if (parts.length === 0) return "home";
+
+  const known = new Set([
+    "controls",
+    "workflows",
+    "tools",
+    "channels",
+    "policy",
+    "proof",
+    "verify",
+    "audit",
+    "mcp",
+    "supply-chain",
+    "events",
+    "compliance",
+    "guides",
+    "glossary",
+    "trust",
+    "secure-workers",
+    "consulting",
+    "pricing",
+    "contact",
+    "about",
+  ]);
+
+  const first = parts[0];
+  if (known.has(first)) return first;
+  return "root";
+}
+
+function normalizeResultCount(input: unknown): number | undefined {
+  const n = Number(input);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  return Math.min(100_000, Math.floor(n));
 }
 
 function normalizeAttribution(input: unknown): Record<string, string> {
@@ -803,6 +1609,7 @@ async function ingestTrackingEvent(request: Request, env: Env): Promise<Response
   }
 
   const page = clipString(body?.page, 240) ?? "/";
+  const pageFamily = clipString(body?.pageFamily, 80) ?? pageFamilyFromPath(page);
   const ts = clipString(body?.ts, 80) ?? new Date().toISOString();
   const parsedTs = Number.isNaN(Date.parse(ts)) ? new Date().toISOString() : ts;
 
@@ -811,8 +1618,14 @@ async function ingestTrackingEvent(request: Request, env: Env): Promise<Response
   const event: TrackingEvent = {
     eventType,
     page,
+    pageFamily,
     href: clipString(body?.href, 500),
     ctaId: clipString(body?.ctaId, 160),
+    ctaVariant: clipString(body?.ctaVariant, 120),
+    actionOutcome: clipString(body?.actionOutcome, 120),
+    query: clipString(body?.query, 120),
+    resultCount: normalizeResultCount(body?.resultCount),
+    targetPath: clipString(body?.targetPath, 240),
     ts: parsedTs,
     source: deriveSource(attribution),
     attribution,
@@ -837,7 +1650,7 @@ async function ingestTrackingEvent(request: Request, env: Env): Promise<Response
   return apiJson({ ok: true, eventId: key });
 }
 
-async function listTrackingEvents(env: Env, sinceMs: number): Promise<TrackingEvent[]> {
+async function listTrackingEvents(env: Env, fromMs: number, toMs: number): Promise<TrackingEvent[]> {
   const out: TrackingEvent[] = [];
   let cursor: string | undefined;
 
@@ -853,9 +1666,14 @@ async function listTrackingEvents(env: Env, sinceMs: number): Promise<TrackingEv
       if (!file) continue;
 
       try {
-        const ev = await file.json<TrackingEvent>();
+        const evRaw = await file.json<TrackingEvent>();
+        const ev: TrackingEvent = {
+          ...evRaw,
+          pageFamily: clipString((evRaw as any)?.pageFamily, 80) ?? pageFamilyFromPath((evRaw as any)?.page),
+        };
+
         const tsMs = Date.parse(ev.ts);
-        if (Number.isNaN(tsMs) || tsMs < sinceMs) continue;
+        if (Number.isNaN(tsMs) || tsMs < fromMs || tsMs > toMs) continue;
         if (!TRACKING_EVENT_TYPES.has(ev.eventType)) continue;
         out.push(ev);
       } catch {
@@ -893,54 +1711,174 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
   }
 
   const daysRaw = Number(body?.days ?? 7);
-  const days = Number.isFinite(daysRaw) ? Math.min(56, Math.max(1, Math.floor(daysRaw))) : 7;
+  const days = Number.isFinite(daysRaw) ? Math.min(90, Math.max(1, Math.floor(daysRaw))) : 7;
 
-  const sinceMs = Date.now() - (days * 24 * 60 * 60 * 1000);
-  const events = await listTrackingEvents(env, sinceMs);
+  const nowMs = Date.now();
+  const fromRaw = clipString(body?.from, 80);
+  const toRaw = clipString(body?.to, 80);
+
+  const fallbackFromMs = nowMs - (days * 24 * 60 * 60 * 1000);
+  const fromMs = fromRaw ? Date.parse(fromRaw) : fallbackFromMs;
+  const toMs = toRaw ? Date.parse(toRaw) : nowMs;
+
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs) || fromMs > toMs) {
+    return apiError("DATE_RANGE_INVALID", "Invalid from/to date range", 400);
+  }
+
+  const events = await listTrackingEvents(env, fromMs, toMs);
 
   const byType = new Map<string, number>();
   const bySource = new Map<string, number>();
   const byPage = new Map<string, number>();
+  const byPageFamily = new Map<string, number>();
   const byCta = new Map<string, number>();
+  const byCtaVariant = new Map<string, number>();
+  const byOutcome = new Map<string, number>();
+
+  const searchQueryCount = new Map<string, number>();
+  const searchQueryClicks = new Map<string, number>();
+  const searchQueryResultsSum = new Map<string, number>();
+
+  const ctaFamilyViews = new Map<string, number>();
+  const ctaFamilyActions = new Map<string, number>();
+  const ctaFamilyClicks = new Map<string, number>();
 
   let contactIntentViews = 0;
   let contactIntentActions = 0;
+  let searchQueries = 0;
+  let searchResultClicks = 0;
 
   for (const ev of events) {
     byType.set(ev.eventType, (byType.get(ev.eventType) ?? 0) + 1);
     bySource.set(ev.source, (bySource.get(ev.source) ?? 0) + 1);
     byPage.set(ev.page, (byPage.get(ev.page) ?? 0) + 1);
+    byPageFamily.set(ev.pageFamily, (byPageFamily.get(ev.pageFamily) ?? 0) + 1);
 
     const ctaKey = ev.ctaId ?? ev.href ?? "unknown";
     if (ev.eventType === "cta_click" || ev.eventType === "contact_email_click") {
       byCta.set(ctaKey, (byCta.get(ctaKey) ?? 0) + 1);
     }
 
-    if (ev.eventType === "contact_intent_view") contactIntentViews += 1;
+    if (ev.ctaVariant) {
+      byCtaVariant.set(ev.ctaVariant, (byCtaVariant.get(ev.ctaVariant) ?? 0) + 1);
+    }
+
+    if (ev.actionOutcome) {
+      byOutcome.set(ev.actionOutcome, (byOutcome.get(ev.actionOutcome) ?? 0) + 1);
+    }
+
+    if (ev.eventType === "contact_intent_view") {
+      contactIntentViews += 1;
+      ctaFamilyViews.set(ev.pageFamily, (ctaFamilyViews.get(ev.pageFamily) ?? 0) + 1);
+    }
+
+    if (ev.eventType === "cta_click") {
+      ctaFamilyClicks.set(ev.pageFamily, (ctaFamilyClicks.get(ev.pageFamily) ?? 0) + 1);
+    }
+
     if (ev.eventType === "contact_email_click" || ev.eventType === "contact_intent_submit") {
       contactIntentActions += 1;
+      ctaFamilyActions.set(ev.pageFamily, (ctaFamilyActions.get(ev.pageFamily) ?? 0) + 1);
+    }
+
+    if (ev.eventType === "search_query" && ev.query) {
+      searchQueries += 1;
+      searchQueryCount.set(ev.query, (searchQueryCount.get(ev.query) ?? 0) + 1);
+      const rc = typeof ev.resultCount === "number" ? ev.resultCount : 0;
+      searchQueryResultsSum.set(ev.query, (searchQueryResultsSum.get(ev.query) ?? 0) + rc);
+    }
+
+    if (ev.eventType === "search_result_click") {
+      searchResultClicks += 1;
+      if (ev.query) {
+        searchQueryClicks.set(ev.query, (searchQueryClicks.get(ev.query) ?? 0) + 1);
+      }
     }
   }
 
   const intentToActionRate = contactIntentViews > 0
     ? Number((contactIntentActions / contactIntentViews).toFixed(4))
     : 0;
+  const searchToClickRate = searchQueries > 0
+    ? Number((searchResultClicks / searchQueries).toFixed(4))
+    : 0;
+
+  const topSearchQueries = [...searchQueryCount.entries()]
+    .map(([query, queries]) => {
+      const clicks = searchQueryClicks.get(query) ?? 0;
+      const resultsTotal = searchQueryResultsSum.get(query) ?? 0;
+      return {
+        query,
+        queries,
+        clicks,
+        ctr: queries > 0 ? Number((clicks / queries).toFixed(4)) : 0,
+        avgResults: queries > 0 ? Number((resultsTotal / queries).toFixed(2)) : 0,
+      };
+    })
+    .sort((a, b) => (b.queries - a.queries) || a.query.localeCompare(b.query, "en"))
+    .slice(0, 20);
+
+  const ctaByPageFamily = [...new Set([
+    ...ctaFamilyViews.keys(),
+    ...ctaFamilyActions.keys(),
+    ...ctaFamilyClicks.keys(),
+  ])]
+    .map((family) => {
+      const views = ctaFamilyViews.get(family) ?? 0;
+      const actions = ctaFamilyActions.get(family) ?? 0;
+      const clicks = ctaFamilyClicks.get(family) ?? 0;
+      return {
+        pageFamily: family,
+        views,
+        clicks,
+        actions,
+        actionRate: views > 0 ? Number((actions / views).toFixed(4)) : 0,
+      };
+    })
+    .sort((a, b) => (b.actions - a.actions) || a.pageFamily.localeCompare(b.pageFamily, "en"));
+
+  const queue = await loadIndexQueue(env);
+  const queueSummary = summarizeIndexQueue(queue);
+  const lastQueueRun = await loadLastQueueRun(env);
 
   return apiJson({
     ok: true,
-    days,
+    range: {
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+      days,
+    },
     generatedAt: new Date().toISOString(),
     totals: {
       events: events.length,
       contactIntentViews,
       contactIntentActions,
       intentToActionRate,
+      searchQueries,
+      searchResultClicks,
+      searchToClickRate,
     },
     breakdown: {
-      byType: topCounts(byType, 20),
-      bySource: topCounts(bySource, 20),
-      topPages: topCounts(byPage, 20),
-      topCtas: topCounts(byCta, 20),
+      byType: topCounts(byType, 30),
+      bySource: topCounts(bySource, 30),
+      topPages: topCounts(byPage, 30),
+      byPageFamily: topCounts(byPageFamily, 30),
+      topCtas: topCounts(byCta, 30),
+      byCtaVariant: topCounts(byCtaVariant, 30),
+      byOutcome: topCounts(byOutcome, 30),
+    },
+    funnel: {
+      search: {
+        queries: searchQueries,
+        clicks: searchResultClicks,
+        searchToClickRate,
+        topQueries: topSearchQueries,
+      },
+      ctaByPageFamily,
+    },
+    indexing: {
+      queue: queueSummary,
+      lastRun: lastQueueRun,
     },
   });
 }
@@ -1569,7 +2507,7 @@ export default {
       });
     }
 
-    // ── API routes (indexing automation + conversion telemetry) ──
+    // ── API routes (search + indexing + conversion telemetry) ──
     if (path.startsWith("/api/")) {
       if (request.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: apiHeaders() });
@@ -1580,6 +2518,38 @@ export default {
         return await ingestTrackingEvent(request, env);
       }
 
+      // Public search endpoint
+      if (path === "/api/search") {
+        if (request.method !== "GET") {
+          return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+        }
+
+        const query = normalizeSearchQuery(url.searchParams.get("q"));
+        const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit") ?? "10")));
+
+        if (query.length < 2) {
+          return apiError("QUERY_TOO_SHORT", "q must be at least 2 characters", 400);
+        }
+
+        const manifest = await loadManifest(env);
+        const corpus = buildSearchCorpus(manifest);
+        const results = searchCorpus(corpus, query, limit);
+
+        return apiJson({
+          ok: true,
+          query,
+          count: results.length,
+          results: results.map((r) => ({
+            path: r.path,
+            title: r.title,
+            description: previewText(r.description, 240),
+            category: r.category,
+            kind: r.kind,
+            score: r.score,
+          })),
+        });
+      }
+
       // Protected telemetry summary endpoint
       if (path === "/api/events/summary") {
         return await summarizeTrackingEvents(request, env);
@@ -1587,6 +2557,21 @@ export default {
 
       const authError = checkAutomationAuth(request, env);
       if (authError) return authError;
+
+      if (path === "/api/index-queue/status") {
+        if (request.method !== "GET") {
+          return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+        }
+
+        const queue = await loadIndexQueue(env);
+        const lastRun = await loadLastQueueRun(env);
+        return apiJson({
+          ok: true,
+          enabled: queueEnabled(env),
+          ...summarizeQueueForResponse(queue),
+          lastRun,
+        });
+      }
 
       if (request.method !== "POST") {
         return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
@@ -1597,6 +2582,64 @@ export default {
         body = await request.json<any>();
       } catch {
         return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
+      }
+
+      if (path === "/api/index-queue/replay") {
+        const forceFailed = body?.forceFailed === true;
+        const simulate429 = body?.simulate429 === true;
+        const maxEntries = Math.min(500, Math.max(1, Number(body?.maxEntries ?? queueMaxEntriesPerRun(env))));
+
+        let forced = 0;
+        if (forceFailed) {
+          const out = await forceRequeueFailedEntries(env);
+          forced = out.requeued;
+        }
+
+        const processed = await processIndexQueue(env, {
+          source: "api:index-queue-replay",
+          maxEntries,
+          simulate429,
+        });
+
+        return apiJson({
+          ok: true,
+          forced,
+          artifactKey: processed.artifactKey,
+          run: processed.run,
+        }, 200);
+      }
+
+      if (path === "/api/index-queue/enqueue") {
+        const { accepted, rejected } = normalizeUrlList(body?.urls, 500);
+        if (accepted.length === 0) {
+          return apiError("URLS_INVALID", "No valid clawea.com URLs were provided", 400);
+        }
+
+        const action: IndexAction = body?.action === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED";
+        const engines = parseIndexingEngines(body?.engines);
+        if (engines.length === 0) {
+          return apiError("ENGINES_INVALID", "engines must include indexnow, google, or all", 400);
+        }
+
+        const enqueued = await enqueueIndexQueue(env, {
+          urls: accepted,
+          action,
+          engines,
+          force: body?.force === true,
+          source: "api:index-queue-enqueue",
+        });
+
+        return apiJson({
+          ok: true,
+          action,
+          engines,
+          requested: accepted.length,
+          rejected,
+          created: enqueued.created,
+          updated: enqueued.updated,
+          deduped: enqueued.deduped,
+          queue: enqueued.summary,
+        });
       }
 
       const { accepted, rejected } = normalizeUrlList(body?.urls, 500);
@@ -1640,18 +2683,36 @@ export default {
       }
 
       if (path === "/api/index-urls") {
-        const action = body?.action === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED";
-        const enginesRaw = body?.engines;
-        const enginesInput = Array.isArray(enginesRaw)
-          ? enginesRaw.map((x) => String(x).toLowerCase())
-          : [String(enginesRaw ?? "all").toLowerCase()];
-
-        const useAll = enginesInput.includes("all");
-        const useIndexNow = useAll || enginesInput.includes("indexnow");
-        const useGoogle = useAll || enginesInput.includes("google");
-
-        if (!useIndexNow && !useGoogle) {
+        const action: IndexAction = body?.action === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED";
+        const engines = parseIndexingEngines(body?.engines);
+        if (engines.length === 0) {
           return apiError("ENGINES_INVALID", "engines must include indexnow, google, or all", 400);
+        }
+
+        const queueOnly = body?.queueOnly === true;
+        const queueOnFailure = body?.queueOnFailure !== false;
+
+        if (queueOnly) {
+          const queued = await enqueueIndexQueue(env, {
+            urls: accepted,
+            action,
+            engines,
+            force: body?.force === true,
+            source: "api:index-urls(queue-only)",
+          });
+
+          return apiJson({
+            ok: true,
+            mode: "queue_only",
+            action,
+            engines,
+            requested: accepted.length,
+            rejected,
+            created: queued.created,
+            updated: queued.updated,
+            deduped: queued.deduped,
+            queue: queued.summary,
+          });
         }
 
         const out: Record<string, unknown> = {
@@ -1659,10 +2720,16 @@ export default {
           requested: accepted.length,
           rejected,
           action,
-          engines: enginesInput,
+          engines,
+          queueOnFailure,
         };
 
-        if (useIndexNow) {
+        const failedForQueue: Record<IndexEngine, string[]> = {
+          indexnow: [],
+          google: [],
+        };
+
+        if (engines.includes("indexnow")) {
           const r = await submitIndexNow(accepted, env);
           out.indexnow = {
             ok: r.ok,
@@ -1675,10 +2742,14 @@ export default {
             body: r.body,
             error: r.error,
           };
-          if (!r.ok) out.ok = false;
+
+          if (!r.ok) {
+            out.ok = false;
+            failedForQueue.indexnow.push(...accepted);
+          }
         }
 
-        if (useGoogle) {
+        if (engines.includes("google")) {
           const r = await submitGoogleIndexing(accepted, action, env);
           out.google = {
             ok: r.ok,
@@ -1688,8 +2759,52 @@ export default {
             details: r.details,
             error: r.error,
           };
-          if (!r.ok) out.ok = false;
+
+          if (!r.ok) {
+            out.ok = false;
+          }
+
+          for (const detail of r.details) {
+            if (!detail.ok) failedForQueue.google.push(detail.url);
+          }
         }
+
+        const queuedFailures: Record<string, unknown> = {};
+        if (queueOnFailure) {
+          if (failedForQueue.indexnow.length > 0) {
+            const q = await enqueueIndexQueue(env, {
+              urls: [...new Set(failedForQueue.indexnow)],
+              action,
+              engines: ["indexnow"],
+              source: "api:index-urls(indexnow-failure)",
+            });
+            queuedFailures.indexnow = {
+              queued: failedForQueue.indexnow.length,
+              created: q.created,
+              updated: q.updated,
+              deduped: q.deduped,
+            };
+          }
+
+          if (failedForQueue.google.length > 0) {
+            const q = await enqueueIndexQueue(env, {
+              urls: [...new Set(failedForQueue.google)],
+              action,
+              engines: ["google"],
+              source: "api:index-urls(google-failure)",
+            });
+            queuedFailures.google = {
+              queued: failedForQueue.google.length,
+              created: q.created,
+              updated: q.updated,
+              deduped: q.deduped,
+            };
+          }
+        }
+
+        const queue = await loadIndexQueue(env);
+        out.queue = summarizeQueueForResponse(queue);
+        out.queuedFailures = queuedFailures;
 
         return apiJson(out, out.ok ? 200 : 207);
       }
@@ -1711,7 +2826,8 @@ export default {
       const q = normalizeSearchQuery(url.searchParams.get("q"));
       if (q) {
         const manifest = await loadManifest(env);
-        const results = searchManifest(manifest, q, 32);
+        const corpus = buildSearchCorpus(manifest);
+        const results = searchCorpus(corpus, q, 32);
         return html(glossarySearchPage(q, results), 200, 300);
       }
     }
@@ -1738,6 +2854,22 @@ export default {
 
     // ── 404 ──
     return html(notFoundPage(), 404);
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (!queueEnabled(env)) return;
+
+    const maxEntries = queueMaxEntriesPerRun(env);
+    ctx.waitUntil((async () => {
+      try {
+        await processIndexQueue(env, {
+          source: "scheduled",
+          maxEntries,
+        });
+      } catch (err) {
+        console.error("INDEX_QUEUE_SCHEDULED_FAILED", err);
+      }
+    })());
   },
 } satisfies ExportedHandler<Env>;
 

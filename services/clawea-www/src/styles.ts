@@ -74,16 +74,30 @@ nav .links a:hover{color:var(--text)}
 .nav-search{display:flex;align-items:center;gap:.5rem;position:relative;
   border:1px solid var(--border);background:var(--surface);border-radius:999px;
   padding:.35rem .75rem;min-width:220px;max-width:320px;width:min(100%,300px);
-  transition:border-color .15s,box-shadow .15s}
+  transition:border-color .15s,box-shadow .15s;overflow:visible}
 .nav-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.18)}
 .nav-search-icon{color:var(--text-muted);font-size:.8rem;line-height:1;flex-shrink:0}
 .nav-search input{border:none;background:transparent;color:var(--text);width:100%;
-  font-size:.85rem;line-height:1.3;outline:none;padding:0}
+  font-size:.85rem;line-height:1.3;outline:none;padding:0;min-width:0}
 .nav-search input::placeholder{color:var(--text-muted)}
+.nav-search-clear{border:none;background:transparent;color:var(--text-muted);cursor:pointer;
+  font-size:1rem;line-height:1;padding:0 .1rem}
+.nav-search-clear:hover{color:var(--text)}
 .nav-search-hint{display:inline-flex;align-items:center;justify-content:center;
   font-family:var(--font-mono);font-size:.68rem;color:var(--text-muted);
   border:1px solid var(--border-light);border-radius:.4rem;padding:.1rem .35rem;
   line-height:1;flex-shrink:0}
+
+.nav-search-results{position:absolute;left:0;right:0;top:calc(100% + .45rem);
+  background:var(--surface);border:1px solid var(--border);border-radius:.85rem;
+  box-shadow:0 20px 40px rgba(0,0,0,.35);padding:.4rem;z-index:150;display:grid;gap:.2rem;
+  max-height:340px;overflow:auto}
+.nav-search-result{display:block;padding:.6rem .65rem;border-radius:.6rem;
+  border:1px solid transparent;color:var(--text);text-decoration:none}
+.nav-search-result:hover,.nav-search-result.active{background:var(--surface-2);border-color:var(--border-light)}
+.nav-search-result-title{display:block;font-size:.82rem;font-weight:600;line-height:1.35;margin-bottom:.15rem}
+.nav-search-result-meta{display:block;font-size:.72rem;color:var(--text-muted);line-height:1.35}
+.nav-search-empty{padding:.55rem .65rem;font-size:.78rem;color:var(--text-secondary)}
 
 .cta-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem 1.25rem;
   font-size:.875rem;font-weight:600;color:#fff;background:var(--accent);
