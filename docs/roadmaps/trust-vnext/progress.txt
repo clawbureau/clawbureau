@@ -584,3 +584,43 @@ Started: 2026-02-07T19:53:07Z
      - secure deploy staging: PASS
      - secure deploy prod safe-mode: PASS
      - suspend hard-stop staging: PASS
+
+## 2026-02-11T11:05:00Z - clawea enterprise productization slice (post-#120)
+- What was implemented
+  - Private clawea PR #9 merged:
+    - https://github.com/clawbureau/clawea/pull/9
+    - Merge: `ca4758fe68822c79605923412778740fe2e6541c`
+  - Added skills productization surfaces:
+    - D1 migration `0005_productization_skills_templates_billing.sql`
+    - tenant custom skill upload API (`/v1/skills/upload`) with hash + manifest safety checks
+    - agent skill install/list/remove APIs (`/v1/agents/:id/skills*`)
+    - fail-closed startup checks for custom-skill existence + R2 bundle presence
+  - Added template revision/governance:
+    - immutable revisions (`template_family_id`, `version`, `is_latest`, `is_immutable`)
+    - deploy latest vs pin controls
+    - secure family governance (`cea_tmpl_secure_enterprise`) with admin-override path only
+  - Added channel binding + tenant policy enforcement:
+    - `PATCH /v1/agents/:id/channels`
+    - tenant `channel_policy` in admin access-policy patch
+  - Added billing expansion:
+    - normalized `GET /v1/billing/usage`
+    - budget alert event ledger + deterministic 100% actions + optional webhook
+    - invoice snapshot MVP (`invoices`, `invoice_line_items`, list/detail/generate APIs)
+  - Added audit expansion:
+    - `GET /v1/audit/runs/:id`
+    - richer audit export deltas (`delta=true&cursor=`)
+  - Added tests + smoke:
+    - new unit tests for skill manifest, template revisions, channel policy, billing usage
+    - smoke script: `scripts/smoke-enterprise-productization-next.mjs`
+- Rollout evidence
+  - Migration applied:
+    - staging DB: PASS
+    - prod DB: PASS
+  - Deploy versions:
+    - staging: `f9c19e52-8291-4e05-974c-cbe550617323`
+    - prod: `4118c590-3d75-4ef3-8817-64b877c028ab`
+  - Smoke artifacts:
+    - `services/clawea/artifacts/smoke/productization-next/2026-02-11T11-03-47Z-staging/result.json` (PASS)
+    - `services/clawea/artifacts/smoke/productization-next/2026-02-11T11-03-52Z-prod/result.json` (PASS)
+- Notes
+  - D1 remote migration path rejected CREATE TRIGGER statements with `SQLITE_ERROR code 7500 (incomplete input)` in this environment; equivalent relationship checks are enforced fail-closed in app logic.
