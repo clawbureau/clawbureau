@@ -13,6 +13,7 @@
     "conversion:weekly": "tsx scripts/weekly-conversion-summary.ts",
     "growth:weekly": "tsx scripts/weekly-growth-report.ts",
     "ops:artifacts": "tsx scripts/build-growth-engine-artifacts.ts",
+    "lint:human-tone": "tsx scripts/human-tone-lint.ts",
     "content:factory": "tsx scripts/content-factory.ts",
     "content:factory:dry": "tsx scripts/content-factory.ts --mode dry-run"
   },

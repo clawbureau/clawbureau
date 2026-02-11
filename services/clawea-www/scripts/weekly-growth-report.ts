@@ -29,6 +29,8 @@ if (!TOKEN) {
 const baseUrl = getArg("base") ?? process.env.CLAWEA_BASE_URL ?? "https://clawea.com";
 const eventsEndpoint = getArg("events-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/events/summary`;
 const queueEndpoint = getArg("queue-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/index-queue/status`;
+const leadsEndpoint = getArg("leads-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/leads/status`;
+const winnersEndpoint = getArg("winners-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/experiments/winners`;
 const days = Math.max(1, Math.min(90, Number(getArg("days") ?? process.env.CLAWEA_GROWTH_DAYS ?? "7")));
 
 const now = new Date();
@@ -63,6 +65,35 @@ function bulletsCta(rows: any[] | undefined, fallback = "- none"): string {
   return rows
     .slice(0, 8)
     .map((r) => `- ${r.pageFamily}: views=${r.views}, clicks=${r.clicks}, actions=${r.actions}, actionRate=${r.actionRate}`)
+    .join("\n");
+}
+
+function bulletsVariant(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 8)
+    .map((r) => `- ${r.variantId}: impressions=${r.impressions}, clicks=${r.clicks}, submits=${r.submits}, submitRate=${r.submitRate}`)
+    .join("\n");
+}
+
+function bulletsWinners(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 10)
+    .map((r) => {
+      const winner = r?.winner;
+      if (!winner) return `- ${r.pageFamily}: no winner yet`;
+      const rate = winner.events > 0 ? Number((winner.contactSubmits / winner.events).toFixed(4)) : 0;
+      return `- ${r.pageFamily}: ${winner.variant} (events=${winner.events}, submits=${winner.contactSubmits}, submitRate=${rate})`;
+    })
+    .join("\n");
+}
+
+function bulletsLeadStatus(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 8)
+    .map((r) => `- ${r.key}: ${r.count}`)
     .join("\n");
 }
 
@@ -106,6 +137,20 @@ async function main() {
 
   const queue = await authedJson(queueEndpoint, { method: "GET" });
 
+  let leads: any = null;
+  try {
+    leads = await authedJson(leadsEndpoint, { method: "GET" });
+  } catch (err: any) {
+    leads = { ok: false, error: String(err?.message ?? "LEADS_STATUS_UNAVAILABLE") };
+  }
+
+  let winners: any = null;
+  try {
+    winners = await authedJson(winnersEndpoint, { method: "GET" });
+  } catch (err: any) {
+    winners = { ok: false, error: String(err?.message ?? "VARIANT_WINNERS_UNAVAILABLE") };
+  }
+
   const report = {
     generatedAt: new Date().toISOString(),
     period: {
@@ -115,6 +160,8 @@ async function main() {
     },
     events,
     queue,
+    leads,
+    winners,
     highlights: {
       topLandingPages: topRows(events?.breakdown?.topPages, 10),
       searchToClick: {
@@ -127,6 +174,15 @@ async function main() {
       },
       ctaByPageFamily: Array.isArray(events?.funnel?.ctaByPageFamily)
         ? events.funnel.ctaByPageFamily.slice(0, 12)
+        : [],
+      variantPerformance: Array.isArray(events?.funnel?.variants)
+        ? events.funnel.variants.slice(0, 16)
+        : [],
+      winnerByFamily: Array.isArray(winners?.report?.winners)
+        ? winners.report.winners.slice(0, 16)
+        : [],
+      leadStatus: Array.isArray(leads?.breakdown?.byStatus)
+        ? leads.breakdown.byStatus.slice(0, 12)
         : [],
       indexingBacklog: queue?.summary ?? null,
       indexingLastRun: queue?.lastRun ?? null,
@@ -146,6 +202,9 @@ async function main() {
     + `- clicks: ${report.highlights.searchToClick.clicks}\n`
     + `- rate: ${report.highlights.searchToClick.rate}\n\n`
     + `## CTA conversion by page family\n${bulletsCta(report.highlights.ctaByPageFamily)}\n\n`
+    + `## Variant performance (events funnel)\n${bulletsVariant(report.highlights.variantPerformance)}\n\n`
+    + `## Weekly winner candidates by page family\n${bulletsWinners(report.highlights.winnerByFamily)}\n\n`
+    + `## Lead pipeline status\n${bulletsLeadStatus(report.highlights.leadStatus)}\n\n`
     + `## Indexing backlog\n`
     + `- totalEntries: ${Number(queue?.summary?.totalEntries ?? 0)}\n`
     + `- nextAttemptAt: ${queue?.summary?.nextAttemptAt ?? "none"}\n`

@@ -1,0 +1,44 @@
+{
+  "generatedAt": "2026-02-11T23:06:45Z",
+  "production": {
+    "baseUrl": "https://www.clawea.com",
+    "checks": [
+      { "path": "/assessment", "status": 200, "marker": "Enterprise Agent Readiness Assessment" },
+      { "path": "/assessment/result?readiness=82&roi=74&risk=28", "status": 200, "marker": "Your recommended track" },
+      { "path": "/contact", "status": 200, "marker": "data-lead-form" },
+      { "path": "/sources", "status": 200, "marker": "Source hub for AI discovery" },
+      { "path": "/llms.txt", "status": 200, "marker": "High-intent routes" },
+      { "path": "/api/experiments/assignment?pageFamily=home&visitorId=prod-smoke", "status": 200, "marker": "assignment" },
+      {
+        "path": "/api/leads/submit",
+        "method": "POST",
+        "status": 200,
+        "response": {
+          "ok": true,
+          "deduped": false,
+          "idempotentReplay": false,
+          "next": "standard_follow_up"
+        }
+      },
+      {
+        "path": "/api/leads/status",
+        "status": 401,
+        "responseCode": "UNAUTHORIZED",
+        "note": "Expected without bearer token"
+      }
+    ]
+  },
+  "staging": {
+    "route": "staging-www.clawea.com/*",
+    "publicDnsReachable": false,
+    "note": "staging-www.clawea.com DNS not publicly resolvable during smoke run",
+    "localDevChecks": [
+      { "path": "/assessment", "status": 200 },
+      { "path": "/assessment/result?readiness=78&roi=66&risk=31", "status": 200 },
+      { "path": "/contact", "status": 200 },
+      { "path": "/sources", "status": 200 },
+      { "path": "/llms.txt", "status": 200 },
+      { "path": "/api/experiments/assignment?pageFamily=home&visitorId=staging-local-smoke", "status": 200 }
+    ]
+  }
+}
