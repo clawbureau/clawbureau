@@ -355,7 +355,7 @@
       ],
       "priority": 26,
       "passes": true,
-      "notes": "Delivered in `services/clawclaim/src/index.ts`: control-plane challenge endpoint, owner-signed controller registration, controller->agent registration, owner-bound sensitive policy update, and deterministic controller/agent read/list endpoints. Test coverage: `services/clawclaim/test/control-plane.test.ts`. Deploy versions: staging `7c1cf0b7-af77-4d21-b29d-b902055519a5`, prod `4af46ea4-05b7-43de-ae1f-6f100b4fde56`."
+      "notes": "Delivered in `services/clawclaim/src/index.ts`: control-plane challenge endpoint, owner-signed controller registration, controller->agent registration, owner-bound sensitive policy update, and deterministic controller/agent read/list endpoints; later extended with lifecycle portability endpoints (rotation/transfer/export/import). Test coverage: `services/clawclaim/test/control-plane.test.ts`, `services/clawclaim/test/claim-lifecycle-portability.test.ts`. Latest deploy versions: staging `ace3a741-85e3-4fcb-b582-aac6993d974f`, prod `2b45efe3-7bfd-48b2-a9c2-df5250f51488`; latest smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`."
     },
     {
       "id": "ICP-US-002",
@@ -368,7 +368,7 @@
       ],
       "priority": 27,
       "passes": true,
-      "notes": "Delivered in `services/clawscope/src/index.ts`: `POST /v1/tokens/issue/canonical`, migration-gated legacy `POST /v1/tokens/issue`, deterministic matrix endpoint `POST /v1/tokens/introspect/matrix`, revocation stream `GET /v1/revocations/stream`, and key overlap contract `GET /v1/keys/rotation-contract`. Added canonical claim fields to `packages/schema/auth/scoped_token_claims.v1.json`. Deploy versions: staging `37e14c8f-1016-4b5e-b117-70dd372e0131`, prod `2edbae03-adf5-4b8a-8cce-74ff3613cd79`."
+      "notes": "Delivered in `services/clawscope/src/index.ts`: `POST /v1/tokens/issue/canonical`, migration-gated legacy `POST /v1/tokens/issue`, deterministic matrix endpoint `POST /v1/tokens/introspect/matrix`, revocation stream `GET /v1/revocations/stream`, and key overlap contract `GET /v1/keys/rotation-contract`. Added canonical claim fields to `packages/schema/auth/scoped_token_claims.v1.json`. Deploy versions: staging `37e14c8f-e14f-4ec7-b2d7-9c22a6d9ce9b`, prod `2edbae03-cf2e-4ba9-9be4-18f9786dd9a5`."
     },
     {
       "id": "ICP-US-003",
@@ -381,11 +381,50 @@
       ],
       "priority": 28,
       "passes": true,
-      "notes": "Delivered in `services/clawverify/src/index.ts` with new endpoints `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` plus deterministic remediation hints. New verification modules: `verify-control-chain.ts`, `verify-token-control.ts`; tests: `test/control-chain.test.ts`, `test/token-control.test.ts`. Deploy versions: staging `db16bf9e-8c5a-49cb-a9f6-083efd86d476`, prod `9e4298b9-e129-44f8-ad3a-20a4e52cd15b`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
+      "notes": "Delivered in `services/clawverify/src/index.ts` with new endpoints `POST /v1/verify/control-chain` and `POST /v1/verify/token-control` plus deterministic remediation hints. New verification modules: `verify-control-chain.ts`, `verify-token-control.ts`; tests: `test/control-chain.test.ts`, `test/token-control.test.ts`. Deploy versions: staging `db16bf9e-af27-499e-a523-f180f9dd8dc0`, prod `9e4298b9-5bf0-415c-8fa4-920242d6fef9`; smoke artifacts: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`, `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`."
+    },
+    {
+      "id": "CCL-US-013",
+      "title": "Owner-confirmed DID rotation continuity",
+      "description": "As identity operations, we need owner-confirmed controller/agent DID rotation continuity so authorization chains survive key and DID migrations.",
+      "acceptanceCriteria": [
+        "Rotation confirm endpoint supports controller and agent roles with owner challenge signatures",
+        "Alias records preserve continuity for controller/agent chain lookups",
+        "Replay/idempotency outcomes are deterministic and fail-closed"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "Shipped in clawclaim via `POST /v1/control-plane/rotations/confirm` with alias persistence + alias-resolved chain reads. Coverage: `services/clawclaim/test/claim-lifecycle-portability.test.ts` and staging/prod smoke artifacts `.../2026-02-11T22-10-50-682Z-staging/` + `.../2026-02-11T22-11-02-225Z-prod/`."
+    },
+    {
+      "id": "CCL-US-014",
+      "title": "Controller transfer state machine + freeze semantics",
+      "description": "As identity operations, we need deterministic transfer state transitions and transfer-pending mutation freeze semantics.",
+      "acceptanceCriteria": [
+        "Transfer request marks controller as transfer_pending",
+        "Transfer confirm finalizes ownership + policy propagation",
+        "Mutation paths fail closed while transfer_pending"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": "Shipped in clawclaim with endpoints `POST /v1/control-plane/controllers/{controller_did}/transfer/request` and `/transfer/confirm`, plus deterministic freeze errors (`CONTROLLER_TRANSFER_FROZEN`). Validated in unit tests + staging/prod identity smoke."
+    },
+    {
+      "id": "CCL-US-015",
+      "title": "Signed identity export/import portability bundle",
+      "description": "As platform operations, we need signed export/import portability bundles with tamper/stale checks and deterministic idempotency.",
+      "acceptanceCriteria": [
+        "Export emits signed bundle envelope with deterministic hash",
+        "Import verifies bundle hash/signature/freshness and rejects tampered or stale bundles",
+        "Import replay behavior is deterministic"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Shipped in clawclaim with `POST /v1/control-plane/identity/export` and `/identity/import`, HMAC signing (`CLAIM_EXPORT_SIGNING_KEY`), deterministic import operation keys, and fail-closed tamper/stale checks. Added schema `packages/schema/identity/identity_export_bundle.v1.json`. Validated by unit tests + staging/prod identity smoke."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T22:50:00Z",
+    "updatedAt": "2026-02-11T23:15:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

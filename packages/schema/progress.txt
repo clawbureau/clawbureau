@@ -119,3 +119,8 @@ Started: 2026-02-03
     - `token_lane` (`legacy | canonical`)
 - Updated deterministic token hash contract description:
   - `token_scope_hash_b64u` now includes canonical chain/policy fields when present.
+
+## CCL-US-015 — Identity export bundle schema
+- Added identity portability bundle schema:
+  - `packages/schema/identity/identity_export_bundle.v1.json`
+- Documents signed portability envelope shape used by clawclaim export/import endpoints.

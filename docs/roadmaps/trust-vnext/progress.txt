@@ -738,3 +738,47 @@ Started: 2026-02-07T19:53:07Z
   - Smoke artifacts:
     - staging: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-01-985Z-staging/result.json`
     - prod: `artifacts/smoke/identity-control-plane/2026-02-11T21-47-11-161Z-prod/result.json`
+
+## 2026-02-11T23:15:00Z - CCL-US-013/014/015 (claim lifecycle portability hardening)
+- What was implemented
+  - Extended clawclaim control-plane challenge purposes for lifecycle operations:
+    - `confirm_rotation`
+    - `transfer_controller_request`
+    - `transfer_controller_confirm`
+    - `export_identity`
+    - `import_identity`
+  - Added rotation continuity endpoint:
+    - `POST /v1/control-plane/rotations/confirm`
+    - supports controller/agent role confirmations, deterministic alias records, and replay-safe outcomes.
+  - Added controller transfer state-machine endpoints:
+    - `POST /v1/control-plane/controllers/{controller_did}/transfer/request`
+    - `POST /v1/control-plane/controllers/{controller_did}/transfer/confirm`
+    - enforces `active -> transfer_pending -> transferred` semantics with mutation freeze while pending.
+  - Added signed identity portability endpoints:
+    - `POST /v1/control-plane/identity/export`
+    - `POST /v1/control-plane/identity/import`
+    - HMAC-signed bundle envelope with deterministic hash/signature/freshness validation.
+  - Added schema contract:
+    - `packages/schema/identity/identity_export_bundle.v1.json`
+- Deterministic error codes added (new)
+  - `CONTROLLER_TRANSFER_FROZEN`
+  - `ROTATION_CONFLICT`
+  - `TRANSFER_ALREADY_PENDING`
+  - `TRANSFER_NOT_PENDING`
+  - `IMPORT_BUNDLE_TAMPERED`
+  - `IMPORT_BUNDLE_STALE`
+  - `IMPORT_ALIAS_CONFLICT`
+- Quality checks
+  - `cd services/clawclaim && npm run typecheck && npm test`
+  - `cd services/clawscope && npm run typecheck && npm test`
+  - `cd services/clawverify && npm run typecheck && npm test`
+- Deployment status
+  - Updated `clawclaim` deploy versions:
+    - `clawclaim-staging`: `ace3a741-85e3-4fcb-b582-aac6993d974f`
+    - `clawclaim`: `2b45efe3-7bfd-48b2-a9c2-df5250f51488`
+  - Existing `clawscope` + `clawverify` versions reused for smoke matrix:
+    - staging: `clawscope=37e14c8f-e14f-4ec7-b2d7-9c22a6d9ce9b`, `clawverify=db16bf9e-af27-499e-a523-f180f9dd8dc0`
+    - prod: `clawscope=2edbae03-cf2e-4ba9-9be4-18f9786dd9a5`, `clawverify=9e4298b9-5bf0-415c-8fa4-920242d6fef9`
+  - Smoke artifacts:
+    - staging: `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/result.json`
+    - prod: `artifacts/smoke/identity-control-plane/2026-02-11T22-11-02-225Z-prod/result.json`
