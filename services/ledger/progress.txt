@@ -439,3 +439,23 @@ Started: 2026-02-02T03:08:26.936251
 - Release status
   - Production deploy intentionally not executed in this CLD-US-016 iteration pending explicit approval.
 ---
+
+## 2026-02-12T00:06:00Z - CLD-US-016 production rollout closure
+- Approval + rollout
+  - Received explicit production rollout approval for CLD-US-016.
+  - Deployed production `clawledger` from branch `feat/economy/CLD-US-016-settlement-ingest-concurrency`.
+- Production deploy evidence
+  - `services/ledger` production version:
+    - `270dd601-b4f9-4ae9-a7c9-7e3221e89c6c`
+- Production smoke evidence
+  - Command:
+    - `node scripts/poh/smoke-ledger-payment-settlements.mjs --env prod --parallel-burst 8`
+  - Result highlights:
+    - baseline confirmed/replay/reversal path: pass
+    - burst confirmed deduped count: 7/8 (single winner)
+    - burst reversal deduped count: 7/8 (single winner)
+    - account available after burst confirm: `777`
+    - account available after burst reversal: `0`
+- Final status
+  - CLD-US-016 marked shipped in `services/ledger/prd.json` and `docs/prds/clawledger.md`.
+---

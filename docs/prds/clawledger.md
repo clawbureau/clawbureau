@@ -182,6 +182,8 @@ Event-sourced ledger for balances, holds, and transfers. Idempotent and auditabl
 - Lookup/list endpoints provide deterministic pagination behavior
 
 ### CLD-US-016 — Settlement ingest concurrency hardening (exactly-once side effects)
+**Status:** Shipped (staging + production validated)
+
 **As a** platform, **I want** settlement side effects to be race-safe under natural-key concurrency **so that** retries and parallel ingests cannot double-credit/debit balances.
 
 **Acceptance Criteria:**

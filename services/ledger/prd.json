@@ -230,8 +230,8 @@
         "Staging deploy + smoke evidence captured"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": "In progress: implementing concurrency hardening and validating on staging. Production rollout gated pending explicit approval."
+      "passes": true,
+      "notes": "Implemented exact-once ingest hardening via create-claim/CAS-claim flow, race-loser dedupe behavior, parallel race tests, and burst smoke validation. Rolled out to staging + production with successful burst-mode smoke evidence."
     }
   ]
 }
