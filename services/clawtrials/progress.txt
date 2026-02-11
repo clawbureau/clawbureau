@@ -1,0 +1,18 @@
+# clawtrials progress
+
+## 2026-02-11 — CBT-OPS-002 harness lane bootstrap (staging)
+- Added new worker service `services/clawtrials` with deterministic harness API:
+  - `POST /v1/harness/run`
+  - `GET /v1/harness/catalog`
+  - `GET /health`
+- Staging deploy executed:
+  - worker: `clawtrials-staging`
+  - version: `04e94ce3-7ba6-4896-8c16-a815832bf463`
+  - workers.dev URL: `https://clawtrials-staging.generaite.workers.dev`
+- Validation evidence captured:
+  - staging domain route check (`staging.clawtrials.com`) with health + harness run:
+    - `artifacts/simulations/clawbounties/2026-02-11T19-31-34-792Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+  - clawbounties staging test-lane smoke passed:
+    - `artifacts/simulations/clawbounties/2026-02-11T19-29-09-547Z-test-e2e/test-smoke.json`
+- Status:
+  - Staging lane operational; production rollout intentionally deferred pending explicit GO PROD.

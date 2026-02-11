@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "ralph/clawbounties-phase1-trust",
+  "branchName": "feat/marketplace/CBT-OPS-002-clawbounties-simulation-activation",
   "description": "clawbounties.com (Bounty Marketplace) — PRD — Marketplace for agent work with test/quorum/requester closures.",
   "userStories": [
     {
@@ -328,6 +328,48 @@
       "priority": 22,
       "passes": true,
       "notes": "Implemented scoped requester token introspection via clawscope for post/approve/reject, kept the legacy path behind REQUESTER_AUTH_COMPAT_LEGACY (default false), added reviewer read endpoints, added requester auth usage event persistence, and added scripts/clawbounties/smoke-requester-closure-simulation.mjs for real staging flow validation. Added staging route override for /v1/bounties* to prevent legacy route shadowing. Captured deterministic auth smoke evidence at artifacts/smoke/requester-auth/2026-02-11T19-25-45Z-staging/result.json and full requester-closure E2E pass artifact at artifacts/simulations/clawbounties-requester-closure/2026-02-11T19-20-52-597Z-staging-runs-3/result.json."
+    },
+    {
+      "id": "CBT-US-022",
+      "title": "Test harness lane operational",
+      "description": "As marketplace ops, I want the clawtrials harness lane to be routable and deterministic so closure_type=test bounties can auto-decide safely.",
+      "acceptanceCriteria": [
+        "Provide clawtrials API endpoint POST /v1/harness/run with deterministic request/response schema",
+        "Ensure staging domain staging.clawtrials.com resolves to API worker (no parked landing fallback for /v1/harness/run)",
+        "Integrate clawbounties test auto-approval path with fail-closed deterministic errors when harness is unavailable or invalid",
+        "Validate staging test-lane behavior with smoke evidence"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Staging complete: clawtrials harness lane deployed + deterministic fail-closed invalid-harness replay evidence captured. Pass flip deferred pending explicit GO PROD."
+    },
+    {
+      "id": "CBT-US-023",
+      "title": "Real E2E simulation runner (no D1 injection)",
+      "description": "As marketplace ops, I want API-only requester/test simulation runners so we can route real internal work through clawbounties immediately.",
+      "acceptanceCriteria": [
+        "Add scripts/poh/smoke-clawbounties-e2e-requester.mjs using real APIs: register -> post -> accept -> submit -> approve/reject",
+        "Add scripts/poh/smoke-clawbounties-e2e-test.mjs using real APIs: register -> post(test) -> accept -> submit -> harness auto decision",
+        "Add scripts/poh/simulate-clawbounties-batch.mjs for load batches without direct D1 mutation",
+        "Simulation scripts emit deterministic failures and fail-closed on dependency outages"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Staging complete: requester/test API-only smokes + batch runs (10 and 50) succeeded with artifacts. Pass flip deferred pending explicit GO PROD."
+    },
+    {
+      "id": "CBT-US-024",
+      "title": "Submission review/listing ergonomics",
+      "description": "As requesters/reviewers/operators, I want first-class submission listing/detail APIs and simulation artifacts so review loops are fast and auditable.",
+      "acceptanceCriteria": [
+        "Implement GET /v1/bounties/:id/submissions with explicit admin/worker/requester auth boundaries",
+        "Implement GET /v1/submissions/:id with deterministic error contracts and review-friendly fields",
+        "Batch simulation writes artifacts under artifacts/simulations/clawbounties/<timestamp>/",
+        "Artifacts include total jobs, per-step success/failure, deterministic error buckets, stuck-state counts, per-step latency stats, and closure_type breakdown"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Staging complete: submission listing/detail endpoints live and artifact metrics emitted under artifacts/simulations/clawbounties/*. Pass flip deferred pending explicit GO PROD."
     }
   ]
 }

@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "env": "staging",
+  "bounty_id": "bty_708a5c5f-4183-4269-84c1-5bcd6c5c5708",
+  "submission_first": "sub_835bbdf2-3732-4cbe-9589-ed80ee0a638e",
+  "first": {
+    "status": 422,
+    "error": "TEST_HARNESS_INVALID",
+    "message": "HARNESS_NOT_FOUND:th_missing_invalid_case_v2",
+    "details": {
+      "submission_id": "sub_835bbdf2-3732-4cbe-9589-ed80ee0a638e",
+      "bounty_id": "bty_708a5c5f-4183-4269-84c1-5bcd6c5c5708",
+      "test_result_id": "tst_98f6e227-0d2f-4845-9e9d-893f15bed33d",
+      "test_harness_id": "th_missing_invalid_case_v2"
+    }
+  },
+  "replay": {
+    "status": 422,
+    "error": "TEST_HARNESS_INVALID",
+    "message": "HARNESS_NOT_FOUND:th_missing_invalid_case_v2",
+    "details": {
+      "submission_id": "sub_835bbdf2-3732-4cbe-9589-ed80ee0a638e",
+      "test_result_id": "tst_98f6e227-0d2f-4845-9e9d-893f15bed33d",
+      "test_harness_id": "th_missing_invalid_case_v2"
+    }
+  },
+  "generated_at": "2026-02-11T19:31:19.823Z"
+}

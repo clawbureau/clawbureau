@@ -337,6 +337,104 @@ interface TestResultRecord {
   updated_at: string;
 }
 
+interface DeterministicTestLaneFailure {
+  code: string;
+  message: string;
+  status: number;
+  details?: Record<string, unknown>;
+}
+
+interface TestAutoDecisionResult {
+  applied: boolean;
+  failure?: DeterministicTestLaneFailure;
+}
+
+interface SubmissionSummaryView {
+  submission_id: string;
+  bounty_id: string;
+  worker_did: string;
+  status: SubmissionStatus;
+  proof_verify_status: 'valid' | 'invalid';
+  proof_tier: ProofTier | null;
+  commit_proof_verify_status: 'valid' | 'invalid' | null;
+  commit_sha: string | null;
+  created_at: string;
+  updated_at: string;
+  latest_test_result: {
+    test_result_id: string;
+    test_harness_id: string;
+    passed: boolean;
+    completed_at: string;
+    error: string | null;
+  } | null;
+}
+
+interface SubmissionDetailView {
+  submission_id: string;
+  bounty_id: string;
+  worker_did: string;
+  status: SubmissionStatus;
+  idempotency_key: string | null;
+  verification: {
+    proof_bundle: {
+      status: 'valid' | 'invalid';
+      reason: string | null;
+      verified_at: string | null;
+      proof_tier: ProofTier | null;
+      proof_bundle_hash_b64u: string | null;
+    };
+    commit_proof: {
+      status: 'valid' | 'invalid' | null;
+      reason: string | null;
+      verified_at: string | null;
+      commit_proof_hash_b64u: string | null;
+    };
+  };
+  source: {
+    commit_sha: string | null;
+    repo_url: string | null;
+    repo_claim_id: string | null;
+  };
+  output: {
+    result_summary: string | null;
+    artifacts: unknown[] | null;
+    agent_pack: Record<string, unknown> | null;
+    execution_attestations: Record<string, unknown>[] | null;
+  };
+  latest_test_result: {
+    test_result_id: string;
+    test_harness_id: string;
+    passed: boolean;
+    total_tests: number;
+    passed_tests: number;
+    failed_tests: number;
+    execution_time_ms: number;
+    completed_at: string;
+    error: string | null;
+  } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type SubmissionViewerContext =
+  | { kind: 'admin' }
+  | { kind: 'worker'; worker: WorkerRecordV1 }
+  | { kind: 'requester'; requester_did: string; auth: RequesterAuthContext };
+
+interface SubmissionViewerContextResultOk {
+  ok: true;
+  context: SubmissionViewerContext;
+}
+
+interface SubmissionViewerContextResultErr {
+  ok: false;
+  error: Response;
+}
+
+type SubmissionViewerContextResult =
+  | SubmissionViewerContextResultOk
+  | SubmissionViewerContextResultErr;
+
 interface SubmissionRecord {
   submission_id: string;
   bounty_id: string;
@@ -1186,6 +1284,79 @@ async function requireRequesterAuth(
       scope: [REQUESTER_AUTH_SCOPE_BY_ACTION[params.action]],
       aud: [],
     },
+  };
+}
+
+async function resolveSubmissionViewerContext(
+  request: Request,
+  env: Env,
+  version: string,
+  params?: {
+    requester_did_hint?: string | null;
+  }
+): Promise<SubmissionViewerContextResult> {
+  if (isAdminAuthorized(request, env)) {
+    return { ok: true, context: { kind: 'admin' } };
+  }
+
+  const token = getBearerToken(request.headers.get('authorization'));
+  if (token) {
+    if (looksLikeJwtToken(token)) {
+      const authResult = await requireRequesterAuth(request, env, version, {
+        action: 'read_submission',
+        requester_did_hint: params?.requester_did_hint ?? null,
+      });
+      if ('error' in authResult) {
+        return { ok: false, error: authResult.error };
+      }
+
+      return {
+        ok: true,
+        context: {
+          kind: 'requester',
+          requester_did: authResult.auth.requester_did,
+          auth: authResult.auth,
+        },
+      };
+    }
+
+    const workerAuth = await requireWorker(request, env, version);
+    if ('error' in workerAuth) {
+      return { ok: false, error: workerAuth.error };
+    }
+
+    return { ok: true, context: { kind: 'worker', worker: workerAuth.worker } };
+  }
+
+  if (isNonEmptyString(request.headers.get('x-requester-did'))) {
+    const requesterDidHint = request.headers.get('x-requester-did')?.trim() ?? null;
+    const authResult = await requireRequesterAuth(request, env, version, {
+      action: 'read_submission',
+      requester_did_hint: requesterDidHint || params?.requester_did_hint || null,
+    });
+    if ('error' in authResult) {
+      return { ok: false, error: authResult.error };
+    }
+
+    return {
+      ok: true,
+      context: {
+        kind: 'requester',
+        requester_did: authResult.auth.requester_did,
+        auth: authResult.auth,
+      },
+    };
+  }
+
+  return {
+    ok: false,
+    error: errorResponse(
+      'UNAUTHORIZED',
+      'Provide admin token, worker bearer token, or requester scoped token',
+      401,
+      undefined,
+      version
+    ),
   };
 }
 
@@ -3295,6 +3466,298 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
   };
 }
 
+function parseTestResultRow(row: Record<string, unknown>): TestResultRecord | null {
+  const test_result_id = d1String(row.test_result_id);
+  const submission_id = d1String(row.submission_id);
+  const bounty_id = d1String(row.bounty_id);
+  const test_harness_id = d1String(row.test_harness_id);
+  const passedRaw = d1Number(row.passed);
+  const total_tests = d1Number(row.total_tests);
+  const passed_tests = d1Number(row.passed_tests);
+  const failed_tests = d1Number(row.failed_tests);
+  const execution_time_ms = d1Number(row.execution_time_ms);
+  const completed_at = d1String(row.completed_at);
+  const error = d1String(row.error);
+  const test_results_json = d1String(row.test_results_json);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !test_result_id ||
+    !submission_id ||
+    !bounty_id ||
+    !test_harness_id ||
+    passedRaw === null ||
+    total_tests === null ||
+    passed_tests === null ||
+    failed_tests === null ||
+    execution_time_ms === null ||
+    !completed_at ||
+    !test_results_json ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  const test_results = parseJsonUnknownArray(test_results_json);
+  if (!test_results) {
+    return null;
+  }
+
+  return {
+    test_result_id,
+    submission_id,
+    bounty_id,
+    test_harness_id,
+    passed: passedRaw !== 0,
+    total_tests,
+    passed_tests,
+    failed_tests,
+    execution_time_ms,
+    completed_at,
+    error: error ? error.trim() : null,
+    test_results,
+    created_at,
+    updated_at,
+  };
+}
+
+async function listSubmissionsByBounty(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    status?: SubmissionStatus;
+    worker_did?: string;
+    limit: number;
+  }
+): Promise<SubmissionRecord[]> {
+  let sql = 'SELECT * FROM submissions WHERE bounty_id = ?';
+  const binds: unknown[] = [params.bounty_id];
+
+  if (params.status) {
+    sql += ' AND status = ?';
+    binds.push(params.status);
+  }
+
+  if (params.worker_did) {
+    sql += ' AND worker_did = ?';
+    binds.push(params.worker_did);
+  }
+
+  sql += ' ORDER BY created_at DESC, submission_id DESC LIMIT ?';
+  binds.push(params.limit);
+
+  const rows = await db.prepare(sql).bind(...binds).all();
+  const out: SubmissionRecord[] = [];
+  for (const row of rows.results ?? []) {
+    if (!isRecord(row)) continue;
+    const parsed = parseSubmissionRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
+async function getLatestTestResultBySubmissionId(
+  db: D1Database,
+  submission_id: string
+): Promise<TestResultRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM test_results WHERE submission_id = ? ORDER BY created_at DESC, test_result_id DESC LIMIT 1')
+    .bind(submission_id)
+    .first();
+
+  if (!row || !isRecord(row)) return null;
+  return parseTestResultRow(row);
+}
+
+function classifyTestLaneFailure(errorMessage: string): DeterministicTestLaneFailure {
+  const msg = errorMessage.trim();
+
+  if (msg === 'TEST_HARNESS_NOT_CONFIGURED' || msg.includes('TEST_HARNESS_NOT_CONFIGURED')) {
+    return {
+      code: 'TEST_HARNESS_NOT_CONFIGURED',
+      message: 'Test harness base URL is not configured',
+      status: 503,
+    };
+  }
+
+  if (msg.startsWith('Invalid response from test harness service')) {
+    return {
+      code: 'TEST_HARNESS_INVALID_RESPONSE',
+      message: msg,
+      status: 502,
+    };
+  }
+
+  if (msg.startsWith('HARNESS_NOT_FOUND')) {
+    return {
+      code: 'TEST_HARNESS_INVALID',
+      message: msg,
+      status: 422,
+    };
+  }
+
+  const httpMatch = msg.match(/^HTTP\s+([0-9]{3})(:.*)?$/i);
+  if (httpMatch) {
+    const status = Number.parseInt(httpMatch[1] ?? '500', 10);
+    if (status >= 500 || status === 404) {
+      return {
+        code: 'TEST_HARNESS_UNAVAILABLE',
+        message: msg,
+        status: 503,
+      };
+    }
+
+    return {
+      code: 'TEST_HARNESS_INVALID_RESPONSE',
+      message: msg,
+      status: 502,
+    };
+  }
+
+  if (msg.startsWith('Test harness error:')) {
+    return {
+      code: 'TEST_HARNESS_UNAVAILABLE',
+      message: msg,
+      status: 503,
+    };
+  }
+
+  return {
+    code: 'TEST_HARNESS_FAILED',
+    message: msg,
+    status: 502,
+  };
+}
+
+async function resolveSubmissionTestLaneFailure(
+  db: D1Database,
+  bounty: BountyV2,
+  submission: SubmissionRecord
+): Promise<DeterministicTestLaneFailure | null> {
+  if (bounty.closure_type !== 'test') return null;
+
+  if (!isNonEmptyString(bounty.test_harness_id)) {
+    return {
+      code: 'TEST_HARNESS_NOT_CONFIGURED',
+      message: 'Bounty is missing test_harness_id for closure_type=test',
+      status: 503,
+      details: {
+        submission_id: submission.submission_id,
+      },
+    };
+  }
+
+  if (!isNonEmptyString(submission.proof_bundle_hash_b64u)) {
+    return {
+      code: 'TEST_HARNESS_INPUT_INVALID',
+      message: 'Submission is missing proof_bundle_hash_b64u',
+      status: 500,
+      details: {
+        submission_id: submission.submission_id,
+      },
+    };
+  }
+
+  const latest = await getLatestTestResultBySubmissionId(db, submission.submission_id);
+  if (!latest || !isNonEmptyString(latest.error)) return null;
+
+  const classified = classifyTestLaneFailure(latest.error);
+  return {
+    code: classified.code,
+    message: classified.message,
+    status: classified.status,
+    details: {
+      submission_id: submission.submission_id,
+      test_result_id: latest.test_result_id,
+      test_harness_id: latest.test_harness_id,
+    },
+  };
+}
+
+function toSubmissionSummaryView(
+  record: SubmissionRecord,
+  latestTest: TestResultRecord | null
+): SubmissionSummaryView {
+  return {
+    submission_id: record.submission_id,
+    bounty_id: record.bounty_id,
+    worker_did: record.worker_did,
+    status: record.status,
+    proof_verify_status: record.proof_verify_status,
+    proof_tier: record.proof_tier,
+    commit_proof_verify_status: record.commit_proof_verify_status,
+    commit_sha: record.commit_sha,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+    latest_test_result: latestTest
+      ? {
+          test_result_id: latestTest.test_result_id,
+          test_harness_id: latestTest.test_harness_id,
+          passed: latestTest.passed,
+          completed_at: latestTest.completed_at,
+          error: latestTest.error,
+        }
+      : null,
+  };
+}
+
+function toSubmissionDetailView(
+  record: SubmissionRecord,
+  latestTest: TestResultRecord | null
+): SubmissionDetailView {
+  return {
+    submission_id: record.submission_id,
+    bounty_id: record.bounty_id,
+    worker_did: record.worker_did,
+    status: record.status,
+    idempotency_key: record.idempotency_key,
+    verification: {
+      proof_bundle: {
+        status: record.proof_verify_status,
+        reason: record.proof_verify_reason,
+        verified_at: record.proof_verified_at,
+        proof_tier: record.proof_tier,
+        proof_bundle_hash_b64u: record.proof_bundle_hash_b64u,
+      },
+      commit_proof: {
+        status: record.commit_proof_verify_status,
+        reason: record.commit_proof_verify_reason,
+        verified_at: record.commit_proof_verified_at,
+        commit_proof_hash_b64u: record.commit_proof_hash_b64u,
+      },
+    },
+    source: {
+      commit_sha: record.commit_sha,
+      repo_url: record.repo_url,
+      repo_claim_id: record.repo_claim_id,
+    },
+    output: {
+      result_summary: record.result_summary,
+      artifacts: record.artifacts,
+      agent_pack: record.agent_pack,
+      execution_attestations: record.execution_attestations,
+    },
+    latest_test_result: latestTest
+      ? {
+          test_result_id: latestTest.test_result_id,
+          test_harness_id: latestTest.test_harness_id,
+          passed: latestTest.passed,
+          total_tests: latestTest.total_tests,
+          passed_tests: latestTest.passed_tests,
+          failed_tests: latestTest.failed_tests,
+          execution_time_ms: latestTest.execution_time_ms,
+          completed_at: latestTest.completed_at,
+          error: latestTest.error,
+        }
+      : null,
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+  };
+}
+
 async function getBountyByIdempotencyKey(db: D1Database, key: string): Promise<BountyV2 | null> {
   const row = await db.prepare('SELECT * FROM bounties WHERE create_idempotency_key = ?').bind(key).first();
   if (!row || !isRecord(row)) return null;
@@ -3911,23 +4374,6 @@ async function getSubmissionById(db: D1Database, submissionId: string): Promise<
   return parseSubmissionRow(row);
 }
 
-async function listSubmissionsByBounty(db: D1Database, bountyId: string, limit = 100): Promise<SubmissionRecord[]> {
-  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.floor(limit))) : 100;
-  const rows = await db
-    .prepare('SELECT * FROM submissions WHERE bounty_id = ? ORDER BY created_at DESC LIMIT ?')
-    .bind(bountyId, safeLimit)
-    .all();
-
-  const out: SubmissionRecord[] = [];
-  for (const row of rows.results ?? []) {
-    if (!isRecord(row)) continue;
-    const parsed = parseSubmissionRow(row);
-    if (parsed) out.push(parsed);
-  }
-
-  return out;
-}
-
 async function getSubmissionByIdempotencyKey(
   db: D1Database,
   key: string,
@@ -3997,19 +4443,31 @@ function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, un
   };
 }
 
-async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission: SubmissionRecord): Promise<boolean> {
-  if (bounty.closure_type !== 'test') return false;
+async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission: SubmissionRecord): Promise<TestAutoDecisionResult> {
+  if (bounty.closure_type !== 'test') return { applied: false };
 
   const test_harness_id = bounty.test_harness_id;
   if (!test_harness_id) {
-    console.error(`Missing test_harness_id for bounty ${bounty.bounty_id}`);
-    return false;
+    return {
+      applied: false,
+      failure: {
+        code: 'TEST_HARNESS_NOT_CONFIGURED',
+        message: 'Bounty is missing test_harness_id for closure_type=test',
+        status: 503,
+      },
+    };
   }
 
   const proofBundleHash = submission.proof_bundle_hash_b64u?.trim();
   if (!proofBundleHash) {
-    console.error(`Missing proof bundle hash for submission ${submission.submission_id}`);
-    return false;
+    return {
+      applied: false,
+      failure: {
+        code: 'TEST_HARNESS_INPUT_INVALID',
+        message: 'Submission is missing proof_bundle_hash_b64u',
+        status: 500,
+      },
+    };
   }
 
   const request: TestHarnessRunRequest = {
@@ -4027,8 +4485,7 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     testResponse = await runTestHarness(env, request);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`Test harness failed for submission ${submission.submission_id}: ${message}`);
-    return false;
+    testResponse = buildTestHarnessFailureResponse(request, message);
   }
 
   const now = new Date().toISOString();
@@ -4062,8 +4519,20 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
   }
 
   if (harnessError) {
-    console.error(`Test harness returned error for submission ${submission.submission_id}: ${testResponse.error}`);
-    return false;
+    const classified = classifyTestLaneFailure(testResponse.error ?? 'Test harness failed');
+    return {
+      applied: false,
+      failure: {
+        code: classified.code,
+        message: classified.message,
+        status: classified.status,
+        details: {
+          submission_id: submission.submission_id,
+          test_result_id: testResultId,
+          test_harness_id,
+        },
+      },
+    };
   }
 
   if (passed) {
@@ -4089,12 +4558,25 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       if (parsed) {
         const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
         const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
-        console.error(`Escrow release failed for ${bounty.escrow_id}: ${code} ${message}`);
-      } else {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`Escrow release failed for ${bounty.escrow_id}: ${message}`);
+        return {
+          applied: false,
+          failure: {
+            code: 'AUTO_APPROVAL_ESCROW_FAILED',
+            message: `${code}: ${message}`,
+            status: 502,
+          },
+        };
       }
-      return false;
+
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return {
+        applied: false,
+        failure: {
+          code: 'AUTO_APPROVAL_ESCROW_FAILED',
+          message,
+          status: 502,
+        },
+      };
     }
 
     try {
@@ -4113,18 +4595,36 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
         }
 
         if (updated.approve_idempotency_key && updated.approve_idempotency_key !== approveKey) {
-          console.error(`Auto-approval idempotency key mismatch for bounty ${bounty.bounty_id}`);
-          return false;
+          return {
+            applied: false,
+            failure: {
+              code: 'AUTO_APPROVAL_STATE_CONFLICT',
+              message: 'Auto-approval idempotency key mismatch',
+              status: 409,
+            },
+          };
         }
 
         if (updated.approved_submission_id && updated.approved_submission_id !== submission.submission_id) {
-          console.error(`Auto-approval submission mismatch for bounty ${bounty.bounty_id}`);
-          return false;
+          return {
+            applied: false,
+            failure: {
+              code: 'AUTO_APPROVAL_STATE_CONFLICT',
+              message: 'Auto-approval submission mismatch',
+              status: 409,
+            },
+          };
         }
       } catch (lookupErr) {
         const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
-        console.error(`Failed to mark bounty approved: ${message}`);
-        return false;
+        return {
+          applied: false,
+          failure: {
+            code: 'AUTO_APPROVAL_STATE_FAILED',
+            message,
+            status: 500,
+          },
+        };
       }
     }
 
@@ -4138,12 +4638,18 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
         }
       } catch (lookupErr) {
         const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
-        console.error(`Failed to mark submission approved: ${message}`);
-        return false;
+        return {
+          applied: false,
+          failure: {
+            code: 'AUTO_APPROVAL_STATE_FAILED',
+            message,
+            status: 500,
+          },
+        };
       }
     }
 
-    return true;
+    return { applied: true };
   }
 
   const rejectKey = `auto-test-failure:${submission.submission_id}`;
@@ -4160,12 +4666,25 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     if (parsed) {
       const code = isNonEmptyString(parsed.payload.error) ? parsed.payload.error.trim() : 'ESCROW_FAILED';
       const message = isNonEmptyString(parsed.payload.message) ? parsed.payload.message.trim() : 'Escrow failed';
-      console.error(`Escrow dispute failed for ${bounty.escrow_id}: ${code} ${message}`);
-    } else {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`Escrow dispute failed for ${bounty.escrow_id}: ${message}`);
+      return {
+        applied: false,
+        failure: {
+          code: 'AUTO_REJECTION_ESCROW_FAILED',
+          message: `${code}: ${message}`,
+          status: 502,
+        },
+      };
     }
-    return false;
+
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
+      applied: false,
+      failure: {
+        code: 'AUTO_REJECTION_ESCROW_FAILED',
+        message,
+        status: 502,
+      },
+    };
   }
 
   try {
@@ -4184,18 +4703,36 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       }
 
       if (updated.reject_idempotency_key && updated.reject_idempotency_key !== rejectKey) {
-        console.error(`Auto-rejection idempotency key mismatch for bounty ${bounty.bounty_id}`);
-        return false;
+        return {
+          applied: false,
+          failure: {
+            code: 'AUTO_REJECTION_STATE_CONFLICT',
+            message: 'Auto-rejection idempotency key mismatch',
+            status: 409,
+          },
+        };
       }
 
       if (updated.rejected_submission_id && updated.rejected_submission_id !== submission.submission_id) {
-        console.error(`Auto-rejection submission mismatch for bounty ${bounty.bounty_id}`);
-        return false;
+        return {
+          applied: false,
+          failure: {
+            code: 'AUTO_REJECTION_STATE_CONFLICT',
+            message: 'Auto-rejection submission mismatch',
+            status: 409,
+          },
+        };
       }
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
-      console.error(`Failed to mark bounty disputed: ${message}`);
-      return false;
+      return {
+        applied: false,
+        failure: {
+          code: 'AUTO_REJECTION_STATE_FAILED',
+          message,
+          status: 500,
+        },
+      };
     }
   }
 
@@ -4209,12 +4746,18 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       }
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
-      console.error(`Failed to mark submission rejected: ${message}`);
-      return false;
+      return {
+        applied: false,
+        failure: {
+          code: 'AUTO_REJECTION_STATE_FAILED',
+          message,
+          status: 500,
+        },
+      };
     }
   }
 
-  return true;
+  return { applied: true };
 }
 
 async function listBounties(
@@ -4641,6 +5184,8 @@ function docsPage(origin: string): string {
         <li><code>GET /v1/bounties?status=open&amp;is_code_bounty=true&amp;tag=typescript</code> — list open bounties (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>POST /v1/bounties/{bounty_id}/accept</code> — accept a bounty (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
         <li><code>POST /v1/bounties/{bounty_id}/submit</code> — submit work (requires <code>Authorization: Bearer &lt;token&gt;</code>)</li>
+        <li><code>GET /v1/bounties/{bounty_id}/submissions</code> — list submissions (admin OR worker token OR <code>x-requester-did</code>)</li>
+        <li><code>GET /v1/submissions/{submission_id}</code> — submission detail (admin OR worker token OR <code>x-requester-did</code>)</li>
         <li><code>GET /v1/submissions/{submission_id}/trust-pulse</code> — fetch a stored Trust Pulse (requires <code>Authorization: Bearer &lt;token&gt;</code> OR admin key)</li>
       </ul>
 
@@ -5057,6 +5602,8 @@ function skillMarkdown(origin: string): string {
       { method: 'POST', path: '/v1/bounties' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/accept' },
       { method: 'POST', path: '/v1/bounties/{bounty_id}/submit' },
+      { method: 'GET', path: '/v1/bounties/{bounty_id}/submissions' },
+      { method: 'GET', path: '/v1/submissions/{submission_id}' },
       { method: 'GET', path: '/v1/submissions/{submission_id}/trust-pulse' },
       { method: 'GET', path: '/v1/bounties/{bounty_id}/submissions' },
       { method: 'GET', path: '/v1/submissions/{submission_id}' },
@@ -5081,6 +5628,8 @@ Public worker endpoints:
 - GET ${origin}/v1/bounties?status=open&is_code_bounty=true&tag=typescript (requires Authorization: Bearer <token>)
 - POST ${origin}/v1/bounties/{bounty_id}/accept (requires Authorization: Bearer <token>)
 - POST ${origin}/v1/bounties/{bounty_id}/submit (requires Authorization: Bearer <token>)
+- GET ${origin}/v1/bounties/{bounty_id}/submissions (admin OR worker token OR x-requester-did)
+- GET ${origin}/v1/submissions/{submission_id} (admin OR worker token OR x-requester-did)
 - GET ${origin}/v1/submissions/{submission_id}/trust-pulse (requires Authorization: Bearer <worker token> OR admin key)
 
 Requester bounty endpoints (require Authorization: Bearer <requester token>):
@@ -6193,6 +6742,21 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
           version
         );
       }
+
+      const existingBounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+      if (existingBounty) {
+        const deterministicFailure = await resolveSubmissionTestLaneFailure(env.BOUNTIES_DB, existingBounty, existing.record);
+        if (deterministicFailure) {
+          return errorResponse(
+            deterministicFailure.code,
+            deterministicFailure.message,
+            deterministicFailure.status,
+            deterministicFailure.details,
+            version
+          );
+        }
+      }
+
       const response = buildSubmitResponse(existing.record);
       return jsonResponse(response, 200, version);
     }
@@ -6629,6 +7193,17 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
             version
           );
         }
+        const deterministicFailure = await resolveSubmissionTestLaneFailure(env.BOUNTIES_DB, bounty, existing.record);
+        if (deterministicFailure) {
+          return errorResponse(
+            deterministicFailure.code,
+            deterministicFailure.message,
+            deterministicFailure.status,
+            deterministicFailure.details,
+            version
+          );
+        }
+
         const response = buildSubmitResponse(existing.record);
         return jsonResponse(response, 200, version);
       }
@@ -6697,15 +7272,44 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
     }
   }
 
-  let decisionApplied = false;
+  let autoDecision: TestAutoDecisionResult | null = null;
   if (isValid && bounty.closure_type === 'test') {
     try {
-      decisionApplied = await autoApproveTestSubmission(env, bounty, record);
+      autoDecision = await autoApproveTestSubmission(env, bounty, record);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      console.error(`Auto-approval failed for submission ${submission_id}: ${message}`);
+      autoDecision = {
+        applied: false,
+        failure: {
+          code: 'TEST_HARNESS_FAILED',
+          message,
+          status: 502,
+          details: {
+            submission_id,
+            bounty_id: bounty.bounty_id,
+          },
+        },
+      };
     }
   }
+
+  if (autoDecision?.failure) {
+    const details: Record<string, unknown> = {
+      submission_id,
+      bounty_id: bounty.bounty_id,
+      ...(autoDecision.failure.details ?? {}),
+    };
+
+    return errorResponse(
+      autoDecision.failure.code,
+      autoDecision.failure.message,
+      autoDecision.failure.status,
+      details,
+      version
+    );
+  }
+
+  const decisionApplied = autoDecision?.applied ?? false;
 
   let responseRecord = record;
   if (decisionApplied) {
@@ -7753,27 +8357,66 @@ async function handleGetBounty(bountyId: string, env: Env, version: string): Pro
 async function handleListBountySubmissions(
   bountyId: string,
   request: Request,
+  url: URL,
   env: Env,
   version: string
 ): Promise<Response> {
-  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
-  if (!bounty) {
-    return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
+  const limitRaw = url.searchParams.get('limit');
+  const defaultLimit = 50;
+  const maxLimit = 200;
+
+  let limit = defaultLimit;
+  if (isNonEmptyString(limitRaw)) {
+    const n = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, undefined, version);
+    }
+    limit = Math.min(maxLimit, n);
   }
 
-  if (!isAdminAuthorized(request, env)) {
-    const authResult = await requireRequesterAuth(request, env, version, {
-      action: 'read_submission',
-      requester_did_hint: bounty.requester_did,
-    });
-    if ('error' in authResult) return authResult.error;
+  const statusRaw = url.searchParams.get('status');
+  let status: SubmissionStatus | undefined;
+  if (statusRaw !== null) {
+    const parsed = parseSubmissionStatus(statusRaw);
+    if (!parsed) {
+      return errorResponse('INVALID_REQUEST', 'status must be pending_review|invalid|approved|rejected', 400, undefined, version);
+    }
+    status = parsed;
+  }
 
+  const workerDidRaw = url.searchParams.get('worker_did');
+  let workerDidFilter: string | undefined;
+  if (workerDidRaw !== null) {
+    if (!isNonEmptyString(workerDidRaw) || !workerDidRaw.trim().startsWith('did:')) {
+      return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, undefined, version);
+    }
+    workerDidFilter = workerDidRaw.trim();
+  }
+
+  let bounty: BountyV2 | null;
+  try {
+    bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, { bounty_id: bountyId }, version);
+  }
+
+  const viewer = await resolveSubmissionViewerContext(request, env, version, {
+    requester_did_hint: bounty.requester_did,
+  });
+  if (!viewer.ok) return viewer.error;
+
+  if (viewer.context.kind === 'requester') {
     try {
       await insertRequesterAuthEvent(env.BOUNTIES_DB, {
         action: 'read_submission',
         bounty_id: bounty.bounty_id,
         submission_id: null,
-        auth: authResult.auth,
+        auth: viewer.context.auth,
         created_at: new Date().toISOString(),
       });
     } catch (err) {
@@ -7782,77 +8425,118 @@ async function handleListBountySubmissions(
     }
   }
 
-  const limitRaw = new URL(request.url).searchParams.get('limit');
-  let limit = 100;
-  if (limitRaw !== null) {
-    const n = Number(limitRaw);
-    if (!Number.isFinite(n)) {
-      return errorResponse('INVALID_REQUEST', 'limit must be a finite integer', 400, undefined, version);
+  if (viewer.context.kind === 'worker') {
+    const workerDid = viewer.context.worker.worker_did;
+    if (workerDidFilter && workerDidFilter !== workerDid) {
+      return errorResponse('FORBIDDEN', 'Workers may only view their own submissions', 403, undefined, version);
     }
-    limit = Math.max(1, Math.min(200, Math.floor(n)));
+    workerDidFilter = workerDid;
   }
 
-  const submissions = await listSubmissionsByBounty(env.BOUNTIES_DB, bounty.bounty_id, limit);
-  const response: BountySubmissionsResponseV1 = {
-    bounty_id: bounty.bounty_id,
-    submissions: submissions.map((entry) => buildSubmissionReviewItem(entry)),
-  };
+  let submissions: SubmissionRecord[];
+  try {
+    submissions = await listSubmissionsByBounty(env.BOUNTIES_DB, {
+      bounty_id: bounty.bounty_id,
+      status,
+      worker_did: workerDidFilter,
+      limit,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
 
-  return jsonResponse(response, 200, version);
+  const views: SubmissionSummaryView[] = [];
+  for (const record of submissions) {
+    try {
+      const latest = await getLatestTestResultBySubmissionId(env.BOUNTIES_DB, record.submission_id);
+      views.push(toSubmissionSummaryView(record, latest));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  return jsonResponse(
+    {
+      bounty_id: bounty.bounty_id,
+      submissions: views,
+      filters: {
+        status: status ?? null,
+        worker_did: workerDidFilter ?? null,
+        limit,
+      },
+    },
+    200,
+    version
+  );
 }
 
-async function handleGetSubmission(
+async function handleGetSubmissionDetail(
   submissionId: string,
   request: Request,
   env: Env,
   version: string
 ): Promise<Response> {
-  const submission = await getSubmissionById(env.BOUNTIES_DB, submissionId);
+  const viewer = await resolveSubmissionViewerContext(request, env, version);
+  if (!viewer.ok) return viewer.error;
+
+  let submission: SubmissionRecord | null;
+  try {
+    submission = await getSubmissionById(env.BOUNTIES_DB, submissionId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
   if (!submission) {
     return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id: submissionId }, version);
   }
 
-  const bounty = await getBountyById(env.BOUNTIES_DB, submission.bounty_id);
+  let bounty: BountyV2 | null;
+  try {
+    bounty = await getBountyById(env.BOUNTIES_DB, submission.bounty_id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
   if (!bounty) {
-    return errorResponse('NOT_FOUND', 'Bounty not found for submission', 404, { bounty_id: submission.bounty_id }, version);
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Bounty for submission not found', 500, { submission_id: submissionId }, version);
   }
 
-  if (!isAdminAuthorized(request, env)) {
-    const token = getBearerToken(request.headers.get('authorization'));
-    if (!token) {
-      return errorResponse('UNAUTHORIZED', 'Missing authorization token', 401, undefined, version);
+  if (viewer.context.kind === 'worker' && submission.worker_did !== viewer.context.worker.worker_did) {
+    return errorResponse('FORBIDDEN', 'Workers may only view their own submissions', 403, undefined, version);
+  }
+
+  if (viewer.context.kind === 'requester') {
+    if (bounty.requester_did !== viewer.context.requester_did) {
+      return errorResponse('FORBIDDEN', 'Requester is not allowed to view this submission', 403, undefined, version);
     }
 
-    if (looksLikeJwtToken(token)) {
-      const authResult = await requireRequesterAuth(request, env, version, {
+    try {
+      await insertRequesterAuthEvent(env.BOUNTIES_DB, {
         action: 'read_submission',
-        requester_did_hint: bounty.requester_did,
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        auth: viewer.context.auth,
+        created_at: new Date().toISOString(),
       });
-      if ('error' in authResult) return authResult.error;
-
-      try {
-        await insertRequesterAuthEvent(env.BOUNTIES_DB, {
-          action: 'read_submission',
-          bounty_id: bounty.bounty_id,
-          submission_id: submission.submission_id,
-          auth: authResult.auth,
-          created_at: new Date().toISOString(),
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
-      }
-    } else {
-      const workerAuth = await requireWorker(request, env, version);
-      if ('error' in workerAuth) return workerAuth.error;
-
-      if (workerAuth.worker.worker_did !== submission.worker_did) {
-        return errorResponse('FORBIDDEN', 'Not allowed to access this submission', 403, undefined, version);
-      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
     }
   }
 
-  return jsonResponse(buildSubmissionReviewItem(submission), 200, version);
+  let latestTest: TestResultRecord | null = null;
+  try {
+    latestTest = await getLatestTestResultBySubmissionId(env.BOUNTIES_DB, submission.submission_id);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  return jsonResponse({ submission: toSubmissionDetailView(submission, latestTest) }, 200, version);
 }
 
 async function handleGetSubmissionTrustPulse(
@@ -8023,7 +8707,7 @@ export default {
         if (!bountyId) {
           return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
         }
-        return handleListBountySubmissions(bountyId, request, env, version);
+        return handleListBountySubmissions(bountyId, request, url, env, version);
       }
 
       if (path === '/v1/bounties' && method === 'GET') {
@@ -8048,7 +8732,7 @@ export default {
         if (!submissionId) {
           return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
         }
-        return handleGetSubmission(submissionId, request, env, version);
+        return handleGetSubmissionDetail(submissionId, request, env, version);
       }
 
       // Bounties API (admin)

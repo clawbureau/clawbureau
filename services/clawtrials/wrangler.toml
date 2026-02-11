@@ -1,0 +1,18 @@
+name = "clawtrials"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-11"
+workers_dev = true
+
+[vars]
+ENVIRONMENT = "production"
+CLAWTRIALS_VERSION = "0.1.0"
+
+[env.staging]
+routes = [
+  { pattern = "staging.clawtrials.com", custom_domain = true }
+]
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+CLAWTRIALS_VERSION = "0.1.0-staging"
