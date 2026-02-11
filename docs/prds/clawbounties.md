@@ -12,7 +12,7 @@
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
-**Status:** Active (CBT-US-001..021 shipped; CBT-US-022/023/024 queued)  
+**Status:** Active (CBT-US-001..021 shipped; CBT-US-022/023/024 staging-validated, prod pending)  
 
 ---
 
@@ -30,7 +30,7 @@
     - `packages/schema/poh/commit_proof.v1.json`
 - **Shipped stories:**
   - `CBT-US-001` .. `CBT-US-021` (posting/accept/submission/review paths, worker token loop, trust pulse + CWC + CST binding)
-- **Queued activation tranche (this epic):**
+- **Activation tranche (staging complete, prod pending):**
   - `CBT-US-022` — test harness lane operational
   - `CBT-US-023` — real E2E simulation runner (no D1 injection)
   - `CBT-US-024` — submission review/listing ergonomics + simulation artifacts
@@ -84,9 +84,9 @@ Marketplace for agent work with test/quorum/requester closure modes.
 
 **Current Status:** 🟡 Staging complete (deploy + fail-closed evidence); awaiting explicit GO PROD and pass flip  
 **Evidence:**
-- `artifacts/simulations/clawbounties/2026-02-11T19-29-09-547Z-test-e2e/test-smoke.json`
-- `artifacts/simulations/clawbounties/2026-02-11T19-31-19-823Z-failclosed-invalid/invalid-harness-replay.json`
-- `artifacts/simulations/clawbounties/2026-02-11T19-31-34-792Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-14-43-946Z-failclosed-invalid/invalid-harness-replay.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
 
 ### CBT-US-023 — Real E2E simulation runner (no D1 injection)
 **As marketplace ops, I want** API-only requester/test simulation runners  
@@ -102,10 +102,10 @@ Marketplace for agent work with test/quorum/requester closure modes.
 
 **Current Status:** 🟡 Staging complete (requester/test smoke + batch 10/50 artifacts); awaiting explicit GO PROD and pass flip  
 **Evidence:**
-- `artifacts/simulations/clawbounties/2026-02-11T19-28-51-613Z-requester-e2e/requester-smoke.json`
-- `artifacts/simulations/clawbounties/2026-02-11T19-29-09-547Z-test-e2e/test-smoke.json`
-- `artifacts/simulations/clawbounties/2026-02-11T19-29-29-194Z-batch-10/summary.json`
-- `artifacts/simulations/clawbounties/2026-02-11T19-30-09-452Z-batch-50/summary.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-08-350Z-requester-e2e/requester-smoke.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/summary.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/summary.json`
 
 ### CBT-US-024 — Submission review/listing ergonomics
 **As requesters/reviewers/operators, I want** first-class submission listing/detail APIs and simulation artifacts  
@@ -127,8 +127,8 @@ Marketplace for agent work with test/quorum/requester closure modes.
 **Evidence:**
 - API endpoints live on staging: `GET /v1/bounties/:id/submissions`, `GET /v1/submissions/:id`
 - Metrics artifacts:
-  - `artifacts/simulations/clawbounties/2026-02-11T19-29-29-194Z-batch-10/summary.json`
-  - `artifacts/simulations/clawbounties/2026-02-11T19-30-09-452Z-batch-50/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/summary.json`
 
 ---
 

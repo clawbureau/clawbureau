@@ -150,13 +150,16 @@ export async function httpJson(url, init) {
   };
 }
 
-function authHeaders({ adminKey, workerToken, requesterDid, contentType = true } = {}) {
+function authHeaders({ adminKey, requesterToken, workerToken, requesterDid, contentType = true } = {}) {
   const headers = {};
   if (contentType) {
     headers['content-type'] = 'application/json; charset=utf-8';
   }
   if (adminKey) {
     headers.authorization = `Bearer ${adminKey}`;
+  }
+  if (requesterToken) {
+    headers.authorization = `Bearer ${requesterToken}`;
   }
   if (workerToken) {
     headers.authorization = `Bearer ${workerToken}`;
@@ -214,6 +217,7 @@ export async function registerWorker(baseUrl, workerDid, tags = ['simulation', '
 export async function postBounty({
   baseUrl,
   adminKey,
+  requesterToken,
   requesterDid,
   closureType,
   testHarnessId = null,
@@ -246,7 +250,7 @@ export async function postBounty({
 
   const out = await httpJson(`${baseUrl}/v1/bounties`, {
     method: 'POST',
-    headers: authHeaders({ adminKey, requesterDid }),
+    headers: authHeaders({ requesterToken: requesterToken ?? adminKey, requesterDid }),
     body: JSON.stringify(body),
   });
 
@@ -299,13 +303,14 @@ export async function approveBounty({
   baseUrl,
   bountyId,
   adminKey,
+  requesterToken,
   requesterDid,
   submissionId,
   idempotencyKey,
 }) {
   return httpJson(`${baseUrl}/v1/bounties/${encodeURIComponent(bountyId)}/approve`, {
     method: 'POST',
-    headers: authHeaders({ adminKey, requesterDid }),
+    headers: authHeaders({ requesterToken: requesterToken ?? adminKey, requesterDid }),
     body: JSON.stringify({
       requester_did: requesterDid,
       submission_id: submissionId,
@@ -318,6 +323,7 @@ export async function rejectBounty({
   baseUrl,
   bountyId,
   adminKey,
+  requesterToken,
   requesterDid,
   submissionId,
   idempotencyKey,
@@ -325,7 +331,7 @@ export async function rejectBounty({
 }) {
   return httpJson(`${baseUrl}/v1/bounties/${encodeURIComponent(bountyId)}/reject`, {
     method: 'POST',
-    headers: authHeaders({ adminKey, requesterDid }),
+    headers: authHeaders({ requesterToken: requesterToken ?? adminKey, requesterDid }),
     body: JSON.stringify({
       requester_did: requesterDid,
       submission_id: submissionId,
@@ -346,6 +352,7 @@ export async function listBountySubmissions({
   baseUrl,
   bountyId,
   adminKey = null,
+  requesterToken = null,
   requesterDid = null,
   workerToken = null,
   params = {},
@@ -361,6 +368,7 @@ export async function listBountySubmissions({
     method: 'GET',
     headers: {
       ...(adminKey ? authHeaders({ adminKey, contentType: false }) : {}),
+      ...(requesterToken ? authHeaders({ requesterToken, contentType: false }) : {}),
       ...(workerToken ? authHeaders({ workerToken, contentType: false }) : {}),
       ...(requesterDid ? { 'x-requester-did': requesterDid } : {}),
     },
@@ -371,6 +379,7 @@ export async function getSubmissionDetail({
   baseUrl,
   submissionId,
   adminKey = null,
+  requesterToken = null,
   requesterDid = null,
   workerToken = null,
 }) {
@@ -378,6 +387,7 @@ export async function getSubmissionDetail({
     method: 'GET',
     headers: {
       ...(adminKey ? authHeaders({ adminKey, contentType: false }) : {}),
+      ...(requesterToken ? authHeaders({ requesterToken, contentType: false }) : {}),
       ...(workerToken ? authHeaders({ workerToken, contentType: false }) : {}),
       ...(requesterDid ? { 'x-requester-did': requesterDid } : {}),
     },
@@ -537,6 +547,7 @@ export async function waitForSubmissionTerminal({
   baseUrl,
   submissionId,
   workerToken,
+  requesterToken,
   requesterDid,
   adminKey,
   timeoutMs = 15_000,
@@ -550,6 +561,7 @@ export async function waitForSubmissionTerminal({
       baseUrl,
       submissionId,
       workerToken,
+      requesterToken,
       requesterDid,
       adminKey,
     });

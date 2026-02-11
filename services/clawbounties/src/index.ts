@@ -488,34 +488,6 @@ interface SubmitBountyResponseV1 {
   };
 }
 
-interface SubmissionReviewItemV1 {
-  submission_id: string;
-  bounty_id: string;
-  worker_did: string;
-  status: SubmissionStatus;
-  created_at: string;
-  updated_at: string;
-  result_summary: string | null;
-  proof_tier: ProofTier | null;
-  verification: {
-    proof_bundle: {
-      status: 'valid' | 'invalid';
-      reason?: string;
-      verified_at?: string;
-    };
-    commit_proof?: {
-      status: 'valid' | 'invalid';
-      reason?: string;
-      verified_at?: string;
-    };
-  };
-}
-
-interface BountySubmissionsResponseV1 {
-  bounty_id: string;
-  submissions: SubmissionReviewItemV1[];
-}
-
 interface EscrowReleaseResponse {
   escrow_id: string;
   status: 'released';
@@ -2682,36 +2654,6 @@ function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
         reason: record.proof_verify_reason ?? undefined,
         verified_at: record.proof_verified_at ?? undefined,
         tier: record.proof_tier ?? undefined,
-      },
-    },
-  };
-
-  if (record.commit_proof_verify_status) {
-    response.verification.commit_proof = {
-      status: record.commit_proof_verify_status,
-      reason: record.commit_proof_verify_reason ?? undefined,
-      verified_at: record.commit_proof_verified_at ?? undefined,
-    };
-  }
-
-  return response;
-}
-
-function buildSubmissionReviewItem(record: SubmissionRecord): SubmissionReviewItemV1 {
-  const response: SubmissionReviewItemV1 = {
-    submission_id: record.submission_id,
-    bounty_id: record.bounty_id,
-    worker_did: record.worker_did,
-    status: record.status,
-    created_at: record.created_at,
-    updated_at: record.updated_at,
-    result_summary: record.result_summary ?? null,
-    proof_tier: record.proof_tier ?? null,
-    verification: {
-      proof_bundle: {
-        status: record.proof_verify_status,
-        reason: record.proof_verify_reason ?? undefined,
-        verified_at: record.proof_verified_at ?? undefined,
       },
     },
   };

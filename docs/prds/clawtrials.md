@@ -23,7 +23,7 @@
 - Staging deployment + validation:
   - `staging.clawtrials.com` route active
   - workers.dev endpoint active (`https://clawtrials-staging.generaite.workers.dev`)
-  - evidence artifact: `artifacts/simulations/clawbounties/2026-02-11T19-31-34-792Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+  - evidence artifact: `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
 
 ### Not yet implemented
 - Full dispute intake / judge assignment / arbitration workflows remain roadmap scope.

@@ -28,7 +28,7 @@ async function main() {
   const envName = resolveEnvName(args.get('env'));
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
 
-  const adminKey = requireEnv('BOUNTIES_ADMIN_KEY');
+  const requesterToken = requireEnv('BOUNTIES_ADMIN_KEY');
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('requester');
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
 
@@ -42,7 +42,7 @@ async function main() {
 
   const postRes = await postBounty({
     baseUrl,
-    adminKey,
+    requesterToken,
     requesterDid,
     closureType: 'requester',
     isCodeBounty: false,
@@ -98,6 +98,7 @@ async function main() {
   const listRes = await listBountySubmissions({
     baseUrl,
     bountyId,
+    requesterToken,
     requesterDid,
     params: { limit: 20 },
   });
@@ -109,6 +110,7 @@ async function main() {
   const detailBefore = await getSubmissionDetail({
     baseUrl,
     submissionId,
+    requesterToken,
     requesterDid,
   });
   assert(detailBefore.status === 200, `get submission detail failed (${detailBefore.status}): ${detailBefore.text}`);
@@ -118,7 +120,7 @@ async function main() {
   const approveRes = await approveBounty({
     baseUrl,
     bountyId,
-    adminKey,
+    requesterToken,
     requesterDid,
     submissionId,
     idempotencyKey: `sim:req:approve:${crypto.randomUUID()}`,
@@ -131,6 +133,7 @@ async function main() {
   const terminal = await waitForSubmissionTerminal({
     baseUrl,
     submissionId,
+    requesterToken,
     requesterDid,
     timeoutMs: 20_000,
     intervalMs: 1_000,

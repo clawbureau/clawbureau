@@ -65,7 +65,7 @@ async function runRequesterJob({
 
     const postRes = await postBounty({
       baseUrl,
-      adminKey,
+      requesterToken: adminKey,
       requesterDid,
       closureType: 'requester',
       isCodeBounty: false,
@@ -160,6 +160,7 @@ async function runRequesterJob({
     const listRes = await listBountySubmissions({
       baseUrl,
       bountyId,
+      requesterToken: adminKey,
       requesterDid,
       params: { limit: 20 },
     });
@@ -173,6 +174,7 @@ async function runRequesterJob({
     const detailBefore = await getSubmissionDetail({
       baseUrl,
       submissionId,
+      requesterToken: adminKey,
       requesterDid,
     });
 
@@ -207,7 +209,7 @@ async function runRequesterJob({
       decisionRes = await approveBounty({
         baseUrl,
         bountyId,
-        adminKey,
+        requesterToken: adminKey,
         requesterDid,
         submissionId,
         idempotencyKey: `sim:batch:req:approve:${jobId}`,
@@ -216,7 +218,7 @@ async function runRequesterJob({
       decisionRes = await rejectBounty({
         baseUrl,
         bountyId,
-        adminKey,
+        requesterToken: adminKey,
         requesterDid,
         submissionId,
         idempotencyKey: `sim:batch:req:reject:${jobId}`,
@@ -256,6 +258,7 @@ async function runRequesterJob({
     const terminal = await waitForSubmissionTerminal({
       baseUrl,
       submissionId,
+      requesterToken: adminKey,
       requesterDid,
       timeoutMs: 20_000,
       intervalMs: 700,
