@@ -1,0 +1,9 @@
+{
+  "version": "m1",
+  "type": "message_signature",
+  "algo": "ed25519",
+  "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+  "message": "commit:3e56c8aff42360ccab5009d891957cf9e4aa7a4c",
+  "createdAt": "2026-02-11T04:17:03.702Z",
+  "signature": "r/gpUtAgSSBTH/KSs+zJx0ZUOTUkAnsFOHK/L9lS6165aOdk7LxnXExvijcMRc3l3M/67VX0Kmq+Zxi5aEvYAA=="
+}

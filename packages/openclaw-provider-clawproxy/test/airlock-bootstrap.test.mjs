@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 
 import plugin, {
   classifyAirlockPath,
@@ -72,6 +72,23 @@ test('evaluateDirectiveAuthorization denies restricted directives for buyer role
   if (!out.allowed) {
     assert.equal(out.code, 'DIRECTIVE_AUTH_DENIED');
   }
+});
+
+test('sensitive consulting preset encodes secure defaults', async () => {
+  const presetPath = new URL('../presets/sensitive-consulting.openclaw.json', import.meta.url);
+  const preset = JSON.parse(await readFile(presetPath, 'utf8'));
+
+  assert.equal(preset?.sandbox?.mode, 'all');
+  assert.equal(preset?.sandbox?.workspaceAccess, 'none');
+  assert.equal(preset?.sandbox?.network, 'none');
+
+  assert.equal(preset?.skills?.allowAutoAllowBins, false);
+  assert.equal(preset?.plugins?.entries?.['provider-clawproxy']?.config?.sensitiveProfile?.forbidSkillAutoAllowBins, true);
+
+  const deny = preset?.tools?.deny ?? [];
+  assert(deny.includes('browser'));
+  assert(deny.includes('web'));
+  assert(deny.includes('message'));
 });
 
 test('plugin fails closed on untrusted bootstrap files when airlock is enabled', async () => {
@@ -227,6 +244,91 @@ test('plugin denies restricted directives for buyer role when directiveAuth is e
           },
         ),
       /DIRECTIVE_AUTH_DENIED/,
+    );
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('plugin denies skill autoAllowBins when sensitiveProfile is enabled', async () => {
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'openclaw-sensitive-profile-test-'));
+  const stateDir = path.join(tmpRoot, 'state');
+
+  try {
+    const internalHooks = new Map();
+    const hooks = new Map();
+
+    const api = {
+      id: 'provider-clawproxy',
+      version: '0.1.0-test',
+      pluginConfig: {
+        baseUrl: 'https://clawproxy.test',
+        mode: 'enforce',
+        includePromptPack: false,
+        includeToolEvents: false,
+        sensitiveProfile: {
+          enabled: true,
+          forbidSkillAutoAllowBins: true,
+        },
+      },
+      config: {},
+      runtime: {
+        version: 'openclaw-test',
+        state: {
+          resolveStateDir: () => stateDir,
+        },
+      },
+      logger: {
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        debug: () => {},
+      },
+      resolvePath: (input) => input,
+      registerHook: (event, handler) => {
+        internalHooks.set(event, handler);
+      },
+      on: (hookName, handler) => {
+        hooks.set(hookName, handler);
+      },
+    };
+
+    plugin.register(api);
+
+    const bootstrapHandler = internalHooks.get('agent:bootstrap');
+    const beforeAgentStart = hooks.get('before_agent_start');
+
+    assert.equal(typeof bootstrapHandler, 'function');
+    assert.equal(typeof beforeAgentStart, 'function');
+
+    const sessionKey = 'agent:main:test:sensitive';
+
+    await bootstrapHandler({
+      type: 'agent',
+      action: 'bootstrap',
+      sessionKey,
+      context: {
+        sessionKey,
+        bootstrapFiles: [
+          {
+            name: 'skill.json',
+            path: '/opt/openclaw/identity/skills/test-skill/skill.json',
+            content: JSON.stringify({
+              name: 'test-skill',
+              autoAllowBins: true,
+            }),
+          },
+        ],
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        beforeAgentStart(
+          { prompt: 'hello', messages: [] },
+          { agentId: 'main', sessionKey, workspaceDir: tmpRoot },
+        ),
+      /SENSITIVE_PROFILE_SKILL_BIN_AUTOALLOW_FORBIDDEN/,
     );
   } finally {
     await rm(tmpRoot, { recursive: true, force: true });
