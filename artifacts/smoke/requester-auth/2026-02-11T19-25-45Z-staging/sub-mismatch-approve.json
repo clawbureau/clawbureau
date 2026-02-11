@@ -1,0 +1,8 @@
+{
+  "error": "REQUESTER_SUB_MISMATCH",
+  "message": "requester_did does not match requester token subject",
+  "details": {
+    "requester_did": "did:key:smokeclawsettlemli82f3gy54zzg",
+    "requested_requester_did": "did:key:zmismatch"
+  }
+}

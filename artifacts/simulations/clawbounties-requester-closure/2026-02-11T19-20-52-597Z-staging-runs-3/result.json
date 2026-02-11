@@ -1,0 +1,71 @@
+{
+  "env": "staging",
+  "requester_did": "did:key:smokeclawsettlemli82f3gy54zzg",
+  "worker_did": "did:key:z6MkoGTUWYyi1eV2HqkeJfkDDfCTsDDKN53YFHnc4VHSfMeq",
+  "requester_token": {
+    "token_hash": "bbf397077c7f8b88c5de2ba024069614595325fe281acce8e75aee5577e0e463",
+    "expires_at": "2026-02-11T19:35:44.000Z",
+    "scopes": [
+      "clawbounties:bounty:create",
+      "clawbounties:bounty:approve",
+      "clawbounties:bounty:reject",
+      "clawbounties:bounty:read"
+    ],
+    "audience": "staging.clawbounties.com"
+  },
+  "summary": {
+    "runs": 3,
+    "succeeded": 3,
+    "failed": 0,
+    "approvals": 2,
+    "rejections": 1,
+    "duration_ms": 8132
+  },
+  "runs": [
+    {
+      "run_index": 1,
+      "run_id": "sim_a2c16842-df3b-43d3-9736-4f3a29ce453c",
+      "decision": "approve",
+      "ok": true,
+      "bounty_id": "bty_fdae648b-15b4-451d-b2af-bea35fe89959",
+      "submission_id": "sub_ec6f1aed-ea6a-40ca-9bfc-9905efef5870",
+      "post_status": 201,
+      "accept_status": 201,
+      "submit_status": 201,
+      "review_list_status": 200,
+      "review_item_status": 200,
+      "decision_status": 200,
+      "error": null
+    },
+    {
+      "run_index": 2,
+      "run_id": "sim_223c0358-da89-4b87-9058-1eff05651210",
+      "decision": "reject",
+      "ok": true,
+      "bounty_id": "bty_f1f3bf06-063d-4377-86a5-a03773968b47",
+      "submission_id": "sub_18acfb27-696d-44db-9c79-7d58c36bab03",
+      "post_status": 201,
+      "accept_status": 201,
+      "submit_status": 201,
+      "review_list_status": 200,
+      "review_item_status": 200,
+      "decision_status": 200,
+      "error": null
+    },
+    {
+      "run_index": 3,
+      "run_id": "sim_8c99b760-aead-42d7-8e2b-ae2c06a26803",
+      "decision": "approve",
+      "ok": true,
+      "bounty_id": "bty_372d3dad-361e-430e-a10b-0fb96711b9aa",
+      "submission_id": "sub_0489166d-137e-44f6-8d0a-5223ca5353ab",
+      "post_status": 201,
+      "accept_status": 201,
+      "submit_status": 201,
+      "review_list_status": 200,
+      "review_item_status": 200,
+      "decision_status": 200,
+      "error": null
+    }
+  ]
+}

@@ -311,6 +311,23 @@
       "priority": 21,
       "passes": true,
       "notes": "Added worker-authenticated submission endpoint that verifies proof bundles (and commit proofs for code bounties), persists submission records, and advances accepted bounties to pending_review when valid."
+    },
+    {
+      "id": "CBT-OPS-001",
+      "title": "Requester scoped auth + simulation launcher",
+      "description": "As operations, we need fail-closed requester auth and a real staging simulation launcher so requester-closure bounty flows can be validated end-to-end without D1 injection.",
+      "acceptanceCriteria": [
+        "POST /v1/bounties + /approve + /reject require scoped requester CST/JWT auth with DID-bound subject checks",
+        "Legacy admin + x-requester-did requester path remains behind explicit compat flag (disabled by default)",
+        "Deterministic requester auth errors for missing token, missing scope, and requester_did mismatch",
+        "Add reviewer endpoints GET /v1/bounties/{bounty_id}/submissions and GET /v1/submissions/{submission_id} with fail-closed auth",
+        "Persist requester auth usage context for bounty actions",
+        "Add staging simulation launcher with parameterized run size and artifact output",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Implemented scoped requester token introspection via clawscope for post/approve/reject, kept the legacy path behind REQUESTER_AUTH_COMPAT_LEGACY (default false), added reviewer read endpoints, added requester auth usage event persistence, and added scripts/clawbounties/smoke-requester-closure-simulation.mjs for real staging flow validation. Added staging route override for /v1/bounties* to prevent legacy route shadowing. Captured deterministic auth smoke evidence at artifacts/smoke/requester-auth/2026-02-11T19-25-45Z-staging/result.json and full requester-closure E2E pass artifact at artifacts/simulations/clawbounties-requester-closure/2026-02-11T19-20-52-597Z-staging-runs-3/result.json."
     }
   ]
 }

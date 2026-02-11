@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "requester_did": "did:key:smokeclawsettlemli82f3gy54zzg",
+  "scope": [
+    "clawbounties:bounty:create"
+  ],
+  "audience": [
+    "staging.clawbounties.com"
+  ],
+  "token": {
+    "token_hash": "57803d274268191343fefa30d119adf197f4dab39dd2c75a7496b52e3bd215ee",
+    "expires_at": "2026-02-11T19:35:46.000Z"
+  }
+}

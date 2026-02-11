@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "env": "staging",
+  "timestamp": "2026-02-11T19-25-45Z",
+  "checks": {
+    "missing_token_post": {
+      "status": 401,
+      "error": "REQUESTER_TOKEN_REQUIRED"
+    },
+    "scope_mismatch_approve": {
+      "status": 403,
+      "error": "REQUESTER_SCOPE_REQUIRED"
+    },
+    "sub_mismatch_approve": {
+      "status": 401,
+      "error": "REQUESTER_SUB_MISMATCH"
+    }
+  }
+}

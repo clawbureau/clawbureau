@@ -327,10 +327,26 @@
       "priority": 24,
       "passes": true,
       "notes": "Implemented D1 table submission_trust_pulse + ingestion/binding checks, added GET retrieval endpoint, and updated /trust-pulse viewer to fetch by submission_id."
+    },
+    {
+      "id": "CEA-US-049H",
+      "title": "Requester scoped auth + simulation launcher for clawbounties requester-closure lane",
+      "description": "As operations, we need fail-closed requester auth and staging simulation tooling so requester closure can be validated end-to-end with scoped CST/JWT identities.",
+      "acceptanceCriteria": [
+        "Replace temporary requester header auth for POST /v1/bounties, /approve, /reject with scoped requester CST/JWT introspection",
+        "Keep legacy admin + x-requester-did path behind explicit compat flag (disabled by default in staging)",
+        "Add deterministic auth errors for missing token, scope mismatch, and requester DID mismatch",
+        "Add reviewer read endpoints for submissions with fail-closed auth",
+        "Add clawea requester token broker endpoint with tenant/operator checks and audit event",
+        "Add staging simulation launcher with parameterized run size and artifact output"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Implemented scoped requester auth + usage logging in services/clawbounties, added reviewer endpoints + migration 0014_requester_auth_events.sql, added clawea endpoint POST /v1/billing/clawbounties/requester-token (operator-only) backed by clawscope issue flow with audit logs, and added scripts/clawbounties/smoke-requester-closure-simulation.mjs for real staging flow execution. Added staging route override for /v1/bounties* to prevent legacy route shadowing. Captured deterministic auth smoke evidence at artifacts/smoke/requester-auth/2026-02-11T19-25-45Z-staging/result.json and requester-closure simulation PASS evidence at artifacts/simulations/clawbounties-requester-closure/2026-02-11T19-20-52-597Z-staging-runs-3/result.json."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T22:20:00Z",
+    "updatedAt": "2026-02-11T20:31:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
