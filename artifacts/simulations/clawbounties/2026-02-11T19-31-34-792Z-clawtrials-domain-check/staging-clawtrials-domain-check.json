@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "domain": "staging.clawtrials.com",
+  "resolved_ip": "172.67.196.1",
+  "checks": {
+    "health": {
+      "status": 200,
+      "elapsed_ms": 69,
+      "body": {
+        "status": "ok",
+        "service": "clawtrials",
+        "version": "0.1.0-staging",
+        "environment": "staging",
+        "harness_count": 3
+      }
+    },
+    "harness_run": {
+      "status": 200,
+      "elapsed_ms": 26,
+      "body": {
+        "schema_version": "1",
+        "test_harness_id": "th_smoke_pass_v1",
+        "submission_id": "sub_domain_probe",
+        "bounty_id": "bty_domain_probe",
+        "passed": true,
+        "total_tests": 3,
+        "passed_tests": 3,
+        "failed_tests": 0,
+        "execution_time_ms": 235,
+        "completed_at": "2026-02-11T19:31:34.792Z",
+        "test_results": [
+          {
+            "test_id": "test_1",
+            "name": "proof_bundle_hash_present",
+            "status": "passed",
+            "details": {
+              "proof_bundle_hash": "abc123"
+            }
+          },
+          {
+            "test_id": "test_2",
+            "name": "submission_id_format",
+            "status": "passed"
+          },
+          {
+            "test_id": "test_3",
+            "name": "output_payload_present",
+            "status": "passed"
+          }
+        ]
+      }
+    }
+  },
+  "generated_at": "2026-02-11T19:31:34.791Z"
+}

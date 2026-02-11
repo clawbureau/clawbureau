@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "worker_did": "did:key:z6Mkk5nNihenToUnN6aUvSRVLhzC4e2YanFJuPaEt6V12frj",
+  "bounty_id": "bty_ef7e9470-3dd0-455a-9ed1-5068617162a7",
+  "idempotency_key": "sim:invalid:submit:88e19adc-1623-42e8-a471-dd25255a373c",
+  "first_submit": {
+    "status": 422,
+    "error": "TEST_HARNESS_INVALID",
+    "message": "HARNESS_NOT_FOUND:th_missing_invalid_case_v2"
+  },
+  "replay_submit": {
+    "status": 422,
+    "error": "TEST_HARNESS_INVALID",
+    "message": "HARNESS_NOT_FOUND:th_missing_invalid_case_v2"
+  },
+  "generated_at": "2026-02-11T21:14:43.946Z"
+}

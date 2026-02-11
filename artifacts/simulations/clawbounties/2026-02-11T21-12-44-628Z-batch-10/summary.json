@@ -1,0 +1,137 @@
+{
+  "ok": true,
+  "run_label": "cbt-ops-002-batch10-rebase",
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "clawtrials_base_url": "https://staging.clawtrials.com",
+  "total_jobs": 10,
+  "concurrency": 4,
+  "harness_id": "th_smoke_pass_v1",
+  "requester_did_mode": "fixed",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "success_jobs": 10,
+  "failed_jobs": 0,
+  "closure_type_breakdown": {
+    "requester": {
+      "total": 5,
+      "success": 5,
+      "failed": 0
+    },
+    "test": {
+      "total": 5,
+      "success": 5,
+      "failed": 0
+    }
+  },
+  "deterministic_error_buckets": {},
+  "stuck_state_counts": {
+    "pending_review": 0,
+    "unknown": 0
+  },
+  "step_metrics": {
+    "register_worker": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 119,
+        "max_ms": 242,
+        "avg_ms": 184,
+        "p95_ms": 242
+      }
+    },
+    "post_bounty": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 524,
+        "max_ms": 2661,
+        "avg_ms": 1154.8,
+        "p95_ms": 2661
+      }
+    },
+    "accept_bounty": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 224,
+        "max_ms": 524,
+        "avg_ms": 315.8,
+        "p95_ms": 524
+      }
+    },
+    "submit": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 300,
+        "max_ms": 1618,
+        "avg_ms": 944.5,
+        "p95_ms": 1618
+      }
+    },
+    "list_submissions": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 98,
+        "max_ms": 258,
+        "avg_ms": 167.5,
+        "p95_ms": 258
+      }
+    },
+    "get_submission_detail": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 96,
+        "max_ms": 220,
+        "avg_ms": 156.8,
+        "p95_ms": 220
+      }
+    },
+    "reject": {
+      "success": 3,
+      "failure": 0,
+      "latency": {
+        "count": 3,
+        "min_ms": 371,
+        "max_ms": 482,
+        "avg_ms": 410,
+        "p95_ms": 482
+      }
+    },
+    "wait_terminal": {
+      "success": 10,
+      "failure": 0,
+      "latency": {
+        "count": 10,
+        "min_ms": 97,
+        "max_ms": 217,
+        "avg_ms": 172.4,
+        "p95_ms": 217
+      }
+    },
+    "approve": {
+      "success": 2,
+      "failure": 0,
+      "latency": {
+        "count": 2,
+        "min_ms": 1176,
+        "max_ms": 3574,
+        "avg_ms": 2375,
+        "p95_ms": 3574
+      }
+    }
+  },
+  "generated_at": "2026-02-11T21:12:44.628Z",
+  "preflight": {
+    "clawbounties_health_ms": 100,
+    "clawtrials_health_ms": 143
+  }
+}

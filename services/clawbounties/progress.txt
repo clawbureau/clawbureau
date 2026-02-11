@@ -447,3 +447,73 @@ Started: 2026-02-02T03:08:26.937005
   - Updated simulation launcher to accept `--reward-minor` and tolerate `accept` 200/201 responses for endpoint shape parity.
 - Ops note:
   - Staging requester account is low-balance; larger runsets can fail at post with deterministic upstream `ESCROW_FAILED -> LEDGER_TRANSFER_FAILED -> INSUFFICIENT_FUNDS`.
+
+## 2026-02-11 - CBT-OPS-002 (simulation activation tranche, staging)
+- Truth-first tracker/docs updates:
+  - Added `CBT-US-022`, `CBT-US-023`, `CBT-US-024` in `services/clawbounties/prd.json` (all `passes=false`).
+  - Updated `docs/prds/clawbounties.md` status/scope to reflect queued activation tranche.
+- Test-lane fail-closed hardening in clawbounties:
+  - `autoApproveTestSubmission(...)` now returns deterministic failure envelopes (not boolean-only).
+  - Deterministic harness error codes surfaced to submit callers, including idempotent replay path.
+  - Added deterministic classification for harness failures (`TEST_HARNESS_UNAVAILABLE`, `TEST_HARNESS_INVALID`, etc.).
+- Reviewer ergonomics endpoints implemented:
+  - `GET /v1/bounties/{bounty_id}/submissions`
+  - `GET /v1/submissions/{submission_id}`
+  - Auth boundaries: admin OR worker token OR requester scoped token (with ownership checks).
+- New API-only simulation tooling added (no D1 injection):
+  - `scripts/poh/smoke-clawbounties-e2e-requester.mjs`
+  - `scripts/poh/smoke-clawbounties-e2e-test.mjs`
+  - `scripts/poh/simulate-clawbounties-batch.mjs`
+  - shared helper: `scripts/poh/_clawbounties-sim-common.mjs`
+- Staging deploy:
+  - clawbounties-staging version `cfd928ce-eb7a-493f-aa0c-5620aff1d8ad`.
+  - note: detected cross-lane staging overwrite (`3da99ebc-6215-4281-9e75-442c24840621`) and restored CBT-OPS-002 build to keep auth-lane isolation.
+- Validation:
+  - `npm --prefix services/clawbounties run typecheck` ✅
+  - `node scripts/docs/lint-prds.mjs` ✅
+  - `node scripts/poh/smoke-clawbounties-e2e-requester.mjs --env staging --requester-did did:key:zsimrequesterbatch0001` ✅
+  - `node scripts/poh/smoke-clawbounties-e2e-test.mjs --env staging --requester-did did:key:zsimrequesterbatch0001 --clawtrials-base-url https://clawtrials-staging.generaite.workers.dev` ✅
+  - `node scripts/poh/simulate-clawbounties-batch.mjs --env staging --total 10 --concurrency 4 --label cbt-ops-002-batch10 --requester-did did:key:zsimrequesterbatch0001 --clawtrials-base-url https://clawtrials-staging.generaite.workers.dev` ✅
+  - `node scripts/poh/simulate-clawbounties-batch.mjs --env staging --total 50 --concurrency 6 --label cbt-ops-002-batch50 --requester-did did:key:zsimrequesterbatch0001 --clawtrials-base-url https://clawtrials-staging.generaite.workers.dev` ✅
+  - deterministic fail-closed replay check for invalid harness id (`TEST_HARNESS_INVALID`) ✅
+- Artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T19-28-51-613Z-requester-e2e/requester-smoke.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T19-29-09-547Z-test-e2e/test-smoke.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T19-29-29-194Z-batch-10/{summary.json,jobs.ndjson}`
+  - `artifacts/simulations/clawbounties/2026-02-11T19-30-09-452Z-batch-50/{summary.json,jobs.ndjson}`
+  - `artifacts/simulations/clawbounties/2026-02-11T19-31-19-823Z-failclosed-invalid/invalid-harness-replay.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T19-31-34-792Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+- Remaining before flipping passes true:
+  - explicit GO PROD only (no prod deploy/smoke or pass flip yet).
+
+## 2026-02-11 - CBT-OPS-002 rebase on main + post-merge staging rerun
+- Rebases `feat/marketplace/CBT-OPS-002-clawbounties-simulation-activation` onto `origin/main` (after #141 merge) and resolved requested conflicts in:
+  - `services/clawbounties/src/index.ts`
+  - `services/clawbounties/prd.json`
+  - `services/clawbounties/progress.txt`
+- Preserved both lanes:
+  - requester scoped auth + compat behavior from #141,
+  - CBT-OPS-002 test-lane/reviewer/simulation tranche behavior.
+- `services/clawbounties/src/index.ts` merge outcomes:
+  - unified submission viewer auth (`admin | worker | requester scoped token`) via `resolveSubmissionViewerContext(...)` + `requireRequesterAuth(...)`.
+  - requester submission read endpoints now persist requester auth events (list + detail).
+  - reconciled route wiring to use `handleGetSubmissionDetail(...)` and the filtered list endpoint signature.
+- Reconciled simulation scripts with requester scoped auth requirements:
+  - updated `scripts/poh/_clawbounties-sim-common.mjs` to support explicit requester bearer token across post/review/list/detail polling flows.
+  - updated requester/batch runners to send requester bearer token for `GET /v1/bounties/{id}/submissions` and `GET /v1/submissions/{id}` (fail-closed #141 behavior).
+- Staging deploys after rebase merge:
+  - clawtrials-staging version `4f576033-a246-403d-b08f-5bbe39d64394`
+  - clawbounties-staging version `00b65ef5-7254-4467-ac38-ac3b12b8c9f0`
+- Validation gates (post-merge):
+  - `npm --prefix services/clawbounties run typecheck` ✅
+  - `npm --prefix services/clawtrials run typecheck` ✅
+  - `node scripts/docs/lint-prds.mjs` ✅
+- Re-ran staging evidence suite:
+  - requester smoke: `artifacts/simulations/clawbounties/2026-02-11T21-12-08-350Z-requester-e2e/requester-smoke.json`
+  - test-lane smoke: `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
+  - batch (10): `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/{summary.json,jobs.ndjson}`
+  - batch (50): `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/{summary.json,jobs.ndjson}`
+  - deterministic invalid harness replay: `artifacts/simulations/clawbounties/2026-02-11T21-14-43-946Z-failclosed-invalid/invalid-harness-replay.json`
+  - clawtrials domain check: `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+- Policy/tracker state kept truthful:
+  - `CBT-US-022/023/024` remain `passes=false` (staging complete, explicit GO PROD still required).

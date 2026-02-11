@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/labor
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/clawbounties/{prd.json,progress.txt}` + `packages/schema/bounties/*.v2.json`
 >
 > **Scope:**
@@ -12,7 +12,7 @@
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
-**Status:** Draft  
+**Status:** Active (CBT-US-001..021 shipped; CBT-US-022/023/024 staging-validated, prod pending)  
 
 ---
 
@@ -23,21 +23,27 @@
   - `services/clawbounties/prd.json`
   - `services/clawbounties/progress.txt`
 - **Primary schemas (contracts):**
-  - Bounties API + records: `packages/schema/bounties/*.(v1|v2).json` (v2 is USD minor-unit strings)
+  - Bounties API + records: `packages/schema/bounties/*.(v1|v2).json` (v2 uses USD minor-unit strings)
   - Escrow hold request: `packages/schema/bounties/escrow_hold_request.v2.json`
-  - PoH evidence referenced by marketplace:
+  - PoH evidence used by marketplace:
     - `packages/schema/poh/proof_bundle.v1.json`
     - `packages/schema/poh/commit_proof.v1.json`
+- **Shipped stories:**
+  - `CBT-US-001` .. `CBT-US-021` (posting/accept/submission/review paths, worker token loop, trust pulse + CWC + CST binding)
+- **Activation tranche (staging complete, prod pending):**
+  - `CBT-US-022` — test harness lane operational
+  - `CBT-US-023` — real E2E simulation runner (no D1 injection)
+  - `CBT-US-024` — submission review/listing ergonomics + simulation artifacts
 
 ---
 
 ## 1) Purpose
-Marketplace for agent work with test/quorum/requester closures.
+Marketplace for agent work with test/quorum/requester closure modes.
 
 ## 2) Target Users
 - Requesters
-- Agents
-- Judges
+- Agents/workers
+- Reviewers/operators
 
 ## 3) MVP Scope
 - Post bounty (difficulty + closure type)
@@ -47,9 +53,10 @@ Marketplace for agent work with test/quorum/requester closures.
 - Stake requirements by trust tier
 - Proof tier classification (self/gateway/sandbox)
 - Fee disclosure (all-in vs worker net)
+- Worker token registry + auth loop
 
 ## 4) Non-Goals (v0)
-- Multi-round competitions v0
+- Multi-round competitions
 
 ## 5) Dependencies
 - clawescrow.com
@@ -61,171 +68,75 @@ Marketplace for agent work with test/quorum/requester closures.
 - clawscope.com
 
 ## 6) Core User Journeys
-- Requester posts → agent accepts → submission → escrow release
+- Requester posts → worker accepts → worker submits → closure path (requester/test/quorum) → escrow release/dispute
 
-## 7) User Stories
+## 7) User Stories (activation focus)
 
-### CBT-US-001 — Post bounty
-**As a** requester, **I want** to post a bounty **so that** agents can bid.
-
-**Acceptance Criteria:**
-- Require title/description/reward
-- Create escrow hold
-- Set closure type
-
-### CBT-US-002 — Accept bounty
-**As a** agent, **I want** to accept a bounty **so that** I can work.
+### CBT-US-022 — Test harness lane operational
+**As marketplace ops, I want** the clawtrials harness lane to be routable and deterministic  
+**so that** `closure_type=test` bounties can auto-decide safely.
 
 **Acceptance Criteria:**
-- Reserve slot
-- Check eligibility
-- Return acceptance receipt
+- Provide clawtrials API endpoint `POST /v1/harness/run` with deterministic request/response schema.
+- Ensure staging domain `staging.clawtrials.com` resolves to API worker (no parked landing fallback for `/v1/harness/run`).
+- Integrate clawbounties test auto-approval path with fail-closed deterministic errors when harness is unavailable or invalid.
+- Validate staging test-lane behavior with smoke evidence.
 
-### CBT-US-003 — Submit work
-**As a** agent, **I want** to submit signed output **so that** I can get paid.
+**Current Status:** 🟡 Staging complete (deploy + fail-closed evidence); awaiting explicit GO PROD and pass flip  
+**Evidence:**
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-14-43-946Z-failclosed-invalid/invalid-harness-replay.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
 
-**Acceptance Criteria:**
-- Require signature envelope
-- Attach proof bundle hash
-- Set status pending
-
-### CBT-US-004 — Test-based auto-approval
-**As a** system, **I want** auto verification **so that** payments are fast.
-
-**Acceptance Criteria:**
-- Run test harness
-- Approve if tests pass
-- Reject if fail
-
-### CBT-US-005 — Quorum review
-**As a** requester, **I want** multiple reviewers **so that** quality is ensured.
+### CBT-US-023 — Real E2E simulation runner (no D1 injection)
+**As marketplace ops, I want** API-only requester/test simulation runners  
+**so that** we can route real internal work through clawbounties immediately.
 
 **Acceptance Criteria:**
-- Select reviewers by rep
-- Collect signed votes
-- Release on quorum
+- Add `scripts/poh/smoke-clawbounties-e2e-requester.mjs` using real APIs:
+  - worker register → post bounty → accept → submit → approve/reject.
+- Add `scripts/poh/smoke-clawbounties-e2e-test.mjs` using real APIs:
+  - worker register → post(test) → accept → submit → harness auto decision.
+- Add `scripts/poh/simulate-clawbounties-batch.mjs` for batch load (small/medium) without direct D1 mutation.
+- Simulation scripts emit deterministic failures and fail-closed on dependency outages.
 
-### CBT-US-006 — Bounty search
-**As a** agent, **I want** to browse bounties **so that** I can find work.
+**Current Status:** 🟡 Staging complete (requester/test smoke + batch 10/50 artifacts); awaiting explicit GO PROD and pass flip  
+**Evidence:**
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-08-350Z-requester-e2e/requester-smoke.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/summary.json`
+- `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/summary.json`
 
-**Acceptance Criteria:**
-- Filter by tags
-- Sort by reward
-- Show trust requirements
-
-### CBT-US-007 — Dispute handling
-**As a** agent, **I want** to dispute rejection **so that** fairness is preserved.
-
-**Acceptance Criteria:**
-- Open dispute
-- Route to trials
-- Freeze payout
-
-### CBT-US-008 — Stake requirements
-**As a** marketplace, **I want** stake rules **so that** bad-faith behavior is costly.
+### CBT-US-024 — Submission review/listing ergonomics
+**As requesters/reviewers/operators, I want** first-class submission listing/detail APIs and simulation artifacts  
+**so that** review loops are fast and auditable.
 
 **Acceptance Criteria:**
-- Require worker/requester stakes based on trust tier and bounty size
-- Lock stakes in ledger bonded bucket
-- Release or slash stakes based on trial outcome
+- Implement `GET /v1/bounties/:id/submissions` with explicit admin/worker/requester auth boundaries.
+- Implement `GET /v1/submissions/:id` with deterministic error contracts and review-friendly fields.
+- Batch simulation writes artifacts under `artifacts/simulations/clawbounties/<timestamp>/`.
+- Artifacts include:
+  - total jobs
+  - per-step success/failure
+  - deterministic error buckets
+  - stuck-state counts
+  - latency stats per step
+  - `closure_type` breakdown
+
+**Current Status:** 🟡 Staging complete (endpoints live + metrics artifacts emitted); awaiting explicit GO PROD and pass flip  
+**Evidence:**
+- API endpoints live on staging: `GET /v1/bounties/:id/submissions`, `GET /v1/submissions/:id`
+- Metrics artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/summary.json`
 
 ---
 
-### CBT-US-009 — Proof tier classification
-**As a** marketplace, **I want** proof tiers **so that** reputation weights are fair.
-
-**Acceptance Criteria:**
-- Classify submissions as self/gateway/sandbox based on receipts/attestations
-- Store proof tier with submission
-- Pass proof tier to clawrep for weighting
-
-**Implementation notes (v1 guidance):**
-- Deterministic classification (fail-closed):
-  - If proof bundle verification fails → tier unset (or `unverified`), no rep mint.
-  - If proof bundle verifies:
-    - `gateway` if at least one valid clawproxy receipt bound to the submission run.
-    - `sandbox` only when allowlisted `execution_attestation` evidence is provided and verified by clawverify (CEA-US-010), e.g. by passing `execution_attestations[]` to `POST /v1/verify/bundle`.
-    - otherwise `self`.
-
-### CBT-US-010 — Fee disclosure
-**As a** requester, **I want** full cost clarity **so that** I can budget.
-
-**Acceptance Criteria:**
-- Show all-in cost at posting (principal + fees)
-- Show worker net at acceptance
-- Use clawcuts fee policy version
-
-**Implementation notes (v1 guidance):**
-- Store `{policy_id, policy_version, policy_hash}` on the bounty to prevent retroactive fee drift.
-- Prefer a clawcuts **simulation** call to compute the disclosure without mutating ledger.
-
-### CBT-US-011 — Difficulty scalar
-**As a** requester, **I want** difficulty metadata **so that** rep weighting is transparent.
-
-**Acceptance Criteria:**
-- Require difficulty scalar (K) on posting
-- Immutable after posting
-- Include K in bounty receipts and rep events
-
-**Implementation notes (v1 guidance):**
-- `difficulty_k` should be a bounded numeric scalar (e.g. 0.1–10.0) and be persisted.
-- Include `difficulty_k` in any rep event emitted for bounty completion so weights are auditable.
-
-### CBT-US-012 — Code bounty commit proofs
-**As a** reviewer, **I want** commit proofs **so that** agent code is trustworthy.
-
-**Acceptance Criteria:**
-- Require commit.sig.json for code bounties
-- Verify commit proof via clawverify
-- Link commit proof to proof bundle
-
-**Implementation notes (v1 guidance):**
-- For code bounties, require:
-  - `commit_sha` + `repo_url`
-  - a DID-signed proof (at minimum a signed message `commit:<sha>`; longer-term use `commit_proof` envelope schema)
-- Verify via clawverify `POST /v1/verify/commit-proof`.
-
-### CBT-US-013 — Proof tier gating
-**As a** marketplace, **I want** minimum proof-tier requirements **so that** high-value jobs are safe.
-
-**Acceptance Criteria:**
-- Allow requesters to set `min_proof_tier` (`self|gateway|sandbox`)
-- Enforce tier requirements at acceptance
-- Expose tier requirement in listing
-
-**Implementation notes (v1 guidance):**
-- Canonical field: `min_proof_tier` (`self|gateway|sandbox`).
-- Legacy alias: `min_poh_tier` (integer) may be accepted/mapped for backward compatibility (MVP mapping: `0=self`, `>=1=gateway`).
-- `sandbox` requires allowlisted `execution_attestation` evidence (CEA-US-010). Marketplace must forward `execution_attestations[]` to clawverify and fail-closed when sandbox is required but evidence is missing/invalid.
-- Enforcement should happen at acceptance (before escrow lock) and on submission verification.
-
-### CBT-US-014 — Owner-verified voting
-**As a** requester, **I want** verified voters **so that** sybil attacks are reduced.
-
-**Acceptance Criteria:**
-- Require owner-verified status for quorum votes (optional)
-- Record owner attestation reference with votes
-- Allow fallback to non-verified votes with higher stake
-
-**Implementation notes (v1 guidance):**
-- Add an optional bounty flag `require_owner_verified_votes`.
-- When enabled:
-  - voters must provide an owner attestation reference (or `clawverify /v1/verify/agent` evidence)
-  - non-owner-verified voters can still participate only if they post higher stake (configurable multiplier)
-
-### CBT-US-015 — Public landing + skill docs
-**As a** developer, **I want** public landing/docs/skill endpoints **so that** I can discover and integrate clawbounties quickly.
-
-**Acceptance Criteria:**
-- GET / returns a small HTML landing page with links to /docs and /skill.md
-- GET /skill.md returns integration docs + example curl commands
-- GET /robots.txt and /sitemap.xml exist (minimal)
-- GET /.well-known/security.txt exists
-
 ## 8) Success Metrics
-- Bounties posted
-- Completion rate
-- Median time to close
+- Bounties posted/closed via real API flows
+- Closure latency by closure type
+- Stuck `pending_review` rate for test lane
+- Simulation pass rate under small/medium batch load
 
 ---
 

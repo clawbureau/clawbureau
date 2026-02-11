@@ -1,0 +1,68 @@
+{
+  "ok": true,
+  "env": "staging",
+  "base_url": "https://staging.clawbounties.com",
+  "clawtrials_base_url": "https://staging.clawtrials.com",
+  "requester_did": "did:key:zsimrequesterbatch0001",
+  "worker_did": "did:key:z6MkwcWhJXcKqDKzHDjUfemfDZkGFXaTovRsDSHnwUszkQ6p",
+  "bounty_id": "bty_f78be770-2716-4b99-a060-e362d0ee7a43",
+  "submission_id": "sub_11dd51af-6a5e-47ab-8d6b-a50ed7b59306",
+  "harness_id": "th_smoke_pass_v1",
+  "expected_final_status": "approved",
+  "final_submission_status": "approved",
+  "steps": [
+    {
+      "step": "check_harness_health",
+      "ok": true,
+      "elapsed_ms": 223
+    },
+    {
+      "step": "check_harness_catalog",
+      "ok": true,
+      "elapsed_ms": 24,
+      "harness_count": 3
+    },
+    {
+      "step": "register_worker",
+      "ok": true,
+      "elapsed_ms": 178
+    },
+    {
+      "step": "post_bounty",
+      "ok": true,
+      "elapsed_ms": 695,
+      "bounty_id": "bty_f78be770-2716-4b99-a060-e362d0ee7a43",
+      "harness_id": "th_smoke_pass_v1"
+    },
+    {
+      "step": "accept_bounty",
+      "ok": true,
+      "elapsed_ms": 239
+    },
+    {
+      "step": "submit",
+      "ok": true,
+      "elapsed_ms": 1470,
+      "submission_id": "sub_11dd51af-6a5e-47ab-8d6b-a50ed7b59306"
+    },
+    {
+      "step": "list_submissions",
+      "ok": true,
+      "elapsed_ms": 106,
+      "count": 1
+    },
+    {
+      "step": "get_submission_detail",
+      "ok": true,
+      "elapsed_ms": 106,
+      "status": "approved"
+    },
+    {
+      "step": "wait_terminal",
+      "ok": true,
+      "elapsed_ms": 98,
+      "final_status": "approved"
+    }
+  ],
+  "generated_at": "2026-02-11T21:12:22.842Z"
+}
