@@ -1,25 +1,31 @@
 > **Type:** PRD
-> **Status:** DRAFT
-> **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
-> **Source of truth:** PRD intent (no active execution tracker yet)
+> **Status:** ACTIVE
+> **Owner:** @clawbureau/economy
+> **Last reviewed:** 2026-02-12
+> **Source of truth:** `services/clawsettle/{prd.json,progress.txt}`
 >
 > **Scope:**
 > - Product requirements for `clawsettle.com`.
-> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+> - Shipped behavior is tracked in `services/clawsettle/progress.txt`.
 
 # clawsettle.com (Settlement) — PRD
 
 **Domain:** clawsettle.com  
 **Pillar:** Economy & Settlement  
-**Status:** Draft  
+**Status:** Active (MPY-US-003 shipped to staging)  
 
 ---
 
 ## Implementation status (current)
 
-- **Service:** not implemented yet (no service-level tracker found).
-- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
+- **Active service:** `services/clawsettle/`
+- **Execution tracker:**
+  - `services/clawsettle/prd.json`
+  - `services/clawsettle/progress.txt`
+- **Current shipped story:**
+  - `MPY-US-003` — Stripe webhook verification + deterministic ledger forwarding
+  - **Environment:** staging (`clawsettle-staging`), staging smoke passed
+  - **Production:** intentionally not deployed in this phase
 
 ---
 
@@ -47,6 +53,17 @@ Payouts, netting, and external rails (Stripe/USDC).
 - Escrow release → payout → receipt
 
 ## 7) User Stories
+### MPY-US-003 — Stripe webhook verification + ledger settlement forwarding
+**As a** settlement adapter, **I want** fail-closed Stripe webhook verification and deterministic forwarding into clawledger settlements **so that** external payment provenance is machine-verifiable and idempotent.
+
+**Acceptance Criteria:**
+  - POST /v1/stripe/webhook verifies Stripe signatures fail-closed
+  - Verified events map to canonical ledger settlement ingest payloads
+  - Forwarding uses deterministic idempotency key `stripe:event:<event_id>`
+  - Replay events dedupe without double-forwarding side effects
+
+**Current Status:** ✅ Shipped to staging (staging deploy + smoke evidence in `services/clawsettle/progress.txt`)
+
 ### CST-US-001 — Initiate payout
 **As a** agent, **I want** to withdraw funds **so that** I can cash out.
 

@@ -1,0 +1,57 @@
+# Ralph Progress Log
+Started: 2026-02-12
+---
+
+## 2026-02-12T12:30:00Z - MPY-US-003 (staging ship)
+- What was implemented
+  - Scaffolded `services/clawsettle` Cloudflare Worker service with staging/prod wrangler environments.
+  - Added fail-closed Stripe webhook flow:
+    - `POST /v1/stripe/webhook`
+    - strict Stripe signature verification (`SIGNATURE_INVALID` on missing/invalid/tampered signatures)
+    - event parsing + canonical mapping into ledger settlement ingest payloads
+    - deterministic forwarding idempotency key format: `stripe:event:<event_id>`
+  - Added replay dedupe persistence table + repository:
+    - migration `services/clawsettle/migrations/0001_create_stripe_webhook_events.sql`
+    - table `stripe_webhook_events` keyed by `event_id`
+    - stores response snapshot for deterministic replay responses
+  - Added settlement forwarding client to clawledger:
+    - `POST /v1/payments/settlements/ingest`
+    - fail-closed `LEDGER_INGEST_FAILED` on non-2xx ledger responses
+  - Added tests:
+    - `services/clawsettle/test/stripe-webhook.test.ts`
+      - valid signature + forward success
+      - tampered signature rejection
+      - replay dedupe (single ledger forward)
+  - Added smoke script:
+    - `scripts/poh/smoke-clawsettle-stripe-webhook.mjs`
+    - validates end-to-end webhook accept, replay dedupe, tampered signature reject, ledger settlement visibility, and balance side effect
+- Staging infra + deploy evidence
+  - Created D1 databases:
+    - `clawsettle` (prod)
+    - `clawsettle-staging` (staging)
+  - Applied staging migration:
+    - `wrangler d1 migrations apply clawsettle-staging --env staging --remote`
+  - Set staging secrets (names only):
+    - `LEDGER_ADMIN_KEY`
+    - `STRIPE_WEBHOOK_SIGNING_SECRET`
+  - Deployed staging Worker:
+    - service: `clawsettle-staging`
+    - version: `286da496-1d1d-4b05-9f62-b121d69503a7`
+  - Added missing staging DNS record:
+    - `staging.clawsettle.com` CNAME -> `clawsettle.com` (proxied)
+- Staging smoke evidence
+  - Command:
+    - `STRIPE_WEBHOOK_SIGNING_SECRET=*** LEDGER_ADMIN_KEY=*** node scripts/poh/smoke-clawsettle-stripe-webhook.mjs --env staging --clawsettle-resolve-ip 104.21.55.125`
+  - Result highlights:
+    - webhook: `200`, `deduped:false`, `forwarded_to_ledger:true`
+    - replay: `200`, `deduped:true`
+    - tampered signature: `401`, code `SIGNATURE_INVALID`
+    - settlement lookup: `200`, one settlement, status `confirmed`
+    - account available after webhook: `1234`
+- Quality checks
+  - `cd services/clawsettle && npm test && npm run lint && npm run typecheck`
+  - `node scripts/docs/lint-prds.mjs`
+- Release status
+  - MPY-US-003 shipped to staging only.
+  - No production deployment executed in this phase.
+---
