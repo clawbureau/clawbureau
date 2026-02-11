@@ -1,0 +1,71 @@
+{
+  "ok": true,
+  "env": "prod",
+  "base_url": "https://clawbounties.com",
+  "clawtrials_base_url": "https://clawtrials.com",
+  "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+  "requester_token_source": "clawscope-issue",
+  "requester_token_kid": "66a63dae7bbf4bda",
+  "requester_token_hash": "b1782a99956f6b440a99d29ed0ffd75653c5a5cfd76c9cbd9e9263f1312f823a",
+  "worker_did": "did:key:z6MkhWjX4fhQs26hbYGz9xMjQcTZNn8SvTJ31bDgsS6YJnd6",
+  "bounty_id": "bty_463b85bf-fc62-49fe-b9f0-7c17314fc2c8",
+  "submission_id": "sub_bd38f631-4b46-4ff3-a9ba-1f81617cfb4b",
+  "harness_id": "th_smoke_pass_v1",
+  "expected_final_status": "approved",
+  "final_submission_status": "approved",
+  "steps": [
+    {
+      "step": "check_harness_health",
+      "ok": true,
+      "elapsed_ms": 79
+    },
+    {
+      "step": "check_harness_catalog",
+      "ok": true,
+      "elapsed_ms": 26,
+      "harness_count": 3
+    },
+    {
+      "step": "register_worker",
+      "ok": true,
+      "elapsed_ms": 276
+    },
+    {
+      "step": "post_bounty",
+      "ok": true,
+      "elapsed_ms": 566,
+      "bounty_id": "bty_463b85bf-fc62-49fe-b9f0-7c17314fc2c8",
+      "harness_id": "th_smoke_pass_v1"
+    },
+    {
+      "step": "accept_bounty",
+      "ok": true,
+      "elapsed_ms": 255
+    },
+    {
+      "step": "submit",
+      "ok": true,
+      "elapsed_ms": 1296,
+      "submission_id": "sub_bd38f631-4b46-4ff3-a9ba-1f81617cfb4b"
+    },
+    {
+      "step": "list_submissions",
+      "ok": true,
+      "elapsed_ms": 132,
+      "count": 1
+    },
+    {
+      "step": "get_submission_detail",
+      "ok": true,
+      "elapsed_ms": 132,
+      "status": "approved"
+    },
+    {
+      "step": "wait_terminal",
+      "ok": true,
+      "elapsed_ms": 138,
+      "final_status": "approved"
+    }
+  ],
+  "generated_at": "2026-02-11T22:21:49.713Z"
+}

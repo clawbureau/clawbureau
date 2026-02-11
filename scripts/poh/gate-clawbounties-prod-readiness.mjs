@@ -9,6 +9,10 @@ import {
   resolveEnvName,
   resolveBountiesBaseUrl,
   resolveTrialsBaseUrl,
+  resolveScopeBaseUrl,
+  resolveRequesterAudience,
+  resolveRequesterScopes,
+  issueRequesterScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -29,16 +33,57 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function resolveRequesterToken(args) {
-  const fromArg = String(args.get('requester-token') || '').trim();
+function resolveScopeAdminKey(args) {
+  const fromArg = String(args.get('scope-admin-key') || '').trim();
   if (fromArg) return fromArg;
 
-  const fromEnv = String(process.env.REQUESTER_SCOPED_TOKEN || process.env.BOUNTIES_ADMIN_KEY || '').trim();
+  const fromEnv = String(process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
+  return fromEnv || null;
+}
+
+async function resolveRequesterAuth({ args, envName, requesterDid }) {
+  const direct = String(args.get('requester-token') || process.env.REQUESTER_SCOPED_TOKEN || '').trim();
+  if (direct) {
+    return {
+      requesterToken: direct,
+      requesterTokenSource: 'provided',
+      requesterTokenKid: null,
+      requesterTokenHash: null,
+      requesterAudience: resolveRequesterAudience(envName, args.get('requester-audience')),
+      scopeBaseUrl: resolveScopeBaseUrl(envName, args.get('scope-base-url')),
+    };
+  }
+
+  const scopeAdminKey = resolveScopeAdminKey(args);
   assert(
-    fromEnv.length > 0,
-    'Missing requester token. Provide --requester-token or set REQUESTER_SCOPED_TOKEN (fallback: BOUNTIES_ADMIN_KEY).'
+    scopeAdminKey,
+    'Missing requester auth input. Provide --requester-token / REQUESTER_SCOPED_TOKEN or set --scope-admin-key / SCOPE_ADMIN_KEY to auto-issue via clawscope.'
   );
-  return fromEnv;
+
+  const requesterAudience = resolveRequesterAudience(envName, args.get('requester-audience'));
+  const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+  const scopes = resolveRequesterScopes(args.get('requester-scopes'));
+  const ttlSeconds = Number.parseInt(String(args.get('requester-token-ttl-sec') || '3600'), 10);
+  assert(Number.isFinite(ttlSeconds) && ttlSeconds > 0, 'requester-token-ttl-sec must be a positive integer');
+
+  const issued = await issueRequesterScopedToken({
+    scopeBaseUrl,
+    scopeAdminKey,
+    requesterDid,
+    audience: requesterAudience,
+    scopes,
+    ttlSec: ttlSeconds,
+    source: 'gate-clawbounties-prod-readiness',
+  });
+
+  return {
+    requesterToken: issued.token,
+    requesterTokenSource: 'clawscope-issue',
+    requesterTokenKid: issued.kid,
+    requesterTokenHash: issued.token_hash,
+    requesterAudience,
+    scopeBaseUrl,
+  };
 }
 
 function resolveAdminKey(args) {
@@ -153,10 +198,11 @@ async function main() {
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
   const trialsBaseUrl = resolveTrialsBaseUrl(envName, args.get('clawtrials-base-url'));
   const requesterDid = String(args.get('requester-did') || '').trim() || randomDid('gate-requester');
-  const requesterToken = resolveRequesterToken(args);
-  const adminKey = resolveAdminKey(args);
-
   assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
+
+  const requesterAuth = await resolveRequesterAuth({ args, envName, requesterDid });
+  const requesterToken = requesterAuth.requesterToken;
+  const adminKey = resolveAdminKey(args);
 
   const checks = [];
   const blockers = [];
@@ -586,7 +632,12 @@ async function main() {
     env: envName,
     base_url: baseUrl,
     clawtrials_base_url: trialsBaseUrl,
+    scope_base_url: requesterAuth.scopeBaseUrl,
+    requester_audience: requesterAuth.requesterAudience,
     requester_did: requesterDid,
+    requester_token_source: requesterAuth.requesterTokenSource,
+    requester_token_kid: requesterAuth.requesterTokenKid,
+    requester_token_hash: requesterAuth.requesterTokenHash,
     recommendation: {
       status: recommendation,
       blockers,

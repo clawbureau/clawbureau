@@ -8,6 +8,10 @@ import {
   resolveEnvName,
   resolveBountiesBaseUrl,
   resolveTrialsBaseUrl,
+  resolveScopeBaseUrl,
+  resolveRequesterAudience,
+  resolveRequesterScopes,
+  issueRequesterScopedToken,
   randomDid,
   generateAgentIdentity,
   registerWorker,
@@ -51,16 +55,61 @@ function parseBoolean(raw, fallback = false) {
   return fallback;
 }
 
-function resolveRequesterToken(args) {
-  const fromArg = String(args.get('requester-token') || '').trim();
+function resolveScopeAdminKey(args) {
+  const fromArg = String(args.get('scope-admin-key') || '').trim();
   if (fromArg) return fromArg;
 
-  const fromEnv = String(process.env.REQUESTER_SCOPED_TOKEN || process.env.BOUNTIES_ADMIN_KEY || '').trim();
+  const fromEnv = String(process.env.SCOPE_ADMIN_KEY || process.env.CLAWSCOPE_ADMIN_KEY || '').trim();
+  return fromEnv || null;
+}
+
+async function resolveRequesterAuth({
+  args,
+  envName,
+  requesterDid,
+}) {
+  const direct = String(args.get('requester-token') || process.env.REQUESTER_SCOPED_TOKEN || '').trim();
+  if (direct) {
+    return {
+      requesterToken: direct,
+      requesterTokenSource: 'provided',
+      requesterTokenKid: null,
+      requesterTokenHash: null,
+      requesterAudience: resolveRequesterAudience(envName, args.get('requester-audience')),
+      scopeBaseUrl: resolveScopeBaseUrl(envName, args.get('scope-base-url')),
+    };
+  }
+
+  const scopeAdminKey = resolveScopeAdminKey(args);
   assert(
-    fromEnv.length > 0,
-    'Missing requester token. Provide --requester-token or set REQUESTER_SCOPED_TOKEN (fallback: BOUNTIES_ADMIN_KEY).'
+    scopeAdminKey,
+    'Missing requester auth input. Provide --requester-token / REQUESTER_SCOPED_TOKEN or set --scope-admin-key / SCOPE_ADMIN_KEY to auto-issue via clawscope.'
   );
-  return fromEnv;
+
+  const requesterAudience = resolveRequesterAudience(envName, args.get('requester-audience'));
+  const scopeBaseUrl = resolveScopeBaseUrl(envName, args.get('scope-base-url'));
+  const scopes = resolveRequesterScopes(args.get('requester-scopes'));
+  const ttlSeconds = Number.parseInt(String(args.get('requester-token-ttl-sec') || '3600'), 10);
+  assert(Number.isFinite(ttlSeconds) && ttlSeconds > 0, 'requester-token-ttl-sec must be a positive integer');
+
+  const issued = await issueRequesterScopedToken({
+    scopeBaseUrl,
+    scopeAdminKey,
+    requesterDid,
+    audience: requesterAudience,
+    scopes,
+    ttlSec: ttlSeconds,
+    source: 'simulate-clawbounties-batch',
+  });
+
+  return {
+    requesterToken: issued.token,
+    requesterTokenSource: 'clawscope-issue',
+    requesterTokenKid: issued.kid,
+    requesterTokenHash: issued.token_hash,
+    requesterAudience,
+    scopeBaseUrl,
+  };
 }
 
 function classifyErrorBucket(errorCode, errorMessage) {
@@ -779,6 +828,11 @@ function summarize(results, {
   runLabel,
   requesterDidMode,
   requesterDid,
+  requesterTokenSource,
+  requesterTokenKid,
+  requesterTokenHash,
+  requesterAudience,
+  scopeBaseUrl,
   fundingPreflight,
   backpressure,
 }) {
@@ -896,6 +950,11 @@ function summarize(results, {
     env: envName,
     base_url: baseUrl,
     clawtrials_base_url: trialsBaseUrl,
+    scope_base_url: scopeBaseUrl,
+    requester_audience: requesterAudience,
+    requester_token_source: requesterTokenSource,
+    requester_token_kid: requesterTokenKid,
+    requester_token_hash: requesterTokenHash,
     total_jobs: total,
     concurrency,
     reward_minor: rewardMinor,
@@ -968,13 +1027,17 @@ async function main() {
 
   const baseUrl = resolveBountiesBaseUrl(envName, args.get('clawbounties-base-url'));
   const trialsBaseUrl = resolveTrialsBaseUrl(envName, args.get('clawtrials-base-url'));
-  const requesterToken = resolveRequesterToken(args);
 
-  const requesterDidOverrideRaw = String(args.get('requester-did') || '').trim();
-  const requesterDidOverride = requesterDidOverrideRaw.length > 0 ? requesterDidOverrideRaw : null;
-  if (requesterDidOverride) {
-    assert(requesterDidOverride.startsWith('did:'), 'requester-did must be a DID string when provided');
-  }
+  const requesterDidRaw = String(args.get('requester-did') || '').trim();
+  const requesterDid = requesterDidRaw.length > 0 ? requesterDidRaw : randomDid('requester-batch');
+  assert(requesterDid.startsWith('did:'), 'requester-did must be a DID string');
+
+  const requesterAuth = await resolveRequesterAuth({
+    args,
+    envName,
+    requesterDid,
+  });
+  const requesterToken = requesterAuth.requesterToken;
 
   const bountiesHealth = await httpJson(`${baseUrl}/health`, { method: 'GET' });
   assert(bountiesHealth.status === 200, `clawbounties health failed (${bountiesHealth.status}): ${bountiesHealth.text}`);
@@ -988,11 +1051,11 @@ async function main() {
       index,
       job_id: `${runLabel}-${String(index + 1).padStart(3, '0')}`,
       closure_type: closureType,
-      requester_did: requesterDidOverride ?? randomDid(`req${index}`),
+      requester_did: requesterDid,
     };
   });
 
-  const fundingRequesterDid = requesterDidOverride ?? jobs[0]?.requester_did ?? randomDid('funding');
+  const fundingRequesterDid = requesterDid;
   const fundingPreflight = fundingPreflightEnabled
     ? await runFundingPreflight({
         baseUrl,
@@ -1075,8 +1138,13 @@ async function main() {
     harnessId,
     rewardMinor,
     runLabel,
-    requesterDidMode: requesterDidOverride ? 'fixed' : 'per-job',
-    requesterDid: requesterDidOverride,
+    requesterDidMode: 'fixed',
+    requesterDid,
+    requesterTokenSource: requesterAuth.requesterTokenSource,
+    requesterTokenKid: requesterAuth.requesterTokenKid,
+    requesterTokenHash: requesterAuth.requesterTokenHash,
+    requesterAudience: requesterAuth.requesterAudience,
+    scopeBaseUrl: requesterAuth.scopeBaseUrl,
     fundingPreflight,
     backpressure,
   });

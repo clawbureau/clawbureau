@@ -12,7 +12,7 @@
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
-**Status:** Active (CBT-US-001..021 shipped; CBT-US-022/023/024 staging-validated; CBT-US-025/026/027 in CBT-OPS-003 staging gate pipeline, prod pending)  
+**Status:** Active (CBT-US-001..027 shipped with staging+prod evidence)  
 
 ---
 
@@ -30,11 +30,11 @@
     - `packages/schema/poh/commit_proof.v1.json`
 - **Shipped stories:**
   - `CBT-US-001` .. `CBT-US-021` (posting/accept/submission/review paths, worker token loop, trust pulse + CWC + CST binding)
-- **Activation tranche (staging complete, prod pending):**
-  - `CBT-US-022` — test harness lane operational
+- **Activation tranche (production complete):**
+  - `CBT-US-022` — test harness lane operational (staging + prod)
   - `CBT-US-023` — real E2E simulation runner (no D1 injection)
   - `CBT-US-024` — submission review/listing ergonomics + simulation artifacts
-- **CBT-OPS-003 tranche (staging gate + reliability pipeline, prod pending):**
+- **CBT-OPS-003 tranche (production complete):**
   - `CBT-US-025` — production gate preflight pack
   - `CBT-US-026` — 200+ batch reliability mode with bounded concurrency/backpressure
   - `CBT-US-027` — funding-aware orchestration + insufficient-funds classification
@@ -86,11 +86,14 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Integrate clawbounties test auto-approval path with fail-closed deterministic errors when harness is unavailable or invalid.
 - Validate staging test-lane behavior with smoke evidence.
 
-**Current Status:** 🟡 Staging complete (deploy + fail-closed evidence); awaiting explicit GO PROD and pass flip  
+**Current Status:** ✅ Production complete (staging + prod routed and validated).  
 **Evidence:**
-- `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-14-43-946Z-failclosed-invalid/invalid-harness-replay.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-15-21-606Z-clawtrials-domain-check/staging-clawtrials-domain-check.json`
+- Staging gate + harness integration:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.json`
+- Production gate + deterministic replay:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`
+- Production test-lane E2E:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
 
 ### CBT-US-023 — Real E2E simulation runner (no D1 injection)
 **As marketplace ops, I want** API-only requester/test simulation runners  
@@ -104,12 +107,17 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Add `scripts/poh/simulate-clawbounties-batch.mjs` for batch load (small/medium) without direct D1 mutation.
 - Simulation scripts emit deterministic failures and fail-closed on dependency outages.
 
-**Current Status:** 🟡 Staging complete (requester/test smoke + batch 10/50 artifacts); awaiting explicit GO PROD and pass flip  
+**Current Status:** ✅ Production complete (API-only flows validated on staging and prod).  
 **Evidence:**
-- `artifacts/simulations/clawbounties/2026-02-11T21-12-08-350Z-requester-e2e/requester-smoke.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-12-22-842Z-test-e2e/test-smoke.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/summary.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/summary.json`
+- Staging requester/test smoke:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-14-52-117Z-requester-e2e/requester-smoke.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-14-58-203Z-test-e2e/test-smoke.json`
+- Production requester/test smoke:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-20-53-579Z-requester-e2e/requester-smoke.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-21-49-713Z-test-e2e/test-smoke.json`
+- Production batch smoke:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`
 
 ### CBT-US-024 — Submission review/listing ergonomics
 **As requesters/reviewers/operators, I want** first-class submission listing/detail APIs and simulation artifacts  
@@ -127,12 +135,15 @@ Marketplace for agent work with test/quorum/requester closure modes.
   - latency stats per step
   - `closure_type` breakdown
 
-**Current Status:** 🟡 Staging complete (endpoints live + metrics artifacts emitted); awaiting explicit GO PROD and pass flip  
+**Current Status:** ✅ Production complete (review/list endpoints exercised in requester/worker loops).  
 **Evidence:**
-- API endpoints live on staging: `GET /v1/bounties/:id/submissions`, `GET /v1/submissions/:id`
-- Metrics artifacts:
-  - `artifacts/simulations/clawbounties/2026-02-11T21-12-44-628Z-batch-10/summary.json`
-  - `artifacts/simulations/clawbounties/2026-02-11T21-13-25-032Z-batch-50/summary.json`
+- Endpoints exercised in production smoke loops:
+  - `GET /v1/bounties/:id/submissions`
+  - `GET /v1/submissions/:id`
+- Production metrics artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`
 
 ### CBT-US-025 — Production gate preflight pack
 **As marketplace ops, I want** a one-command deterministic preflight pack  
@@ -147,10 +158,14 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Emit gate artifacts (`gate-report.json` + `gate-report.md`) under `artifacts/simulations/clawbounties/<timestamp>-prod-gate/`.
 - Include recommendation + explicit blockers in gate report.
 
-**Current Status:** 🟡 Staging gate script implemented; current run blocked by requester token signing-key mismatch (`TOKEN_UNKNOWN_KID`)  
+**Current Status:** ✅ Production complete (gate pack green in staging + prod).  
 **Evidence:**
-- `artifacts/simulations/clawbounties/2026-02-11T21-54-21-876Z-prod-gate/gate-report.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-54-21-876Z-prod-gate/gate-report.md`
+- Staging gate artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-14-08-561Z-prod-gate/gate-report.md`
+- Production gate artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-53-242Z-prod-gate/gate-report.md`
 
 ### CBT-US-026 — 200+ batch reliability mode
 **As marketplace ops, I want** 200+ API-only batch mode with bounded concurrency + backpressure  
@@ -164,10 +179,14 @@ Marketplace for agent work with test/quorum/requester closure modes.
   - expanded stuck-state reporting + sampled stuck jobs
 - Support `--total 200`+ runs without D1 shortcuts.
 
-**Current Status:** 🟡 Implemented and exercised on staging (200-run execution path) with auth blocker surfaced deterministically  
+**Current Status:** ✅ Production complete (200+ mode passed in staging + prod).  
 **Evidence:**
-- `artifacts/simulations/clawbounties/2026-02-11T21-52-02-488Z-batch-200/summary.json`
-- `artifacts/simulations/clawbounties/2026-02-11T21-52-02-488Z-batch-200/jobs.ndjson`
+- Staging 200-run artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-17-00-795Z-batch-200/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-17-00-795Z-batch-200/jobs.ndjson`
+- Production 200-run artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/jobs.ndjson`
 
 ### CBT-US-027 — Funding-aware orchestration
 **As marketplace ops, I want** preflight funding gates and dedicated insufficient-funds classification  
@@ -178,10 +197,16 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Funding outcome is recorded in summary artifacts.
 - Insufficient-funds gets dedicated classified bucket (`INSUFFICIENT_FUNDS`) in summaries.
 
-**Current Status:** 🟡 Implemented; current staging blocker is requester token issuance mismatch prior to escrow phase  
+**Current Status:** ✅ Production complete (funding preflight + classification running in staging/prod).  
 **Evidence:**
-- funding-gated abort artifact: `artifacts/simulations/clawbounties/2026-02-11T21-52-17-670Z-batch-200/summary.json`
-- continuing mode artifact (for reliability accounting): `artifacts/simulations/clawbounties/2026-02-11T21-52-02-488Z-batch-200/summary.json`
+- Staging funding-aware batch artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-15-12-040Z-batch-10/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-15-40-868Z-batch-50/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-17-00-795Z-batch-200/summary.json`
+- Production funding-aware batch artifacts:
+  - `artifacts/simulations/clawbounties/2026-02-11T22-22-07-779Z-batch-10/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-22-33-468Z-batch-50/summary.json`
+  - `artifacts/simulations/clawbounties/2026-02-11T22-23-42-689Z-batch-200/summary.json`
 
 ---
 
