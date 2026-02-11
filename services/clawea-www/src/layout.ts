@@ -50,6 +50,7 @@ export function layout(opts: LayoutOpts): string {
   <main id="main-content">${body}</main>
   ${footer()}
   <a href="#" class="back-to-top" aria-label="Back to top">&uarr;</a>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   ${interactiveScript()}
   ${trackingScript()}
 </body>
@@ -379,8 +380,9 @@ function trackingScript(): string {
   return `<script>
 (function(){
   const EVENT_ENDPOINT = "/api/events";
-  const STORAGE_KEY = "clawea-attribution-v1";
-  const INTENT_PATHS = new Set(["/pricing", "/contact", "/trust", "/secure-workers", "/consulting"]);
+  const LEAD_ENDPOINT = "/api/leads/submit";
+  const STORAGE_KEY = "clawea-attribution-v2";
+  const INTENT_PATHS = new Set(["/pricing", "/contact", "/assessment", "/assessment/result", "/trust", "/secure-workers", "/consulting"]);
 
   const SAFE_KEYS = [
     "utm_source",
@@ -394,6 +396,9 @@ function trackingScript(): string {
     "referrer_host",
     "landing_path",
     "source",
+    "first_touch_ts",
+    "first_touch_path",
+    "first_touch_page_family"
   ];
 
   function clip(value, maxLen){
@@ -409,8 +414,8 @@ function trackingScript(): string {
     const first = path.split('/')[0];
     const known = new Set([
       'controls','workflows','tools','channels','policy','proof','verify','audit',
-      'mcp','supply-chain','events','compliance','guides','glossary',
-      'trust','secure-workers','consulting','pricing','contact','about'
+      'mcp','supply-chain','events','compliance','guides','glossary','sources',
+      'trust','secure-workers','consulting','pricing','contact','about','assessment'
     ]);
     return known.has(first) ? first : 'root';
   }
@@ -429,9 +434,7 @@ function trackingScript(): string {
   function writeStored(data){
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // ignore storage failures
-    }
+    } catch {}
   }
 
   function deriveSource(obj){
@@ -440,19 +443,76 @@ function trackingScript(): string {
     return "direct";
   }
 
+  function parseCookieMap(){
+    const out = {};
+    const raw = document.cookie || "";
+    raw.split(';').forEach(function(entry){
+      const e = entry.trim();
+      if(!e) return;
+      const idx = e.indexOf('=');
+      if(idx <= 0) return;
+      const k = e.slice(0, idx);
+      const v = e.slice(idx + 1);
+      out[k] = decodeURIComponent(v || '');
+    });
+    return out;
+  }
+
+  function currentVisitorId(){
+    const cookies = parseCookieMap();
+    const vid = clip(cookies.clawea_vid, 140);
+    return vid || undefined;
+  }
+
+  function experimentFromCookie(){
+    const cookies = parseCookieMap();
+    const raw = clip(cookies.clawea_exp, 240);
+    if (!raw) {
+      return {
+        variantId: derivePageFamily(window.location.pathname) + ":proof:sales",
+        heroVariant: "proof",
+        ctaVariant: "sales",
+      };
+    }
+
+    const parts = raw.split(':');
+    if (parts.length < 3) {
+      return {
+        variantId: derivePageFamily(window.location.pathname) + ":proof:sales",
+        heroVariant: "proof",
+        ctaVariant: "sales",
+      };
+    }
+
+    return {
+      variantId: parts[0] + ':' + parts[1] + ':' + parts[2],
+      heroVariant: parts[1],
+      ctaVariant: parts[2],
+    };
+  }
+
   function captureAttribution(){
     const current = readStored();
     const next = { ...current };
 
     const params = new URLSearchParams(window.location.search);
-
-    for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "msclkid"]) {
+    ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "msclkid"].forEach(function(key){
       const v = clip(params.get(key), 160);
       if (v) next[key] = v;
-    }
+    });
 
     if (!next.landing_path) {
       next.landing_path = clip(window.location.pathname, 200) || "/";
+    }
+
+    if (!next.first_touch_ts) {
+      next.first_touch_ts = new Date().toISOString();
+    }
+    if (!next.first_touch_path) {
+      next.first_touch_path = clip(window.location.pathname, 200) || "/";
+    }
+    if (!next.first_touch_page_family) {
+      next.first_touch_page_family = derivePageFamily(window.location.pathname);
     }
 
     if (!next.referrer_host && document.referrer) {
@@ -461,9 +521,7 @@ function trackingScript(): string {
         if (host && host !== window.location.hostname.toLowerCase()) {
           next.referrer_host = clip(host, 120);
         }
-      } catch {
-        // ignore invalid referrer
-      }
+      } catch {}
     }
 
     next.source = deriveSource(next);
@@ -474,10 +532,10 @@ function trackingScript(): string {
   function currentAttribution(){
     const stored = readStored();
     const out = {};
-    for (const key of SAFE_KEYS) {
+    SAFE_KEYS.forEach(function(key){
       const v = clip(stored[key], 160);
       if (v) out[key] = v;
-    }
+    });
     if (!out.source) out.source = deriveSource(out);
     return out;
   }
@@ -488,11 +546,11 @@ function trackingScript(): string {
       if (base.origin !== window.location.origin) return href;
 
       const attrs = currentAttribution();
-      for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
+      ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].forEach(function(key){
         if (attrs[key] && !base.searchParams.has(key)) {
           base.searchParams.set(key, attrs[key]);
         }
-      }
+      });
       if (attrs.source && !base.searchParams.has("src")) {
         base.searchParams.set("src", attrs.source);
       }
@@ -515,25 +573,140 @@ function trackingScript(): string {
       headers: { "content-type": "application/json" },
       body,
       keepalive: true,
-    }).catch(() => {});
+    }).catch(function(){});
   }
 
   function track(eventType, extra){
+    const exp = experimentFromCookie();
     sendEvent({
       eventType,
       ts: new Date().toISOString(),
       page: window.location.pathname,
       pageFamily: derivePageFamily(window.location.pathname),
       attribution: currentAttribution(),
+      variantId: exp.variantId,
+      heroVariant: exp.heroVariant,
+      ctaVariant: exp.ctaVariant,
+      visitorId: currentVisitorId(),
       ...(extra || {}),
     });
   }
 
   window.__claweaTrack = track;
 
-  captureAttribution();
+  function applyVariantCopy(){
+    const exp = experimentFromCookie();
 
-  document.querySelectorAll("a[href]").forEach((el) => {
+    document.querySelectorAll('[data-hero-copy]').forEach(function(el){
+      var attr = 'data-hero-' + exp.heroVariant;
+      var next = clip(el.getAttribute(attr), 220);
+      if (next) el.textContent = next;
+    });
+
+    document.querySelectorAll('[data-cta-copy]').forEach(function(el){
+      var attr = 'data-cta-' + exp.ctaVariant;
+      var next = clip(el.getAttribute(attr), 200);
+      if (next) el.textContent = next;
+      el.setAttribute('data-cta-variant', exp.ctaVariant);
+    });
+  }
+
+  function markVariantImpression(){
+    try {
+      var exp = experimentFromCookie();
+      var key = 'clawea-variant-impression:' + window.location.pathname + ':' + exp.variantId;
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+      track('variant_assignment', { actionOutcome: 'impression' });
+    } catch {}
+  }
+
+  function hydrateLeadForms(){
+    var forms = document.querySelectorAll('[data-lead-form]');
+    if (!forms.length) return;
+
+    forms.forEach(function(form){
+      if (!(form instanceof HTMLFormElement)) return;
+      var statusEl = form.querySelector('[data-lead-form-status]');
+
+      form.addEventListener('submit', async function(e){
+        e.preventDefault();
+
+        var fd = new FormData(form);
+        var idempotencyKey = 'lead_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+        var assessment = {
+          readinessScore: Number(fd.get('assessment.readinessScore') || 0),
+          roiScore: Number(fd.get('assessment.roiScore') || 0),
+          riskScore: Number(fd.get('assessment.riskScore') || 0),
+          confidenceLabel: clip(String(fd.get('assessment.confidenceLabel') || ''), 80),
+        };
+
+        var attribution = currentAttribution();
+        var payload = {
+          fullName: clip(String(fd.get('fullName') || ''), 120),
+          email: clip(String(fd.get('email') || ''), 200),
+          company: clip(String(fd.get('company') || ''), 160),
+          role: clip(String(fd.get('role') || ''), 120),
+          teamSize: clip(String(fd.get('teamSize') || ''), 80),
+          timeline: clip(String(fd.get('timeline') || ''), 120),
+          primaryUseCase: clip(String(fd.get('primaryUseCase') || ''), 600),
+          intentNote: clip(String(fd.get('intentNote') || ''), 1200),
+          page: window.location.pathname,
+          pageFamily: derivePageFamily(window.location.pathname),
+          attribution: attribution,
+          firstTouch: {
+            ts: attribution.first_touch_ts,
+            path: attribution.first_touch_path,
+            pageFamily: attribution.first_touch_page_family,
+            source: attribution.source,
+          },
+          assessment: assessment,
+          idempotencyKey: idempotencyKey,
+          turnstileToken: clip(String(fd.get('cf-turnstile-response') || ''), 3000),
+        };
+
+        if (statusEl) statusEl.textContent = 'Submitting...';
+
+        try {
+          var res = await fetch(LEAD_ENDPOINT, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          var out = await res.json();
+
+          if (!res.ok || !out || out.ok !== true) {
+            if (statusEl) statusEl.textContent = 'Submission failed. Please check your inputs and try again.';
+            track('contact_intent_submit', { actionOutcome: 'failed', ctaId: form.getAttribute('data-cta') || 'lead-form' });
+            return;
+          }
+
+          if (statusEl) {
+            statusEl.textContent = out.deduped
+              ? 'Thanks. We already have your brief and will follow up shortly.'
+              : 'Thanks. Your brief is in queue. We will reach out soon.';
+          }
+
+          track('lead_submit', {
+            actionOutcome: out.deduped ? 'deduped' : 'submitted',
+            ctaId: form.getAttribute('data-cta') || 'lead-form',
+            ctaVariant: experimentFromCookie().ctaVariant,
+          });
+        } catch {
+          if (statusEl) statusEl.textContent = 'Submission failed. Please try again.';
+          track('contact_intent_submit', { actionOutcome: 'network_error', ctaId: form.getAttribute('data-cta') || 'lead-form' });
+        }
+      });
+    });
+  }
+
+  captureAttribution();
+  applyVariantCopy();
+  markVariantImpression();
+  hydrateLeadForms();
+
+  document.querySelectorAll("a[href]").forEach(function(el){
     const hrefAttr = clip(el.getAttribute("href"), 600);
     if (!hrefAttr) return;
 
@@ -546,7 +719,7 @@ function trackingScript(): string {
 
     if (!isCta && !isMailto) return;
 
-    el.addEventListener("click", () => {
+    el.addEventListener("click", function(){
       const href = clip(el.getAttribute("href"), 600);
       const ctaId = clip(el.getAttribute("data-cta") || el.textContent || "cta", 120);
       const ctaVariant = clip(
@@ -558,7 +731,7 @@ function trackingScript(): string {
       if (href && href.toLowerCase().startsWith("mailto:")) {
         track("contact_email_click", { href, ctaId, ctaVariant, actionOutcome: "clicked" });
       } else {
-        track("cta_click", { href, ctaId, ctaVariant, actionOutcome: "clicked" });
+        track("cta_click", { href, ctaId, ctaVariant, actionOutcome: "clicked", targetPath: href && href.startsWith('/') ? href.split('?')[0] : undefined });
       }
     }, { passive: true });
   });
@@ -566,7 +739,7 @@ function trackingScript(): string {
   if (INTENT_PATHS.has(window.location.pathname)) {
     track("contact_intent_view", {
       ctaId: window.location.pathname,
-      ctaVariant: "intent",
+      ctaVariant: experimentFromCookie().ctaVariant,
       actionOutcome: "view",
     });
   }
@@ -582,6 +755,7 @@ function nav(currentPath: string): string {
     { href: "/channels", label: "Channels" },
     { href: "/trust", label: "Trust" },
     { href: "/pricing", label: "Pricing" },
+    { href: "/assessment", label: "Assessment" },
   ];
   const linkHtml = links
     .map((l) => {
@@ -624,7 +798,7 @@ function nav(currentPath: string): string {
       </button>
       <div class="links" id="nav-menu">
         ${linkHtml}
-        <a href="/contact" class="cta-btn" data-cta="nav-contact">Talk to Sales</a>
+        <a href="/contact" class="cta-btn" data-cta="nav-contact" data-cta-copy data-cta-proof="Talk to Sales" data-cta-roi="Run assessment" data-cta-speed="Start assessment">Talk to Sales</a>
       </div>
     </div>
   </nav>`;
@@ -670,6 +844,8 @@ function footer(): string {
         <ul>
           <li><a href="/guides">Guides</a></li>
           <li><a href="/glossary">Glossary</a></li>
+          <li><a href="/sources">Source Hub</a></li>
+          <li><a href="/assessment">Assessment</a></li>
           <li><a href="/mcp-security">MCP Security</a></li>
           <li><a href="/about">About</a></li>
           <li><a href="/contact">Contact</a></li>

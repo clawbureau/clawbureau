@@ -786,6 +786,17 @@ function candidateReportReasons(report: any): string[] {
 
   if (report.truncated === true) reasons.push("truncated");
   if (report.lint?.ok === false) reasons.push("lint_not_ok");
+
+  if (Array.isArray(report?.lint?.issues)) {
+    for (const issue of report.lint.issues) {
+      const code = typeof issue?.code === "string" ? issue.code : null;
+      if (!code) continue;
+      if (code.startsWith("human_tone_") || code.startsWith("ai_phrase_")) {
+        reasons.push(`lint_issue:${code}`);
+      }
+    }
+  }
+
   if (report.sanitizer_failed_reason) reasons.push(`sanitizer_failed:${String(report.sanitizer_failed_reason)}`);
 
   if (Array.isArray(report?.citations?.violations) && report.citations.violations.length > 0) {

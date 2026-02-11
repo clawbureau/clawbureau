@@ -1,0 +1,75 @@
+{
+  "story": "AEO-REV-005",
+  "generatedAt": "2026-02-11T23:06:30Z",
+  "worker": "clawea-www",
+  "branch": "feat/clawea-www/AEO-REV-005-demand-capture-qualification-engine",
+  "deployments": {
+    "staging": {
+      "workerName": "clawea-www-staging",
+      "versionId": "32ae4e66-eee5-4ee8-9bd5-a7694397ffd0",
+      "route": "staging-www.clawea.com/*",
+      "notes": [
+        "Route remains staging-www.clawea.com because staging.clawea.com/* is assigned to worker clawea-staging.",
+        "DNS for staging-www.clawea.com is not publicly resolvable at the time of this run."
+      ]
+    },
+    "production": {
+      "workerName": "clawea-www",
+      "versionId": "8c4b4454-9d32-492a-a483-6e9798091237",
+      "routes": [
+        "clawea.com/*",
+        "www.clawea.com/*"
+      ]
+    }
+  },
+  "bindings": {
+    "d1": {
+      "production": {
+        "databaseName": "clawea-www",
+        "databaseId": "f4e6a39b-1894-4554-b682-e0c719719aa4"
+      },
+      "staging": {
+        "databaseName": "clawea-www-staging",
+        "databaseId": "82781bed-d57c-4fe7-8269-74f54c12f69d"
+      }
+    },
+    "kv": {
+      "production": {
+        "namespace": "clawea-www-VARIANT_CONFIG",
+        "id": "c026646d19914778b9c438f007485383",
+        "previewId": "36e71f3724914ab09ffda6425edf6bc8"
+      },
+      "staging": {
+        "namespace": "clawea-www-staging-staging-VARIANT_CONFIG",
+        "id": "1051001c69364031be8fc0f79324fefc",
+        "previewId": "fff86d64d9b442e180daecbb2e09fdcc"
+      }
+    },
+    "queues": {
+      "production": "clawea-www-lead-jobs",
+      "staging": "clawea-www-lead-jobs-staging"
+    }
+  },
+  "migrations": {
+    "file": "services/clawea-www/migrations/0001_lead_intake.sql",
+    "applied": [
+      {
+        "database": "clawea-www-staging",
+        "status": "ok"
+      },
+      {
+        "database": "clawea-www",
+        "status": "ok"
+      }
+    ]
+  },
+  "secretsUpdated": [
+    "TURNSTILE_SITE_KEY",
+    "TURNSTILE_SECRET_KEY",
+    "LEAD_ID_HASH_SALT"
+  ],
+  "notes": [
+    "Turnstile secrets were set to Cloudflare test keys for deployment smoke validation.",
+    "Replace test keys with production Turnstile site/secret pair before scaling traffic."
+  ]
+}

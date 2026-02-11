@@ -35,12 +35,15 @@
  *   GET /vs/*, /compare/*, /for/* → comparisons and role-based pages
  *
  *   Static pages:
- *   GET /pricing, /contact, /about, /trust, /secure-workers, /consulting
+ *   GET /pricing, /assessment, /assessment/result, /contact, /about, /trust, /secure-workers, /consulting, /sources
  *
  *   System endpoints:
- *   GET /sitemap.xml, /robots.txt, /health
+ *   GET /sitemap.xml, /robots.txt, /llms.txt, /health
  *   GET /<INDEXNOW_KEY>.txt
  *   GET /api/search?q=...
+ *   GET /api/experiments/config, /api/experiments/assignment, /api/experiments/winners (winners is token-protected)
+ *   POST /api/leads/submit
+ *   GET /api/leads/status, /api/leads/export (token-protected)
  *   POST /api/indexnow, /api/google-index, /api/index-urls
  *   GET /api/index-queue/status
  *   POST /api/index-queue/enqueue, /api/index-queue/replay
@@ -69,9 +72,15 @@ interface Env {
   SITE_URL: string;
   ENVIRONMENT: string;
 
+  // Demand capture data + jobs
+  DB: D1Database;
+  VARIANT_CONFIG: KVNamespace;
+  LEAD_JOBS: Queue;
+
   // Indexing automation
   INDEXNOW_KEY?: string;
   INDEX_AUTOMATION_TOKEN?: string;
+  LEADS_API_TOKEN?: string;
   GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON?: string;
   INDEXNOW_MAX_ATTEMPTS?: string;
   INDEXNOW_RETRY_BASE_MS?: string;
@@ -87,6 +96,16 @@ interface Env {
   INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS?: string;
   INDEX_QUEUE_RETRY_BASE_MS?: string;
   INDEX_QUEUE_RETRY_MAX_MS?: string;
+
+  // Lead intake + Turnstile
+  TURNSTILE_SECRET_KEY?: string;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_REQUIRED?: string;
+  LEAD_ID_HASH_SALT?: string;
+
+  // Experiment routing
+  EXPERIMENT_SEED?: string;
+  EXPERIMENT_CONFIG_KEY?: string;
 }
 
 interface Article {
@@ -126,6 +145,88 @@ interface SearchDocument {
 interface SearchResult extends SearchDocument {
   score: number;
 }
+
+type LeadLifecycleStatus =
+  | "new"
+  | "enriched"
+  | "qualified"
+  | "contacted"
+  | "closed"
+  | "rejected";
+
+interface LeadSubmissionPayload {
+  fullName?: string;
+  email?: string;
+  company?: string;
+  role?: string;
+  teamSize?: string;
+  timeline?: string;
+  primaryUseCase?: string;
+  intentNote?: string;
+  assessment?: {
+    readinessScore?: number;
+    roiScore?: number;
+    riskScore?: number;
+    confidenceLabel?: string;
+  };
+  attribution?: Record<string, string>;
+  firstTouch?: {
+    ts?: string;
+    path?: string;
+    pageFamily?: string;
+    source?: string;
+  };
+  page?: string;
+  pageFamily?: string;
+  turnstileToken?: string;
+  idempotencyKey?: string;
+}
+
+interface LeadRow {
+  lead_id: string;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+  status: LeadLifecycleStatus;
+  qualification_score: number;
+  intent_score: number;
+  risk_score: number;
+  readiness_score: number;
+  roi_score: number;
+  dedupe_count: number;
+  source: string;
+  page: string;
+  page_family: string;
+  full_name: string;
+  company: string;
+  role: string;
+  team_size: string;
+  timeline: string;
+  primary_use_case: string;
+  email_hint: string;
+}
+
+interface ExperimentVariantConfig {
+  seed: string;
+  families: Record<string, {
+    hero: string[];
+    cta: string[];
+  }>;
+}
+
+const DEFAULT_EXPERIMENT_CONFIG: ExperimentVariantConfig = {
+  seed: "aeo-rev-005-default",
+  families: {
+    home: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"] },
+    assessment: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"] },
+    tools: { hero: ["proof", "risk"], cta: ["assessment", "sales"] },
+    workflows: { hero: ["proof", "automation"], cta: ["assessment", "sales"] },
+    contact: { hero: ["fast-path", "proof"], cta: ["submit", "assessment"] },
+    pricing: { hero: ["roi", "proof"], cta: ["proof", "roi", "sales"] },
+    sources: { hero: ["proof", "citation"], cta: ["assessment", "sales"] },
+    root: { hero: ["proof", "roi"], cta: ["proof", "roi"] },
+  },
+};
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -176,6 +277,20 @@ function checkAutomationAuth(request: Request, env: Env): Response | null {
   const secret = env.INDEX_AUTOMATION_TOKEN?.trim();
   if (!secret) {
     return apiError("INDEX_AUTOMATION_NOT_CONFIGURED", "Indexing automation token is not configured", 503);
+  }
+
+  const token = getBearerToken(request);
+  if (!token || token !== secret) {
+    return apiError("UNAUTHORIZED", "Missing or invalid bearer token", 401);
+  }
+
+  return null;
+}
+
+function checkOpsAuth(request: Request, env: Env): Response | null {
+  const secret = env.LEADS_API_TOKEN?.trim() || env.INDEX_AUTOMATION_TOKEN?.trim();
+  if (!secret) {
+    return apiError("OPS_AUTH_NOT_CONFIGURED", "Ops bearer token is not configured", 503);
   }
 
   const token = getBearerToken(request);
@@ -1303,6 +1418,20 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     kind: "static",
   },
   {
+    path: "/assessment",
+    title: "AI Readiness Assessment | Claw EA",
+    description: "Two-minute assessment for enterprise AI readiness, expected ROI, and rollout risk posture.",
+    category: "assessment",
+    kind: "static",
+  },
+  {
+    path: "/sources",
+    title: "Citation Source Hub | Claw EA",
+    description: "Citation routing hub for source-backed enterprise AI implementation pages.",
+    category: "sources",
+    kind: "static",
+  },
+  {
     path: "/contact",
     title: "Contact Sales | Claw EA Enterprise AI Agents",
     description: "Talk to Claw EA enterprise sales.",
@@ -1464,6 +1593,8 @@ type TrackingEventType =
   | "contact_intent_view"
   | "contact_email_click"
   | "contact_intent_submit"
+  | "lead_submit"
+  | "variant_assignment"
   | "search_query"
   | "search_result_click"
   | "search_clear";
@@ -1479,6 +1610,9 @@ type TrackingEvent = {
   query?: string;
   resultCount?: number;
   targetPath?: string;
+  variantId?: string;
+  heroVariant?: string;
+  visitorId?: string;
   ts: string;
   source: string;
   attribution: Record<string, string>;
@@ -1495,6 +1629,8 @@ const TRACKING_EVENT_TYPES = new Set<TrackingEventType>([
   "contact_intent_view",
   "contact_email_click",
   "contact_intent_submit",
+  "lead_submit",
+  "variant_assignment",
   "search_query",
   "search_result_click",
   "search_clear",
@@ -1533,6 +1669,8 @@ function pageFamilyFromPath(input: string | undefined): string {
     "consulting",
     "pricing",
     "contact",
+    "assessment",
+    "sources",
     "about",
   ]);
 
@@ -1562,6 +1700,9 @@ function normalizeAttribution(input: unknown): Record<string, string> {
     "referrer_host",
     "landing_path",
     "source",
+    "first_touch_ts",
+    "first_touch_path",
+    "first_touch_page_family",
   ];
 
   const out: Record<string, string> = {};
@@ -1626,6 +1767,9 @@ async function ingestTrackingEvent(request: Request, env: Env): Promise<Response
     query: clipString(body?.query, 120),
     resultCount: normalizeResultCount(body?.resultCount),
     targetPath: clipString(body?.targetPath, 240),
+    variantId: clipString(body?.variantId, 120),
+    heroVariant: clipString(body?.heroVariant, 120),
+    visitorId: clipString(body?.visitorId, 140),
     ts: parsedTs,
     source: deriveSource(attribution),
     attribution,
@@ -1646,6 +1790,8 @@ async function ingestTrackingEvent(request: Request, env: Env): Promise<Response
   await env.ARTICLES.put(key, JSON.stringify(event), {
     httpMetadata: { contentType: "application/json" },
   });
+
+  await persistTrackingEventD1(env, event);
 
   return apiJson({ ok: true, eventId: key });
 }
@@ -1733,7 +1879,11 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
   const byPageFamily = new Map<string, number>();
   const byCta = new Map<string, number>();
   const byCtaVariant = new Map<string, number>();
+  const byVariantId = new Map<string, number>();
+  const byHeroVariant = new Map<string, number>();
   const byOutcome = new Map<string, number>();
+
+  const variantOutcome = new Map<string, { impressions: number; clicks: number; submits: number }>();
 
   const searchQueryCount = new Map<string, number>();
   const searchQueryClicks = new Map<string, number>();
@@ -1763,6 +1913,20 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       byCtaVariant.set(ev.ctaVariant, (byCtaVariant.get(ev.ctaVariant) ?? 0) + 1);
     }
 
+    if (ev.variantId) {
+      byVariantId.set(ev.variantId, (byVariantId.get(ev.variantId) ?? 0) + 1);
+
+      const current = variantOutcome.get(ev.variantId) ?? { impressions: 0, clicks: 0, submits: 0 };
+      if (ev.eventType === "variant_assignment") current.impressions += 1;
+      if (ev.eventType === "cta_click") current.clicks += 1;
+      if (ev.eventType === "contact_intent_submit" || ev.eventType === "lead_submit") current.submits += 1;
+      variantOutcome.set(ev.variantId, current);
+    }
+
+    if (ev.heroVariant) {
+      byHeroVariant.set(ev.heroVariant, (byHeroVariant.get(ev.heroVariant) ?? 0) + 1);
+    }
+
     if (ev.actionOutcome) {
       byOutcome.set(ev.actionOutcome, (byOutcome.get(ev.actionOutcome) ?? 0) + 1);
     }
@@ -1776,7 +1940,7 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       ctaFamilyClicks.set(ev.pageFamily, (ctaFamilyClicks.get(ev.pageFamily) ?? 0) + 1);
     }
 
-    if (ev.eventType === "contact_email_click" || ev.eventType === "contact_intent_submit") {
+    if (ev.eventType === "contact_email_click" || ev.eventType === "contact_intent_submit" || ev.eventType === "lead_submit") {
       contactIntentActions += 1;
       ctaFamilyActions.set(ev.pageFamily, (ctaFamilyActions.get(ev.pageFamily) ?? 0) + 1);
     }
@@ -1837,6 +2001,18 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
     })
     .sort((a, b) => (b.actions - a.actions) || a.pageFamily.localeCompare(b.pageFamily, "en"));
 
+  const variantPerformance = [...variantOutcome.entries()]
+    .map(([variantId, row]) => ({
+      variantId,
+      impressions: row.impressions,
+      clicks: row.clicks,
+      submits: row.submits,
+      clickRate: row.impressions > 0 ? Number((row.clicks / row.impressions).toFixed(4)) : 0,
+      submitRate: row.impressions > 0 ? Number((row.submits / row.impressions).toFixed(4)) : 0,
+    }))
+    .sort((a, b) => (b.submitRate - a.submitRate) || (b.impressions - a.impressions) || a.variantId.localeCompare(b.variantId, "en"))
+    .slice(0, 40);
+
   const queue = await loadIndexQueue(env);
   const queueSummary = summarizeIndexQueue(queue);
   const lastQueueRun = await loadLastQueueRun(env);
@@ -1865,6 +2041,8 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       byPageFamily: topCounts(byPageFamily, 30),
       topCtas: topCounts(byCta, 30),
       byCtaVariant: topCounts(byCtaVariant, 30),
+      byVariantId: topCounts(byVariantId, 40),
+      byHeroVariant: topCounts(byHeroVariant, 40),
       byOutcome: topCounts(byOutcome, 30),
     },
     funnel: {
@@ -1875,11 +2053,1034 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
         topQueries: topSearchQueries,
       },
       ctaByPageFamily,
+      variants: variantPerformance,
     },
     indexing: {
       queue: queueSummary,
       lastRun: lastQueueRun,
     },
+  });
+}
+
+function envFlag(value: string | undefined, fallback = false): boolean {
+  if (value === undefined) return fallback;
+  const v = value.trim().toLowerCase();
+  if (!v) return fallback;
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+function randomId(prefix = "id"): string {
+  const raw = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replace(/-/g, "")
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return `${prefix}_${raw.slice(0, 24)}`;
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+
+  const b64 = btoa(binary);
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function sha256Base64Url(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return base64Url(new Uint8Array(digest));
+}
+
+function normalizeEmail(input: string | undefined): string {
+  return (input ?? "").trim().toLowerCase();
+}
+
+function safeJsonParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeLeadPayload(body: any): LeadSubmissionPayload {
+  return {
+    fullName: clipString(body?.fullName, 120),
+    email: clipString(body?.email, 200),
+    company: clipString(body?.company, 160),
+    role: clipString(body?.role, 120),
+    teamSize: clipString(body?.teamSize, 80),
+    timeline: clipString(body?.timeline, 120),
+    primaryUseCase: clipString(body?.primaryUseCase, 600),
+    intentNote: clipString(body?.intentNote, 1200),
+    assessment: {
+      readinessScore: normalizeResultCount(body?.assessment?.readinessScore),
+      roiScore: normalizeResultCount(body?.assessment?.roiScore),
+      riskScore: normalizeResultCount(body?.assessment?.riskScore),
+      confidenceLabel: clipString(body?.assessment?.confidenceLabel, 80),
+    },
+    attribution: normalizeAttribution(body?.attribution),
+    firstTouch: {
+      ts: clipString(body?.firstTouch?.ts, 80),
+      path: clipString(body?.firstTouch?.path, 240),
+      pageFamily: clipString(body?.firstTouch?.pageFamily, 80),
+      source: clipString(body?.firstTouch?.source, 80),
+    },
+    page: clipString(body?.page, 240),
+    pageFamily: clipString(body?.pageFamily, 80),
+    turnstileToken: clipString(body?.turnstileToken, 3000),
+    idempotencyKey: clipString(body?.idempotencyKey, 160),
+  };
+}
+
+function scoreLeadIntent(payload: LeadSubmissionPayload): {
+  intentScore: number;
+  readinessScore: number;
+  roiScore: number;
+  riskScore: number;
+  qualificationScore: number;
+  confidenceLabel: string;
+} {
+  const baseReadiness = Math.min(100, Math.max(0, Number(payload.assessment?.readinessScore ?? 0)));
+  const baseRoi = Math.min(100, Math.max(0, Number(payload.assessment?.roiScore ?? 0)));
+  const baseRisk = Math.min(100, Math.max(0, Number(payload.assessment?.riskScore ?? 40)));
+
+  const teamBoost = (() => {
+    const t = (payload.teamSize ?? "").toLowerCase();
+    if (/(500|1000|enterprise|global)/.test(t)) return 15;
+    if (/(100|200|300|400)/.test(t)) return 10;
+    if (/(50|75)/.test(t)) return 6;
+    return 2;
+  })();
+
+  const timelineBoost = (() => {
+    const t = (payload.timeline ?? "").toLowerCase();
+    if (/(now|immediate|this week|2 weeks)/.test(t)) return 14;
+    if (/(30|month|q1|q2|q3|q4)/.test(t)) return 8;
+    if (/(quarter|90)/.test(t)) return 4;
+    return 1;
+  })();
+
+  const intentSignals = [
+    payload.primaryUseCase,
+    payload.intentNote,
+  ].join(" ").toLowerCase();
+
+  const urgencyBoost = /(approval|security|audit|compliance|risk|incident|production|rollout)/.test(intentSignals)
+    ? 10
+    : 0;
+
+  const intentScore = Math.min(100, baseReadiness + teamBoost + timelineBoost + urgencyBoost);
+  const readinessScore = Math.min(100, Math.max(0, baseReadiness || Math.round(intentScore * 0.75)));
+  const roiScore = Math.min(100, Math.max(0, baseRoi || Math.round(intentScore * 0.7)));
+  const riskScore = Math.min(100, Math.max(0, baseRisk));
+
+  const qualificationScore = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round((intentScore * 0.38) + (readinessScore * 0.28) + (roiScore * 0.24) + ((100 - riskScore) * 0.1)),
+    ),
+  );
+
+  const confidenceLabel = qualificationScore >= 78
+    ? "high-intent"
+    : qualificationScore >= 55
+      ? "medium-intent"
+      : "early-intent";
+
+  return {
+    intentScore,
+    readinessScore,
+    roiScore,
+    riskScore,
+    qualificationScore,
+    confidenceLabel,
+  };
+}
+
+async function verifyTurnstile(token: string | undefined, request: Request, env: Env): Promise<{ ok: boolean; error?: string }> {
+  const required = envFlag(env.TURNSTILE_REQUIRED, true);
+  const secret = env.TURNSTILE_SECRET_KEY?.trim();
+
+  if (!required) {
+    return { ok: true };
+  }
+
+  if (!secret) {
+    return { ok: false, error: "TURNSTILE_NOT_CONFIGURED" };
+  }
+
+  if (!token) {
+    return { ok: false, error: "TURNSTILE_TOKEN_MISSING" };
+  }
+
+  try {
+    const ip = clipString(request.headers.get("cf-connecting-ip"), 120);
+    const form = new URLSearchParams();
+    form.set("secret", secret);
+    form.set("response", token);
+    if (ip) form.set("remoteip", ip);
+
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+    });
+
+    const payload = safeJsonParse<any>(await res.text(), {});
+    if (payload?.success === true) return { ok: true };
+
+    const errorCodes = Array.isArray(payload?.["error-codes"])
+      ? payload["error-codes"]
+      : [];
+
+    const errCode = errorCodes.length > 0
+      ? String(errorCodes[0])
+      : "TURNSTILE_VERIFY_FAILED";
+
+    return { ok: false, error: errCode };
+  } catch {
+    return { ok: false, error: "TURNSTILE_UPSTREAM_UNAVAILABLE" };
+  }
+}
+
+async function persistTrackingEventD1(env: Env, event: TrackingEvent): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO funnel_events (
+        event_id,
+        event_type,
+        page,
+        page_family,
+        source,
+        cta_id,
+        cta_variant,
+        action_outcome,
+        query,
+        result_count,
+        target_path,
+        variant_id,
+        hero_variant,
+        visitor_id,
+        attribution_json,
+        event_ts,
+        created_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+      `,
+    )
+      .bind(
+        randomId("ev"),
+        event.eventType,
+        event.page,
+        event.pageFamily,
+        event.source,
+        event.ctaId ?? null,
+        event.ctaVariant ?? null,
+        event.actionOutcome ?? null,
+        event.query ?? null,
+        event.resultCount ?? null,
+        event.targetPath ?? null,
+        event.variantId ?? null,
+        event.heroVariant ?? null,
+        event.visitorId ?? null,
+        JSON.stringify(event.attribution ?? {}),
+        event.ts,
+        new Date().toISOString(),
+      )
+      .run();
+  } catch (err) {
+    console.error("FUNNEL_EVENT_D1_INSERT_FAILED", err);
+  }
+}
+
+async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Request, env: Env): Promise<{
+  leadId: string;
+  deduped: boolean;
+  idempotentReplay: boolean;
+  scores: ReturnType<typeof scoreLeadIntent>;
+}> {
+  const nowIso = new Date().toISOString();
+  const email = normalizeEmail(payload.email);
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("EMAIL_INVALID");
+  }
+
+  const idempotencyKey = payload.idempotencyKey ?? randomId("idem");
+
+  const idemExisting = await env.DB.prepare(
+    `SELECT lead_id FROM lead_idempotency WHERE idempotency_key = ?1 LIMIT 1`,
+  ).bind(idempotencyKey).first<{ lead_id: string }>();
+
+  if (idemExisting?.lead_id) {
+    return {
+      leadId: idemExisting.lead_id,
+      deduped: true,
+      idempotentReplay: true,
+      scores: scoreLeadIntent(payload),
+    };
+  }
+
+  const salt = env.LEAD_ID_HASH_SALT?.trim() ?? "clawea-www-lead";
+  const identityHash = await sha256Base64Url(`${salt}|${email}`);
+  const emailHash = await sha256Base64Url(email);
+
+  const page = payload.page ?? "/contact";
+  const pageFamily = payload.pageFamily ?? pageFamilyFromPath(page);
+  const source = payload.attribution?.source ?? payload.firstTouch?.source ?? "direct";
+
+  const scores = scoreLeadIntent(payload);
+
+  const emailParts = email.split("@");
+  const emailHint = emailParts.length === 2
+    ? `${emailParts[0].slice(0, 2)}***@${emailParts[1]}`
+    : "***";
+
+  const existing = await env.DB.prepare(
+    `SELECT lead_id, dedupe_count FROM leads WHERE identity_hash = ?1 LIMIT 1`,
+  ).bind(identityHash).first<{ lead_id: string; dedupe_count: number }>();
+
+  const leadId = existing?.lead_id ?? randomId("lead");
+  const deduped = Boolean(existing?.lead_id);
+
+  if (!deduped) {
+    await env.DB.prepare(
+      `INSERT INTO leads (
+        lead_id,
+        identity_hash,
+        email_hash,
+        email_hint,
+        full_name,
+        company,
+        role,
+        team_size,
+        timeline,
+        primary_use_case,
+        intent_note,
+        source,
+        page,
+        page_family,
+        attribution_json,
+        first_touch_json,
+        assessment_json,
+        readiness_score,
+        roi_score,
+        risk_score,
+        intent_score,
+        qualification_score,
+        status,
+        dedupe_count,
+        created_at,
+        updated_at,
+        last_seen_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, 0, ?24, ?24, ?24)
+      `,
+    )
+      .bind(
+        leadId,
+        identityHash,
+        emailHash,
+        emailHint,
+        payload.fullName ?? "",
+        payload.company ?? "",
+        payload.role ?? "",
+        payload.teamSize ?? "",
+        payload.timeline ?? "",
+        payload.primaryUseCase ?? "",
+        payload.intentNote ?? "",
+        source,
+        page,
+        pageFamily,
+        JSON.stringify(payload.attribution ?? {}),
+        JSON.stringify(payload.firstTouch ?? {}),
+        JSON.stringify(payload.assessment ?? {}),
+        scores.readinessScore,
+        scores.roiScore,
+        scores.riskScore,
+        scores.intentScore,
+        scores.qualificationScore,
+        (scores.qualificationScore >= 78 ? "qualified" : "new"),
+        nowIso,
+      )
+      .run();
+  } else {
+    await env.DB.prepare(
+      `UPDATE leads
+        SET
+          full_name = COALESCE(NULLIF(?2,''), full_name),
+          company = COALESCE(NULLIF(?3,''), company),
+          role = COALESCE(NULLIF(?4,''), role),
+          team_size = COALESCE(NULLIF(?5,''), team_size),
+          timeline = COALESCE(NULLIF(?6,''), timeline),
+          primary_use_case = COALESCE(NULLIF(?7,''), primary_use_case),
+          intent_note = COALESCE(NULLIF(?8,''), intent_note),
+          source = COALESCE(NULLIF(?9,''), source),
+          page = COALESCE(NULLIF(?10,''), page),
+          page_family = COALESCE(NULLIF(?11,''), page_family),
+          attribution_json = CASE WHEN ?12 <> '{}' THEN ?12 ELSE attribution_json END,
+          first_touch_json = CASE WHEN ?13 <> '{}' THEN ?13 ELSE first_touch_json END,
+          assessment_json = CASE WHEN ?14 <> '{}' THEN ?14 ELSE assessment_json END,
+          readiness_score = MAX(readiness_score, ?15),
+          roi_score = MAX(roi_score, ?16),
+          risk_score = MIN(risk_score, ?17),
+          intent_score = MAX(intent_score, ?18),
+          qualification_score = MAX(qualification_score, ?19),
+          status = CASE WHEN MAX(qualification_score, ?19) >= 78 THEN 'qualified' ELSE status END,
+          dedupe_count = dedupe_count + 1,
+          updated_at = ?20,
+          last_seen_at = ?20
+        WHERE lead_id = ?1
+      `,
+    )
+      .bind(
+        leadId,
+        payload.fullName ?? "",
+        payload.company ?? "",
+        payload.role ?? "",
+        payload.teamSize ?? "",
+        payload.timeline ?? "",
+        payload.primaryUseCase ?? "",
+        payload.intentNote ?? "",
+        source,
+        page,
+        pageFamily,
+        JSON.stringify(payload.attribution ?? {}),
+        JSON.stringify(payload.firstTouch ?? {}),
+        JSON.stringify(payload.assessment ?? {}),
+        scores.readinessScore,
+        scores.roiScore,
+        scores.riskScore,
+        scores.intentScore,
+        scores.qualificationScore,
+        nowIso,
+      )
+      .run();
+  }
+
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO lead_idempotency (idempotency_key, lead_id, created_at)
+     VALUES (?1, ?2, ?3)`,
+  ).bind(idempotencyKey, leadId, nowIso).run();
+
+  await env.DB.prepare(
+    `INSERT INTO lead_events (
+      event_id,
+      lead_id,
+      event_type,
+      event_payload_json,
+      source,
+      page,
+      page_family,
+      created_at
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+  )
+    .bind(
+      randomId("lead_evt"),
+      leadId,
+      deduped ? "lead_deduped" : "lead_submitted",
+      JSON.stringify({
+        deduped,
+        scores,
+        emailHint,
+        attribution: payload.attribution ?? {},
+      }),
+      source,
+      page,
+      pageFamily,
+      nowIso,
+    )
+    .run();
+
+  try {
+    await env.LEAD_JOBS.send({
+      type: "lead_enrich",
+      leadId,
+      submittedAt: nowIso,
+    });
+  } catch (err) {
+    console.error("LEAD_QUEUE_SEND_FAILED", err);
+  }
+
+  return {
+    leadId,
+    deduped,
+    idempotentReplay: false,
+    scores,
+  };
+}
+
+async function submitLead(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  let body: any;
+  try {
+    body = await request.json<any>();
+  } catch {
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
+  }
+
+  const payload = normalizeLeadPayload(body);
+
+  const turnstile = await verifyTurnstile(payload.turnstileToken, request, env);
+  if (!turnstile.ok) {
+    return apiError("TURNSTILE_FAILED", turnstile.error ?? "Turnstile validation failed", 403);
+  }
+
+  try {
+    const saved = await upsertLeadFromPayload(payload, request, env);
+    return apiJson({
+      ok: true,
+      leadId: saved.leadId,
+      deduped: saved.deduped,
+      idempotentReplay: saved.idempotentReplay,
+      confidenceLabel: saved.scores.confidenceLabel,
+      qualificationScore: saved.scores.qualificationScore,
+      next: saved.scores.qualificationScore >= 78 ? "priority_follow_up" : "standard_follow_up",
+    });
+  } catch (err: any) {
+    const code = String(err?.message ?? "LEAD_SUBMIT_FAILED");
+    if (code === "EMAIL_INVALID") {
+      return apiError("EMAIL_INVALID", "A valid work email is required", 400);
+    }
+    console.error("LEAD_SUBMIT_FAILED", err);
+    return apiError("LEAD_SUBMIT_FAILED", "Lead intake failed", 500);
+  }
+}
+
+function csvEscape(value: unknown): string {
+  const s = String(value ?? "");
+  if (/[",\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+async function leadsStatus(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const totalRow = await env.DB.prepare(`SELECT COUNT(*) AS count FROM leads`).first<{ count: number }>();
+
+  const statusRows = await env.DB.prepare(
+    `SELECT status AS key, COUNT(*) AS count FROM leads GROUP BY status ORDER BY count DESC`,
+  ).all<{ key: string; count: number }>();
+
+  const sourceRows = await env.DB.prepare(
+    `SELECT source AS key, COUNT(*) AS count FROM leads GROUP BY source ORDER BY count DESC LIMIT 20`,
+  ).all<{ key: string; count: number }>();
+
+  const familyRows = await env.DB.prepare(
+    `SELECT page_family AS key, COUNT(*) AS count FROM leads GROUP BY page_family ORDER BY count DESC LIMIT 20`,
+  ).all<{ key: string; count: number }>();
+
+  const recentRows = await env.DB.prepare(
+    `SELECT
+      lead_id,
+      created_at,
+      updated_at,
+      last_seen_at,
+      status,
+      qualification_score,
+      intent_score,
+      risk_score,
+      readiness_score,
+      roi_score,
+      dedupe_count,
+      source,
+      page,
+      page_family,
+      full_name,
+      company,
+      role,
+      team_size,
+      timeline,
+      primary_use_case,
+      email_hint
+    FROM leads
+    ORDER BY last_seen_at DESC
+    LIMIT 50`,
+  ).all<LeadRow>();
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    totals: {
+      leads: Number(totalRow?.count ?? 0),
+      recentWindow: Number(recentRows.results?.length ?? 0),
+    },
+    breakdown: {
+      byStatus: statusRows.results ?? [],
+      bySource: sourceRows.results ?? [],
+      byPageFamily: familyRows.results ?? [],
+    },
+    recent: (recentRows.results ?? []).map((row) => ({
+      leadId: row.lead_id,
+      status: row.status,
+      qualificationScore: row.qualification_score,
+      intentScore: row.intent_score,
+      readinessScore: row.readiness_score,
+      roiScore: row.roi_score,
+      riskScore: row.risk_score,
+      dedupeCount: row.dedupe_count,
+      source: row.source,
+      page: row.page,
+      pageFamily: row.page_family,
+      company: row.company,
+      role: row.role,
+      teamSize: row.team_size,
+      timeline: row.timeline,
+      emailHint: row.email_hint,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastSeenAt: row.last_seen_at,
+    })),
+  });
+}
+
+async function leadsExport(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const url = new URL(request.url);
+  const format = (clipString(url.searchParams.get("format"), 12) ?? "json").toLowerCase();
+  const statusFilter = clipString(url.searchParams.get("status"), 32);
+  const limit = Math.min(2000, Math.max(1, Number(url.searchParams.get("limit") ?? "500")));
+
+  let sql = `SELECT
+    lead_id,
+    status,
+    qualification_score,
+    intent_score,
+    readiness_score,
+    roi_score,
+    risk_score,
+    dedupe_count,
+    source,
+    page,
+    page_family,
+    company,
+    role,
+    team_size,
+    timeline,
+    primary_use_case,
+    email_hint,
+    created_at,
+    updated_at,
+    last_seen_at
+  FROM leads`;
+
+  const binds: Array<string | number> = [];
+  if (statusFilter) {
+    sql += ` WHERE status = ?1`;
+    binds.push(statusFilter);
+  }
+
+  sql += ` ORDER BY last_seen_at DESC LIMIT ${limit}`;
+
+  const rows = await env.DB.prepare(sql).bind(...binds).all<Record<string, unknown>>();
+  const results = rows.results ?? [];
+
+  if (format === "csv") {
+    const headers = [
+      "lead_id",
+      "status",
+      "qualification_score",
+      "intent_score",
+      "readiness_score",
+      "roi_score",
+      "risk_score",
+      "dedupe_count",
+      "source",
+      "page",
+      "page_family",
+      "company",
+      "role",
+      "team_size",
+      "timeline",
+      "primary_use_case",
+      "email_hint",
+      "created_at",
+      "updated_at",
+      "last_seen_at",
+    ];
+
+    const lines = [headers.join(",")];
+    for (const row of results) {
+      lines.push(headers.map((h) => csvEscape(row[h])).join(","));
+    }
+
+    return new Response(lines.join("\n"), {
+      status: 200,
+      headers: apiHeaders({
+        "content-type": "text/csv;charset=utf-8",
+        "content-disposition": `attachment; filename="clawea-leads-${new Date().toISOString().slice(0, 10)}.csv"`,
+      }),
+    });
+  }
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    count: results.length,
+    leads: results,
+  });
+}
+
+async function experimentsWinners(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const url = new URL(request.url);
+  const date = clipString(url.searchParams.get("date"), 10);
+
+  let key = date ? `reports/growth/variant-performance-${date}.json` : null;
+
+  if (!key) {
+    const listed = await env.ARTICLES.list({
+      prefix: "reports/growth/variant-performance-",
+      limit: 100,
+    });
+
+    const latest = listed.objects
+      .map((o) => o.key)
+      .filter((k) => k.startsWith("reports/growth/variant-performance-") && k.endsWith(".json"))
+      .sort((a, b) => b.localeCompare(a, "en"))[0];
+
+    key = latest ?? null;
+  }
+
+  if (!key) {
+    return apiError("REPORT_NOT_FOUND", "No variant report found", 404);
+  }
+
+  const obj = await env.ARTICLES.get(key);
+  if (!obj) {
+    return apiError("REPORT_NOT_FOUND", `Variant report not found for key ${key}`, 404);
+  }
+
+  const parsed = safeJsonParse(await obj.text(), null);
+  return apiJson({
+    ok: true,
+    key,
+    report: parsed,
+  });
+}
+
+function stableHash(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+async function loadExperimentConfig(env: Env): Promise<ExperimentVariantConfig> {
+  const key = env.EXPERIMENT_CONFIG_KEY?.trim() || "experiment-config-v1";
+
+  try {
+    const raw = await env.VARIANT_CONFIG.get(key, "text");
+    if (!raw) {
+      return {
+        ...DEFAULT_EXPERIMENT_CONFIG,
+        seed: env.EXPERIMENT_SEED?.trim() || DEFAULT_EXPERIMENT_CONFIG.seed,
+      };
+    }
+
+    const parsed = safeJsonParse<ExperimentVariantConfig>(raw, DEFAULT_EXPERIMENT_CONFIG);
+    const seed = clipString(parsed?.seed, 120) ?? env.EXPERIMENT_SEED?.trim() ?? DEFAULT_EXPERIMENT_CONFIG.seed;
+    const families = parsed?.families && typeof parsed.families === "object"
+      ? parsed.families
+      : DEFAULT_EXPERIMENT_CONFIG.families;
+
+    return { seed, families };
+  } catch {
+    return {
+      ...DEFAULT_EXPERIMENT_CONFIG,
+      seed: env.EXPERIMENT_SEED?.trim() || DEFAULT_EXPERIMENT_CONFIG.seed,
+    };
+  }
+}
+
+function assignVariant(config: ExperimentVariantConfig, visitorId: string, pageFamily: string): {
+  pageFamily: string;
+  heroVariant: string;
+  ctaVariant: string;
+} {
+  const family = pageFamily || "root";
+  const familyConfig = config.families[family] ?? config.families.root ?? { hero: ["proof"], cta: ["sales"] };
+
+  const heroOptions = familyConfig.hero.length > 0 ? familyConfig.hero : ["proof"];
+  const ctaOptions = familyConfig.cta.length > 0 ? familyConfig.cta : ["sales"];
+
+  const heroHash = stableHash(`${config.seed}|hero|${family}|${visitorId}`);
+  const ctaHash = stableHash(`${config.seed}|cta|${family}|${visitorId}`);
+
+  const heroVariant = heroOptions[heroHash % heroOptions.length];
+  const ctaVariant = ctaOptions[ctaHash % ctaOptions.length];
+
+  return {
+    pageFamily: family,
+    heroVariant,
+    ctaVariant,
+  };
+}
+
+function readCookie(request: Request, name: string): string | null {
+  const cookies = request.headers.get("cookie") ?? "";
+  const entries = cookies.split(";").map((x) => x.trim());
+  for (const entry of entries) {
+    const [k, ...rest] = entry.split("=");
+    if (!k || rest.length === 0) continue;
+    if (k === name) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
+function getOrCreateVisitorId(request: Request): { visitorId: string; cookieNeeded: boolean } {
+  const existing = clipString(readCookie(request, "clawea_vid"), 120);
+  if (existing) {
+    return { visitorId: existing, cookieNeeded: false };
+  }
+
+  return {
+    visitorId: randomId("vid"),
+    cookieNeeded: true,
+  };
+}
+
+function applyExperimentCookies(response: Response, visitorId: string, assignment: {
+  pageFamily: string;
+  heroVariant: string;
+  ctaVariant: string;
+}, setVisitorCookie: boolean, setExperimentCookie: boolean): Response {
+  const headers = new Headers(response.headers);
+  if (setVisitorCookie) {
+    headers.append(
+      "set-cookie",
+      `clawea_vid=${encodeURIComponent(visitorId)}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`,
+    );
+  }
+
+  if (setExperimentCookie) {
+    headers.append(
+      "set-cookie",
+      `clawea_exp=${encodeURIComponent(`${assignment.pageFamily}:${assignment.heroVariant}:${assignment.ctaVariant}`)}; Path=/; Max-Age=2592000; SameSite=Lax; Secure`,
+    );
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function experimentAssignmentEndpoint(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const url = new URL(request.url);
+  const visitorId = clipString(url.searchParams.get("visitorId"), 120)
+    ?? getOrCreateVisitorId(request).visitorId;
+  const pageFamily = clipString(url.searchParams.get("pageFamily"), 80) ?? "root";
+
+  const config = await loadExperimentConfig(env);
+  const assignment = assignVariant(config, visitorId, pageFamily);
+
+  return apiJson({
+    ok: true,
+    visitorId,
+    seed: config.seed,
+    assignment,
+  });
+}
+
+async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> {
+  for (const message of batch.messages) {
+    const payload = message.body as Record<string, unknown>;
+    const type = String(payload?.type ?? "");
+
+    try {
+      if (type === "lead_enrich") {
+        const leadId = clipString(payload?.leadId, 80);
+        if (!leadId) {
+          message.ack();
+          continue;
+        }
+
+        const lead = await env.DB.prepare(
+          `SELECT
+            lead_id,
+            qualification_score,
+            intent_score,
+            readiness_score,
+            roi_score,
+            risk_score,
+            status,
+            source,
+            page,
+            page_family
+          FROM leads
+          WHERE lead_id = ?1
+          LIMIT 1`,
+        ).bind(leadId).first<any>();
+
+        if (!lead) {
+          message.ack();
+          continue;
+        }
+
+        const status = Number(lead.qualification_score ?? 0) >= 78
+          ? "qualified"
+          : Number(lead.qualification_score ?? 0) >= 55
+            ? "enriched"
+            : "new";
+
+        const nowIso = new Date().toISOString();
+
+        await env.DB.prepare(
+          `UPDATE leads SET status = ?2, updated_at = ?3 WHERE lead_id = ?1`,
+        ).bind(leadId, status, nowIso).run();
+
+        await env.DB.prepare(
+          `INSERT INTO lead_events (
+            event_id,
+            lead_id,
+            event_type,
+            event_payload_json,
+            source,
+            page,
+            page_family,
+            created_at
+          ) VALUES (?1, ?2, 'lead_enriched', ?3, ?4, ?5, ?6, ?7)`,
+        )
+          .bind(
+            randomId("lead_evt"),
+            leadId,
+            JSON.stringify({
+              status,
+              qualificationScore: lead.qualification_score,
+              intentScore: lead.intent_score,
+              readinessScore: lead.readiness_score,
+              roiScore: lead.roi_score,
+              riskScore: lead.risk_score,
+            }),
+            String(lead.source ?? "direct"),
+            String(lead.page ?? "/contact"),
+            String(lead.page_family ?? "contact"),
+            nowIso,
+          )
+          .run();
+
+        message.ack();
+        continue;
+      }
+
+      if (type === "variant_weekly_report") {
+        const nowIso = new Date().toISOString();
+        const fromIso = new Date(Date.now() - (7 * 24 * 60 * 60 * 1000)).toISOString();
+
+        const rows = await env.DB.prepare(
+          `SELECT
+            page_family,
+            cta_variant,
+            COUNT(*) AS events,
+            SUM(CASE WHEN event_type = 'cta_click' THEN 1 ELSE 0 END) AS cta_clicks,
+            SUM(CASE WHEN event_type = 'contact_intent_submit' THEN 1 ELSE 0 END) AS contact_submits
+          FROM funnel_events
+          WHERE event_ts >= ?1 AND event_ts <= ?2
+            AND cta_variant IS NOT NULL
+          GROUP BY page_family, cta_variant
+          ORDER BY page_family ASC, events DESC`,
+        ).bind(fromIso, nowIso).all<any>();
+
+        const grouped = new Map<string, Array<any>>();
+        for (const row of rows.results ?? []) {
+          const family = String(row.page_family ?? "root");
+          const existing = grouped.get(family) ?? [];
+          existing.push({
+            variant: String(row.cta_variant ?? "unknown"),
+            events: Number(row.events ?? 0),
+            ctaClicks: Number(row.cta_clicks ?? 0),
+            contactSubmits: Number(row.contact_submits ?? 0),
+          });
+          grouped.set(family, existing);
+        }
+
+        const winners = [...grouped.entries()].map(([family, variants]) => {
+          const sorted = [...variants].sort((a, b) => {
+            const aRate = a.events > 0 ? (a.contactSubmits / a.events) : 0;
+            const bRate = b.events > 0 ? (b.contactSubmits / b.events) : 0;
+            if (bRate !== aRate) return bRate - aRate;
+            return b.events - a.events;
+          });
+
+          const winner = sorted[0] ?? null;
+          return {
+            pageFamily: family,
+            winner,
+            candidates: sorted,
+          };
+        });
+
+        const artifact = {
+          generatedAt: nowIso,
+          range: { from: fromIso, to: nowIso, days: 7 },
+          winners,
+        };
+
+        const key = `reports/growth/variant-performance-${nowIso.slice(0, 10)}.json`;
+        await env.ARTICLES.put(key, JSON.stringify(artifact, null, 2), {
+          httpMetadata: { contentType: "application/json" },
+        });
+
+        message.ack();
+        continue;
+      }
+
+      message.ack();
+    } catch (err) {
+      console.error("LEAD_QUEUE_MESSAGE_FAILED", { type, err });
+      message.retry();
+    }
+  }
+}
+
+async function enqueueWeeklyVariantReportIfDue(env: Env): Promise<void> {
+  const now = new Date();
+  const isMondayMorningUtc = now.getUTCDay() === 1 && now.getUTCHours() >= 6 && now.getUTCHours() < 8;
+  if (!isMondayMorningUtc) return;
+
+  const weekKey = `${now.getUTCFullYear()}-W${String(Math.ceil(((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7)).padStart(2, "0")}`;
+  const lockKey = `variant-report-lock:${weekKey}`;
+
+  const exists = await env.VARIANT_CONFIG.get(lockKey, "text");
+  if (exists) return;
+
+  await env.VARIANT_CONFIG.put(lockKey, now.toISOString(), { expirationTtl: 14 * 24 * 60 * 60 });
+  await env.LEAD_JOBS.send({
+    type: "variant_weekly_report",
+    weekKey,
+    requestedAt: now.toISOString(),
   });
 }
 
@@ -1942,11 +3143,11 @@ function homePage(): string {
     <section class="hero">
       <div class="wrap">
         <span class="badge badge-blue">Enterprise AI Infrastructure</span>
-        <h1>AI Agents That Your Enterprise Can Actually Trust</h1>
+        <h1 data-hero-copy data-hero-proof="AI Agents Your Security Team Can Defend" data-hero-roi="AI Agents That Ship Value Without Governance Debt" data-hero-speed="AI Agents You Can Launch This Month, Not Next Year">AI Agents That Your Enterprise Can Actually Trust</h1>
         <p class="sub">Deploy verified AI agents across Slack, Teams, Discord, and 20+ channels. Every action attested. Every model call receipted. No vendor lock-in. Works with Claude, GPT, Gemini, Llama, and any model you choose.</p>
         <div class="actions">
-          <a href="/contact" class="cta-btn cta-btn-lg">Talk to Sales</a>
-          <a href="/pricing" class="cta-btn cta-btn-outline cta-btn-lg">View Plans</a>
+          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-assessment" data-cta-copy data-cta-proof="Run readiness assessment" data-cta-roi="Estimate rollout ROI" data-cta-speed="Start 2-minute assessment">Run readiness assessment</a>
+          <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="home-contact">Talk to Sales</a>
         </div>
       </div>
     </section>
@@ -2080,10 +3281,10 @@ function homePage(): string {
     <section class="section">
       <div class="wrap">
         <div class="cta-banner">
-          <h2>Deploy Your First Enterprise AI Agent Today</h2>
-          <p>Get a verified, attested AI agent running for your team in minutes. Start with Starter tier, scale to Enterprise.</p>
-          <a href="/contact" class="cta-btn cta-btn-lg">Talk to Sales</a>
-          <a href="/guides/first-30-days" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem">Read the Guide</a>
+          <h2>Deploy Your First Enterprise AI Agent With a Controlled Pilot</h2>
+          <p>Start with a scored readiness path, then move to a proof-backed pilot plan your security and platform teams can approve.</p>
+          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-bottom-assessment" data-cta-copy>Run readiness assessment</a>
+          <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="home-bottom-contact">Talk to Sales</a>
         </div>
       </div>
     </section>`,
@@ -2188,7 +3389,294 @@ function pricingPage(): string {
   });
 }
 
-function contactPage(): string {
+type AssessmentResult = {
+  readinessScore: number;
+  roiScore: number;
+  riskScore: number;
+  confidenceLabel: string;
+  recommendedTrack: "guided-pilot" | "self-serve-pilot" | "architecture-review";
+};
+
+function parseAssessmentResult(url: URL): AssessmentResult {
+  const readinessScore = Math.min(100, Math.max(0, Number(url.searchParams.get("readiness") ?? "0") || 0));
+  const roiScore = Math.min(100, Math.max(0, Number(url.searchParams.get("roi") ?? "0") || 0));
+  const riskScore = Math.min(100, Math.max(0, Number(url.searchParams.get("risk") ?? "0") || 0));
+
+  const blended = Math.round((readinessScore * 0.4) + (roiScore * 0.35) + ((100 - riskScore) * 0.25));
+  const confidenceLabel = blended >= 78 ? "high-intent" : blended >= 55 ? "medium-intent" : "early-intent";
+
+  const recommendedTrack: AssessmentResult["recommendedTrack"] = blended >= 78
+    ? "guided-pilot"
+    : blended >= 55
+      ? "architecture-review"
+      : "self-serve-pilot";
+
+  return {
+    readinessScore,
+    roiScore,
+    riskScore,
+    confidenceLabel,
+    recommendedTrack,
+  };
+}
+
+function assessmentPage(turnstileSiteKey: string): string {
+  return layout({
+    meta: {
+      title: "AI Readiness Assessment | Claw EA",
+      description: "Score your enterprise readiness, expected ROI, and operational risk in 2 minutes.",
+      path: "/assessment",
+      canonicalPath: "/assessment",
+    },
+    breadcrumbs: [{ name: "Home", path: "/" }, { name: "Assessment", path: "/assessment" }],
+    body: `
+    <section class="section content-page">
+      <div class="wrap" style="max-width:760px">
+        <span class="badge badge-purple">Demand capture</span>
+        <h1 data-hero-copy>Enterprise Agent Readiness Assessment</h1>
+        <p class="lead">Answer five short questions. We return a readiness score, ROI estimate, and risk posture with a clear next step.</p>
+
+        <form class="card lead-form" data-assessment-form style="margin-top:1.5rem">
+          <div class="form-grid-2">
+            <label class="form-field">
+              <span>Team size</span>
+              <select name="teamSize" required>
+                <option value="">Select…</option>
+                <option value="1-20">1-20</option>
+                <option value="21-100">21-100</option>
+                <option value="101-500">101-500</option>
+                <option value="500+">500+</option>
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>Current stage</span>
+              <select name="maturity" required>
+                <option value="">Select…</option>
+                <option value="exploration">Exploration</option>
+                <option value="pilot">Pilot running</option>
+                <option value="production">Production with guardrails</option>
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>Primary objective</span>
+              <select name="objective" required>
+                <option value="">Select…</option>
+                <option value="cost">Reduce manual process cost</option>
+                <option value="speed">Faster approvals and delivery</option>
+                <option value="compliance">Audit and compliance confidence</option>
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>Risk tolerance</span>
+              <select name="riskTolerance" required>
+                <option value="">Select…</option>
+                <option value="low">Low (strict approvals)</option>
+                <option value="moderate">Moderate</option>
+                <option value="high">High (speed first)</option>
+              </select>
+            </label>
+
+            <label class="form-field form-field-wide">
+              <span>Timeline to launch</span>
+              <select name="timeline" required>
+                <option value="">Select…</option>
+                <option value="2-weeks">Within 2 weeks</option>
+                <option value="30-days">Within 30 days</option>
+                <option value="quarter">This quarter</option>
+                <option value="later">Later planning</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="form-actions" style="margin-top:1.25rem">
+            <button type="submit" class="cta-btn cta-btn-lg" data-cta="assessment-calculate" data-cta-copy>Calculate my score</button>
+            <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="assessment-contact">Talk to sales now</a>
+          </div>
+
+          <p class="form-note">No signup required for scoring. You can submit your details on the result page if you want a tailored plan.</p>
+        </form>
+      </div>
+    </section>
+    <script>
+    (function(){
+      var form=document.querySelector('[data-assessment-form]');
+      if(!form)return;
+
+      function pick(value,map,fallback){return (map&&map[value])||fallback;}
+
+      form.addEventListener('submit',function(e){
+        e.preventDefault();
+
+        var fd=new FormData(form);
+        var team=String(fd.get('teamSize')||'');
+        var maturity=String(fd.get('maturity')||'');
+        var objective=String(fd.get('objective')||'');
+        var riskTolerance=String(fd.get('riskTolerance')||'');
+        var timeline=String(fd.get('timeline')||'');
+
+        var readiness=Math.round(
+          pick(team,{'1-20':40,'21-100':55,'101-500':70,'500+':78},42)
+          + pick(maturity,{'exploration':8,'pilot':18,'production':25},10)
+          + pick(timeline,{'2-weeks':15,'30-days':10,'quarter':6,'later':3},5)
+        );
+
+        var roi=Math.round(
+          pick(objective,{'cost':72,'speed':68,'compliance':64},60)
+          + pick(team,{'1-20':5,'21-100':8,'101-500':12,'500+':15},6)
+        );
+
+        var risk=Math.round(
+          pick(riskTolerance,{'low':30,'moderate':48,'high':66},48)
+          - pick(maturity,{'exploration':0,'pilot':5,'production':10},0)
+        );
+
+        readiness=Math.max(0,Math.min(100,readiness));
+        roi=Math.max(0,Math.min(100,roi));
+        risk=Math.max(0,Math.min(100,risk));
+
+        var out='/assessment/result?readiness='+encodeURIComponent(String(readiness))
+          +'&roi='+encodeURIComponent(String(roi))
+          +'&risk='+encodeURIComponent(String(risk))
+          +'&team='+encodeURIComponent(team)
+          +'&objective='+encodeURIComponent(objective)
+          +'&timeline='+encodeURIComponent(timeline);
+
+        if(window.__claweaTrack){
+          window.__claweaTrack('cta_click',{
+            ctaId:'assessment-calculate',
+            ctaVariant:'calculator',
+            actionOutcome:'calculated',
+            targetPath:'/assessment/result'
+          });
+        }
+
+        window.location.href=out;
+      });
+    })();
+    </script>`,
+    schemas: [
+      faqSchema([
+        { q: "How long does this take?", a: "Around two minutes. You only answer five questions." },
+        { q: "Do I need to sign up?", a: "No. You can calculate your score without entering contact details." },
+        { q: "Can I share this with my team?", a: "Yes. Copy the result URL and share it internally." },
+      ]),
+    ],
+  });
+}
+
+function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string): string {
+  const trackLabel = result.recommendedTrack === "guided-pilot"
+    ? "Guided pilot"
+    : result.recommendedTrack === "architecture-review"
+      ? "Architecture review"
+      : "Self-serve pilot";
+
+  return layout({
+    meta: {
+      title: `Assessment Result (${result.confidenceLabel}) | Claw EA`,
+      description: "Review your readiness, ROI, and risk score. Get the fastest next step for enterprise agent rollout.",
+      path: "/assessment/result",
+      canonicalPath: "/assessment/result",
+      noindex: true,
+    },
+    breadcrumbs: [
+      { name: "Home", path: "/" },
+      { name: "Assessment", path: "/assessment" },
+      { name: "Result", path: "/assessment/result" },
+    ],
+    body: `
+    <section class="section content-page">
+      <div class="wrap" style="max-width:820px">
+        <span class="badge badge-green">Assessment result</span>
+        <h1>Your recommended track: ${esc(trackLabel)}</h1>
+        <p class="lead">We scored your current operating posture across readiness, ROI potential, and risk control fit.</p>
+
+        <div class="score-grid">
+          <article class="score-card">
+            <h3>Readiness</h3>
+            <div class="score-value">${result.readinessScore}</div>
+            <p>How prepared your team is to launch a controlled pilot quickly.</p>
+          </article>
+          <article class="score-card">
+            <h3>ROI signal</h3>
+            <div class="score-value">${result.roiScore}</div>
+            <p>Estimated value potential from throughput and approval cycle improvements.</p>
+          </article>
+          <article class="score-card">
+            <h3>Risk posture</h3>
+            <div class="score-value">${result.riskScore}</div>
+            <p>Higher scores indicate higher risk exposure without strict execution controls.</p>
+          </article>
+        </div>
+
+        <div class="proof-summary-block" style="margin-top:1.5rem">
+          <h3>Proof-first rollout checklist</h3>
+          <ul>
+            <li>Start with one irreversible workflow and enforce approval gates.</li>
+            <li>Require receipts and proof bundles for every model call and side effect.</li>
+            <li>Track lead-to-launch metrics weekly and keep an explicit rollback path.</li>
+          </ul>
+        </div>
+
+        <div class="cta-banner" style="margin-top:2rem">
+          <h2>Want a tailored rollout plan?</h2>
+          <p>Submit one short form and we return a deployment recommendation with control policy examples.</p>
+          <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-lg" data-cta="assessment-result-contact" data-cta-copy>Request tailored plan</a>
+          <a href="/trust" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-trust">Review trust controls</a>
+        </div>
+
+        <form class="card lead-form" data-lead-form data-cta="assessment-result-form" style="margin-top:2rem">
+          <h3 style="margin-bottom:.5rem">Fast qualification form</h3>
+          <p class="form-note" style="margin-bottom:1rem">This takes less than 45 seconds.</p>
+
+          <div class="form-grid-2">
+            <label class="form-field">
+              <span>Work email</span>
+              <input type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+            </label>
+            <label class="form-field">
+              <span>Company</span>
+              <input type="text" name="company" required placeholder="Company name" autocomplete="organization">
+            </label>
+            <label class="form-field">
+              <span>Your role</span>
+              <input type="text" name="role" placeholder="Security lead, platform lead, CTO..." autocomplete="organization-title">
+            </label>
+            <label class="form-field">
+              <span>Timeline</span>
+              <input type="text" name="timeline" placeholder="2 weeks, this month, this quarter">
+            </label>
+          </div>
+
+          <input type="hidden" name="primaryUseCase" value="assessment-result-followup">
+          <input type="hidden" name="assessment.readinessScore" value="${result.readinessScore}">
+          <input type="hidden" name="assessment.roiScore" value="${result.roiScore}">
+          <input type="hidden" name="assessment.riskScore" value="${result.riskScore}">
+          <input type="hidden" name="assessment.confidenceLabel" value="${esc(result.confidenceLabel)}">
+
+          <div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="cta-btn" data-cta="assessment-result-submit">Send to solutions team</button>
+            <span class="form-status" data-lead-form-status aria-live="polite"></span>
+          </div>
+        </form>
+      </div>
+    </section>`,
+    schemas: [
+      serviceSchema(
+        "Claw EA Readiness Assessment",
+        "Assessment route for enterprise AI agent rollout readiness and risk-to-proof conversion planning.",
+        "https://www.clawea.com/assessment",
+      ),
+    ],
+  });
+}
+
+function contactPage(turnstileSiteKey: string): string {
   return layout({
     meta: {
       title: "Contact Sales | Claw EA Enterprise AI Agents",
@@ -2198,16 +3686,142 @@ function contactPage(): string {
     breadcrumbs: [{ name: "Home", path: "/" }, { name: "Contact", path: "/contact" }],
     body: `
     <section class="section content-page">
-      <div class="wrap" style="max-width:600px">
+      <div class="wrap" style="max-width:760px">
         <h1>Talk to Sales</h1>
-        <p class="lead">Tell us about your AI agent needs. We typically respond within 4 hours during business days.</p>
-        <div class="card" style="margin-top:2rem">
-          <p style="text-align:center;padding:2rem">
-            <strong>Email:</strong> <a href="mailto:enterprise@clawbureau.com">enterprise@clawbureau.com</a><br><br>
-            <strong>Subject line:</strong> Claw EA inquiry from [Your Company]<br><br>
-            Include: industry, team size, primary use case, and timeline.
-          </p>
+        <p class="lead">Short path: tell us your team, objective, and timeline. We reply with a scoped recommendation and next steps.</p>
+
+        <form class="card lead-form" data-lead-form data-cta="contact-lead-form">
+          <div class="form-grid-2">
+            <label class="form-field">
+              <span>Work email</span>
+              <input type="email" name="email" required placeholder="you@company.com" autocomplete="email">
+            </label>
+            <label class="form-field">
+              <span>Company</span>
+              <input type="text" name="company" required placeholder="Company name" autocomplete="organization">
+            </label>
+            <label class="form-field">
+              <span>Full name</span>
+              <input type="text" name="fullName" placeholder="Your name" autocomplete="name">
+            </label>
+            <label class="form-field">
+              <span>Role</span>
+              <input type="text" name="role" placeholder="Security lead, platform lead, CTO..." autocomplete="organization-title">
+            </label>
+            <label class="form-field">
+              <span>Team size</span>
+              <select name="teamSize">
+                <option value="">Select…</option>
+                <option value="1-20">1-20</option>
+                <option value="21-100">21-100</option>
+                <option value="101-500">101-500</option>
+                <option value="500+">500+</option>
+              </select>
+            </label>
+            <label class="form-field">
+              <span>Timeline</span>
+              <select name="timeline">
+                <option value="">Select…</option>
+                <option value="2-weeks">Within 2 weeks</option>
+                <option value="30-days">Within 30 days</option>
+                <option value="quarter">This quarter</option>
+                <option value="later">Later planning</option>
+              </select>
+            </label>
+            <label class="form-field form-field-wide">
+              <span>Primary use case</span>
+              <textarea name="primaryUseCase" rows="3" placeholder="Example: production deploy approvals, SIEM evidence collection, identity lifecycle approvals"></textarea>
+            </label>
+          </div>
+
+          <div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="cta-btn cta-btn-lg" data-cta="contact-fast-submit" data-cta-copy>Request tailored plan</button>
+            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="contact-assessment">Run readiness assessment</a>
+            <span class="form-status" data-lead-form-status aria-live="polite"></span>
+          </div>
+
+          <p class="form-note">Prefer email? Write to <a href="mailto:enterprise@clawbureau.com">enterprise@clawbureau.com</a>. Include company, team size, and target timeline.</p>
+        </form>
+      </div>
+    </section>`,
+    schemas: [
+      faqSchema([
+        { q: "How fast do you reply?", a: "Typically within four business hours." },
+        { q: "Do you support pilots before contract?", a: "Yes. We can run a guided pilot with strict scope and measurable success criteria." },
+        { q: "Can we bring our own model keys?", a: "Yes. BYOK is supported, and we keep proof and policy controls in place." },
+      ]),
+    ],
+  });
+}
+
+function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
+  const rows = Object.entries(manifest)
+    .map(([slug, meta]) => ({ slug, meta }))
+    .filter((row) => row.meta.indexable !== false)
+    .slice(0, 80);
+
+  const familyCounts = new Map<string, number>();
+  for (const row of rows) {
+    const family = row.slug.split("/")[0] || "root";
+    familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
+  }
+
+  const familySummary = [...familyCounts.entries()]
+    .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], "en"))
+    .map(([family, count]) => `<li><a href="/${family}">${esc(family)}</a> · ${count} indexable pages</li>`)
+    .join("");
+
+  const topIndexable = rows
+    .slice(0, 24)
+    .map((row) => `<li><a href="/${row.slug}">${esc(row.meta.title.replace(/ \| Claw EA$/, ""))}</a></li>`)
+    .join("");
+
+  return layout({
+    meta: {
+      title: "Citation Source Hub | Claw EA",
+      description: "Source-first routing hub for citation-ready Claw EA pages and proof-linked implementation guides.",
+      path: "/sources",
+      canonicalPath: "/sources",
+    },
+    breadcrumbs: [{ name: "Home", path: "/" }, { name: "Sources", path: "/sources" }],
+    body: `
+    <section class="section content-page">
+      <div class="wrap" style="max-width:900px">
+        <span class="badge badge-blue">Citation routing</span>
+        <h1>Source hub for AI discovery and enterprise buyers</h1>
+        <p class="lead">Use this page to route to citation-ready articles, workflow runbooks, and proof-first pages with explicit references.</p>
+
+        <div class="proof-summary-block">
+          <h3>How to cite Claw EA pages</h3>
+          <ul>
+            <li>Prefer direct article URLs under <code>/tools</code>, <code>/workflows</code>, and <code>/controls</code>.</li>
+            <li>Use pages that include explicit Sources sections and proof summaries.</li>
+            <li>For platform trust claims, cite <a href="/trust">/trust</a> and <a href="/agent-proof-and-attestation">/agent-proof-and-attestation</a>.</li>
+          </ul>
         </div>
+
+        <div class="grid-2" style="margin-top:1.5rem">
+          <article class="card">
+            <h3>Indexable families</h3>
+            <ul>${familySummary}</ul>
+          </article>
+          <article class="card">
+            <h3>High-intent next steps</h3>
+            <ul>
+              <li><a href="/assessment">Run readiness assessment</a></li>
+              <li><a href="/contact">Submit high-intent brief</a></li>
+              <li><a href="/trust">Review trust controls</a></li>
+              <li><a href="/pricing">Review pricing and rollout tiers</a></li>
+            </ul>
+          </article>
+        </div>
+
+        <article class="card" style="margin-top:1.5rem">
+          <h3>Frequently cited pages</h3>
+          <ul class="sources-hub-list">${topIndexable}</ul>
+        </article>
       </div>
     </section>`,
   });
@@ -2221,7 +3835,11 @@ function notFoundPage(): string {
       <div class="wrap">
         <h1>404 - Page Not Found</h1>
         <p class="lead">The page you're looking for doesn't exist or has been moved.</p>
-        <a href="/" class="cta-btn cta-btn-lg" style="margin-top:2rem">Back to Home</a>
+        <div class="actions" style="margin-top:2rem;justify-content:center">
+          <a href="/" class="cta-btn cta-btn-lg">Back to Home</a>
+          <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg">Run assessment</a>
+          <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg">Talk to sales</a>
+        </div>
       </div>
     </section>`,
   });
@@ -2271,6 +3889,8 @@ function relatedLinksForArticle(article: Article): Array<{ name: string; path: s
   const family = slugParts[0] ?? "";
 
   const links: Array<{ name: string; path: string }> = [
+    { name: "Run readiness assessment", path: "/assessment" },
+    { name: "Talk to sales", path: "/contact" },
     { name: "Policy-as-Code", path: "/policy-as-code-for-agents" },
     { name: "Secure Execution", path: "/secure-agent-execution" },
     { name: "Proof and Attestation", path: "/agent-proof-and-attestation" },
@@ -2380,6 +4000,42 @@ function wrapTables(rawHtml: string): string {
     .replace(/<\/table>/g, "</table></div>");
 }
 
+function isBofuArticle(article: Article): boolean {
+  return (
+    article.slug.startsWith("tools/")
+    || article.slug.startsWith("workflows/")
+    || article.slug.startsWith("channels/")
+    || article.slug.startsWith("compliance/")
+    || article.slug.startsWith("compare/")
+    || article.slug.startsWith("for/")
+  );
+}
+
+function renderProofSummaryBlock(article: Article): string {
+  if (!isBofuArticle(article)) return "";
+
+  const sourceList = (article.sources ?? [])
+    .slice(0, 3)
+    .map((s) => `<li><a href="${esc(s.uri)}" rel="noopener" target="_blank">${esc(s.title || s.uri)}</a></li>`)
+    .join("");
+
+  return `
+  <section class="proof-summary-block" aria-label="Proof-first summary">
+    <h3>Proof-first summary</h3>
+    <ul>
+      <li>Execution policy is explicit before an agent can run irreversible actions.</li>
+      <li>Every model call and tool action can be tied to receipts and audit evidence.</li>
+      <li>Rollback posture is documented with deterministic failure handling paths.</li>
+    </ul>
+    <p class="proof-summary-links">
+      <a href="/assessment" data-cta="proof-summary-assessment">Run readiness assessment</a>
+      <span>·</span>
+      <a href="/contact" data-cta="proof-summary-contact">Request tailored rollout plan</a>
+    </p>
+    ${sourceList ? `<div class="proof-summary-sources"><strong>Top references</strong><ul>${sourceList}</ul></div>` : ""}
+  </section>`;
+}
+
 function articlePage(article: Article): string {
   const breadcrumbs = breadcrumbsFromSlug(article.slug);
   const schemas: string[] = [];
@@ -2429,6 +4085,8 @@ function articlePage(article: Article): string {
     ? `<div class="takeaways"><div class="takeaways-title">&#9672; Key takeaway</div><p>${esc(article.description)}</p></div>`
     : "";
 
+  const proofSummaryHtml = renderProofSummaryBlock(article);
+
   // Related content with card styling
   const related = relatedLinksForArticle(article);
   const relatedHtml = related.length
@@ -2474,6 +4132,7 @@ function articlePage(article: Article): string {
           ${familyLinkHtml}
         </div>
         ${takeawaysHtml}
+        ${proofSummaryHtml}
         <div class="article-layout">
           ${tocHtml}
           <div class="article-main">
@@ -2496,6 +4155,18 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+
+    const visitor = getOrCreateVisitorId(request);
+    const existingExpCookie = clipString(readCookie(request, "clawea_exp"), 240);
+    const experimentConfigPromise = loadExperimentConfig(env);
+
+    const htmlWithExperiment = async (response: Response, routePath = path): Promise<Response> => {
+      const config = await experimentConfigPromise;
+      const assignment = assignVariant(config, visitor.visitorId, pageFamilyFromPath(routePath));
+      const expectedExp = `${assignment.pageFamily}:${assignment.heroVariant}:${assignment.ctaVariant}`;
+      const shouldSetExpCookie = existingExpCookie !== expectedExp;
+      return applyExperimentCookies(response, visitor.visitorId, assignment, visitor.cookieNeeded, shouldSetExpCookie);
+    };
 
     // ── IndexNow key file ──
     if ((request.method === "GET" || request.method === "HEAD") && env.INDEXNOW_KEY && path === `/${env.INDEXNOW_KEY}.txt`) {
@@ -2548,6 +4219,35 @@ export default {
             score: r.score,
           })),
         });
+      }
+
+      if (path === "/api/experiments/config") {
+        if (request.method !== "GET") {
+          return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+        }
+
+        const config = await loadExperimentConfig(env);
+        return apiJson({ ok: true, config });
+      }
+
+      if (path === "/api/experiments/assignment") {
+        return await experimentAssignmentEndpoint(request, env);
+      }
+
+      if (path === "/api/experiments/winners") {
+        return await experimentsWinners(request, env);
+      }
+
+      if (path === "/api/leads/submit") {
+        return await submitLead(request, env);
+      }
+
+      if (path === "/api/leads/status") {
+        return await leadsStatus(request, env);
+      }
+
+      if (path === "/api/leads/export") {
+        return await leadsExport(request, env);
       }
 
       // Protected telemetry summary endpoint
@@ -2814,13 +4514,22 @@ export default {
 
     // ── Static routes ──
     if (path === "/health") return json({ ok: true, service: "clawea-www", ts: new Date().toISOString() });
-    if (path === "/") return html(homePage(), 200, 7200);
-    if (path === "/pricing") return html(pricingPage());
-    if (path === "/contact") return html(contactPage());
-    if (path === "/trust") return html(trustPage());
-    if (path === "/secure-workers") return html(secureWorkersPage());
-    if (path === "/consulting") return html(consultingPage());
-    if (path === "/about") return html(aboutPage());
+
+    const turnstileSiteKey = env.TURNSTILE_SITE_KEY?.trim() || "1x00000000000000000000AA";
+
+    if (path === "/") return await htmlWithExperiment(html(homePage(), 200, 7200), path);
+    if (path === "/pricing") return await htmlWithExperiment(html(pricingPage()), path);
+    if (path === "/assessment") return await htmlWithExperiment(html(assessmentPage(turnstileSiteKey), 200, 1800), path);
+    if (path === "/assessment/result") return await htmlWithExperiment(html(assessmentResultPage(parseAssessmentResult(url), turnstileSiteKey), 200, 900), "/assessment/result");
+    if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstileSiteKey)), path);
+    if (path === "/trust") return await htmlWithExperiment(html(trustPage()), path);
+    if (path === "/secure-workers") return await htmlWithExperiment(html(secureWorkersPage()), path);
+    if (path === "/consulting") return await htmlWithExperiment(html(consultingPage()), path);
+    if (path === "/about") return await htmlWithExperiment(html(aboutPage()), path);
+    if (path === "/sources") {
+      const manifest = await loadManifest(env);
+      return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
+    }
 
     if (path === "/glossary") {
       const q = normalizeSearchQuery(url.searchParams.get("q"));
@@ -2828,8 +4537,35 @@ export default {
         const manifest = await loadManifest(env);
         const corpus = buildSearchCorpus(manifest);
         const results = searchCorpus(corpus, q, 32);
-        return html(glossarySearchPage(q, results), 200, 300);
+        return await htmlWithExperiment(html(glossarySearchPage(q, results), 200, 300), "/glossary");
       }
+    }
+
+    if (path === "/llms.txt") {
+      return new Response(
+        [
+          "# Claw EA",
+          "",
+          "Claw EA publishes policy-first enterprise agent implementation references.",
+          "Use citation-ready pages with explicit sources and proof summaries.",
+          "",
+          "## High-intent routes",
+          "- https://www.clawea.com/assessment",
+          "- https://www.clawea.com/contact",
+          "- https://www.clawea.com/trust",
+          "- https://www.clawea.com/sources",
+          "",
+          "## Core references",
+          "- https://www.clawea.com/policy-as-code-for-agents",
+          "- https://www.clawea.com/secure-agent-execution",
+          "- https://www.clawea.com/agent-proof-and-attestation",
+          "- https://www.clawea.com/agent-audit-and-replay",
+          "",
+          "## Sitemap",
+          "- https://www.clawea.com/sitemap.xml",
+        ].join("\n"),
+        { headers: { "content-type": "text/plain;charset=utf-8", "cache-control": "public, max-age=86400" } },
+      );
     }
 
     // ── Robots.txt ──
@@ -2849,27 +4585,39 @@ export default {
     const slug = slugFromPath(path);
     const article = await loadArticle(env, slug);
     if (article) {
-      return html(articlePage(article), 200, 3600);
+      return await htmlWithExperiment(html(articlePage(article), 200, 3600), `/${article.slug}`);
     }
 
     // ── 404 ──
-    return html(notFoundPage(), 404);
+    return await htmlWithExperiment(html(notFoundPage(), 404), path);
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (!queueEnabled(env)) return;
+    if (queueEnabled(env)) {
+      const maxEntries = queueMaxEntriesPerRun(env);
+      ctx.waitUntil((async () => {
+        try {
+          await processIndexQueue(env, {
+            source: "scheduled",
+            maxEntries,
+          });
+        } catch (err) {
+          console.error("INDEX_QUEUE_SCHEDULED_FAILED", err);
+        }
+      })());
+    }
 
-    const maxEntries = queueMaxEntriesPerRun(env);
     ctx.waitUntil((async () => {
       try {
-        await processIndexQueue(env, {
-          source: "scheduled",
-          maxEntries,
-        });
+        await enqueueWeeklyVariantReportIfDue(env);
       } catch (err) {
-        console.error("INDEX_QUEUE_SCHEDULED_FAILED", err);
+        console.error("VARIANT_REPORT_ENQUEUE_FAILED", err);
       }
     })());
+  },
+
+  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
+    await leadJobsQueue(batch, env);
   },
 } satisfies ExportedHandler<Env>;
 
@@ -2881,11 +4629,13 @@ async function serveSitemap(env: Env): Promise<Response> {
   const obj = await env.ARTICLES.get("articles/_sitemap_core.json");
   const staticPages = [
     { slug: "", priority: "1.0" },
+    { slug: "assessment", priority: "0.9" },
     { slug: "trust", priority: "0.8" },
     { slug: "secure-workers", priority: "0.8" },
     { slug: "consulting", priority: "0.8" },
     { slug: "pricing", priority: "0.8" },
-    { slug: "contact", priority: "0.7" },
+    { slug: "contact", priority: "0.8" },
+    { slug: "sources", priority: "0.7" },
     { slug: "about", priority: "0.6" },
   ];
 

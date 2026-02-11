@@ -234,6 +234,51 @@ nav .links a:hover{color:var(--text)}
 .cta-banner h2{font-size:1.6rem;font-weight:700;margin-bottom:.75rem}
 .cta-banner p{color:var(--text-secondary);margin-bottom:2rem;max-width:500px;margin-left:auto;margin-right:auto}
 
+/* ── Lead forms / assessment ───────────────────────────────────── */
+.lead-form{padding:1.5rem 1.35rem}
+.form-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem 1.1rem}
+.form-field{display:flex;flex-direction:column;gap:.4rem}
+.form-field span{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600}
+.form-field input,.form-field select,.form-field textarea{
+  width:100%;border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text);border-radius:.6rem;padding:.65rem .75rem;font-size:.9rem;
+  line-height:1.4;outline:none;transition:border-color .15s,box-shadow .15s
+}
+.form-field input:focus,.form-field select:focus,.form-field textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.2)
+}
+.form-field textarea{resize:vertical;min-height:90px}
+.form-field-wide{grid-column:1/-1}
+.form-actions{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
+.form-status{font-size:.82rem;color:var(--text-secondary)}
+.form-note{margin-top:.85rem;font-size:.8rem;color:var(--text-muted);max-width:none!important}
+.cf-turnstile{margin-top:1rem}
+
+.score-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin-top:1.25rem}
+.score-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.15rem}
+.score-card h3{margin:0 0 .45rem;font-size:.88rem;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)}
+.score-value{font-size:2rem;font-weight:800;letter-spacing:-.03em;margin-bottom:.35rem;color:var(--text)}
+.score-card p{margin:0;max-width:100%;font-size:.84rem;line-height:1.5}
+
+.proof-summary-block{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:0 var(--radius) var(--radius) 0;padding:1.1rem 1.2rem;max-width:780px}
+.proof-summary-block h3{margin:.1rem 0 .55rem;font-size:1rem}
+.proof-summary-block ul{max-width:100%;margin-bottom:.55rem}
+.proof-summary-links{display:flex;gap:.4rem;flex-wrap:wrap;font-size:.86rem;margin:0}
+.proof-summary-sources{margin-top:.65rem}
+.proof-summary-sources strong{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+.proof-summary-sources ul{margin-top:.45rem;max-width:100%}
+.sources-hub-list{columns:2;column-gap:2rem}
+.sources-hub-list li{break-inside:avoid;margin-bottom:.45rem}
+
+@media(max-width:900px){
+  .score-grid{grid-template-columns:1fr}
+}
+
+@media(max-width:768px){
+  .form-grid-2{grid-template-columns:1fr}
+  .sources-hub-list{columns:1}
+}
+
 /* ── Breadcrumb ────────────────────────────────────────────────── */
 .breadcrumb{font-size:.8rem;color:var(--text-muted);margin-bottom:1.5rem;padding-top:2rem}
 .breadcrumb a{color:var(--text-muted)}.breadcrumb a:hover{color:var(--accent)}
