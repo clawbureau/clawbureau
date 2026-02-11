@@ -245,14 +245,15 @@
       "title": "Transparency log inclusion proofs (clawlogs)",
       "description": "As a third party, I want portable inclusion proofs for clawlogs so that published attestations can be independently verified against a transparency log root.",
       "acceptanceCriteria": [
-        "Add log_inclusion_proof.v1 schema",
-        "clawlogs exposes an inclusion proof endpoint (future PR)",
-        "clawverify can validate inclusion proofs when they are supplied with attestation objects (future PR)",
-        "Docs updated: clawlogs PRD + PoH roadmap"
+        "clawlogs exposes append/root/proof endpoints for per-log Merkle trees",
+        "proof endpoint returns log_inclusion_proof.v1 objects with signed root data",
+        "clawverify validates clawlogs inclusion proofs when supplied inside derivation/audit attestations",
+        "Docs updated with exact Merkle construction + proof verification spec"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": "Phase 0 schema + docs; service implementation can follow."
+      "passes": true,
+      "notes": "Phase 0 schema + docs plus service implementation.",
+      "completionNotes": "Implemented services/clawlogs (append/root/proof + Ed25519 root signatures), documented deterministic Merkle/proof algorithm, and extended clawverify to fail closed when supplied inclusion proofs are invalid in derivation/audit attestation payloads."
     },
     {
       "id": "POHVN-US-005",

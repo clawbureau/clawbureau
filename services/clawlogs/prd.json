@@ -1,0 +1,46 @@
+{
+  "project": "clawbureau",
+  "branchName": "ralph/clawlogs",
+  "description": "clawlogs.com (transparency log) — MVP append-only log + signed Merkle roots + inclusion proofs.",
+  "userStories": [
+    {
+      "id": "CLG-US-001",
+      "title": "Append-only transparency log",
+      "description": "As a system, I want append-only storage of leaf hashes so inclusion proofs are stable and tamper-evident.",
+      "acceptanceCriteria": [
+        "POST /v1/logs/:log_id/append inserts one leaf hash under a Durable Object keyed by log_id",
+        "Append endpoint is admin-gated",
+        "Reject duplicate leaf hashes to keep proof-by-hash deterministic"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented via LogDurableObject with per-log leaf storage and strict leaf hash validation."
+    },
+    {
+      "id": "CLG-US-002",
+      "title": "Signed roots + inclusion proofs",
+      "description": "As an auditor, I want signed roots and inclusion proofs so I can independently verify log membership.",
+      "acceptanceCriteria": [
+        "GET /v1/logs/:log_id/root returns {root_hash_b64u, tree_size, published_at, signature}",
+        "GET /v1/logs/:log_id/proof/:leaf_hash_b64u returns log_inclusion_proof.v1",
+        "Root signatures use Ed25519 over the root_hash_b64u string"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Merkle proofs use sha256(left||right), duplicate-last for odd levels, with root signatures emitted from LOGS_SIGNING_KEY."
+    },
+    {
+      "id": "POHVN-US-004",
+      "title": "Transparency log inclusion proofs (clawlogs)",
+      "description": "As a third party, I want portable inclusion proofs for clawlogs so attestations can be independently verified against a transparency log root.",
+      "acceptanceCriteria": [
+        "clawlogs service exposes append/root/proof endpoints",
+        "Proof endpoint emits log_inclusion_proof.v1-compatible payloads",
+        "Merkle/proof verification algorithm is documented"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Service implemented under services/clawlogs with spec doc and golden-vector tests."
+    }
+  ]
+}

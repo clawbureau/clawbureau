@@ -1,25 +1,31 @@
 > **Type:** PRD
-> **Status:** DRAFT
+> **Status:** ACTIVE (MVP implemented)
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
-> **Source of truth:** PRD intent (no active execution tracker yet)
+> **Last reviewed:** 2026-02-11
+> **Source of truth:** `services/clawlogs/prd.json` + `services/clawlogs/progress.txt`
 >
 > **Scope:**
 > - Product requirements for `clawlogs.com`.
-> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+> - MVP service now exists; this PRD tracks forward roadmap beyond the shipped minimal transparency log.
 
 # clawlogs.com (Audit Logs) — PRD
 
 **Domain:** clawlogs.com  
 **Pillar:** Identity & Trust  
-**Status:** Draft  
+**Status:** Active (MVP shipped)  
 
 ---
 
 ## Implementation status (current)
 
-- **Service:** not implemented yet (no service-level tracker found).
-- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
+- **Service:** implemented at `services/clawlogs/`.
+- **Shipped MVP endpoints:**
+  - `POST /v1/logs/:log_id/append` (admin-gated)
+  - `GET /v1/logs/:log_id/root` (signed root)
+  - `GET /v1/logs/:log_id/proof/:leaf_hash_b64u` (`log_inclusion_proof.v1` payload)
+- **Storage model:** Durable Object per `log_id` storing append-only leaf hashes.
+- **Merkle spec:** `docs/specs/clawlogs/MERKLE_TRANSPARENCY_LOG_v1.md`.
+- **Tracking:** `services/clawlogs/prd.json`, `services/clawlogs/progress.txt`.
 
 ---
 

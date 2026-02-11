@@ -1,0 +1,44 @@
+name = "clawlogs"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-11"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "clawlogs.com/*", zone_name = "clawlogs.com" },
+  { pattern = "www.clawlogs.com/*", zone_name = "clawlogs.com" }
+]
+
+# CLG-US-001/002/008: Durable Object per log_id
+[[durable_objects.bindings]]
+name = "LOGS"
+class_name = "LogDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["LogDurableObject"]
+
+[vars]
+SERVICE_VERSION = "0.1.0"
+
+# Secrets to set via `wrangler secret put`:
+# - LOGS_SIGNING_KEY (Ed25519 seed, base64url; required for signed roots/proofs)
+# - ADMIN_TOKEN (required for append endpoint)
+
+[env.staging]
+name = "clawlogs-staging"
+routes = [
+  { pattern = "staging.clawlogs.com/*", zone_name = "clawlogs.com" }
+]
+
+# Wrangler does not inherit durable_objects into env.*
+[[env.staging.durable_objects.bindings]]
+name = "LOGS"
+class_name = "LogDurableObject"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_classes = ["LogDurableObject"]
+
+[env.staging.vars]
+SERVICE_VERSION = "0.1.0"

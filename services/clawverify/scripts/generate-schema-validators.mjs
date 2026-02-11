@@ -86,6 +86,7 @@ const code = standaloneCode(ajv, {
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,
+  validateLogInclusionProofV1: logInclusionProof.$id,
   validateModelIdentityV1: modelIdentity.$id,
   validateUrmV1: urm.$id,
   validatePromptPackV1: promptPack.$id,

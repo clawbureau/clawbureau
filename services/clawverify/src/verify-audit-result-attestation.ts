@@ -26,6 +26,7 @@ import {
   verifySignature,
 } from './crypto';
 import { validateAuditResultAttestationEnvelopeV1 } from './schema-validation';
+import { verifyLogInclusionProof } from './verify-log-inclusion-proof';
 
 export interface AuditResultAttestationVerifierOptions {
   /**
@@ -96,6 +97,7 @@ export async function verifyAuditResultAttestation(
   protocol_config_hash_b64u?: string;
   result_status?: string;
   results_hash_b64u?: string;
+  clawlogs_inclusion_proof_validated?: boolean;
   error?: VerificationError;
 }> {
   const now = new Date().toISOString();
@@ -400,9 +402,37 @@ export async function verifyAuditResultAttestation(
     };
   }
 
-  // 14) Summary extraction
   const payloadRec = envelope.payload as unknown as Record<string, unknown>;
 
+  // 14) Optional clawlogs inclusion proof validation (fail-closed if supplied)
+  let inclusionProofValidated: boolean | undefined;
+
+  if (isRecord(payloadRec.clawlogs) && payloadRec.clawlogs.inclusion_proof !== undefined) {
+    const proofVerification = await verifyLogInclusionProof(payloadRec.clawlogs.inclusion_proof);
+
+    if (!proofVerification.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Invalid clawlogs inclusion proof: ${proofVerification.reason ?? 'verification failed'}`,
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        error:
+          proofVerification.error ??
+          {
+            code: 'INCLUSION_PROOF_INVALID',
+            message: 'Invalid clawlogs inclusion proof',
+            field: 'payload.clawlogs.inclusion_proof',
+          },
+      };
+    }
+
+    inclusionProofValidated = true;
+  }
+
+  // 15) Summary extraction
   const auditId = typeof payloadRec.audit_id === 'string' ? payloadRec.audit_id : undefined;
 
   const auditPackHash =
@@ -465,5 +495,6 @@ export async function verifyAuditResultAttestation(
     protocol_config_hash_b64u: protocolConfigHash,
     result_status: resultStatus,
     results_hash_b64u: resultsHash,
+    clawlogs_inclusion_proof_validated: inclusionProofValidated,
   };
 }

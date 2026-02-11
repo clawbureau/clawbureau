@@ -57,3 +57,7 @@ Shared JSON schemas for Claw Bureau services.
 - `audit_result_attestation.v1.json`
 - `audit_result_attestation_envelope.v1.json`
 - `log_inclusion_proof.v1.json`
+
+### `fixtures/`
+- `protocol-m-golden-vector.v1.json`
+- `log_inclusion_proof_golden.v1.json`

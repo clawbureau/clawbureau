@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import golden from '../../../packages/schema/fixtures/log_inclusion_proof_golden.v1.json';
 import { base64UrlEncode, computeHash } from '../src/crypto';
 import { verifyDerivationAttestation } from '../src/verify-derivation-attestation';
 import { verifyAuditResultAttestation } from '../src/verify-audit-result-attestation';
@@ -76,6 +77,52 @@ async function signEnvelope(payload: unknown, signer: { did: string; privateKey:
   };
 }
 
+type GoldenVector = {
+  inclusion_proof_v1: {
+    proof_version: '1';
+    log_id: string;
+    tree_size: number;
+    leaf_hash_b64u: string;
+    root_hash_b64u: string;
+    audit_path: string[];
+    root_published_at: string;
+    root_signature: {
+      signer_did: string;
+      sig_b64u: string;
+    };
+    metadata: {
+      leaf_index: number;
+      merkle_algorithm: string;
+    };
+  };
+};
+
+const GOLDEN_INCLUSION_PROOF = (golden as GoldenVector).inclusion_proof_v1;
+
+function mutateB64u(value: string): string {
+  const first = value[0] === 'A' ? 'B' : 'A';
+  return `${first}${value.slice(1)}`;
+}
+
+function withInclusionProof<T extends Record<string, unknown>>(payload: T, tamper?: 'audit_path' | 'signature'): T {
+  const proof = JSON.parse(JSON.stringify(GOLDEN_INCLUSION_PROOF));
+
+  if (tamper === 'audit_path') {
+    proof.audit_path[0] = `${proof.audit_path[0].slice(0, -1)}A`;
+  }
+
+  if (tamper === 'signature') {
+    proof.root_signature.sig_b64u = mutateB64u(proof.root_signature.sig_b64u);
+  }
+
+  return {
+    ...payload,
+    clawlogs: {
+      inclusion_proof: proof,
+    },
+  };
+}
+
 describe('CVF-US-017: derivation attestation verification', () => {
   it('verifies a valid derivation attestation envelope (allowlisted signer)', async () => {
     const signer = await makeDidKeyEd25519();
@@ -112,6 +159,71 @@ describe('CVF-US-017: derivation attestation verification', () => {
     expect(out.transform_kind).toBe('quantize');
     expect(out.input_model?.provider).toBe('self_hosted');
     expect(out.output_model?.name).toBe('llama-3.1-8b-q4');
+  });
+
+  it('verifies when a valid clawlogs inclusion proof is supplied', async () => {
+    const signer = await makeDidKeyEd25519();
+
+    const payload: any = withInclusionProof({
+      derivation_version: '1',
+      derivation_id: 'drv_001_with_proof',
+      issued_at: '2026-02-11T00:00:00Z',
+      input_model: {
+        model_identity_version: '1',
+        tier: 'openweights_hashable',
+        model: { provider: 'self_hosted', name: 'llama-3.1-8b' },
+      },
+      output_model: {
+        model_identity_version: '1',
+        tier: 'openweights_hashable',
+        model: { provider: 'self_hosted', name: 'llama-3.1-8b-q4' },
+      },
+      transform: {
+        kind: 'quantize',
+      },
+    });
+
+    const envelope = await signEnvelope(payload, signer, 'derivation_attestation');
+    const out = await verifyDerivationAttestation(envelope, {
+      allowlistedSignerDids: [signer.did],
+    });
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.clawlogs_inclusion_proof_validated).toBe(true);
+  });
+
+  it('fails closed when supplied clawlogs inclusion proof is invalid', async () => {
+    const signer = await makeDidKeyEd25519();
+
+    const payload: any = withInclusionProof(
+      {
+        derivation_version: '1',
+        derivation_id: 'drv_001_bad_proof',
+        issued_at: '2026-02-11T00:00:00Z',
+        input_model: {
+          model_identity_version: '1',
+          tier: 'openweights_hashable',
+          model: { provider: 'self_hosted', name: 'llama-3.1-8b' },
+        },
+        output_model: {
+          model_identity_version: '1',
+          tier: 'openweights_hashable',
+          model: { provider: 'self_hosted', name: 'llama-3.1-8b-q4' },
+        },
+        transform: {
+          kind: 'quantize',
+        },
+      },
+      'audit_path',
+    );
+
+    const envelope = await signEnvelope(payload, signer, 'derivation_attestation');
+    const out = await verifyDerivationAttestation(envelope, {
+      allowlistedSignerDids: [signer.did],
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('INCLUSION_PROOF_INVALID');
   });
 
   it('fails closed when signer allowlist is not configured', async () => {
@@ -249,6 +361,85 @@ describe('CVF-US-018: audit result attestation verification', () => {
     expect(out.model?.provider).toBe('openai');
     expect(out.result_status).toBe('pass');
     expect(out.results_hash_b64u).toBe('resultsHASHb64u_12345678');
+  });
+
+  it('verifies when a valid clawlogs inclusion proof is supplied', async () => {
+    const signer = await makeDidKeyEd25519();
+
+    const payload: any = withInclusionProof({
+      audit_version: '1',
+      audit_id: 'audit_with_proof',
+      issued_at: '2026-02-11T00:00:00Z',
+      model: {
+        model_identity_version: '1',
+        tier: 'closed_opaque',
+        model: { provider: 'openai', name: 'gpt-5.2' },
+      },
+      audit_code: { code_hash_b64u: 'codeHASHb64u_12345678' },
+      dataset: {
+        dataset_id: 'mmlu',
+        dataset_hash_b64u: 'dataHASHb64u_12345678',
+        access: 'public',
+      },
+      protocol: {
+        name: 'mmlu-v1',
+        config_hash_b64u: 'cfgHASHb64u_12345678',
+      },
+      result: {
+        status: 'pass',
+        results_hash_b64u: 'resultsHASHb64u_12345678',
+      },
+    });
+
+    const envelope = await signEnvelope(payload, signer, 'audit_result_attestation');
+
+    const out = await verifyAuditResultAttestation(envelope, {
+      allowlistedSignerDids: [signer.did],
+    });
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.clawlogs_inclusion_proof_validated).toBe(true);
+  });
+
+  it('fails closed when supplied clawlogs inclusion proof signature is invalid', async () => {
+    const signer = await makeDidKeyEd25519();
+
+    const payload: any = withInclusionProof(
+      {
+        audit_version: '1',
+        audit_id: 'audit_bad_proof_sig',
+        issued_at: '2026-02-11T00:00:00Z',
+        model: {
+          model_identity_version: '1',
+          tier: 'closed_opaque',
+          model: { provider: 'openai', name: 'gpt-5.2' },
+        },
+        audit_code: { code_hash_b64u: 'codeHASHb64u_12345678' },
+        dataset: {
+          dataset_id: 'mmlu',
+          dataset_hash_b64u: 'dataHASHb64u_12345678',
+          access: 'public',
+        },
+        protocol: {
+          name: 'mmlu-v1',
+          config_hash_b64u: 'cfgHASHb64u_12345678',
+        },
+        result: {
+          status: 'pass',
+          results_hash_b64u: 'resultsHASHb64u_12345678',
+        },
+      },
+      'signature',
+    );
+
+    const envelope = await signEnvelope(payload, signer, 'audit_result_attestation');
+
+    const out = await verifyAuditResultAttestation(envelope, {
+      allowlistedSignerDids: [signer.did],
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('SIGNATURE_INVALID');
   });
 
   it('rejects signer not allowlisted', async () => {

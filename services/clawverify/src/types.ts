@@ -230,7 +230,8 @@ export type VerificationErrorCode =
   | 'EXPIRED'
   | 'CLAIM_NOT_FOUND'
   | 'DEPENDENCY_NOT_CONFIGURED'
-  | 'PARSE_ERROR';
+  | 'PARSE_ERROR'
+  | 'INCLUSION_PROOF_INVALID';
 
 /**
  * Structured error for verification failures
@@ -317,6 +318,7 @@ export interface VerifyDerivationAttestationResponse {
     name?: string;
     tier?: ModelIdentityTier;
   };
+  clawlogs_inclusion_proof_validated?: boolean;
   error?: VerificationError;
 }
 
@@ -383,6 +385,7 @@ export interface VerifyAuditResultAttestationResponse {
   protocol_config_hash_b64u?: string;
   result_status?: string;
   results_hash_b64u?: string;
+  clawlogs_inclusion_proof_validated?: boolean;
   error?: VerificationError;
 }
 
