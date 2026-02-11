@@ -46,4 +46,32 @@ describe('token_scope_hash_b64u', () => {
 
     expect(h1).not.toBe(h2);
   });
+
+  it('changes when payment_account_did claim changes', async () => {
+    const h1 = await computeTokenScopeHashB64uV1({
+      sub: 'did:key:zWorker',
+      aud: 'clawproxy.com',
+      scope: ['clawproxy:call:openai'],
+      policy_hash_b64u: POLICY_HASH,
+    });
+
+    const h2 = await computeTokenScopeHashB64uV1({
+      sub: 'did:key:zWorker',
+      aud: 'clawproxy.com',
+      scope: ['clawproxy:call:openai'],
+      policy_hash_b64u: POLICY_HASH,
+      payment_account_did: 'did:key:zPaymentAccount',
+    });
+
+    const h3 = await computeTokenScopeHashB64uV1({
+      sub: 'did:key:zWorker',
+      aud: 'clawproxy.com',
+      scope: ['clawproxy:call:openai'],
+      policy_hash_b64u: POLICY_HASH,
+      payment_account_did: '  did:key:zPaymentAccount  ',
+    });
+
+    expect(h1).not.toBe(h2);
+    expect(h2).toBe(h3);
+  });
 });

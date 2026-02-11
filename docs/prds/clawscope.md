@@ -92,6 +92,7 @@ Define and enforce scoped token access (CST), issue/introspect/revoke tokens, an
 
 **Acceptance Criteria:**
   - Issue tokens bound to **agent DID** (`sub`) + **audience** (`aud`) + **scope[]**
+  - Support optional `payment_account_did` claim for machine-payment account binding
   - Enforce TTL and max scope length
   - Return token hash + policy version
   - Support OpenClaw correlation via `mission_id` (recommended default = OpenClaw `sessionKey`)
@@ -102,7 +103,7 @@ Define and enforce scoped token access (CST), issue/introspect/revoke tokens, an
 
 **Acceptance Criteria:**
   - Validate signature + expiry
-  - Return scope + audience + owner_ref
+  - Return scope + audience + owner_ref + payment_account_did (when present)
   - Fail closed on unknown version
   - Support revocation-aware `active:false` response
 

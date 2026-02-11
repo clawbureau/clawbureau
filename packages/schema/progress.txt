@@ -98,3 +98,11 @@ Started: 2026-02-03
   - ledger mapping context (`account_id`, `amount_minor`, `currency`)
   - optional rail/network + provider timestamps metadata
 - Updated `packages/schema/README.md` with new `payments/` directory and schema listing.
+
+## MPY-US-005 — Scoped token payment account claim binding
+- Extended CST claim schema:
+  - `packages/schema/auth/scoped_token_claims.v1.json`
+- Added optional claim:
+  - `payment_account_did`
+- Updated deterministic hash contract description:
+  - `token_scope_hash_b64u` now includes `payment_account_did` when present in canonical claim set.

@@ -69,6 +69,12 @@ export interface Env {
 
   /** Minimum required available balance (minor units) for platform-paid calls. Default: 1. */
   PLATFORM_PAID_MIN_AVAILABLE_MINOR?: string;
+
+  /**
+   * When true, platform-paid requests require CST claim payment_account_did.
+   * Missing claim fails closed with PAYMENT_ACCOUNT_BINDING_REQUIRED.
+   */
+  PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM?: string;
 }
 
 /**
@@ -169,7 +175,19 @@ export type ReceiptPaymentMode = 'user' | 'platform';
 export type PaymentAccountDidSource =
   | 'x-payment-account-did'
   | 'x-client-did'
-  | 'cst-sub';
+  | 'cst-sub'
+  | 'cst-payment-account-did';
+
+export interface PlatformPaymentAccountBindingContext {
+  status: 'matched';
+  claimRequired: boolean;
+  claimPresent: boolean;
+  claimAccountDid?: string;
+  requestAccountDid?: string;
+  requestAccountDidSource?: PaymentAccountDidSource;
+  effectiveAccountDid: string;
+  effectiveAccountDidSource: PaymentAccountDidSource;
+}
 
 export interface PlatformFundingCheckContext {
   status: 'funded';
@@ -189,6 +207,8 @@ export interface ReceiptPayment {
   paid: boolean;
   /** Reference to the ledger entry that recorded the spend (when paid=true) */
   ledgerRef?: string;
+  /** Claim/header binding context for platform-paid account identity checks. */
+  accountBinding?: PlatformPaymentAccountBindingContext;
   /** Proof context for platform-paid precheck (present for funded platform calls). */
   fundingCheck?: PlatformFundingCheckContext;
 }
