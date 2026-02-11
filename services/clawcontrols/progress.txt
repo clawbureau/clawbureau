@@ -20,3 +20,15 @@ Started: 2026-02-10T00:38:35Z
 - Quality checks
   - cd services/clawcontrols && npm run typecheck && npm test
 ---
+
+## 2026-02-11 - POHVN-US-005 (WPC hooks: model identity tier + audit packs)
+- What was implemented
+  - Extended the strict WPC v1 shape to include:
+    - `minimum_model_identity_tier`
+    - `required_audit_packs[]` (audit_pack_hash_b64u)
+  - Validation remains fail-closed on unknown keys.
+- Tests
+  - Updated DO tests to ensure idempotent hashing still holds with new fields.
+- Quality checks
+  - cd services/clawcontrols && npm run typecheck && npm test
+---
