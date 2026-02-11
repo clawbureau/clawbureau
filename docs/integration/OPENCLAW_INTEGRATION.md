@@ -168,6 +168,41 @@ If bootstrap discovery yields files from `JobRoot` (or unknown roots), fail clos
 
 This keeps trusted and untrusted contexts partitioned and prevents accidental bootstrap/skills auto-discovery from buyer mounts in sensitive runs.
 
+## Directive authorization by role (OCL-US-002)
+
+### Goal
+Prevent buyer-originated messages from applying security-sensitive directives that can downgrade posture (e.g. `/exec`, `/elevated`, `/model`).
+
+### Plugin policy
+`provider-clawproxy` supports role-aware directive authorization in `before_agent_start`:
+- Extract directives from prompt/message text
+- Resolve sender role from context/event metadata
+- Deny restricted directives unless sender role is operator-allowlisted
+- Fail closed with deterministic errors:
+  - `DIRECTIVE_AUTH_ROLE_REQUIRED`
+  - `DIRECTIVE_AUTH_DENIED`
+
+### Config snippet
+```json
+{
+  "plugins": {
+    "entries": {
+      "provider-clawproxy": {
+        "config": {
+          "baseUrl": "https://clawproxy.com",
+          "directiveAuth": {
+            "enabled": true,
+            "operatorRoles": ["operator", "admin"],
+            "buyerRoles": ["buyer", "customer"],
+            "restrictedDirectives": ["/exec", "/elevated", "/model"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ## Notes / guardrails
 - Do not leak admin keys into LLM context; keep them in plugin config or gateway env.
 - Prefer offline verification (JWKS + EdDSA) for speed; introspection remains for revocation checks.

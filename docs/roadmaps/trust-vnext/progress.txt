@@ -512,3 +512,18 @@ Started: 2026-02-07T19:53:07Z
 - Notes
   - This enforces sensitive-profile bootstrap partitioning without requiring OpenClaw core changes by using plugin-level fail-closed checks.
 ---
+## 2026-02-11T21:50:00Z - OCL-US-002
+- What was implemented
+  - Added role-based directive authorization in `provider-clawproxy` plugin:
+    - new config block: `directiveAuth` (`enabled`, `operatorRoles`, `buyerRoles`, `restrictedDirectives`)
+    - parses slash directives from prompt/messages
+    - resolves sender role from event/context metadata
+    - fail-closed denies restricted directives for buyer/non-operator roles
+  - Deterministic denial paths:
+    - `DIRECTIVE_AUTH_ROLE_REQUIRED`
+    - `DIRECTIVE_AUTH_DENIED`
+  - Updated OpenClaw integration docs with operator-vs-buyer directive auth pattern.
+- Tests
+  - Extended `packages/openclaw-provider-clawproxy/test/airlock-bootstrap.test.mjs` with directive parsing/authz regression cases.
+  - `node --test test/*.test.mjs` passed.
+---

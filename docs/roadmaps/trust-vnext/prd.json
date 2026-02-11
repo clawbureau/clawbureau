@@ -239,8 +239,8 @@
         "Add regression tests for directive parsing and authorization"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "See docs/openclaw/9.3-directives.md + prompt-injection oracle outputs."
+      "passes": true,
+      "notes": "Implemented plugin-level directive authorization in provider-clawproxy (`directiveAuth` config): restricted directives are extracted from prompt/message text and evaluated against sender role allowlists. Buyer/unknown roles are fail-closed for restricted directives with deterministic denial codes (`DIRECTIVE_AUTH_ROLE_REQUIRED`, `DIRECTIVE_AUTH_DENIED`). Added regression tests for directive extraction, authorization evaluation, and before_agent_start rejection behavior."
     },
     {
       "id": "OCL-US-003",
@@ -329,7 +329,7 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T21:15:00Z",
+    "updatedAt": "2026-02-11T21:50:00Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }
