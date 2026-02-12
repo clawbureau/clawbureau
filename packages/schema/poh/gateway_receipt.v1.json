@@ -71,6 +71,26 @@
               "uri": { "type": "string" }
             }
           }
+        },
+        "x402_payment_ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "x402 payment transaction hash or facilitator reference. Present when request was paid via x402."
+        },
+        "x402_amount_minor": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Amount settled in minor units (e.g., 1 USDC = 1000000 minor units). Present when request was paid via x402."
+        },
+        "x402_currency": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Payment currency (e.g., USDC). Present when request was paid via x402."
+        },
+        "x402_network": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Payment network (e.g., base-sepolia, base). Present when request was paid via x402."
         }
       },
       "additionalProperties": true

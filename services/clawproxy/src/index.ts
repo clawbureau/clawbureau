@@ -58,6 +58,17 @@ import {
   didKeyFromEd25519PublicKeyBytes,
 } from './crypto';
 import { logBlockedProvider, logRateLimited, logPolicyViolation, logPolicyMissing, logConfidentialRequest, logTokenUsed } from './logging';
+import {
+  isX402Enabled,
+  hasX402Payment,
+  buildPaymentRequiredResponse,
+  verifyX402Payment,
+  settleX402Payment,
+  buildX402ReceiptMetadata,
+  type X402PaymentPayload,
+  type X402PaymentRequirements,
+  type X402PaymentContext,
+} from './x402';
 import { checkRateLimit, buildRateLimitHeaders, type RateLimitInfo } from './ratelimit';
 import {
   extractBindingFromHeaders,
