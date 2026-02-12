@@ -1,0 +1,51 @@
+{
+  "urm_version": "1",
+  "urm_id": "urm_fe24395a-990c-4df7-a00d-7fc03fdbf64f",
+  "run_id": "run_4ff3fd23-dd01-41e3-93e4-42ec06bd89d7",
+  "agent_did": "did:key:z6Mkh94VVvCWjth7HpMRdbJkQvt55tBxz53iSMBTaWKhSGDq",
+  "issued_at": "2026-02-12T17:36:13.176Z",
+  "harness": {
+    "id": "pi",
+    "version": "1.0.0",
+    "runtime": "host",
+    "config_hash_b64u": "EKeb0ViOiqlpPvvBLO1Xc3p-rbjcPf4lIl2m9TM414o"
+  },
+  "inputs": [
+    {
+      "type": "command",
+      "hash_b64u": "MDEnQI7o0HWO8-fDBmd23AC3dLJYieEtOhOaY3AObWU",
+      "metadata": {
+        "command": "echo CPL-MAX-002 evidence"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "exit_code",
+      "hash_b64u": "X-zrZv_IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V-k",
+      "metadata": {
+        "exitCode": 0
+      }
+    },
+    {
+      "type": "trust_pulse",
+      "hash_b64u": "xTbLomevHuEJPgPakMccSTYLtuP4VcNSFMt67Svj_fQ",
+      "content_type": "application/json",
+      "metadata": {
+        "schema": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+        "artifact_hash_b64u": "xTbLomevHuEJPgPakMccSTYLtuP4VcNSFMt67Svj_fQ",
+        "evidence_class": "self_reported",
+        "tier_uplift": false
+      }
+    }
+  ],
+  "event_chain_root_hash_b64u": "M8IdsvS0kmKefgHXFxLJq536QTyjjFpw9b2SP5C427s",
+  "metadata": {
+    "trust_pulse": {
+      "schema": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+      "artifact_hash_b64u": "xTbLomevHuEJPgPakMccSTYLtuP4VcNSFMt67Svj_fQ",
+      "evidence_class": "self_reported",
+      "tier_uplift": false
+    }
+  }
+}
