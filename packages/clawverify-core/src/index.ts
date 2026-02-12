@@ -90,3 +90,6 @@ export type {
   BadgeStats,
   BadgeStatus,
 } from './badge-health.js';
+
+// Sentinel trace compiler
+export { compileSemanticTrace } from './trace-compiler.js';

@@ -872,14 +872,85 @@ export interface ProofBundleMetadata {
   [key: string]: unknown;
 }
 
-/** Proof bundle payload structure */
+/** Tool receipt payload (matches poh/proof_bundle.v1.json tool_receipts). */
+export interface ToolReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  tool_name: string;
+  tool_version?: string;
+  args_hash_b64u?: string;
+  args_digest?: string;
+  result_hash_b64u?: string;
+  result_digest?: string;
+  result_status?: string;
+  hash_algorithm: HashAlgorithm;
+  duration_ms?: number;
+  latency_ms?: number;
+  agent_did: string;
+  timestamp: string;
+  binding?: Record<string, unknown>;
+}
+
+/** Side-effect receipt payload (matches poh/proof_bundle.v1.json). */
+export interface SideEffectReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  effect_class: 'network_egress' | 'filesystem_write' | 'external_api_write';
+  target_digest?: string;
+  request_digest?: string;
+  response_digest?: string;
+  hash_algorithm: HashAlgorithm;
+  vendor_id?: string;
+  bytes_written?: number;
+  agent_did: string;
+  timestamp: string;
+  binding?: Record<string, unknown>;
+}
+
+/** Human approval receipt payload (matches poh/proof_bundle.v1.json). */
+export interface HumanApprovalReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  approval_type: 'explicit_approve' | 'explicit_deny' | 'auto_approve' | 'timeout_deny';
+  scope_hash_b64u?: string;
+  plan_hash_b64u?: string;
+  approver_subject?: string;
+  capability_minted?: boolean;
+  policy_hash_b64u?: string;
+  agent_did: string;
+  timestamp: string;
+  binding?: Record<string, unknown>;
+}
+
+/** Delegation receipt payload (matches poh/proof_bundle.v1.json). */
+export interface DelegationReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  delegator_did: string;
+  delegate_did: string;
+  task_description_hash_b64u: string;
+  delegate_bundle_hash_b64u: string;
+  delegation_policy?: string;
+  hash_algorithm: HashAlgorithm;
+  delegated_at: string;
+  completed_at?: string;
+  binding?: Record<string, unknown>;
+}
+
+/** Proof bundle payload structure (matches poh/proof_bundle.v1.json) */
 export interface ProofBundlePayload {
   bundle_version: '1';
   bundle_id: string;
   agent_did: string;
+  eip8004_agent_id?: string;
+  eip8004_registry?: string;
   urm?: URMReference;
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
+  tool_receipts?: ToolReceiptPayload[];
+  side_effect_receipts?: SideEffectReceiptPayload[];
+  human_approval_receipts?: HumanApprovalReceiptPayload[];
+  delegation_receipts?: DelegationReceiptPayload[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
 }

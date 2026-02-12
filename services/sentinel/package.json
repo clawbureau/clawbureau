@@ -1,0 +1,21 @@
+{
+  "name": "@clawbureau/sentinel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Behavioral anomaly detection via trajectory embeddings.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clawbureau/clawverify-core": "file:../../packages/clawverify-core"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250207.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

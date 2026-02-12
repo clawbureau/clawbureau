@@ -1,0 +1,25 @@
+name = "sentinel"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-11"
+
+[vars]
+SENTINEL_ENABLED = "true"
+
+[ai]
+binding = "AI"
+
+[[vectorize]]
+binding = "SENTINEL_DB"
+index_name = "clawsig-sentinel-v1"
+
+[[queues.consumers]]
+queue = "sentinel-ingest"
+max_batch_size = 10
+max_batch_timeout = 30
+
+[env.staging]
+name = "sentinel-staging"
+
+[env.staging.vars]
+SENTINEL_ENABLED = "true"
