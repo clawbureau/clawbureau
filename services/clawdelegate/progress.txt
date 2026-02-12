@@ -18,4 +18,6 @@
 - Routing check: `artifacts/ops/clawdelegate/2026-02-12T04-53-42-573Z-routing/routing-check.json`
 - Notes:
   - `clawdelegate.com` route is live on dedicated worker.
-  - `www.clawdelegate.com` and `staging.clawdelegate.com` DNS records are not resolvable yet.
+  - DNS caveat closed: `www.clawdelegate.com` + `staging.clawdelegate.com` now resolve (proxied CNAMEs → apex).
+  - Canonical hostname smoke (staging): `artifacts/smoke/clawdelegate/2026-02-12T11-57-51-889Z-staging/result.json` (base_url = https://staging.clawdelegate.com)
+  - Canonical hostname smoke (prod): `artifacts/smoke/clawdelegate/2026-02-12T11-57-55-034Z-prod/result.json`

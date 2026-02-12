@@ -1,0 +1,111 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/identity/CDL-MAX-001-delegation-control-plane",
+  "description": "clawdelegate.com (Delegation Control Plane) — PRD — Delegated CST lifecycle (issue/revoke), spend governance hooks, and immutable audit/export evidence.",
+  "userStories": [
+    {
+      "id": "CDL-US-001",
+      "title": "Create delegation contract",
+      "description": "As an operator, I want to create a delegation contract so sub-agents can act within scoped authority.",
+      "acceptanceCriteria": [
+        "POST /v1/delegations creates an idempotent delegation contract",
+        "Delegation persists authoritative state in D1",
+        "Deterministic error contracts (fail-closed)"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in services/clawdelegate with D1 + deterministic idempotency. Verified by smoke artifacts under artifacts/smoke/clawdelegate/."
+    },
+    {
+      "id": "CDL-US-002",
+      "title": "Approval workflows",
+      "description": "As a delegator, I want an explicit approval step so delegated authority is not active until approved.",
+      "acceptanceCriteria": [
+        "POST /v1/delegations/:id/approve transitions delegation to approved",
+        "Replay-safe behavior for repeated approvals",
+        "Audit events emitted"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented approve state transition + audit events. Verified by smoke (approve event present in audit trail)."
+    },
+    {
+      "id": "CDL-US-003",
+      "title": "Spend caps",
+      "description": "As a platform, I want delegation spend caps enforced so overages are blocked and auditable.",
+      "acceptanceCriteria": [
+        "Spend mutations enforce spend_cap_minor",
+        "Over-cap attempts fail closed with deterministic error code",
+        "Ledger hooks are idempotent and replay-safe"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented spend reserve/consume/release/authorize with cap enforcement and deterministic errors (e.g. DELEGATION_SPEND_CAP_EXCEEDED)."
+    },
+    {
+      "id": "CDL-US-004",
+      "title": "Delegation audit trail + export",
+      "description": "As an auditor, I want an immutable audit trail and export so delegation lifecycle is traceable.",
+      "acceptanceCriteria": [
+        "GET /v1/delegations/:id/audit lists audit events",
+        "GET /v1/delegations/:id/audit/export returns JSONL with sha256 header",
+        "All lifecycle and spend actions are recorded"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Implemented audit registry in D1 and deterministic export with x-audit-sha256-b64u header. Verified by smoke assertions (audit_has_* and export_hash_header_present)."
+    },
+    {
+      "id": "CDL-US-005",
+      "title": "Delegation revoke + revocation fanout",
+      "description": "As a delegator, I want to revoke delegations and propagate token revocations so permissions are safe.",
+      "acceptanceCriteria": [
+        "POST /v1/delegations/:id/revoke sets state revoked",
+        "Revocation propagates to clawscope (token revoke)",
+        "Queue-based fanout supported with deterministic fallbacks"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Implemented revoke state transition + fanout to clawscope via queue (DELEGATE_EVENTS) or best-effort direct calls. Verified by smoke revoke + audit."
+    },
+    {
+      "id": "CDL-US-006",
+      "title": "Delegation API surface",
+      "description": "As a developer, I want a documented API surface so integrations are straightforward.",
+      "acceptanceCriteria": [
+        "GET /docs lists endpoints",
+        "GET /health returns version and environment",
+        "Fail-closed auth for mutating routes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Implemented /health and /docs with deterministic output. Admin-key auth required for control-plane routes."
+    },
+    {
+      "id": "CDL-US-007",
+      "title": "Delegated CST issuance",
+      "description": "As a delegator, I want delegated CST tokens minted so delegates have narrow, time-bounded authority.",
+      "acceptanceCriteria": [
+        "POST /v1/delegations/:id/tokens/issue issues a canonical CST via clawscope",
+        "Token includes delegation binding claims (delegation_id, delegator_did, delegate_did, etc.)",
+        "Issuance fails closed if control-chain is missing"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Implemented delegated CST issuance via clawscope /v1/tokens/issue/canonical with delegation claims. Verified by smoke (issue returns token_hash + token_scope_hash_b64u)."
+    },
+    {
+      "id": "CDL-MAX-001",
+      "title": "Staging+prod rollout evidence",
+      "description": "As operations, we need staging+prod deploy+smoke evidence for the delegation control plane.",
+      "acceptanceCriteria": [
+        "Deploy versions recorded",
+        "Staging+prod smokes pass",
+        "Evidence artifacts stored in artifacts/ops and artifacts/smoke"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "See artifacts/ops/clawdelegate/2026-02-12T04-56-45-407Z-deploy/deploy-summary.json and artifacts/smoke/clawdelegate/* for smoke outputs (including canonical hostname staging smoke)."
+    }
+  ]
+}
