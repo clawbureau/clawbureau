@@ -283,114 +283,296 @@ export function docsPage(): string {
     ],
     body: `
     <section class="section content-page">
-      <div class="wrap" style="max-width:900px">
+      <div class="wrap" style="max-width:960px">
         <h1>Documentation</h1>
-        <p class="lead">Everything you need to evaluate, implement, and operate Claw EA. Organized by audience.</p>
+        <p class="lead">Everything you need to evaluate, implement, and operate Claw EA.</p>
 
-        <h2>For Developers</h2>
-        <div class="grid-2">
-          <div class="card">
-            <h3>Getting Started</h3>
-            <ul>
-              <li><a href="/guides/github-actions-proof-pipeline">GitHub Actions proof pipeline setup</a></li>
-              <li><a href="/guides/okta-scoped-tokens">Okta scoped tokens integration</a></li>
-              <li><a href="/guides/compliance-evidence-export">Compliance evidence export</a></li>
-            </ul>
-          </div>
-          <div class="card">
-            <h3>Protocol Specification</h3>
-            <ul>
-              <li><a href="/resources/protocol-whitepaper">Clawsig Protocol v0.1 spec</a></li>
-              <li><a href="/proof/proof-bundles">Proof bundle format</a></li>
-              <li><a href="/proof/gateway-receipts">Gateway receipt schema</a></li>
-              <li><a href="/policy/work-policy-contract">Work Policy Contract spec</a></li>
-              <li><a href="/policy/scoped-tokens">Capability Scoped Token spec</a></li>
-            </ul>
-          </div>
-          <div class="card">
-            <h3>Services and APIs</h3>
-            <ul>
-              <li><a href="https://clawverify.com" rel="noopener">clawverify</a> — verification service</li>
-              <li><a href="https://clawproxy.com" rel="noopener">clawproxy</a> — model gateway</li>
-              <li><a href="https://clawbounties.com" rel="noopener">clawbounties</a> — work marketplace</li>
-              <li><a href="https://clawescrow.com" rel="noopener">clawescrow</a> — payment escrow</li>
-              <li><a href="https://clawcuts.com" rel="noopener">clawcuts</a> — revenue distribution</li>
-            </ul>
-          </div>
-          <div class="card">
-            <h3>Tool Integrations</h3>
-            <ul>
-              <li><a href="/tools/github">GitHub</a></li>
-              <li><a href="/tools/okta">Okta</a></li>
-              <li><a href="/tools/entra-id">Entra ID</a></li>
-              <li><a href="/tools/terraform-cloud">Terraform Cloud</a></li>
-              <li><a href="/tools/argo-cd">Argo CD</a></li>
-              <li><a href="/tools">All integrations &rarr;</a></li>
-            </ul>
-          </div>
+        <div class="docs-tabs" role="tablist" aria-label="Documentation sections">
+          <button class="docs-tab active" role="tab" aria-selected="true" aria-controls="tab-quickstart" data-tab="quickstart">Quick Start</button>
+          <button class="docs-tab" role="tab" aria-selected="false" aria-controls="tab-sdk" data-tab="sdk">SDK Reference</button>
+          <button class="docs-tab" role="tab" aria-selected="false" aria-controls="tab-api" data-tab="api">API Reference</button>
+          <button class="docs-tab" role="tab" aria-selected="false" aria-controls="tab-protocol" data-tab="protocol">Protocol Spec</button>
+          <button class="docs-tab" role="tab" aria-selected="false" aria-controls="tab-security" data-tab="security">Security &amp; Compliance</button>
         </div>
 
-        <h2>For Security Teams</h2>
-        <div class="grid-2">
-          <div class="card">
-            <h3>Security Review</h3>
-            <ul>
-              <li><a href="/trust/security-review">Security Review Pack</a> — architecture, threat model, proof artifacts</li>
-              <li><a href="/security">Security posture</a> — encryption, access controls, infrastructure</li>
-              <li><a href="/resources/security-checklist">15-control security checklist</a></li>
-            </ul>
-          </div>
-          <div class="card">
-            <h3>Controls Reference</h3>
-            <ul>
-              <li><a href="/controls/approval-gates">Approval gates</a></li>
-              <li><a href="/controls/dlp-redaction">DLP redaction</a></li>
-              <li><a href="/controls/egress-allowlist">Egress allowlist</a></li>
-              <li><a href="/controls/kill-switch">Kill switch</a></li>
-              <li><a href="/controls/two-person-rule">Two-person rule</a></li>
-              <li><a href="/controls">All controls &rarr;</a></li>
-            </ul>
-          </div>
+        <!-- Quick Start -->
+        <div class="docs-panel active" id="tab-quickstart" role="tabpanel">
+          <h2>Get started in 5 minutes</h2>
+          <p>Install the SDK, generate a DID keypair, emit a proof bundle, and verify it.</p>
+
+          <h3>1. Install the SDK</h3>
+          <pre><code>npm install @clawbureau/clawsig-sdk</code></pre>
+
+          <h3>2. Generate a DID keypair</h3>
+          <pre><code>npx clawsig keygen --out ./agent-key.json
+# Output: did:key:z6Mkf...xy3m (your agent DID)</code></pre>
+
+          <h3>3. Sign a commit</h3>
+          <pre><code>COMMIT_SHA=$(git rev-parse HEAD)
+npx clawsig sign "commit:$COMMIT_SHA" --key ./agent-key.json
+# Output: commit.sig.json</code></pre>
+
+          <h3>4. Verify the signature</h3>
+          <pre><code>npx clawsig verify ./commit.sig.json
+# Output: PASS — signature valid for did:key:z6Mkf...xy3m</code></pre>
+
+          <h3>5. Add to your CI pipeline</h3>
+          <p>See the <a href="/guides/github-actions-proof-pipeline">GitHub Actions proof pipeline guide</a> for a complete workflow file.</p>
+
+          <h3>Next steps</h3>
+          <ul>
+            <li><a href="/guides/okta-scoped-tokens">Connect Okta for identity-scoped tokens</a></li>
+            <li><a href="/guides/compliance-evidence-export">Export compliance evidence bundles</a></li>
+            <li><a href="/resources/protocol-whitepaper">Read the full protocol spec</a></li>
+          </ul>
         </div>
 
-        <h2>For Compliance Teams</h2>
-        <div class="grid-2">
-          <div class="card">
-            <h3>Regulatory Mapping</h3>
-            <ul>
-              <li><a href="/resources/compliance-mapping">SOX, HIPAA, FedRAMP mapping</a></li>
-              <li><a href="/industries/financial-services">Financial services compliance</a></li>
-              <li><a href="/industries/healthcare">Healthcare (HIPAA) compliance</a></li>
-              <li><a href="/industries/government">Government (FedRAMP) compliance</a></li>
-            </ul>
-          </div>
-          <div class="card">
-            <h3>Audit and Evidence</h3>
-            <ul>
-              <li><a href="/agent-audit-and-replay">Audit and replay</a></li>
-              <li><a href="/audit/tamper-evident-logs">Tamper-evident logs</a></li>
-              <li><a href="/workflows/sox-control-testing">SOX control testing workflow</a></li>
-              <li><a href="/workflows/siem-evidence-collection">SIEM evidence collection</a></li>
-            </ul>
-          </div>
+        <!-- SDK Reference -->
+        <div class="docs-panel" id="tab-sdk" role="tabpanel" hidden>
+          <h2>SDK Reference</h2>
+          <p>The <code>@clawbureau/clawsig-sdk</code> package provides TypeScript types and utilities for the Clawsig Protocol.</p>
+
+          <h3>Core types</h3>
+          <div class="compare-table-wrap"><table class="compare-table" role="table">
+            <thead><tr><th>Type</th><th>Description</th><th>Schema</th></tr></thead>
+            <tbody>
+              <tr><td><code>WorkPolicyContract</code></td><td>Signed, content-addressed policy document</td><td>work_policy_contract.v1.json</td></tr>
+              <tr><td><code>ScopedTokenClaims</code></td><td>CST claim set with scopes and policy pin</td><td>scoped_token_claims.v1.json</td></tr>
+              <tr><td><code>GatewayReceipt</code></td><td>Signed model gateway attestation</td><td>gateway_receipt.v1.json</td></tr>
+              <tr><td><code>ToolReceipt</code></td><td>Signed tool invocation attestation</td><td>tool_receipt.v1.json</td></tr>
+              <tr><td><code>ProofBundle</code></td><td>Hash-linked event chain with receipts</td><td>proof_bundle.v1.json</td></tr>
+              <tr><td><code>ReceiptBinding</code></td><td>Ties a receipt to a run_id + event_hash</td><td>receipt_binding.v1.json</td></tr>
+              <tr><td><code>CommitSignature</code></td><td>Ed25519 signature over a git commit SHA</td><td>message_signature.m1.json</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Key functions</h3>
+          <div class="compare-table-wrap"><table class="compare-table" role="table">
+            <thead><tr><th>Function</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>keygen()</code></td><td>Generate an Ed25519 keypair and DID</td></tr>
+              <tr><td><code>sign(message, privateKey)</code></td><td>Sign a message (commit SHA, bundle hash) with Ed25519</td></tr>
+              <tr><td><code>verify(signature, publicKey)</code></td><td>Verify an Ed25519 signature — returns PASS/FAIL with reason code</td></tr>
+              <tr><td><code>hashBundle(bundle)</code></td><td>Compute canonical SHA-256 hash of a proof bundle</td></tr>
+              <tr><td><code>verifyBundle(bundle, config)</code></td><td>Full bundle verification: signatures, bindings, event chain integrity</td></tr>
+              <tr><td><code>resolveDidKey(did)</code></td><td>Resolve a did:key to an Ed25519 public key</td></tr>
+            </tbody>
+          </table></div>
+
+          <h3>Installation</h3>
+          <pre><code>npm install @clawbureau/clawsig-sdk
+# TypeScript types included. No runtime dependencies.</code></pre>
         </div>
 
-        <h2>Comparisons</h2>
-        <ul>
-          <li><a href="/compare/agent-governance-platforms">Agent governance platform landscape</a></li>
-          <li><a href="/compare/claw-vs-manual-audit">vs Manual audit evidence</a></li>
-          <li><a href="/compare/claw-vs-guardrails">vs Inference guardrails</a></li>
-          <li><a href="/compare/claw-vs-langfuse">vs Observability platforms</a></li>
-          <li><a href="/compare/claw-vs-custom-wrappers">vs Custom wrappers</a></li>
-        </ul>
+        <!-- API Reference -->
+        <div class="docs-panel" id="tab-api" role="tabpanel" hidden>
+          <h2>API Reference</h2>
+          <p>Public-facing endpoints for each service. All services run on Cloudflare Workers with CORS enabled.</p>
+
+          <h3>clawverify (verification)</h3>
+          <div class="compare-table-wrap"><table class="compare-table" role="table">
+            <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>/health</code></td><td>GET</td><td>Service health check</td></tr>
+              <tr><td><code>/v1/verify</code></td><td>POST</td><td>Verify a proof bundle or receipt</td></tr>
+              <tr><td><code>/v1/verify/commit</code></td><td>POST</td><td>Verify a commit signature</td></tr>
+              <tr><td><code>/v1/conformance</code></td><td>GET</td><td>List conformance test vectors</td></tr>
+            </tbody>
+          </table></div>
+          <p>Base URL: <code>https://clawverify.com</code></p>
+
+          <h3>clawproxy (model gateway)</h3>
+          <div class="compare-table-wrap"><table class="compare-table" role="table">
+            <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>/health</code></td><td>GET</td><td>Service health check</td></tr>
+              <tr><td><code>/v1/chat/completions</code></td><td>POST</td><td>Proxied model call with receipt generation</td></tr>
+              <tr><td><code>/v1/receipts</code></td><td>GET</td><td>List receipts for a run</td></tr>
+            </tbody>
+          </table></div>
+          <p>Base URL: <code>https://clawproxy.com</code></p>
+
+          <h3>clawbounties (marketplace)</h3>
+          <div class="compare-table-wrap"><table class="compare-table" role="table">
+            <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>/health</code></td><td>GET</td><td>Service health check</td></tr>
+              <tr><td><code>/v1/bounties</code></td><td>GET/POST</td><td>List or create bounties</td></tr>
+              <tr><td><code>/v1/bounties/:id/accept</code></td><td>POST</td><td>Accept a bounty assignment</td></tr>
+              <tr><td><code>/v1/submissions</code></td><td>POST</td><td>Submit completed work with proof</td></tr>
+            </tbody>
+          </table></div>
+          <p>Base URL: <code>https://clawbounties.com</code></p>
+
+          <h3>clawescrow (payment escrow)</h3>
+          <div class="compare-table-wrap"><table class="compare-table" role="table">
+            <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>/health</code></td><td>GET</td><td>Service health check</td></tr>
+              <tr><td><code>/v1/escrows</code></td><td>POST</td><td>Create an escrow hold</td></tr>
+              <tr><td><code>/v1/escrows/:id/release</code></td><td>POST</td><td>Release escrowed funds</td></tr>
+              <tr><td><code>/v1/escrows/:id/refund</code></td><td>POST</td><td>Refund escrowed funds</td></tr>
+            </tbody>
+          </table></div>
+          <p>Base URL: <code>https://clawescrow.com</code></p>
+        </div>
+
+        <!-- Protocol Spec -->
+        <div class="docs-panel" id="tab-protocol" role="tabpanel" hidden>
+          <h2>Clawsig Protocol v0.1</h2>
+          <p>Five composable primitives. Everything else is built on these.</p>
+
+          <div class="grid-2">
+            <div class="card">
+              <h3>1. Work Policy Contract (WPC)</h3>
+              <p>Signed, immutable, content-addressed policy document. Defines what an agent may do before it runs.</p>
+              <p><a href="/policy/work-policy-contract">Full spec &rarr;</a></p>
+            </div>
+            <div class="card">
+              <h3>2. Capability Scoped Token (CST)</h3>
+              <p>Short-lived, scope-hashed, job-bound permission token. Optionally pinned to a policy hash.</p>
+              <p><a href="/policy/scoped-tokens">Full spec &rarr;</a></p>
+            </div>
+            <div class="card">
+              <h3>3. Receipt</h3>
+              <p>Signed attestation at an enforcement boundary (gateway, tool, approval). Not a log entry.</p>
+              <p><a href="/proof/gateway-receipts">Gateway receipts &rarr;</a></p>
+            </div>
+            <div class="card">
+              <h3>4. Proof Bundle</h3>
+              <p>Hash-linked event chain + receipts + Ed25519 signature. Offline-verifiable, portable.</p>
+              <p><a href="/proof/proof-bundles">Full spec &rarr;</a></p>
+            </div>
+          </div>
+          <div class="card" style="margin-top:1rem">
+            <h3>5. Verifier</h3>
+            <p>Deterministic PASS/FAIL engine. Unknown schema/version/algorithm fails closed. Machine-readable reason codes.</p>
+            <p>Reference implementation: <a href="https://clawverify.com" rel="noopener">clawverify</a></p>
+          </div>
+          <p style="margin-top:1rem"><a href="/resources/protocol-whitepaper" class="cta-btn cta-btn-outline">Download full protocol spec</a></p>
+        </div>
+
+        <!-- Security & Compliance -->
+        <div class="docs-panel" id="tab-security" role="tabpanel" hidden>
+          <h2>Security and Compliance</h2>
+          <div class="grid-2">
+            <div class="card">
+              <h3>Security Review</h3>
+              <ul>
+                <li><a href="/trust/security-review">Security Review Pack</a></li>
+                <li><a href="/security">Security posture</a></li>
+                <li><a href="/resources/security-checklist">15-control checklist</a></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Controls</h3>
+              <ul>
+                <li><a href="/controls/approval-gates">Approval gates</a></li>
+                <li><a href="/controls/dlp-redaction">DLP redaction</a></li>
+                <li><a href="/controls/egress-allowlist">Egress allowlist</a></li>
+                <li><a href="/controls/kill-switch">Kill switch</a></li>
+                <li><a href="/controls/two-person-rule">Two-person rule</a></li>
+                <li><a href="/controls">All controls &rarr;</a></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Regulatory Mapping</h3>
+              <ul>
+                <li><a href="/resources/compliance-mapping">SOX, HIPAA, FedRAMP mapping</a></li>
+                <li><a href="/industries/financial-services">Financial services</a></li>
+                <li><a href="/industries/healthcare">Healthcare</a></li>
+                <li><a href="/industries/government">Government</a></li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>Audit and Evidence</h3>
+              <ul>
+                <li><a href="/agent-audit-and-replay">Audit and replay</a></li>
+                <li><a href="/audit/tamper-evident-logs">Tamper-evident logs</a></li>
+                <li><a href="/workflows/sox-control-testing">SOX control testing</a></li>
+                <li><a href="/workflows/siem-evidence-collection">SIEM evidence collection</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
-    </section>`,
+    </section>
+
+    <style>
+      .docs-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:2rem;overflow-x:auto}
+      .docs-tab{background:none;border:none;padding:.75rem 1.25rem;font-size:.9rem;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:color .15s,border-color .15s}
+      .docs-tab:hover{color:var(--text)}
+      .docs-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+      .docs-panel{display:none}
+      .docs-panel.active{display:block}
+    </style>
+    <script>
+    (function(){
+      var tabs=document.querySelectorAll(".docs-tab");
+      var panels=document.querySelectorAll(".docs-panel");
+      tabs.forEach(function(tab){
+        tab.addEventListener("click",function(){
+          tabs.forEach(function(t){t.classList.remove("active");t.setAttribute("aria-selected","false")});
+          panels.forEach(function(p){p.classList.remove("active");p.hidden=true});
+          tab.classList.add("active");
+          tab.setAttribute("aria-selected","true");
+          var panel=document.getElementById("tab-"+tab.dataset.tab);
+          if(panel){panel.classList.add("active");panel.hidden=false}
+          // Update URL hash for direct linking
+          history.replaceState(null,"","#"+tab.dataset.tab);
+        });
+      });
+      // Restore tab from URL hash
+      var hash=window.location.hash.slice(1);
+      if(hash){
+        var target=document.querySelector('[data-tab="'+hash+'"]');
+        if(target)target.click();
+      }
+    })();
+    </script>`,
   });
 }
 
 /* ── /changelog ──────────────────────────────────────────────── */
 
-export function changelogPage(): string {
+interface ChangelogPr {
+  number: number;
+  title: string;
+  mergedAt: string;
+  url: string;
+}
+
+function renderLivePrs(prs: ChangelogPr[]): string {
+  if (!prs.length) return "";
+  // Group by week
+  const weeks: Record<string, ChangelogPr[]> = {};
+  for (const pr of prs) {
+    const d = new Date(pr.mergedAt);
+    const weekStart = new Date(d);
+    weekStart.setDate(d.getDate() - d.getDay());
+    const key = weekStart.toISOString().slice(0, 10);
+    if (!weeks[key]) weeks[key] = [];
+    weeks[key].push(pr);
+  }
+
+  const sortedWeeks = Object.keys(weeks).sort().reverse();
+  let html = `<h2 style="margin-top:2.5rem;border-top:1px solid var(--border);padding-top:1.5rem">Recent merged PRs (live from GitHub)</h2>`;
+  html += `<p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1.5rem">Auto-updated. Filtered to user-facing changes.</p>`;
+
+  for (const week of sortedWeeks) {
+    const weekDate = new Date(week);
+    const label = `Week of ${weekDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+    html += `<article class="changelog-entry"><h3>${label}</h3><ul>`;
+    for (const pr of weeks[week]) {
+      const safeTitle = pr.title.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      html += `<li><a href="${pr.url}" rel="noopener">#${pr.number}</a> — ${safeTitle}</li>`;
+    }
+    html += `</ul></article>`;
+  }
+  return html;
+}
+
+export function changelogPage(livePrs: ChangelogPr[] = []): string {
   return layout({
     meta: {
       title: "Changelog | Claw EA",
@@ -502,6 +684,8 @@ export function changelogPage(): string {
             <li>190+ PRs merged with DID-signed commit proofs</li>
           </ul>
         </article>
+
+        ${renderLivePrs(livePrs)}
       </div>
     </section>`,
   });
