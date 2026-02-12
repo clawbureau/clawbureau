@@ -95,6 +95,14 @@
         "log_inclusion_proof": {
           "$ref": "https://schemas.clawbureau.org/claw.poh.log_inclusion_proof.v1.json",
           "description": "Receipt Transparency (RT) inclusion proof. Present when the receipt hash has been submitted to the clawlogs append-only Merkle tree. A receipt without this field has not been transparency-logged and should be treated with lower trust by verifiers."
+        },
+        "kinematic_fingerprint": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.kinematic_fingerprint.v1.json",
+          "description": "Kinematic Proof of Model (KPOM) fingerprint. Hardware-level timing fingerprint derived from streaming token delivery patterns. Present for streaming responses proxied through the gateway."
+        },
+        "sentinel_anomaly_report": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.sentinel_anomaly_report.v1.json",
+          "description": "Sentinel trajectory anomaly report. Present when the Sentinel analysis engine has assessed the execution trajectory for behavioral anomalies."
         }
       },
       "additionalProperties": true
