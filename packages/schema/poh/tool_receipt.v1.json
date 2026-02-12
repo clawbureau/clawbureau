@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/tool_receipt.v1.json",
+  "title": "Tool Receipt v1",
+  "description": "A receipt emitted at a tool dispatcher boundary. Hash-only by default: captures tool identity, argument digest, result digest, timing, and agent DID — without leaking raw arguments or results.",
+  "type": "object",
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "tool_name",
+    "args_hash_b64u",
+    "result_hash_b64u",
+    "hash_algorithm",
+    "agent_did",
+    "timestamp",
+    "latency_ms"
+  ],
+  "properties": {
+    "receipt_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version. Always '1' for this schema."
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique receipt ID (UUID or similar)."
+    },
+    "tool_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical tool name (e.g. 'bash', 'read_file', 'web_search')."
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "Optional tool version string."
+    },
+    "args_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded hash of JCS-canonicalized tool arguments."
+    },
+    "result_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded hash of JCS-canonicalized tool result."
+    },
+    "result_status": {
+      "type": "string",
+      "enum": ["success", "error", "timeout"],
+      "description": "High-level outcome of the tool call."
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256"],
+      "description": "Hash algorithm used for args_hash and result_hash."
+    },
+    "agent_did": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID of the agent that invoked the tool."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of tool invocation."
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Tool execution latency in milliseconds."
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "run_id": { "type": "string" },
+        "event_hash_b64u": { "type": "string" },
+        "nonce": { "type": "string" },
+        "policy_hash": { "type": "string" },
+        "token_scope_hash_b64u": { "type": "string" }
+      },
+      "description": "Optional binding to a proof bundle run and event chain."
+    }
+  },
+  "additionalProperties": false
+}

@@ -83,17 +83,18 @@ async function main() {
 
     const inputPath = path.join(ROOT, relPath);
 
-    const sub = kind === 'proof_bundle' ? 'proof-bundle' : 'export-bundle';
+    const sub =
+      kind === 'proof_bundle'
+        ? 'proof-bundle'
+        : kind === 'commit_sig'
+          ? 'commit-sig'
+          : 'export-bundle';
 
-    const args = [
-      cliPath,
-      'verify',
-      sub,
-      '--input',
-      inputPath,
-      '--config',
-      configPath,
-    ];
+    const args = [cliPath, 'verify', sub, '--input', inputPath];
+    // commit-sig doesn't require a config file
+    if (kind !== 'commit_sig') {
+      args.push('--config', configPath);
+    }
 
     const startedAt = new Date().toISOString();
 

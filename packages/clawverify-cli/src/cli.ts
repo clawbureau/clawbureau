@@ -5,6 +5,7 @@ import { CliUsageError } from './errors.js';
 import {
   exitCodeForOutput,
   kindForSubcommand,
+  verifyCommitSigFromFile,
   verifyExportBundleFromFile,
   verifyProofBundleFromFile,
 } from './verify.js';
@@ -21,6 +22,7 @@ function usageText(): string {
     'Usage:',
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
     '  clawverify verify export-bundle --input <path> [--config <path>]',
+    '  clawverify verify commit-sig   --input <path>',
     '',
     'Exit codes:',
     '  0 = PASS (valid)',
@@ -81,14 +83,16 @@ async function main() {
   const config = await resolveVerifierConfig({ configPath });
 
   const out =
-    kind === 'proof_bundle'
-      ? await verifyProofBundleFromFile({
-          inputPath,
-          configPath,
-          urmPath,
-          config,
-        })
-      : await verifyExportBundleFromFile({ inputPath, configPath, config });
+    kind === 'commit_sig'
+      ? await verifyCommitSigFromFile({ inputPath })
+      : kind === 'proof_bundle'
+        ? await verifyProofBundleFromFile({
+            inputPath,
+            configPath,
+            urmPath,
+            config,
+          })
+        : await verifyExportBundleFromFile({ inputPath, configPath, config });
 
   output(out);
   process.exitCode = exitCodeForOutput(out);

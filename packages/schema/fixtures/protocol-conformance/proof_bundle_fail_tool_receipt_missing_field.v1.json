@@ -1,0 +1,74 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "bundle_conformance_001",
+    "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "event_chain": [
+      {
+        "event_id": "evt_conformance_001",
+        "run_id": "run_conformance_001",
+        "event_type": "llm_call",
+        "timestamp": "2026-02-12T00:00:00.000Z",
+        "payload_hash_b64u": "ibhRTWt5gh47v4X1fAtBRKwEKCHZir1w-de3fNfCEu8",
+        "prev_hash_b64u": null,
+        "event_hash_b64u": "mo72_ab1UHvxY2DERZG2Tn12KNl2e_NSUrVDEQ5-Jds"
+      }
+    ],
+    "receipts": [
+      {
+        "envelope_version": "1",
+        "envelope_type": "gateway_receipt",
+        "payload": {
+          "receipt_version": "1",
+          "receipt_id": "rcpt_conformance_001",
+          "gateway_id": "gw_conformance",
+          "provider": "anthropic",
+          "model": "claude-test",
+          "request_hash_b64u": "znFMvVUosicygIr9uAwLugv-vYW--WPViQLpMQ6daXI",
+          "response_hash_b64u": "I-UgWdP2Vh8iGQumBflRpGs7RqcR0pDjlOXPSk4ylBY",
+          "tokens_input": 10,
+          "tokens_output": 20,
+          "latency_ms": 123,
+          "timestamp": "2026-02-12T00:00:00.000Z",
+          "binding": {
+            "run_id": "run_conformance_001",
+            "event_hash_b64u": "mo72_ab1UHvxY2DERZG2Tn12KNl2e_NSUrVDEQ5-Jds",
+            "nonce": "nonce_conformance_001"
+          }
+        },
+        "payload_hash_b64u": "Q93BAJydvhGEdSO1FOx5FI4Dcw0dT7EKJP2IrZmdXtQ",
+        "hash_algorithm": "SHA-256",
+        "signature_b64u": "q7q0bn1bcQzJMlujG55-WfSWjvtaT_D0JKSyvU0sMzB6NG-CDynd94W3LKywxi2coUUN5a7N2Qs0h0cBds5MAA",
+        "algorithm": "Ed25519",
+        "signer_did": "did:key:z6MkfF4ykuxdK3Cea9xDqWgLLgMBvxcypy6Tv1K45Eahxy3m",
+        "issued_at": "2026-02-12T00:00:01.000Z"
+      }
+    ],
+    "tool_receipts": [
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_test-vector-001",
+        "tool_version": "5.2",
+        "args_hash_b64u": "dGVzdC1hcmdzLWhhc2g",
+        "result_hash_b64u": "dGVzdC1yZXN1bHQtaGFzaA",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "timestamp": "2026-02-12T17:00:00.000Z",
+        "latency_ms": 42,
+        "binding": {
+          "run_id": "run_conformance_001",
+          "event_hash_b64u": "mo72_ab1UHvxY2DERZG2Tn12KNl2e_NSUrVDEQ5-Jds"
+        }
+      }
+    ]
+  },
+  "payload_hash_b64u": "HZYtCYB_iGtYBqnwGdf6Dts41qMLYil_AjLKHLJ7Lyk",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "9FS8CmJ7b1aE7YT-wdL8tZxnml-eDJ4XB5q-dE3uId8_BlgKEqUSVAdveKTKner99EjcoN3wKSxaj9k83b5ZDw",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "issued_at": "2026-02-12T00:00:02.000Z"
+}

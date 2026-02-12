@@ -62,7 +62,11 @@ A receipt is the unit that makes runs verifiable without reconstructing internal
 - **Witnessed web receipts** (SHIPPED reference impl):
   - Schema: `packages/schema/poh/web_receipt.v1.json`
   - Emitted by: witness harnesses / web control planes
-- **Tool receipts** (PLANNED): tool dispatcher boundary (tool name + args/result digests)
+- **Tool receipts** (SHIPPED):
+  - Schema: `packages/schema/poh/tool_receipt.v1.json`
+  - Envelope: `packages/schema/poh/tool_receipt_envelope.v1.json`
+  - SDK: `packages/clawproof-sdk` `ClawproofRun.recordToolCall()`
+  - Emitted by: tool dispatcher boundaries (hash-only by default)
 - **Side-effect receipts** (PLANNED): network egress, filesystem writes, external API writes
 - **Human approval receipts** (PLANNED): approval boundary that mints new capability
 
@@ -117,20 +121,47 @@ Any product claim like “every action attested” MUST declare its coverage.
 - **Coverage MT (Model + Tools):** model + tool receipts
 - **Coverage MTS (Model + Tools + Side-effects):** model + tool + side-effect receipts
 
-**Current Claw Bureau public truth (2026-02-12):** Coverage M is shipped; MT/MTS are planned.
+**Current Claw Bureau public truth (2026-02-12):** Coverage M shipped; Coverage MT shipped; MTS planned.
+
+### 2.3 Coverage matrix
+
+| Boundary | Receipt class | Schema | Status | Verifier support |
+|----------|--------------|--------|--------|-----------------|
+| Model gateway calls | `gateway_receipt` | `poh/gateway_receipt.v1.json` | **SHIPPED** | Full (signature + binding) |
+| Tool dispatcher calls | `tool_receipt` | `poh/tool_receipt.v1.json` | **SHIPPED** | Full (schema + signature) |
+| Network egress | (planned) | — | PLANNED | — |
+| Filesystem writes | (planned) | — | PLANNED | — |
+| External API writes | (planned) | — | PLANNED | — |
+| Human approvals | (planned) | — | PLANNED | — |
+| Witnessed web events | `web_receipt` | `poh/web_receipt.v1.json` | **SHIPPED** | Partial (schema only) |
+
+### 2.4 What is proven / what is not proven
+
+**Claw Protocol proofs demonstrate:**
+- An LLM call was made through a specific gateway with specific request/response hashes (model receipts)
+- A tool was invoked with specific argument/result digests (tool receipts, hash-only by default)
+- Events occurred in a specific order (hash-linked event chain)
+- A specific agent DID signed the proof bundle
+- A specific policy was in effect at time of execution (policy pin)
+- A receipt was bound to a specific run (receipt binding)
+
+**Claw Protocol proofs do NOT demonstrate:**
+- The content of LLM prompts/responses (only hashes, unless selective disclosure is enabled)
+- That the agent "intended" a specific outcome (proofs are execution traces, not intent proofs)
+- That no other actions occurred outside the attested boundaries
+- That the human operator reviewed every individual action (only that capability was granted)
+- Real-time correctness (proofs are after-the-fact; receipts may have propagation delay)
 
 ---
 
 ## 3) Deterministic failure semantics (protocol)
 
 ### 3.1 Denial and error codes
-All protocol components MUST return deterministic, machine-readable codes (examples):
-- `DENIED_POLICY` (policy rule violation)
-- `DENIED_SCOPE` (capability scope insufficient)
-- `DEPENDENCY_NOT_CONFIGURED` (fail-closed allowlist/governance missing)
-- `REPLAY_DETECTED` (idempotency / binding replay)
-- `INVALID_SIGNATURE`
-- `INVALID_SCHEMA`
+
+All protocol components MUST return deterministic, machine-readable reason codes from the canonical registry:
+`docs/specs/claw-protocol/REASON_CODE_REGISTRY.md`
+
+Code categories include: `SIGNATURE_*`, `SCHEMA_*`, `UNKNOWN_*`, `HASH_*`, `INVALID_*`, `DEPENDENCY_*`, `REPLAY_*`, `TOKEN_*`, `POLICY_*`.
 
 ### 3.2 “Verify-lite” preflight
 Clients (agents/tools) SHOULD be able to preflight:
