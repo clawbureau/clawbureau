@@ -130,3 +130,11 @@ Started: 2026-02-03
   - `packages/schema/identity/platform_claim.v1.json`
   - `packages/schema/identity/org_roster_claim_manifest.v1.json`
 - Establishes deterministic external identity claim and org/team roster manifest contracts used by clawclaim M5 endpoints.
+
+## CRP-OPS-001 — Reputation schemas (clawrep MVP)
+- Added deterministic reputation schemas:
+  - `packages/schema/reputation/reputation_event_ingest.v1.json`
+  - `packages/schema/reputation/reputation_profile.v1.json`
+  - `packages/schema/reputation/reviewer_selection_request.v1.json`
+  - `packages/schema/reputation/reviewer_selection_response.v1.json`
+- Updated `packages/schema/README.md` to include new `reputation/` directory and schema listing.

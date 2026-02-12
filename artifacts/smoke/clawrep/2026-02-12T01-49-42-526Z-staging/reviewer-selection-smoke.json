@@ -1,0 +1,56 @@
+{
+  "env": "staging",
+  "base_url": "https://clawrep-staging.generaite.workers.dev",
+  "request": {
+    "bounty_id": "bnty_1770860982527",
+    "difficulty_scalar": 2,
+    "quorum_size": 2,
+    "min_reputation_score": 10,
+    "require_owner_verified": false,
+    "exclude_dids": [
+      "did:key:z6MkrepA1770860982527"
+    ],
+    "submission_proof_tier": "gateway"
+  },
+  "first_selection": {
+    "bounty_id": "bnty_1770860982527",
+    "reviewers": [
+      {
+        "reviewer_did": "did:key:z6MkrepB1770860982527",
+        "reputation_score": 204.687079,
+        "is_owner_verified": true
+      },
+      {
+        "reviewer_did": "did:key:z6MkrepC1770860982527",
+        "reputation_score": 132.28757,
+        "is_owner_verified": false
+      }
+    ],
+    "selected_at": "2026-02-12T01:49:45.436Z"
+  },
+  "second_selection": {
+    "bounty_id": "bnty_1770860982527",
+    "reviewers": [
+      {
+        "reviewer_did": "did:key:z6MkrepB1770860982527",
+        "reputation_score": 204.687079,
+        "is_owner_verified": true
+      },
+      {
+        "reviewer_did": "did:key:z6MkrepC1770860982527",
+        "reputation_score": 132.28757,
+        "is_owner_verified": false
+      }
+    ],
+    "selected_at": "2026-02-12T01:49:45.436Z"
+  },
+  "reviewer_info": {
+    "reviewer_did": "did:key:z6MkrepB1770860982527",
+    "reputation_score": 204.687079,
+    "is_owner_verified": true
+  },
+  "assertions": {
+    "deterministic_ordering": true,
+    "reviewer_info_found": true
+  }
+}

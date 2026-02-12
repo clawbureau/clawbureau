@@ -1,0 +1,222 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T01:50:30.194Z",
+  "latest": {
+    "status": 200,
+    "payload": {
+      "snapshot_version": "1",
+      "generated_at": 1770861028,
+      "generated_at_iso": "2026-02-12T01:50:28.000Z",
+      "active_kid": "66a63dae7bbf4bda",
+      "accepted_kids": [
+        "66a63dae7bbf4bda",
+        "65b60673d6ed884b"
+      ],
+      "signing_kids": [
+        "66a63dae7bbf4bda"
+      ],
+      "verify_only_kids": [
+        "65b60673d6ed884b"
+      ],
+      "expiring_kids": [
+        {
+          "kid": "65b60673d6ed884b",
+          "not_after_unix": 1771108817
+        }
+      ],
+      "overlap_seconds": 3600,
+      "snapshot_id": "kts_1770861028_66a63dae7bbf4bda",
+      "snapshot_hash_b64u": "EPxfOLAVUkkkDJnk34Es9UB7Ga7aYWIKJzq7BnxeP2Q",
+      "signer_kid": "66a63dae7bbf4bda",
+      "signature_b64u": "5Oz7vuvCfXEE6HIDPZYhiBCDw1beonUAtLHZ3rQkpuSmkxdudrWT9QfxEXmWcVJUsdfTfaacxm8DIJ9jwndoDg",
+      "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T01:50:28.000Z-kts_1770861028_66a63dae7bbf4bda.json"
+    }
+  },
+  "history": {
+    "status": 200,
+    "payload": {
+      "snapshots": [
+        {
+          "snapshot_version": "1",
+          "generated_at": 1770861028,
+          "generated_at_iso": "2026-02-12T01:50:28.000Z",
+          "active_kid": "66a63dae7bbf4bda",
+          "accepted_kids": [
+            "66a63dae7bbf4bda",
+            "65b60673d6ed884b"
+          ],
+          "signing_kids": [
+            "66a63dae7bbf4bda"
+          ],
+          "verify_only_kids": [
+            "65b60673d6ed884b"
+          ],
+          "expiring_kids": [
+            {
+              "kid": "65b60673d6ed884b",
+              "not_after_unix": 1771108817
+            }
+          ],
+          "overlap_seconds": 3600,
+          "snapshot_id": "kts_1770861028_66a63dae7bbf4bda",
+          "snapshot_hash_b64u": "EPxfOLAVUkkkDJnk34Es9UB7Ga7aYWIKJzq7BnxeP2Q",
+          "signer_kid": "66a63dae7bbf4bda",
+          "signature_b64u": "5Oz7vuvCfXEE6HIDPZYhiBCDw1beonUAtLHZ3rQkpuSmkxdudrWT9QfxEXmWcVJUsdfTfaacxm8DIJ9jwndoDg",
+          "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T01:50:28.000Z-kts_1770861028_66a63dae7bbf4bda.json"
+        },
+        {
+          "snapshot_version": "1",
+          "generated_at": 1770859711,
+          "generated_at_iso": "2026-02-12T01:28:31.000Z",
+          "active_kid": "66a63dae7bbf4bda",
+          "accepted_kids": [
+            "66a63dae7bbf4bda",
+            "65b60673d6ed884b"
+          ],
+          "signing_kids": [
+            "66a63dae7bbf4bda"
+          ],
+          "verify_only_kids": [
+            "65b60673d6ed884b"
+          ],
+          "expiring_kids": [
+            {
+              "kid": "65b60673d6ed884b",
+              "not_after_unix": 1771108817
+            }
+          ],
+          "overlap_seconds": 3600,
+          "snapshot_id": "kts_1770859711_66a63dae7bbf4bda",
+          "snapshot_hash_b64u": "NSQxIzr5SRIf2FN9uQZgzZFh1PGNbRLLIitS0nvbdSQ",
+          "signer_kid": "66a63dae7bbf4bda",
+          "signature_b64u": "0KFt02iS2Kv98It0mNlXWGETlVtT7oEXgFQn5w2ms8U4fnqi-NafNJox1FSrbpMzBHcYj-TpGrYtN_8jJXl9BA",
+          "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T01:28:31.000Z-kts_1770859711_66a63dae7bbf4bda.json"
+        },
+        {
+          "snapshot_version": "1",
+          "generated_at": 1770859657,
+          "generated_at_iso": "2026-02-12T01:27:37.000Z",
+          "active_kid": "66a63dae7bbf4bda",
+          "accepted_kids": [
+            "66a63dae7bbf4bda",
+            "65b60673d6ed884b"
+          ],
+          "signing_kids": [
+            "66a63dae7bbf4bda"
+          ],
+          "verify_only_kids": [
+            "65b60673d6ed884b"
+          ],
+          "expiring_kids": [
+            {
+              "kid": "65b60673d6ed884b",
+              "not_after_unix": 1771108817
+            }
+          ],
+          "overlap_seconds": 3600,
+          "snapshot_id": "kts_1770859657_66a63dae7bbf4bda",
+          "snapshot_hash_b64u": "b85xuM1WfzUMYrnihobFet6LBxjZtsR7OHv0nOQdpek",
+          "signer_kid": "66a63dae7bbf4bda",
+          "signature_b64u": "n2AgYoL90A0qI7j7O9waXrM0fj77zW8VtZrTxl5__ilaGQL2-RvP5JXAZVR8BNcXRbTv1v_75KshVtjyal4fAg",
+          "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T01:27:37.000Z-kts_1770859657_66a63dae7bbf4bda.json"
+        },
+        {
+          "snapshot_version": "1",
+          "generated_at": 1770857541,
+          "generated_at_iso": "2026-02-12T00:52:21.000Z",
+          "active_kid": "66a63dae7bbf4bda",
+          "accepted_kids": [
+            "66a63dae7bbf4bda",
+            "65b60673d6ed884b"
+          ],
+          "signing_kids": [
+            "66a63dae7bbf4bda"
+          ],
+          "verify_only_kids": [
+            "65b60673d6ed884b"
+          ],
+          "expiring_kids": [
+            {
+              "kid": "65b60673d6ed884b",
+              "not_after_unix": 1771108817
+            }
+          ],
+          "overlap_seconds": 3600,
+          "snapshot_id": "kts_1770857541_66a63dae7bbf4bda",
+          "snapshot_hash_b64u": "29qCx-mvLIPW7g1sj_ZcW7K21g2cRsikLNI-zmjT5UY",
+          "signer_kid": "66a63dae7bbf4bda",
+          "signature_b64u": "8Kc2CNB4diKt6MkoZDk9COx8BV2Cl8WiYIN_LXSgiFnRcYY4m1J3v6TeSDjx53e4TbkzBzeCNQO6mpWBoqV1Dg",
+          "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T00:52:21.000Z-kts_1770857541_66a63dae7bbf4bda.json"
+        },
+        {
+          "snapshot_version": "1",
+          "generated_at": 1770857460,
+          "generated_at_iso": "2026-02-12T00:51:00.000Z",
+          "active_kid": "66a63dae7bbf4bda",
+          "accepted_kids": [
+            "66a63dae7bbf4bda",
+            "65b60673d6ed884b"
+          ],
+          "signing_kids": [
+            "66a63dae7bbf4bda"
+          ],
+          "verify_only_kids": [
+            "65b60673d6ed884b"
+          ],
+          "expiring_kids": [
+            {
+              "kid": "65b60673d6ed884b",
+              "not_after_unix": 1771108817
+            }
+          ],
+          "overlap_seconds": 3600,
+          "snapshot_id": "kts_1770857460_66a63dae7bbf4bda",
+          "snapshot_hash_b64u": "fxvIn7CA_YGWz7u2K16UdyRgnO9I5UhGEhJwIlSw2vw",
+          "signer_kid": "66a63dae7bbf4bda",
+          "signature_b64u": "fAwTqLRI_FjCfSsB5vLRqz1HlUNdqLiYAVLBymnMtqdYlu-jnqFeBektQ4yMV_N7L46EulzvIwVNsai2esNuDQ",
+          "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T00:51:00.000Z-kts_1770857460_66a63dae7bbf4bda.json"
+        }
+      ]
+    }
+  },
+  "force_snapshot": {
+    "status": 200,
+    "payload": {
+      "status": "snapshot_created",
+      "snapshot": {
+        "snapshot_version": "1",
+        "generated_at": 1770861029,
+        "generated_at_iso": "2026-02-12T01:50:29.000Z",
+        "active_kid": "66a63dae7bbf4bda",
+        "accepted_kids": [
+          "66a63dae7bbf4bda",
+          "65b60673d6ed884b"
+        ],
+        "signing_kids": [
+          "66a63dae7bbf4bda"
+        ],
+        "verify_only_kids": [
+          "65b60673d6ed884b"
+        ],
+        "expiring_kids": [
+          {
+            "kid": "65b60673d6ed884b",
+            "not_after_unix": 1771108817
+          }
+        ],
+        "overlap_seconds": 3600,
+        "snapshot_id": "kts_1770861029_66a63dae7bbf4bda",
+        "snapshot_hash_b64u": "sUiiEYy8I0biOzvvXtLU6jv0EhP8Vl4m3ATfkWR7VAg",
+        "signer_kid": "66a63dae7bbf4bda",
+        "signature_b64u": "UMPG0MDVlJV5Vt-Fqyp5Ne1eNTfmf0lG9P2PT71WOkSEMMUO-XAvfbhHn2ugyUQFCbFRbzdJnuIp4GvhfhSTDQ",
+        "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T01:50:29.000Z-kts_1770861029_66a63dae7bbf4bda.json"
+      }
+    }
+  },
+  "validations": {
+    "latest_has_active_kid": true,
+    "latest_has_accepted_kids": true,
+    "latest_signature_present": true,
+    "forced_snapshot_succeeded": true
+  }
+}

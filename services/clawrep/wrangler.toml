@@ -1,0 +1,77 @@
+name = "clawrep"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-12"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+routes = [
+  { pattern = "clawrep.com/v1/*", zone_name = "clawrep.com" },
+  { pattern = "clawrep.com/health", zone_name = "clawrep.com" },
+  { pattern = "clawrep.com/docs", zone_name = "clawrep.com" },
+  { pattern = "clawrep.com/skill.md", zone_name = "clawrep.com" }
+]
+
+[[d1_databases]]
+binding = "REP_DB"
+database_name = "clawrep"
+database_id = "0b20f710-429e-470d-8af1-31907c62e5b7"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "REP_CACHE"
+id = "d949e219f2704be79474853a560d7710"
+
+[[queues.producers]]
+binding = "REP_EVENTS"
+queue = "clawrep-events"
+
+[[queues.consumers]]
+queue = "clawrep-events"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+
+[triggers]
+crons = ["7 0 * * *"]
+
+[vars]
+REP_VERSION = "0.1.0"
+REP_DECAY_DAILY_RATE = "0.02"
+REP_REVIEWER_CACHE_TTL_SECONDS = "120"
+
+# Secrets to be set via `wrangler secret put`:
+# - REP_ADMIN_KEY
+# - REP_INGEST_KEY
+
+[env.staging]
+name = "clawrep-staging"
+routes = []
+
+[[env.staging.d1_databases]]
+binding = "REP_DB"
+database_name = "clawrep-staging"
+database_id = "ad8ea2ef-721c-4349-aa86-08840502c03e"
+migrations_dir = "migrations"
+
+[[env.staging.kv_namespaces]]
+binding = "REP_CACHE"
+id = "f8a137574fc54522a241ba6b5d7bf260"
+
+[[env.staging.queues.producers]]
+binding = "REP_EVENTS"
+queue = "clawrep-events-staging"
+
+[[env.staging.queues.consumers]]
+queue = "clawrep-events-staging"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+
+[env.staging.triggers]
+crons = ["7 0 * * *"]
+
+[env.staging.vars]
+REP_VERSION = "0.1.0"
+REP_DECAY_DAILY_RATE = "0.02"
+REP_REVIEWER_CACHE_TTL_SECONDS = "120"

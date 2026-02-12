@@ -577,6 +577,122 @@
       "priority": 43,
       "passes": true,
       "notes": "Runner: `scripts/identity/run-identity-control-plane-m6-suite.mjs`. Passing artifacts: staging `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`, prod `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`."
+    },
+    {
+      "id": "TRUST-REP-001",
+      "title": "Identity control plane M6 post-deploy stabilization watch",
+      "description": "As trust operators, we need interval conformance reruns with error-bucket/auth-drift deltas so post-deploy regressions are detected quickly.",
+      "acceptanceCriteria": [
+        "Run identity M6 conformance suite for staging + prod in watch window",
+        "Publish error-bucket deltas against baseline conformance matrix",
+        "Publish auth drift evidence for canonical vs legacy protected routes",
+        "Store watch artifact under artifacts/ops/identity-control-plane/*/watch-report.json"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Post-deploy watch completed. Staging watch: artifacts/ops/identity-control-plane/2026-02-12T01-50-25-165Z-staging/watch-report.json. Prod watch: artifacts/ops/identity-control-plane/2026-02-12T01-50-52-559Z-prod/watch-report.json. Error-bucket deltas remained zero and no auth drift detected."
+    },
+    {
+      "id": "CRP-US-001",
+      "title": "clawrep deterministic reputation ingest",
+      "description": "As trust infrastructure, we need idempotent closure ingest and deterministic scoring.",
+      "acceptanceCriteria": [
+        "POST /v1/events/ingest is idempotent by source_event_id",
+        "Scoring uses concave contribution and deterministic weighting",
+        "Audit trail records ingest and duplicate outcomes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Shipped in services/clawrep with migration 0001_reputation_foundation.sql and smoke evidence in artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/ingest-replay-smoke.json + prod counterpart."
+    },
+    {
+      "id": "CRP-US-002",
+      "title": "clawrep daily deterministic decay",
+      "description": "As trust operations, we need deterministic daily decay with idempotent run-day semantics.",
+      "acceptanceCriteria": [
+        "POST /v1/decay/run supports deterministic idempotency by run_day",
+        "Cron trigger executes daily decay run",
+        "Decay operations are auditable"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Delivered via clawrep cron trigger (7 0 * * *) + decay_runs table + audit records. Smoke: artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/decay-penalty-smoke.json and prod equivalent."
+    },
+    {
+      "id": "CRP-US-003",
+      "title": "clawrep trust tier calculation",
+      "description": "As marketplaces, we need deterministic tier outputs with dispute-rate controls.",
+      "acceptanceCriteria": [
+        "GET /v1/tiers/:did returns deterministic tier data",
+        "Dispute-rate capping is enforced fail-closed"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Delivered via deriveTier() policy and /v1/tiers/:did endpoint. Smoke evidence in tier-calculation-smoke.json (staging/prod)."
+    },
+    {
+      "id": "CRP-US-004",
+      "title": "clawrep deterministic penalties",
+      "description": "As trust operations, we need deterministic penalty schedules and idempotent application.",
+      "acceptanceCriteria": [
+        "POST /v1/penalties/apply enforces deterministic penalty schedule",
+        "Penalty ingest is idempotent by source_event_id",
+        "Penalty events are auditable"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Delivered with penalty schedule in services/clawrep/src/core.ts and endpoint /v1/penalties/apply. Smoke evidence in decay-penalty-smoke.json (staging/prod)."
+    },
+    {
+      "id": "CRP-US-005",
+      "title": "clawrep reviewer contract compatibility",
+      "description": "As clawbounties integration, we need reviewer APIs to stay contract-compatible and deterministic.",
+      "acceptanceCriteria": [
+        "POST /v1/reviewers/select request/response shape is preserved",
+        "GET /v1/reviewers/:did contract is preserved",
+        "Selection ordering is deterministic"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Compatibility note recorded in services/clawrep/COMPATIBILITY-NOTE-AGENT-C-reviewer-contract.md. Smoke evidence in reviewer-selection-smoke.json (staging/prod)."
+    },
+    {
+      "id": "CRP-US-006",
+      "title": "clawrep public reputation read",
+      "description": "As platform clients, we need deterministic profile reads for trust display and policy decisions.",
+      "acceptanceCriteria": [
+        "GET /v1/rep/:did returns stable profile shape",
+        "Unknown DIDs return deterministic NOT_FOUND"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Implemented in services/clawrep/src/index.ts with deterministic NOT_FOUND contract and tier context."
+    },
+    {
+      "id": "CRP-US-007",
+      "title": "clawrep owner-verified weighting",
+      "description": "As trust systems, we need owner-verified scoring influence and reviewer visibility to reduce sybil risk.",
+      "acceptanceCriteria": [
+        "Owner-verified multiplier is included in deterministic scoring",
+        "Reviewer APIs expose owner-verified state and attestation ref when present"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Delivered via computeClosureScoreDelta owner weight and reviewer profile responses with owner verification fields."
+    },
+    {
+      "id": "CRP-OPS-001",
+      "title": "clawrep.com productionization MVP",
+      "description": "As trust platform ops, we need clawrep productionized on Cloudflare with D1/Queues/Cron/KV and reproducible deploy evidence.",
+      "acceptanceCriteria": [
+        "Worker service deployed for staging + prod with D1, queue, cron, and optional KV bindings",
+        "Wrangler hygiene passes (types + dry-run deploys)",
+        "MVP endpoint suite is live with fail-closed auth",
+        "Staging + prod smoke artifacts and ops summaries are published"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Implemented in services/clawrep. Deploy versions: staging e41c2e88-9c81-4673-b99d-322e007e3aba, prod b54e2e0d-9062-4782-9a4b-87a84129f249. Ops artifacts: artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json and artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json."
     }
   ],
   "metadata": {

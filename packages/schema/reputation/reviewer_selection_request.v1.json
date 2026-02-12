@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/claw.reputation.reviewer_selection_request.v1.json",
+  "title": "Reviewer Selection Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bounty_id", "difficulty_scalar", "quorum_size"],
+  "properties": {
+    "bounty_id": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "difficulty_scalar": { "type": "number", "minimum": 0.1, "maximum": 10 },
+    "quorum_size": { "type": "integer", "minimum": 1, "maximum": 10 },
+    "min_reputation_score": { "type": "number", "minimum": 0 },
+    "require_owner_verified": { "type": "boolean" },
+    "exclude_dids": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 16, "pattern": "^did:" },
+      "maxItems": 64
+    },
+    "submission_proof_tier": {
+      "type": "string",
+      "enum": ["unknown", "self", "gateway", "sandbox", "tee", "witnessed_web"]
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/trust/CRP-OPS-001-clawrep-mvp",
+  "description": "clawrep.com (Reputation) — canonical deterministic reputation and reviewer selection service.",
+  "userStories": [
+    {
+      "id": "CRP-US-001",
+      "title": "Reputation minting from verified closures",
+      "description": "As marketplace infrastructure, we need deterministic non-transferable reputation events so verified work outcomes increase reputation fairly.",
+      "acceptanceCriteria": [
+        "POST /v1/events/ingest accepts closure events with strict schema validation",
+        "Ingest is idempotent by source_event_id",
+        "Score contribution uses a concave value function and closure/proof/owner weights",
+        "Typecheck and tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Delivered with idempotent ingest + concave deterministic scoring in services/clawrep/src/index.ts and src/core.ts."
+    },
+    {
+      "id": "CRP-US-002",
+      "title": "Daily reputation decay",
+      "description": "As trust operations, we need deterministic daily decay so stale reputation naturally decreases over time.",
+      "acceptanceCriteria": [
+        "POST /v1/decay/run applies decay with deterministic idempotency by run day",
+        "Cron trigger runs decay automatically",
+        "Decay operations are auditable",
+        "Typecheck and tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Delivered with decay_runs idempotency + cron schedule and POST /v1/decay/run."
+    },
+    {
+      "id": "CRP-US-003",
+      "title": "Trust tier calculation",
+      "description": "As marketplaces, we need deterministic tier calculations so gating decisions are reproducible.",
+      "acceptanceCriteria": [
+        "GET /v1/tiers/:did returns deterministic tier outputs",
+        "Tier logic includes dispute-rate gating",
+        "Tier values are derived from authoritative D1 profile state",
+        "Typecheck and tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Delivered via deriveTier() and GET /v1/tiers/:did."
+    },
+    {
+      "id": "CRP-US-004",
+      "title": "Deterministic dispute penalties",
+      "description": "As trust operations, we need deterministic penalty schedules so dispute outcomes have predictable reputation impacts.",
+      "acceptanceCriteria": [
+        "POST /v1/penalties/apply enforces deterministic penalty schedule",
+        "Penalty severity handling is bounded and deterministic",
+        "Penalty events are auditable and idempotent by source_event_id",
+        "Typecheck and tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Delivered via deterministic penalty schedule + POST /v1/penalties/apply."
+    },
+    {
+      "id": "CRP-US-005",
+      "title": "Reviewer selection API compatibility",
+      "description": "As clawbounties integration clients, we need stable reviewer selection/read APIs so quorum flows remain deterministic.",
+      "acceptanceCriteria": [
+        "POST /v1/reviewers/select matches existing request/response contract",
+        "GET /v1/reviewers/:did matches existing response contract",
+        "Selection ordering is deterministic",
+        "Typecheck and tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Delivered with contract-compatible reviewer endpoints and compatibility note file."
+    },
+    {
+      "id": "CRP-US-006",
+      "title": "Public reputation read API",
+      "description": "As platforms, we need a deterministic reputation read endpoint for trust display and policy decisions.",
+      "acceptanceCriteria": [
+        "GET /v1/rep/:did returns score/profile/tier context",
+        "Non-existent DID returns deterministic NOT_FOUND",
+        "Responses are schema-stable",
+        "Typecheck and tests pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Delivered with GET /v1/rep/:did and deterministic NOT_FOUND behavior."
+    },
+    {
+      "id": "CRP-US-007",
+      "title": "Owner-verified weighting",
+      "description": "As trust systems, we need owner-verified weighting to reduce sybil risk while preserving deterministic scoring.",
+      "acceptanceCriteria": [
+        "Owner-verified multiplier is applied deterministically in closure scoring",
+        "Reviewer responses surface owner-verified state",
+        "Audit trail preserves owner verification context",
+        "Typecheck and tests pass"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Delivered with owner_verified weighting and reviewer owner verification fields."
+    }
+  ]
+}

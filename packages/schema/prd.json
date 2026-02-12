@@ -46,6 +46,20 @@
       "priority": 3,
       "passes": true,
       "notes": "Added explicit PoH schemas for gateway receipts and proof bundle envelopes and tightened receipt.binding validation by referencing receipt_binding.v1.json."
+    },
+    {
+      "id": "CRP-OPS-001-SCHEMA",
+      "title": "Reputation schema contracts for clawrep MVP",
+      "description": "As trust services, we need strict versioned reputation schemas for ingest/profile/reviewer contracts.",
+      "acceptanceCriteria": [
+        "Add reputation_event_ingest.v1.json with strict closure ingest fields",
+        "Add reputation_profile.v1.json for deterministic profile/tier output",
+        "Add reviewer selection request/response schemas",
+        "Update packages/schema/README.md listings"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added packages/schema/reputation/{reputation_event_ingest,reputation_profile,reviewer_selection_request,reviewer_selection_response}.v1.json and updated README listings."
     }
   ]
 }

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/claw.reputation.reviewer_selection_response.v1.json",
+  "title": "Reviewer Selection Response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bounty_id", "reviewers", "selected_at"],
+  "properties": {
+    "bounty_id": { "type": "string", "minLength": 1 },
+    "selected_at": { "type": "string", "format": "date-time" },
+    "reviewers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviewer_did", "reputation_score", "is_owner_verified"],
+        "properties": {
+          "reviewer_did": { "type": "string", "minLength": 16, "pattern": "^did:" },
+          "reputation_score": { "type": "number", "minimum": 0 },
+          "is_owner_verified": { "type": "boolean" },
+          "owner_attestation_ref": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "env": "prod",
+  "generated_at": "2026-02-12T01:51:30.484Z",
+  "baseline_conformance": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json",
+  "latest_conformance": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/identity-control-plane/2026-02-12T01-50-52-559Z-prod/conformance-matrix.json",
+  "baseline_summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  },
+  "latest_summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  },
+  "error_bucket_deltas": {
+    "LEGACY_AUTH_FORBIDDEN": {
+      "baseline": 3,
+      "latest": 3,
+      "delta": 0
+    },
+    "NONE": {
+      "baseline": 3,
+      "latest": 3,
+      "delta": 0
+    },
+    "TOKEN_REQUIRED": {
+      "baseline": 1,
+      "latest": 1,
+      "delta": 0
+    },
+    "PLATFORM_PAID_REQUIRES_DID": {
+      "baseline": 1,
+      "latest": 1,
+      "delta": 0
+    }
+  },
+  "auth_drift_evidence": {
+    "clawscope.revoke.legacy_rejected": {
+      "baseline": {
+        "status": 401,
+        "error": "LEGACY_AUTH_FORBIDDEN",
+        "pass": true
+      },
+      "latest": {
+        "status": 401,
+        "error": "LEGACY_AUTH_FORBIDDEN",
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawscope.audit.legacy_rejected": {
+      "baseline": {
+        "status": 401,
+        "error": "LEGACY_AUTH_FORBIDDEN",
+        "pass": true
+      },
+      "latest": {
+        "status": 401,
+        "error": "LEGACY_AUTH_FORBIDDEN",
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawscope.audit.canonical_accepted": {
+      "baseline": {
+        "status": 200,
+        "error": null,
+        "pass": true
+      },
+      "latest": {
+        "status": 200,
+        "error": null,
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawcontrols.wpc.legacy_rejected": {
+      "baseline": {
+        "status": 401,
+        "error": "LEGACY_AUTH_FORBIDDEN",
+        "pass": true
+      },
+      "latest": {
+        "status": 401,
+        "error": "LEGACY_AUTH_FORBIDDEN",
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawcontrols.wpc.canonical_accepted": {
+      "baseline": {
+        "status": 201,
+        "error": null,
+        "pass": true
+      },
+      "latest": {
+        "status": 201,
+        "error": null,
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawproxy.proxy.legacy_rejected": {
+      "baseline": {
+        "status": 401,
+        "error": "TOKEN_REQUIRED",
+        "pass": true
+      },
+      "latest": {
+        "status": 401,
+        "error": "TOKEN_REQUIRED",
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawproxy.proxy.canonical_accepted": {
+      "baseline": {
+        "status": 401,
+        "error": "PLATFORM_PAID_REQUIRES_DID",
+        "pass": true
+      },
+      "latest": {
+        "status": 401,
+        "error": "PLATFORM_PAID_REQUIRES_DID",
+        "pass": true
+      },
+      "drift": false
+    },
+    "clawscope.revoke.canonical_accepted": {
+      "baseline": {
+        "status": 200,
+        "error": null,
+        "pass": true
+      },
+      "latest": {
+        "status": 200,
+        "error": null,
+        "pass": true
+      },
+      "drift": false
+    }
+  },
+  "overall": {
+    "conformance_stable": true,
+    "error_buckets_unchanged": true,
+    "auth_drift_detected": false
+  }
+}
