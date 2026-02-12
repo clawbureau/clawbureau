@@ -4,7 +4,7 @@
  *
  * Verifies:
  * - PoH proof bundles under artifacts/poh/**-bundle.json using the offline verifier CLI
- * - DID commit proofs under proofs/**/commit.sig.json (did-work Protocol M message signature)
+ * - DID commit proofs under proofs/<branch>/commit.sig.json (did-work Protocol M message signature)
  */
 
 import * as fs from 'node:fs/promises';
