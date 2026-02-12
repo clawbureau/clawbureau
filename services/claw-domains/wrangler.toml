@@ -42,8 +42,7 @@ routes = [
   { pattern = "www.clawproviders.com/*", zone_name = "clawproviders.com" },
   { pattern = "clawsupply.com/*",    zone_name = "clawsupply.com" },
   { pattern = "www.clawsupply.com/*", zone_name = "clawsupply.com" },
-  { pattern = "clawincome.com/*",    zone_name = "clawincome.com" },
-  { pattern = "www.clawincome.com/*", zone_name = "clawincome.com" },
+  # clawincome.com moved to dedicated Worker: services/clawincome
   { pattern = "clawgrant.com/*",     zone_name = "clawgrant.com" },
   { pattern = "www.clawgrant.com/*", zone_name = "clawgrant.com" },
   { pattern = "clawgang.com/*",      zone_name = "clawgang.com" },

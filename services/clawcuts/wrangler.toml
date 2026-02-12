@@ -15,7 +15,7 @@ database_name = "clawcuts"
 database_id = "76418170-3b27-40d4-bfb1-5c29610e008e"
 
 [vars]
-CUTS_VERSION = "0.2.0"
+CUTS_VERSION = "0.2.1"
 CUTS_FEE_CLEARING_ACCOUNT = "clearing:clawcuts"
 
 [env.staging]
@@ -30,5 +30,5 @@ database_name = "clawcuts-staging"
 database_id = "3bda8020-7483-49e1-aacb-99e6eaea1592"
 
 [env.staging.vars]
-CUTS_VERSION = "0.2.0"
+CUTS_VERSION = "0.2.1"
 CUTS_FEE_CLEARING_ACCOUNT = "clearing:clawcuts"
