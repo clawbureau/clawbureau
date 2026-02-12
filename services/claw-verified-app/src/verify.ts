@@ -65,6 +65,21 @@ export async function verifyPR(
 
     try {
       const bundle = JSON.parse(content);
+
+      // RED TEAM FIX #5: Replay attack prevention.
+      // Fail fast BEFORE any cryptographic verification.
+      // The bundle's commit_proof must reference the exact PR HEAD SHA.
+      const replayCheck = checkCommitShaBinding(bundle, headSha);
+      if (replayCheck) {
+        results.push({
+          path: file.filename,
+          valid: false,
+          reason: replayCheck,
+          receiptCount: 0,
+        });
+        continue;
+      }
+
       const result = verifyBundle(bundle, policy);
       results.push({ path: file.filename, ...result });
     } catch {

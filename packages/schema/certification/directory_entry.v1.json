@@ -2,96 +2,25 @@
   "$id": "https://schemas.clawbureau.org/claw.certification.directory_entry.v1.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Clawsig Directory Entry",
-  "description": "A public directory entry for a framework that has passed Clawsig Inside conformance testing. Displayed at clawsig.com/directory.",
+  "description": "A public directory entry for a framework that has passed Clawsig Inside conformance testing.",
   "type": "object",
-  "required": [
-    "entry_version",
-    "framework_name",
-    "framework_repo",
-    "verified_tier",
-    "last_verified_at",
-    "badge_url",
-    "total_conformance_runs",
-    "status"
-  ],
+  "required": ["entry_version","framework_name","framework_repo","verified_tier","last_verified_at","badge_url","total_conformance_runs","status"],
   "properties": {
-    "entry_version": {
-      "type": "string",
-      "const": "1",
-      "description": "Schema version for this directory entry format."
-    },
-    "framework_name": {
-      "type": "string",
-      "description": "Human-readable name of the agent framework.",
-      "minLength": 1,
-      "maxLength": 128
-    },
-    "framework_repo": {
-      "type": "string",
-      "description": "GitHub repository URL for the framework.",
-      "format": "uri",
-      "pattern": "^https://github\\.com/.+$"
-    },
-    "framework_description": {
-      "type": "string",
-      "description": "Short description of what the framework does.",
-      "maxLength": 512
-    },
-    "verified_tier": {
-      "type": "string",
-      "description": "Highest proof tier achieved and verified.",
-      "enum": ["self", "gateway", "sandbox", "tee"]
-    },
-    "last_verified_at": {
-      "type": "string",
-      "description": "ISO 8601 timestamp of the most recent passing conformance run.",
-      "format": "date-time"
-    },
-    "last_verified_version": {
-      "type": "string",
-      "description": "Framework version of the most recent passing conformance run.",
-      "maxLength": 64
-    },
-    "badge_url": {
-      "type": "string",
-      "description": "URL to the Clawsig Inside badge SVG for this framework.",
-      "format": "uri"
-    },
-    "total_conformance_runs": {
-      "type": "integer",
-      "description": "Total number of conformance test runs recorded for this framework.",
-      "minimum": 0
-    },
-    "consecutive_passes": {
-      "type": "integer",
-      "description": "Number of consecutive passing conformance runs (resets on failure).",
-      "minimum": 0
-    },
-    "status": {
-      "type": "string",
-      "description": "Current certification status.",
-      "enum": ["verified", "expired", "revoked"]
-    },
-    "status_reason": {
-      "type": "string",
-      "description": "Human-readable reason for the current status (especially for expired/revoked).",
-      "maxLength": 256
-    },
-    "claimer_did": {
-      "type": "string",
-      "description": "DID of the framework maintainer who submitted the certification claim.",
-      "pattern": "^did:(key|web):.+"
-    },
-    "created_at": {
-      "type": "string",
-      "description": "ISO 8601 timestamp of when this entry was first created.",
-      "format": "date-time"
-    },
-    "updated_at": {
-      "type": "string",
-      "description": "ISO 8601 timestamp of when this entry was last updated.",
-      "format": "date-time"
-    }
+    "entry_version": {"type":"string","const":"1"},
+    "framework_name": {"type":"string","minLength":1,"maxLength":128},
+    "framework_repo": {"type":"string","format":"uri","pattern":"^https://github\\.com/.+$"},
+    "framework_description": {"type":"string","maxLength":512},
+    "verified_tier": {"type":"string","enum":["self","gateway","sandbox","tee"]},
+    "last_verified_at": {"type":"string","format":"date-time"},
+    "last_verified_version": {"type":"string","maxLength":64},
+    "badge_url": {"type":"string","format":"uri"},
+    "total_conformance_runs": {"type":"integer","minimum":0},
+    "consecutive_passes": {"type":"integer","minimum":0},
+    "status": {"type":"string","enum":["verified","expired","revoked"]},
+    "status_reason": {"type":"string","maxLength":256},
+    "claimer_did": {"type":"string","pattern":"^did:(key|web):.+"},
+    "created_at": {"type":"string","format":"date-time"},
+    "updated_at": {"type":"string","format":"date-time"}
   },
-  "additionalProperties": false
+  "additionalProperties":false
 }

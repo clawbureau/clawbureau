@@ -2,5 +2,7 @@ export { resolveVerifierConfig, loadClawverifyConfigFile, CliConfigError } from 
 export { verifyProofBundleFromFile, verifyExportBundleFromFile } from './verify.js';
 export { hintForReasonCode, explainReasonCode } from './hints.js';
 export { runInit } from './init.js';
+export { wrap } from './wrap.js';
 export type { InitOptions, InitResult } from './init.js';
+export type { WrapOptions } from './wrap.js';
 export type { CliOutput, CliVerifyOutput, ClawverifyConfigV1, ResolvedVerifierConfig } from './types.js';

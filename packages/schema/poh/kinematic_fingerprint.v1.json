@@ -1,0 +1,21 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.kinematic_fingerprint.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kinematic Fingerprint v1",
+  "description": "Hardware-level timing fingerprint derived from streaming token delivery patterns. Proves which datacenter/hardware topology generated the response without provider cooperation.",
+  "type": "object",
+  "required": ["ttft_ms", "itl_p50_ms", "itl_p95_ms", "itl_stddev_ms", "chunk_count", "burst_signature_b64u"],
+  "properties": {
+    "ttft_ms": { "type": "number", "description": "Time to first token in milliseconds" },
+    "itl_p50_ms": { "type": "number", "description": "Median inter-token latency in ms" },
+    "itl_p95_ms": { "type": "number", "description": "95th percentile inter-token latency in ms" },
+    "itl_stddev_ms": { "type": "number", "description": "Standard deviation of inter-token latencies" },
+    "chunk_count": { "type": "integer", "description": "Total number of SSE chunks received" },
+    "burst_signature_b64u": { "type": "string", "description": "SHA-256 hash of the quantized chunk-size distribution array" },
+    "hardware_inferred": { "type": "string", "description": "Inferred hardware topology (e.g., 'cloud_optimized_cluster', 'cloud_standard', 'local_consumer_gpu')" },
+    "confidence_score": { "type": "number", "minimum": 0, "maximum": 1, "description": "Confidence in hardware inference (0=unknown, 1=certain)" },
+    "total_tokens": { "type": "integer", "description": "Total tokens in the streamed response" },
+    "total_duration_ms": { "type": "number", "description": "Total streaming duration" }
+  },
+  "additionalProperties": false
+}

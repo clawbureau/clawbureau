@@ -13,6 +13,7 @@ import { runComplianceReport } from './compliance-cmd.js';
 import { hintForReasonCode, explainReasonCode } from './hints.js';
 import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
+import { wrap } from './wrap.js';
 import type { CliOutput, CliKind } from './types.js';
 
 function nowIso(): string {
@@ -21,9 +22,10 @@ function nowIso(): string {
 
 function usageText(): string {
   return [
-    'clawverify — offline verifier CLI for the Clawsig Protocol',
+    'clawverify / clawsig — CLI for the Clawsig Protocol',
     '',
     'Usage:',
+    '  clawsig wrap [--no-publish] [--output <path>] -- <command> [args...]',
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
     '  clawverify verify export-bundle --input <path> [--config <path>]',
     '  clawverify verify commit-sig   --input <path>',
@@ -39,6 +41,9 @@ function usageText(): string {
     '  2 = USAGE/CONFIG error',
     '',
     'Examples:',
+    '  clawsig wrap -- python my_agent.py',
+    '  clawsig wrap --output bundle.json -- node agent.js',
+    '  clawsig wrap --no-publish -- npx my-agent',
     '  clawverify verify proof-bundle --input bundle.json --config clawverify.config.v1.json',
     '  clawverify compliance bundle.json --framework soc2',
     '  clawverify init',
@@ -66,6 +71,7 @@ type ParsedArgs =
   | { command: 'init'; targetDir?: string; force: boolean }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
+  | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -75,6 +81,26 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (argv[0] === 'version' || hasFlag(argv, '--version')) {
     return { command: 'version' };
+  }
+
+  if (argv[0] === 'wrap') {
+    // clawsig wrap [--no-publish] [--output <path>] -- <command> [args...]
+    const dashDashIdx = argv.indexOf('--');
+    if (dashDashIdx === -1 || dashDashIdx >= argv.length - 1) {
+      throw new CliUsageError(
+        'Usage: clawsig wrap [--no-publish] [--output <path>] -- <command> [args...]\n\n' +
+        'The -- separator and a command are required.',
+      );
+    }
+
+    const flagArgs = argv.slice(1, dashDashIdx);
+    const publish = !flagArgs.includes('--no-publish');
+    const outputPath = readFlag(flagArgs, '--output');
+
+    const wrapCommand = argv[dashDashIdx + 1]!;
+    const wrapArgs = argv.slice(dashDashIdx + 2);
+
+    return { command: 'wrap', wrapCommand, wrapArgs, publish, outputPath };
   }
 
   if (argv[0] === 'compliance') {
@@ -160,6 +186,15 @@ async function main() {
 
   if (parsed.command === 'migrate-policy') {
     runMigratePolicy(parsed.inputPath);
+    return;
+  }
+
+  if (parsed.command === 'wrap') {
+    const exitCode = await wrap(parsed.wrapCommand, parsed.wrapArgs, {
+      publish: parsed.publish,
+      outputPath: parsed.outputPath,
+    });
+    process.exitCode = exitCode;
     return;
   }
 

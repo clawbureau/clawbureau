@@ -1,8 +1,5 @@
 /**
  * Clawsig Conformance Test Types
- *
- * Shared type definitions for the conformance runner, mock proxy,
- * and GitHub Action.
  */
 
 /** Valid proof tiers in ascending order of trust. */
@@ -11,37 +8,23 @@ export type ProofTier = (typeof PROOF_TIERS)[number];
 
 /** Result of a single conformance test run. */
 export interface ConformanceResult {
-  /** Whether the overall conformance test passed. */
   passed: boolean;
-  /** Whether a proof bundle was found at the expected output path. */
   bundle_found: boolean;
-  /** Whether the found bundle passed cryptographic verification via clawverify-core. */
   bundle_valid: boolean;
-  /** The proof tier detected in the bundle (null if bundle not found/invalid). */
   tier: string | null;
-  /** Whether the detected tier meets or exceeds the expected tier. */
   tier_meets_expected: boolean;
-  /** Number of events in the proof bundle event chain. */
   event_chain_length: number;
-  /** Total number of receipts (gateway + tool + side-effect + human approval). */
   receipt_count: number;
-  /** Human-readable error messages. */
   errors: string[];
 }
 
 /** Configuration for running a conformance test. */
 export interface ConformanceConfig {
-  /** Shell command to invoke the agent under test. */
   agentCommand: string;
-  /** Minimum proof tier the agent must achieve (default: "self"). */
   expectedTier?: ProofTier;
-  /** Timeout in seconds before killing the agent process (default: 60). */
   timeout?: number;
-  /** Path where the agent is expected to write its proof bundle (default: ".clawsig/proof_bundle.json"). */
   outputPath?: string;
-  /** Port for the mock LLM proxy (default: 0 = auto-assign). */
   mockProxyPort?: number;
-  /** Working directory for the agent process (default: cwd). */
   cwd?: string;
 }
 

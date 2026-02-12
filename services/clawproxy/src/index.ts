@@ -48,6 +48,7 @@ import {
 } from './receipt';
 import { isRtEnabled, submitReceiptToRt } from './rt';
 import { buildReceiptMetadataWithModelIdentity } from './model-identity';
+import { createTimingCollector, createNonStreamingFingerprint } from './kinematics';
 import {
   importEd25519Key,
   computeKeyId,
@@ -1591,6 +1592,7 @@ async function handleProxy(
   providerParam: string
 ): Promise<Response> {
   const startTime = Date.now();
+  const startTimePerfNow = performance.now(); // KPOM: high-resolution timer for kinematic fingerprinting
 
   // Use a stable, server-defined gateway identifier for signed receipts.
   // Do NOT derive this from request host headers, which can be user-controlled.
@@ -2636,6 +2638,9 @@ async function handleProxy(
 
     const rateLimitHeaders = buildRateLimitHeaders(rateLimitInfo);
 
+    // KPOM: create timing collector before streaming starts (zero-overhead on hot path)
+    const timingCollector = createTimingCollector();
+
     // Start streaming immediately; receipt is appended as SSE comments at end.
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -2649,6 +2654,7 @@ async function handleProxy(
             if (!value) continue;
 
             hasher.update(value);
+            timingCollector.recordChunk(value.byteLength);
             controller.enqueue(value);
           }
 
@@ -2676,6 +2682,16 @@ async function handleProxy(
 
           const modelLabel = receipt.model && receipt.model.trim().length > 0 ? receipt.model : 'unknown';
 
+          // KPOM: finalize timing fingerprint (all computation happens here, after stream ends)
+          let kpomMeta: Record<string, unknown> | undefined;
+          try {
+            const fp = await timingCollector.finalize();
+            kpomMeta = { ...fp } as Record<string, unknown>;
+          } catch (kpomErr) {
+            // Non-fatal: fingerprinting must never break receipt delivery
+            console.error('[KPOM] streaming fingerprint finalization failed (non-fatal):', kpomErr);
+          }
+
           const receiptMetadata = await buildReceiptMetadataWithModelIdentity({
             provider,
             model: modelLabel,
@@ -2685,6 +2701,7 @@ async function handleProxy(
                 : {}),
               ...(wpcModelIdentityMeta ?? {}),
               ...(platformFundingCheckMeta ?? {}),
+              ...(kpomMeta ? { kinematic_fingerprint: kpomMeta } : {}),
             },
           });
 
@@ -2784,6 +2801,9 @@ async function handleProxy(
     });
   }
 
+  // KPOM: record when the non-streaming response was received (performance.now for sub-ms precision)
+  const nonStreamingResponseReceivedAt = performance.now();
+
   let responseBody: string;
   let encryptionContext: EncryptionContext | null = null;
   let receipt: Awaited<ReturnType<typeof generateReceipt>>;
@@ -2824,6 +2844,16 @@ async function handleProxy(
 
     const modelLabel = receipt.model && receipt.model.trim().length > 0 ? receipt.model : 'unknown';
 
+    // KPOM: non-streaming fingerprint (TTFT only, ITL zeroed)
+    let nonStreamingKpomMeta: Record<string, unknown> | undefined;
+    try {
+      const fp = await createNonStreamingFingerprint(startTimePerfNow, nonStreamingResponseReceivedAt);
+      nonStreamingKpomMeta = { ...fp } as Record<string, unknown>;
+    } catch (kpomErr) {
+      // Non-fatal: fingerprinting must never break receipt delivery
+      console.error('[KPOM] non-streaming fingerprint failed (non-fatal):', kpomErr);
+    }
+
     const receiptMetadata = await buildReceiptMetadataWithModelIdentity({
       provider,
       model: modelLabel,
@@ -2833,6 +2863,7 @@ async function handleProxy(
           : {}),
         ...(wpcModelIdentityMeta ?? {}),
         ...(platformFundingCheckMeta ?? {}),
+        ...(nonStreamingKpomMeta ? { kinematic_fingerprint: nonStreamingKpomMeta } : {}),
       },
     });
 

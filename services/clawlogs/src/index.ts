@@ -2,6 +2,7 @@ import type { Env, RootSignature } from './types';
 import { importEd25519Signer, signEd25519 } from './crypto';
 import { isBase64urlString } from './merkle';
 import { LogDurableObject } from './log-do';
+import { anchorMerkleRoot } from './cron-anchor';
 
 export { LogDurableObject };
 
@@ -618,5 +619,18 @@ export default {
     }
 
     return text('method not allowed', 405);
+  },
+
+  /**
+   * Red Team Fix #3: Daily cron trigger anchors the RT Merkle root
+   * to the ClawsigRTAnchor contract on Base L2.
+   * Configured via [triggers] crons = ["0 0 * * *"] in wrangler.toml.
+   */
+  async scheduled(
+    _event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    ctx.waitUntil(anchorMerkleRoot(env as Parameters<typeof anchorMerkleRoot>[0]));
   },
 };

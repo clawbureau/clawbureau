@@ -1,8 +1,5 @@
 /**
  * GitHub Action entry point for the Clawsig Conformance Test.
- *
- * Reads inputs from @actions/core, runs the conformance test,
- * and sets outputs/summary/failure status.
  */
 
 import * as core from '@actions/core';
@@ -16,25 +13,17 @@ function isValidTier(tier: string): tier is ProofTier {
 
 async function run(): Promise<void> {
   try {
-    // Read inputs
     const agentCommand = core.getInput('agent_command', { required: true });
     const expectedTierInput = core.getInput('expected_tier') || 'self';
     const timeoutInput = core.getInput('timeout') || '60';
     const outputPath = core.getInput('output_path') || '.clawsig/proof_bundle.json';
 
-    // Validate inputs
     if (!isValidTier(expectedTierInput)) {
-      core.setFailed(
-        `Invalid expected_tier "${expectedTierInput}". Must be one of: ${PROOF_TIERS.join(', ')}`,
-      );
+      core.setFailed(`Invalid expected_tier "${expectedTierInput}". Must be one of: ${PROOF_TIERS.join(', ')}`);
       return;
     }
-
     const timeout = parseInt(timeoutInput, 10);
-    if (isNaN(timeout) || timeout <= 0) {
-      core.setFailed(`Invalid timeout "${timeoutInput}". Must be a positive integer.`);
-      return;
-    }
+    if (isNaN(timeout) || timeout <= 0) { core.setFailed(`Invalid timeout "${timeoutInput}".`); return; }
 
     core.info(`Clawsig Conformance Test`);
     core.info(`  Command:       ${agentCommand}`);
@@ -43,15 +32,8 @@ async function run(): Promise<void> {
     core.info(`  Output path:   ${outputPath}`);
     core.info('');
 
-    // Run conformance test
-    const result = await runConformanceTest({
-      agentCommand,
-      expectedTier: expectedTierInput,
-      timeout,
-      outputPath,
-    });
+    const result = await runConformanceTest({ agentCommand, expectedTier: expectedTierInput, timeout, outputPath });
 
-    // Set outputs
     core.setOutput('passed', String(result.passed));
     core.setOutput('tier', result.tier ?? 'none');
     core.setOutput('bundle_found', String(result.bundle_found));
@@ -59,59 +41,31 @@ async function run(): Promise<void> {
     core.setOutput('event_chain_length', String(result.event_chain_length));
     core.setOutput('receipt_count', String(result.receipt_count));
 
-    // Build step summary
     const icon = result.passed ? '\u2705' : '\u274c';
-    const tierBadge = result.tier
-      ? `\`${result.tier.toUpperCase()}\``
-      : '`NONE`';
-
-    const summaryLines = [
-      `## ${icon} Clawsig Conformance Test`,
-      '',
-      '| Check | Result |',
-      '|-------|--------|',
+    const tierBadge = result.tier ? `\`${result.tier.toUpperCase()}\`` : '`NONE`';
+    const lines = [
+      `## ${icon} Clawsig Conformance Test`, '',
+      '| Check | Result |', '|-------|--------|',
       `| Bundle found | ${result.bundle_found ? '\u2705' : '\u274c'} |`,
       `| Bundle valid | ${result.bundle_valid ? '\u2705' : '\u274c'} |`,
       `| Proof tier | ${tierBadge} |`,
       `| Meets expected (${expectedTierInput}) | ${result.tier_meets_expected ? '\u2705' : '\u274c'} |`,
       `| Event chain length | ${result.event_chain_length} |`,
-      `| Receipt count | ${result.receipt_count} |`,
-      '',
+      `| Receipt count | ${result.receipt_count} |`, '',
     ];
-
     if (result.passed) {
-      summaryLines.push(
-        `> **Clawsig Inside** \u2014 This framework produces valid ${tierBadge} tier proof bundles.`,
-        '',
-        `[![Clawsig Inside](https://api.clawverify.com/v1/badges/conformance/${expectedTierInput}.svg)](https://clawsig.com/directory)`,
-      );
+      lines.push(`> **Clawsig Inside** \u2014 This framework produces valid ${tierBadge} tier proof bundles.`, '',
+        `[![Clawsig Inside](https://api.clawverify.com/v1/badges/conformance/${expectedTierInput}.svg)](https://clawsig.com/directory)`);
     }
-
     if (result.errors.length > 0) {
-      summaryLines.push('', '### Errors', '');
-      for (const err of result.errors) {
-        summaryLines.push(`- ${err}`);
-      }
+      lines.push('', '### Errors', '');
+      for (const err of result.errors) lines.push(`- ${err}`);
     }
+    await core.summary.addRaw(lines.join('\n')).write();
 
-    await core.summary.addRaw(summaryLines.join('\n')).write();
-
-    // Log details
-    if (result.errors.length > 0) {
-      core.info('Errors:');
-      for (const err of result.errors) {
-        core.warning(err);
-      }
-    }
-
-    // Set final status
-    if (result.passed) {
-      core.info(`\nConformance test PASSED (tier: ${result.tier})`);
-    } else {
-      core.setFailed(
-        `Conformance test FAILED. ${result.errors.length} error(s): ${result.errors.join('; ')}`,
-      );
-    }
+    if (result.errors.length > 0) { for (const err of result.errors) core.warning(err); }
+    if (result.passed) core.info(`\nConformance test PASSED (tier: ${result.tier})`);
+    else core.setFailed(`Conformance test FAILED. ${result.errors.length} error(s): ${result.errors.join('; ')}`);
   } catch (error) {
     core.setFailed(`Unexpected error: ${(error as Error).message}`);
   }

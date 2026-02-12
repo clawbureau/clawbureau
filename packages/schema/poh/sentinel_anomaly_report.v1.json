@@ -1,0 +1,16 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.sentinel_anomaly_report.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sentinel Anomaly Report v1",
+  "description": "Behavioral anomaly assessment from the Sentinel trajectory analysis engine.",
+  "type": "object",
+  "required": ["threat_score", "anomaly_type"],
+  "properties": {
+    "threat_score": { "type": "number", "minimum": 0, "maximum": 100, "description": "0=benign, 100=certain attack" },
+    "anomaly_type": { "type": "string", "enum": ["benign", "prompt_injection_suspected", "data_exfiltration_topology", "alien_trajectory", "model_impersonation"], "description": "Classification of the detected anomaly" },
+    "global_prevalence": { "type": "integer", "description": "Count of similar trajectories in the global RT log" },
+    "nearest_neighbors": { "type": "array", "items": { "type": "string" }, "description": "Run IDs of the most similar historical executions" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  },
+  "additionalProperties": false
+}
