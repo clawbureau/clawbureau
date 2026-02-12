@@ -50,3 +50,41 @@
    - `docs/openclaw/10-extensions-and-plugins.md`
    - `docs/openclaw/6.2-tool-security-and-sandboxing.md`
    - `docs/openclaw/9.3-directives.md`
+
+## Protocol adopter (third-party agent framework / tool author)
+
+> You want to emit verifiable proof bundles from your own agent or verify bundles produced by others.
+
+1. `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md` — **start here** (integration in a day)
+2. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md` — normative spec
+3. `packages/clawsig-sdk/README.md` — SDK API reference + quickstart
+4. `packages/clawverify-cli/README.md` — offline verifier CLI
+5. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — error codes
+6. `packages/schema/fixtures/protocol-conformance/manifest.v1.json` — conformance vectors
+7. `docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md` — CI integration example
+
+## Economy / risk developer (clawsettle / clawdelegate / escrow)
+
+> You work on the economic layer: payments, settlements, delegation, risk controls.
+
+1. `docs/specs/agent-economy/MVP.md` — economy architecture
+2. PRDs:
+   - `docs/prds/clawsettle.md` — settlements + disputes
+   - `docs/prds/clawdelegate.md` — delegation control plane
+   - `docs/prds/clawescrow.md` — escrow service
+   - `docs/prds/clawledger.md` — ledger service
+3. `docs/specs/payments/MACHINE_PAYMENT_SETTLEMENT_v1.md` — settlement spec
+4. `docs/foundations/INTERCONNECTION.md` — service dependencies
+5. `docs/roadmaps/trust-vnext/README.md` — economy roadmap tracker
+
+## Enterprise buyer (clawea / security review)
+
+> You're evaluating Clawbureau for enterprise deployment.
+
+1. `docs/prds/clawea-enterprise.md` — enterprise platform overview
+2. `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md` §2 — security team guide
+3. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md` §5 — Claw Verified supply-chain trust
+4. `docs/foundations/ARCHITECTURE.md` — service topology
+5. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — fail-closed error contract
+6. `docs/foundations/DEPLOYMENT_RUNBOOK.md` — operational procedures
+7. Security Review Pack → [clawea.com/security](https://clawea.com/security) (external)

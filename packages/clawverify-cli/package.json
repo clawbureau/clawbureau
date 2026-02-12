@@ -1,19 +1,49 @@
 {
   "name": "@clawbureau/clawverify-cli",
   "version": "0.1.0",
-  "private": true,
+  "description": "Offline verifier CLI for the Clawsig Protocol — verify proof bundles, export bundles, and commit signatures without network access.",
   "type": "module",
-  "description": "Offline verifier CLI for Clawsig Protocol (reference implementation)",
   "bin": {
     "clawverify": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "dist/**/*.js.map",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
     "test": "vitest run"
   },
+  "keywords": [
+    "clawsig",
+    "verifier",
+    "proof-bundle",
+    "offline-verification",
+    "Ed25519",
+    "DID",
+    "agent-verification"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawbureau/clawbureau",
+    "directory": "packages/clawverify-cli"
+  },
+  "homepage": "https://github.com/clawbureau/clawbureau/tree/main/packages/clawverify-cli",
+  "bugs": "https://github.com/clawbureau/clawbureau/issues",
   "dependencies": {
     "@clawbureau/clawverify-core": "file:../clawverify-core"
   },
@@ -21,6 +51,9 @@
     "@types/node": "^25.2.1",
     "typescript": "^5.7.0",
     "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "license": "MIT"
 }
