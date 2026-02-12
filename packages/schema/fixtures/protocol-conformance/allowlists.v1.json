@@ -1,0 +1,7 @@
+{
+  "vector_version": "1",
+  "gateway_receipt_signer_dids": [
+    "did:key:z6MkfF4ykuxdK3Cea9xDqWgLLgMBvxcypy6Tv1K45Eahxy3m"
+  ],
+  "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7"
+}

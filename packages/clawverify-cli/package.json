@@ -1,0 +1,26 @@
+{
+  "name": "@clawbureau/clawverify-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline verifier CLI for Claw Protocol (reference implementation)",
+  "bin": {
+    "clawverify": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clawbureau/clawverify-core": "file:../clawverify-core"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "typescript": "^5.7.0",
+    "vitest": "^1.2.0"
+  },
+  "license": "MIT"
+}

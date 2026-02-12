@@ -29,6 +29,8 @@ archive/
 # locks (prefer pnpm/yarn if needed; avoid committing npm locks from agent runs)
 package-lock.json
 !packages/bounties/package-lock.json
+!packages/clawverify-core/package-lock.json
+!packages/clawverify-cli/package-lock.json
 !services/clawproxy/package-lock.json
 !services/clawverify/package-lock.json
 !services/claw-domains/package-lock.json
