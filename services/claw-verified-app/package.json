@@ -1,0 +1,19 @@
+{
+  "name": "claw-verified-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claw Verified GitHub App — cryptographic verification for AI-generated PRs",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.112.0"
+  },
+  "license": "MIT"
+}

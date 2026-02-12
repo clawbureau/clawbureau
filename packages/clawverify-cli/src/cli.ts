@@ -10,6 +10,7 @@ import {
   verifyProofBundleFromFile,
 } from './verify.js';
 import { hintForReasonCode, explainReasonCode } from './hints.js';
+import { runInit } from './init.js';
 import type { CliOutput, CliKind } from './types.js';
 
 function nowIso(): string {
@@ -24,6 +25,7 @@ function usageText(): string {
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
     '  clawverify verify export-bundle --input <path> [--config <path>]',
     '  clawverify verify commit-sig   --input <path>',
+    '  clawverify init [--dir <path>] [--force]',
     '  clawverify explain <REASON_CODE>',
     '  clawverify version',
     '',
@@ -34,6 +36,7 @@ function usageText(): string {
     '',
     'Examples:',
     '  clawverify verify proof-bundle --input bundle.json --config clawverify.config.v1.json',
+    '  clawverify init',
     '  clawverify explain HASH_MISMATCH',
     '',
     'Docs: https://clawsig.com',
@@ -54,6 +57,7 @@ function hasFlag(args: string[], name: string): boolean {
 
 type ParsedArgs =
   | { command: 'verify'; kind: CliKind; inputPath: string; configPath?: string; urmPath?: string }
+  | { command: 'init'; targetDir?: string; force: boolean }
   | { command: 'explain'; code: string }
   | { command: 'version' };
 
@@ -70,6 +74,12 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const code = argv[1];
     if (!code) throw new CliUsageError('Usage: clawverify explain <REASON_CODE>');
     return { command: 'explain', code: code.toUpperCase() };
+  }
+
+  if (argv[0] === 'init') {
+    const targetDir = readFlag(argv, '--dir');
+    const force = hasFlag(argv, '--force');
+    return { command: 'init', targetDir, force };
   }
 
   if (argv[0] !== 'verify') {
@@ -117,6 +127,30 @@ async function main() {
 
   if (parsed.command === 'explain') {
     process.stdout.write(`${explainReasonCode(parsed.code)}\n`);
+    return;
+  }
+
+  if (parsed.command === 'init') {
+    const result = runInit({
+      targetDir: parsed.targetDir,
+      force: parsed.force,
+    });
+
+    process.stdout.write(`Initialized .clawsig/ in ${result.dir}\n`);
+
+    if (result.created.length > 0) {
+      process.stdout.write(`  Created: ${result.created.join(', ')}\n`);
+    }
+    if (result.skipped.length > 0) {
+      process.stdout.write(`  Skipped (already exists): ${result.skipped.join(', ')}\n`);
+      process.stdout.write('  Use --force to overwrite existing files.\n');
+    }
+
+    process.stdout.write('\nNext steps:\n');
+    process.stdout.write('  1. Edit .clawsig/policy.json to configure your policy\n');
+    process.stdout.write('  2. Install the Claw Verified GitHub App\n');
+    process.stdout.write('  3. Have an AI agent open a PR with a proof bundle\n');
+    process.stdout.write('\nDocs: https://clawprotocol.org/github-app\n');
     return;
   }
 

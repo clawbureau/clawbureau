@@ -1,0 +1,12 @@
+name = "claw-verified-app"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (set via wrangler secret put):
+# - GITHUB_APP_ID
+# - GITHUB_PRIVATE_KEY
+# - GITHUB_WEBHOOK_SECRET
+
+[env.staging]
+name = "claw-verified-app-staging"
