@@ -75,6 +75,7 @@ import {
 import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
 import { compareManualAuditPage, compareGuardrailsPage, compareLangfusePage, compareCustomWrappersPage, compareGovernanceLandscapePage } from "./pages/compare";
 import { guideGithubActionsProofPage, guideOktaScopedTokensPage, guideComplianceExportPage } from "./pages/guides";
+import { industryFinancialServicesPage, industryHealthcarePage, industryGovernmentPage, industryInsurancePage, industryLegalPage, industryTechnologyPage } from "./pages/industries";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1814,6 +1815,48 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     title: "About Claw Bureau | Enterprise AI Trust Infrastructure",
     description: "About Claw Bureau and the trust infrastructure approach for enterprise AI.",
     category: "about",
+    kind: "static",
+  },
+  {
+    path: "/industries/financial-services",
+    title: "AI Agent Compliance for Financial Services",
+    description: "SOX-grade evidence, budget controls, approval gates for banks and fintechs.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/healthcare",
+    title: "AI Agent HIPAA Compliance for Healthcare",
+    description: "DLP redaction, secret boundaries, egress allowlists for healthcare organizations.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/government",
+    title: "AI Agent FedRAMP & Government Compliance",
+    description: "Two-person rule, kill switch, forced dry-run, tamper-evident logs for government.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/insurance",
+    title: "AI Agent Insurance Underwriting Automation",
+    description: "Approval gates, proof bundles, reconciliation controls for insurance carriers.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/legal",
+    title: "AI Agent Legal Document Review Governance",
+    description: "File path scopes, DLP, two-person rule, audit replay for law firms.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/technology",
+    title: "AI Agent DevOps Governance for Technology",
+    description: "Deploy approvals, GitHub Actions integration, credential rotation for engineering teams.",
+    category: "industries",
     kind: "static",
   },
   {
@@ -8084,6 +8127,14 @@ export default {
     if (path === "/guides/okta-scoped-tokens") return await htmlWithExperiment(html(guideOktaScopedTokensPage()), path);
     if (path === "/guides/compliance-evidence-export") return await htmlWithExperiment(html(guideComplianceExportPage()), path);
 
+    // Industry vertical pages
+    if (path === "/industries/financial-services") return await htmlWithExperiment(html(industryFinancialServicesPage()), path);
+    if (path === "/industries/healthcare") return await htmlWithExperiment(html(industryHealthcarePage()), path);
+    if (path === "/industries/government") return await htmlWithExperiment(html(industryGovernmentPage()), path);
+    if (path === "/industries/insurance") return await htmlWithExperiment(html(industryInsurancePage()), path);
+    if (path === "/industries/legal") return await htmlWithExperiment(html(industryLegalPage()), path);
+    if (path === "/industries/technology") return await htmlWithExperiment(html(industryTechnologyPage()), path);
+
     if (path === "/sources") {
       const manifest = await loadManifest(env);
       return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
@@ -8226,6 +8277,12 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "guides/github-actions-proof-pipeline", priority: "0.8" },
     { slug: "guides/okta-scoped-tokens", priority: "0.7" },
     { slug: "guides/compliance-evidence-export", priority: "0.7" },
+    { slug: "industries/financial-services", priority: "0.8" },
+    { slug: "industries/healthcare", priority: "0.8" },
+    { slug: "industries/government", priority: "0.8" },
+    { slug: "industries/insurance", priority: "0.7" },
+    { slug: "industries/legal", priority: "0.7" },
+    { slug: "industries/technology", priority: "0.8" },
   ];
 
   let entries = staticPages.map((p) => `  <url><loc>https://www.clawea.com/${p.slug}</loc><priority>${p.priority}</priority><changefreq>weekly</changefreq></url>`);
