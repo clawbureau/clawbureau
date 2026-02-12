@@ -51,4 +51,4 @@ All domain PRDs live in `docs/prds/`.
 
 | Topic | PRD |
 |---|---|
-| Claw Protocol | docs/prds/clawprotocol.md |
+| Clawsig Protocol | docs/prds/clawprotocol.md |

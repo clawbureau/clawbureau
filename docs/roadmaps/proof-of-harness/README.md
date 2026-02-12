@@ -30,7 +30,7 @@ PoH is the evidence model that lets the marketplace verify **which harness** per
 
 ## Known limitations / sharp edges
 
-- **Streaming**: the current external-harness shim (`@clawbureau/clawproof-adapters`) buffers JSON and is not streaming/SSE-safe.
+- **Streaming**: the current external-harness shim (`@clawbureau/clawsig-adapters`) buffers JSON and is not streaming/SSE-safe.
 - **Subscription/web auth**: local “web evidence” is forgeable; requires a witness/attested runner to reach high trust tiers.
 
 ## Where vNext work lives

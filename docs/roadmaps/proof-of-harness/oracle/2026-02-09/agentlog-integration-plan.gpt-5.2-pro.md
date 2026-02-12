@@ -7,7 +7,7 @@
 - Directly leverages mature patterns in `agentlog/redact.py` (File 3) and its ordering/idempotence assumptions.
 
 **Where it lands**
-- In the shared adapter runtime (`packages/clawproof-adapters/src/session.ts`, File 10) and/or OpenClaw recorder (`packages/openclaw-provider-clawproxy/src/recorder.ts`, File 11), so *all* harnesses benefit.
+- In the shared adapter runtime (`packages/clawsig-adapters/src/session.ts`, File 10) and/or OpenClaw recorder (`packages/openclaw-provider-clawproxy/src/recorder.ts`, File 11), so *all* harnesses benefit.
 
 **Fail-closed / non-gameable**
 - This does **not** uplift tier; it only reduces risk. Safe-by-default.
@@ -68,8 +68,8 @@ Below are stories to append to `userStories` in File 15 (`docs/roadmaps/trust-vn
 **Title:** Pre-hash redaction for PoH event payloads + URM metadata (adapter-runtime enforced)  
 **Description:** As a platform, we must redact secrets/PII before any payload is hashed into the event chain or stored in URM metadata, to prevent toxic proofs and accidental disclosure.  
 **Acceptance Criteria:**
-- Implement a redaction utility in `packages/clawproof-adapters` that ports patterns/order from `agentlog/redact.py` (File 3).
-- `recordEvent()` in `packages/clawproof-adapters/src/session.ts` (File 10) redacts the payload **before** `hashJsonB64u()` is computed.
+- Implement a redaction utility in `packages/clawsig-adapters` that ports patterns/order from `agentlog/redact.py` (File 3).
+- `recordEvent()` in `packages/clawsig-adapters/src/session.ts` (File 10) redacts the payload **before** `hashJsonB64u()` is computed.
 - `finalize()` redacts `FinalizeOptions.urmMetadata` before embedding into URM (File 10, URM creation).
 - Redaction is:
   - deterministic
@@ -140,15 +140,15 @@ Goal: ensure PoH artifacts are safe to share/store; no secrets land in hashed pa
 
 #### PR 1.1 — Port `agentlog` redaction into TS and wire into adapter session
 **Scope**
-- Add `packages/clawproof-adapters/src/redact.ts` (new) implementing the rules/order from `agentlog/redact.py` (File 3).
-- Update `packages/clawproof-adapters/src/session.ts` (File 10):
+- Add `packages/clawsig-adapters/src/redact.ts` (new) implementing the rules/order from `agentlog/redact.py` (File 3).
+- Update `packages/clawsig-adapters/src/session.ts` (File 10):
   - In `recordEvent()`: redact `input.payload` before hashing.
   - In `finalize()`: redact `options.urmMetadata` before embedding into URM.
 
 **Files likely touched**
-- `packages/clawproof-adapters/src/redact.ts` (new)
-- `packages/clawproof-adapters/src/session.ts` (File 10)
-- (Maybe) `packages/clawproof-adapters/src/types.ts` to add an optional config flag like `redactionMode`.
+- `packages/clawsig-adapters/src/redact.ts` (new)
+- `packages/clawsig-adapters/src/session.ts` (File 10)
+- (Maybe) `packages/clawsig-adapters/src/types.ts` to add an optional config flag like `redactionMode`.
 
 **Tests needed**
 - Unit tests for `redact.ts` mirroring patterns from File 3:
@@ -267,7 +267,7 @@ Goal: local, derived-only verification status for OpenClaw sessions.
 1. **Gateway receipt envelopes** (`_receipt_envelope`) captured by shim/session:
    - Signature verifiable (Ed25519) and signer DID allowlisted (PoH spec §5.3; File 14).
    - Binding verifiable to event chain via `binding.run_id` + `binding.event_hash_b64u` (File 14).
-   - Implemented extraction in adapter runtime (`extractReceiptEnvelope()` in `packages/clawproof-adapters/src/session.ts`, File 10) and streaming shim collection in `packages/clawproof-adapters/src/shim.ts` (File 9).
+   - Implemented extraction in adapter runtime (`extractReceiptEnvelope()` in `packages/clawsig-adapters/src/session.ts`, File 10) and streaming shim collection in `packages/clawsig-adapters/src/shim.ts` (File 9).
 
 2. **Event chain integrity**
    - Verifier recomputes `event_hash_b64u` and rejects mismatches (CVF-US-021 already “passes”; File 15).
@@ -335,7 +335,7 @@ Goal: local, derived-only verification status for OpenClaw sessions.
 ### Skills / ecosystem impact
 - No change required for OpenClaw “skills” besides:
   - ensuring tool instrumentation emits enough structured info to count tool/file touches without including file contents.
-- External harnesses using the shim (`packages/clawproof-adapters/src/shim.ts`, File 9) benefit automatically from:
+- External harnesses using the shim (`packages/clawsig-adapters/src/shim.ts`, File 9) benefit automatically from:
   - safer recorded payloads (Phase 1)
   - verifiable receipts capture (already present)
 

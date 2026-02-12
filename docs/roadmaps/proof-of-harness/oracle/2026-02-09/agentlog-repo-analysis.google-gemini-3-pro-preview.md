@@ -32,10 +32,10 @@ The `Universal Run Manifest` (URM) allows for a `metadata` field. `agentlog` ext
 **C. Redaction & PII Safety**
 `agentlog/redact.py` contains a mature set of regexes for `Bearer`, `sk-ant-`, `jwt`, and natural language leaks.
 *   *Learnings*: PoH adapters MUST run this specific logic *before* hashing the payload for the Event Chain. If a key leaks into the Event Chain, the entire proof bundle is toxic.
-*   *Action*: Port `agentlog/redact.py` logic directly into `clawproof-adapters` TypeScript logic.
+*   *Action*: Port `agentlog/redact.py` logic directly into `clawsig-adapters` TypeScript logic.
 
 **D. Harness Shims**
-The `shim.ts` in `clawproof-adapters` proxies traffic. `agentlog`'s parser logic can be used to *verify* that the referenced files in a tool call (e.g., `read_file "config.json"`) actually exist on the user's disk relative to the `cwd` defined in the session header, adding a layer of integrity check to "Self" tier proofs.
+The `shim.ts` in `clawsig-adapters` proxies traffic. `agentlog`'s parser logic can be used to *verify* that the referenced files in a tool call (e.g., `read_file "config.json"`) actually exist on the user's disk relative to the `cwd` defined in the session header, adding a layer of integrity check to "Self" tier proofs.
 
 ### 3. Trust Analysis
 
@@ -53,10 +53,10 @@ The `shim.ts` in `clawproof-adapters` proxies traffic. `agentlog`'s parser logic
 ### 4. Concrete Integration Proposals
 
 #### 1. Port Redaction Logic to PoH Adapters
-*   **Description**: Port `agentlog/redact.py` (Python) to `packages/clawproof-adapters` (TypeScript).
-*   **Target**: `clawproof-adapters` library users (harness developers).
+*   **Description**: Port `agentlog/redact.py` (Python) to `packages/clawsig-adapters` (TypeScript).
+*   **Target**: `clawsig-adapters` library users (harness developers).
 *   **Value**: Prevents PII/Keys from ever entering the immutable Event Chain, ensuring PoH bundles are safe to share/store.
-*   **Location**: `packages/clawproof-adapters/src/redact.ts`.
+*   **Location**: `packages/clawsig-adapters/src/redact.ts`.
 *   **Complexity**: Low (Regex port).
 
 #### 2. `agentlog verify` Command
@@ -67,10 +67,10 @@ The `shim.ts` in `clawproof-adapters` proxies traffic. `agentlog`'s parser logic
 *   **Complexity**: Medium (Requires logic to recompute hashes Python-side).
 
 #### 3. Semantic Metadata Injection (Pulse-to-URM)
-*   **Description**: When `clawproof-adapters` finalizes a run, it should allow an optional `semantic_summary` input. `agentlog`'s logic (`memory_pulse.py`) extracts "Decisions" and "Files Modifed".
+*   **Description**: When `clawsig-adapters` finalizes a run, it should allow an optional `semantic_summary` input. `agentlog`'s logic (`memory_pulse.py`) extracts "Decisions" and "Files Modifed".
 *   **Target**: Marketplace Users (Buyers).
 *   **Value**: Buyers see a high-level summary of the run (e.g., "Modified 3 files in `src/`, decided to use `axios`") in the Explorer UI without needed to decrypt/parse the full chain.
-*   **Location**: `packages/clawproof-adapters` (interface update) & `agentlog` (extractor).
+*   **Location**: `packages/clawsig-adapters` (interface update) & `agentlog` (extractor).
 *   **Complexity**: Low.
 
 #### 4. Reference integrity Check (Git Commit Linkage)
@@ -90,7 +90,7 @@ The `shim.ts` in `clawproof-adapters` proxies traffic. `agentlog`'s parser logic
 ### 5. Recommended Next Steps
 
 **Phase 1: Safety & Consistency (Quick Wins - 1 Day)**
-1.  **Port Redaction**: Copy regexes from `agentlog/redact.py` to `packages/clawproof-adapters/src/redact.ts` and use it in `recorder.ts` `recordEvent`.
+1.  **Port Redaction**: Copy regexes from `agentlog/redact.py` to `packages/clawsig-adapters/src/redact.ts` and use it in `recorder.ts` `recordEvent`.
 2.  **Harmonize Schemas**: Ensure `agentlog/parsers/base.py` `AgentEvent` aligns with fields required by `packages/schema/poh/event_chain.v1.json`.
 
 **Phase 2: Verifiability (1 Week)**

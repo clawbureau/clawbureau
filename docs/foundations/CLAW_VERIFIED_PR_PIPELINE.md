@@ -2,7 +2,7 @@
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
 > **Last reviewed:** 2026-02-12
-> **Source of truth:** `.github/workflows/claw-verified-pr.yml` + `packages/clawproof-adapters/` + `packages/clawverify-cli/`
+> **Source of truth:** `.github/workflows/clawsig-verified-pr.yml` + `packages/clawsig-adapters/` + `packages/clawverify-cli/`
 >
 > **Scope:**
 > - Repo-level convention for agent PR evidence packs (PoH bundles + offline verification output)
@@ -40,21 +40,21 @@ Use the committed config:
 
 This includes the allowlisted **gateway receipt signer DIDs** for both prod + staging `clawproxy`.
 
-## 3) How to generate evidence (clawproof-wrap)
+## 3) How to generate evidence (clawsig-wrap)
 
 From repo root:
 
 ```bash
 # Required: point the harness at clawproxy.
-export CLAWPROOF_PROXY_URL=https://clawproxy.com
+export CLAWSIG_PROXY_URL=https://clawproxy.com
 
 # Optional: auth token (CST) if you want real receipts for protected proxy routes.
-# export CLAWPROOF_PROXY_TOKEN=...
+# export CLAWSIG_PROXY_TOKEN=...
 
 # Run the harness through the wrapper.
 # The wrapper defaults to writing evidence into artifacts/poh/<branch>/.
-CLAWPROOF_VERIFY=1 \
-clawproof-wrap pi -- pi "run the tests"
+CLAWSIG_VERIFY=1 \
+clawsig-wrap pi -- pi "run the tests"
 ```
 
 This will write:
@@ -80,10 +80,10 @@ node packages/clawverify-cli/dist/cli.js verify proof-bundle \
   --config packages/schema/fixtures/clawverify.config.clawbureau.v1.json
 ```
 
-## 5) GitHub check: claw-verified-pr
+## 5) GitHub check: clawsig-verified-pr
 
 Workflow:
-- `.github/workflows/claw-verified-pr.yml`
+- `.github/workflows/clawsig-verified-pr.yml`
 
 Behavior:
 - **Observe mode (default):** if PR evidence exists, verify it and post a summary; do not fail the PR.
@@ -123,6 +123,6 @@ To enable: Settings → Branches → Branch protection rules → Require status 
 
 ## 8) CI caching + artifact persistence
 
-The `claw-verified-pr` workflow uses `actions/setup-node` with `cache: npm` to avoid cold `npm ci` on every push.
+The `clawsig-verified-pr` workflow uses `actions/setup-node` with `cache: npm` to avoid cold `npm ci` on every push.
 
-Verify summaries are uploaded as GitHub artifacts (`claw-verified-pr-summary`) with 90-day retention, so evidence persists beyond ephemeral job logs.
+Verify summaries are uploaded as GitHub artifacts (`clawsig-verified-pr-summary`) with 90-day retention, so evidence persists beyond ephemeral job logs.

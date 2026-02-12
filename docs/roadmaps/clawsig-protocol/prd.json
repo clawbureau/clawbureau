@@ -1,0 +1,177 @@
+{
+  "name": "clawbureau",
+  "project": "clawbureau",
+  "description": "Clawsig Protocol v0.1 - publish an open narrow waist (policy/capability/receipts/bundles/verifier), make coverage explicit, and ship frictionless governance UX patterns.",
+  "branchName": "ralph/clawsig-protocol-v0.1",
+  "userStories": [
+    {
+      "id": "CPL-US-001",
+      "title": "Publish Clawsig Protocol v0.1 narrow waist spec",
+      "description": "As an ecosystem integrator, I want a tiny, implementable protocol spec so third parties can adopt Claw verification without adopting the entire Claw service suite.",
+      "acceptanceCriteria": [
+        "Publish a canonical spec under docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md",
+        "Define the 5 primitives: Policy Artifact (WPC), Capability Token (CST), Receipt, Bundle, Verifier",
+        "Document versioning + canonicalization requirements and fail-closed rules",
+        "Explicitly define receipt binding requirements and replay safety expectations",
+        "Include clear 'what is proven / what is not proven' language"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Spec published at docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md. Defines 5 primitives, coverage matrix, fail-closed semantics, identity pluggability, and explicit 'what is proven / what is not' language."
+    },
+    {
+      "id": "CPL-US-002",
+      "title": "Publish an explicit coverage matrix (no ambiguous 'every action attested')",
+      "description": "As a buyer/enterprise, I want exact coverage claims so I can understand what is and is not attested, without marketing ambiguity.",
+      "acceptanceCriteria": [
+        "Add a 'Coverage' section to CLAWSIG_PROTOCOL_v0.1 defining 'action' as side-effect boundaries",
+        "Publish a coverage matrix that distinguishes: model receipts vs tool receipts vs side-effect receipts vs human approval receipts",
+        "Update relevant PRDs to reference the coverage matrix and avoid over-claiming",
+        "Document current shipped coverage level as-of the roadmap start date"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Coverage matrix published in CLAWSIG_PROTOCOL_v0.1.md §2.3. Distinguishes Coverage M (model), MT (model+tools), MTS (model+tools+side-effects). Current truth: MT shipped. PRDs updated to reference coverage matrix."
+    },
+    {
+      "id": "CPL-US-003",
+      "title": "Protocol-level deterministic reason code registry",
+      "description": "As an agent/tool author, I want deterministic denials and reason codes so automation can handle policy failures without guesswork.",
+      "acceptanceCriteria": [
+        "Define a stable set of protocol reason codes (deny + invalid + dependency missing + replay)",
+        "Document required response shape for deny semantics (machine-readable fields)",
+        "Require fail-closed behavior for unknown codes/schemas where relevant",
+        "Update verifier docs to surface reason codes consistently"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Reason code registry published at docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md. Mined 400+ codes from all services; organized by category (SIGNATURE_*, SCHEMA_*, UNKNOWN_*, HASH_*, DEPENDENCY_*, REPLAY_*, TOKEN_*, POLICY_*). Defines required response shape for deny semantics. Conformance vectors assert registered codes only."
+    },
+    {
+      "id": "CPL-US-004",
+      "title": "Offline verifier CLI + libraries (reference implementation)",
+      "description": "As an auditor/enterprise, I want offline verification so I can validate bundles without requiring hosted services.",
+      "acceptanceCriteria": [
+        "Publish a CLI that can verify proof bundles and export bundles offline",
+        "CLI returns PASS/FAIL plus deterministic reason codes",
+        "Add at least one library entrypoint (TS) used by the CLI",
+        "Document how to reproduce hosted clawverify results offline"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Shipped offline verifier CLI + core libs (packages/clawverify-cli + packages/clawverify-core). See conformance evidence under artifacts/conformance/clawsig-protocol/."
+    },
+    {
+      "id": "CPL-US-005",
+      "title": "Conformance suite + test vectors (PASS/FAIL fixtures)",
+      "description": "As a third-party implementer, I want conformance vectors so I can prove my implementation matches the protocol.",
+      "acceptanceCriteria": [
+        "Publish 'golden' bundles that MUST PASS",
+        "Publish tampered variants that MUST FAIL with specific reason codes",
+        "Add CI that runs the verifier against the vectors",
+        "Document versioning policy for vectors (additive; never mutate)"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Published PASS/FAIL vectors + runner + CI gate (packages/schema/fixtures/protocol-conformance + scripts/protocol/run-clawsig-protocol-conformance.mjs + workflow clawsig-protocol-conformance)."
+    },
+    {
+      "id": "CPL-US-006",
+      "title": "Tool receipt schema + minimal SDK (tool dispatcher boundary)",
+      "description": "As a tool author/runtime integrator, I want a standard way to receipt tool calls so 'action attestation' can include tool execution.",
+      "acceptanceCriteria": [
+        "Define a versioned tool_receipt schema (hash-only by default)",
+        "Document canonicalization and signing requirements",
+        "Add a minimal SDK interface for emitting tool receipts from dispatchers",
+        "Extend verifier to validate tool receipts when present (fail-closed on unknown schema)"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Shipped: tool_receipt.v1.json + tool_receipt_envelope.v1.json schemas; SDK recordToolCall() in clawsig-sdk; clawverify-core validates tool receipts in proof bundles (fail-closed on unknown version/algo); conformance vectors for valid/tampered/missing-field/agent-mismatch. Coverage statement updated to MT."
+    },
+    {
+      "id": "CPL-US-007",
+      "title": "Side-effect receipt classes (egress/filesystem/external write)",
+      "description": "As an enterprise security team, I want receipts for side-effect boundaries so attestations represent real-world impact, not just model calls.",
+      "acceptanceCriteria": [
+        "Define receipt classes for at least: network egress, filesystem writes, external API writes",
+        "Receipts include request/response digests and vendor IDs where applicable",
+        "Document how side-effect receipts are bound into bundles",
+        "Verifier can validate these receipts when present"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Shipped: side_effect_receipt.v1.json + envelope schema; 3 effect classes (network_egress, filesystem_write, external_api_write); SDK recordSideEffect(); clawverify-core validates in bundles (fail-closed); 2 conformance vectors. Sensitive payloads hash-only by default."
+    },
+    {
+      "id": "CPL-US-008",
+      "title": "Human approval receipts + capability minting (two-phase default)",
+      "description": "As a human operator, I want one approval moment that mints scoped capabilities so governance feels like autocomplete, not paperwork.",
+      "acceptanceCriteria": [
+        "Define a human_approval_receipt class and signing model",
+        "Approval receipt mints a new CST bound to an explicit scope and (optionally) WPC hash pin",
+        "Document the two-phase execution posture: plan/diff always allowed; side-effects require explicit capability",
+        "Verifier can validate approval receipts when present"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Shipped: human_approval_receipt.v1.json + envelope schema; 4 approval types (explicit_approve/deny, auto_approve, timeout_deny); approval mints CST bound to scope + optional WPC pin; SDK recordHumanApproval(); clawverify-core validates in bundles; 2 conformance vectors. Two-phase posture documented in spec §2.5."
+    },
+    {
+      "id": "CPL-US-009",
+      "title": "Capability negotiation protocol (RequestCapability + deterministic denial)",
+      "description": "As an agent, I want a standard way to request capabilities and receive deterministic denials so I can adapt automatically.",
+      "acceptanceCriteria": [
+        "Define a RequestCapability request/response shape (scope, reason, evidence_required)",
+        "Denials return deterministic reason codes (e.g., DENIED_POLICY(tool=X, rule=Y))",
+        "Add a verify-lite / preflight mode so agents can self-check compliance",
+        "Document negotiation semantics in the protocol spec"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Shipped: capability_request.v1.json + capability_response.v1.json schemas; 5 decision types (granted, denied, requires_approval, preflight_pass, preflight_fail); per-action denied_actions with rule references; preflight mode for agent self-check. Documented in spec §2.6."
+    },
+    {
+      "id": "CPL-US-010",
+      "title": "GitHub diff-first approvals reference integration",
+      "description": "As a development team, I want a frictionless GitHub workflow (diff-first approvals + proof bundles) so safe governance is the easiest path.",
+      "acceptanceCriteria": [
+        "Provide a reference workflow where phase A produces a diff/PR without side-effects",
+        "Phase B requires an approved capability (CST) to apply changes (merge, push, deploy)",
+        "Attach proof bundle verification summary to the PR as a check/artifact",
+        "Document the integration as a reference module (not required for protocol adoption)"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Shipped Claw Verified PR pipeline: canonical artifacts/poh evidence pack layout, offline verification output, and GitHub check (observe-by-default; enforce on label or DID commit proof). See docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md and .github/workflows/clawsig-verified-pr.yml."
+    },
+    {
+      "id": "CPL-US-011",
+      "title": "Bring-your-own identity profile (OIDC/service accounts; DID optional)",
+      "description": "As an enterprise, I want identity to be pluggable so protocol adoption doesn't require a DID migration.",
+      "acceptanceCriteria": [
+        "Protocol spec documents identity as pluggable (OIDC/service accounts/DIDs)",
+        "Document a canonical 'subject' representation and mapping rules",
+        "Ensure capability tokens and receipts can carry non-DID identities where appropriate",
+        "Fail-closed rules remain deterministic regardless of identity provider"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Shipped: spec §4 expanded with canonical subject representation table (DID, OIDC, service account, email, GitHub), mapping rules for receipts/envelopes/CSTs, and fail-closed behavior for unknown formats. Non-DID subjects bind via approver_subject and CST sub claims."
+    },
+    {
+      "id": "CPL-US-012",
+      "title": "'Claw Verified' supply-chain wedge for skills/tools",
+      "description": "As a platform operator, I want a default trust mark for skills/tools so malicious ecosystem components are quarantined by default.",
+      "acceptanceCriteria": [
+        "Define requirements for 'verified' tools (version pinning + receipt emission + verification)",
+        "Document a quarantine mode for tools that cannot emit verifiable receipts (low privilege; default deny side-effects)",
+        "Publish a reference signing/verifying flow for tool manifests",
+        "Integrate the requirements into provider/skill registry PRDs"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Shipped: spec §5 defines Claw Verified requirements (version pinning + receipt emission + verification), tool manifest signing flow (Ed25519 + JCS), quarantine mode (low privilege, default deny, observe-only), and integration guidance for skill/provider registries."
+    }
+  ]
+}

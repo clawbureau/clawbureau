@@ -1,0 +1,23 @@
+{
+  "name": "@clawbureau/clawsig-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "External harness adapters for Proof-of-Harness — wrapper scripts and runtime for Claude Code, Codex, Pi, Opencode, and Factory Droid",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "clawsig-wrap": "./bin/clawsig-wrap.sh"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "license": "MIT"
+}

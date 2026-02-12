@@ -7,14 +7,14 @@ Edit the registry, then run `node scripts/poh/sync-harness-registry.mjs`.
 
 | Harness | ID | Kind | Status | Connects via |
 |---|---|---|---|---|
-| Claude Code | `claude-code` | external-cli | supported | clawproof-adapters starts a local shim server and points `ANTHROPIC_BASE_URL` at it. |
-| Codex CLI | `codex` | external-cli | supported | clawproof-adapters starts a local shim server and points `OPENAI_BASE_URL` at it. |
-| Factory Droid | `factory-droid` | external-cli | planned | Planned: use clawproof-adapters shim routing (same as other external CLIs). |
+| Claude Code | `claude-code` | external-cli | supported | clawsig-adapters starts a local shim server and points `ANTHROPIC_BASE_URL` at it. |
+| Codex CLI | `codex` | external-cli | supported | clawsig-adapters starts a local shim server and points `OPENAI_BASE_URL` at it. |
+| Factory Droid | `factory-droid` | external-cli | planned | Planned: use clawsig-adapters shim routing (same as other external CLIs). |
 | Gemini CLI | `gemini-cli` | external-cli | planned | Planned: route Google Generative AI calls through clawproxy provider=google and capture receipts in a PoH bundle. |
 | OpenClaw | `openclaw` | native | supported | OpenClaw plugin patches global fetch() to route supported provider HTTP calls through `clawproxy` (`POST /v1/proxy/:provider`). |
-| OpenCode | `opencode` | external-cli | supported | clawproof-adapters starts a local shim server and points provider base URLs at it. |
-| Pi (pi-coding-agent) | `pi` | external-cli | experimental | clawproof-adapters starts a local shim server and points provider base URLs at it. |
-| Ad-hoc scripts (clawproof SDK) | `script` | sdk | supported | `@clawbureau/clawproof-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce). |
+| OpenCode | `opencode` | external-cli | supported | clawsig-adapters starts a local shim server and points provider base URLs at it. |
+| Pi (pi-coding-agent) | `pi` | external-cli | experimental | clawsig-adapters starts a local shim server and points provider base URLs at it. |
+| Ad-hoc scripts (clawsig SDK) | `script` | sdk | supported | `@clawbureau/clawsig-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce). |
 
 ---
 
@@ -25,13 +25,13 @@ Edit the registry, then run `node scripts/poh/sync-harness-registry.mjs`.
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/clawproof-adapters/src/adapters/claude-code.ts`](../../../packages/clawproof-adapters/src/adapters/claude-code.ts)
-- [`packages/clawproof-adapters/src/shim.ts`](../../../packages/clawproof-adapters/src/shim.ts)
-- [`packages/clawproof-adapters/src/session.ts`](../../../packages/clawproof-adapters/src/session.ts)
+- [`packages/clawsig-adapters/src/adapters/claude-code.ts`](../../../packages/clawsig-adapters/src/adapters/claude-code.ts)
+- [`packages/clawsig-adapters/src/shim.ts`](../../../packages/clawsig-adapters/src/shim.ts)
+- [`packages/clawsig-adapters/src/session.ts`](../../../packages/clawsig-adapters/src/session.ts)
 
 ### How it connects
 
-- clawproof-adapters starts a local shim server and points `ANTHROPIC_BASE_URL` at it.
+- clawsig-adapters starts a local shim server and points `ANTHROPIC_BASE_URL` at it.
 - Shim forwards each request to clawproxy via session.proxyLLMCall() to inject PoH binding headers + capture receipts.
 
 ### Base URL overrides
@@ -45,14 +45,14 @@ Edit the registry, then run `node scripts/poh/sync-harness-registry.mjs`.
 ### Recommended commands
 
 ```bash
-clawproof-wrap claude-code -- claude --print "fix the failing test"
+clawsig-wrap claude-code -- claude --print "fix the failing test"
 ```
 
 ### Best practices
 
 - Use `--print` (non-interactive) for repeatable output and easier log capture.
 - Prefer simple tool call visibility; if tool logs are not present, expect a minimal tool_call chain.
-- Keep upstream provider key as `ANTHROPIC_API_KEY`; clawproof does not replace provider keys.
+- Keep upstream provider key as `ANTHROPIC_API_KEY`; clawsig does not replace provider keys.
 
 ### Limitations
 
@@ -67,13 +67,13 @@ clawproof-wrap claude-code -- claude --print "fix the failing test"
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/clawproof-adapters/src/adapters/codex.ts`](../../../packages/clawproof-adapters/src/adapters/codex.ts)
-- [`packages/clawproof-adapters/src/shim.ts`](../../../packages/clawproof-adapters/src/shim.ts)
-- [`packages/clawproof-adapters/src/session.ts`](../../../packages/clawproof-adapters/src/session.ts)
+- [`packages/clawsig-adapters/src/adapters/codex.ts`](../../../packages/clawsig-adapters/src/adapters/codex.ts)
+- [`packages/clawsig-adapters/src/shim.ts`](../../../packages/clawsig-adapters/src/shim.ts)
+- [`packages/clawsig-adapters/src/session.ts`](../../../packages/clawsig-adapters/src/session.ts)
 
 ### How it connects
 
-- clawproof-adapters starts a local shim server and points `OPENAI_BASE_URL` at it.
+- clawsig-adapters starts a local shim server and points `OPENAI_BASE_URL` at it.
 - Shim extracts upstream key from Authorization and forwards to clawproxy as X-Provider-API-Key.
 
 ### Base URL overrides
@@ -87,12 +87,12 @@ clawproof-wrap claude-code -- claude --print "fix the failing test"
 ### Recommended commands
 
 ```bash
-clawproof-wrap codex -- codex exec --json "implement the feature"
+clawsig-wrap codex -- codex exec --json "implement the feature"
 ```
 
 ### Best practices
 
-- Use `codex exec --json` to emit JSONL events; clawproof can extract tool_call events best-effort.
+- Use `codex exec --json` to emit JSONL events; clawsig can extract tool_call events best-effort.
 - If you see streaming-related errors, try non-interactive subcommands (exec/review) rather than the interactive TUI.
 
 ### Limitations
@@ -108,13 +108,13 @@ clawproof-wrap codex -- codex exec --json "implement the feature"
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/clawproof-adapters/src/adapters/factory-droid.ts`](../../../packages/clawproof-adapters/src/adapters/factory-droid.ts)
-- [`packages/clawproof-adapters/src/shim.ts`](../../../packages/clawproof-adapters/src/shim.ts)
-- [`packages/clawproof-adapters/src/session.ts`](../../../packages/clawproof-adapters/src/session.ts)
+- [`packages/clawsig-adapters/src/adapters/factory-droid.ts`](../../../packages/clawsig-adapters/src/adapters/factory-droid.ts)
+- [`packages/clawsig-adapters/src/shim.ts`](../../../packages/clawsig-adapters/src/shim.ts)
+- [`packages/clawsig-adapters/src/session.ts`](../../../packages/clawsig-adapters/src/session.ts)
 
 ### How it connects
 
-- Planned: use clawproof-adapters shim routing (same as other external CLIs).
+- Planned: use clawsig-adapters shim routing (same as other external CLIs).
 
 ### Base URL overrides
 
@@ -128,7 +128,7 @@ clawproof-wrap codex -- codex exec --json "implement the feature"
 ### Recommended commands
 
 ```bash
-clawproof-wrap factory-droid -- factory-droid run --task "build feature"
+clawsig-wrap factory-droid -- factory-droid run --task "build feature"
 ```
 
 ### Best practices
@@ -165,7 +165,7 @@ clawproof-wrap factory-droid -- factory-droid run --task "build feature"
 ### Recommended commands
 
 ```bash
-# TODO: add a clawproof-adapters harness adapter once we confirm Gemini CLI base URL override behavior.
+# TODO: add a clawsig-adapters harness adapter once we confirm Gemini CLI base URL override behavior.
 ```
 
 ### Best practices
@@ -238,13 +238,13 @@ openclaw plugins enable provider-clawproxy
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/clawproof-adapters/src/adapters/opencode.ts`](../../../packages/clawproof-adapters/src/adapters/opencode.ts)
-- [`packages/clawproof-adapters/src/shim.ts`](../../../packages/clawproof-adapters/src/shim.ts)
-- [`packages/clawproof-adapters/src/session.ts`](../../../packages/clawproof-adapters/src/session.ts)
+- [`packages/clawsig-adapters/src/adapters/opencode.ts`](../../../packages/clawsig-adapters/src/adapters/opencode.ts)
+- [`packages/clawsig-adapters/src/shim.ts`](../../../packages/clawsig-adapters/src/shim.ts)
+- [`packages/clawsig-adapters/src/session.ts`](../../../packages/clawsig-adapters/src/session.ts)
 
 ### How it connects
 
-- clawproof-adapters starts a local shim server and points provider base URLs at it.
+- clawsig-adapters starts a local shim server and points provider base URLs at it.
 - Shim forwards to clawproxy with PoH binding headers and captures `_receipt_envelope`.
 
 ### Base URL overrides
@@ -259,7 +259,7 @@ openclaw plugins enable provider-clawproxy
 ### Recommended commands
 
 ```bash
-clawproof-wrap opencode -- opencode run --format json "refactor module"
+clawsig-wrap opencode -- opencode run --format json "refactor module"
 ```
 
 ### Best practices
@@ -280,14 +280,14 @@ clawproof-wrap opencode -- opencode run --format json "refactor module"
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/clawproof-adapters/src/adapters/pi.ts`](../../../packages/clawproof-adapters/src/adapters/pi.ts)
-- [`packages/clawproof-adapters/src/shim.ts`](../../../packages/clawproof-adapters/src/shim.ts)
-- [`packages/clawproof-adapters/src/session.ts`](../../../packages/clawproof-adapters/src/session.ts)
+- [`packages/clawsig-adapters/src/adapters/pi.ts`](../../../packages/clawsig-adapters/src/adapters/pi.ts)
+- [`packages/clawsig-adapters/src/shim.ts`](../../../packages/clawsig-adapters/src/shim.ts)
+- [`packages/clawsig-adapters/src/session.ts`](../../../packages/clawsig-adapters/src/session.ts)
 - [`scripts/ralph/ralph.sh`](../../../scripts/ralph/ralph.sh)
 
 ### How it connects
 
-- clawproof-adapters starts a local shim server and points provider base URLs at it.
+- clawsig-adapters starts a local shim server and points provider base URLs at it.
 - Shim forwards to clawproxy with PoH binding headers and captures receipts.
 
 ### Base URL overrides
@@ -302,7 +302,7 @@ clawproof-wrap opencode -- opencode run --format json "refactor module"
 ### Recommended commands
 
 ```bash
-clawproof-wrap pi -- pi -p "run the tests"
+clawsig-wrap pi -- pi -p "run the tests"
 ```
 
 ### Best practices
@@ -316,20 +316,20 @@ clawproof-wrap pi -- pi -p "run the tests"
 
 ---
 
-## Ad-hoc scripts (clawproof SDK) (`script`)
+## Ad-hoc scripts (clawsig SDK) (`script`)
 
 - **Kind:** sdk
 - **Status:** supported
 
 ### Key implementations ("knows of" this harness)
 
-- [`packages/clawproof-sdk/src/run.ts`](../../../packages/clawproof-sdk/src/run.ts)
+- [`packages/clawsig-sdk/src/run.ts`](../../../packages/clawsig-sdk/src/run.ts)
 - [`services/clawproxy/src/index.ts`](../../../services/clawproxy/src/index.ts)
 - [`services/clawverify/src/verify-proof-bundle.ts`](../../../services/clawverify/src/verify-proof-bundle.ts)
 
 ### How it connects
 
-- `@clawbureau/clawproof-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce).
+- `@clawbureau/clawsig-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce).
 - SDK collects `_receipt_envelope`, builds URM + event chain, and signs a proof bundle with an agent DID key.
 
 ### Base URL overrides
@@ -344,7 +344,7 @@ clawproof-wrap pi -- pi -p "run the tests"
 ### Recommended commands
 
 ```bash
-# Programmatic (Node): use @clawbureau/clawproof-sdk createRun() + callLLM() + finalize()
+# Programmatic (Node): use @clawbureau/clawsig-sdk createRun() + callLLM() + finalize()
 ```
 
 ### Best practices

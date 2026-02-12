@@ -177,7 +177,7 @@ You have an internal `WorkPolicyContract` interface in `services/clawproxy/src/p
   - Configure provider routing via `@openclaw/provider-clawproxy` (see registry pointers in `docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md`).
 
 **External CLIs (Claude Code / Codex / Pi / OpenCode)**
-- Use `clawproof-wrap` shim pattern already described in `docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md`:
+- Use `clawsig-wrap` shim pattern already described in `docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md`:
   - Force base URL to shim → shim forwards to clawproxy with binding headers.
   - Add network sandboxing wrapper (iptables/pf / container netns) so only shim + allowed domains are reachable.
 

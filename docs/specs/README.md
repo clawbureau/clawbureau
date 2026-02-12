@@ -9,8 +9,8 @@
 
 # Specs
 
-- Claw Protocol:
-  - `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- Clawsig Protocol:
+  - `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 - Agent Economy:
   - `docs/specs/agent-economy/MVP.md`
 - Clawlogs:

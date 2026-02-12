@@ -6831,7 +6831,7 @@ function trustPulseViewerPage(origin: string): string {
         It is designed for UX and review convenience and must not be used to uplift trust tiers.
       </p>
       <p>
-        Paste a <code>trust_pulse.v1</code> JSON document below, or upload the <code>*-trust-pulse.json</code> emitted by <code>clawproof-wrap</code>.
+        Paste a <code>trust_pulse.v1</code> JSON document below, or upload the <code>*-trust-pulse.json</code> emitted by <code>clawsig-wrap</code>.
       </p>
       <p><a href="${o}/docs">Back to docs</a></p>
 

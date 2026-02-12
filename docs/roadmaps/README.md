@@ -14,8 +14,8 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## Active roadmaps
 
-- **Claw Protocol (narrow waist + explicit coverage + frictionless governance)**
-  - Folder: `docs/roadmaps/claw-protocol/`
+- **Clawsig Protocol (narrow waist + explicit coverage + frictionless governance)**
+  - Folder: `docs/roadmaps/clawsig-protocol/`
   - Status: active (see `prd.json` + `progress.txt`)
 
 - **Docs IA (docs information architecture + freshness cleanup)**

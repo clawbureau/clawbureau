@@ -30,11 +30,11 @@
       },
       "outputDir": {
         "type": "string",
-        "description": "Directory to write PoH artifacts (default: .clawproof/openclaw)"
+        "description": "Directory to write PoH artifacts (default: .clawsig/openclaw)"
       },
       "keyFile": {
         "type": "string",
-        "description": "Path to persistent Ed25519 JWK key file (default: <stateDir>/clawproof/keys/<agentId>.jwk.json)"
+        "description": "Path to persistent Ed25519 JWK key file (default: <stateDir>/clawsig/keys/<agentId>.jwk.json)"
       },
       "mode": {
         "type": "string",
@@ -132,8 +132,8 @@
     "confidentialMode": { "label": "Confidential Mode", "help": "Send X-Confidential-Mode: true to enable confidential-mode proxy behavior.", "advanced": true },
     "receiptPrivacyMode": { "label": "Receipt Privacy Mode", "advanced": true },
     "baseUrl": { "label": "clawproxy Base URL", "placeholder": "https://clawproxy.com" },
-    "outputDir": { "label": "Output Directory", "placeholder": ".clawproof/openclaw" },
-    "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawproof/keys/<agentId>.jwk.json", "advanced": true },
+    "outputDir": { "label": "Output Directory", "placeholder": ".clawsig/openclaw" },
+    "keyFile": { "label": "Key File", "placeholder": "<stateDir>/clawsig/keys/<agentId>.jwk.json", "advanced": true },
     "mode": { "label": "Mode", "help": "Use enforce to make PoH non-optional." },
     "airlock": {
       "label": "Airlock (IdentityRoot vs JobRoot)",

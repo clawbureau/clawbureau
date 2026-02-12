@@ -247,8 +247,8 @@ Assume malicious workers with full control of their local machine and harness, a
 - If `allowlistedSignerDids` is missing/empty, receipts are invalid (`services/clawverify/src/verify-receipt.ts`).
 
 4) **Adapters and SDKs inject binding headers**  
-- SDK: `packages/clawproof-sdk/src/run.ts` (`X-Run-Id`, `X-Event-Hash`, `X-Idempotency-Key`)  
-- External harness shim: `packages/clawproof-adapters/src/shim.ts` forwards via session and captures receipts  
+- SDK: `packages/clawsig-sdk/src/run.ts` (`X-Run-Id`, `X-Event-Hash`, `X-Idempotency-Key`)  
+- External harness shim: `packages/clawsig-adapters/src/shim.ts` forwards via session and captures receipts  
 - OpenClaw provider: `packages/openclaw-provider-clawproxy/src/provider.ts` injects headers.
 
 ### Critical gaps / weaknesses
@@ -283,7 +283,7 @@ Assume malicious workers with full control of their local machine and harness, a
 
 #### Gap 5 — Receipt format transition ambiguity (operational risk)
 - `clawproxy` still supports legacy `_receipt` and also emits `_receipt_envelope` (`services/clawproxy/src/index.ts`, `services/clawproxy/src/receipt.ts`).  
-- SDK/adapters sometimes “bridge” legacy receipts into envelope shapes (`packages/clawproof-sdk/src/run.ts`, `packages/clawproof-adapters/src/session.ts`, `packages/openclaw-provider-clawproxy/src/recorder.ts`), but those bridged envelopes are **not cryptographically verifiable** (signature fields may be `unsigned` or signer DID mismatched).
+- SDK/adapters sometimes “bridge” legacy receipts into envelope shapes (`packages/clawsig-sdk/src/run.ts`, `packages/clawsig-adapters/src/session.ts`, `packages/openclaw-provider-clawproxy/src/recorder.ts`), but those bridged envelopes are **not cryptographically verifiable** (signature fields may be `unsigned` or signer DID mismatched).
 - Consequence: confusion, and downstream systems might mistakenly treat presence of “receipts” as gateway proof unless they check `receipts_valid`.
 
 **Best fix:** policy: gateway tier only counts `_receipt_envelope`-verified receipts; optionally stop bundling bridged legacy receipts or mark them explicitly as “unverified legacy”.
@@ -321,7 +321,7 @@ Each story is incremental and keeps adoption feasible while pushing toward fail-
 
 ### Story 5 — Receipt policy enforcement: require canonical `_receipt_envelope` for gateway tier
 **Change:** Stop treating bridged legacy receipts as “receipts present.” If `receipt_envelope` is missing, it must not contribute to gateway tier.  
-**Where:** SDK/adapters: `packages/clawproof-sdk/src/run.ts`, `packages/clawproof-adapters/src/session.ts`, OpenClaw recorder `packages/openclaw-provider-clawproxy/src/recorder.ts`.  
+**Where:** SDK/adapters: `packages/clawsig-sdk/src/run.ts`, `packages/clawsig-adapters/src/session.ts`, OpenClaw recorder `packages/openclaw-provider-clawproxy/src/recorder.ts`.  
 **Acceptance:** Gateway tier requires signature-valid envelopes from allowlisted signers; legacy receipts may be stored only as debug artifacts.
 
 ### Story 6 — Key rotation + signer discovery that stays fail-closed

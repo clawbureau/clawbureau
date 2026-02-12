@@ -32,7 +32,7 @@ node packages/clawverify-cli/dist/cli.js verify proof-bundle \
 ```
 
 ### 4) GitHub check
-- The `claw-verified-pr` workflow runs in **observe mode** by default.
+- The `clawsig-verified-pr` workflow runs in **observe mode** by default.
 - It becomes **enforced** (fails closed) if:
   - PR label `claw-verified` is present, OR
   - PR adds `proofs/**/commit.sig.json`

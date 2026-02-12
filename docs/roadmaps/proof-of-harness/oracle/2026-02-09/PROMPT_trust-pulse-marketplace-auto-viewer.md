@@ -3,7 +3,7 @@
 You are helping implement the next step of the Trust Pulse feature.
 
 Current state:
-- Producers (clawproof-adapters + OpenClaw recorder) generate a `trust_pulse.v1` document (self-reported, non-tier) and attach a pointer in `URM.metadata.trust_pulse`.
+- Producers (clawsig-adapters + OpenClaw recorder) generate a `trust_pulse.v1` document (self-reported, non-tier) and attach a pointer in `URM.metadata.trust_pulse`.
 - `clawbounties` now has a public `GET /trust-pulse` page that can paste/upload JSON to view tools + files.
 
 Goal:

@@ -1,7 +1,7 @@
 {
   "manifest_version": "1",
   "protocol": {
-    "name": "Claw Protocol",
+    "name": "Clawsig Protocol",
     "version": "0.1"
   },
   "generated_at": "2026-02-12T00:00:00.000Z",
