@@ -1,19 +1,57 @@
 {
   "name": "@clawbureau/clawsig-sdk",
   "version": "0.1.0",
-  "private": true,
-  "description": "Lightweight SDK for emitting verifiable proof bundles from API scripts and automation workloads",
+  "description": "Lightweight SDK for emitting verifiable proof bundles from any Node.js agent — model calls, tool receipts, side-effect receipts, human approvals, and capability negotiation.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "dist/**/*.js.map",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
     "smoke:node": "npm run build && node scripts/smoke-node.mjs"
   },
+  "keywords": [
+    "clawsig",
+    "proof-bundle",
+    "proof-of-harness",
+    "agent-verification",
+    "tool-receipts",
+    "side-effect-receipts",
+    "Ed25519",
+    "DID"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawbureau/clawbureau",
+    "directory": "packages/clawsig-sdk"
+  },
+  "homepage": "https://github.com/clawbureau/clawbureau/tree/main/packages/clawsig-sdk",
+  "bugs": "https://github.com/clawbureau/clawbureau/issues",
   "devDependencies": {
     "@types/node": "^25.2.1",
     "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "license": "MIT"
 }

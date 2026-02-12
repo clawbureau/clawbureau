@@ -87,3 +87,20 @@ Started: 2026-02-07T20:00:00Z
   - docs/ecosystem/STRATEGIC_PLAN.md
   - docs/archive/README.md
 ---
+
+## 2026-02-12T18:00:00Z - DOCS-US-001/002/003/004 (closure)
+- What was implemented
+  - DOCS-US-001: Written formal IA proposal (docs/roadmaps/docs-ia/IA_PROPOSAL.md) classifying all 222 docs into canonical/active/draft/archive. Folder structure codified. Archiving rules defined.
+  - DOCS-US-002: Verified all redirect stubs are in place. Archive folder active with protocol-M planning bundle. No broken internal links found.
+  - DOCS-US-003: Status blocks verified on all 20 most-referenced docs (foundations, specs, indexes, roadmap READMEs). Added status block to ADOPTION_GUIDE.md.
+  - DOCS-US-004: WHAT_TO_READ.md expanded with 3 new audience paths: protocol adopter (7 docs), economy/risk developer (5 docs + PRDs), enterprise buyer (7 docs + external Security Review Pack link).
+- Tracker flips
+  - DOCS-US-001, DOCS-US-002, DOCS-US-003, DOCS-US-004 → passes=true
+  - **Docs-IA roadmap: 4/4 COMPLETE.**
+- Files changed
+  - docs/roadmaps/docs-ia/IA_PROPOSAL.md (new)
+  - docs/roadmaps/docs-ia/prd.json
+  - docs/roadmaps/docs-ia/progress.txt
+  - docs/WHAT_TO_READ.md
+  - docs/specs/clawsig-protocol/ADOPTION_GUIDE.md (status block added)
+---

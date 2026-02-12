@@ -7,7 +7,7 @@
     {
       "id": "DOCS-US-001",
       "title": "Oracle-assisted docs audit + IA proposal",
-      "description": "As a contributor, I want a single proposal for docs IA, canonical reading paths, and archiving rules so it’s obvious what to read and what to ignore.",
+      "description": "As a contributor, I want a single proposal for docs IA, canonical reading paths, and archiving rules so it\u2019s obvious what to read and what to ignore.",
       "acceptanceCriteria": [
         "Produce a written IA proposal (folders, naming, indices)",
         "Classify existing docs into canonical/active/draft/archive",
@@ -15,19 +15,21 @@
         "List concrete move/rename actions"
       ],
       "priority": 1,
-      "passes": false
+      "passes": true,
+      "notes": "IA proposal written (docs/roadmaps/docs-ia/IA_PROPOSAL.md), 222 docs classified into canonical/active/draft/archive."
     },
     {
       "id": "DOCS-US-002",
       "title": "Archive or mark outdated docs",
-      "description": "As a reader, I want outdated docs clearly marked or moved into an archive so I don’t mistake them for current state.",
+      "description": "As a reader, I want outdated docs clearly marked or moved into an archive so I don\u2019t mistake them for current state.",
       "acceptanceCriteria": [
         "Outdated docs are moved to an archive folder or get an explicit status banner",
         "Indexes link only to canonical/current docs by default",
         "No broken internal links after moves"
       ],
       "priority": 2,
-      "passes": false
+      "passes": true,
+      "notes": "Root-level redirect stubs already in place. No broken links. Archive folder active. Protocol-M planning bundle archived."
     },
     {
       "id": "DOCS-US-003",
@@ -39,22 +41,24 @@
         "Add guidance to docs/README.md"
       ],
       "priority": 3,
-      "passes": false
+      "passes": true,
+      "notes": "Status blocks applied to all canonical hubs, specs, foundations, roadmap READMEs, and adoption guide. Template at docs/_templates/STATUS_BLOCK.md."
     },
     {
       "id": "DOCS-US-004",
       "title": "Add a \"What to read\" index per audience",
-      "description": "As a new engineer, I want a 5-minute reading list tailored to what I’m doing so I can start without guessing.",
+      "description": "As a new engineer, I want a 5-minute reading list tailored to what I\u2019m doing so I can start without guessing.",
       "acceptanceCriteria": [
         "Add a concise list for: marketplace dev, PoH dev, OpenClaw integration dev, ecosystem/strategy",
         "Each list links to <= 8 docs",
         "Lists are kept up to date as part of roadmap updates"
       ],
       "priority": 4,
-      "passes": false
+      "passes": true,
+      "notes": "WHAT_TO_READ.md expanded with 3 new paths: protocol adopter, economy/risk developer, enterprise buyer."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-07T20:00:00Z"
+    "updatedAt": "2026-02-12T18:00:00Z"
   }
 }
