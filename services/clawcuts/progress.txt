@@ -21,3 +21,43 @@ Started: 2026-02-03
 - Removed legacy `params.job_type` requirement and updated `/skill.md` example.
 - Policy hashing updated to `clawcuts.policy.v2` canonical schema.
 - Typecheck: `npm run typecheck`.
+
+## 2026-02-11 - CCU-OPS-001 (CCU-US-001/002/003/004/006)
+- Added D1-backed control plane schema (`services/clawcuts/migrations/0001_init.sql`):
+  - `policy_versions`
+  - `policy_audit_events`
+  - `fee_apply_events`
+- Implemented policy lifecycle endpoints:
+  - `POST /v1/policies/versions`
+  - `POST /v1/policies/activate`
+  - `POST /v1/policies/deactivate`
+  - `GET /v1/policies/{product}/{policy_id}/active`
+  - `GET /v1/policies/{product}/{policy_id}/history`
+  - `GET /v1/policies/{product}/{policy_id}/history.csv`
+- Upgraded fee simulation to policy v3 with optional discounts + referral split planning.
+- Implemented deterministic settlement apply pipeline:
+  - `POST /v1/fees/apply` (idempotent, snapshot-only, hash/version validation)
+  - `POST /v1/fees/apply/finalize` (ledger fee/referral event refs)
+- Implemented monthly revenue reporting:
+  - `GET /v1/reports/revenue/monthly` (JSON + CSV)
+- Added escrow integration for apply/finalize and split execution:
+  - `services/escrow/src/worker.ts`
+  - migration `services/escrow/migrations/0002_add_referral_event_ids.sql`
+- Added smoke automation: `scripts/poh/smoke-clawcuts-monetization.mjs`.
+- Validation:
+  - `pnpm --dir services/clawcuts typecheck`
+  - `pnpm --dir services/clawcuts test`
+  - `pnpm --dir services/escrow typecheck`
+  - `pnpm --dir services/clawbounties typecheck`
+  - `node --check scripts/poh/smoke-clawcuts-monetization.mjs`
+- Evidence:
+  - staging: `artifacts/simulations/clawcuts/2026-02-12T00-10-13-377Z-staging/smoke.json`
+  - prod: `artifacts/simulations/clawcuts/2026-02-12T00-11-08-054Z-prod/smoke.json`
+- Deploys:
+  - `clawcuts-staging`: `a523cac1-6aee-47e5-8485-3b9c8317e04f`
+  - `clawcuts` (prod): `4a54177d-c256-4bc7-bbd5-5f6b1c8ceb14`
+  - `clawescrow-staging`: `c351d572-f69b-4bc1-b251-c3f90a8a415a`
+  - `clawescrow` (prod): `070aa9df-1263-4ecf-9087-e205758a6c62`
+- Migrations applied (remote):
+  - `services/clawcuts/migrations/0001_init.sql` -> `clawcuts-staging`, `clawcuts`
+  - `services/escrow/migrations/0002_add_referral_event_ids.sql` -> `clawescrow-staging`, `clawescrow`

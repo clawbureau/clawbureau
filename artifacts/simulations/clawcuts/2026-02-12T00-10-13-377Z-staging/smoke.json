@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "env": "staging",
+  "policy": {
+    "id": "bounties_v1",
+    "version": "2",
+    "hash_b64u": "l8G3kzZp0S-ilpTY8jmUB6nkU0cwyTm0EXdv2iyzDQw"
+  },
+  "escrow": {
+    "escrow_id": "esc_f5eb9fc9-5fdc-4671-89a3-bbf92499ea6d",
+    "release_idempotency_key": "smoke:clawcuts:release:mlipcpb53extqe",
+    "worker_transfer": "evt_mlipcrdh_x94e6dpw",
+    "fee_transfer_count": 1,
+    "referral_transfer_count": 1
+  },
+  "report": {
+    "month": "2026-02",
+    "matched_policy_version": "2",
+    "matched_policy_hash_b64u": "l8G3kzZp0S-ilpTY8jmUB6nkU0cwyTm0EXdv2iyzDQw",
+    "platform_fee_minor": "675",
+    "referral_payout_minor": "202",
+    "platform_retained_minor": "473"
+  }
+}

@@ -145,3 +145,13 @@ Started: 2026-02-02T03:08:26.936628
 - Learnings:
   - Use stored fee snapshot (do not recompute fees at release).
   - Use D1-held idempotency locks (`release_idempotency_key`, `dispute_idempotency_key`) to prevent double actions.
+
+## 2026-02-11 - CCU-OPS-001 integration hardening
+- Added clawcuts settlement apply integration on release path:
+  - `clawcuts /v1/fees/apply` called fail-closed before fee fanout
+  - transfer plan consumed from stored snapshot only (no local recomputation)
+  - `clawcuts /v1/fees/apply/finalize` called with emitted ledger event IDs
+- Added dedicated referral event tracking:
+  - new column `ledger_referral_event_ids_json` (`migrations/0002_add_referral_event_ids.sql`)
+  - release/get responses now include `ledger_refs.referral_transfers`
+- Extended fee quote snapshot validation to support optional split metadata and preserve it through escrow persistence.

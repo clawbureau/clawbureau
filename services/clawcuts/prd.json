@@ -1,6 +1,6 @@
 {
   "project": "clawbureau",
-  "branchName": "feat/clawcuts/CCU-US-005-fee-simulation",
+  "branchName": "feat/marketplace/CCU-OPS-001-clawcuts-monetization",
   "description": "clawcuts.com (Pricing Engine) — PRD — Fee engine and take-rate policies for markets and escrow.",
   "userStories": [
     {
@@ -14,8 +14,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented D1-backed policy control plane with immutable version creation (`POST /v1/policies/versions`), explicit activate/deactivate lifecycle, bootstrap defaults, and strict admin-gated operations. Evidence: artifacts/simulations/clawcuts/2026-02-12T00-10-13-377Z-staging/smoke.json and artifacts/simulations/clawcuts/2026-02-12T00-11-08-054Z-prod/smoke.json."
     },
     {
       "id": "CCU-US-002",
@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added `POST /v1/fees/apply` + `POST /v1/fees/apply/finalize` idempotent settlement pipeline that consumes stored snapshots only, validates policy hash/version binding, and records deterministic transfer plans + ledger refs. Escrow release now uses clawcuts apply fail-closed before ledger fanout."
     },
     {
       "id": "CCU-US-003",
@@ -42,8 +42,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Referral split rule fields (`referral_bps`, `referral_min_minor`) added to policies; simulation emits deterministic split plans; escrow release executes dedicated referral transfers (`kind=escrow_release_referral`) with separate ledger_refs.referral_transfers."
     },
     {
       "id": "CCU-US-004",
@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Policy audit log persisted in `policy_audit_events` with actor+timestamp and exposed via `GET /v1/policies/{product}/{policy_id}/history` and `/history.csv`."
     },
     {
       "id": "CCU-US-005",
@@ -84,8 +84,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented `GET /v1/reports/revenue/monthly` with JSON + CSV exports segmented by product/policy/version and totals for gross principal, platform fee, referral payout, and retained platform revenue."
     },
     {
       "id": "CCU-US-007",

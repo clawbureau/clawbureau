@@ -14,8 +14,9 @@ database_name = "clawescrow"
 database_id = "12711de7-c1ac-415f-ae43-e74e6ec6abca"
 
 [vars]
-ESCROW_VERSION = "0.1.0"
+ESCROW_VERSION = "0.2.0"
 LEDGER_BASE_URL = "https://clawledger.com"
+CLAWCUTS_BASE_URL = "https://clawcuts.com"
 FEE_CLEARING_DOMAIN = "clawcuts"
 
 [env.staging]
@@ -30,6 +31,7 @@ database_name = "clawescrow-staging"
 database_id = "d126ce15-8016-46ab-bfb6-d6c2a9e467c8"
 
 [env.staging.vars]
-ESCROW_VERSION = "0.1.0"
+ESCROW_VERSION = "0.2.0"
 LEDGER_BASE_URL = "https://staging.clawledger.com"
+CLAWCUTS_BASE_URL = "https://staging.clawcuts.com"
 FEE_CLEARING_DOMAIN = "clawcuts"
