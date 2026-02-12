@@ -395,9 +395,10 @@ async function router(request: Request, env: Env): Promise<Response> {
         <li><code>GET /v1/netting/runs/:id</code> (admin)</li>
         <li><code>GET /v1/netting/runs/:id/report?format=json|csv</code> (admin)</li>
         <li><code>POST /v1/loss-events</code> (admin, idempotency required)</li>
+        <li><code>POST /v1/loss-events/:id/resolve</code> (admin, idempotency required)</li>
         <li><code>GET /v1/loss-events</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
         <li><code>GET /v1/loss-events/:id</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
-        <li><code>GET /v1/loss-events/outbox</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
+        <li><code>GET /v1/loss-events/outbox?operation=apply|resolve</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
         <li><code>POST /v1/loss-events/ops/retry</code> (admin)</li>
       </ul>
     </main>
@@ -468,6 +469,35 @@ async function router(request: Request, env: Env): Promise<Response> {
     if (shouldInlineLossEventForwarding(env)) {
       // Best-effort forwarding attempt; durable state persists in outbox.
       await lossEventService.retryForwarding({
+        limit: resolveLossEventRetryLimit(env),
+        loss_event_id: response.event.loss_event_id,
+      });
+    }
+
+    return jsonResponse(response, response.deduped ? 200 : 201, resolveVersion(env));
+  }
+
+  const lossEventResolveMatch = path.match(/^\/v1\/loss-events\/([^/]+)\/resolve$/);
+  if (lossEventResolveMatch && request.method === 'POST') {
+    assertSettleAdmin(request, env);
+
+    const idempotencyKey = extractIdempotencyKey(request);
+    if (!idempotencyKey) {
+      throw new ClawSettleError('Missing idempotency key', 'INVALID_REQUEST', 400, {
+        field: 'idempotency_key',
+      });
+    }
+
+    const bodyRaw = await parseJsonRequestBody(request);
+    const response = await lossEventService.resolveLossEvent(
+      decodeURIComponent(lossEventResolveMatch[1] ?? ''),
+      bodyRaw,
+      idempotencyKey
+    );
+
+    if (shouldInlineLossEventForwarding(env)) {
+      await lossEventService.retryForwarding({
+        operation: 'resolve',
         limit: resolveLossEventRetryLimit(env),
         loss_event_id: response.event.loss_event_id,
       });
@@ -589,13 +619,27 @@ export default {
       })
     );
 
+    const lossLimit = resolveLossEventRetryLimit(env);
+
     ctx.waitUntil(
       lossService
         .retryForwarding({
-          limit: resolveLossEventRetryLimit(env),
+          operation: 'apply',
+          limit: lossLimit,
         })
         .catch((err) => {
           console.error('scheduled-loss-forwarding-retry-failed', err);
+        })
+    );
+
+    ctx.waitUntil(
+      lossService
+        .retryForwarding({
+          operation: 'resolve',
+          limit: lossLimit,
+        })
+        .catch((err) => {
+          console.error('scheduled-loss-resolution-forwarding-retry-failed', err);
         })
     );
   },

@@ -351,6 +351,17 @@ interface BountyRiskEventRecord {
   updated_at: string;
 }
 
+interface BountyRiskClearRecord {
+  clear_id: string;
+  idempotency_key: string;
+  source_loss_event_id: string;
+  bounty_id: string;
+  reason: string | null;
+  metadata_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -5801,6 +5812,57 @@ async function getBountyRiskEventById(db: D1Database, riskEventId: string): Prom
   return parseBountyRiskEventRow(row);
 }
 
+function parseBountyRiskClearRow(row: unknown): BountyRiskClearRecord | null {
+  if (!isRecord(row)) return null;
+
+  const clear_id = d1String(row.clear_id);
+  const idempotency_key = d1String(row.idempotency_key);
+  const source_loss_event_id = d1String(row.source_loss_event_id);
+  const bounty_id = d1String(row.bounty_id);
+  const reason = d1String(row.reason);
+  const metadata_json = d1String(row.metadata_json);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (!clear_id || !idempotency_key || !source_loss_event_id || !bounty_id || !created_at || !updated_at) {
+    return null;
+  }
+
+  return {
+    clear_id,
+    idempotency_key,
+    source_loss_event_id,
+    bounty_id,
+    reason,
+    metadata_json,
+    created_at,
+    updated_at,
+  };
+}
+
+async function getBountyRiskClearByIdempotencyKey(db: D1Database, key: string): Promise<BountyRiskClearRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_risk_event_clears WHERE idempotency_key = ?').bind(key).first();
+  return parseBountyRiskClearRow(row);
+}
+
+async function getBountyRiskClearById(db: D1Database, clearId: string): Promise<BountyRiskClearRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_risk_event_clears WHERE clear_id = ?').bind(clearId).first();
+  return parseBountyRiskClearRow(row);
+}
+
+async function getBountyRiskClearByPair(
+  db: D1Database,
+  sourceLossEventId: string,
+  bountyId: string
+): Promise<BountyRiskClearRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM bounty_risk_event_clears WHERE source_loss_event_id = ? AND bounty_id = ?')
+    .bind(sourceLossEventId, bountyId)
+    .first();
+
+  return parseBountyRiskClearRow(row);
+}
+
 function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, unknown> {
   return {
     artifacts: submission.artifacts ?? [],
@@ -10165,6 +10227,163 @@ async function handleRiskLossEvent(
   );
 }
 
+async function handleRiskLossEventClear(
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const authError = requireRiskService(request, env, version);
+  if (authError) return authError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(body.idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, { field: 'idempotency_key' }, version);
+  }
+  if (!isNonEmptyString(body.source_loss_event_id)) {
+    return errorResponse('INVALID_REQUEST', 'source_loss_event_id is required', 400, { field: 'source_loss_event_id' }, version);
+  }
+  if (!isNonEmptyString(body.bounty_id) || !body.bounty_id.trim().startsWith('bty_')) {
+    return errorResponse('INVALID_REQUEST', 'bounty_id must be a bounty id', 400, { field: 'bounty_id' }, version);
+  }
+
+  if (body.reason !== undefined && body.reason !== null && !isNonEmptyString(body.reason)) {
+    return errorResponse('INVALID_REQUEST', 'reason must be a non-empty string when provided', 400, { field: 'reason' }, version);
+  }
+
+  if (body.metadata !== undefined && body.metadata !== null && !isRecord(body.metadata)) {
+    return errorResponse('INVALID_REQUEST', 'metadata must be an object', 400, { field: 'metadata' }, version);
+  }
+
+  const idempotencyKey = body.idempotency_key.trim();
+  const sourceLossEventId = body.source_loss_event_id.trim();
+  const bountyId = body.bounty_id.trim();
+  const reason = isNonEmptyString(body.reason) ? body.reason.trim() : null;
+  const metadata = isRecord(body.metadata) ? body.metadata : null;
+  const metadataJson = metadata ? stableStringify(metadata) : null;
+
+  const existing = await getBountyRiskClearByIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+  if (existing) {
+    if (
+      existing.source_loss_event_id !== sourceLossEventId ||
+      existing.bounty_id !== bountyId ||
+      (existing.reason ?? null) !== reason ||
+      (existing.metadata_json ?? null) !== metadataJson
+    ) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used with a different payload',
+        409,
+        { idempotency_key: idempotencyKey, clear_id: existing.clear_id },
+        version
+      );
+    }
+
+    const replayBounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+    return jsonResponse(
+      {
+        ok: true,
+        replay: true,
+        clear: existing,
+        bounty: replayBounty
+          ? {
+              bounty_id: replayBounty.bounty_id,
+              status: replayBounty.status,
+              trial_case_id: replayBounty.trial_case_id,
+            }
+          : null,
+      },
+      200,
+      version
+    );
+  }
+
+  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, { bounty_id: bountyId }, version);
+  }
+
+  const now = new Date().toISOString();
+  const clearId = `brc_${crypto.randomUUID()}`;
+
+  try {
+    await env.BOUNTIES_DB
+      .prepare(
+        `INSERT INTO bounty_risk_event_clears (
+          clear_id,
+          idempotency_key,
+          source_loss_event_id,
+          bounty_id,
+          reason,
+          metadata_json,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        clearId,
+        idempotencyKey,
+        sourceLossEventId,
+        bountyId,
+        reason,
+        metadataJson,
+        now,
+        now
+      )
+      .run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('UNIQUE constraint failed')) {
+      const raced = await getBountyRiskClearByIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+      if (raced) {
+        return jsonResponse({ ok: true, replay: true, clear: raced }, 200, version);
+      }
+
+      const pair = await getBountyRiskClearByPair(env.BOUNTIES_DB, sourceLossEventId, bountyId);
+      if (pair) {
+        return errorResponse(
+          'RISK_CLEAR_ALREADY_EXISTS',
+          'Risk clear already exists for loss event and bounty',
+          409,
+          { existing_clear_id: pair.clear_id, existing_idempotency_key: pair.idempotency_key },
+          version
+        );
+      }
+
+      return errorResponse('CONFLICT', 'Risk clear already exists', 409, undefined, version);
+    }
+
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  const saved = await getBountyRiskClearById(env.BOUNTIES_DB, clearId);
+  if (!saved) {
+    return errorResponse('DB_WRITE_FAILED', 'Risk clear persistence failed', 500, undefined, version);
+  }
+
+  const refreshedBounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+
+  return jsonResponse(
+    {
+      ok: true,
+      replay: false,
+      clear: saved,
+      bounty: refreshedBounty
+        ? {
+            bounty_id: refreshedBounty.bounty_id,
+            status: refreshedBounty.status,
+            trial_case_id: refreshedBounty.trial_case_id,
+          }
+        : null,
+    },
+    201,
+    version
+  );
+}
+
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
   const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   if (!bounty) {
@@ -10467,6 +10686,10 @@ export default {
     if (path.startsWith('/v1/')) {
       if (path === '/v1/risk/loss-events' && method === 'POST') {
         return handleRiskLossEvent(request, env, version);
+      }
+
+      if (path === '/v1/risk/loss-events/clear' && method === 'POST') {
+        return handleRiskLossEventClear(request, env, version);
       }
 
       // Worker API (public)

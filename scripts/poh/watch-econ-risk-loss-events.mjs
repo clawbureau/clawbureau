@@ -62,6 +62,40 @@ function computeStatusBuckets(events) {
   return buckets;
 }
 
+function computeOutboxBuckets(outbox) {
+  return {
+    pending: outbox.filter((entry) => entry?.status === 'pending').length,
+    forwarded: outbox.filter((entry) => entry?.status === 'forwarded').length,
+    failed: outbox.filter((entry) => entry?.status === 'failed').length,
+  };
+}
+
+function computeOutboxByTarget(outbox) {
+  const outboxByTarget = {};
+
+  for (const entry of outbox) {
+    const target = typeof entry?.target_service === 'string' ? entry.target_service : 'unknown';
+    const status = typeof entry?.status === 'string' ? entry.status : 'unknown';
+
+    if (!outboxByTarget[target]) {
+      outboxByTarget[target] = {
+        pending: 0,
+        forwarded: 0,
+        failed: 0,
+        unknown: 0,
+      };
+    }
+
+    if (status === 'pending' || status === 'forwarded' || status === 'failed') {
+      outboxByTarget[target][status] += 1;
+    } else {
+      outboxByTarget[target].unknown += 1;
+    }
+  }
+
+  return outboxByTarget;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const envName = resolveEnvName(args.get('env'));
@@ -80,53 +114,42 @@ async function main() {
   const limit = Number.parseInt(String(args.get('limit') || '200'), 10);
   assert(Number.isInteger(limit) && limit > 0, '--limit must be a positive integer');
 
+  const headers = {
+    authorization: `Bearer ${readToken}`,
+  };
+
   const eventsRes = await requestJson(`${settleBaseUrl}/v1/loss-events?limit=${limit}`, {
     method: 'GET',
-    headers: {
-      authorization: `Bearer ${readToken}`,
-    },
+    headers,
   });
 
   assert(eventsRes.status === 200, `loss events list failed (${eventsRes.status}): ${eventsRes.text}`);
 
-  const outboxRes = await requestJson(`${settleBaseUrl}/v1/loss-events/outbox?limit=${limit}`, {
+  const outboxApplyRes = await requestJson(`${settleBaseUrl}/v1/loss-events/outbox?operation=apply&limit=${limit}`, {
     method: 'GET',
-    headers: {
-      authorization: `Bearer ${readToken}`,
-    },
+    headers,
   });
 
-  assert(outboxRes.status === 200, `loss outbox list failed (${outboxRes.status}): ${outboxRes.text}`);
+  assert(outboxApplyRes.status === 200, `loss outbox (apply) list failed (${outboxApplyRes.status}): ${outboxApplyRes.text}`);
+
+  const outboxResolveRes = await requestJson(`${settleBaseUrl}/v1/loss-events/outbox?operation=resolve&limit=${limit}`, {
+    method: 'GET',
+    headers,
+  });
+
+  assert(outboxResolveRes.status === 200, `loss outbox (resolve) list failed (${outboxResolveRes.status}): ${outboxResolveRes.text}`);
 
   const events = Array.isArray(eventsRes.json?.events) ? eventsRes.json.events : [];
-  const outbox = Array.isArray(outboxRes.json?.outbox) ? outboxRes.json.outbox : [];
+  const outboxApply = Array.isArray(outboxApplyRes.json?.outbox) ? outboxApplyRes.json.outbox : [];
+  const outboxResolve = Array.isArray(outboxResolveRes.json?.outbox) ? outboxResolveRes.json.outbox : [];
 
   const eventBuckets = computeStatusBuckets(events);
-  const outboxBuckets = {
-    pending: outbox.filter((entry) => entry?.status === 'pending').length,
-    forwarded: outbox.filter((entry) => entry?.status === 'forwarded').length,
-    failed: outbox.filter((entry) => entry?.status === 'failed').length,
-  };
 
-  const outboxByTarget = {};
-  for (const entry of outbox) {
-    const target = typeof entry?.target_service === 'string' ? entry.target_service : 'unknown';
-    const status = typeof entry?.status === 'string' ? entry.status : 'unknown';
-    if (!outboxByTarget[target]) {
-      outboxByTarget[target] = {
-        pending: 0,
-        forwarded: 0,
-        failed: 0,
-        unknown: 0,
-      };
-    }
+  const outboxApplyBuckets = computeOutboxBuckets(outboxApply);
+  const outboxResolveBuckets = computeOutboxBuckets(outboxResolve);
 
-    if (status === 'pending' || status === 'forwarded' || status === 'failed') {
-      outboxByTarget[target][status] += 1;
-    } else {
-      outboxByTarget[target].unknown += 1;
-    }
-  }
+  const outboxApplyByTarget = computeOutboxByTarget(outboxApply);
+  const outboxResolveByTarget = computeOutboxByTarget(outboxResolve);
 
   const summary = {
     ok: true,
@@ -136,12 +159,16 @@ async function main() {
     limit,
     event_count: events.length,
     event_status_buckets: eventBuckets,
-    outbox_count: outbox.length,
-    outbox_status_buckets: outboxBuckets,
-    outbox_by_target: outboxByTarget,
+    outbox_apply_count: outboxApply.length,
+    outbox_apply_status_buckets: outboxApplyBuckets,
+    outbox_apply_by_target: outboxApplyByTarget,
+    outbox_resolve_count: outboxResolve.length,
+    outbox_resolve_status_buckets: outboxResolveBuckets,
+    outbox_resolve_by_target: outboxResolveByTarget,
     deterministic_error_buckets: {
       event_failed_count: eventBuckets.failed,
-      outbox_failed_count: outboxBuckets.failed,
+      outbox_apply_failed_count: outboxApplyBuckets.failed,
+      outbox_resolve_failed_count: outboxResolveBuckets.failed,
     },
   };
 
@@ -151,7 +178,12 @@ async function main() {
 
   await writeJson(path.resolve(artifactDir, 'summary.json'), summary);
   await writeJson(path.resolve(artifactDir, 'events.json'), eventsRes.json ?? null);
-  await writeJson(path.resolve(artifactDir, 'outbox.json'), outboxRes.json ?? null);
+
+  // Keep legacy output file name for apply.
+  await writeJson(path.resolve(artifactDir, 'outbox.json'), outboxApplyRes.json ?? null);
+
+  await writeJson(path.resolve(artifactDir, 'outbox-apply.json'), outboxApplyRes.json ?? null);
+  await writeJson(path.resolve(artifactDir, 'outbox-resolve.json'), outboxResolveRes.json ?? null);
 
   console.log(JSON.stringify({ ok: true, artifact_dir: artifactDir }, null, 2));
 }

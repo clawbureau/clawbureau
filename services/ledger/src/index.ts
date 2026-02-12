@@ -1556,6 +1556,32 @@ async function handleReleaseRiskHold(holdId: string, request: Request, env: Env)
   return jsonResponse({ hold: released, replay: false }, 200);
 }
 
+async function handleReleaseRiskHoldBySource(request: Request, env: Env): Promise<Response> {
+  const cloned = request.clone();
+
+  const body = await parseJsonBody<unknown>(request);
+  if (!isRecord(body)) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const sourceLossEventIdRaw = body.source_loss_event_id;
+  if (!isNonEmptyString(sourceLossEventIdRaw)) {
+    return errorResponse('Missing required field: source_loss_event_id', 'INVALID_REQUEST', 400);
+  }
+
+  const sourceLossEventId = sourceLossEventIdRaw.trim();
+
+  const hold = await getRiskHoldBySourceEvent(env.DB, sourceLossEventId);
+  if (!hold) {
+    return errorResponse('Risk hold not found', 'NOT_FOUND', 404, {
+      source_loss_event_id: sourceLossEventId,
+    });
+  }
+
+  // Reuse canonical hold-id release logic (incl. transfer idempotency + replay/conflict semantics).
+  return handleReleaseRiskHold(hold.hold_id, cloned, env);
+}
+
 async function handleListRiskHolds(url: URL, env: Env): Promise<Response> {
   const status = url.searchParams.get('status')?.trim();
   const accountRef = url.searchParams.get('account')?.trim();
@@ -2699,6 +2725,10 @@ export function isRiskHoldServiceRequest(method: string, path: string): boolean 
     return true;
   }
 
+  if (method === 'POST' && path === '/v1/risk/holds/release-by-source') {
+    return true;
+  }
+
   if (method === 'POST' && /^\/v1\/risk\/holds\/[^/]+\/release$/.test(path)) {
     return true;
   }
@@ -2916,6 +2946,7 @@ async function router(
         <li><code>GET /v1/payments/settlements/:provider/:external_payment_id</code> — Lookup settlement(s) by provider external id.</li>
         <li><code>GET /v1/payments/settlements</code> — List settlements (deterministic cursor pagination).</li>
         <li><code>POST /v1/risk/holds/apply</code> — Apply deterministic risk hold (A→H).</li>
+        <li><code>POST /v1/risk/holds/release-by-source</code> — Release deterministic risk hold by source_loss_event_id (H→A).</li>
         <li><code>POST /v1/risk/holds/:id/release</code> — Release deterministic risk hold (H→A).</li>
         <li><code>GET /v1/risk/holds</code> — List risk-hold records.</li>
         <li><code>GET /attestation/reserve</code> — Signed reserve coverage attestation (public).</li>
@@ -2949,6 +2980,7 @@ async function router(
           { method: 'GET', path: '/v1/payments/settlements/:provider/:external_payment_id' },
           { method: 'GET', path: '/v1/payments/settlements' },
           { method: 'POST', path: '/v1/risk/holds/apply' },
+          { method: 'POST', path: '/v1/risk/holds/release-by-source' },
           { method: 'POST', path: '/v1/risk/holds/:id/release' },
           { method: 'GET', path: '/v1/risk/holds' },
           { method: 'GET', path: '/attestation/reserve' },
@@ -3143,6 +3175,11 @@ Canonical: ${url.origin}/.well-known/security.txt
   // POST /v1/risk/holds/apply
   if (path === '/v1/risk/holds/apply' && method === 'POST') {
     return handleApplyRiskHold(request, env);
+  }
+
+  // POST /v1/risk/holds/release-by-source
+  if (path === '/v1/risk/holds/release-by-source' && method === 'POST') {
+    return handleReleaseRiskHoldBySource(request, env);
   }
 
   // GET /v1/risk/holds

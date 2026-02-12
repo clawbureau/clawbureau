@@ -70,7 +70,16 @@ describe('loss-events helpers', () => {
   });
 
   it('parses retry body', () => {
-    const parsed = LossEventService.parseRetryBody({ limit: 10, loss_event_id: 'lse_1' });
-    expect(parsed).toEqual({ limit: 10, loss_event_id: 'lse_1' });
+    const parsed = LossEventService.parseRetryBody({ operation: 'apply', limit: 10, loss_event_id: 'lse_1' });
+    expect(parsed).toEqual({ operation: 'apply', limit: 10, loss_event_id: 'lse_1' });
+  });
+
+  it('parses retry body with resolve operation', () => {
+    const parsed = LossEventService.parseRetryBody({ operation: 'resolve', limit: 5 });
+    expect(parsed).toEqual({ operation: 'resolve', limit: 5 });
+  });
+
+  it('rejects invalid retry operation', () => {
+    expect(() => LossEventService.parseRetryBody({ operation: 'nope' })).toThrowError(ClawSettleError);
   });
 });
