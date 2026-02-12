@@ -1,21 +1,20 @@
 {
   "name": "Claw Verified",
-  "description": "Cryptographic verification for AI-generated pull requests. Validates Clawsig proof bundles to ensure autonomous agents followed your repo's Work Policy Contract.",
+  "description": "Cryptographic verification for AI-generated pull requests. Validates Clawsig proof bundles against repo policy.",
   "url": "https://clawprotocol.org/github-app",
   "hook_attributes": {
     "url": "https://claw-verified-app.clawbureau.workers.dev/webhook",
     "active": true
   },
   "redirect_url": "https://clawprotocol.org/github-app/callback",
-  "setup_url": "https://clawprotocol.org/github-app/setup",
   "public": true,
+  "default_events": [
+    "pull_request",
+    "check_suite"
+  ],
   "default_permissions": {
     "checks": "write",
     "contents": "read",
     "pull_requests": "read"
-  },
-  "default_events": [
-    "pull_request",
-    "check_suite"
-  ]
+  }
 }
