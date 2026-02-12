@@ -100,6 +100,26 @@ export interface Env {
 
   /** Default delegated spend amount in minor units when no override header is provided (default: "1"). */
   CLAWDELEGATE_DEFAULT_SPEND_MINOR?: string;
+
+  // --- x402 internet-native payments (Phase 4) ---
+
+  /** Enable x402 payment acceptance (default: false). When true, requests without CST or BYOK key can pay via x402. */
+  X402_ENABLED?: string;
+
+  /** x402 facilitator URL for payment verification and settlement. Default: Coinbase testnet facilitator. */
+  X402_FACILITATOR_URL?: string;
+
+  /** Wallet address to receive x402 payments (required when X402_ENABLED=true). */
+  X402_RESOURCE_WALLET?: string;
+
+  /** JSON price table mapping provider/model to pricing. Example: {"openai/gpt-4o":{"input_per_1k_minor":250,...}} */
+  X402_PRICE_TABLE?: string;
+
+  /** Payment network for x402 (default: base-sepolia). Use "base" for mainnet. */
+  X402_NETWORK?: string;
+
+  /** Default max amount in minor units for models not in price table (default: 100000 = 0.10 USDC). */
+  X402_DEFAULT_MAX_AMOUNT_MINOR?: string;
 }
 
 /**

@@ -42,6 +42,13 @@ CLAWDELEGATE_BASE_URL = "https://clawdelegate.com"
 CLAWDELEGATE_TIMEOUT_MS = "5000"
 CLAWDELEGATE_DEFAULT_SPEND_MINOR = "1"
 
+# x402 internet-native payments (Phase 4)
+# When enabled, requests without CST or BYOK key can pay via x402 protocol.
+X402_ENABLED = "false"
+# X402_FACILITATOR_URL — set via secret/var when enabled (default: Coinbase testnet)
+# X402_RESOURCE_WALLET — set via secret when enabled (wallet to receive payments)
+# X402_NETWORK — default: base-sepolia (testnet)
+
 # Secrets/vars to be set via wrangler secret put (or via dashboard vars):
 # - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
 # - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
@@ -85,3 +92,6 @@ LEDGER_BASE_URL = "https://staging.clawledger.com"
 CLAWDELEGATE_BASE_URL = "https://staging.clawdelegate.com"
 CLAWDELEGATE_TIMEOUT_MS = "5000"
 CLAWDELEGATE_DEFAULT_SPEND_MINOR = "1"
+
+# x402 internet-native payments (Phase 4) — staging
+X402_ENABLED = "false"
