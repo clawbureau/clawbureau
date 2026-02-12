@@ -58,8 +58,8 @@
         "Document how to reproduce hosted clawverify results offline"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "Hosted clawverify remains valuable, but protocol credibility requires an offline path."
+      "passes": true,
+      "notes": "Shipped offline verifier CLI + core libs (packages/clawverify-cli + packages/clawverify-core). See conformance evidence under artifacts/conformance/claw-protocol/."
     },
     {
       "id": "CPL-US-005",
@@ -72,8 +72,8 @@
         "Document versioning policy for vectors (additive; never mutate)"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Vectors should cover schema/version mismatches, signature invalidity, and receipt replay/binding failures."
+      "passes": true,
+      "notes": "Published PASS/FAIL vectors + runner + CI gate (packages/schema/fixtures/protocol-conformance + scripts/protocol/run-claw-protocol-conformance.mjs + workflow claw-protocol-conformance)."
     },
     {
       "id": "CPL-US-006",

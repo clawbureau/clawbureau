@@ -2,3 +2,15 @@
 - Seeded Claw Protocol roadmap (v0.1).
 - Goal: publish narrow waist spec + explicit coverage matrix + offline verifier + side-effect receipts + frictionless approvals wedge.
 - Reference spec: docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md
+
+2026-02-12
+- CPL-US-004/005 shipped: offline verifier CLI + conformance suite (offline, fail-closed, deterministic).
+  - PR: https://github.com/clawbureau/clawbureau/pull/173
+  - Build:
+    - cd packages/clawverify-core && npm ci && npm run build
+    - cd packages/clawverify-cli && npm ci && npm run build
+  - Run conformance:
+    - node scripts/protocol/run-claw-protocol-conformance.mjs
+  - Evidence: artifacts/conformance/claw-protocol/2026-02-12T13-09-32-386Z/summary.json
+  - CI: .github/workflows/claw-protocol-conformance.yml
+  - DID proof: proofs/feat/protocol/CPL-US-004-005-offline-verifier-conformance/commit.sig.json
