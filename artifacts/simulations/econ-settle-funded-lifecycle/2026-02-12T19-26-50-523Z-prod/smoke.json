@@ -1,0 +1,57 @@
+{
+  "epic": "ECON-SETTLE-002",
+  "task": "Task 4: Funded lifecycle e2e",
+  "env": "prod",
+  "nonce": "smoke-funded-1770924410523-1taxtw",
+  "timestamp": "2026-02-12T19:26:51.203Z",
+  "passed": 4,
+  "total": 8,
+  "results": [
+    {
+      "step": "Fee simulation returns policy",
+      "pass": true,
+      "detail": "status=200 policy=standard"
+    },
+    {
+      "step": "Fee quote buyer_total > principal",
+      "pass": true,
+      "detail": "buyer_total=5250 principal=5000"
+    },
+    {
+      "step": "PaymentIntent creation",
+      "pass": false,
+      "detail": "unexpected: 401 {\"error\":\"Unauthorized\",\"code\":\"UNAUTHORIZED\"}"
+    },
+    {
+      "step": "Escrow creation",
+      "pass": false,
+      "detail": "401: {\"error\":\"UNAUTHORIZED\",\"message\":\"Missing admin token\"}"
+    },
+    {
+      "step": "Payout contract validation",
+      "pass": false,
+      "detail": "400: {\"error\":\"Missing idempotency key\",\"code\":\"INVALID_REQUEST\",\"details\":{\"field\":\"idempotency_key\"}}"
+    },
+    {
+      "step": "Economy health: services reachable",
+      "pass": false,
+      "detail": "0/7 services up"
+    },
+    {
+      "step": "PaymentIntent idempotency check",
+      "pass": true,
+      "detail": "first=401 replay=401"
+    },
+    {
+      "step": "Escrow idempotency: consistent behavior",
+      "pass": true,
+      "detail": "first=401 replay=401"
+    }
+  ],
+  "endpoints": {
+    "settle": "https://clawsettle.com",
+    "cuts": "https://clawcuts.com",
+    "escrow": "https://clawescrow.com",
+    "ledger": "https://clawledger.com"
+  }
+}
