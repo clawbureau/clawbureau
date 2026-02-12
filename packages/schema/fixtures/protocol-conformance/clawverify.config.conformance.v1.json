@@ -1,0 +1,12 @@
+{
+  "config_version": "1",
+  "allowlists": {
+    "gateway_receipt_signer_dids": [
+      "did:key:z6MkfF4ykuxdK3Cea9xDqWgLLgMBvxcypy6Tv1K45Eahxy3m"
+    ],
+    "derivation_attestation_signer_dids": [
+      "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "did:key:z6MkehRgf7yJbgaGfYsdoAsKdBPE3dj2CYhowQdcjqSJgvVd"
+    ]
+  }
+}

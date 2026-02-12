@@ -1,0 +1,40 @@
+/**
+ * @clawbureau/clawverify-core
+ *
+ * Pure, offline-capable verification primitives shared by:
+ * - packages/clawverify-cli (offline verifier)
+ * - (optional) hosted verifiers / services
+ *
+ * Hard constraints:
+ * - fail-closed for unknown schema/version/algorithm
+ * - deterministic error codes
+ * - no network fetches
+ */
+
+export * from './types.js';
+
+export { verifyProofBundle } from './verify-proof-bundle.js';
+export type { ProofBundleVerifierOptions } from './verify-proof-bundle.js';
+
+export { verifyExportBundle } from './verify-export-bundle.js';
+export type { VerifyExportBundleOptions } from './verify-export-bundle.js';
+
+export { verifyReceipt } from './verify-receipt.js';
+export type { ReceiptVerifierOptions } from './verify-receipt.js';
+
+export { verifyWebReceipt } from './verify-web-receipt.js';
+
+export { verifyExecutionAttestation } from './verify-execution-attestation.js';
+export { verifyDerivationAttestation } from './verify-derivation-attestation.js';
+export { verifyAuditResultAttestation } from './verify-audit-result-attestation.js';
+export { verifyLogInclusionProof } from './verify-log-inclusion-proof.js';
+
+export {
+  base64UrlDecode,
+  base64UrlEncode,
+  computeHash,
+  extractPublicKeyFromDidKey,
+  verifySignature,
+} from './crypto.js';
+
+export { jcsCanonicalize } from './jcs.js';
