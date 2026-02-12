@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "env": "staging",
+  "run_id": "run_2479271e-8fcd-466c-bdbc-6cd6c5494dd5",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "loss_event_id": "lse_4353e26f28d7cef4f82082cb",
+  "sdk_integration": {
+    "tool_receipt_count": 4,
+    "event_chain_length": 6,
+    "bundle_id": "bundle_80db1fc7-27fa-456a-85a4-5fe93e16bdc6",
+    "urm_id": "urm_842bdb92-5121-4e72-9857-babce8be2e43"
+  },
+  "steps": [
+    {
+      "step": "create_loss_event",
+      "status": 201,
+      "loss_event_id": "lse_4353e26f28d7cef4f82082cb",
+      "elapsed_ms": 464
+    },
+    {
+      "step": "retry_apply",
+      "status": 200,
+      "forwarded": 0,
+      "elapsed_ms": 710
+    },
+    {
+      "step": "readback",
+      "status": 200,
+      "event_status": "failed",
+      "elapsed_ms": 133
+    },
+    {
+      "step": "outbox_apply",
+      "total": 3,
+      "forwarded": 0,
+      "failed": 3
+    }
+  ],
+  "generated_at": "2026-02-12T18:39:12.409Z"
+}
