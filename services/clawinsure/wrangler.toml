@@ -1,0 +1,55 @@
+name = "clawinsure"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-12"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+routes = [
+  { pattern = "clawinsure.com/*", zone_name = "clawinsure.com" },
+  { pattern = "www.clawinsure.com/*", zone_name = "clawinsure.com" }
+]
+
+[[d1_databases]]
+binding = "INSURE_DB"
+database_name = "clawinsure"
+database_id = "f638a72a-4ec1-4864-b7c7-2d2c0980a74e"
+migrations_dir = "migrations"
+
+[vars]
+INSURE_VERSION = "0.1.0"
+CLAWSCOPE_BASE_URL = "https://clawscope.com"
+INSURE_REQUIRED_AUDIENCE = "clawinsure.com"
+CLAWREP_BASE_URL = "https://clawrep.com"
+LEDGER_BASE_URL = "https://clawledger.com"
+TRIALS_BASE_URL = "https://clawtrials.com"
+ESCROW_BASE_URL = "https://clawescrow.com"
+INCOME_BASE_URL = "https://clawincome.com"
+
+[env.staging]
+name = "clawinsure-staging"
+routes = [
+  { pattern = "staging.clawinsure.com/*", zone_name = "clawinsure.com" }
+]
+
+[[env.staging.d1_databases]]
+binding = "INSURE_DB"
+database_name = "clawinsure-staging"
+database_id = "98cab5dd-7336-40eb-8fe4-ec94e0c52cef"
+migrations_dir = "migrations"
+
+[env.staging.vars]
+INSURE_VERSION = "0.1.0"
+CLAWSCOPE_BASE_URL = "https://staging.clawscope.com"
+INSURE_REQUIRED_AUDIENCE = "staging.clawinsure.com"
+CLAWREP_BASE_URL = "https://clawrep-staging.generaite.workers.dev"
+LEDGER_BASE_URL = "https://staging.clawledger.com"
+TRIALS_BASE_URL = "https://staging.clawtrials.com"
+ESCROW_BASE_URL = "https://staging.clawescrow.com"
+INCOME_BASE_URL = "https://staging.clawincome.com"
+
+# Secrets to set via wrangler secret put:
+# - INSURE_ADMIN_KEY
+# - LEDGER_ADMIN_KEY
+# - TRIALS_ADMIN_KEY
+# - ESCROW_ADMIN_KEY

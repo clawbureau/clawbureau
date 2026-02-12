@@ -1,0 +1,48 @@
+{
+  "operation": "CINR-OPS-001-clawinsure-mvp",
+  "generated_at": "2026-02-12T03:26:20Z",
+  "deployments": {
+    "claw-domains": {
+      "version": "cefb0c55-45f1-46bc-9af2-22f2b17be164",
+      "change": "released clawinsure.com routes from parked-domain worker"
+    },
+    "clawinsure-staging": {
+      "version": "65754896-45ef-4f53-b5b0-7b93680ea5cb",
+      "workers_dev": "https://clawinsure-staging.generaite.workers.dev",
+      "route": "staging.clawinsure.com/*"
+    },
+    "clawinsure": {
+      "version": "876d4e59-379c-42a2-951f-07ca6c2299f7",
+      "workers_dev": "https://clawinsure.generaite.workers.dev",
+      "routes": [
+        "clawinsure.com/*",
+        "www.clawinsure.com/*"
+      ]
+    }
+  },
+  "migrations": {
+    "clawinsure-staging": {
+      "database_id": "98cab5dd-7336-40eb-8fe4-ec94e0c52cef",
+      "applied": [
+        "0001_init.sql"
+      ]
+    },
+    "clawinsure": {
+      "database_id": "f638a72a-4ec1-4864-b7c7-2d2c0980a74e",
+      "applied": [
+        "0001_init.sql"
+      ]
+    }
+  },
+  "secrets_rotated": {
+    "ledger_admin_key": "rotated and aligned across ledger, escrow, clawsettle, clawproxy, clawincome, clawinsure (staging+prod)",
+    "clawinsure": [
+      "INSURE_ADMIN_KEY",
+      "TRIALS_ADMIN_KEY"
+    ]
+  },
+  "smoke_artifacts": {
+    "staging": "artifacts/simulations/clawinsure/2026-02-12T03-25-42-778Z-staging/smoke.json",
+    "prod": "artifacts/simulations/clawinsure/2026-02-12T03-25-51-801Z-prod/smoke.json"
+  }
+}

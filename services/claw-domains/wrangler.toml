@@ -9,8 +9,7 @@ compatibility_date = "2026-02-01"
 
 routes = [
   # For-sale candidates
-  { pattern = "clawinsure.com/*",    zone_name = "clawinsure.com" },
-  { pattern = "www.clawinsure.com/*", zone_name = "clawinsure.com" },
+  # clawinsure.com moved to dedicated Worker: services/clawinsure
   # clawsettle.com moved to dedicated Worker: services/clawsettle
   { pattern = "clawportfolio.com/*", zone_name = "clawportfolio.com" },
   { pattern = "www.clawportfolio.com/*", zone_name = "clawportfolio.com" },

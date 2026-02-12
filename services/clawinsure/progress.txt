@@ -1,0 +1,57 @@
+## Codebase Patterns
+- Deterministic minor-unit math via BigInt only.
+- Fail-closed dependency checks for risk/evidence/payout integrations.
+- Idempotency keys on all money-affecting operations.
+
+# Ralph Progress Log
+Started: 2026-02-12
+---
+
+## 2026-02-12 - CINR-OPS-001 kickoff
+- Initialized `services/clawinsure` worker with D1 schema and MVP endpoint surface.
+- Added migrations/tests/docs scaffold for CINR-US-001..006.
+
+## 2026-02-12 - CINR-OPS-001 shipped (staging + production)
+- Implemented MVP API surface:
+  - `POST /v1/quotes`
+  - `POST /v1/policies`
+  - `GET /v1/policies/:id`
+  - `POST /v1/claims`
+  - `GET /v1/claims/:id`
+  - `POST /v1/claims/:id/adjudicate`
+  - `POST /v1/claims/:id/payout`
+  - `GET /v1/risk/:did`
+  - `GET /v1/reports/claims`
+- Hard requirements enforced:
+  - deterministic BigInt minor-unit math only for premium + payout amounts
+  - idempotency keys required for policy create, claim create, adjudication, payout
+  - fail-closed evidence validation (`proof_bundle_hash_b64u`, `receipt_refs`, `artifact_refs`)
+  - fail-closed unresolved reference checks for optional `trial_case_id` / `escrow_id`
+  - strict claimant vs admin auth boundaries (scope introspection + admin key separation)
+- Provider bond support:
+  - `provider_bond` coverage type
+  - persistent bond issuance (`provider_bonds` table)
+  - bond metadata exposed in policy read response
+- Integrations:
+  - clawrep read path for tier/dispute signal in risk scoring
+  - clawledger transfers for premium collection + claim payout
+  - clawtrials reference resolution for claim evidence checks
+  - clawincome statement URL linkage in payout response payload
+- Infra:
+  - new D1 databases:
+    - `clawinsure-staging` (`98cab5dd-7336-40eb-8fe4-ec94e0c52cef`)
+    - `clawinsure` (`f638a72a-4ec1-4864-b7c7-2d2c0980a74e`)
+  - migration applied remotely:
+    - `migrations/0001_init.sql`
+- Deploys:
+  - `claw-domains` `cefb0c55-45f1-46bc-9af2-22f2b17be164` (released clawinsure routes)
+  - `clawinsure-staging` `65754896-45ef-4f53-b5b0-7b93680ea5cb`
+  - `clawinsure` `876d4e59-379c-42a2-951f-07ca6c2299f7`
+- Validation:
+  - `pnpm --dir services/clawinsure typecheck` ✅
+  - `pnpm --dir services/clawinsure test` ✅
+  - staging smoke (workers.dev base override due local DNS resolution of `staging.clawinsure.com` in harness):
+    - `artifacts/simulations/clawinsure/2026-02-12T03-25-42-778Z-staging/smoke.json` ✅
+  - prod smoke: `artifacts/simulations/clawinsure/2026-02-12T03-25-51-801Z-prod/smoke.json` ✅
+- Ops artifact:
+  - `artifacts/ops/clawinsure/2026-02-12T03-21-09Z/deploy-summary.json`

@@ -16,6 +16,8 @@
 - Service tracker: `services/clawtrials/prd.json`
 - Service progress log: `services/clawtrials/progress.txt`
 - Current state: arbitration MVP (`CTR-US-001..006`) is implemented and deployed in staging + production.
+- Reliability follow-up (`CTR-OPS-002`): post-fix watch run reports `server_error=0` and `contract_drift=0` in both envs.
+- Reliability artifact: `artifacts/ops/clawtrials/2026-02-12T03-23-55-629Z-72h-watch-post-fix/`
 
 ## 1) Purpose
 - Provide deterministic dispute arbitration for clawbounties rejection flows.
