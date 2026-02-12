@@ -1,0 +1,33 @@
+{
+  "env": "staging",
+  "base_url": "https://clawsettle.claw-staging.workers.dev",
+  "generated_at": "2026-02-12T17:56:18.796Z",
+  "all_pass": false,
+  "steps": [
+    {
+      "step": "disputes_aging",
+      "pass": false,
+      "error": "fetch failed"
+    },
+    {
+      "step": "disputes_recon",
+      "pass": false,
+      "error": "fetch failed"
+    },
+    {
+      "step": "disputes_fees",
+      "pass": false,
+      "error": "fetch failed"
+    },
+    {
+      "step": "disputes_fees_filtered",
+      "pass": false,
+      "error": "fetch failed"
+    },
+    {
+      "step": "auth_enforcement",
+      "pass": false,
+      "error": "fetch failed"
+    }
+  ]
+}

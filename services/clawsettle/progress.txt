@@ -501,3 +501,24 @@ Started: 2026-02-12
     - event_failed=1 (pre-existing), outbox_resolve_failed=0
   - prod: `artifacts/ops/econ-risk/2026-02-12T17-15-27-456Z-prod-loss-event-watch/summary.json`
     - event_failed=0, outbox_resolve_failed=0
+
+## 2026-02-12 - MPY-US-015 settlement reconciliation hardening (staging + prod)
+- What was implemented:
+  - Partial dispute support: `disputed_amount_minor` column in dispute bridge, loss event hold sized to disputed amount
+  - Dispute fee tracking: `dispute_fees` table (`dispute_fee` on create, `chargeback_fee` on permanent loss)
+  - Fee extraction from Stripe `balance_transactions` (defaults to $15/1500 minor)
+  - 3 new admin-gated GET endpoints:
+    - `/v1/disputes/aging` — age-bucketed report (0-7d, 7-30d, 30-60d, 60+d)
+    - `/v1/reconciliation/disputes` — mismatch detection (6 mismatch types)
+    - `/v1/disputes/fees` — fee records with status/limit filtering
+- Schema: migration 0008 (dispute_recon_hardening.sql)
+- Tests: 37 passing (14 dispute, 5 new for MPY-US-015)
+- Deploy evidence:
+  - Staging: migration 0008 applied (DB 9edcb398), deployed version 37993c99
+  - Prod: migration 0008 applied (DB 1f2be28f), deployed version 8f00eca0
+- Smoke evidence (5/5 both envs):
+  - Staging: artifacts/simulations/dispute-recon-hardening/2026-02-12T17-56-33-904Z-staging/smoke.json
+  - Prod: artifacts/simulations/dispute-recon-hardening/2026-02-12T17-57-14-711Z-prod/smoke.json
+- Watch evidence (no new failures):
+  - Staging: artifacts/ops/econ-risk/2026-02-12T17-57-22-366Z-staging-loss-event-watch/summary.json
+  - Prod: artifacts/ops/econ-risk/2026-02-12T17-57-32-569Z-prod-loss-event-watch/summary.json

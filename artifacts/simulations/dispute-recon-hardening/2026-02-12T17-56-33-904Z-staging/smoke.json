@@ -1,0 +1,41 @@
+{
+  "env": "staging",
+  "base_url": "https://staging.clawsettle.com",
+  "generated_at": "2026-02-12T17:56:34.376Z",
+  "all_pass": true,
+  "steps": [
+    {
+      "step": "disputes_aging",
+      "status": 200,
+      "pass": true,
+      "bucket_count": 4,
+      "total_open": 0,
+      "total_disputed_minor": "0"
+    },
+    {
+      "step": "disputes_recon",
+      "status": 200,
+      "pass": true,
+      "total_disputes": 0,
+      "total_mismatches": 0,
+      "mismatch_types": []
+    },
+    {
+      "step": "disputes_fees",
+      "status": 200,
+      "pass": true,
+      "fee_count": 0
+    },
+    {
+      "step": "disputes_fees_filtered",
+      "status": 200,
+      "pass": true,
+      "fee_count": 0
+    },
+    {
+      "step": "auth_enforcement",
+      "status": 401,
+      "pass": true
+    }
+  ]
+}
