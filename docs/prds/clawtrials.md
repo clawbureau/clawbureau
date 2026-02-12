@@ -12,6 +12,11 @@
 
 ---
 
+## Implementation status
+- Service tracker: `services/clawtrials/prd.json`
+- Service progress log: `services/clawtrials/progress.txt`
+- Current state: arbitration MVP (`CTR-US-001..006`) is implemented and deployed in staging + production.
+
 ## 1) Purpose
 - Provide deterministic dispute arbitration for clawbounties rejection flows.
 - Preserve harness lane compatibility (`/v1/harness/*`) for existing test-closure automation.
