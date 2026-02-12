@@ -1,0 +1,95 @@
+{
+  "policy_version": "2",
+  "policy_id": "enterprise-restrictive-v1",
+  "issuer_did": "did:key:z6MkEnterpriseAdmin",
+  "statements": [
+    {
+      "sid": "AllowAnthropicModels",
+      "effect": "Allow",
+      "actions": ["model:invoke"],
+      "resources": ["*"],
+      "conditions": {
+        "StringEquals": {
+          "Model:Provider": "anthropic"
+        }
+      }
+    },
+    {
+      "sid": "AllowOpenAIModels",
+      "effect": "Allow",
+      "actions": ["model:invoke"],
+      "resources": ["*"],
+      "conditions": {
+        "StringEquals": {
+          "Model:Provider": "openai"
+        }
+      }
+    },
+    {
+      "sid": "DenyAllExternalNetwork",
+      "effect": "Deny",
+      "actions": ["side_effect:network_egress"],
+      "resources": ["*"]
+    },
+    {
+      "sid": "AllowInternalNetwork",
+      "effect": "Allow",
+      "actions": ["side_effect:network_egress"],
+      "resources": ["*"],
+      "conditions": {
+        "StringLike": {
+          "SideEffect:TargetDomain": "*.internal"
+        }
+      }
+    },
+    {
+      "sid": "AllowToolExecution",
+      "effect": "Allow",
+      "actions": ["tool:execute"],
+      "resources": ["*"]
+    },
+    {
+      "sid": "AllowReadFilesystem",
+      "effect": "Allow",
+      "actions": ["side_effect:filesystem_read"],
+      "resources": ["*"]
+    },
+    {
+      "sid": "AllowWriteSourceOnly",
+      "effect": "Allow",
+      "actions": ["side_effect:filesystem_write"],
+      "resources": ["src/**"]
+    },
+    {
+      "sid": "DenyWriteSecrets",
+      "effect": "Deny",
+      "actions": ["side_effect:filesystem_write"],
+      "resources": ["**/secrets/**", "**/.env*", "**/credentials/**"]
+    },
+    {
+      "sid": "AllowWriteSecretsWithHumanApproval",
+      "effect": "Allow",
+      "actions": ["side_effect:filesystem_write"],
+      "resources": ["**/secrets/**", "**/.env*"],
+      "conditions": {
+        "Bool": {
+          "Request:HasHumanApproval": "true"
+        }
+      }
+    },
+    {
+      "sid": "DenySelfReportedProofs",
+      "effect": "Deny",
+      "actions": ["*"],
+      "resources": ["*"],
+      "conditions": {
+        "StringEquals": {
+          "Receipt:ProofTier": "self"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Enterprise-restrictive policy: only Claude and GPT models, no external network access (*.internal only), human approval required for secrets, gateway proof tier minimum."
+  }
+}

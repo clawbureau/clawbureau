@@ -1,0 +1,142 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.policy.work_policy_contract.v2.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Work Policy Contract (WPC) v2",
+  "description": "An IAM-style Work Policy Contract (WPC) with statement-based policy evaluation.\n\nv2 adds an AWS IAM-style `statements` array while preserving backward compatibility with v1 fields.\n\nEvaluation rules:\n- Default deny: if no statement explicitly allows an action, it is denied.\n- Explicit Deny always wins over Allow.\n- Strict Intersection: when `inherits` is set, the parent policy is loaded and both parent AND child must allow the action.\n\nCanonical policy_hash_b64u (v2): SHA-256 base64url of the RFC8785 JCS canonical JSON string of the WPC payload (sha256(JCS(payload))).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["policy_version", "policy_id", "issuer_did", "statements"],
+  "properties": {
+    "policy_version": {
+      "const": "2",
+      "description": "Policy schema version (v2 IAM-style)."
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human/stable identifier for the policy (hash-bound)."
+    },
+    "issuer_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "minLength": 4,
+      "maxLength": 256,
+      "description": "DID of the enterprise/buyer issuing the policy."
+    },
+    "inherits": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Optional parent policy ID for Strict Intersection. When set, both parent AND child must allow an action for it to be permitted."
+    },
+    "statements": {
+      "type": "array",
+      "description": "IAM-style policy statements. Evaluated in order; explicit Deny always wins.",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/PolicyStatement"
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional free-form metadata (hash-bound).",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "PolicyStatement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sid", "effect", "actions", "resources"],
+      "properties": {
+        "sid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Statement identifier (unique within this policy)."
+        },
+        "effect": {
+          "type": "string",
+          "enum": ["Allow", "Deny"],
+          "description": "Whether this statement allows or denies the matched actions."
+        },
+        "actions": {
+          "type": "array",
+          "description": "Actions this statement applies to. Supports glob patterns with '*'.\n\nBuilt-in action namespaces:\n- model:invoke — invoke an LLM model\n- model:* — all model actions\n- tool:execute — execute a tool\n- tool:* — all tool actions\n- side_effect:network_egress — outbound network request\n- side_effect:filesystem_write — write to filesystem\n- side_effect:filesystem_read — read from filesystem\n- side_effect:* — all side effects\n- * — all actions",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "resources": {
+          "type": "array",
+          "description": "Resources this statement applies to. Supports glob patterns.\n\nExamples:\n- '*' — all resources\n- 'src/**/*.ts' — TypeScript source files\n- '*.internal' — internal domains\n- '**/secrets/**' — any secrets path",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "conditions": {
+          "type": "object",
+          "description": "Optional conditions that must all be true for this statement to apply.",
+          "additionalProperties": false,
+          "properties": {
+            "StringEquals": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Exact string match. Context key must equal the specified value."
+            },
+            "StringNotEquals": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Negated string match. Context key must NOT equal the specified value."
+            },
+            "StringLike": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Glob-style match. Supports '*' and '?' wildcards."
+            },
+            "StringNotLike": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Negated glob match."
+            },
+            "NumericEquals": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Numeric equality."
+            },
+            "NumericLessThan": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Numeric less-than comparison."
+            },
+            "NumericGreaterThan": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Numeric greater-than comparison."
+            },
+            "Bool": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "Boolean match. Value must be 'true' or 'false'."
+            },
+            "IpAddress": {
+              "$ref": "#/$defs/ConditionMap",
+              "description": "CIDR match for IP addresses."
+            }
+          }
+        }
+      }
+    },
+    "ConditionMap": {
+      "type": "object",
+      "description": "Map of context keys to expected values.\n\nBuilt-in context keys:\n- Agent:DID — the agent's DID\n- Model:Provider — e.g. 'anthropic', 'openai', 'google'\n- Model:Name — e.g. 'claude-sonnet-4', 'gpt-4o'\n- Receipt:ProofTier — 'self', 'gateway', 'sandbox'\n- Request:HasHumanApproval — 'true' or 'false'\n- SideEffect:TargetDomain — target domain for network egress\n- Tool:Name — name of tool being invoked\n- Context:Hour — hour of day (0-23) for time-based policies",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "maxProperties": 16
+    }
+  }
+}

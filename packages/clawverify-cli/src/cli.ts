@@ -9,8 +9,10 @@ import {
   verifyExportBundleFromFile,
   verifyProofBundleFromFile,
 } from './verify.js';
+import { runComplianceReport } from './compliance-cmd.js';
 import { hintForReasonCode, explainReasonCode } from './hints.js';
 import { runInit } from './init.js';
+import { runMigratePolicy } from './migrate-policy.js';
 import type { CliOutput, CliKind } from './types.js';
 
 function nowIso(): string {
@@ -25,6 +27,8 @@ function usageText(): string {
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
     '  clawverify verify export-bundle --input <path> [--config <path>]',
     '  clawverify verify commit-sig   --input <path>',
+    '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>]',
+    '  clawverify migrate-policy      <v1-policy.json>',
     '  clawverify init [--dir <path>] [--force]',
     '  clawverify explain <REASON_CODE>',
     '  clawverify version',
@@ -36,6 +40,7 @@ function usageText(): string {
     '',
     'Examples:',
     '  clawverify verify proof-bundle --input bundle.json --config clawverify.config.v1.json',
+    '  clawverify compliance bundle.json --framework soc2',
     '  clawverify init',
     '  clawverify explain HASH_MISMATCH',
     '',
@@ -57,8 +62,10 @@ function hasFlag(args: string[], name: string): boolean {
 
 type ParsedArgs =
   | { command: 'verify'; kind: CliKind; inputPath: string; configPath?: string; urmPath?: string }
+  | { command: 'compliance'; inputPath: string; framework: string; outputPath?: string }
   | { command: 'init'; targetDir?: string; force: boolean }
   | { command: 'explain'; code: string }
+  | { command: 'migrate-policy'; inputPath: string }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -68,6 +75,22 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (argv[0] === 'version' || hasFlag(argv, '--version')) {
     return { command: 'version' };
+  }
+
+  if (argv[0] === 'compliance') {
+    const inputPath = argv[1];
+    if (!inputPath || inputPath.startsWith('--')) {
+      throw new CliUsageError('Usage: clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>]');
+    }
+    const framework = readFlag(argv, '--framework') ?? 'soc2';
+    const outputPath = readFlag(argv, '--output');
+    return { command: 'compliance', inputPath, framework, outputPath };
+  }
+
+  if (argv[0] === 'migrate-policy') {
+    const inputPath = argv[1];
+    if (!inputPath) throw new CliUsageError('Usage: clawverify migrate-policy <v1-policy.json>');
+    return { command: 'migrate-policy', inputPath };
   }
 
   if (argv[0] === 'explain') {
@@ -127,6 +150,16 @@ async function main() {
 
   if (parsed.command === 'explain') {
     process.stdout.write(`${explainReasonCode(parsed.code)}\n`);
+    return;
+  }
+
+  if (parsed.command === 'compliance') {
+    await runComplianceReport(parsed.inputPath, parsed.framework, parsed.outputPath);
+    return;
+  }
+
+  if (parsed.command === 'migrate-policy') {
+    runMigratePolicy(parsed.inputPath);
     return;
   }
 
