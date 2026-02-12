@@ -124,6 +124,23 @@
       "priority": 8,
       "passes": true,
       "notes": "Shipped to staging+prod with migration 0005 + queue fanout bindings live. Evidence: smokes artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json; watches artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json and artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json (failed buckets = 0)."
+    },
+    {
+      "id": "MPY-US-013",
+      "title": "Loss-event resolution + deterministic unfreeze",
+      "description": "As economy ops, I want a deterministic loss-event resolve lifecycle that releases downstream risk holds (ledger/escrow/bounties) via a separate replay-safe outbox so freezes can be cleared safely and audibly.",
+      "acceptanceCriteria": [
+        "Implement POST /v1/loss-events/:id/resolve (admin, idempotency required)",
+        "Fail-closed: resolve returns 409 unless the loss event apply status is forwarded",
+        "Persist loss_event_resolutions + loss_event_resolution_outbox with replay-safe uniqueness",
+        "Forward resolve fanout to ledger (release-by-source), escrow (risk-hold release), and clawbounties (risk clear record)",
+        "Support operation=apply|resolve on GET /v1/loss-events/outbox and POST /v1/loss-events/ops/retry",
+        "Cron + queue retry paths cover both apply and resolve outboxes",
+        "Capture staging + production deploy + smoke + watch evidence (deterministic error buckets zero)"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0006 loss_event_resolutions + loss_event_resolution_outbox and operation-aware outbox/retry controls. Evidence: deploy summary artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json; smokes artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json; watches artifacts/ops/econ-risk/2026-02-12T14-25-43-531Z-staging-loss-event-watch/summary.json (limit=5) and artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json (failed buckets apply=0 resolve=0)."
     }
   ]
 }

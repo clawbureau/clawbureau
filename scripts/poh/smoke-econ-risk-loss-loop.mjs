@@ -128,6 +128,7 @@ async function main() {
       'content-type': 'application/json; charset=utf-8',
     },
     body: JSON.stringify({
+      operation: 'apply',
       limit: Number.parseInt(String(args.get('retry-limit') || '50'), 10),
       loss_event_id: lossEventId,
     }),
@@ -156,7 +157,7 @@ async function main() {
   assert(getEvent.status === 200, `loss event get failed (${getEvent.status}): ${getEvent.text}`);
 
   const getOutbox = await requestJson(
-    `${settleBaseUrl}/v1/loss-events/outbox?loss_event_id=${encodeURIComponent(lossEventId)}&limit=50`,
+    `${settleBaseUrl}/v1/loss-events/outbox?operation=apply&loss_event_id=${encodeURIComponent(lossEventId)}&limit=50`,
     {
       method: 'GET',
       headers: {

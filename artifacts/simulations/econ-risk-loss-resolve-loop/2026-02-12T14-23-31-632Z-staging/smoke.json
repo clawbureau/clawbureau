@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "env": "staging",
+  "settle_base_url": "https://staging.clawsettle.com",
+  "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+  "idempotency_keys": {
+    "apply": "smoke:loss-event:e08cfc2f-50c1-46e7-8472-5cabecab59fc",
+    "resolve": "smoke:loss-event:resolve:fc8ba3a9-b9b6-4c54-802b-d97ec5758ecb"
+  },
+  "require_fully_forwarded": true,
+  "apply": {
+    "event_status": "forwarded",
+    "outbox": {
+      "total": 5,
+      "forwarded": 5,
+      "failed": 0
+    }
+  },
+  "resolve": {
+    "resolution_id": "lsr_ca0f149ae950e8c14f3673ee",
+    "outbox": {
+      "total": 3,
+      "forwarded": 3,
+      "failed": 0
+    }
+  },
+  "ledger_hold": null,
+  "steps": [
+    {
+      "step": "create_loss_event",
+      "status": 201,
+      "elapsed_ms": 345,
+      "deduped": false,
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "target_count": 5
+    },
+    {
+      "step": "retry_forwarding_apply",
+      "status": 200,
+      "elapsed_ms": 1587,
+      "attempted": 5,
+      "forwarded": 5,
+      "failed": 0
+    },
+    {
+      "step": "readback_apply",
+      "event_status": "forwarded",
+      "outbox_count": 5,
+      "forwarded_count": 5,
+      "failed_count": 0
+    },
+    {
+      "step": "resolve_loss_event",
+      "status": 201,
+      "elapsed_ms": 282,
+      "deduped": false,
+      "resolution_id": "lsr_ca0f149ae950e8c14f3673ee"
+    },
+    {
+      "step": "retry_forwarding_resolve",
+      "status": 200,
+      "elapsed_ms": 926,
+      "attempted": 3,
+      "forwarded": 3,
+      "failed": 0
+    },
+    {
+      "step": "readback_resolve",
+      "outbox_count": 3,
+      "forwarded_count": 3,
+      "failed_count": 0
+    }
+  ]
+}

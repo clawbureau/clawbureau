@@ -1,0 +1,51 @@
+{
+  "ok": true,
+  "outbox": [
+    {
+      "outbox_id": "lro_9b5dd0704031695520832d19",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "ledger",
+      "target_url": "https://clawledger.com/v1/risk/holds/release-by-source",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 200,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:29.015Z",
+      "created_at": "2026-02-12T14:28:27.707Z",
+      "updated_at": "2026-02-12T14:28:29.015Z"
+    },
+    {
+      "outbox_id": "lro_6383f9da2f20ef5bafb1c388",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "clawbounties",
+      "target_url": "https://clawbounties.com/v1/risk/loss-events/clear",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:28.497Z",
+      "created_at": "2026-02-12T14:28:27.707Z",
+      "updated_at": "2026-02-12T14:28:28.497Z"
+    },
+    {
+      "outbox_id": "lro_34f9969c4bdf5a22b5d323ae",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "escrow",
+      "target_url": "https://clawescrow.com/v1/escrows/esc_4f8cc0ab-35ef-47ad-a301-c4cfd9c2ce32/risk-hold",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 200,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:28.202Z",
+      "created_at": "2026-02-12T14:28:27.707Z",
+      "updated_at": "2026-02-12T14:28:28.202Z"
+    }
+  ],
+  "next_cursor": null
+}

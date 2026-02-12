@@ -14,6 +14,8 @@ const LOSS_TARGETS: readonly LossTargetService[] = [
   'clawbounties',
 ] as const;
 
+type LossOutboxOperation = 'apply' | 'resolve';
+
 interface LossEventRecord {
   id: string;
   idempotency_key: string;
@@ -53,9 +55,41 @@ interface LossEventOutboxRecord {
   updated_at: string;
 }
 
+interface LossEventResolutionRecord {
+  id: string;
+  loss_event_id: string;
+  idempotency_key: string;
+  request_hash: string;
+  reason: string | null;
+  status: LossEventStatus;
+  target_count: number;
+  forwarded_count: number;
+  failed_count: number;
+  created_at: string;
+  updated_at: string;
+  last_forwarded_at: string | null;
+  resolved_at: string | null;
+}
+
+interface LossEventResolutionOutboxRecord {
+  id: string;
+  loss_event_id: string;
+  target_service: LossTargetService;
+  target_url: string;
+  status: LossOutboxStatus;
+  attempts: number;
+  last_http_status: number | null;
+  last_error_code: string | null;
+  last_error_message: string | null;
+  next_retry_at: string | null;
+  forwarded_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface LossEventQueueMessage {
   loss_event_id: string;
-  trigger: 'create' | 'retry' | 'cron';
+  trigger: 'create' | 'resolve' | 'retry' | 'cron';
   queued_at: string;
 }
 
@@ -109,6 +143,20 @@ interface LossEventView {
   created_at: string;
   updated_at: string;
   last_forwarded_at: string | null;
+}
+
+interface LossEventResolutionView {
+  resolution_id: string;
+  loss_event_id: string;
+  reason: string | null;
+  status: LossEventStatus;
+  target_count: number;
+  forwarded_count: number;
+  failed_count: number;
+  created_at: string;
+  updated_at: string;
+  last_forwarded_at: string | null;
+  resolved_at: string | null;
 }
 
 interface LossOutboxView {
@@ -486,6 +534,40 @@ function normalizeOutbox(row: LossEventOutboxRecord): LossOutboxView {
   };
 }
 
+function normalizeResolution(row: LossEventResolutionRecord): LossEventResolutionView {
+  return {
+    resolution_id: row.id,
+    loss_event_id: row.loss_event_id,
+    reason: row.reason,
+    status: row.status,
+    target_count: row.target_count,
+    forwarded_count: row.forwarded_count,
+    failed_count: row.failed_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    last_forwarded_at: row.last_forwarded_at,
+    resolved_at: row.resolved_at,
+  };
+}
+
+function normalizeResolutionOutbox(row: LossEventResolutionOutboxRecord): LossOutboxView {
+  return {
+    outbox_id: row.id,
+    loss_event_id: row.loss_event_id,
+    target_service: row.target_service,
+    target_url: row.target_url,
+    status: row.status,
+    attempts: row.attempts,
+    last_http_status: row.last_http_status,
+    last_error_code: row.last_error_code,
+    last_error_message: row.last_error_message,
+    next_retry_at: row.next_retry_at,
+    forwarded_at: row.forwarded_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 function parseRecord<T>(row: Record<string, unknown> | null, parser: (row: Record<string, unknown>) => T | null): T | null {
   if (!row) return null;
   return parser(row);
@@ -633,6 +715,107 @@ function parseLossOutboxRecord(row: Record<string, unknown>): LossEventOutboxRec
   };
 }
 
+function parseLossResolutionRecord(row: Record<string, unknown>): LossEventResolutionRecord | null {
+  const id = asString(row.id);
+  const loss_event_id = asString(row.loss_event_id);
+  const idempotency_key = asString(row.idempotency_key);
+  const request_hash = asString(row.request_hash);
+  const reason = asString(row.reason);
+  const statusRaw = asString(row.status);
+  const target_count = asNumber(row.target_count);
+  const forwarded_count = asNumber(row.forwarded_count);
+  const failed_count = asNumber(row.failed_count);
+  const created_at = asString(row.created_at);
+  const updated_at = asString(row.updated_at);
+  const last_forwarded_at = asString(row.last_forwarded_at);
+  const resolved_at = asString(row.resolved_at);
+
+  if (
+    !id ||
+    !loss_event_id ||
+    !idempotency_key ||
+    !request_hash ||
+    !statusRaw ||
+    target_count === null ||
+    forwarded_count === null ||
+    failed_count === null ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  if (
+    statusRaw !== 'recorded' &&
+    statusRaw !== 'processing' &&
+    statusRaw !== 'partially_forwarded' &&
+    statusRaw !== 'forwarded' &&
+    statusRaw !== 'failed'
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    loss_event_id,
+    idempotency_key,
+    request_hash,
+    reason,
+    status: statusRaw,
+    target_count,
+    forwarded_count,
+    failed_count,
+    created_at,
+    updated_at,
+    last_forwarded_at,
+    resolved_at,
+  };
+}
+
+function parseLossResolutionOutboxRecord(row: Record<string, unknown>): LossEventResolutionOutboxRecord | null {
+  const id = asString(row.id);
+  const loss_event_id = asString(row.loss_event_id);
+  const target_service_raw = asString(row.target_service);
+  const target_url = asString(row.target_url);
+  const status_raw = asString(row.status);
+  const attempts = asNumber(row.attempts);
+  const last_http_status = asNumber(row.last_http_status);
+  const last_error_code = asString(row.last_error_code);
+  const last_error_message = asString(row.last_error_message);
+  const next_retry_at = asString(row.next_retry_at);
+  const forwarded_at = asString(row.forwarded_at);
+  const created_at = asString(row.created_at);
+  const updated_at = asString(row.updated_at);
+
+  if (!id || !loss_event_id || !target_service_raw || !target_url || !status_raw || attempts === null || !created_at || !updated_at) {
+    return null;
+  }
+
+  if (!LOSS_TARGETS.includes(target_service_raw as LossTargetService)) {
+    return null;
+  }
+
+  if (status_raw !== 'pending' && status_raw !== 'forwarded' && status_raw !== 'failed') {
+    return null;
+  }
+
+  return {
+    id,
+    loss_event_id,
+    target_service: target_service_raw as LossTargetService,
+    target_url,
+    status: status_raw,
+    attempts,
+    last_http_status,
+    last_error_code,
+    last_error_message,
+    next_retry_at,
+    forwarded_at,
+    created_at,
+    updated_at,
+  };
+}
+
 function getBearerToken(request: Request): string | null {
   const authorization = request.headers.get('authorization') ?? request.headers.get('Authorization');
   if (!authorization) return null;
@@ -672,6 +855,47 @@ function parseQueryLimit(value: string | null, fallback: number, max = 200): num
   }
 
   return Math.min(parsed, max);
+}
+
+function parseOutboxOperation(value: string | null): LossOutboxOperation {
+  if (!value || value.trim().length === 0) {
+    return 'apply';
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'apply' || normalized === 'resolve') {
+    return normalized;
+  }
+
+  throw new ClawSettleError('operation must be apply|resolve', 'INVALID_REQUEST', 400, {
+    field: 'operation',
+    value,
+  });
+}
+
+function parseLossResolutionPayload(input: unknown): { reason: string | null } {
+  if (input === null || input === undefined) {
+    return { reason: null };
+  }
+
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    throw new ClawSettleError('Invalid JSON payload', 'INVALID_REQUEST', 400);
+  }
+
+  const payload = input as Record<string, unknown>;
+  const reasonRaw = payload.reason;
+
+  if (reasonRaw === undefined || reasonRaw === null) {
+    return { reason: null };
+  }
+
+  if (typeof reasonRaw !== 'string' || reasonRaw.trim().length === 0) {
+    throw new ClawSettleError('reason must be a non-empty string', 'INVALID_REQUEST', 400, {
+      field: 'reason',
+    });
+  }
+
+  return { reason: reasonRaw.trim() };
 }
 
 function resolveTargetConfigs(
@@ -820,6 +1044,96 @@ function resolveTargetConfigs(
 
   if (configs.length === 0) {
     throw new ClawSettleError('No valid loss-event targets resolved', 'INVALID_REQUEST', 400);
+  }
+
+  return configs;
+}
+
+function resolveResolutionTargetConfigs(
+  env: Env,
+  params: {
+    event: LossEventRecord;
+    apply_outbox: LossEventOutboxRecord[];
+  }
+): LossTargetConfig[] {
+  const hasEscrow = params.apply_outbox.some((row) => row.target_service === 'escrow');
+  const hasBounties = params.apply_outbox.some((row) => row.target_service === 'clawbounties');
+
+  const targets: LossTargetService[] = [
+    'ledger',
+    ...(hasEscrow ? (['escrow'] as const) : []),
+    ...(hasBounties ? (['clawbounties'] as const) : []),
+  ];
+
+  const configs: LossTargetConfig[] = [];
+
+  for (const target of targets) {
+    if (target === 'ledger') {
+      const baseUrl = env.LEDGER_BASE_URL?.trim();
+      const token = (env.LEDGER_RISK_KEY ?? env.LEDGER_ADMIN_KEY)?.trim();
+      if (!baseUrl) {
+        throw new ClawSettleError('Ledger base URL not configured for loss-event resolution', 'DEPENDENCY_NOT_CONFIGURED', 503, {
+          field: 'LEDGER_BASE_URL',
+        });
+      }
+      if (!token) {
+        throw new ClawSettleError('Ledger risk key not configured for loss-event resolution', 'DEPENDENCY_NOT_CONFIGURED', 503, {
+          field: 'LEDGER_RISK_KEY',
+        });
+      }
+
+      configs.push({
+        service: 'ledger',
+        url: `${baseUrl.replace(/\/$/, '')}/v1/risk/holds/release-by-source`,
+        auth_token: token,
+      });
+      continue;
+    }
+
+    if (target === 'escrow') {
+      const token = env.ESCROW_RISK_KEY?.trim();
+      if (!token) {
+        throw new ClawSettleError('ESCROW_RISK_KEY not configured for loss-event resolution', 'DEPENDENCY_NOT_CONFIGURED', 503, {
+          field: 'ESCROW_RISK_KEY',
+        });
+      }
+
+      const escrowOutbox = params.apply_outbox.find((row) => row.target_service === 'escrow') ?? null;
+      if (!escrowOutbox) {
+        throw new ClawSettleError('Escrow outbox entry not found for loss-event resolution', 'INTERNAL_ERROR', 500, {
+          loss_event_id: params.event.id,
+        });
+      }
+
+      configs.push({
+        service: 'escrow',
+        url: escrowOutbox.target_url,
+        auth_token: token,
+      });
+      continue;
+    }
+
+    if (target === 'clawbounties') {
+      const baseUrl = env.CLAWBOUNTIES_BASE_URL?.trim();
+      const token = env.BOUNTIES_RISK_KEY?.trim();
+      if (!baseUrl) {
+        throw new ClawSettleError('Clawbounties base URL not configured for loss-event resolution', 'DEPENDENCY_NOT_CONFIGURED', 503, {
+          field: 'CLAWBOUNTIES_BASE_URL',
+        });
+      }
+      if (!token) {
+        throw new ClawSettleError('BOUNTIES_RISK_KEY not configured for loss-event resolution', 'DEPENDENCY_NOT_CONFIGURED', 503, {
+          field: 'BOUNTIES_RISK_KEY',
+        });
+      }
+
+      configs.push({
+        service: 'clawbounties',
+        url: `${baseUrl.replace(/\/$/, '')}/v1/risk/loss-events/clear`,
+        auth_token: token,
+      });
+      continue;
+    }
   }
 
   return configs;
@@ -976,6 +1290,35 @@ async function readLossOutboxByEventId(db: D1Database, lossEventId: string): Pro
     .filter((row): row is LossEventOutboxRecord => Boolean(row));
 }
 
+async function readLossResolutionByIdempotencyKey(db: D1Database, idempotencyKey: string): Promise<LossEventResolutionRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM loss_event_resolutions WHERE idempotency_key = ?')
+    .bind(idempotencyKey)
+    .first<Record<string, unknown>>();
+
+  return parseRecord(row, parseLossResolutionRecord);
+}
+
+async function readLossResolutionByEventId(db: D1Database, lossEventId: string): Promise<LossEventResolutionRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM loss_event_resolutions WHERE loss_event_id = ?')
+    .bind(lossEventId)
+    .first<Record<string, unknown>>();
+
+  return parseRecord(row, parseLossResolutionRecord);
+}
+
+async function readResolutionOutboxByEventId(db: D1Database, lossEventId: string): Promise<LossEventResolutionOutboxRecord[]> {
+  const rows = await db
+    .prepare('SELECT * FROM loss_event_resolution_outbox WHERE loss_event_id = ? ORDER BY created_at ASC, id ASC')
+    .bind(lossEventId)
+    .all<Record<string, unknown>>();
+
+  return (rows.results ?? [])
+    .map((row) => parseLossResolutionOutboxRecord(row))
+    .filter((row): row is LossEventResolutionOutboxRecord => Boolean(row));
+}
+
 async function recomputeLossEventStatus(db: D1Database, lossEventId: string, at: string): Promise<void> {
   const summaryRow = await db
     .prepare(
@@ -1083,6 +1426,254 @@ async function markOutboxFailed(
     .run();
 
   await recomputeLossEventStatus(db, outbox.loss_event_id, now);
+}
+
+async function recomputeLossResolutionStatus(db: D1Database, lossEventId: string, at: string): Promise<void> {
+  const summaryRow = await db
+    .prepare(
+      `SELECT
+        COUNT(1) AS target_count,
+        SUM(CASE WHEN status = 'forwarded' THEN 1 ELSE 0 END) AS forwarded_count,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending_count
+       FROM loss_event_resolution_outbox
+       WHERE loss_event_id = ?`
+    )
+    .bind(lossEventId)
+    .first<Record<string, unknown>>();
+
+  if (!summaryRow) {
+    return;
+  }
+
+  const targetCount = asNumber(summaryRow.target_count) ?? 0;
+  const forwardedCount = asNumber(summaryRow.forwarded_count) ?? 0;
+  const failedCount = asNumber(summaryRow.failed_count) ?? 0;
+  const pendingCount = asNumber(summaryRow.pending_count) ?? 0;
+
+  let status: LossEventStatus = 'recorded';
+  if (targetCount > 0 && forwardedCount === targetCount) {
+    status = 'forwarded';
+  } else if (failedCount > 0 && forwardedCount > 0) {
+    status = 'partially_forwarded';
+  } else if (failedCount > 0 && pendingCount === 0 && forwardedCount === 0) {
+    status = 'failed';
+  } else if (forwardedCount > 0) {
+    status = 'partially_forwarded';
+  } else if (pendingCount < targetCount) {
+    status = 'processing';
+  }
+
+  await db
+    .prepare(
+      `UPDATE loss_event_resolutions
+       SET status = ?,
+           target_count = ?,
+           forwarded_count = ?,
+           failed_count = ?,
+           updated_at = ?,
+           last_forwarded_at = CASE WHEN ? > 0 THEN ? ELSE last_forwarded_at END,
+           resolved_at = CASE WHEN ? = 'forwarded' THEN COALESCE(resolved_at, ?) ELSE resolved_at END
+       WHERE loss_event_id = ?`
+    )
+    .bind(
+      status,
+      targetCount,
+      forwardedCount,
+      failedCount,
+      at,
+      forwardedCount,
+      at,
+      status,
+      at,
+      lossEventId
+    )
+    .run();
+}
+
+async function markResolutionOutboxForwarded(
+  db: D1Database,
+  outbox: LossEventResolutionOutboxRecord,
+  now: string,
+  httpStatus: number
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE loss_event_resolution_outbox
+       SET status = 'forwarded',
+           attempts = ?,
+           last_http_status = ?,
+           last_error_code = NULL,
+           last_error_message = NULL,
+           next_retry_at = NULL,
+           forwarded_at = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .bind(outbox.attempts + 1, httpStatus, now, now, outbox.id)
+    .run();
+
+  await recomputeLossResolutionStatus(db, outbox.loss_event_id, now);
+}
+
+async function markResolutionOutboxFailed(
+  db: D1Database,
+  outbox: LossEventResolutionOutboxRecord,
+  now: string,
+  params: {
+    http_status: number | null;
+    error_code: string;
+    error_message: string;
+    next_retry_at: string | null;
+    permanent: boolean;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE loss_event_resolution_outbox
+       SET status = 'failed',
+           attempts = ?,
+           last_http_status = ?,
+           last_error_code = ?,
+           last_error_message = ?,
+           next_retry_at = ?,
+           updated_at = ?
+       WHERE id = ?`
+    )
+    .bind(
+      outbox.attempts + 1,
+      params.http_status,
+      params.error_code,
+      params.error_message.slice(0, 1000),
+      params.permanent ? null : params.next_retry_at,
+      now,
+      outbox.id
+    )
+    .run();
+
+  await recomputeLossResolutionStatus(db, outbox.loss_event_id, now);
+}
+
+async function fetchRetryableResolutionOutbox(
+  db: D1Database,
+  params: {
+    now: string;
+    limit: number;
+    loss_event_id?: string;
+  }
+): Promise<Array<{ outbox: LossEventResolutionOutboxRecord; event: LossEventRecord; resolution: LossEventResolutionRecord }>> {
+  const where: string[] = [
+    "o.status IN ('pending','failed')",
+    '(o.next_retry_at IS NULL OR o.next_retry_at <= ?)',
+  ];
+  const binds: unknown[] = [params.now];
+
+  if (params.loss_event_id) {
+    where.push('o.loss_event_id = ?');
+    binds.push(params.loss_event_id);
+  }
+
+  binds.push(params.limit);
+
+  const query = `SELECT
+    o.id AS outbox_id,
+    o.loss_event_id AS outbox_loss_event_id,
+    o.target_service,
+    o.target_url,
+    o.status AS outbox_status,
+    o.attempts,
+    o.last_http_status,
+    o.last_error_code,
+    o.last_error_message,
+    o.next_retry_at,
+    o.forwarded_at,
+    o.created_at AS outbox_created_at,
+    o.updated_at AS outbox_updated_at,
+    r.id AS resolution_id,
+    r.idempotency_key AS resolution_idempotency_key,
+    r.request_hash AS resolution_request_hash,
+    r.reason AS resolution_reason,
+    r.status AS resolution_status,
+    r.target_count AS resolution_target_count,
+    r.forwarded_count AS resolution_forwarded_count,
+    r.failed_count AS resolution_failed_count,
+    r.created_at AS resolution_created_at,
+    r.updated_at AS resolution_updated_at,
+    r.last_forwarded_at AS resolution_last_forwarded_at,
+    r.resolved_at AS resolution_resolved_at,
+    e.*
+  FROM loss_event_resolution_outbox o
+  JOIN loss_event_resolutions r ON r.loss_event_id = o.loss_event_id
+  JOIN loss_events e ON e.id = o.loss_event_id
+  WHERE ${where.join(' AND ')}
+  ORDER BY o.created_at ASC, o.id ASC
+  LIMIT ?`;
+
+  const rows = await db.prepare(query).bind(...binds).all<Record<string, unknown>>();
+  const results: Array<{ outbox: LossEventResolutionOutboxRecord; event: LossEventRecord; resolution: LossEventResolutionRecord }> = [];
+
+  for (const row of rows.results ?? []) {
+    const outbox = parseLossResolutionOutboxRecord({
+      id: row.outbox_id,
+      loss_event_id: row.outbox_loss_event_id,
+      target_service: row.target_service,
+      target_url: row.target_url,
+      status: row.outbox_status,
+      attempts: row.attempts,
+      last_http_status: row.last_http_status,
+      last_error_code: row.last_error_code,
+      last_error_message: row.last_error_message,
+      next_retry_at: row.next_retry_at,
+      forwarded_at: row.forwarded_at,
+      created_at: row.outbox_created_at,
+      updated_at: row.outbox_updated_at,
+    });
+
+    const resolution = parseLossResolutionRecord({
+      id: row.resolution_id,
+      loss_event_id: row.outbox_loss_event_id,
+      idempotency_key: row.resolution_idempotency_key,
+      request_hash: row.resolution_request_hash,
+      reason: row.resolution_reason,
+      status: row.resolution_status,
+      target_count: row.resolution_target_count,
+      forwarded_count: row.resolution_forwarded_count,
+      failed_count: row.resolution_failed_count,
+      created_at: row.resolution_created_at,
+      updated_at: row.resolution_updated_at,
+      last_forwarded_at: row.resolution_last_forwarded_at,
+      resolved_at: row.resolution_resolved_at,
+    });
+
+    const event = parseLossEventRecord({
+      id: row.id,
+      idempotency_key: row.idempotency_key,
+      request_hash: row.request_hash,
+      source_service: row.source_service,
+      source_event_id: row.source_event_id,
+      account_id: row.account_id,
+      account_did: row.account_did,
+      currency: row.currency,
+      amount_minor: row.amount_minor,
+      reason_code: row.reason_code,
+      severity: row.severity,
+      occurred_at: row.occurred_at,
+      metadata_json: row.metadata_json,
+      status: row.status,
+      target_count: row.target_count,
+      forwarded_count: row.forwarded_count,
+      failed_count: row.failed_count,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      last_forwarded_at: row.last_forwarded_at,
+    });
+
+    if (outbox && resolution && event) {
+      results.push({ outbox, resolution, event });
+    }
+  }
+
+  return results;
 }
 
 async function fetchRetryableOutbox(
@@ -1281,6 +1872,168 @@ async function forwardOutboxEntry(
   return { ok: true, http_status: response.status };
 }
 
+function buildResolutionTargetRequestBody(
+  target: LossTargetService,
+  event: LossEventRecord,
+  resolution: LossEventResolutionRecord,
+  targetIdempotencyKey: string
+): Record<string, unknown> {
+  const metadata = parseJsonObject<Record<string, unknown>>(event.metadata_json);
+
+  if (target === 'ledger') {
+    return {
+      idempotency_key: targetIdempotencyKey,
+      source_loss_event_id: event.id,
+      reason: resolution.reason ?? `loss_event_resolved:${event.reason_code}`,
+    };
+  }
+
+  if (target === 'escrow') {
+    return {
+      idempotency_key: targetIdempotencyKey,
+      action: 'release',
+      source_loss_event_id: event.id,
+      reason: resolution.reason ?? `loss_event_resolved:${event.reason_code}`,
+    };
+  }
+
+  if (target === 'clawbounties') {
+    const bountyId = typeof metadata?.bounty_id === 'string' ? metadata.bounty_id.trim() : null;
+
+    return {
+      idempotency_key: targetIdempotencyKey,
+      source_loss_event_id: event.id,
+      bounty_id: bountyId,
+      reason: resolution.reason ?? `loss_event_resolved:${event.reason_code}`,
+      metadata: metadata ?? null,
+    };
+  }
+
+  throw new ClawSettleError('Unsupported resolution target', 'INVALID_REQUEST', 400, {
+    target,
+  });
+}
+
+async function forwardResolutionOutboxEntry(
+  env: Env,
+  outbox: LossEventResolutionOutboxRecord,
+  event: LossEventRecord,
+  resolution: LossEventResolutionRecord
+): Promise<{ ok: boolean; http_status: number | null; error_code?: string; error_message?: string }> {
+  const metadata = parseJsonObject<Record<string, unknown>>(event.metadata_json);
+
+  const tokenByService: Record<LossTargetService, string | null> = {
+    ledger: (env.LEDGER_RISK_KEY ?? env.LEDGER_ADMIN_KEY)?.trim() || null,
+    escrow: env.ESCROW_RISK_KEY?.trim() || null,
+    clawinsure: env.INSURE_RISK_KEY?.trim() || null,
+    clawincome: env.INCOME_RISK_KEY?.trim() || null,
+    clawbounties: env.BOUNTIES_RISK_KEY?.trim() || null,
+  };
+
+  const token = tokenByService[outbox.target_service];
+  if (!token) {
+    return {
+      ok: false,
+      http_status: null,
+      error_code: 'DEPENDENCY_NOT_CONFIGURED',
+      error_message: `${outbox.target_service} auth token is not configured`,
+    };
+  }
+
+  if (outbox.target_service === 'escrow') {
+    const escrowId = typeof metadata?.escrow_id === 'string' ? metadata.escrow_id.trim() : null;
+    if (!escrowId) {
+      return {
+        ok: false,
+        http_status: 400,
+        error_code: 'INVALID_REQUEST',
+        error_message: 'metadata.escrow_id missing for escrow risk hold release',
+      };
+    }
+  }
+
+  if (outbox.target_service === 'clawbounties') {
+    const bountyId = typeof metadata?.bounty_id === 'string' ? metadata.bounty_id.trim() : null;
+    if (!bountyId) {
+      return {
+        ok: false,
+        http_status: 400,
+        error_code: 'INVALID_REQUEST',
+        error_message: 'metadata.bounty_id missing for clawbounties risk clear',
+      };
+    }
+  }
+
+  if (outbox.target_service !== 'ledger' && outbox.target_service !== 'escrow' && outbox.target_service !== 'clawbounties') {
+    return {
+      ok: false,
+      http_status: 400,
+      error_code: 'INVALID_REQUEST',
+      error_message: `Unsupported resolution target: ${outbox.target_service}`,
+    };
+  }
+
+  const targetIdempotencyKey = `loss-event:resolve:${event.id}:${outbox.target_service}`;
+  const body = buildResolutionTargetRequestBody(outbox.target_service, event, resolution, targetIdempotencyKey);
+
+  let response: Response;
+  try {
+    response = await fetch(outbox.target_url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${token}`,
+        'idempotency-key': targetIdempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      http_status: null,
+      error_code: 'FETCH_FAILED',
+      error_message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const text = await response.text();
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = text.length > 0 ? (JSON.parse(text) as Record<string, unknown>) : null;
+  } catch {
+    parsed = null;
+  }
+
+  if (response.status === 409) {
+    return { ok: true, http_status: response.status };
+  }
+
+  if (!response.ok) {
+    const errorCode =
+      typeof parsed?.code === 'string'
+        ? parsed.code
+        : typeof parsed?.error === 'string'
+          ? parsed.error
+          : 'UPSTREAM_ERROR';
+
+    const errorMessage =
+      typeof parsed?.message === 'string'
+        ? parsed.message
+        : typeof parsed?.code === 'string' && typeof parsed?.error === 'string'
+          ? parsed.error
+          : text.slice(0, 500) || `HTTP ${response.status}`;
+
+    return {
+      ok: false,
+      http_status: response.status,
+      error_code: errorCode,
+      error_message: errorMessage,
+    };
+  }
+
+  return { ok: true, http_status: response.status };
+}
+
 export class LossEventService {
   constructor(private readonly env: Env) {}
 
@@ -1470,6 +2223,208 @@ export class LossEventService {
     };
   }
 
+  async resolveLossEvent(
+    lossEventId: string,
+    payloadInput: unknown,
+    idempotencyKey: string
+  ): Promise<{ ok: true; deduped: boolean; event: LossEventView; resolution: LossEventResolutionView; outbox: LossOutboxView[] }> {
+    const event = await readLossEventById(this.env.DB, lossEventId);
+    if (!event) {
+      throw new ClawSettleError('Loss event not found', 'NOT_FOUND', 404, {
+        loss_event_id: lossEventId,
+      });
+    }
+
+    if (event.status !== 'forwarded') {
+      throw new ClawSettleError('Loss event must be forwarded before resolve', 'LOSS_EVENT_NOT_READY', 409, {
+        loss_event_id: lossEventId,
+        status: event.status,
+      });
+    }
+
+    const payload = parseLossResolutionPayload(payloadInput);
+
+    const applyOutbox = await readLossOutboxByEventId(this.env.DB, lossEventId);
+
+    const targetServices: LossTargetService[] = [
+      'ledger',
+      ...(applyOutbox.some((row) => row.target_service === 'escrow') ? (['escrow'] as const) : []),
+      ...(applyOutbox.some((row) => row.target_service === 'clawbounties') ? (['clawbounties'] as const) : []),
+    ];
+
+    const canonicalRequest = {
+      loss_event_id: event.id,
+      reason: payload.reason,
+      targets: targetServices,
+    };
+    const requestHash = await sha256Hex(stableStringify(canonicalRequest));
+
+    const existing = await readLossResolutionByIdempotencyKey(this.env.DB, idempotencyKey);
+    if (existing) {
+      if (existing.loss_event_id !== event.id || existing.request_hash !== requestHash) {
+        throw new ClawSettleError('Idempotency key replay with mismatched payload', 'IDEMPOTENCY_CONFLICT', 409, {
+          idempotency_key: idempotencyKey,
+          existing_resolution_id: existing.id,
+          existing_loss_event_id: existing.loss_event_id,
+        });
+      }
+
+      const outboxExisting = await readResolutionOutboxByEventId(this.env.DB, existing.loss_event_id);
+
+      return {
+        ok: true,
+        deduped: true,
+        event: normalizeEvent(event),
+        resolution: normalizeResolution(existing),
+        outbox: outboxExisting.map((row) => normalizeResolutionOutbox(row)),
+      };
+    }
+
+    const existingByEvent = await readLossResolutionByEventId(this.env.DB, event.id);
+    if (existingByEvent) {
+      throw new ClawSettleError('Loss event resolution already exists', 'IDEMPOTENCY_CONFLICT', 409, {
+        loss_event_id: event.id,
+        existing_resolution_id: existingByEvent.id,
+        existing_idempotency_key: existingByEvent.idempotency_key,
+      });
+    }
+
+    const configs = resolveResolutionTargetConfigs(this.env, {
+      event,
+      apply_outbox: applyOutbox,
+    });
+
+    const now = nowIso();
+    const resolutionId = await deriveDeterministicId(
+      'lsr',
+      stableStringify({
+        loss_event_id: event.id,
+        idempotency_key: idempotencyKey,
+      })
+    );
+
+    const resolutionInsert = this.env.DB.prepare(
+      `INSERT INTO loss_event_resolutions (
+        id,
+        loss_event_id,
+        idempotency_key,
+        request_hash,
+        reason,
+        status,
+        target_count,
+        forwarded_count,
+        failed_count,
+        created_at,
+        updated_at,
+        last_forwarded_at,
+        resolved_at
+      ) VALUES (?, ?, ?, ?, ?, 'recorded', ?, 0, 0, ?, ?, NULL, NULL)`
+    ).bind(resolutionId, event.id, idempotencyKey, requestHash, payload.reason, configs.length, now, now);
+
+    const outboxStatements: D1PreparedStatement[] = [];
+    for (const config of configs) {
+      const outboxId = await deriveDeterministicId('lro', `${event.id}:${config.service}`);
+      outboxStatements.push(
+        this.env.DB.prepare(
+          `INSERT INTO loss_event_resolution_outbox (
+            id,
+            loss_event_id,
+            target_service,
+            target_url,
+            status,
+            attempts,
+            last_http_status,
+            last_error_code,
+            last_error_message,
+            next_retry_at,
+            forwarded_at,
+            created_at,
+            updated_at
+          ) VALUES (?, ?, ?, ?, 'pending', 0, NULL, NULL, NULL, NULL, NULL, ?, ?)`
+        ).bind(outboxId, event.id, config.service, config.url, now, now)
+      );
+    }
+
+    try {
+      await this.env.DB.batch([resolutionInsert, ...outboxStatements]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (message.includes('UNIQUE constraint failed: loss_event_resolutions.idempotency_key')) {
+        const deduped = await readLossResolutionByIdempotencyKey(this.env.DB, idempotencyKey);
+        if (!deduped) {
+          throw new ClawSettleError('Failed to create loss-event resolution', 'INTERNAL_ERROR', 500);
+        }
+
+        if (deduped.request_hash !== requestHash || deduped.loss_event_id !== event.id) {
+          throw new ClawSettleError('Idempotency key replay with mismatched payload', 'IDEMPOTENCY_CONFLICT', 409, {
+            idempotency_key: idempotencyKey,
+            existing_resolution_id: deduped.id,
+            existing_loss_event_id: deduped.loss_event_id,
+          });
+        }
+
+        const outboxDeduped = await readResolutionOutboxByEventId(this.env.DB, deduped.loss_event_id);
+        return {
+          ok: true,
+          deduped: true,
+          event: normalizeEvent(event),
+          resolution: normalizeResolution(deduped),
+          outbox: outboxDeduped.map((row) => normalizeResolutionOutbox(row)),
+        };
+      }
+
+      if (message.includes('UNIQUE constraint failed: loss_event_resolutions.loss_event_id')) {
+        const deduped = await readLossResolutionByEventId(this.env.DB, event.id);
+        if (!deduped) {
+          throw new ClawSettleError('Failed to create loss-event resolution', 'INTERNAL_ERROR', 500);
+        }
+
+        if (deduped.idempotency_key === idempotencyKey && deduped.request_hash === requestHash) {
+          const outboxDeduped = await readResolutionOutboxByEventId(this.env.DB, deduped.loss_event_id);
+          return {
+            ok: true,
+            deduped: true,
+            event: normalizeEvent(event),
+            resolution: normalizeResolution(deduped),
+            outbox: outboxDeduped.map((row) => normalizeResolutionOutbox(row)),
+          };
+        }
+
+        throw new ClawSettleError('Loss event resolution already exists', 'IDEMPOTENCY_CONFLICT', 409, {
+          loss_event_id: event.id,
+          existing_resolution_id: deduped.id,
+          existing_idempotency_key: deduped.idempotency_key,
+        });
+      }
+
+      throw new ClawSettleError('Failed to persist loss-event resolution', 'INTERNAL_ERROR', 500, {
+        message,
+      });
+    }
+
+    const resolution = await readLossResolutionByEventId(this.env.DB, lossEventId);
+    if (!resolution) {
+      throw new ClawSettleError('Failed to reload loss-event resolution', 'INTERNAL_ERROR', 500);
+    }
+
+    const outbox = await readResolutionOutboxByEventId(this.env.DB, lossEventId);
+
+    await this.enqueueLossEvent({
+      loss_event_id: event.id,
+      trigger: 'resolve',
+      queued_at: now,
+    });
+
+    return {
+      ok: true,
+      deduped: false,
+      event: normalizeEvent(event),
+      resolution: normalizeResolution(resolution),
+      outbox: outbox.map((row) => normalizeResolutionOutbox(row)),
+    };
+  }
+
   async enqueueLossEvent(message: LossEventQueueMessage): Promise<void> {
     if (!this.env.LOSS_EVENTS) {
       return;
@@ -1586,6 +2541,7 @@ export class LossEventService {
   }
 
   async listOutbox(url: URL): Promise<{ ok: true; outbox: LossOutboxView[]; next_cursor: string | null }> {
+    const operation = parseOutboxOperation(url.searchParams.get('operation'));
     const limit = parseQueryLimit(url.searchParams.get('limit'), 50);
     const cursor = decodeCursor(url.searchParams.get('cursor'));
 
@@ -1638,17 +2594,34 @@ export class LossEventService {
     }
 
     const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const outboxTable = operation === 'resolve' ? 'loss_event_resolution_outbox' : 'loss_event_outbox';
 
     const rows = await this.env.DB
       .prepare(
         `SELECT *
-         FROM loss_event_outbox
+         FROM ${outboxTable}
          ${whereSql}
          ORDER BY created_at DESC, id DESC
          LIMIT ?`
       )
       .bind(...binds, limit + 1)
       .all<Record<string, unknown>>();
+
+    if (operation === 'resolve') {
+      const parsed = (rows.results ?? [])
+        .map((row) => parseLossResolutionOutboxRecord(row))
+        .filter((row): row is LossEventResolutionOutboxRecord => Boolean(row));
+
+      const hasMore = parsed.length > limit;
+      const page = hasMore ? parsed.slice(0, limit) : parsed;
+      const next = hasMore ? page[page.length - 1] : null;
+
+      return {
+        ok: true,
+        outbox: page.map((row) => normalizeResolutionOutbox(row)),
+        next_cursor: next ? encodeCursor(next.created_at, next.id) : null,
+      };
+    }
 
     const parsed = (rows.results ?? [])
       .map((row) => parseLossOutboxRecord(row))
@@ -1665,14 +2638,60 @@ export class LossEventService {
     };
   }
 
-  async retryForwarding(params: { limit?: number; loss_event_id?: string }): Promise<{
+  async retryForwarding(params: { operation?: LossOutboxOperation; limit?: number; loss_event_id?: string }): Promise<{
     ok: true;
     attempted: number;
     forwarded: number;
     failed: number;
   }> {
+    const operation: LossOutboxOperation = params.operation ?? 'apply';
     const limit = params.limit && Number.isInteger(params.limit) && params.limit > 0 ? params.limit : 25;
     const now = nowIso();
+
+    if (operation === 'resolve') {
+      const candidates = await fetchRetryableResolutionOutbox(this.env.DB, {
+        now,
+        limit,
+        loss_event_id: params.loss_event_id,
+      });
+
+      let attempted = 0;
+      let forwarded = 0;
+      let failed = 0;
+
+      for (const candidate of candidates) {
+        attempted += 1;
+        const result = await forwardResolutionOutboxEntry(this.env, candidate.outbox, candidate.event, candidate.resolution);
+        const at = nowIso();
+
+        if (result.ok) {
+          await markResolutionOutboxForwarded(this.env.DB, candidate.outbox, at, result.http_status ?? 200);
+          forwarded += 1;
+          continue;
+        }
+
+        const errorCode = result.error_code ?? 'UPSTREAM_ERROR';
+        const errorMessage = result.error_message ?? 'Unknown error';
+        const classification = classifyForwardFailure(result.http_status, errorCode);
+
+        await markResolutionOutboxFailed(this.env.DB, candidate.outbox, at, {
+          http_status: result.http_status,
+          error_code: errorCode,
+          error_message: errorMessage,
+          next_retry_at: classification.permanent ? null : computeNextRetryAt(candidate.outbox.attempts + 1, at),
+          permanent: classification.permanent,
+        });
+
+        failed += 1;
+      }
+
+      return {
+        ok: true,
+        attempted,
+        forwarded,
+        failed,
+      };
+    }
 
     const candidates = await fetchRetryableOutbox(this.env.DB, {
       now,
@@ -1727,6 +2746,13 @@ export class LossEventService {
     const lossEventId = parseRequiredString(msg.loss_event_id, 'loss_event_id');
 
     await this.retryForwarding({
+      operation: 'apply',
+      limit: 25,
+      loss_event_id: lossEventId,
+    });
+
+    await this.retryForwarding({
+      operation: 'resolve',
       limit: 25,
       loss_event_id: lossEventId,
     });
@@ -1740,7 +2766,7 @@ export class LossEventService {
     );
   }
 
-  static parseRetryBody(input: unknown): { limit?: number; loss_event_id?: string } {
+  static parseRetryBody(input: unknown): { operation?: LossOutboxOperation; limit?: number; loss_event_id?: string } {
     if (input === null || input === undefined) {
       return {};
     }
@@ -1750,6 +2776,17 @@ export class LossEventService {
     }
 
     const payload = input as Record<string, unknown>;
+
+    let operation: LossOutboxOperation | undefined;
+    if (payload.operation !== undefined && payload.operation !== null) {
+      if (typeof payload.operation !== 'string') {
+        throw new ClawSettleError('operation must be apply|resolve', 'INVALID_REQUEST', 400, {
+          field: 'operation',
+        });
+      }
+
+      operation = parseOutboxOperation(payload.operation);
+    }
 
     let limit: number | undefined;
     if (payload.limit !== undefined) {
@@ -1772,6 +2809,7 @@ export class LossEventService {
     }
 
     return {
+      ...(operation ? { operation } : {}),
       ...(limit ? { limit } : {}),
       ...(lossEventId ? { loss_event_id: lossEventId } : {}),
     };

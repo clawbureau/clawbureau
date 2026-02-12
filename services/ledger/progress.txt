@@ -543,3 +543,15 @@ Started: 2026-02-02T03:08:26.936251
   - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
   - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
 - Rollout summary: `artifacts/ops/econ-risk/2026-02-12T05-02-40Z-econ-risk-max-rollout/deploy-summary.json`
+
+## 2026-02-12 - CLD-US-018 rollout complete (staging + prod)
+- Added `POST /v1/risk/holds/release-by-source` (release by `source_loss_event_id`) as canonical unfreeze primitive.
+- Deployed ledger versions:
+  - staging `d5b51484-5eb0-4bde-8a14-0a45ce057c67`
+  - prod `a1770dde-503d-419d-9643-979b9d0c4c80`
+- Evidence (clawsettle apply→resolve smoke + watch):
+  - staging smoke: `artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json`
+  - staging watch: `artifacts/ops/econ-risk/2026-02-12T14-25-43-531Z-staging-loss-event-watch/summary.json` (limit=5)
+  - prod watch: `artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json`
+- Rollout summary: `artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json`

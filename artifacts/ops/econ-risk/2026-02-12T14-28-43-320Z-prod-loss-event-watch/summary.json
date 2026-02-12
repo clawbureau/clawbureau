@@ -1,0 +1,85 @@
+{
+  "ok": true,
+  "env": "prod",
+  "settle_base_url": "https://clawsettle.com",
+  "generated_at": "2026-02-12T14:28:43.319Z",
+  "limit": 200,
+  "event_count": 4,
+  "event_status_buckets": {
+    "recorded": 0,
+    "processing": 0,
+    "partially_forwarded": 0,
+    "forwarded": 4,
+    "failed": 0,
+    "unknown": 0
+  },
+  "outbox_apply_count": 20,
+  "outbox_apply_status_buckets": {
+    "pending": 0,
+    "forwarded": 20,
+    "failed": 0
+  },
+  "outbox_apply_by_target": {
+    "ledger": {
+      "pending": 0,
+      "forwarded": 4,
+      "failed": 0,
+      "unknown": 0
+    },
+    "clawbounties": {
+      "pending": 0,
+      "forwarded": 4,
+      "failed": 0,
+      "unknown": 0
+    },
+    "escrow": {
+      "pending": 0,
+      "forwarded": 4,
+      "failed": 0,
+      "unknown": 0
+    },
+    "clawincome": {
+      "pending": 0,
+      "forwarded": 4,
+      "failed": 0,
+      "unknown": 0
+    },
+    "clawinsure": {
+      "pending": 0,
+      "forwarded": 4,
+      "failed": 0,
+      "unknown": 0
+    }
+  },
+  "outbox_resolve_count": 3,
+  "outbox_resolve_status_buckets": {
+    "pending": 0,
+    "forwarded": 3,
+    "failed": 0
+  },
+  "outbox_resolve_by_target": {
+    "ledger": {
+      "pending": 0,
+      "forwarded": 1,
+      "failed": 0,
+      "unknown": 0
+    },
+    "clawbounties": {
+      "pending": 0,
+      "forwarded": 1,
+      "failed": 0,
+      "unknown": 0
+    },
+    "escrow": {
+      "pending": 0,
+      "forwarded": 1,
+      "failed": 0,
+      "unknown": 0
+    }
+  },
+  "deterministic_error_buckets": {
+    "event_failed_count": 0,
+    "outbox_apply_failed_count": 0,
+    "outbox_resolve_failed_count": 0
+  }
+}

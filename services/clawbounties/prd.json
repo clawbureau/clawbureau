@@ -466,6 +466,22 @@
       "priority": 32,
       "passes": true,
       "notes": "Shipped to staging+prod with migration 0017 bounty_risk_events and BOUNTIES_RISK_KEY-protected POST /v1/risk/loss-events. Deterministic replay/conflict behavior and disputed-state coupling validated via ECON risk-loop smokes artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json."
+    },
+    {
+      "id": "CBT-US-032",
+      "title": "Loss-event risk clear records",
+      "description": "As marketplace risk ops, I want clawbounties to record deterministic risk-clear events for a bounty when a loss event is resolved, without auto-undisputing the bounty.",
+      "acceptanceCriteria": [
+        "Add bounty_risk_event_clears persistence with idempotency_key UNIQUE and UNIQUE(source_loss_event_id, bounty_id)",
+        "Implement POST /v1/risk/loss-events/clear protected by BOUNTIES_RISK_KEY",
+        "Replay path returns 200 replay on matching payload; mismatch returns 409 IDEMPOTENCY_CONFLICT",
+        "Conflict on duplicate (source_loss_event_id, bounty_id) returns deterministic 409",
+        "Does not mutate bounty status (no auto-undispute)",
+        "Validated in end-to-end clawsettle loss resolve smoke"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0018 bounty_risk_event_clears and BOUNTIES_RISK_KEY-protected POST /v1/risk/loss-events/clear. Evidence: deploy summary artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json; apply+resolve smokes artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json (resolve outbox forwarded to clawbounties clear)."
     }
   ]
 }
