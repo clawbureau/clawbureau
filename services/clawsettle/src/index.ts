@@ -20,6 +20,11 @@ import {
   getDisputeAgingReport,
   getDisputeReconReport,
 } from './disputes';
+import {
+  getEconomyHealth,
+  queryOpsAlerts,
+  runOpsAlertChecks,
+} from './economy-health';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
@@ -676,6 +681,36 @@ async function router(request: Request, env: Env): Promise<Response> {
     }, 200, resolveVersion(env));
   }
 
+  // ---------------------------------------------------------------------------
+  // Economy health dashboard (ECON-OPS-001)
+  // ---------------------------------------------------------------------------
+
+  if (request.method === 'GET' && path === '/v1/economy/health') {
+    assertSettleAdmin(request, env);
+    const report = await getEconomyHealth(env);
+    return jsonResponse(report, 200, resolveVersion(env));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ops alerts (ECON-OPS-001 Task 2)
+  // ---------------------------------------------------------------------------
+
+  if (request.method === 'GET' && path === '/v1/ops/alerts') {
+    assertSettleAdmin(request, env);
+    const since = url.searchParams.get('since') ?? undefined;
+    const severity = url.searchParams.get('severity') ?? undefined;
+    const limitParam = url.searchParams.get('limit');
+    const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10) || 50), 200) : 50;
+    const alerts = await queryOpsAlerts(env.DB, { since, severity, limit });
+    return jsonResponse({ ok: true, alerts, count: alerts.length }, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'POST' && path === '/v1/ops/alerts/check') {
+    assertSettleAdmin(request, env);
+    const result = await runOpsAlertChecks(env.DB);
+    return jsonResponse({ ok: true, ...result }, 200, resolveVersion(env));
+  }
+
   return errorResponse('Not found', 'NOT_FOUND', 404, undefined, resolveVersion(env));
 }
 
@@ -756,6 +791,13 @@ export default {
         .catch((err) => {
           console.error('scheduled-loss-resolution-forwarding-retry-failed', err);
         })
+    );
+
+    // ECON-OPS-001: cron-triggered ops alert checks
+    ctx.waitUntil(
+      runOpsAlertChecks(env.DB).catch((err) => {
+        console.error('scheduled-ops-alert-checks-failed', err);
+      })
     );
   },
 };
