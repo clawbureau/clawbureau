@@ -2661,8 +2661,24 @@ export class LossEventService {
 
       for (const candidate of candidates) {
         attempted += 1;
+        const resT0 = Date.now();
         const result = await forwardResolutionOutboxEntry(this.env, candidate.outbox, candidate.event, candidate.resolution);
         const at = nowIso();
+        const resMs = Date.now() - resT0;
+
+        // ECON-OPS-002: Log resolve delivery
+        try {
+          const { logWebhookDelivery } = await import('./ops-intelligence.js');
+          await logWebhookDelivery(this.env.DB, {
+            event_type: `loss:resolve:${candidate.outbox.target_service}`,
+            source: 'loss_resolve',
+            received_at: at,
+            processing_ms: resMs,
+            status: result.ok ? 'success' : 'failed',
+            error_code: result.ok ? undefined : (result.error_code ?? 'UPSTREAM_ERROR'),
+            idempotency_key: `loss-resolve:${candidate.event.id}:${candidate.outbox.target_service}`,
+          });
+        } catch { /* best-effort */ }
 
         if (result.ok) {
           await markResolutionOutboxForwarded(this.env.DB, candidate.outbox, at, result.http_status ?? 200);
@@ -2705,8 +2721,25 @@ export class LossEventService {
 
     for (const candidate of candidates) {
       attempted += 1;
+      const fwdT0 = Date.now();
       const result = await forwardOutboxEntry(this.env, candidate.outbox, candidate.event);
       const at = nowIso();
+      const fwdMs = Date.now() - fwdT0;
+
+      // ECON-OPS-002: Log delivery for SLA tracking (best-effort)
+      const fwdSource = operation === 'apply' ? 'loss_apply' as const : 'loss_resolve' as const;
+      try {
+        const { logWebhookDelivery } = await import('./ops-intelligence.js');
+        await logWebhookDelivery(this.env.DB, {
+          event_type: `loss:${operation}:${candidate.outbox.target_service}`,
+          source: fwdSource,
+          received_at: at,
+          processing_ms: fwdMs,
+          status: result.ok ? 'success' : 'failed',
+          error_code: result.ok ? undefined : (result.error_code ?? 'UPSTREAM_ERROR'),
+          idempotency_key: `loss-event:${candidate.event.id}:${candidate.outbox.target_service}`,
+        });
+      } catch { /* best-effort */ }
 
       if (result.ok) {
         await markOutboxForwarded(this.env.DB, candidate.outbox, at, result.http_status ?? 200);
