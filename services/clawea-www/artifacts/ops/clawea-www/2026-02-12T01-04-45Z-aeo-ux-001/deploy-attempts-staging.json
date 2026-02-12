@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-02-12T11:42:06.453Z",
+  "cwd": "/Users/gfw/clawd/tmp/monorepo-aeo-ux-001/services/clawea-www",
+  "env": "staging",
+  "command": "npx wrangler deploy --env staging",
+  "maxAttempts": 4,
+  "retryCodes": [
+    10013
+  ],
+  "attempts": [
+    {
+      "attempt": 1,
+      "startedAt": "2026-02-12T11:42:06.454Z",
+      "finishedAt": "2026-02-12T11:42:32.723Z",
+      "durationMs": 26269,
+      "exitCode": 0,
+      "ok": true,
+      "retryableErrorCodes": [],
+      "versionId": "3d45b7df-e9ab-4cc3-a30b-3984eec2f4c9",
+      "worker": "clawea-www-staging",
+      "outputTail": "\n ⛅️ wrangler 3.114.17 (update available 4.64.0)\n-----------------------------------------------\n\n\u001b[33m▲ \u001b[43;33m[\u001b[43;30mWARNING\u001b[43;33m]\u001b[0m \u001b[1mThe version of Wrangler you are using is now out-of-date.\u001b[0m\n\n  Please update to the latest version to prevent critical errors.\n  Run `npm install --save-dev wrangler@4` to update to the latest version.\n  After installation, run Wrangler with `npx wrangler`.\n\n\nTotal Upload: 330.15 KiB / gzip: 74.83 KiB\nYour worker has access to the following bindings:\n- Durable Objects:\n  - LEAD_SUBMIT_LOCK: LeadSubmitLockDO\n- KV Namespaces:\n  - VARIANT_CONFIG: 1051001c69364031be8fc0f79324fefc\n- Queues:\n  - LEAD_JOBS: clawea-www-lead-jobs-staging\n  - LEAD_ROUTE_ENTERPRISE: clawea-www-route-enterprise-staging\n  - LEAD_ROUTE_SMB: clawea-www-route-smb-staging\n  - LEAD_ROUTE_PARTNER: clawea-www-route-partner-staging\n- D1 Databases:\n  - DB: clawea-www-staging (82781bed-d57c-4fe7-8269-74f54c12f69d), Preview: (82781bed-d57c-4fe7-8269-74f54c12f69d)\n- R2 Buckets:\n  - ARTICLES: clawea-www-staging\n- Analytics Engine Datasets:\n  - ANALYTICS: clawea_www_staging\n- Vars:\n  - ENVIRONMENT: \"staging\"\n  - SITE_URL: \"https://staging-www.clawea.com\"\n  - INDEXNOW_KEY: \"edf20368863e485aa92e1b95fa15872a\"\n  - INDEXNOW_MAX_ATTEMPTS: \"4\"\n  - INDEXNOW_RETRY_BASE_MS: \"900\"\n  - INDEXNOW_RETRY_MAX_MS: \"30000\"\n  - GOOGLE_INDEX_MAX_ATTEMPTS: \"4\"\n  - GOOGLE_INDEX_RETRY_BASE_MS: \"1200\"\n  - GOOGLE_INDEX_RETRY_MAX_MS: \"45000\"\n  - INDEX_QUEUE_ENABLED: \"1\"\n  - INDEX_QUEUE_MAX_ENTRIES_PER_RUN: \"20\"\n  - INDEX_QUEUE_INDEXNOW_MAX_ATTEMPTS: \"6\"\n  - INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS: \"6\"\n  - INDEX_QUEUE_RETRY_BASE_MS: \"30000\"\n  - INDEX_QUEUE_RETRY_MAX_MS: \"1800000\"\n  - TURNSTILE_REQUIRED: \"1\"\n  - LEAD_SUBMIT_IP_WINDOW_LIMIT: \"30\"\n  - LEAD_SUBMIT_EMAIL_WINDOW_LIMIT: \"10\"\n  - LEAD_SUBMIT_WINDOW_MINUTES: \"10\"\n  - ROUTING_MAX_ATTEMPTS: \"5\"\n  - CRM_PROVIDER_CONFIG_KEY: \"crm-provider-config-v1\"\n  - LEAD_RESPONSE_SLA_MINUTES: \"30\"\n  - ROUTING_QUEUE_LAG_ALERT_MINUTES: \"15\"\n  - EXPERIMENT_SEED: \"aeo-rev-007-staging\"\n  - EXPERIMENT_CONFIG_KEY: \"experiment-config-v1\"\n  - EXPERIMENT_WINNER_MIN_IMPRESSIONS: \"20\"\n  - EXPERIMENT_WINNER_MIN_BOOKED: \"1\"\n  - EXPERIMENT_WINNER_MIN_CONFIDENCE: \"0.08\"\n  - EXPERIMENT_HOLDOUT_PERCENT: \"8\"\nUploaded clawea-www-staging (11.54 sec)\nDeployed clawea-www-staging triggers (9.70 sec)\n  https://clawea-www-staging.generaite.workers.dev\n  staging-www.clawea.com/* (zone name: clawea.com)\n  schedule: */20 * * * *\n  Producer for clawea-www-lead-jobs-staging\n  Producer for clawea-www-route-enterprise-staging\n  Producer for clawea-www-route-smb-staging\n  Producer for clawea-www-route-partner-staging\n  Consumer for clawea-www-lead-jobs-staging\n  Consumer for clawea-www-route-enterprise-staging\n  Consumer for clawea-www-route-smb-staging\n  Consumer for clawea-www-route-partner-staging\nCurrent Version ID: 3d45b7df-e9ab-4cc3-a30b-3984eec2f4c9\n"
+    }
+  ],
+  "result": {
+    "ok": true,
+    "versionId": "3d45b7df-e9ab-4cc3-a30b-3984eec2f4c9",
+    "worker": "clawea-www-staging",
+    "attempts": 1
+  }
+}

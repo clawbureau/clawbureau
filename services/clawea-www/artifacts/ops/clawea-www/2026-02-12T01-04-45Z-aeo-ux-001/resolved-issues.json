@@ -1,0 +1,36 @@
+{
+  "runId": "2026-02-12T01-04-45Z-aeo-ux-001",
+  "generatedAt": "2026-02-12T03:40:00Z",
+  "gate": {
+    "model": "gemini-3-pro-preview",
+    "before": {
+      "issues": 30,
+      "P0": 4,
+      "P1": 13,
+      "P2": 13
+    },
+    "after": {
+      "issues": 29,
+      "P0": 0,
+      "P1": 0,
+      "P2": 29
+    },
+    "status": "pass"
+  },
+  "fixLanes": [
+    "Turnstile local-preview artifacts removed while preserving live-domain verification",
+    "Home/Pricing/Trust contrast and CTA hierarchy remediation",
+    "Assessment and contact flow simplification + clearer required/optional semantics",
+    "Sources hub mobile tap target and card-order remediation",
+    "Trust flow mobile readability fallback (ordered list)",
+    "Footer contrast and mobile readability hardening",
+    "Critique severity policy tightened to keep P1 objective and fail-closed"
+  ],
+  "filesTouched": [
+    "services/clawea-www/src/index.ts",
+    "services/clawea-www/src/layout.ts",
+    "services/clawea-www/src/pages/static.ts",
+    "services/clawea-www/src/styles.ts",
+    "services/clawea-www/scripts/ux/gemini-ui-critique.ts"
+  ]
+}

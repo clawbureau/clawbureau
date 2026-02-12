@@ -1,0 +1,96 @@
+{
+  "story": "AEO-UX-001",
+  "runId": "2026-02-12T01-04-45Z-aeo-ux-001",
+  "generatedAt": "2026-02-12T11:57:37.364Z",
+  "environment": "production",
+  "canonical": "https://www.clawea.com",
+  "workersDev": "https://clawea-www.generaite.workers.dev",
+  "ok": true,
+  "notes": {
+    "healthRouteOnCanonical": "handled by platform worker (service=clawea), not clawea-www",
+    "turnstile": {
+      "validation": "negative-only (dummy token rejected as TURNSTILE_FAILED)"
+    }
+  },
+  "checks": [
+    {
+      "name": "GET / (canonical)",
+      "url": "https://www.clawea.com/",
+      "status": 200
+    },
+    {
+      "name": "GET /pricing (canonical)",
+      "url": "https://www.clawea.com/pricing",
+      "status": 200
+    },
+    {
+      "name": "GET /trust (canonical)",
+      "url": "https://www.clawea.com/trust",
+      "status": 200
+    },
+    {
+      "name": "GET /contact (canonical)",
+      "url": "https://www.clawea.com/contact",
+      "status": 200,
+      "turnstileSiteKey": "0x4AAAAAACazOSX2CTrD6krt"
+    },
+    {
+      "name": "GET /assessment (canonical)",
+      "url": "https://www.clawea.com/assessment",
+      "status": 200
+    },
+    {
+      "name": "GET /assessment/result (canonical)",
+      "url": "https://www.clawea.com/assessment/result",
+      "status": 200,
+      "turnstileSiteKey": "0x4AAAAAACazOSX2CTrD6krt"
+    },
+    {
+      "name": "GET /book (canonical)",
+      "url": "https://www.clawea.com/book",
+      "status": 200,
+      "turnstileSiteKey": "0x4AAAAAACazOSX2CTrD6krt"
+    },
+    {
+      "name": "GET /sources (canonical)",
+      "url": "https://www.clawea.com/sources",
+      "status": 200
+    },
+    {
+      "name": "GET /robots.txt (canonical)",
+      "url": "https://www.clawea.com/robots.txt",
+      "status": 200,
+      "hasSitemap": true
+    },
+    {
+      "name": "GET /sitemap.xml (canonical)",
+      "url": "https://www.clawea.com/sitemap.xml",
+      "status": 200,
+      "looksLikeSitemap": true
+    },
+    {
+      "name": "GET /health (workers.dev)",
+      "url": "https://clawea-www.generaite.workers.dev/health",
+      "status": 200,
+      "body": {
+        "ok": true,
+        "service": "clawea-www",
+        "ts": "2026-02-12T11:57:38.141Z"
+      }
+    },
+    {
+      "name": "POST /api/leads/submit (dummy token)",
+      "url": "https://www.clawea.com/api/leads/submit",
+      "status": 403,
+      "errorCode": "TURNSTILE_FAILED",
+      "message": "invalid-input-response"
+    },
+    {
+      "name": "POST /api/book/submit (dummy token)",
+      "url": "https://www.clawea.com/api/book/submit",
+      "status": 403,
+      "errorCode": "TURNSTILE_FAILED",
+      "message": "invalid-input-response"
+    }
+  ]
+}

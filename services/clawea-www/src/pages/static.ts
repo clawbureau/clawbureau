@@ -109,6 +109,11 @@ export function trustPage(): string {
           <a href="/agent-proof-and-attestation" class="cta-btn cta-btn-lg">How Attestation Works</a>
           <a href="/proof/gateway-receipts" class="cta-btn cta-btn-outline cta-btn-lg">Gateway Receipts</a>
         </div>
+        <ul class="trust-proof-list" aria-label="Compliance posture">
+          <li>SOC 2 control mapping</li>
+          <li>HIPAA/GDPR evidence packs</li>
+          <li>FedRAMP-ready control posture</li>
+        </ul>
       </div>
     </section>
 
@@ -154,28 +159,26 @@ export function trustPage(): string {
               <li>Merkle log root seals the bundle for tamper detection</li>
             </ul>
           </div>
-          <div class="feat-visual">
-Task Assigned
-  |
-  v
-[clawproxy] --> receipt_001 (signed)
-  |
-  v
-[tool: read_file] --> event_002 (hashed)
-  |
-  v
-[clawproxy] --> receipt_003 (signed)
-  |
-  v
-[output] --> artifact_hash_004
-  |
-  v
-Universal Run Manifest
-  + receipts[]
-  + events[]
-  + artifacts[]
-  + merkle_root
-  + agent_signature (Ed25519)</div>
+          <div class="feat-visual trust-flow-desktop" role="img" aria-label="Flow: task received, gateway receipt created, tool event hashed, output artifact hashed, then all records sealed into a signed universal run manifest.">
+            <div class="trust-flow-chart">
+              <div class="trust-flow-step">1. Task assigned and run context created</div>
+              <div class="trust-flow-arrow" aria-hidden="true">↓</div>
+              <div class="trust-flow-step">2. Model call mediated by clawproxy → signed gateway receipt</div>
+              <div class="trust-flow-arrow" aria-hidden="true">↓</div>
+              <div class="trust-flow-step">3. Tool invocation recorded as hashed event</div>
+              <div class="trust-flow-arrow" aria-hidden="true">↓</div>
+              <div class="trust-flow-step">4. Output artifacts hashed and attached to run</div>
+              <div class="trust-flow-arrow" aria-hidden="true">↓</div>
+              <div class="trust-flow-step">5. Universal Run Manifest sealed with Merkle root + agent DID signature</div>
+            </div>
+          </div>
+          <ol class="trust-flow-mobile" aria-label="Proof flow summary">
+            <li>Task assigned and run context created.</li>
+            <li>Model call mediated by clawproxy with a signed gateway receipt.</li>
+            <li>Tool invocation recorded as a hashed event.</li>
+            <li>Output artifacts hashed and attached to the run record.</li>
+            <li>Universal Run Manifest sealed with Merkle root and agent DID signature.</li>
+          </ol>
         </div>
       </div>
     </section>

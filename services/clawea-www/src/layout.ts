@@ -772,11 +772,22 @@ function trackingScript(): string {
 
         var fd = new FormData(form);
         var slotValue = clip(String(fd.get('slotIso') || ''), 80);
+        var slotDate = clip(String(fd.get('slotDate') || ''), 24);
+        var slotTime = clip(String(fd.get('slotTime') || ''), 16);
+        if (!slotValue && slotDate && slotTime) {
+          slotValue = slotDate + 'T' + slotTime + ':00Z';
+        }
+
         var slotIso = undefined;
         if (slotValue) {
           var parsed = new Date(slotValue);
           if (!Number.isNaN(parsed.getTime())) slotIso = parsed.toISOString();
         }
+
+        var detectedTz = '';
+        try {
+          detectedTz = String((Intl && Intl.DateTimeFormat && Intl.DateTimeFormat().resolvedOptions().timeZone) || '');
+        } catch {}
 
         var payload = {
           leadId: clip(String(fd.get('leadId') || ''), 80),
@@ -784,7 +795,7 @@ function trackingScript(): string {
           company: clip(String(fd.get('company') || ''), 160),
           slotIso: slotIso,
           notes: clip(String(fd.get('notes') || ''), 1200),
-          timezone: clip(String(fd.get('timezone') || ''), 80),
+          timezone: clip(String(fd.get('timezone') || detectedTz || ''), 80),
           turnstileToken: clip(String(fd.get('cf-turnstile-response') || ''), 3000),
         };
 
@@ -886,7 +897,7 @@ function nav(currentPath: string): string {
     { href: "/channels", label: "Channels" },
     { href: "/trust", label: "Trust" },
     { href: "/pricing", label: "Pricing" },
-    { href: "/assessment", label: "Assessment" },
+    { href: "/contact", label: "Contact" },
   ];
   const linkHtml = links
     .map((l) => {
@@ -894,6 +905,11 @@ function nav(currentPath: string): string {
       return `<a href="${l.href}"${active ? ' aria-current="page"' : ''}>${l.label}</a>`;
     })
     .join("");
+
+  const onAssessmentFlow = currentPath === "/assessment" || currentPath.startsWith("/assessment/");
+  const navCtaHref = onAssessmentFlow ? "/contact" : "/assessment";
+  const navCtaLabel = onAssessmentFlow ? "Talk to Sales" : "Run assessment";
+  const navCtaId = onAssessmentFlow ? "nav-contact" : "nav-assessment";
 
   return `
   <nav aria-label="Main navigation">
@@ -904,32 +920,13 @@ function nav(currentPath: string): string {
         </svg>
         claw<span>ea</span>
       </a>
-      <form class="nav-search" role="search" action="/glossary" method="get" aria-label="Search glossary and guides">
-        <label for="nav-search-input" class="sr-only">Search glossary and guides</label>
-        <span class="nav-search-icon" aria-hidden="true">⌕</span>
-        <input
-          id="nav-search-input"
-          name="q"
-          type="search"
-          data-global-search
-          placeholder="Search playbooks"
-          autocapitalize="off"
-          autocomplete="off"
-          spellcheck="false"
-          enterkeyhint="search"
-          aria-autocomplete="list"
-          aria-controls="nav-search-results"
-        >
-        <button type="button" class="nav-search-clear" data-search-clear aria-label="Clear search" hidden>×</button>
-        <span class="nav-search-hint" aria-hidden="true">/</span>
-        <div class="nav-search-results" id="nav-search-results" data-search-results role="listbox" hidden></div>
-      </form>
+      <a href="${navCtaHref}" class="cta-btn nav-cta-mobile" data-cta="${navCtaId}-mobile">${navCtaLabel}</a>
       <button class="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Toggle navigation">
         <span></span><span></span><span></span>
       </button>
       <div class="links" id="nav-menu">
         ${linkHtml}
-        <a href="/contact" class="cta-btn" data-cta="nav-contact" data-cta-copy data-cta-proof="Talk to Sales" data-cta-roi="Run assessment" data-cta-speed="Start assessment">Talk to Sales</a>
+        <a href="${navCtaHref}" class="cta-btn" data-cta="${navCtaId}" data-cta-copy data-cta-proof="Run readiness assessment" data-cta-roi="Estimate rollout ROI" data-cta-speed="Start 2-minute assessment">${navCtaLabel}</a>
       </div>
     </div>
   </nav>`;
@@ -940,8 +937,8 @@ function footer(): string {
   <footer>
     <div class="wrap">
       <div>
-        <h4>Claw Enterprise Agents</h4>
-        <p style="color:var(--text-muted);font-size:.85rem;max-width:280px;line-height:1.6">
+        <h4>Claw EA</h4>
+        <p style="color:var(--text);font-size:.85rem;max-width:280px;line-height:1.6">
           Deploy permissioned AI agents for enterprise teams.
           Policy-as-code controls, approvals, and proof bundles,
           so you can ship automation without losing auditability.
@@ -961,7 +958,7 @@ function footer(): string {
         </ul>
       </div>
       <div>
-        <h4>Microsoft</h4>
+        <h4>Microsoft Integrations</h4>
         <ul>
           <li><a href="/tools/entra-id">Entra ID</a></li>
           <li><a href="/tools/sharepoint">SharePoint</a></li>
@@ -984,13 +981,11 @@ function footer(): string {
         </ul>
       </div>
       <div class="copyright">
-        &copy; ${new Date().getFullYear()} Claw Bureau. All rights reserved.
+        &copy; 2019-Present Claw EA (Claw Bureau). All rights reserved.
+        <span style="margin:0 .5rem">|</span>
+        <a href="https://www.clawea.com">clawea.com</a>
         <span style="margin:0 .5rem">|</span>
         <a href="https://clawbureau.com">clawbureau.com</a>
-        <span style="margin:0 .5rem">|</span>
-        <a href="https://clawverify.com">clawverify.com</a>
-        <span style="margin:0 .5rem">|</span>
-        <a href="https://clawbounties.com">clawbounties.com</a>
       </div>
     </div>
   </footer>`;
