@@ -1,0 +1,9 @@
+{
+  "config_version": "1",
+  "allowlists": {
+    "gateway_receipt_signer_dids": [
+      "did:key:z6MkhcupRtQ9sR1gRGXrfp75mnAisURvCijemfPfmniLx3oM",
+      "did:key:z6Mkow2e1FgyJfg4SQz7CmRc5moGhyAhE3jZxB4T2sPT1e2d"
+    ]
+  }
+}

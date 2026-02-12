@@ -37,12 +37,14 @@ clawproof-factory-droid -- factory-droid run --task "build feature"
 
 ### 3. Proof artifacts
 
-After the run completes, proof artifacts are written to `.clawproof/`:
+After the run completes, proof artifacts are written to `artifacts/poh/<branch>/` (repo-relative) by default:
 
 ```
-.clawproof/
-  run_<uuid>-bundle.json   # Signed proof bundle (SignedEnvelope<ProofBundlePayload>)
-  run_<uuid>-urm.json      # Universal Run Manifest
+artifacts/poh/<branch>/
+  run_<uuid>-bundle.json        # Signed proof bundle (SignedEnvelope<ProofBundlePayload>)
+  run_<uuid>-urm.json           # Universal Run Manifest
+  run_<uuid>-trust-pulse.json   # Trust Pulse summary (stable JSON)
+  run_<uuid>-verify.json        # (optional) Offline verifier output (CLAWPROOF_VERIFY=1)
 ```
 
 ## How It Works
@@ -66,12 +68,15 @@ After the run completes, proof artifacts are written to `.clawproof/`:
 | `CLAWBOUNTIES_BASE_URL` | No | — | clawbounties base URL (enables job CST auto-fetch when other vars are set) |
 | `CLAWBOUNTIES_BOUNTY_ID` | No | — | bounty id (bty_...) for job CST issuance |
 | `CLAWBOUNTIES_WORKER_TOKEN` | No | — | clawbounties worker auth token (Authorization: Bearer ...) |
-| `CLAWPROOF_KEY_FILE` | No | `.clawproof-key.json` | Path to Ed25519 JWK key file |
-| `CLAWPROOF_OUTPUT_DIR` | No | `.clawproof/` | Directory for proof artifacts |
+| `CLAWPROOF_KEY_FILE` | No | `<repo>/.clawproof-key.json` | Path to Ed25519 JWK key file |
+| `CLAWPROOF_OUTPUT_DIR` | No | `<repo>/artifacts/poh/<branch>/` | Directory for proof artifacts |
+| `CLAWPROOF_VERIFY` | No | `0` | If set to 1, run offline verification and write `run_<uuid>-verify.json` |
+| `CLAWPROOF_VERIFY_CONFIG` | No | `packages/schema/fixtures/clawverify.config.clawbureau.v1.json` (if present) | Offline verifier config (allowlists) |
+| `CLAWPROOF_VERIFY_STRICT` | No | `0` | If set to 1, fail the wrapper when verification FAILs |
 
 ## Key Management
 
-On first run, the adapter generates an Ed25519 key pair and saves it as a JWK file (default: `.clawproof-key.json`). The agent DID is derived from the public key: `did:key:z<base58btc(0xed01 + pubkey)>`.
+On first run, the adapter generates an Ed25519 key pair and saves it as a JWK file (default: `<repo>/.clawproof-key.json`). The agent DID is derived from the public key: `did:key:z<base58btc(0xed01 + pubkey)>`.
 
 To use an existing key, set `CLAWPROOF_KEY_FILE` to the path of a JWK file containing `{ publicKey, privateKey }`.
 

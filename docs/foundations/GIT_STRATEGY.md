@@ -46,14 +46,18 @@ If a PR is produced by an agent, include at minimum:
   └── commit.sig.json     # DID-signed message signature for `commit:<hash>`
 ```
 
-Optional / future PoH bundle files:
+### PR evidence pack (PoH)
+For “Claw Verified” PRs (CPL-US-010), also include a PoH evidence pack under:
 
 ```
-/proofs/<branch>/
-  ├── artifact.sig.json   # signature envelope
-  ├── receipt.json        # gateway receipt(s)
-  └── manifest.json       # URM / event chain (if applicable)
+/artifacts/poh/<branch>/
+  ├── <run_id>-bundle.json        # Signed proof bundle (PoH)
+  ├── <run_id>-urm.json           # Universal Run Manifest
+  ├── <run_id>-trust-pulse.json   # Trust Pulse summary
+  └── <run_id>-verify.json        # Offline verifier output
 ```
+
+See: `docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md`.
 
 Ralph runs use a 2-commit pattern: story commit → proof commit (containing `commit.sig.json` for its parent commit).
 

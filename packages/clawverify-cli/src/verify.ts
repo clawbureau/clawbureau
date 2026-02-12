@@ -106,6 +106,8 @@ function strictProofBundleReceiptVerdict(opts: {
 
 export async function verifyProofBundleFromFile(opts: {
   inputPath: string;
+  /** Optional URM path. If not provided, clawverify will try to auto-load a sibling "-urm.json" file for "-bundle.json" inputs. */
+  urmPath?: string;
   configPath?: string;
   config: ResolvedVerifierConfig;
 }): Promise<CliVerifyOutput> {
@@ -114,9 +116,31 @@ export async function verifyProofBundleFromFile(opts: {
   const raw = await readJsonFile(opts.inputPath);
   const envelope = unwrapProofBundleInput(raw) as SignedEnvelope<ProofBundlePayload>;
 
+  // Optional: load URM from an explicit flag, or auto-detect a sibling file for canonical PoH evidence packs.
+  let resolvedUrmPath: string | undefined = opts.urmPath;
+
+  if (!resolvedUrmPath && opts.inputPath.endsWith('-bundle.json')) {
+    const candidate = opts.inputPath.replace(/-bundle\.json$/, '-urm.json');
+    try {
+      await fs.access(candidate);
+      resolvedUrmPath = candidate;
+    } catch {
+      // ignore
+    }
+  }
+
+  const urm = resolvedUrmPath ? await readJsonFile(resolvedUrmPath) : undefined;
+
+  const input = {
+    path: opts.inputPath,
+    config_path: opts.configPath,
+    urm_path: resolvedUrmPath,
+  };
+
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: opts.config.gatewayReceiptSignerDids,
     allowlistedAttesterDids: opts.config.attestationSignerDids,
+    urm,
   });
 
   if (verification.result.status !== 'VALID') {
@@ -126,10 +150,7 @@ export async function verifyProofBundleFromFile(opts: {
       verified_at: verifiedAt,
       reason_code: verification.error?.code ?? 'INVALID',
       reason: verification.error?.message ?? verification.result.reason,
-      input: {
-        path: opts.inputPath,
-        config_path: opts.configPath,
-      },
+      input,
       verification,
     };
   }
@@ -147,10 +168,7 @@ export async function verifyProofBundleFromFile(opts: {
       verified_at: verifiedAt,
       reason_code: strict.reason_code,
       reason: strict.reason,
-      input: {
-        path: opts.inputPath,
-        config_path: opts.configPath,
-      },
+      input,
       verification,
     };
   }
@@ -161,10 +179,7 @@ export async function verifyProofBundleFromFile(opts: {
     verified_at: verifiedAt,
     reason_code: 'OK',
     reason: 'Proof bundle verified successfully',
-    input: {
-      path: opts.inputPath,
-      config_path: opts.configPath,
-    },
+    input,
     verification,
   };
 }

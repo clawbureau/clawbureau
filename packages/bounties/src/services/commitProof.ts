@@ -81,6 +81,44 @@ function base64DecodeToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
+/** RFC 8785 JSON Canonicalization Scheme (JCS) */
+function jcsCanonicalize(value: unknown): string {
+  if (value === null) return "null";
+
+  switch (typeof value) {
+    case "boolean":
+      return value ? "true" : "false";
+
+    case "number":
+      if (!Number.isFinite(value)) {
+        throw new Error("Non-finite number not allowed in JCS");
+      }
+      return JSON.stringify(value);
+
+    case "string":
+      return JSON.stringify(value);
+
+    case "object": {
+      if (Array.isArray(value)) {
+        return `[${value.map(jcsCanonicalize).join(",")}]`;
+      }
+
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      const parts: string[] = [];
+
+      for (const k of keys) {
+        parts.push(`${JSON.stringify(k)}:${jcsCanonicalize(obj[k])}`);
+      }
+
+      return `{${parts.join(",")}}`;
+    }
+
+    default:
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
 export interface VerifyCommitSigResult {
   valid: boolean;
   commit_sha?: string;
@@ -90,7 +128,9 @@ export interface VerifyCommitSigResult {
 
 /**
  * Verify a did-work style commit.sig.json.
- * This is a pure cryptographic check (Ed25519 signature over the UTF-8 message).
+ *
+ * Protocol M: signature is computed over the JCS-canonicalized envelope, with the
+ * signature field present and set to the empty string.
  */
 export async function verifyCommitSig(commitSig: CommitSig): Promise<VerifyCommitSigResult> {
   const commitSha = extractCommitShaFromMessage(commitSig.message);
@@ -113,7 +153,24 @@ export async function verifyCommitSig(commitSig: CommitSig): Promise<VerifyCommi
   }
 
   const signatureBytes = base64DecodeToBytes(commitSig.signature);
-  const messageBytes = new TextEncoder().encode(commitSig.message);
+
+  let canonical: string;
+  try {
+    const forSigning = { ...commitSig, signature: "" };
+    canonical = jcsCanonicalize(forSigning);
+  } catch (err) {
+    return {
+      valid: false,
+      commit_sha: commitSha,
+      signer_did: commitSig.did,
+      error:
+        err instanceof Error
+          ? `Canonicalization error: ${err.message}`
+          : "Canonicalization error",
+    };
+  }
+
+  const messageBytes = new TextEncoder().encode(canonical);
 
   try {
     const publicKey = await crypto.subtle.importKey(

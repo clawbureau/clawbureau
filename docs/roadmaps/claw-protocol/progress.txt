@@ -14,3 +14,17 @@
   - Evidence: artifacts/conformance/claw-protocol/2026-02-12T13-09-32-386Z/summary.json
   - CI: .github/workflows/claw-protocol-conformance.yml
   - DID proof: proofs/feat/protocol/CPL-US-004-005-offline-verifier-conformance/commit.sig.json
+
+2026-02-12
+- CPL-US-010 shipped: Claw Verified PR pipeline (offline verification + GitHub check).
+  - PR: https://github.com/clawbureau/clawbureau/pull/174
+  - Canonical evidence layout:
+    - artifacts/poh/<branch>/<run_id>-bundle.json
+    - artifacts/poh/<branch>/<run_id>-urm.json
+    - artifacts/poh/<branch>/<run_id>-trust-pulse.json
+    - artifacts/poh/<branch>/<run_id>-verify.json
+  - Verifier config: packages/schema/fixtures/clawverify.config.clawbureau.v1.json
+  - Workflow: .github/workflows/claw-verified-pr.yml
+  - Runner: scripts/protocol/run-claw-verified-pr.mjs
+  - Dogfood evidence pack:
+    - artifacts/poh/feat/protocol/CPL-US-010-claw-verified-pr-pipeline/run_475c15b0-8ceb-4d39-9316-6bf6c4cf4426-verify.json

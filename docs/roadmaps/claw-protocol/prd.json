@@ -142,8 +142,8 @@
         "Document the integration as a reference module (not required for protocol adoption)"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": "This is the recommended adoption wedge for enterprises and OSS maintainers."
+      "passes": true,
+      "notes": "Shipped Claw Verified PR pipeline: canonical artifacts/poh evidence pack layout, offline verification output, and GitHub check (observe-by-default; enforce on label or DID commit proof). See docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md and .github/workflows/claw-verified-pr.yml."
     },
     {
       "id": "CPL-US-011",

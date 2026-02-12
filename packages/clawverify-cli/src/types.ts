@@ -15,6 +15,8 @@ export interface CliVerifyOutput extends CliOutputBase {
     path: string;
     /** Optional config path (if provided explicitly). */
     config_path?: string;
+    /** Optional URM path (proof bundles may reference a URM stored separately). */
+    urm_path?: string;
   };
 
   /** Raw verifier output (intentionally preserved for offline parity/debugging). */
@@ -26,6 +28,7 @@ export interface CliErrorOutput extends CliOutputBase {
   input?: {
     path?: string;
     config_path?: string;
+    urm_path?: string;
   };
 }
 

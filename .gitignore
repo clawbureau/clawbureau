@@ -38,6 +38,10 @@ package-lock.json
 # local scratch
 .tmp-main-required-pr-reviews.json
 
+# clawproof local keys / scratch output (do not commit)
+.clawproof-key.json
+.clawproof/
+
 # hackathon / analysis scratch
 hackathons/**/analysis/
 
