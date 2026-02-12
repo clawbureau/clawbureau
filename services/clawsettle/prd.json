@@ -160,6 +160,26 @@
       "priority": 10,
       "passes": true,
       "notes": "Shipped to staging+prod with migration 0007 dispute_loss_event_bridge. Evidence: staging smoke artifacts/simulations/stripe-dispute-lifecycle/2026-02-12T17-13-31-299Z-staging/smoke.json; prod smoke artifacts/simulations/stripe-dispute-lifecycle/2026-02-12T17-14-25-050Z-prod/smoke.json; post-deploy watches artifacts/ops/econ-risk/2026-02-12T17-14-29-625Z-staging-loss-event-watch/summary.json and artifacts/ops/econ-risk/2026-02-12T17-15-27-456Z-prod-loss-event-watch/summary.json."
+    },
+    {
+      "id": "MPY-US-015",
+      "title": "Settlement reconciliation hardening — partial disputes, fees, aging, recon",
+      "description": "As economy ops, I want dispute tracking to handle partial disputes correctly, record Stripe dispute fees separately, provide aging reports by bucket, and run reconciliation checks comparing dispute bridge records against loss events.",
+      "acceptanceCriteria": [
+        "Dispute bridge tracks disputed_amount_minor separately from charge amount_minor",
+        "Loss event risk hold sized to disputed_amount_minor (partial dispute support)",
+        "Stripe dispute fee ($15 standard) recorded in dispute_fees table on dispute.created",
+        "Chargeback fee recorded on permanent loss (dispute.closed status=lost)",
+        "GET /v1/disputes/aging returns age-bucketed report (0-7d, 7-30d, 30-60d, 60+d)",
+        "GET /v1/reconciliation/disputes flags mismatches (missing loss events, amount mismatches, unresolved holds, missing fees)",
+        "GET /v1/disputes/fees returns fee records with status/limit filtering",
+        "All new endpoints admin-token-gated (SETTLE_ADMIN_KEY)",
+        "Migration 0008 applied to staging + production",
+        "Staging + production smoke tests passing"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Migration 0008 (dispute_recon_hardening) applied staging (DB 9edcb398) + prod (DB 1f2be28f). Staging deploy 37993c99, prod deploy 8f00eca0. Smoke: 5/5 both envs. Watch: prod event_failed=0, outbox_resolve_failed=0."
     }
   ]
 }
