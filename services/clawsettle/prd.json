@@ -180,6 +180,26 @@
       "priority": 10,
       "passes": true,
       "notes": "Migration 0008 (dispute_recon_hardening) applied staging (DB 9edcb398) + prod (DB 1f2be28f). Staging deploy 37993c99, prod deploy 8f00eca0. Smoke: 5/5 both envs. Watch: prod event_failed=0, outbox_resolve_failed=0."
+    },
+    {
+      "id": "ECON-OPS-001",
+      "title": "Economy health dashboard + ops alerting",
+      "description": "As economy ops, I want a single-glance health view across all economy services showing outstanding risk holds, pending disputes, outbox depths, failed forwarding counts, reconciliation mismatches, and automated alerting for stale failures and aging disputes.",
+      "acceptanceCriteria": [
+        "GET /v1/economy/health fans out to 7 economy services and aggregates health + metrics",
+        "Per-service health status (up/down/degraded) with latency_ms",
+        "Settlement section: loss events by status, outbox depths (apply+resolve), dispute aging, fees pending, recon mismatches",
+        "Overall status derivation: healthy|degraded|unhealthy based on service availability and alert conditions",
+        "Ops alerts table (D1) with alert_type, severity, details_json",
+        "Cron-triggered alert checks: stale outbox failures, 60+ day disputes, recon mismatches",
+        "POST /v1/ops/alerts/check manual trigger, GET /v1/ops/alerts query with since/severity/limit",
+        "All endpoints admin-token-gated",
+        "Migration 0009 applied staging + production",
+        "Staging + production smoke tests passing"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Migration 0009 applied staging (9edcb398) + prod (1f2be28f). Staging versions ace9091e/eb22a656. Prod version bba95e15. Smoke 5/5 both envs. All 7 prod services up <70ms. PR #35 (stale clawproviders) closed as superseded."
     }
   ]
 }
