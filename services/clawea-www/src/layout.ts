@@ -954,6 +954,7 @@ function footer(): string {
           <li><a href="/mcp">MCP</a></li>
           <li><a href="/compliance">Compliance</a></li>
           <li><a href="/trust">Trust</a></li>
+          <li><a href="/trust/security-review">Security Review Pack</a></li>
           <li><a href="/secure-workers">Secure Workers</a></li>
         </ul>
       </div>
