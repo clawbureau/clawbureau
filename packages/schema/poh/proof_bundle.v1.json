@@ -203,6 +203,74 @@
         }
       }
     },
+    "tool_receipts": {
+      "type": "array",
+      "description": "Tool receipt payloads (Coverage MT). Raw ToolReceiptPayload objects — not envelope-wrapped.",
+      "items": {
+        "type": "object",
+        "required": ["receipt_version", "receipt_id", "tool_name", "hash_algorithm", "agent_did", "timestamp"],
+        "properties": {
+          "receipt_version": { "const": "1" },
+          "receipt_id": { "type": "string", "minLength": 1 },
+          "tool_name": { "type": "string", "minLength": 1 },
+          "tool_version": { "type": "string" },
+          "args_hash_b64u": { "type": "string", "minLength": 1 },
+          "args_digest": { "type": "string", "minLength": 1 },
+          "result_hash_b64u": { "type": "string", "minLength": 1 },
+          "result_digest": { "type": "string", "minLength": 1 },
+          "result_status": { "type": "string" },
+          "hash_algorithm": { "type": "string", "enum": ["SHA-256", "BLAKE3"] },
+          "duration_ms": { "type": "number", "minimum": 0 },
+          "latency_ms": { "type": "number", "minimum": 0 },
+          "agent_did": { "type": "string", "pattern": "^did:" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "binding": { "type": "object" }
+        }
+      }
+    },
+    "side_effect_receipts": {
+      "type": "array",
+      "description": "Side-effect receipt payloads (Coverage MTS). Raw SideEffectReceiptPayload objects.",
+      "items": {
+        "type": "object",
+        "required": ["receipt_version", "receipt_id", "effect_class", "hash_algorithm", "agent_did", "timestamp"],
+        "properties": {
+          "receipt_version": { "const": "1" },
+          "receipt_id": { "type": "string", "minLength": 1 },
+          "effect_class": { "type": "string", "enum": ["network_egress", "filesystem_write", "external_api_write"] },
+          "target_digest": { "type": "string" },
+          "request_digest": { "type": "string" },
+          "response_digest": { "type": "string" },
+          "hash_algorithm": { "type": "string", "enum": ["SHA-256", "BLAKE3"] },
+          "vendor_id": { "type": "string" },
+          "bytes_written": { "type": "number", "minimum": 0 },
+          "agent_did": { "type": "string", "pattern": "^did:" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "binding": { "type": "object" }
+        }
+      }
+    },
+    "human_approval_receipts": {
+      "type": "array",
+      "description": "Human approval receipt payloads (Coverage MTS). Raw HumanApprovalReceiptPayload objects.",
+      "items": {
+        "type": "object",
+        "required": ["receipt_version", "receipt_id", "approval_type", "agent_did", "timestamp"],
+        "properties": {
+          "receipt_version": { "const": "1" },
+          "receipt_id": { "type": "string", "minLength": 1 },
+          "approval_type": { "type": "string", "enum": ["explicit_approve", "explicit_deny", "auto_approve", "timeout_deny"] },
+          "scope_hash_b64u": { "type": "string" },
+          "plan_hash_b64u": { "type": "string" },
+          "approver_subject": { "type": "string" },
+          "capability_minted": { "type": "boolean" },
+          "policy_hash_b64u": { "type": "string" },
+          "agent_did": { "type": "string", "pattern": "^did:" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "binding": { "type": "object" }
+        }
+      }
+    },
     "attestations": {
       "type": "array",
       "minItems": 1,
@@ -269,6 +337,9 @@
     { "required": ["urm"] },
     { "required": ["event_chain"] },
     { "required": ["receipts"] },
+    { "required": ["tool_receipts"] },
+    { "required": ["side_effect_receipts"] },
+    { "required": ["human_approval_receipts"] },
     { "required": ["attestations"] }
   ]
 }

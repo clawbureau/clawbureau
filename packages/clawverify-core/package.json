@@ -1,6 +1,6 @@
 {
   "name": "@clawbureau/clawverify-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pure, offline-capable verification primitives for the Clawsig Protocol — schema validation, Ed25519 signature verification, hash chain integrity, receipt validation.",
   "type": "module",
   "main": "./dist/index.js",
