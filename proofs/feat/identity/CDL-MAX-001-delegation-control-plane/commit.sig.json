@@ -1,0 +1,9 @@
+{
+  "version": "m1",
+  "type": "message_signature",
+  "algo": "ed25519",
+  "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+  "message": "feat(identity): close CDL-MAX-001 delegation control-plane rollout\ncommit:1221732e99fcd68765bd252d6a498c50636f33cb",
+  "createdAt": "2026-02-12T05:01:51.244Z",
+  "signature": "9mAy2CxEr8fKvGjkt2K9Ksq6QlEqpZBC2wHVX4MMbQS51PYBJj/FyvZBkvQQCGG6cxsjnFYMKGNSSRUCmUArBQ=="
+}
