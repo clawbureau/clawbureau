@@ -1,0 +1,63 @@
+name: clawsig cross-platform
+
+on:
+  push:
+    paths:
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/clawsig-sdk/**'
+      - 'packages/schema/poh/**'
+      - 'packages/schema/fixtures/**'
+  pull_request:
+    paths:
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/clawsig-sdk/**'
+      - 'packages/schema/poh/**'
+      - 'packages/schema/fixtures/**'
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - runtime: node
+            os: ubuntu-latest
+            node-version: '20'
+          - runtime: node
+            os: ubuntu-latest
+            node-version: '22'
+          - runtime: node
+            os: macos-latest
+            node-version: '22'
+          - runtime: bun
+            os: ubuntu-latest
+            node-version: '22'
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.runtime }} / ${{ matrix.os }} / node-${{ matrix.node-version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - if: matrix.runtime == 'bun'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: |
+          cd packages/clawverify-core && npm run build && cd ../..
+          cd packages/clawverify-cli && npm run build && cd ../..
+          cd packages/clawsig-sdk && npm run build && cd ../..
+
+      - name: Run cross-platform tests
+        run: node --test packages/clawverify-cli/test/cross-platform.test.ts
