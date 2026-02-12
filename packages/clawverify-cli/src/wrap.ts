@@ -8,8 +8,10 @@
  * 4. On exit: compiles proof bundle, optionally publishes to VaaS
  */
 
-import { spawn } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { spawn, execFile } from 'node:child_process';
+import { writeFile, mkdir, unlink } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import { join } from 'node:path';
 import {
   generateEphemeralDid,
   startLocalProxy,
@@ -18,6 +20,8 @@ import type {
   SignedEnvelope,
   ProofBundlePayload,
 } from '@clawbureau/clawsig-sdk';
+
+const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +43,11 @@ interface VaaSResponse {
     ledger?: string;
   };
   error?: string;
+}
+
+interface PublishResult {
+  badgeUrl?: string;
+  ledgerUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,10 +97,20 @@ export async function wrap(
     // RED TEAM FIX #6: Socket-level interception preload.
     // Inject Node.js --import flag to monkey-patch http/https at socket level.
     CLAWSIG_PROXY_PORT: String(proxy.port),
+    CLAWSIG_PROXY_URL: `http://127.0.0.1:${proxy.port}`,
     NODE_OPTIONS: [
       process.env['NODE_OPTIONS'],
       '--import @clawbureau/clawsig-sdk/preload',
     ].filter(Boolean).join(' '),
+
+    // Polyglot proxy env vars: Python (requests/httpx), Go (net/http),
+    // curl, and other runtimes that respect standard proxy environment.
+    HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
+    HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
+    http_proxy: `http://127.0.0.1:${proxy.port}`,
+    https_proxy: `http://127.0.0.1:${proxy.port}`,
+    NO_PROXY: 'localhost,127.0.0.1',
+    no_proxy: 'localhost,127.0.0.1',
   };
 
   // Pass through existing API keys from parent env
@@ -133,15 +152,21 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Receipts: ${bundle.payload.receipts?.length ?? 0} gateway receipts\n`);
 
-  // 5. Write to disk if requested
+  // 5. Always write bundle to .clawsig/proof_bundle.json
+  await writeBundleToDisk(bundle);
+
+  // 5b. Also write to custom output path if requested
   if (outputPath) {
     await writeFile(outputPath, JSON.stringify(bundle, null, 2), 'utf-8');
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle written to: ${outputPath}\n`);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle also written to: ${outputPath}\n`);
   }
 
-  // 6. Publish to VaaS
+  // 6. Publish to VaaS and try to attach badge to open PR
   if (publish) {
-    await publishBundle(bundle);
+    const publishResult = await publishBundle(bundle);
+    if (publishResult.badgeUrl && publishResult.ledgerUrl) {
+      await tryAttachBadgeToPR(publishResult.badgeUrl, publishResult.ledgerUrl);
+    }
   } else {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Publish skipped (--no-publish)\n`);
 
@@ -159,7 +184,7 @@ export async function wrap(
  * Publish a proof bundle to the VaaS API.
  * Handles network errors and 404s gracefully (prints bundle locally as fallback).
  */
-async function publishBundle(bundle: SignedEnvelope<ProofBundlePayload>): Promise<void> {
+async function publishBundle(bundle: SignedEnvelope<ProofBundlePayload>): Promise<PublishResult> {
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Publishing to VaaS...\n`);
 
   try {
@@ -180,7 +205,7 @@ async function publishBundle(bundle: SignedEnvelope<ProofBundlePayload>): Promis
       );
       process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Bundle verified locally. VaaS publish will be available soon.\n`);
       printLocalFallback(bundle);
-      return;
+      return {};
     }
 
     const body = await res.json() as VaaSResponse;
@@ -191,19 +216,112 @@ async function publishBundle(bundle: SignedEnvelope<ProofBundlePayload>): Promis
       process.stdout.write(
         `[![Clawsig Verified](${body.urls.badge})](${body.urls.ledger})\n`,
       );
+      return { badgeUrl: body.urls.badge, ledgerUrl: body.urls.ledger };
     } else {
       process.stderr.write(`\x1b[33m[clawsig]\x1b[0m VaaS response: ${JSON.stringify(body)}\n`);
       printLocalFallback(bundle);
+      return {};
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown error';
     process.stderr.write(`\x1b[33m[clawsig]\x1b[0m VaaS unavailable: ${message}\n`);
     process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Bundle verified locally. VaaS publish will be available soon.\n`);
     printLocalFallback(bundle);
+    return {};
   }
 }
 
 function printLocalFallback(bundle: SignedEnvelope<ProofBundlePayload>): void {
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Local proof bundle ID: ${bundle.payload.bundle_id}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Signer: ${bundle.signer_did}\n`);
+}
+
+/**
+ * Always write the proof bundle to .clawsig/proof_bundle.json.
+ * This ensures the bundle survives even if VaaS is unreachable or
+ * the agent already pushed a PR before the wrapper exits (Bug 3).
+ */
+async function writeBundleToDisk(bundle: SignedEnvelope<ProofBundlePayload>): Promise<void> {
+  try {
+    const dir = join(process.cwd(), '.clawsig');
+    await mkdir(dir, { recursive: true });
+    const bundlePath = join(dir, 'proof_bundle.json');
+    await writeFile(bundlePath, JSON.stringify(bundle, null, 2), 'utf-8');
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle written to: ${bundlePath}\n`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    process.stderr.write(
+      `\x1b[33m[clawsig]\x1b[0m Could not write bundle to .clawsig/proof_bundle.json: ${message}\n`,
+    );
+  }
+}
+
+/**
+ * Try to find an open PR on the current branch and append the
+ * verification badge. Requires the `gh` CLI. Fails silently if
+ * gh is not installed or no PR exists — the badge is always printed
+ * to stdout regardless.
+ */
+async function tryAttachBadgeToPR(badgeUrl: string, ledgerUrl: string): Promise<void> {
+  try {
+    // Check if gh CLI is available
+    try {
+      await execFileAsync('which', ['gh']);
+    } catch {
+      return; // gh not installed, skip silently
+    }
+
+    // Get current branch name
+    const { stdout: branchOut } = await execFileAsync(
+      'git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+    );
+    const branch = branchOut.trim();
+    if (!branch || branch === 'HEAD') return;
+
+    // Find open PR for this branch
+    const { stdout: prListOut } = await execFileAsync('gh', [
+      'pr', 'list', '--head', branch, '--json', 'number', '--limit', '1',
+    ]);
+    const prs = JSON.parse(prListOut) as Array<{ number: number }>;
+    if (!prs.length || !prs[0]) return;
+    const prNumber = prs[0].number;
+
+    // Get current PR body
+    const { stdout: prViewOut } = await execFileAsync('gh', [
+      'pr', 'view', String(prNumber), '--json', 'body',
+    ]);
+    const { body: currentBody } = JSON.parse(prViewOut) as { body: string };
+
+    // Build badge markdown
+    const badgeMarkdown = `[![Clawsig Verified](${badgeUrl})](${ledgerUrl})`;
+
+    // Don't add duplicate badge
+    if (currentBody && currentBody.includes(badgeMarkdown)) {
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Badge already present in PR #${prNumber}\n`);
+      return;
+    }
+
+    const newBody = (currentBody || '') + `\n\n---\n${badgeMarkdown}\n`;
+
+    // Write to temp file and use --body-file to avoid shell escaping issues
+    const bodyFile = join(process.cwd(), '.clawsig', '.pr-body-tmp');
+    await mkdir(join(process.cwd(), '.clawsig'), { recursive: true });
+    await writeFile(bodyFile, newBody, 'utf-8');
+
+    try {
+      await execFileAsync('gh', ['pr', 'edit', String(prNumber), '--body-file', bodyFile]);
+      process.stderr.write(`\x1b[32m[clawsig]\x1b[0m Badge attached to PR #${prNumber}\n`);
+    } finally {
+      await unlink(bodyFile).catch(() => {});
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    process.stderr.write(
+      `\x1b[33m[clawsig]\x1b[0m Could not attach badge to PR: ${message}\n`,
+    );
+    process.stderr.write(
+      `\x1b[33m[clawsig]\x1b[0m Manually add this badge to your PR:\n` +
+      `  [![Clawsig Verified](${badgeUrl})](${ledgerUrl})\n`,
+    );
+  }
 }
