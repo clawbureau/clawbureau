@@ -1080,3 +1080,6 @@ Started: 2026-02-07T19:53:07Z
 - Notes
   - `clawdelegate.com` now serves dedicated clawdelegate APIs (401 on unauthenticated `/v1/delegations` as expected).
   - `www.clawdelegate.com` and `staging.clawdelegate.com` currently lack resolvable DNS records; staging smoke was executed via workers.dev.
+  - PR merged: https://github.com/clawbureau/clawbureau/pull/167
+  - Merge commit: `f33de6a525c58acad2c821847cd31b96867504aa`
+  - DID proof: `proofs/feat/identity/CDL-MAX-001-delegation-control-plane/commit.sig.json`
