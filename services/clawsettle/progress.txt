@@ -452,3 +452,12 @@ Started: 2026-02-12
   - `artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json`
 - Consolidated rollout summary:
   - `artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json`
+
+## 2026-02-12 - Post-merge stabilization watch (MAX-002 merge + 2h soak)
+- PR #175 merged (merge commit `45c9ffa`); PR #174 (Claw Verified pipeline) merged first (`215e12c`).
+- Post-merge loss-event watch (apply+resolve outboxes, limit=5):
+  - staging: `artifacts/ops/econ-risk/2026-02-12T17-02-22-661Z-staging-loss-event-watch/summary.json`
+    - deterministic error buckets: event_failed=0, outbox_apply_failed=0, outbox_resolve_failed=0
+  - prod: `artifacts/ops/econ-risk/2026-02-12T17-02-27-122Z-prod-loss-event-watch/summary.json`
+    - deterministic error buckets: event_failed=0, outbox_apply_failed=0, outbox_resolve_failed=0
+- Conclusion: apply+resolve pipelines stable post-merge. No regressions.

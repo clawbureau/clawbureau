@@ -1,0 +1,131 @@
+{
+  "ok": true,
+  "events": [
+    {
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "source_service": "clawsettle-smoke",
+      "source_event_id": "smoke-loss-2e2dc1ac-66b2-4c53-ab09-ea5c5fab51ee",
+      "account_did": "did:key:zinsure-claimantef72cf3f8636455a95d08595ea9bf3f4",
+      "account_id": null,
+      "amount_minor": "10",
+      "currency": "USD",
+      "reason_code": "chargeback",
+      "severity": "high",
+      "occurred_at": "2026-02-12T14:23:28.196Z",
+      "metadata": {
+        "smoke": true,
+        "env": "staging",
+        "escrow_id": "esc_e5310d50-19d6-475a-965f-8f0dd541ea72",
+        "bounty_id": "bty_cf9ed54e-37a9-4e25-835f-c65b4cca95dc"
+      },
+      "status": "forwarded",
+      "target_count": 5,
+      "forwarded_count": 5,
+      "failed_count": 0,
+      "created_at": "2026-02-12T14:23:28.314Z",
+      "updated_at": "2026-02-12T14:23:30.013Z",
+      "last_forwarded_at": "2026-02-12T14:23:30.013Z"
+    },
+    {
+      "loss_event_id": "lse_38577ee57ca3914335b45666",
+      "source_service": "clawsettle-smoke",
+      "source_event_id": "smoke-loss-7496521d-599d-43e5-acea-5282e376db63",
+      "account_did": "did:key:zinsure-claimantef72cf3f8636455a95d08595ea9bf3f4",
+      "account_id": null,
+      "amount_minor": "10",
+      "currency": "USD",
+      "reason_code": "chargeback",
+      "severity": "high",
+      "occurred_at": "2026-02-12T14:22:18.338Z",
+      "metadata": {
+        "smoke": true,
+        "env": "staging",
+        "escrow_id": "esc_e5310d50-19d6-475a-965f-8f0dd541ea72",
+        "bounty_id": "bty_cf9ed54e-37a9-4e25-835f-c65b4cca95dc"
+      },
+      "status": "forwarded",
+      "target_count": 5,
+      "forwarded_count": 5,
+      "failed_count": 0,
+      "created_at": "2026-02-12T14:22:18.455Z",
+      "updated_at": "2026-02-12T14:22:21.467Z",
+      "last_forwarded_at": "2026-02-12T14:22:21.467Z"
+    },
+    {
+      "loss_event_id": "lse_a8290414903bcea7cb772264",
+      "source_service": "clawsettle-smoke",
+      "source_event_id": "smoke-loss-97c20f62-e4a8-445b-9854-5ddfc43d4441",
+      "account_did": "did:key:zloss-account2f0de87d6a7346e9abdf015f1a353c08",
+      "account_id": null,
+      "amount_minor": "250",
+      "currency": "USD",
+      "reason_code": "chargeback",
+      "severity": "high",
+      "occurred_at": "2026-02-12T14:16:15.781Z",
+      "metadata": {
+        "smoke": true,
+        "env": "staging",
+        "escrow_id": "esc_76e4e344-c2e7-4f80-a88a-0c9a97dfe2ad",
+        "bounty_id": "bty_b12b3e23-427f-40b6-8865-092670087208"
+      },
+      "status": "partially_forwarded",
+      "target_count": 5,
+      "forwarded_count": 3,
+      "failed_count": 2,
+      "created_at": "2026-02-12T14:16:15.902Z",
+      "updated_at": "2026-02-12T17:00:57.864Z",
+      "last_forwarded_at": "2026-02-12T17:00:57.864Z"
+    },
+    {
+      "loss_event_id": "lse_65f087af83aceaff9631f9c0",
+      "source_service": "clawsettle-smoke",
+      "source_event_id": "smoke-loss-9bc6ccac-2d7b-4c69-bbf8-648281aede45",
+      "account_did": "did:key:zloss-accounte05fbc6933e541fb8048889a36eb2484",
+      "account_id": null,
+      "amount_minor": "250",
+      "currency": "USD",
+      "reason_code": "chargeback",
+      "severity": "high",
+      "occurred_at": "2026-02-12T14:15:47.802Z",
+      "metadata": {
+        "smoke": true,
+        "env": "staging",
+        "escrow_id": "esc_76e4e344-c2e7-4f80-a88a-0c9a97dfe2ad",
+        "bounty_id": "bty_b12b3e23-427f-40b6-8865-092670087208"
+      },
+      "status": "partially_forwarded",
+      "target_count": 5,
+      "forwarded_count": 3,
+      "failed_count": 2,
+      "created_at": "2026-02-12T14:15:47.927Z",
+      "updated_at": "2026-02-12T17:00:55.416Z",
+      "last_forwarded_at": "2026-02-12T17:00:55.416Z"
+    },
+    {
+      "loss_event_id": "lse_b2651dd15ce808b80d7908e3",
+      "source_service": "clawsettle-smoke",
+      "source_event_id": "smoke-loss-2f5fa0e3-6365-4ef0-93d1-ddec5b4fd391",
+      "account_did": "did:key:zinsure-claimantef72cf3f8636455a95d08595ea9bf3f4",
+      "account_id": null,
+      "amount_minor": "10",
+      "currency": "USD",
+      "reason_code": "chargeback",
+      "severity": "high",
+      "occurred_at": "2026-02-12T04:56:12.646Z",
+      "metadata": {
+        "smoke": true,
+        "env": "staging",
+        "escrow_id": "esc_62a7ff8c-1590-4c38-976e-a0e4e0d4715e",
+        "bounty_id": "bty_cf9ed54e-37a9-4e25-835f-c65b4cca95dc"
+      },
+      "status": "forwarded",
+      "target_count": 5,
+      "forwarded_count": 5,
+      "failed_count": 0,
+      "created_at": "2026-02-12T04:56:12.774Z",
+      "updated_at": "2026-02-12T04:56:17.264Z",
+      "last_forwarded_at": "2026-02-12T04:56:17.264Z"
+    }
+  ],
+  "next_cursor": "MjAyNi0wMi0xMlQwNDo1NjoxMi43NzRaOjpsc2VfYjI2NTFkZDE1Y2U4MDhiODBkNzkwOGUz"
+}
