@@ -1,0 +1,92 @@
+{
+  "epic": "ECON-OPS-002",
+  "env": "prod",
+  "timestamp": "2026-02-12T19:54:23.207Z",
+  "passed": 15,
+  "total": 15,
+  "results": [
+    {
+      "step": "Health history endpoint 200",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "step": "Health history returns snapshots array",
+      "pass": true,
+      "detail": "count=0"
+    },
+    {
+      "step": "Health trends endpoint 200",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "step": "Health trends has per_service",
+      "pass": true,
+      "detail": "snapshots=0"
+    },
+    {
+      "step": "Health trends has period",
+      "pass": true,
+      "detail": "days=1"
+    },
+    {
+      "step": "Webhook SLA endpoint 200",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "step": "Webhook SLA has processing_ms",
+      "pass": true,
+      "detail": "p50=0 p95=0 p99=0"
+    },
+    {
+      "step": "Webhook SLA has success_rate",
+      "pass": true,
+      "detail": "rate=100% total=0"
+    },
+    {
+      "step": "Webhook failures endpoint 200",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "step": "Webhook failures returns array",
+      "pass": true,
+      "detail": "count=0"
+    },
+    {
+      "step": "Active alerts endpoint 200",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "step": "Active alerts returns array",
+      "pass": true,
+      "detail": "count=0"
+    },
+    {
+      "step": "Legacy health 200",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "step": "Services reachable",
+      "pass": true,
+      "detail": "7/7 up"
+    },
+    {
+      "step": "Legacy alerts 200",
+      "pass": true,
+      "detail": "status=200"
+    }
+  ],
+  "endpoints": {
+    "history": 0,
+    "trends_snapshots": 0,
+    "sla_deliveries": 0,
+    "failures": 0,
+    "active_alerts": 0,
+    "services_up": 7
+  }
+}
