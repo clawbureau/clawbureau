@@ -35,6 +35,18 @@ console.log(result.reason_code); // 'OK', 'SIGNATURE_INVALID', etc.
 
 Unknown schema versions, hash algorithms, or envelope formats produce `FAIL` — never silently pass.
 
+## Learn more
+
+- **[Full documentation](https://www.clawea.com/docs)** — Quick Start, SDK reference, API reference, protocol spec
+- **[Adoption guide](https://github.com/clawbureau/clawbureau/blob/main/docs/specs/clawsig-protocol/ADOPTION_GUIDE.md)** — integrate in a day
+- **[Clawsig Protocol](https://clawsig.com)** — protocol overview, design principles, conformance suite
+
+### Enterprise
+
+Running AI agents in regulated environments? Claw EA provides approval gates, DLP redaction, audit trails, and compliance evidence for SOX, HIPAA, and FedRAMP.
+
+**[See enterprise plans →](https://www.clawea.com/pricing/enterprise)**
+
 ## License
 
 MIT

@@ -1,7 +1,7 @@
 {
   "name": "@clawbureau/clawsig-sdk",
   "version": "0.1.1",
-  "description": "Lightweight SDK for emitting verifiable proof bundles from any Node.js agent — model calls, tool receipts, side-effect receipts, human approvals, and capability negotiation.",
+  "description": "Lightweight SDK for emitting verifiable proof bundles from any Node.js agent \u2014 model calls, tool receipts, side-effect receipts, human approvals, and capability negotiation.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -44,7 +44,7 @@
     "url": "https://github.com/clawbureau/clawbureau",
     "directory": "packages/clawsig-sdk"
   },
-  "homepage": "https://github.com/clawbureau/clawbureau/tree/main/packages/clawsig-sdk",
+  "homepage": "https://www.clawea.com/docs#sdk",
   "bugs": "https://github.com/clawbureau/clawbureau/issues",
   "devDependencies": {
     "@types/node": "^25.2.1",
