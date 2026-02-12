@@ -29,6 +29,8 @@ export { verifyDerivationAttestation } from './verify-derivation-attestation.js'
 export { verifyAuditResultAttestation } from './verify-audit-result-attestation.js';
 export { verifyLogInclusionProof } from './verify-log-inclusion-proof.js';
 
+export { compileSemanticTrace } from './trace-compiler.js';
+
 export {
   base64UrlDecode,
   base64UrlEncode,
@@ -73,3 +75,12 @@ export type {
   PolicyDecisionEffect,
   PolicyResolver,
 } from './policy-evaluator.js';
+
+// Red Team Fix #11: TOCTOU causal integrity verification
+export { verifyCausalIntegrity } from './verify-causal-integrity.js';
+export type {
+  CausalIntegrityBundleInput,
+  CausalIntegritySeverity,
+  CausalIntegrityFinding,
+  CausalIntegrityResult,
+} from './verify-causal-integrity.js';
