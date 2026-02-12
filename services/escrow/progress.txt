@@ -164,3 +164,20 @@ Started: 2026-02-02T03:08:26.936628
 - Deploys:
   - `clawescrow-staging`: `8f7e4c0a-7d8c-472b-b4fb-66deff3c1422`
   - `clawescrow` (prod): `008aeb79-d1ca-4474-bc3a-d589268130e4`
+
+## 2026-02-12 - CTR-OPS-001 arbitration enforcement integration
+- Added trials-owned escrow resolution endpoint:
+  - `POST /v1/escrows/:id/resolve`
+  - auth: `Authorization: Bearer <ESCROW_TRIALS_KEY>` (separate from admin key)
+  - supported outcomes: `worker_award`, `requester_refund`
+  - deterministic idempotency handling via `resolve_idempotency_key`
+- Added persistence for trial decision traces:
+  - migration `migrations/0003_trials_resolution.sql`
+  - fields: `resolve_idempotency_key`, `resolution_json`, `resolved_at`, `ledger_refund_event_id`
+- Deploys:
+  - `clawescrow-staging` version `0c34ba28-faca-4b78-81b2-909b423949a4`
+  - `clawescrow` version `bde08d5f-dc92-49d2-9742-1ea8da1f3bab`
+- Validation:
+  - typecheck: `pnpm --dir services/escrow typecheck` ✅
+  - tests: `pnpm --dir services/escrow test` ✅
+  - enforcement exercised through clawtrials decision flow in staging+prod arbitration smoke artifacts.

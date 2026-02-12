@@ -8,8 +8,11 @@
 export interface Env {
   ESCROW_VERSION: string;
 
-  /** Admin key required for all non-public endpoints. Set via `wrangler secret put`. */
+  /** Admin key required for non-public endpoints. Set via `wrangler secret put`. */
   ESCROW_ADMIN_KEY?: string;
+
+  /** Dedicated service key for clawtrials decision enforcement endpoint. */
+  ESCROW_TRIALS_KEY?: string;
 
   /** Used to call clawledger. Set via `wrangler secret put`. */
   LEDGER_ADMIN_KEY?: string;
@@ -99,6 +102,25 @@ interface DisputeEscrowResponseBody {
   dispute_window_ends_at: string;
 }
 
+type EscrowResolutionDecision = 'worker_award' | 'requester_refund';
+
+interface ResolveEscrowResponseBody {
+  escrow_id: string;
+  status: 'released' | 'cancelled';
+  resolution: {
+    case_id: string;
+    decision: EscrowResolutionDecision;
+    decided_by: string;
+    resolved_at: string;
+  };
+  ledger_refs: {
+    worker_transfer: string | null;
+    refund_transfer: string | null;
+    fee_transfers: string[];
+    referral_transfers: string[];
+  };
+}
+
 interface EscrowRecord {
   escrow_id: string;
   create_idempotency_key: string;
@@ -121,11 +143,15 @@ interface EscrowRecord {
   ledger_worker_event_id: string | null;
   ledger_fee_event_ids: string[];
   ledger_referral_event_ids: string[];
+  ledger_refund_event_id: string | null;
   assign_idempotency_key: string | null;
   release_idempotency_key: string | null;
   dispute_idempotency_key: string | null;
+  resolve_idempotency_key: string | null;
   verification: Record<string, unknown> | null;
   dispute: Record<string, unknown> | null;
+  resolution: Record<string, unknown> | null;
+  resolved_at: string | null;
 }
 
 function jsonResponse(body: unknown, status = 200, version?: string): Response {
@@ -222,6 +248,24 @@ function requireAdmin(request: Request, env: Env, version: string): Response | n
 
   if (token !== env.ESCROW_ADMIN_KEY) {
     return errorResponse('UNAUTHORIZED', 'Invalid admin token', 401, undefined, version);
+  }
+
+  return null;
+}
+
+function requireTrialsAuth(request: Request, env: Env, version: string): Response | null {
+  const trialsKey = env.ESCROW_TRIALS_KEY?.trim();
+  if (!trialsKey) {
+    return errorResponse('TRIALS_KEY_NOT_CONFIGURED', 'ESCROW_TRIALS_KEY is not configured', 503, undefined, version);
+  }
+
+  const token = getAdminToken(request);
+  if (!token) {
+    return errorResponse('UNAUTHORIZED', 'Missing trials token', 401, undefined, version);
+  }
+
+  if (token !== trialsKey) {
+    return errorResponse('UNAUTHORIZED', 'Invalid trials token', 401, undefined, version);
   }
 
   return null;
@@ -561,6 +605,7 @@ function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
   const ledger_referral_event_ids = safeJsonParse<string[]>(d1String(row.ledger_referral_event_ids_json)) ?? [];
   const verification = safeJsonParse<Record<string, unknown>>(d1String(row.verification_json));
   const dispute = safeJsonParse<Record<string, unknown>>(d1String(row.dispute_json));
+  const resolution = safeJsonParse<Record<string, unknown>>(d1String(row.resolution_json));
 
   const statusTyped = status as EscrowStatus;
   if (statusTyped !== 'held' && statusTyped !== 'released' && statusTyped !== 'frozen' && statusTyped !== 'cancelled') {
@@ -589,12 +634,21 @@ function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
     ledger_worker_event_id: d1String(row.ledger_worker_event_id),
     ledger_fee_event_ids,
     ledger_referral_event_ids,
+    ledger_refund_event_id: d1String(row.ledger_refund_event_id),
     assign_idempotency_key: d1String(row.assign_idempotency_key),
     release_idempotency_key: d1String(row.release_idempotency_key),
     dispute_idempotency_key: d1String(row.dispute_idempotency_key),
+    resolve_idempotency_key: d1String(row.resolve_idempotency_key),
     verification,
     dispute,
+    resolution,
+    resolved_at: d1String(row.resolved_at),
   };
+}
+
+function parseEscrowResolutionDecision(input: unknown): EscrowResolutionDecision | null {
+  if (input === 'worker_award' || input === 'requester_refund') return input;
+  return null;
 }
 
 async function getEscrowById(db: D1Database, escrowId: string): Promise<EscrowRecord | null> {
@@ -765,12 +819,16 @@ async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void>
         ledger_worker_event_id,
         ledger_fee_event_ids_json,
         ledger_referral_event_ids_json,
+        ledger_refund_event_id,
         assign_idempotency_key,
         release_idempotency_key,
         dispute_idempotency_key,
+        resolve_idempotency_key,
         verification_json,
-        dispute_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        dispute_json,
+        resolution_json,
+        resolved_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.escrow_id,
@@ -794,11 +852,15 @@ async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void>
       record.ledger_worker_event_id,
       JSON.stringify(record.ledger_fee_event_ids),
       JSON.stringify(record.ledger_referral_event_ids),
+      record.ledger_refund_event_id,
       record.assign_idempotency_key,
       record.release_idempotency_key,
       record.dispute_idempotency_key,
+      record.resolve_idempotency_key,
       record.verification ? JSON.stringify(record.verification) : null,
-      record.dispute ? JSON.stringify(record.dispute) : null
+      record.dispute ? JSON.stringify(record.dispute) : null,
+      record.resolution ? JSON.stringify(record.resolution) : null,
+      record.resolved_at
     )
     .run();
 }
@@ -883,6 +945,94 @@ async function updateEscrowDisputed(
     .run();
 }
 
+async function tryLockResolve(db: D1Database, escrowId: string, idempotencyKey: string, now: string): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE escrows
+         SET resolve_idempotency_key = COALESCE(resolve_idempotency_key, ?), updated_at = ?
+       WHERE escrow_id = ?
+         AND status = 'frozen'`
+    )
+    .bind(idempotencyKey, now, escrowId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
+async function updateEscrowResolutionReleased(
+  db: D1Database,
+  params: {
+    escrow_id: string;
+    released_at: string;
+    worker_event_id: string;
+    fee_event_ids: string[];
+    referral_event_ids: string[];
+    resolve_idempotency_key: string;
+    resolution: Record<string, unknown>;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE escrows
+          SET status = 'released',
+              released_at = ?,
+              resolved_at = ?,
+              updated_at = ?,
+              ledger_worker_event_id = ?,
+              ledger_fee_event_ids_json = ?,
+              ledger_referral_event_ids_json = ?,
+              resolve_idempotency_key = ?,
+              release_idempotency_key = COALESCE(release_idempotency_key, ?),
+              resolution_json = ?
+        WHERE escrow_id = ?`
+    )
+    .bind(
+      params.released_at,
+      params.released_at,
+      params.released_at,
+      params.worker_event_id,
+      JSON.stringify(params.fee_event_ids),
+      JSON.stringify(params.referral_event_ids),
+      params.resolve_idempotency_key,
+      params.resolve_idempotency_key,
+      JSON.stringify(params.resolution),
+      params.escrow_id
+    )
+    .run();
+}
+
+async function updateEscrowResolutionCancelled(
+  db: D1Database,
+  params: {
+    escrow_id: string;
+    resolved_at: string;
+    refund_event_id: string;
+    resolve_idempotency_key: string;
+    resolution: Record<string, unknown>;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE escrows
+          SET status = 'cancelled',
+              resolved_at = ?,
+              updated_at = ?,
+              ledger_refund_event_id = ?,
+              resolve_idempotency_key = ?,
+              resolution_json = ?
+        WHERE escrow_id = ?`
+    )
+    .bind(
+      params.resolved_at,
+      params.resolved_at,
+      params.refund_event_id,
+      params.resolve_idempotency_key,
+      JSON.stringify(params.resolution),
+      params.escrow_id
+    )
+    .run();
+}
+
 function landingPage(origin: string, version: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -954,6 +1104,7 @@ function docsPage(origin: string): string {
       <li><code>POST /v1/escrows/{escrow_id}/assign</code> — set worker DID</li>
       <li><code>POST /v1/escrows/{escrow_id}/release</code> — release to worker + fee pool (calls clawledger /v1/transfers)</li>
       <li><code>POST /v1/escrows/{escrow_id}/dispute</code> — freeze within dispute window</li>
+      <li><code>POST /v1/escrows/{escrow_id}/resolve</code> — clawtrials-only decision enforcement (worker award or requester refund)</li>
       <li><code>GET /v1/escrows/{escrow_id}</code> — fetch escrow record</li>
     </ul>
 
@@ -1328,11 +1479,15 @@ async function handleCreateEscrow(request: Request, env: Env, version: string): 
     ledger_worker_event_id: null,
     ledger_fee_event_ids: [],
     ledger_referral_event_ids: [],
+    ledger_refund_event_id: null,
     assign_idempotency_key: null,
     release_idempotency_key: null,
     dispute_idempotency_key: null,
+    resolve_idempotency_key: null,
     verification: null,
     dispute: null,
+    resolution: null,
+    resolved_at: null,
   };
 
   try {
@@ -1390,6 +1545,7 @@ async function handleGetEscrow(escrowId: string, env: Env, version: string): Pro
         created_at: escrow.created_at,
         held_at: escrow.held_at,
         released_at: escrow.released_at,
+        resolved_at: escrow.resolved_at,
         updated_at: escrow.updated_at,
       },
       dispute_window_seconds: escrow.dispute_window_seconds,
@@ -1397,11 +1553,13 @@ async function handleGetEscrow(escrowId: string, env: Env, version: string): Pro
       ledger_refs: {
         hold_transfer: escrow.ledger_hold_event_id,
         worker_transfer: escrow.ledger_worker_event_id,
+        refund_transfer: escrow.ledger_refund_event_id,
         fee_transfers: escrow.ledger_fee_event_ids,
         referral_transfers: escrow.ledger_referral_event_ids,
       },
       verification: escrow.verification,
       dispute: escrow.dispute,
+      resolution: escrow.resolution,
     },
     200,
     version
@@ -1480,14 +1638,17 @@ async function handleListEscrows(request: Request, env: Env, version: string): P
           created_at: escrow.created_at,
           held_at: escrow.held_at,
           released_at: escrow.released_at,
+          resolved_at: escrow.resolved_at,
           updated_at: escrow.updated_at,
         },
         ledger_refs: {
           hold_transfer: escrow.ledger_hold_event_id,
           worker_transfer: escrow.ledger_worker_event_id,
+          refund_transfer: escrow.ledger_refund_event_id,
           fee_transfers: escrow.ledger_fee_event_ids,
           referral_transfers: escrow.ledger_referral_event_ids,
         },
+        resolution: escrow.resolution,
       })),
       next_cursor: list.next_cursor ?? null,
     },
@@ -1870,6 +2031,403 @@ async function handleDisputeEscrow(escrowId: string, request: Request, env: Env,
   return jsonResponse(response, 200, version);
 }
 
+async function handleResolveEscrow(escrowId: string, request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const case_id = bodyRaw.case_id;
+  const decisionRaw = bodyRaw.decision;
+  const decided_by = bodyRaw.decided_by;
+  const reasonRaw = bodyRaw.reason;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(case_id) || !case_id.trim().startsWith('trc_')) {
+    return errorResponse('INVALID_REQUEST', 'case_id must be a trial case id', 400, undefined, version);
+  }
+
+  const decision = parseEscrowResolutionDecision(decisionRaw);
+  if (!decision) {
+    return errorResponse('INVALID_REQUEST', 'decision must be worker_award|requester_refund', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(decided_by) || !decided_by.trim().startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'decided_by must be a DID string', 400, undefined, version);
+  }
+
+  if (reasonRaw !== undefined && reasonRaw !== null && !isNonEmptyString(reasonRaw)) {
+    return errorResponse('INVALID_REQUEST', 'reason must be a non-empty string when provided', 400, undefined, version);
+  }
+
+  const idempotencyKey = idempotency_key.trim();
+  const caseId = case_id.trim();
+  const decidedBy = decided_by.trim();
+  const reason = isNonEmptyString(reasonRaw) ? reasonRaw.trim() : null;
+
+  const escrow = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!escrow) {
+    return errorResponse('NOT_FOUND', 'Escrow not found', 404, undefined, version);
+  }
+
+  if (escrow.status === 'released') {
+    if (decision !== 'worker_award') {
+      return errorResponse('INVALID_STATUS', `Escrow already released; decision '${decision}' is invalid`, 409, undefined, version);
+    }
+
+    if (escrow.resolve_idempotency_key && escrow.resolve_idempotency_key !== idempotencyKey) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'Escrow already resolved with a different idempotency_key',
+        409,
+        { resolve_idempotency_key: escrow.resolve_idempotency_key },
+        version
+      );
+    }
+
+    const response: ResolveEscrowResponseBody = {
+      escrow_id: escrow.escrow_id,
+      status: 'released',
+      resolution: {
+        case_id: caseId,
+        decision: 'worker_award',
+        decided_by: decidedBy,
+        resolved_at: escrow.resolved_at ?? escrow.released_at ?? nowIso(),
+      },
+      ledger_refs: {
+        worker_transfer: escrow.ledger_worker_event_id,
+        refund_transfer: escrow.ledger_refund_event_id,
+        fee_transfers: escrow.ledger_fee_event_ids,
+        referral_transfers: escrow.ledger_referral_event_ids,
+      },
+    };
+
+    return jsonResponse(response, 200, version);
+  }
+
+  if (escrow.status === 'cancelled') {
+    if (decision !== 'requester_refund') {
+      return errorResponse('INVALID_STATUS', `Escrow already cancelled; decision '${decision}' is invalid`, 409, undefined, version);
+    }
+
+    if (escrow.resolve_idempotency_key && escrow.resolve_idempotency_key !== idempotencyKey) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'Escrow already resolved with a different idempotency_key',
+        409,
+        { resolve_idempotency_key: escrow.resolve_idempotency_key },
+        version
+      );
+    }
+
+    const response: ResolveEscrowResponseBody = {
+      escrow_id: escrow.escrow_id,
+      status: 'cancelled',
+      resolution: {
+        case_id: caseId,
+        decision: 'requester_refund',
+        decided_by: decidedBy,
+        resolved_at: escrow.resolved_at ?? nowIso(),
+      },
+      ledger_refs: {
+        worker_transfer: escrow.ledger_worker_event_id,
+        refund_transfer: escrow.ledger_refund_event_id,
+        fee_transfers: escrow.ledger_fee_event_ids,
+        referral_transfers: escrow.ledger_referral_event_ids,
+      },
+    };
+
+    return jsonResponse(response, 200, version);
+  }
+
+  if (escrow.status !== 'frozen') {
+    return errorResponse('INVALID_STATUS', `Cannot resolve escrow in status '${escrow.status}'`, 409, undefined, version);
+  }
+
+  const lockNow = nowIso();
+  if (!escrow.resolve_idempotency_key) {
+    await tryLockResolve(env.ESCROW_DB, escrowId, idempotencyKey, lockNow);
+  }
+
+  const locked = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!locked) {
+    return errorResponse('DB_READ_FAILED', 'Failed to read escrow', 500, undefined, version);
+  }
+
+  if (locked.resolve_idempotency_key && locked.resolve_idempotency_key !== idempotencyKey) {
+    return errorResponse(
+      'IDEMPOTENCY_CONFLICT',
+      'Escrow resolve already in progress with a different idempotency_key',
+      409,
+      { resolve_idempotency_key: locked.resolve_idempotency_key },
+      version
+    );
+  }
+
+  const resolvedAt = nowIso();
+  const resolution: Record<string, unknown> = {
+    case_id: caseId,
+    decision,
+    decided_by: decidedBy,
+    reason,
+    resolved_at: resolvedAt,
+  };
+
+  if (decision === 'worker_award') {
+    if (!locked.worker_did) {
+      return errorResponse('WORKER_NOT_ASSIGNED', 'Escrow has no worker assigned', 409, undefined, version);
+    }
+
+    const feeTotal = sumFeesMinor(locked.fee_quote.fees);
+    const buyerTotal = parsePositiveMinor(locked.buyer_total_minor);
+    const workerNet = parseNonNegativeMinor(locked.worker_net_minor);
+    if (buyerTotal === null || workerNet === null) {
+      return errorResponse('INTERNAL_ERROR', 'Stored amounts invalid', 500, undefined, version);
+    }
+
+    if (workerNet + feeTotal !== buyerTotal) {
+      return errorResponse(
+        'FEE_QUOTE_MISMATCH',
+        'Stored fee quote does not sum to buyer_total_minor',
+        500,
+        {
+          worker_net_minor: workerNet.toString(),
+          fee_total_minor: feeTotal.toString(),
+          buyer_total_minor: buyerTotal.toString(),
+        },
+        version
+      );
+    }
+
+    const feeClearingDomain = env.FEE_CLEARING_DOMAIN?.trim().length ? env.FEE_CLEARING_DOMAIN!.trim() : 'clawcuts';
+    const fallbackClearingAccount = `clearing:${feeClearingDomain}`;
+
+    const releaseBaseId = `escrow:${locked.escrow_id}:resolve:${idempotencyKey}:worker_award`;
+
+    let cutsApply: CutsApplyResponse;
+    try {
+      cutsApply = await clawcutsApplyFees(env, {
+        idempotency_key: releaseBaseId,
+        product: 'clawbounties',
+        settlement_ref: locked.escrow_id,
+        occurred_at: nowIso(),
+        snapshot: locked.fee_quote,
+        context: {
+          escrow_id: locked.escrow_id,
+          buyer_did: locked.buyer_did,
+          worker_did: locked.worker_did,
+          fallback_clearing_account: fallbackClearingAccount,
+          resolution_decision: 'worker_award',
+          resolution_case_id: caseId,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('FEE_APPLY_FAILED', message, 502, undefined, version);
+    }
+
+    const applyFeeTotal = parseNonNegativeMinor(cutsApply.fee_summary.total_fee_minor);
+    const applyReferralTotal = parseNonNegativeMinor(cutsApply.fee_summary.referral_payout_minor);
+    const applyRetainedTotal = parseNonNegativeMinor(cutsApply.fee_summary.platform_retained_minor);
+    const applyBuyerTotal = parsePositiveMinor(cutsApply.fee_summary.buyer_total_minor);
+    const applyWorkerNet = parseNonNegativeMinor(cutsApply.fee_summary.worker_net_minor);
+
+    if (
+      applyFeeTotal === null ||
+      applyReferralTotal === null ||
+      applyRetainedTotal === null ||
+      applyBuyerTotal === null ||
+      applyWorkerNet === null
+    ) {
+      return errorResponse('FEE_APPLY_MISMATCH', 'clawcuts apply summary is invalid', 502, undefined, version);
+    }
+
+    if (
+      applyFeeTotal !== feeTotal ||
+      applyBuyerTotal !== buyerTotal ||
+      applyWorkerNet !== workerNet ||
+      applyRetainedTotal + applyReferralTotal !== applyFeeTotal
+    ) {
+      return errorResponse(
+        'FEE_APPLY_MISMATCH',
+        'clawcuts apply summary does not match stored escrow snapshot',
+        502,
+        {
+          expected_fee_total_minor: feeTotal.toString(),
+          received_fee_total_minor: applyFeeTotal.toString(),
+          expected_buyer_total_minor: buyerTotal.toString(),
+          received_buyer_total_minor: applyBuyerTotal.toString(),
+          expected_worker_net_minor: workerNet.toString(),
+          received_worker_net_minor: applyWorkerNet.toString(),
+        },
+        version
+      );
+    }
+
+    let workerEventId: string;
+    const feeEventIds: string[] = [];
+    const referralEventIds: string[] = [];
+
+    try {
+      const workerTransfer = await ledgerV1Transfer(env, {
+        idempotency_key: `${releaseBaseId}:worker`,
+        from: { account: locked.buyer_did, bucket: 'H' },
+        to: { account: locked.worker_did, bucket: 'A' },
+        amount_minor: locked.worker_net_minor,
+        metadata: {
+          kind: 'escrow_resolution_worker_award',
+          escrow_id: locked.escrow_id,
+          case_id: caseId,
+          policy_id: locked.fee_quote.policy_id,
+          policy_version: locked.fee_quote.policy_version,
+          policy_hash_b64u: locked.fee_quote.policy_hash_b64u,
+        },
+      });
+      workerEventId = workerTransfer.event_id;
+
+      for (const transfer of cutsApply.transfer_plan.transfers) {
+        const amount = parseNonNegativeMinor(transfer.amount_minor);
+        if (amount === null || amount === 0n) continue;
+
+        const transferResult = await ledgerV1Transfer(env, {
+          idempotency_key: `${releaseBaseId}:fee:${transfer.transfer_index}`,
+          from: { account: locked.buyer_did, bucket: 'H' },
+          to: { account: transfer.to_account, bucket: transfer.to_bucket },
+          amount_minor: transfer.amount_minor,
+          metadata: {
+            kind: transfer.split_kind === 'referral' ? 'escrow_release_referral' : 'escrow_release_fee',
+            escrow_id: locked.escrow_id,
+            case_id: caseId,
+            fee_transfer_index: transfer.transfer_index,
+            fee_index: transfer.fee_index,
+            fee_kind: transfer.fee_kind,
+            fee_payer: transfer.payer,
+            split_kind: transfer.split_kind,
+            to_account: transfer.to_account,
+            to_bucket: transfer.to_bucket,
+            referrer_did: transfer.referrer_did,
+            referral_code: transfer.referral_code,
+            policy_id: locked.fee_quote.policy_id,
+            policy_version: locked.fee_quote.policy_version,
+            policy_hash_b64u: locked.fee_quote.policy_hash_b64u,
+          },
+        });
+
+        if (transfer.split_kind === 'referral') {
+          referralEventIds.push(transferResult.event_id);
+        } else {
+          feeEventIds.push(transferResult.event_id);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('LEDGER_RESOLUTION_FAILED', message, 502, undefined, version);
+    }
+
+    try {
+      await clawcutsFinalizeFeeApply(env, {
+        idempotency_key: cutsApply.idempotency_key,
+        ledger_fee_event_ids: feeEventIds,
+        ledger_referral_event_ids: referralEventIds,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('FEE_APPLY_FINALIZE_FAILED', message, 502, undefined, version);
+    }
+
+    await updateEscrowResolutionReleased(env.ESCROW_DB, {
+      escrow_id: locked.escrow_id,
+      released_at: resolvedAt,
+      worker_event_id: workerEventId,
+      fee_event_ids: feeEventIds,
+      referral_event_ids: referralEventIds,
+      resolve_idempotency_key: idempotencyKey,
+      resolution,
+    });
+
+    const response: ResolveEscrowResponseBody = {
+      escrow_id: locked.escrow_id,
+      status: 'released',
+      resolution: {
+        case_id: caseId,
+        decision: 'worker_award',
+        decided_by: decidedBy,
+        resolved_at: resolvedAt,
+      },
+      ledger_refs: {
+        worker_transfer: workerEventId,
+        refund_transfer: null,
+        fee_transfers: feeEventIds,
+        referral_transfers: referralEventIds,
+      },
+    };
+
+    return jsonResponse(response, 200, version);
+  }
+
+  const refundAmount = parsePositiveMinor(locked.buyer_total_minor);
+  if (refundAmount === null) {
+    return errorResponse('INTERNAL_ERROR', 'Stored buyer_total_minor is invalid', 500, undefined, version);
+  }
+
+  let refundEventId: string;
+  try {
+    const transfer = await ledgerV1Transfer(env, {
+      idempotency_key: `escrow:${locked.escrow_id}:resolve:${idempotencyKey}:refund`,
+      from: { account: locked.buyer_did, bucket: 'H' },
+      to: { account: locked.buyer_did, bucket: 'A' },
+      amount_minor: refundAmount.toString(),
+      metadata: {
+        kind: 'escrow_resolution_requester_refund',
+        escrow_id: locked.escrow_id,
+        case_id: caseId,
+      },
+    });
+
+    refundEventId = transfer.event_id;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('LEDGER_RESOLUTION_FAILED', message, 502, undefined, version);
+  }
+
+  await updateEscrowResolutionCancelled(env.ESCROW_DB, {
+    escrow_id: locked.escrow_id,
+    resolved_at: resolvedAt,
+    refund_event_id: refundEventId,
+    resolve_idempotency_key: idempotencyKey,
+    resolution,
+  });
+
+  const response: ResolveEscrowResponseBody = {
+    escrow_id: locked.escrow_id,
+    status: 'cancelled',
+    resolution: {
+      case_id: caseId,
+      decision: 'requester_refund',
+      decided_by: decidedBy,
+      resolved_at: resolvedAt,
+    },
+    ledger_refs: {
+      worker_transfer: null,
+      refund_transfer: refundEventId,
+      fee_transfers: [],
+      referral_transfers: [],
+    },
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
+export const __internals = {
+  parseEscrowResolutionDecision,
+  encodeEscrowCursor,
+  decodeEscrowCursor,
+};
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -1891,8 +2449,15 @@ export default {
       if (path === '/.well-known/security.txt') return textResponse(securityTxt(origin), 'text/plain; charset=utf-8', 200, version);
     }
 
-    // Admin-gated API
+    // API
     if (path.startsWith('/v1/')) {
+      const resolveMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)\/resolve$/);
+      if (resolveMatch && method === 'POST') {
+        const trialsError = requireTrialsAuth(request, env, version);
+        if (trialsError) return trialsError;
+        return handleResolveEscrow(resolveMatch[1], request, env, version);
+      }
+
       const adminError = requireAdmin(request, env, version);
       if (adminError) return adminError;
 

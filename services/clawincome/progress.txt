@@ -93,3 +93,21 @@ Started: 2026-02-12
 - `artifacts/simulations/clawincome/2026-02-12T01-09-18-3NZ-prod/smoke.json`
 - Staging smoke uses resolver override for domain propagation edge-case:
   - `--clawincome-resolve-ip 104.21.52.203`
+
+### 24h post-merge watch pass (sanity)
+- Executed unauthenticated endpoint-sanity watch against staging+prod over 12 rounds per endpoint (72 requests per env):
+  - `node <inline watch script>` (saved outputs under `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/`)
+- Results:
+  - staging: 72/72 requests non-5xx (`server_error_rate_percent=0`)
+  - prod: 72/72 requests non-5xx (`server_error_rate_percent=0`)
+- Endpoint checks covered:
+  - `GET /health` expected 200
+  - `GET /v1/statements/monthly` expected auth denial without token (401/403)
+  - `GET /v1/statements/monthly.csv` expected auth denial without token (401/403)
+  - `GET /v1/invoices` expected auth denial without token (401/403)
+  - `GET /v1/tax-lots` expected auth denial without token (401/403)
+  - `GET /v1/income` expected auth denial without token (401/403)
+- Evidence:
+  - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/summary.json`
+  - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/staging.json`
+  - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/prod.json`

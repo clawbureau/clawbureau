@@ -1,0 +1,65 @@
+{
+  "env": "staging",
+  "base": "https://staging.clawincome.com",
+  "checked_at": "2026-02-12T01:29:34.420Z",
+  "iterations": 12,
+  "expected_contract": {
+    "/health": 200,
+    "/v1/* unauthenticated": "401 or 403"
+  },
+  "summary": {
+    "total_requests": 72,
+    "server_errors": 0,
+    "server_error_rate_percent": 0,
+    "endpoint": {
+      "/health": {
+        "count": 12,
+        "status_counts": {
+          "200": 12
+        },
+        "p95_ms": 177,
+        "avg_ms": 88
+      },
+      "/v1/statements/monthly?did=did%3Akey%3Azwatch000000000000000000000000000000000&month=2026-02": {
+        "count": 12,
+        "status_counts": {
+          "401": 12
+        },
+        "p95_ms": 539,
+        "avg_ms": 174
+      },
+      "/v1/statements/monthly.csv?did=did%3Akey%3Azwatch000000000000000000000000000000000&month=2026-02": {
+        "count": 12,
+        "status_counts": {
+          "401": 12
+        },
+        "p95_ms": 205,
+        "avg_ms": 144
+      },
+      "/v1/invoices?did=did%3Akey%3Azwatch000000000000000000000000000000000&month=2026-02": {
+        "count": 12,
+        "status_counts": {
+          "401": 12
+        },
+        "p95_ms": 207,
+        "avg_ms": 139
+      },
+      "/v1/tax-lots?did=did%3Akey%3Azwatch000000000000000000000000000000000&year=2026": {
+        "count": 12,
+        "status_counts": {
+          "401": 12
+        },
+        "p95_ms": 246,
+        "avg_ms": 149
+      },
+      "/v1/income?did=did%3Akey%3Azwatch000000000000000000000000000000000&from=2026-02-01T00%3A00%3A00.000Z&to=2026-03-01T00%3A00%3A00.000Z&limit=10": {
+        "count": 12,
+        "status_counts": {
+          "401": 12
+        },
+        "p95_ms": 235,
+        "avg_ms": 142
+      }
+    }
+  }
+}
