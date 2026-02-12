@@ -1,0 +1,313 @@
+{
+  "generatedAt": "2026-02-12T01:12:28.295Z",
+  "model": "gemini-3-pro-preview",
+  "screenshotsDir": "/Users/gfw/clawd/tmp/monorepo-aeo-ux-001/services/clawea-www/artifacts/ops/clawea-www/2026-02-12T01-04-45Z-aeo-ux-001/screenshots-before",
+  "totals": {
+    "issues": 30,
+    "P0": 4,
+    "P1": 13,
+    "P2": 13
+  },
+  "issues": [
+    {
+      "issue_id": "trust_score_zero_state",
+      "page": "Assessment Result",
+      "severity": "P0",
+      "evidence": "Readiness, ROI Signal, and Risk Posture cards all display a score of '0' in the result view.",
+      "trust_impact": "Displaying '0' across all metrics implies a broken calculation engine or a complete failure of the user's inputs. This destroys the credibility of the assessment tool immediately after the user invested effort to complete it.",
+      "exact_fix_recommendation": "Ensure the scoring logic returns meaningful non-zero integers or ranges. If '0' is a valid state, provide explicit context text explaining why the score is zero (e.g., 'Insufficient data').",
+      "accessibility_impact": "None",
+      "conversion_impact": "Users are unlikely to convert or 'Talk to Sales' if the tool provides no value or appears to be malfunctioning."
+    },
+    {
+      "issue_id": "mobile_header_artifact",
+      "page": "Assessment (Mobile)",
+      "severity": "P1",
+      "evidence": "In the mobile header, there is a visual glitch underneath the search bar appearing as a second, empty rounded rectangle or shadow container.",
+      "trust_impact": "Obvious UI rendering defects in the navigation header suggest low code quality and lack of QA, which is damaging for a brand selling 'Enterprise' reliability.",
+      "exact_fix_recommendation": "Inspect the mobile CSS for the search component. Remove the extraneous container or pseudo-element causing the double-border effect.",
+      "accessibility_impact": "May cause confusion for screen readers if the artifact is a focusable element.",
+      "conversion_impact": "Visual sloppiness distracts from the primary conversion path."
+    },
+    {
+      "issue_id": "redundant_data_collection",
+      "page": "Assessment Result",
+      "severity": "P1",
+      "evidence": "The 'Fast qualification form' at the bottom of the result page asks for 'Timeline', despite 'Timeline to Launch' already being collected in the initial assessment step.",
+      "trust_impact": "Asking for the same information twice makes the system appear unintelligent and disconnected, lowering user confidence in the platform's data handling.",
+      "exact_fix_recommendation": "Remove the 'Timeline' field from the qualification form and carry over the value from the initial assessment, or pre-fill it if editing is required.",
+      "accessibility_impact": "Unnecessary cognitive load and typing effort.",
+      "conversion_impact": "Every extra field reduces form completion rates; redundant fields are high-friction blockers."
+    },
+    {
+      "issue_id": "cta_overload",
+      "page": "Assessment Result",
+      "severity": "P2",
+      "evidence": "The 'Want a tailored rollout plan?' section presents three competing buttons: 'Request tailored plan', 'Book rollout session', and 'Review trust controls'.",
+      "trust_impact": "Cluttered calls-to-action dilute the hierarchy and suggest the platform is unsure of the optimal next step for the user.",
+      "exact_fix_recommendation": "Reduce to one primary CTA (e.g., 'Request tailored plan') and one secondary outline button. Move 'Review trust controls' to a text link or a separate 'Trust' section to reduce decision fatigue.",
+      "accessibility_impact": " increased navigation steps for keyboard users.",
+      "conversion_impact": "Choice paralysis can lower the click-through rate on the primary conversion goal."
+    },
+    {
+      "issue_id": "trust_001",
+      "page": "/book",
+      "severity": "P1",
+      "evidence": "Badge text above the main headline reads 'HIGH-INTENT CONVERSION'.",
+      "trust_impact": "This appears to be internal marketing logic or a dev placeholder exposed to the user. It breaks the fourth wall, making the user feel like a metric rather than a customer, which significantly degrades trust.",
+      "exact_fix_recommendation": "Replace the text with a user-facing label such as 'Deployment Services' or 'Getting Started', or remove the badge entirely.",
+      "accessibility_impact": "None",
+      "conversion_impact": "High. Users may feel manipulated or view the page as unfinished/robotic."
+    },
+    {
+      "issue_id": "visual_002",
+      "page": "/book",
+      "severity": "P2",
+      "evidence": "A dark gray, rounded rectangle artifact is visible immediately below the search bar in the global header on both desktop and mobile views.",
+      "trust_impact": "The UI appears broken or glitchy, suggesting a lack of QA testing. For an enterprise tool, visual polish is a proxy for software reliability.",
+      "exact_fix_recommendation": "Inspect the header CSS/HTML. Remove the extraneous container or shadow element rendering below the search input.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Medium. Lowers perceived quality of the platform."
+    },
+    {
+      "issue_id": "access_003",
+      "page": "/book",
+      "severity": "P1",
+      "evidence": "Placeholder text in form fields (e.g., 'you@company.com', 'Company name') has very low contrast against the dark input background.",
+      "trust_impact": "Fails basic accessibility standards, alienating users with visual impairments and making the form appear disabled or inactive to some users.",
+      "exact_fix_recommendation": "Increase the lightness/opacity of the placeholder text color to meet WCAG AA contrast ratio standards (at least 4.5:1 for normal text).",
+      "accessibility_impact": "High. Hard to read for low-vision users.",
+      "conversion_impact": "High. If users cannot clearly see the fields, they are less likely to complete the form."
+    },
+    {
+      "issue_id": "ux_004",
+      "page": "/book",
+      "severity": "P2",
+      "evidence": "The 'Preferred Start (UTC)' input displays raw browser default styling ('dd/mm/yyyy, --.--') which clashes with the custom dark theme.",
+      "trust_impact": "The interface looks inconsistent and unfinished. It relies on native browser controls that do not match the sophisticated aesthetic of the rest of the page.",
+      "exact_fix_recommendation": "Implement a custom date-time picker component that matches the design system, or apply CSS to style the native input to match the text inputs.",
+      "accessibility_impact": "Medium. Native controls are accessible but visually jarring.",
+      "conversion_impact": "Medium. Increases cognitive load to interpret the unstyled input."
+    },
+    {
+      "issue_id": "cta_ambiguity_form",
+      "page": "/contact",
+      "severity": "P1",
+      "evidence": "The form contains two competing buttons ('Request tailored plan' and 'Run readiness assessment') inside the form container. It is unclear if the second button submits the form or navigates away.",
+      "trust_impact": "Confusing UX signals a lack of clarity in the user journey, potentially frustrating enterprise users.",
+      "exact_fix_recommendation": "Make 'Request tailored plan' the sole primary submit button. Move 'Run readiness assessment' outside the form or style it as a clearly distinct secondary link/ghost button.",
+      "accessibility_impact": "Screen reader users may struggle to understand the context of two submit-like actions within one form region.",
+      "conversion_impact": "High. Users may hesitate to click, fearing the wrong action, or click the secondary button and lose their form data if it navigates away."
+    },
+    {
+      "issue_id": "accessibility_contrast_inputs",
+      "page": "/contact",
+      "severity": "P1",
+      "evidence": "Input placeholders (e.g., 'you@company.com') and field labels use dark grey text on a dark background, resulting in very low contrast.",
+      "trust_impact": "Low legibility feels unprofessional and excludes users with visual impairments.",
+      "exact_fix_recommendation": "Lighten the text color for labels and placeholders to ensure a minimum 4.5:1 contrast ratio against the dark background (WCAG AA).",
+      "accessibility_impact": "Severe. Users with low vision or poor monitors may be unable to read field labels or placeholders.",
+      "conversion_impact": "Medium. Difficulty reading fields increases cognitive load and friction during form completion."
+    },
+    {
+      "issue_id": "visual_glitch_header_search",
+      "page": "/contact",
+      "severity": "P2",
+      "evidence": "A visual artifact (ghost pill-shaped container) renders visibly beneath or misaligned with the search input field in the global header on both desktop and mobile.",
+      "trust_impact": "Visual bugs in the primary navigation signal a lack of QA and engineering polish, damaging the 'enterprise' feel.",
+      "exact_fix_recommendation": "Inspect header CSS to remove the extraneous background element or fix the flexbox alignment of the search container.",
+      "accessibility_impact": "None.",
+      "conversion_impact": "Low. Primarily a brand perception issue."
+    },
+    {
+      "issue_id": "suspicious_copyright_date",
+      "page": "/contact",
+      "severity": "P2",
+      "evidence": "Footer copyright displays '© 2026', which is a future date.",
+      "trust_impact": "Makes the site appear to be a template, AI-generated mockup, or neglected, significantly lowering credibility.",
+      "exact_fix_recommendation": "Update the copyright year to the current year dynamically.",
+      "accessibility_impact": "None.",
+      "conversion_impact": "Low. However, astute users may perceive the site as fake."
+    },
+    {
+      "issue_id": "trust_001",
+      "page": "Home",
+      "severity": "P0",
+      "evidence": "In the 'Channels + Tools' section, the card labeled 'GitHub' features a red skull icon instead of the GitHub logo.",
+      "trust_impact": "Using a skull symbol (universally associated with death, danger, or malware) to represent a code repository integration is a catastrophic semiotic failure. It subconsciously signals that the integration is dangerous or malicious, directly undermining the page's core promise of 'Trust' and security.",
+      "exact_fix_recommendation": "Immediately replace the skull icon with the official GitHub 'Octocat' logo or a neutral code-branch icon.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Severe. Security-conscious enterprise buyers will likely bounce immediately upon seeing 'death' imagery associated with their code infrastructure."
+    },
+    {
+      "issue_id": "trust_002",
+      "page": "Home",
+      "severity": "P1",
+      "evidence": "The 'Channels + Tools' section uses generic, non-branded icons for major enterprise platforms: Microsoft Teams (blue square), Slack (generic chat bubble), Jira (clipboard), and Entra ID (lock).",
+      "trust_impact": "Enterprise buyers expect official partner integrations. Using generic clip-art instead of official brand assets (SVGs) suggests these are not real, certified integrations, or that the product is 'vaporware' created from a low-quality template.",
+      "exact_fix_recommendation": "Replace all generic icons in the integration grid with the official, current brand logos for Microsoft Teams, Slack, Google Chat, Entra ID, SharePoint, and Jira.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "High. Lack of official branding reduces credibility for an integration-heavy platform."
+    },
+    {
+      "issue_id": "ui_001",
+      "page": "Home (Desktop)",
+      "severity": "P2",
+      "evidence": "In the top navigation bar, the 'Search playbooks' input field has a visible rendering glitch: a second, empty rounded border appears directly below the actual input field.",
+      "trust_impact": "Visual bugs in the primary navigation signal a lack of QA and attention to detail, which is concerning for a product claiming 'pixel-perfect' enterprise reliability.",
+      "exact_fix_recommendation": "Inspect the CSS for the search container. Remove the extraneous border or shadow on the container wrapper that is causing the double-input artifact.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Medium. Low polish correlates with low perceived software quality."
+    },
+    {
+      "issue_id": "ux_mobile_001",
+      "page": "Home (Mobile)",
+      "severity": "P2",
+      "evidence": "In the mobile view, the 'Channels + Tools' section stacks 8 integration cards vertically in a single column, creating a very long scroll area with low information density.",
+      "trust_impact": "Low",
+      "exact_fix_recommendation": "Change the mobile layout for the integration grid to a 2-column grid (2x4) or a horizontal swipe carousel to reduce vertical page length and improve scannability.",
+      "accessibility_impact": "Medium. Excessive scrolling increases physical effort.",
+      "conversion_impact": "Medium. Users may fatigue and drop off before reaching the bottom CTA."
+    },
+    {
+      "issue_id": "header_visual_glitch",
+      "page": "/pricing",
+      "severity": "P1",
+      "evidence": "A visual artifact (misplaced grey container/border) appears directly beneath the search bar in the global header on both desktop and mobile views.",
+      "trust_impact": "High. Obvious UI rendering bugs in the primary navigation signal poor engineering quality and lack of QA, reducing user confidence in the platform.",
+      "exact_fix_recommendation": "Inspect the CSS for the search input container. Remove the extraneous background layer or correct the absolute positioning/z-index of the search field wrapper.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Medium"
+    },
+    {
+      "issue_id": "suspicious_copyright_date",
+      "page": "/pricing",
+      "severity": "P0",
+      "evidence": "Footer copyright text displays '© 2026 Claw Bureau'.",
+      "trust_impact": "Severe. A future-dated copyright year is a hallmark of AI-generated templates or fraudulent sites. It immediately destroys credibility for an enterprise security/compliance product.",
+      "exact_fix_recommendation": "Update the footer to display the current year dynamically using JavaScript (e.g., new Date().getFullYear()).",
+      "accessibility_impact": "None",
+      "conversion_impact": "High"
+    },
+    {
+      "issue_id": "mobile_header_layout",
+      "page": "/pricing",
+      "severity": "P1",
+      "evidence": "On mobile, the search bar is horizontally compressed between the logo and hamburger menu, truncating the placeholder text and creating a cramped touch target.",
+      "trust_impact": "Medium. Suggests the mobile experience is an afterthought.",
+      "exact_fix_recommendation": "Replace the visible search input with a search icon that toggles a modal or expandable input field on mobile viewports.",
+      "accessibility_impact": "High. The small touch target and truncated text violate mobile usability best practices.",
+      "conversion_impact": "Medium"
+    },
+    {
+      "issue_id": "low_contrast_eyebrow_text",
+      "page": "/pricing",
+      "severity": "P2",
+      "evidence": "The 'PRICING' label above the H1 uses a dark blue color against a black background.",
+      "trust_impact": "Low",
+      "exact_fix_recommendation": "Lighten the text color to a shade that achieves at least a 4.5:1 contrast ratio against the black background (e.g., a lighter cyan or white).",
+      "accessibility_impact": "High. Fails WCAG contrast requirements, making it invisible to some users.",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "weak_plan_differentiation",
+      "page": "/pricing",
+      "severity": "P2",
+      "evidence": "The 'Business' plan is visually highlighted with a border, but its CTA button ('Get Started') is identical in style and color to the lower-tier plans.",
+      "trust_impact": "Low",
+      "exact_fix_recommendation": "Style the 'Business' plan CTA button differently (e.g., a solid white button or a distinct hover state) to reinforce it as the preferred/primary conversion path.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Medium"
+    },
+    {
+      "issue_id": "visual-defect-search-bar",
+      "page": "/sources",
+      "severity": "P1",
+      "evidence": "A dark grey, rounded rectangular artifact is visible directly underneath the search input field in the global header on both desktop and mobile views.",
+      "trust_impact": "The interface appears broken or poorly implemented, which significantly undermines trust in the platform's technical quality.",
+      "exact_fix_recommendation": "Inspect the CSS for the search container. Remove the extraneous background element or correct the `height` and `overflow` properties to eliminate the double-bar rendering artifact.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Medium"
+    },
+    {
+      "issue_id": "mobile-conversion-hierarchy",
+      "page": "/sources",
+      "severity": "P1",
+      "evidence": "On mobile, the 'High-intent next steps' section (containing critical CTAs like 'Book rollout session') is buried beneath the extremely long 'Indexable families' list.",
+      "trust_impact": "Users may perceive the page as a passive directory rather than an actionable hub.",
+      "exact_fix_recommendation": "On mobile breakpoints, reorder the layout to place 'High-intent next steps' above 'Indexable families', or wrap the 'Indexable families' list in a collapsed accordion by default.",
+      "accessibility_impact": "High navigation effort required for keyboard/screen reader users to reach primary action links.",
+      "conversion_impact": "High"
+    },
+    {
+      "issue_id": "layout-imbalance-desktop",
+      "page": "/sources",
+      "severity": "P2",
+      "evidence": "On desktop, the 'Indexable families' column is significantly longer than the 'High-intent next steps' column, creating a large area of trapped whitespace on the right side.",
+      "trust_impact": "The layout feels unpolished and unfinished.",
+      "exact_fix_recommendation": "Make the 'High-intent next steps' card sticky on scroll so it remains visible while reading the adjacent list, or redistribute content to balance column heights.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "cognitive-load-link-density",
+      "page": "/sources",
+      "severity": "P2",
+      "evidence": "The 'Frequently cited pages' section presents a massive, unstructured wall of text links, making it difficult to scan for specific information.",
+      "trust_impact": "The page feels like a raw sitemap dump rather than a curated user experience.",
+      "exact_fix_recommendation": "Group these links into sub-categories (e.g., 'Agent Controls', 'Policies', 'Compliance') or implement a 'Show more' interaction pattern to reduce initial visual noise.",
+      "accessibility_impact": "Long, unstructured lists are tedious for screen reader users to navigate.",
+      "conversion_impact": "Medium"
+    },
+    {
+      "issue_id": "visual_glitch_header_search",
+      "page": "/trust",
+      "severity": "P1",
+      "evidence": "In the global header (desktop and mobile), there is a visible, empty rounded-rectangle outline or artifact floating directly beneath the search input field.",
+      "trust_impact": "This obvious UI defect creates an impression of broken code or lack of QA, which is severely damaging for a company selling 'verification' and 'trust' infrastructure.",
+      "exact_fix_recommendation": "Inspect the header CSS/HTML to remove the duplicate container, shadow, or border element that is rendering incorrectly below the main search bar.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Distracts from the primary navigation and lowers perceived platform stability."
+    },
+    {
+      "issue_id": "mobile_diagram_illegibility",
+      "page": "/trust",
+      "severity": "P0",
+      "evidence": "The 'How it Works' ASCII/code diagram is simply scaled down on mobile devices, rendering the text microscopic and unreadable.",
+      "trust_impact": "Users cannot verify the technical 'proof' mechanism, which is the page's core value proposition. Hiding technical details due to poor responsiveness suggests a lack of transparency.",
+      "exact_fix_recommendation": "Replace the ASCII text block on mobile with a responsive SVG diagram, or implement a horizontal scroll container that maintains a legible font size (min 12px).",
+      "accessibility_impact": "Text size is well below readable standards, making the content inaccessible to all mobile users.",
+      "conversion_impact": "Blocks the technical buyer from understanding the product's differentiator, likely causing drop-off."
+    },
+    {
+      "issue_id": "low_trust_iconography",
+      "page": "/trust",
+      "severity": "P2",
+      "evidence": "The icons used in the 'Three Layers of Trust' cards (pencil, lock, clipboard) appear to be standard OS emojis rather than custom enterprise assets.",
+      "trust_impact": "Using generic emojis for high-stakes concepts like 'Execution Attestation' feels amateurish and low-budget, undermining the 'Enterprise' positioning.",
+      "exact_fix_recommendation": "Replace the emoji-style assets with a custom, monoline or high-fidelity icon set that matches the site's dark/technical aesthetic.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Reduces brand authority and perceived product maturity."
+    },
+    {
+      "issue_id": "code_block_contrast",
+      "page": "/trust",
+      "severity": "P1",
+      "evidence": "The gray text within the code block diagram (e.g., flow arrows and comments) has very low contrast against the black background.",
+      "trust_impact": "Technical users may struggle to read the flow, leading to frustration and a perception that the technical details are obfuscated.",
+      "exact_fix_recommendation": "Increase the brightness of the gray text color in the syntax highlighter to ensure it meets WCAG AA contrast ratio (at least 4.5:1 against the background).",
+      "accessibility_impact": "Likely fails WCAG contrast requirements, excluding visually impaired users.",
+      "conversion_impact": "Impedes the 'technical win' by making the proof hard to read."
+    },
+    {
+      "issue_id": "footer_future_date",
+      "page": "/trust",
+      "severity": "P2",
+      "evidence": "The footer copyright year is hardcoded to '2026'.",
+      "trust_impact": "If the current year is not 2026, this looks like a template placeholder or an AI-hallucinated detail, suggesting the site is fake or neglected.",
+      "exact_fix_recommendation": "Dynamically render the current year using JavaScript or server-side logic.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Subtle erosion of credibility for detail-oriented users."
+    }
+  ]
+}

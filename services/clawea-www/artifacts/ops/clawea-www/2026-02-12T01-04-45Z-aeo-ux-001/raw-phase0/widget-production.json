@@ -1,0 +1,23 @@
+{
+  "result": {
+    "sitekey": "0x4AAAAAACazOSX2CTrD6krt",
+    "secret_redacted": true,
+    "modified_on": "2026-02-12T01:05:25.960442Z",
+    "created_on": "2026-02-12T00:52:47.207269Z",
+    "mode": "invisible",
+    "domains": [
+      "clawea-www.generaite.workers.dev",
+      "clawea.com",
+      "www.clawea.com"
+    ],
+    "name": "clawea-www-production-turnstile",
+    "bot_fight_mode": false,
+    "region": "world",
+    "offlabel": false,
+    "ephemeral_id": false,
+    "clearance_level": "no_clearance"
+  },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

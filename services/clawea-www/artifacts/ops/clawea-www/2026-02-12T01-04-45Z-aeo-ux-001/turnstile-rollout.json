@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-02-12T01:05:43Z",
+  "status": "completed",
+  "widgets": {
+    "staging": {
+      "sitekey": "0x4AAAAAACazONSWbIzwmAf-",
+      "mode": "invisible",
+      "domains": [
+        "clawea-www-staging.generaite.workers.dev",
+        "staging-www.clawea.com"
+      ],
+      "name": "clawea-www-staging-turnstile"
+    },
+    "production": {
+      "sitekey": "0x4AAAAAACazOSX2CTrD6krt",
+      "mode": "invisible",
+      "domains": [
+        "clawea-www.generaite.workers.dev",
+        "clawea.com",
+        "www.clawea.com"
+      ],
+      "name": "clawea-www-production-turnstile"
+    }
+  },
+  "workerSecretUpdate": {
+    "TURNSTILE_SITE_KEY": "set_staging_and_production",
+    "TURNSTILE_SECRET_KEY": "set_staging_and_production"
+  },
+  "observedSiteKey": {
+    "stagingWorkersDev": "0x4AAAAAACazONSWbIzwmAf-",
+    "productionWorkersDev": "0x4AAAAAACazOSX2CTrD6krt",
+    "productionCanonical": "0x4AAAAAACazOSX2CTrD6krt"
+  },
+  "smoke": {
+    "leadSubmitWithDummyToken": {
+      "staging": {
+        "ok": false,
+        "error": {
+          "code": "TURNSTILE_FAILED",
+          "message": "invalid-input-response"
+        }
+      },
+      "production": {
+        "ok": false,
+        "error": {
+          "code": "TURNSTILE_FAILED",
+          "message": "invalid-input-response"
+        }
+      },
+      "note": "Dummy token is expected to fail after real-key rollout; this confirms Turnstile verification path is active."
+    },
+    "siteverifyDummyToken": {
+      "staging": {
+        "error-codes": [
+          "invalid-input-response"
+        ],
+        "success": false,
+        "messages": []
+      },
+      "production": {
+        "error-codes": [
+          "invalid-input-response"
+        ],
+        "success": false,
+        "messages": []
+      },
+      "note": "invalid-input-response expected with real secrets"
+    },
+    "leadSubmitRealTokenAutomation": {
+      "status": "not-automatable-in-headless-run",
+      "reason": "Turnstile challenge token issuance requires interactive browser trust signals; no reliable unattended token mint in CI/headless context.",
+      "mitigation": "Validated key wiring + live site key replacement + strict verification failure on dummy token"
+    }
+  }
+}

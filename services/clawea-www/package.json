@@ -16,11 +16,14 @@
     "lint:human-tone": "tsx scripts/human-tone-lint.ts",
     "routing:replay": "tsx scripts/routing-replay.ts",
     "experiments:recommend": "tsx scripts/recommend-winners.ts",
+    "ux:screenshots": "tsx scripts/ux/capture-live-screenshots.ts",
+    "ux:critique": "tsx scripts/ux/gemini-ui-critique.ts",
     "content:factory": "tsx scripts/content-factory.ts",
     "content:factory:dry": "tsx scripts/content-factory.ts --mode dry-run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250121.0",
+    "playwright": "^1.58.2",
     "tsx": "^4.21.0",
     "typescript": "^5.3.0",
     "wrangler": "^3.105.0"

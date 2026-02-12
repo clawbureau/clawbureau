@@ -6128,9 +6128,14 @@ function homePage(): string {
         <h1 data-hero-copy data-hero-proof="AI Agents Your Security Team Can Defend" data-hero-roi="AI Agents That Ship Value Without Governance Debt" data-hero-speed="AI Agents You Can Launch This Month, Not Next Year">AI Agents That Your Enterprise Can Actually Trust</h1>
         <p class="sub">Deploy verified AI agents across Slack, Teams, Discord, and 20+ channels. Every action attested. Every model call receipted. No vendor lock-in. Works with Claude, GPT, Gemini, Llama, and any model you choose.</p>
         <div class="actions">
-          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-assessment" data-cta-copy data-cta-proof="Run readiness assessment" data-cta-roi="Estimate rollout ROI" data-cta-speed="Start 2-minute assessment">Run readiness assessment</a>
+          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-assessment" data-cta-copy data-cta-proof="Run assessment" data-cta-roi="Estimate rollout ROI" data-cta-speed="Start 2-minute assessment">Run assessment</a>
           <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="home-contact">Talk to Sales</a>
         </div>
+        <ul class="trust-proof-list" aria-label="Trust posture highlights">
+          <li>SOC 2 control mapping</li>
+          <li>HIPAA/GDPR evidence ready</li>
+          <li>SIEM export compatible</li>
+        </ul>
       </div>
     </section>
 
@@ -6218,23 +6223,22 @@ function homePage(): string {
         </div>
         <div class="grid-4">
           ${[
-            ["Microsoft Teams", "/channels/microsoft-teams", "🟦", "Approvals and control sessions."],
-            ["Slack", "/channels/slack", "💬", "Fast control plane for teams."],
-            ["Email", "/channels/email", "📧", "High-risk outbound, policy-first."],
-            ["Google Chat", "/channels/google-chat", "🟩", "Workspace-native control plane."],
-            ["Entra ID", "/tools/entra-id", "🔐", "Identity and step-up approvals."],
-            ["SharePoint", "/tools/sharepoint", "📄", "Scoped document access."],
-            ["GitHub", "/tools/github", "🐙", "Code changes with policy and proof."],
-            ["Jira", "/tools/jira", "📋", "Change control and ticket workflows."],
+            ["Microsoft Teams", "/channels/microsoft-teams", "Approvals and control sessions."],
+            ["Slack", "/channels/slack", "Fast control plane for teams."],
+            ["Email", "/channels/email", "High-risk outbound, policy-first."],
+            ["Google Chat", "/channels/google-chat", "Workspace-native control plane."],
+            ["Entra ID", "/tools/entra-id", "Identity and step-up approvals."],
+            ["SharePoint", "/tools/sharepoint", "Scoped document access."],
+            ["GitHub", "/tools/github", "Code changes with policy and proof."],
+            ["Jira", "/tools/jira", "Change control and ticket workflows."],
           ]
-            .map(([name, href, icon, desc]) => `<a href="${href}" class="card card-link"><div class="icon">${icon}</div><h3>${name}</h3><p>${desc}</p></a>`)
+            .map(([name, href, desc]) => `<a href="${href}" class="card card-link"><h3>${name}</h3><p>${desc}</p></a>`)
             .join("")}
         </div>
-        <p style="text-align:center;margin-top:2rem">
-          <a href="/channels" style="color:var(--text-muted)">Browse channels</a>
-          <span style="color:var(--text-muted)"> · </span>
-          <a href="/tools" style="color:var(--text-muted)">Browse tools</a>
-        </p>
+        <div class="actions" style="justify-content:center;margin-top:2rem">
+          <a href="/channels" class="cta-btn cta-btn-outline" data-cta="home-browse-channels">Browse all channels</a>
+          <a href="/tools" class="cta-btn cta-btn-outline" data-cta="home-browse-tools">Browse all tools</a>
+        </div>
       </div>
     </section>
 
@@ -6265,7 +6269,7 @@ function homePage(): string {
         <div class="cta-banner">
           <h2>Deploy Your First Enterprise AI Agent With a Controlled Pilot</h2>
           <p>Start with a scored readiness path, then move to a proof-backed pilot plan your security and platform teams can approve.</p>
-          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-bottom-assessment" data-cta-copy>Run readiness assessment</a>
+          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-bottom-assessment" data-cta-copy>Run assessment</a>
           <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="home-bottom-contact">Talk to Sales</a>
         </div>
       </div>
@@ -6296,7 +6300,12 @@ function pricingPage(): string {
           <h2>Start Small, Scale Without Limits</h2>
           <p>Every tier includes full execution attestation, proof bundles, and audit logs.</p>
         </div>
-        <div class="grid-4">
+        <ul class="trust-proof-list" style="margin:-.5rem 0 1.5rem" aria-label="Compliance highlights">
+          <li>SOC 2 aligned controls</li>
+          <li>HIPAA and GDPR mapping</li>
+          <li>SIEM export ready</li>
+        </ul>
+        <div class="grid-4 pricing-grid">
           <div class="price-card">
             <div class="tier">Starter</div>
             <div class="amount">$49</div>
@@ -6309,7 +6318,7 @@ function pricingPage(): string {
               <li>Execution attestation</li>
               <li>90-day audit log retention</li>
             </ul>
-            <a href="/contact" class="cta-btn">Get Started</a>
+            <a href="/contact" class="cta-btn cta-btn-outline">Get Started</a>
           </div>
           <div class="price-card">
             <div class="tier">Team</div>
@@ -6324,7 +6333,7 @@ function pricingPage(): string {
               <li>1-year audit log retention</li>
               <li>Budget controls</li>
             </ul>
-            <a href="/contact" class="cta-btn">Get Started</a>
+            <a href="/contact" class="cta-btn cta-btn-outline">Get Started</a>
           </div>
           <div class="price-card featured">
             <div class="tier" style="color:var(--accent)">Business</div>
@@ -6345,8 +6354,9 @@ function pricingPage(): string {
           <div class="price-card">
             <div class="tier">Enterprise</div>
             <div class="amount">Custom</div>
-            <div class="period">contact sales</div>
+            <div class="period">Contact sales</div>
             <ul>
+              <li><strong>Everything in Business, plus:</strong></li>
               <li>Unlimited agents</li>
               <li>Unlimited skills</li>
               <li>Custom container limits</li>
@@ -6356,7 +6366,7 @@ function pricingPage(): string {
               <li>BAA / DPA available</li>
               <li>On-prem option</li>
             </ul>
-            <a href="/contact" class="cta-btn">Talk to Sales</a>
+            <a href="/contact" class="cta-btn cta-btn-outline">Talk to Sales</a>
           </div>
         </div>
       </div>
@@ -6377,12 +6387,23 @@ type AssessmentResult = {
   riskScore: number;
   confidenceLabel: string;
   recommendedTrack: "guided-pilot" | "self-serve-pilot" | "architecture-review";
+  timeline?: string;
+  previewMode: boolean;
 };
 
 function parseAssessmentResult(url: URL): AssessmentResult {
-  const readinessScore = Math.min(100, Math.max(0, Number(url.searchParams.get("readiness") ?? "0") || 0));
-  const roiScore = Math.min(100, Math.max(0, Number(url.searchParams.get("roi") ?? "0") || 0));
-  const riskScore = Math.min(100, Math.max(0, Number(url.searchParams.get("risk") ?? "0") || 0));
+  const hasExplicitScores = ["readiness", "roi", "risk"].some((k) => url.searchParams.has(k));
+
+  let readinessScore = Math.min(100, Math.max(0, Number(url.searchParams.get("readiness") ?? "0") || 0));
+  let roiScore = Math.min(100, Math.max(0, Number(url.searchParams.get("roi") ?? "0") || 0));
+  let riskScore = Math.min(100, Math.max(0, Number(url.searchParams.get("risk") ?? "0") || 0));
+
+  const previewMode = !hasExplicitScores || (readinessScore === 0 && roiScore === 0 && riskScore === 0);
+  if (previewMode) {
+    readinessScore = 67;
+    roiScore = 63;
+    riskScore = 38;
+  }
 
   const blended = Math.round((readinessScore * 0.4) + (roiScore * 0.35) + ((100 - riskScore) * 0.25));
   const confidenceLabel = blended >= 78 ? "high-intent" : blended >= 55 ? "medium-intent" : "early-intent";
@@ -6399,7 +6420,14 @@ function parseAssessmentResult(url: URL): AssessmentResult {
     riskScore,
     confidenceLabel,
     recommendedTrack,
+    timeline: clipString(url.searchParams.get("timeline"), 80) ?? "",
+    previewMode,
   };
+}
+
+function renderTurnstileBlock(turnstileSiteKey: string, enableLiveWidget: boolean): string {
+  if (!enableLiveWidget) return "";
+  return `<div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>`;
 }
 
 function assessmentPage(turnstileSiteKey: string): string {
@@ -6421,7 +6449,7 @@ function assessmentPage(turnstileSiteKey: string): string {
         <form class="card lead-form" data-assessment-form style="margin-top:1.5rem">
           <div class="form-grid-2">
             <label class="form-field">
-              <span>Team size</span>
+              <span>Team size *</span>
               <select name="teamSize" required>
                 <option value="">Select…</option>
                 <option value="1-20">1-20</option>
@@ -6432,7 +6460,7 @@ function assessmentPage(turnstileSiteKey: string): string {
             </label>
 
             <label class="form-field">
-              <span>Current stage</span>
+              <span>Current stage *</span>
               <select name="maturity" required>
                 <option value="">Select…</option>
                 <option value="exploration">Exploration</option>
@@ -6442,7 +6470,7 @@ function assessmentPage(turnstileSiteKey: string): string {
             </label>
 
             <label class="form-field">
-              <span>Primary objective</span>
+              <span>Primary objective *</span>
               <select name="objective" required>
                 <option value="">Select…</option>
                 <option value="cost">Reduce manual process cost</option>
@@ -6452,7 +6480,7 @@ function assessmentPage(turnstileSiteKey: string): string {
             </label>
 
             <label class="form-field">
-              <span>Risk tolerance</span>
+              <span>Risk tolerance *</span>
               <select name="riskTolerance" required>
                 <option value="">Select…</option>
                 <option value="low">Low (strict approvals)</option>
@@ -6462,7 +6490,7 @@ function assessmentPage(turnstileSiteKey: string): string {
             </label>
 
             <label class="form-field form-field-wide">
-              <span>Timeline to launch</span>
+              <span>Timeline to launch *</span>
               <select name="timeline" required>
                 <option value="">Select…</option>
                 <option value="2-weeks">Within 2 weeks</option>
@@ -6475,7 +6503,7 @@ function assessmentPage(turnstileSiteKey: string): string {
 
           <div class="form-actions" style="margin-top:1.25rem">
             <button type="submit" class="cta-btn cta-btn-lg" data-cta="assessment-calculate" data-cta-copy>Calculate my score</button>
-            <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="assessment-contact">Talk to sales now</a>
+            <a href="/contact" style="font-size:.9rem;color:var(--text);text-decoration:underline" data-cta="assessment-contact">Need a custom plan? Talk to sales.</a>
           </div>
 
           <p class="form-note">No signup required for scoring. You can submit your details on the result page if you want a tailored plan.</p>
@@ -6549,12 +6577,16 @@ function assessmentPage(turnstileSiteKey: string): string {
   });
 }
 
-function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string): string {
+function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string, enableLiveTurnstile: boolean): string {
   const trackLabel = result.recommendedTrack === "guided-pilot"
     ? "Guided pilot"
     : result.recommendedTrack === "architecture-review"
       ? "Architecture review"
       : "Self-serve pilot";
+
+  const readinessClass = result.readinessScore >= 70 ? "score-good" : result.readinessScore >= 50 ? "score-warn" : "score-bad";
+  const roiClass = result.roiScore >= 70 ? "score-good" : result.roiScore >= 50 ? "score-warn" : "score-bad";
+  const riskClass = result.riskScore <= 40 ? "score-good" : result.riskScore <= 65 ? "score-warn" : "score-bad";
 
   return layout({
     meta: {
@@ -6579,18 +6611,18 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
         <div class="score-grid">
           <article class="score-card">
             <h3>Readiness</h3>
-            <div class="score-value">${result.readinessScore}</div>
+            <div class="score-value ${readinessClass}">${result.readinessScore}</div>
             <p>How prepared your team is to launch a controlled pilot quickly.</p>
           </article>
           <article class="score-card">
             <h3>ROI signal</h3>
-            <div class="score-value">${result.roiScore}</div>
+            <div class="score-value ${roiClass}">${result.roiScore}</div>
             <p>Estimated value potential from throughput and approval cycle improvements.</p>
           </article>
           <article class="score-card">
             <h3>Risk posture</h3>
-            <div class="score-value">${result.riskScore}</div>
-            <p>Higher scores indicate higher risk exposure without strict execution controls.</p>
+            <div class="score-value ${riskClass}">${result.riskScore}</div>
+            <p>Lower is safer. Higher scores indicate higher risk exposure without strict execution controls.</p>
           </article>
         </div>
 
@@ -6603,34 +6635,22 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
           </ul>
         </div>
 
-        <div class="cta-banner" style="margin-top:2rem">
-          <h2>Want a tailored rollout plan?</h2>
-          <p>Submit one short form and we return a deployment recommendation with control policy examples.</p>
-          <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-lg" data-cta="assessment-result-contact" data-cta-copy>Request tailored plan</a>
-          <a href="/book?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-book">Book rollout session</a>
-          <a href="/trust" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-trust">Review trust controls</a>
-        </div>
-
         <form class="card lead-form" data-lead-form data-cta="assessment-result-form" style="margin-top:2rem">
-          <h3 style="margin-bottom:.5rem">Fast qualification form</h3>
+          <h3 style="margin-bottom:.5rem">Get your tailored rollout plan</h3>
           <p class="form-note" style="margin-bottom:1rem">This takes less than 45 seconds.</p>
 
           <div class="form-grid-2">
             <label class="form-field">
-              <span>Work email</span>
+              <span>Work email *</span>
               <input type="email" name="email" required placeholder="you@company.com" autocomplete="email">
             </label>
             <label class="form-field">
-              <span>Company</span>
+              <span>Company *</span>
               <input type="text" name="company" required placeholder="Company name" autocomplete="organization">
             </label>
             <label class="form-field">
               <span>Your role</span>
               <input type="text" name="role" placeholder="Security lead, platform lead, CTO..." autocomplete="organization-title">
-            </label>
-            <label class="form-field">
-              <span>Timeline</span>
-              <input type="text" name="timeline" placeholder="2 weeks, this month, this quarter">
             </label>
           </div>
 
@@ -6639,14 +6659,23 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
           <input type="hidden" name="assessment.roiScore" value="${result.roiScore}">
           <input type="hidden" name="assessment.riskScore" value="${result.riskScore}">
           <input type="hidden" name="assessment.confidenceLabel" value="${esc(result.confidenceLabel)}">
+          <input type="hidden" name="timeline" value="${esc(result.timeline ?? "")}">
 
-          <div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>
+          ${renderTurnstileBlock(turnstileSiteKey, enableLiveTurnstile)}
 
           <div class="form-actions">
-            <button type="submit" class="cta-btn" data-cta="assessment-result-submit">Send to solutions team</button>
+            <button type="submit" class="cta-btn" data-cta="assessment-result-submit">Email me the tailored plan</button>
             <span class="form-status" data-lead-form-status aria-live="polite"></span>
           </div>
         </form>
+
+        <div class="cta-banner" style="margin-top:1.5rem">
+          <h2>Want to skip forms and talk now?</h2>
+          <p>Book a rollout session directly or review trust controls before you proceed.</p>
+          <a href="/book?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-lg" data-cta="assessment-result-book">Book rollout session</a>
+          <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-contact" data-cta-copy>Talk to Sales</a>
+          <p style="margin-top:.9rem;font-size:.9rem"><a href="/trust" style="color:var(--text);text-decoration:underline" data-cta="assessment-result-trust">Review trust controls first</a></p>
+        </div>
       </div>
     </section>`,
     schemas: [
@@ -6659,7 +6688,7 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
   });
 }
 
-function contactPage(turnstileSiteKey: string): string {
+function contactPage(turnstileSiteKey: string, enableLiveTurnstile: boolean): string {
   return layout({
     meta: {
       title: "Contact Sales | Claw EA Enterprise AI Agents",
@@ -6671,62 +6700,50 @@ function contactPage(turnstileSiteKey: string): string {
     <section class="section content-page">
       <div class="wrap" style="max-width:760px">
         <h1>Talk to Sales</h1>
-        <p class="lead">Short path: tell us your team, objective, and timeline. We reply with a scoped recommendation and next steps.</p>
+        <p class="lead">Short path: share your contact details and use case. We reply with a scoped recommendation and next steps.</p>
 
         <form class="card lead-form" data-lead-form data-cta="contact-lead-form">
           <div class="form-grid-2">
             <label class="form-field">
-              <span>Work email</span>
+              <span>Work email *</span>
               <input type="email" name="email" required placeholder="you@company.com" autocomplete="email">
             </label>
             <label class="form-field">
-              <span>Company</span>
+              <span>Company *</span>
               <input type="text" name="company" required placeholder="Company name" autocomplete="organization">
             </label>
             <label class="form-field">
-              <span>Full name</span>
-              <input type="text" name="fullName" placeholder="Your name" autocomplete="name">
+              <span>Full name *</span>
+              <input type="text" name="fullName" required placeholder="Your name" autocomplete="name">
             </label>
             <label class="form-field">
-              <span>Role</span>
+              <span>Role (optional)</span>
               <input type="text" name="role" placeholder="Security lead, platform lead, CTO..." autocomplete="organization-title">
             </label>
-            <label class="form-field">
-              <span>Team size</span>
-              <select name="teamSize">
-                <option value="">Select…</option>
-                <option value="1-20">1-20</option>
-                <option value="21-100">21-100</option>
-                <option value="101-500">101-500</option>
-                <option value="500+">500+</option>
-              </select>
-            </label>
-            <label class="form-field">
-              <span>Timeline</span>
-              <select name="timeline">
-                <option value="">Select…</option>
-                <option value="2-weeks">Within 2 weeks</option>
-                <option value="30-days">Within 30 days</option>
-                <option value="quarter">This quarter</option>
-                <option value="later">Later planning</option>
-              </select>
-            </label>
             <label class="form-field form-field-wide">
-              <span>Primary use case</span>
+              <span>Primary use case (optional)</span>
               <textarea name="primaryUseCase" rows="3" placeholder="Example: production deploy approvals, SIEM evidence collection, identity lifecycle approvals"></textarea>
             </label>
           </div>
 
-          <div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>
+          ${renderTurnstileBlock(turnstileSiteKey, enableLiveTurnstile)}
+
+          <p class="form-note" style="margin:.75rem 0 0">By submitting, you agree to follow-up from Claw EA and our <a href="/policy" aria-label="Read privacy policy">privacy policy</a>.</p>
 
           <div class="form-actions">
             <button type="submit" class="cta-btn cta-btn-lg" data-cta="contact-fast-submit" data-cta-copy>Request tailored plan</button>
-            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="contact-assessment">Run readiness assessment</a>
             <span class="form-status" data-lead-form-status aria-live="polite"></span>
           </div>
 
-          <p class="form-note">Prefer email? Write to <a href="mailto:enterprise@clawbureau.com">enterprise@clawbureau.com</a>. Include company, team size, and target timeline.</p>
+          <p class="form-note">Prefer email? Write to <a href="mailto:enterprise@clawbureau.com">enterprise@clawbureau.com</a>. Include company, role, and target use case.</p>
         </form>
+
+        <div style="margin-top:1rem">
+          <p class="form-note" style="margin:.2rem 0 .5rem">Not ready to submit? Start with the assessment.</p>
+          <div class="actions" style="justify-content:flex-start">
+            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="contact-assessment">Run assessment</a>
+          </div>
+        </div>
       </div>
     </section>`,
     schemas: [
@@ -6739,7 +6756,7 @@ function contactPage(turnstileSiteKey: string): string {
   });
 }
 
-function bookPage(requestUrl: URL, turnstileSiteKey: string): string {
+function bookPage(requestUrl: URL, turnstileSiteKey: string, enableLiveTurnstile: boolean): string {
   const leadId = clipString(requestUrl.searchParams.get("lead"), 80) ?? "";
   const email = clipString(requestUrl.searchParams.get("email"), 220) ?? "";
   const company = clipString(requestUrl.searchParams.get("company"), 160) ?? "";
@@ -6754,7 +6771,7 @@ function bookPage(requestUrl: URL, turnstileSiteKey: string): string {
     body: `
     <section class="section content-page">
       <div class="wrap" style="max-width:760px">
-        <span class="badge badge-blue">High-intent conversion</span>
+        <span class="badge badge-blue">Deployment planning</span>
         <h1>Book your deployment planning session</h1>
         <p class="lead">Share minimal details and reserve a rollout session. We prefill context from your assessment/contact path when available.</p>
 
@@ -6771,12 +6788,26 @@ function bookPage(requestUrl: URL, turnstileSiteKey: string): string {
               <input type="text" name="company" value="${esc(company)}" placeholder="Company name" autocomplete="organization">
             </label>
             <label class="form-field">
-              <span>Preferred start (UTC)</span>
-              <input type="datetime-local" name="slotIso">
+              <span>Preferred date</span>
+              <input type="date" name="slotDate">
             </label>
             <label class="form-field">
+              <span>Preferred time</span>
+              <input type="time" name="slotTime" step="900">
+            </label>
+            <label class="form-field form-field-wide">
               <span>Timezone</span>
-              <input type="text" name="timezone" placeholder="Europe/Berlin, America/New_York...">
+              <select name="timezone">
+                <option value="">Auto-detect / Not sure</option>
+                <option value="UTC">UTC</option>
+                <option value="Europe/Berlin">Europe/Berlin</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="America/New_York">America/New_York</option>
+                <option value="America/Chicago">America/Chicago</option>
+                <option value="America/Los_Angeles">America/Los_Angeles</option>
+                <option value="Asia/Singapore">Asia/Singapore</option>
+                <option value="Asia/Tokyo">Asia/Tokyo</option>
+              </select>
             </label>
             <label class="form-field form-field-wide">
               <span>Context for the session</span>
@@ -6784,16 +6815,22 @@ function bookPage(requestUrl: URL, turnstileSiteKey: string): string {
             </label>
           </div>
 
-          <div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>
+          ${renderTurnstileBlock(turnstileSiteKey, enableLiveTurnstile)}
 
           <div class="form-actions">
             <button type="submit" class="cta-btn cta-btn-lg" data-cta="book-submit-primary">Confirm booking request</button>
-            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="book-assessment">Run assessment first</a>
             <span class="form-status" data-book-form-status aria-live="polite"></span>
           </div>
 
           <p class="form-note">Ops will confirm by email with exact session time and preparation checklist.</p>
         </form>
+
+        <div style="margin-top:1rem">
+          <p class="form-note" style="margin:.2rem 0 .5rem">Not ready to book yet? Run the readiness assessment first.</p>
+          <div class="actions" style="justify-content:flex-start">
+            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="book-assessment">Run assessment first</a>
+          </div>
+        </div>
       </div>
     </section>`,
     schemas: [
@@ -6820,12 +6857,34 @@ function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
 
   const familySummary = [...familyCounts.entries()]
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], "en"))
-    .map(([family, count]) => `<li><a href="/${family}">${esc(family)}</a> · ${count} indexable pages</li>`)
+    .map(([family, count]) => `<li><a href="/${family}" class="pill-link">${esc(family)} · ${count} pages</a></li>`)
+    .join("");
+
+  const defaultFamilySummary = [
+    ["tools", "Connector security and operations guides"],
+    ["workflows", "Approval and evidence playbooks"],
+    ["controls", "Policy controls and guardrails"],
+    ["channels", "Team-facing control plane entries"],
+  ]
+    .map(([slug, label]) => `<li><a href="/${slug}" class="pill-link">${esc(slug)} · ${esc(label)}</a></li>`)
     .join("");
 
   const topIndexable = rows
     .slice(0, 24)
     .map((row) => `<li><a href="/${row.slug}">${esc(row.meta.title.replace(/ \| Claw EA$/, ""))}</a></li>`)
+    .join("");
+
+  const defaultTopIndexable = [
+    ["/trust", "Trust Layer"],
+    ["/agent-proof-and-attestation", "Proof and Attestation"],
+    ["/secure-agent-execution", "Secure Agent Execution"],
+    ["/policy-as-code-for-agents", "Policy as Code for Agents"],
+    ["/controls", "Controls Hub"],
+    ["/workflows", "Workflow Playbooks"],
+    ["/tools", "Tools Hub"],
+    ["/channels", "Channels Hub"],
+  ]
+    .map(([path, label]) => `<li><a href="${path}">${label}</a></li>`)
     .join("");
 
   return layout({
@@ -6839,7 +6898,7 @@ function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
     body: `
     <section class="section content-page">
       <div class="wrap" style="max-width:900px">
-        <span class="badge badge-blue">Citation routing</span>
+        <span class="badge badge-blue">Citation hub</span>
         <h1>Source hub for AI discovery and enterprise buyers</h1>
         <p class="lead">Use this page to route to citation-ready articles, workflow runbooks, and proof-first pages with explicit references.</p>
 
@@ -6853,16 +6912,18 @@ function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
         </div>
 
         <div class="grid-2" style="margin-top:1.5rem">
-          <article class="card">
-            <h3>Indexable families</h3>
-            <ul>${familySummary}</ul>
+          <article class="card sources-family-card">
+            <h3>Core resource categories</h3>
+            <ul>${familySummary || defaultFamilySummary}</ul>
           </article>
-          <article class="card">
-            <h3>High-intent next steps</h3>
-            <ul>
-              <li><a href="/assessment">Run readiness assessment</a></li>
-              <li><a href="/contact">Submit high-intent brief</a></li>
-              <li><a href="/book">Book rollout session</a></li>
+          <article class="card sources-next-card">
+            <h3>Next steps</h3>
+            <div class="actions" style="justify-content:flex-start;gap:.5rem;margin-top:.25rem">
+              <a href="/assessment" class="cta-btn cta-btn-outline">Run assessment</a>
+              <a href="/contact" class="cta-btn cta-btn-outline">Submit project brief</a>
+              <a href="/book" class="cta-btn cta-btn-outline">Book rollout session</a>
+            </div>
+            <ul style="margin-top:.85rem">
               <li><a href="/trust">Review trust controls</a></li>
               <li><a href="/pricing">Review pricing and rollout tiers</a></li>
             </ul>
@@ -6871,7 +6932,7 @@ function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
 
         <article class="card" style="margin-top:1.5rem">
           <h3>Frequently cited pages</h3>
-          <ul class="sources-hub-list">${topIndexable}</ul>
+          <ul class="sources-hub-list">${topIndexable || defaultTopIndexable}</ul>
         </article>
       </div>
     </section>`,
@@ -6941,7 +7002,7 @@ function relatedLinksForArticle(article: Article): Array<{ name: string; path: s
   const family = slugParts[0] ?? "";
 
   const links: Array<{ name: string; path: string }> = [
-    { name: "Run readiness assessment", path: "/assessment" },
+    { name: "Run assessment", path: "/assessment" },
     { name: "Talk to sales", path: "/contact" },
     { name: "Policy-as-Code", path: "/policy-as-code-for-agents" },
     { name: "Secure Execution", path: "/secure-agent-execution" },
@@ -7080,7 +7141,7 @@ function renderProofSummaryBlock(article: Article): string {
       <li>Rollback posture is documented with deterministic failure handling paths.</li>
     </ul>
     <p class="proof-summary-links">
-      <a href="/assessment" data-cta="proof-summary-assessment">Run readiness assessment</a>
+      <a href="/assessment" data-cta="proof-summary-assessment">Run assessment</a>
       <span>·</span>
       <a href="/contact" data-cta="proof-summary-contact">Request tailored rollout plan</a>
     </p>
@@ -7612,13 +7673,15 @@ export default {
     if (path === "/health") return json({ ok: true, service: "clawea-www", ts: new Date().toISOString() });
 
     const turnstileSiteKey = env.TURNSTILE_SITE_KEY?.trim() || "1x00000000000000000000AA";
+    const host = url.hostname.toLowerCase();
+    const enableLiveTurnstile = host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
 
     if (path === "/") return await htmlWithExperiment(html(homePage(), 200, 7200), path);
     if (path === "/pricing") return await htmlWithExperiment(html(pricingPage()), path);
     if (path === "/assessment") return await htmlWithExperiment(html(assessmentPage(turnstileSiteKey), 200, 1800), path);
-    if (path === "/assessment/result") return await htmlWithExperiment(html(assessmentResultPage(parseAssessmentResult(url), turnstileSiteKey), 200, 900), "/assessment/result");
-    if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstileSiteKey)), path);
-    if (path === "/book") return await htmlWithExperiment(html(bookPage(url, turnstileSiteKey), 200, 900), path);
+    if (path === "/assessment/result") return await htmlWithExperiment(html(assessmentResultPage(parseAssessmentResult(url), turnstileSiteKey, enableLiveTurnstile), 200, 900), "/assessment/result");
+    if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstileSiteKey, enableLiveTurnstile)), path);
+    if (path === "/book") return await htmlWithExperiment(html(bookPage(url, turnstileSiteKey, enableLiveTurnstile), 200, 900), path);
     if (path === "/trust") return await htmlWithExperiment(html(trustPage()), path);
     if (path === "/secure-workers") return await htmlWithExperiment(html(secureWorkersPage()), path);
     if (path === "/consulting") return await htmlWithExperiment(html(consultingPage()), path);

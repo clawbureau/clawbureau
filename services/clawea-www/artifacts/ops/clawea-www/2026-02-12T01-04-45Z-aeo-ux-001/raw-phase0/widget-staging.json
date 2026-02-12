@@ -1,0 +1,22 @@
+{
+  "result": {
+    "sitekey": "0x4AAAAAACazONSWbIzwmAf-",
+    "secret_redacted": true,
+    "modified_on": "2026-02-12T01:05:25.222791Z",
+    "created_on": "2026-02-12T00:52:46.572015Z",
+    "mode": "invisible",
+    "domains": [
+      "clawea-www-staging.generaite.workers.dev",
+      "staging-www.clawea.com"
+    ],
+    "name": "clawea-www-staging-turnstile",
+    "bot_fight_mode": false,
+    "region": "world",
+    "offlabel": false,
+    "ephemeral_id": false,
+    "clearance_level": "no_clearance"
+  },
+  "success": true,
+  "errors": [],
+  "messages": []
+}

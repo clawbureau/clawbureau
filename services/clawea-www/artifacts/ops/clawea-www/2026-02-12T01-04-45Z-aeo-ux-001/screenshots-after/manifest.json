@@ -1,0 +1,172 @@
+{
+  "generatedAt": "2026-02-12T04:29:37.311Z",
+  "base": "http://127.0.0.1:8789",
+  "pages": [
+    "/",
+    "/pricing",
+    "/trust",
+    "/contact",
+    "/assessment",
+    "/assessment/result",
+    "/book",
+    "/sources"
+  ],
+  "viewports": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 1024
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    }
+  ],
+  "captures": [
+    {
+      "route": "/",
+      "url": "http://127.0.0.1:8789/",
+      "viewport": "desktop",
+      "files": {
+        "above": "home__desktop__above.png",
+        "full": "home__desktop__full.png"
+      }
+    },
+    {
+      "route": "/",
+      "url": "http://127.0.0.1:8789/",
+      "viewport": "mobile",
+      "files": {
+        "above": "home__mobile__above.png",
+        "full": "home__mobile__full.png"
+      }
+    },
+    {
+      "route": "/pricing",
+      "url": "http://127.0.0.1:8789/pricing",
+      "viewport": "desktop",
+      "files": {
+        "above": "pricing__desktop__above.png",
+        "full": "pricing__desktop__full.png"
+      }
+    },
+    {
+      "route": "/pricing",
+      "url": "http://127.0.0.1:8789/pricing",
+      "viewport": "mobile",
+      "files": {
+        "above": "pricing__mobile__above.png",
+        "full": "pricing__mobile__full.png"
+      }
+    },
+    {
+      "route": "/trust",
+      "url": "http://127.0.0.1:8789/trust",
+      "viewport": "desktop",
+      "files": {
+        "above": "trust__desktop__above.png",
+        "full": "trust__desktop__full.png"
+      }
+    },
+    {
+      "route": "/trust",
+      "url": "http://127.0.0.1:8789/trust",
+      "viewport": "mobile",
+      "files": {
+        "above": "trust__mobile__above.png",
+        "full": "trust__mobile__full.png"
+      }
+    },
+    {
+      "route": "/contact",
+      "url": "http://127.0.0.1:8789/contact",
+      "viewport": "desktop",
+      "files": {
+        "above": "contact__desktop__above.png",
+        "full": "contact__desktop__full.png"
+      }
+    },
+    {
+      "route": "/contact",
+      "url": "http://127.0.0.1:8789/contact",
+      "viewport": "mobile",
+      "files": {
+        "above": "contact__mobile__above.png",
+        "full": "contact__mobile__full.png"
+      }
+    },
+    {
+      "route": "/assessment",
+      "url": "http://127.0.0.1:8789/assessment",
+      "viewport": "desktop",
+      "files": {
+        "above": "assessment__desktop__above.png",
+        "full": "assessment__desktop__full.png"
+      }
+    },
+    {
+      "route": "/assessment",
+      "url": "http://127.0.0.1:8789/assessment",
+      "viewport": "mobile",
+      "files": {
+        "above": "assessment__mobile__above.png",
+        "full": "assessment__mobile__full.png"
+      }
+    },
+    {
+      "route": "/assessment/result",
+      "url": "http://127.0.0.1:8789/assessment/result",
+      "viewport": "desktop",
+      "files": {
+        "above": "assessment__result__desktop__above.png",
+        "full": "assessment__result__desktop__full.png"
+      }
+    },
+    {
+      "route": "/assessment/result",
+      "url": "http://127.0.0.1:8789/assessment/result",
+      "viewport": "mobile",
+      "files": {
+        "above": "assessment__result__mobile__above.png",
+        "full": "assessment__result__mobile__full.png"
+      }
+    },
+    {
+      "route": "/book",
+      "url": "http://127.0.0.1:8789/book",
+      "viewport": "desktop",
+      "files": {
+        "above": "book__desktop__above.png",
+        "full": "book__desktop__full.png"
+      }
+    },
+    {
+      "route": "/book",
+      "url": "http://127.0.0.1:8789/book",
+      "viewport": "mobile",
+      "files": {
+        "above": "book__mobile__above.png",
+        "full": "book__mobile__full.png"
+      }
+    },
+    {
+      "route": "/sources",
+      "url": "http://127.0.0.1:8789/sources",
+      "viewport": "desktop",
+      "files": {
+        "above": "sources__desktop__above.png",
+        "full": "sources__desktop__full.png"
+      }
+    },
+    {
+      "route": "/sources",
+      "url": "http://127.0.0.1:8789/sources",
+      "viewport": "mobile",
+      "files": {
+        "above": "sources__mobile__above.png",
+        "full": "sources__mobile__full.png"
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "story": "AEO-UX-001",
+  "runId": "2026-02-12T01-04-45Z-aeo-ux-001",
+  "generatedAt": "2026-02-12T12:10:00Z",
+  "branch": "feat/clawea-www/AEO-UX-001-trust-ui-remediation",
+  "baseCommit": "b6130e85c9700a3a876fa911f647f7ec48bfb9fa",
+  "deployments": {
+    "staging": {
+      "worker": "clawea-www-staging",
+      "versionId": "3d45b7df-e9ab-4cc3-a30b-3984eec2f4c9",
+      "url": "https://clawea-www-staging.generaite.workers.dev",
+      "routes": [
+        "staging-www.clawea.com/* (zone: clawea.com)"
+      ],
+      "attemptsArtifact": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T01-04-45Z-aeo-ux-001/deploy-attempts-staging.json",
+      "smokeArtifact": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T01-04-45Z-aeo-ux-001/smoke-summary-staging.json",
+      "notes": [
+        "Deployed via retry wrapper (retryable codes: [10013])",
+        "No retries needed; attempt=1",
+        "staging-www.clawea.com was not resolvable from this environment; smoke used workers.dev URL"
+      ]
+    },
+    "production": {
+      "worker": "clawea-www",
+      "versionId": "f7b65454-6fc8-4700-9648-edf92616b616",
+      "url": "https://clawea-www.generaite.workers.dev",
+      "routes": [
+        "clawea.com/* (zone: clawea.com)",
+        "www.clawea.com/* (zone: clawea.com)"
+      ],
+      "attemptsArtifact": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T01-04-45Z-aeo-ux-001/deploy-attempts-production.json",
+      "smokeArtifact": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T01-04-45Z-aeo-ux-001/smoke-summary-production.json",
+      "notes": [
+        "Deployed via retry wrapper (retryable codes: [10013])",
+        "No retries needed; attempt=1",
+        "Canonical /health is served by the platform worker (service=clawea); clawea-www health verified via workers.dev URL"
+      ]
+    }
+  }
+}

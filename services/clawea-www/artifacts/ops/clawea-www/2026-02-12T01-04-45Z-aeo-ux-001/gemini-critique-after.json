@@ -1,0 +1,303 @@
+{
+  "generatedAt": "2026-02-12T04:36:22.103Z",
+  "model": "gemini-3-pro-preview",
+  "screenshotsDir": "/Users/gfw/clawd/tmp/monorepo-aeo-ux-001/services/clawea-www/artifacts/ops/clawea-www/2026-02-12T01-04-45Z-aeo-ux-001/screenshots-after",
+  "totals": {
+    "issues": 29,
+    "P0": 0,
+    "P1": 0,
+    "P2": 29
+  },
+  "issues": [
+    {
+      "issue_id": "trust_01_internal_jargon",
+      "page": "Assessment (Input)",
+      "severity": "P2",
+      "evidence": "The pill badge above the headline reads 'DEMAND CAPTURE'.",
+      "trust_impact": "High. This appears to be internal marketing terminology (the stage of the funnel) leaked into the UI. It signals to the user that they are a 'lead to be captured' rather than a professional seeking value, which is fatal for enterprise trust.",
+      "exact_fix_recommendation": "Change the badge text to user-centric copy such as 'Free Assessment', 'Readiness Tool', or 'Enterprise Security'.",
+      "accessibility_impact": "None",
+      "conversion_impact": "High. Users wary of sales aggression may bounce immediately upon seeing 'Demand Capture'."
+    },
+    {
+      "issue_id": "conv_02_competing_ctas",
+      "page": "Result",
+      "severity": "P2",
+      "evidence": "Two primary blue buttons appear in close proximity: 'Email me the tailored plan' (Form Submit) and 'Book rollout session' (Next Step).",
+      "trust_impact": "Medium. It feels like the interface is shouting two different priorities at once.",
+      "exact_fix_recommendation": "Downgrade the 'Book rollout session' button to a secondary style (outline or ghost button) to establish visual hierarchy. The primary goal of this section is capturing the email via the form.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Medium. Split attention (Decision Paralysis) often lowers the click-through rate for both actions."
+    },
+    {
+      "issue_id": "usability_03_inconsistent_validation",
+      "page": "Result",
+      "severity": "P2",
+      "evidence": "In the lead capture form, 'WORK EMAIL *' and 'COMPANY *' have asterisks indicating required fields, but 'YOUR ROLE' does not.",
+      "trust_impact": "Low",
+      "exact_fix_recommendation": "If 'Your Role' is required, add the asterisk for consistency. If it is optional, explicitly label it '(Optional)' to reduce friction.",
+      "accessibility_impact": "Medium. Screen reader users rely on consistent required field indicators.",
+      "conversion_impact": "Low. Ambiguity causes micro-hesitation."
+    },
+    {
+      "issue_id": "ux_04_risk_score_cognitive_load",
+      "page": "Result",
+      "severity": "P2",
+      "evidence": "The Risk Posture score is '38' (Green). While the text explains 'Lower is safer', the visual language (Green) usually implies a high score/success in gamified interfaces.",
+      "trust_impact": "Medium. Misinterpretation could lead a user to think they have a 'low' (bad) score despite the green color.",
+      "exact_fix_recommendation": "Add a visual gauge or slider bar below the number showing the range (0-100) with the needle in the 'Low/Safe' green zone to visually reinforce that a low number is the target.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "ui_05_checklist_visibility_mobile",
+      "page": "Result (Mobile)",
+      "severity": "P2",
+      "evidence": "The 'Proof-first rollout checklist' is defined only by a thin blue vertical border on the left. On mobile, this looks like a blockquote or formatting error rather than a distinct UI card.",
+      "trust_impact": "Low",
+      "exact_fix_recommendation": "Add a subtle background color (e.g., rgba(255,255,255,0.05)) to the checklist container to clearly delineate it as a resource card separate from the background.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "booking-method-friction",
+      "page": "/book",
+      "severity": "P2",
+      "evidence": "Form uses manual 'Preferred Date' and 'Preferred Time' inputs instead of a real-time calendar scheduler.",
+      "trust_impact": "The headline promises to 'Book' a session, but the manual inputs and microcopy ('Ops will confirm by email') reveal this is merely a request form. This mismatch creates a 'bait-and-switch' feeling and signals a high-friction, manual sales process rather than a modern, automated experience.",
+      "exact_fix_recommendation": "Replace the manual date/time inputs with an embedded calendar scheduling tool (e.g., Calendly, HubSpot, Cal.com) to allow users to select actual available slots and book instantly.",
+      "accessibility_impact": "Manual date/time inputs are often more prone to formatting errors and harder to navigate for screen reader users compared to accessible calendar widgets.",
+      "conversion_impact": "High. Users expecting to lock in a time immediately may abandon the form when realizing they are entering a negotiation loop via email."
+    },
+    {
+      "issue_id": "competing-primary-ctas",
+      "page": "/book",
+      "severity": "P2",
+      "evidence": "The 'Run assessment' button in the global navigation uses the exact same primary blue styling as the 'Confirm booking request' form submit button.",
+      "trust_impact": "Visual hierarchy is confused; the user is presented with two 'primary' actions, diluting the importance of the main page goal (booking).",
+      "exact_fix_recommendation": "Change the 'Run assessment' button in the header to a secondary (outline) or ghost style on this page, or remove it entirely to focus attention solely on the booking form.",
+      "accessibility_impact": "None.",
+      "conversion_impact": "Medium. Distracts users from the primary conversion action of the page."
+    },
+    {
+      "issue_id": "ambiguous-time-input",
+      "page": "/book",
+      "severity": "P2",
+      "evidence": "The 'Preferred Time' input displays a placeholder '--.--' without explicit 12h/24h formatting indicators.",
+      "trust_impact": "Creates uncertainty about the expected input format (e.g., does '03:00' mean AM or PM?). Ambiguous UI inputs lower perceived polish and increase error rates.",
+      "exact_fix_recommendation": "Replace the free-text time input with a dropdown selector offering 15 or 30-minute increments (e.g., '09:00 AM', '09:30 AM') to standardize data entry.",
+      "accessibility_impact": "Ambiguous text inputs for time are difficult for cognitive accessibility; users may struggle to understand the required format.",
+      "conversion_impact": "Low/Medium. Potential for validation errors or frustration."
+    },
+    {
+      "issue_id": "impersonal-microcopy",
+      "page": "/book",
+      "severity": "P2",
+      "evidence": "Microcopy below the submit button reads: 'Ops will confirm by email...'",
+      "trust_impact": "Using internal jargon like 'Ops' (Operations) sounds bureaucratic, cold, and detached, rather than service-oriented.",
+      "exact_fix_recommendation": "Change 'Ops' to 'Our team', 'A specialist', or 'We'. Example: 'Our team will confirm your session time by email...'",
+      "accessibility_impact": "None.",
+      "conversion_impact": "Low. Subtle impact on brand warmth."
+    },
+    {
+      "issue_id": "trust-missing-social-proof",
+      "page": "/contact",
+      "severity": "P2",
+      "evidence": "The page requests sensitive enterprise contact information but displays zero social proof (client logos, testimonials) or security badges (SOC2, ISO) to validate the company's legitimacy.",
+      "trust_impact": "High. For an enterprise security/architecture product, the absence of trust signals on the conversion page creates doubt.",
+      "exact_fix_recommendation": "Insert a grayscale logo strip of current enterprise customers or security compliance badges (e.g., SOC2, ISO 27001) immediately below the 'Talk to Sales' headline.",
+      "accessibility_impact": "None",
+      "conversion_impact": "High. Trust signals are a critical friction-reducer for enterprise lead forms."
+    },
+    {
+      "issue_id": "copy-robotic-phrasing",
+      "page": "/contact",
+      "severity": "P2",
+      "evidence": "The subheader text 'Short path: share your contact details...' is non-idiomatic and feels robotic or like internal shorthand that was accidentally published.",
+      "trust_impact": "Medium. Unnatural copy suggests a lack of human polish or AI-generated content, which damages brand authority.",
+      "exact_fix_recommendation": "Rewrite to natural language, e.g., 'Fast track: Share your details and use case to get a scoped recommendation.' or simply remove the 'Short path:' prefix.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Medium. Clear, human-sounding copy improves user confidence."
+    },
+    {
+      "issue_id": "legal-copy-grammar",
+      "page": "/contact",
+      "severity": "P2",
+      "evidence": "The privacy disclaimer reads 'agree to follow-up ... and our privacy policy'. Grammatically, a user does not 'agree to a privacy policy' in this context (they acknowledge it), and 'agree to follow-up' is awkward phrasing.",
+      "trust_impact": "Medium. Poor grammar in legal/compliance text undermines the perceived competence of an enterprise security company.",
+      "exact_fix_recommendation": "Change to: 'By submitting, you consent to receive communications from Claw EA and acknowledge our Privacy Policy.'",
+      "accessibility_impact": "None",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "mobile-header-crowding",
+      "page": "/contact",
+      "severity": "P2",
+      "evidence": "In the mobile view, the 'Run assessment' CTA button is very wide, creating a crowded header with minimal breathing room between the logo, the button, and the hamburger menu.",
+      "trust_impact": "Low. Visual clutter reduces perceived premium quality.",
+      "exact_fix_recommendation": "On mobile, either reduce the button's horizontal padding to make it compact or move the CTA inside the hamburger menu to declutter the navigation bar.",
+      "accessibility_impact": "Medium. Crowded touch targets can lead to accidental clicks on adjacent elements.",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "visual_monotony_grid_layout",
+      "page": "Home",
+      "severity": "P2",
+      "evidence": "Four consecutive sections ('Six Pillars', 'Controls', 'Chat Control Plane', 'Policy') utilize nearly identical dark-card grid layouts with text-heavy content, creating a 'wall of text' effect.",
+      "trust_impact": "Medium. The repetitive, template-like design causes visual fatigue, making the enterprise offering feel generic rather than tailored and high-value.",
+      "exact_fix_recommendation": "Break the pattern by converting the 'Controls' or 'Six Pillars' section into a zigzag (alternating text/image) layout or a tabbed interactive component to improve hierarchy and scannability.",
+      "accessibility_impact": "Low",
+      "conversion_impact": "Medium. Users are likely to skim or skip critical feature differentiators due to the monotonous presentation."
+    },
+    {
+      "issue_id": "missing_social_proof",
+      "page": "Home",
+      "severity": "P2",
+      "evidence": "The page lacks a 'Trusted By' bar, client logos, or testimonials, despite the headline explicitly promising 'Trust' and 'Enterprise' readiness.",
+      "trust_impact": "High. Enterprise buyers require external validation to trust a new infrastructure product. The absence of logos contradicts the 'Actually Trust' value proposition.",
+      "exact_fix_recommendation": "Insert a grayscale logo strip of partners (e.g., Cloudflare, AWS) or pilot customers immediately below the Hero stats section to provide visual authority.",
+      "accessibility_impact": "None",
+      "conversion_impact": "High. Lack of social proof is a significant friction point for enterprise adoption."
+    },
+    {
+      "issue_id": "mobile_hero_spacing_excessive",
+      "page": "Home (Mobile)",
+      "severity": "P2",
+      "evidence": "In the mobile view, there is excessive vertical whitespace between the subhead and the first CTA, and between the two stacked CTAs.",
+      "trust_impact": "Low. The large gaps push the critical trust signals (SOC 2, HIPAA checkmarks) further down the page, reducing their immediate visibility.",
+      "exact_fix_recommendation": "Reduce the bottom margin of the subhead and the vertical gap between the two buttons by 50% to group the conversion block tighter.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Medium. Inefficient use of above-the-fold space delays user access to key trust markers."
+    },
+    {
+      "issue_id": "low_contrast_body_text",
+      "page": "Home",
+      "severity": "P2",
+      "evidence": "The grey body text within the dark feature cards (e.g., 'Hardware-isolated Cloudflare Sandboxes...') has low contrast against the black background.",
+      "trust_impact": "Medium. Hard-to-read text can be perceived as an attempt to obscure details or a lack of design polish.",
+      "exact_fix_recommendation": "Lighten the body text color (e.g., to #E5E7EB) to ensure a contrast ratio of at least 4.5:1 against the card background.",
+      "accessibility_impact": "High. Likely fails WCAG AA contrast requirements, making content difficult for visually impaired users to read.",
+      "conversion_impact": "Medium. Reduced readability hinders the user's ability to understand the product's technical safeguards."
+    },
+    {
+      "issue_id": "mobile_trust_signal_alignment",
+      "page": "Home (Mobile)",
+      "severity": "P2",
+      "evidence": "The trust signal checkmarks (SOC 2, HIPAA) are center-aligned as a text block, causing the checkmarks themselves to be misaligned vertically (ragged left edge).",
+      "trust_impact": "Low. Visual sloppiness detracts from the 'pixel-perfect' quality expected of enterprise security tools.",
+      "exact_fix_recommendation": "Wrap the trust signals in a container with 'text-align: left' and center that container, or use a flex column to align the checkmarks vertically.",
+      "accessibility_impact": "None",
+      "conversion_impact": "Low"
+    },
+    {
+      "issue_id": "pricing-desktop-alignment-01",
+      "page": "/pricing",
+      "severity": "P2",
+      "evidence": "In the desktop view, the 'Get Started' and 'Talk to Sales' buttons inside the pricing cards are positioned immediately after the feature lists. Because the lists vary in length, the buttons are not aligned horizontally across the row.",
+      "trust_impact": "Misaligned interactive elements create a jagged visual scan line, reducing the perceived polish and professional quality of the interface.",
+      "exact_fix_recommendation": "Apply `margin-top: auto` to the button container or use Flexbox properties on the card to push all CTA buttons to the bottom of the pricing cards, ensuring they align perfectly across the row.",
+      "accessibility_impact": "Consistent positioning helps users with cognitive disabilities predict where interactive elements are located within similar components.",
+      "conversion_impact": "Aligned buttons facilitate easier plan comparison and decision-making by presenting a structured choice architecture."
+    },
+    {
+      "issue_id": "pricing-conversion-badge-02",
+      "page": "/pricing",
+      "severity": "P2",
+      "evidence": "The 'Business' plan ($999) is visually highlighted with a blue border and solid button, but lacks a text label explaining its prominence (e.g., 'Most Popular' or 'Recommended').",
+      "trust_impact": "Without a label, the highlighting can feel arbitrary rather than a helpful recommendation based on user trends.",
+      "exact_fix_recommendation": "Add a pill-shaped badge labeled 'Most Popular' or 'Recommended' to the top border of the Business card to explicitly signal social proof and guide selection.",
+      "accessibility_impact": "Relying solely on border color to indicate the preferred plan fails for color-blind users; a text label ensures the recommendation is accessible to all.",
+      "conversion_impact": "Explicitly labeling the preferred or most popular plan reduces decision fatigue and typically increases conversion for that specific tier."
+    },
+    {
+      "issue_id": "pricing-mobile-header-03",
+      "page": "/pricing",
+      "severity": "P2",
+      "evidence": "In the mobile view, the 'Run assessment' button in the header is extremely wide, occupying significant horizontal space between the logo and the hamburger menu.",
+      "trust_impact": "On smaller mobile viewports (e.g., iPhone SE), this layout risks element overlap or wrapping, which looks broken and unprofessional.",
+      "exact_fix_recommendation": "On mobile breakpoints, reduce the CTA text to 'Assess' or use a smaller/icon-only button variant to preserve safe zones around the logo and menu.",
+      "accessibility_impact": "Crowded touch targets in the header can lead to accidental clicks on adjacent elements (like the menu or logo).",
+      "conversion_impact": "A broken or crowded header distracts from the primary page content and can frustrate navigation."
+    },
+    {
+      "issue_id": "pricing-breadcrumb-spacing-04",
+      "page": "/pricing",
+      "severity": "P2",
+      "evidence": "The 'Home / Pricing' breadcrumb is rendered with a very small font size and is surrounded by excessive vertical whitespace, making it appear floating and disconnected from the page structure.",
+      "trust_impact": "The layout looks unintentional, as if a CSS margin error occurred, which subtly undermines confidence in the site's engineering quality.",
+      "exact_fix_recommendation": "Increase the breadcrumb font size slightly for legibility and significantly reduce the vertical padding between the header, breadcrumb, and the 'PRICING' section label.",
+      "accessibility_impact": "Small touch targets and poor visual grouping make the breadcrumb harder to notice and use for navigation.",
+      "conversion_impact": "Low impact, but poor use of above-the-fold space pushes valuable pricing content further down the page."
+    },
+    {
+      "issue_id": "cta_hierarchy_next_steps",
+      "page": "/sources",
+      "severity": "P2",
+      "evidence": "In the 'Next steps' card (both desktop and mobile), the 'Run assessment', 'Submit project brief', and 'Book rollout session' buttons all share the exact same secondary outline style.",
+      "trust_impact": "Presenting three competing actions with identical visual weight creates decision paralysis (Hick's Law) and dilutes the primary conversion goal.",
+      "exact_fix_recommendation": "Style 'Run assessment' as a solid filled primary button (matching the global navigation) to establish clear hierarchy. Keep the other two options as secondary outlines or tertiary links.",
+      "accessibility_impact": "Users relying on visual cues for importance cannot distinguish the primary path from secondary options.",
+      "conversion_impact": "High. The lack of a clear primary call-to-action in the body content significantly lowers the likelihood of the user taking the desired 'Run assessment' action."
+    },
+    {
+      "issue_id": "resource_card_affordance",
+      "page": "/sources",
+      "severity": "P2",
+      "evidence": "The items under 'Core resource categories' (e.g., 'tools', 'workflows') appear as list items with very low contrast backgrounds against the container, lacking clear button affordances.",
+      "trust_impact": "The UI feels flat and users may not intuitively understand that these cards are the primary navigation mechanisms for the hub.",
+      "exact_fix_recommendation": "Increase the contrast of the inner card backgrounds or add a hover effect/chevron icon to clearly signal that these elements are clickable navigation targets.",
+      "accessibility_impact": "Low contrast boundaries make it difficult for users with visual impairments to identify the hit targets.",
+      "conversion_impact": "Medium. If users do not perceive these as links, they cannot navigate to the core content sections."
+    },
+    {
+      "issue_id": "mobile_footer_length",
+      "page": "/sources",
+      "severity": "P2",
+      "evidence": "On the mobile view, the footer link lists (Platform, Microsoft Integrations, Resources) are fully expanded, creating excessive vertical scrolling.",
+      "trust_impact": "Reduces the perception of mobile polish and creates friction for users trying to reach the bottom of the page.",
+      "exact_fix_recommendation": "Implement accordion behavior for footer columns on mobile devices, defaulting to collapsed states.",
+      "accessibility_impact": "Increases navigation effort for keyboard/screen reader users who must traverse all links to reach the end of the page.",
+      "conversion_impact": "Low. Primarily a usability optimization."
+    },
+    {
+      "issue_id": "mobile-list-rendering-bug",
+      "page": "Mobile Trust Page",
+      "severity": "P2",
+      "evidence": "In the 'From Agent Action to Proof Bundle' section on mobile, the numbered list items (1-5) display a redundant green bullet point next to the number (e.g., '1. • Task assigned...').",
+      "trust_impact": "Visual rendering bugs in a section explicitly discussing 'verification', 'proof', and 'tamper detection' ironically undermine the brand's promise of technical precision and reliability.",
+      "exact_fix_recommendation": "Inspect the CSS for the numbered list; remove the conflicting `::before` pseudo-element or `list-style-image` that is inheriting the green bullet style from the list above it.",
+      "accessibility_impact": "Creates a confusing reading order and visual clutter for cognitive processing.",
+      "conversion_impact": "Low, but degrades the 'enterprise-grade' polish."
+    },
+    {
+      "issue_id": "inconsistent-iconography",
+      "page": "Desktop & Mobile Trust Page",
+      "severity": "P2",
+      "evidence": "In the 'Three Layers of Trust' section, the 'Proof of Harness' lock icon is a glossy, 3D-style emoji, whereas the 'Execution Attestation' and 'Work Policy' icons are flat, single-color line art.",
+      "trust_impact": "Incoherent visual styles signal a lack of attention to detail or the use of mixed stock assets, which lowers the perceived quality and legitimacy of the product.",
+      "exact_fix_recommendation": "Replace the 3D lock icon with a flat, linear icon that matches the stroke width, color, and aesthetic of the adjacent pen and clipboard icons.",
+      "accessibility_impact": "None.",
+      "conversion_impact": "Low (subconscious trust signal)."
+    },
+    {
+      "issue_id": "diagram-contrast-legibility",
+      "page": "Desktop Trust Page",
+      "severity": "P2",
+      "evidence": "The flow chart in 'From Agent Action to Proof Bundle' uses dark grey boxes on a black background with extremely faint connecting arrows.",
+      "trust_impact": "If the technical 'proof' diagram is hard to see, users may perceive the technology as opaque or difficult to understand, reducing confidence in the solution.",
+      "exact_fix_recommendation": "Increase the brightness of the box borders or backgrounds to achieve at least a 3:1 contrast ratio against the page background. Brighten the connecting arrows significantly.",
+      "accessibility_impact": "Low contrast borders and arrows may be invisible to users with low vision, making the flow chart unintelligible.",
+      "conversion_impact": "Medium (impedes understanding of the core value prop)."
+    },
+    {
+      "issue_id": "cta-strategy-fragmentation",
+      "page": "Global",
+      "severity": "P2",
+      "evidence": "The page employs three different primary CTA labels with different implied commitments: 'Run assessment' (Nav), 'How Attestation Works' (Hero), and 'Request a Demo' (Footer).",
+      "trust_impact": "Inconsistent messaging confuses the user about the product's maturity and engagement model (self-serve tool vs. enterprise sales motion).",
+      "exact_fix_recommendation": "Unify the primary conversion goal. If 'Run assessment' is the high-value action, replace the generic 'Request a Demo' in the footer with 'Run assessment' to maintain funnel consistency.",
+      "accessibility_impact": "None.",
+      "conversion_impact": "Medium (dilutes the primary conversion path)."
+    }
+  ]
+}
