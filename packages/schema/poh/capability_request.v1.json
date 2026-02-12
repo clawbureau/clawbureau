@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/capability_request.v1.json",
+  "title": "Capability Request v1",
+  "description": "A request from an agent to obtain or verify a capability (CST). Used for negotiation: the agent describes what it wants to do, and the authority responds with a grant, denial, or evidence requirements.",
+  "type": "object",
+  "required": [
+    "request_version",
+    "request_id",
+    "agent_did",
+    "requested_scope",
+    "reason",
+    "timestamp"
+  ],
+  "properties": {
+    "request_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique request ID (UUID)."
+    },
+    "agent_did": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID of the requesting agent."
+    },
+    "requested_scope": {
+      "type": "object",
+      "required": ["actions"],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "description": "List of actions the agent wants to perform (e.g. ['deploy:staging', 'write:/etc/config', 'egress:api.github.com'])."
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Specific tools the agent plans to use."
+        },
+        "ttl_seconds": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Requested TTL for the capability."
+        },
+        "policy_hash_b64u": {
+          "type": "string",
+          "description": "Optional: pin request to a specific policy version."
+        }
+      },
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "Human-readable reason for the capability request."
+    },
+    "plan_hash_b64u": {
+      "type": "string",
+      "description": "Optional hash of the proposed plan/diff. Allows the approver to review what will happen."
+    },
+    "preflight": {
+      "type": "boolean",
+      "description": "If true, this is a preflight check — do not mint a capability, just report whether it would be granted."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "run_id": { "type": "string" },
+        "event_hash_b64u": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

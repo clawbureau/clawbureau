@@ -1,0 +1,417 @@
+{
+  "manifest": {
+    "path": "packages/schema/fixtures/protocol-conformance/manifest.v1.json",
+    "manifest_version": "1",
+    "vector_count": 22
+  },
+  "cli": {
+    "path": "packages/clawverify-cli/dist/cli.js"
+  },
+  "config": {
+    "path": "packages/schema/fixtures/protocol-conformance/clawverify.config.conformance.v1.json"
+  },
+  "results": {
+    "passed": 22,
+    "failed": 0,
+    "ok": true
+  },
+  "vectors": [
+    {
+      "name": "export_bundle.golden",
+      "kind": "export_bundle",
+      "input_path": "packages/schema/fixtures/export_bundle_golden.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": [
+          "OK"
+        ]
+      },
+      "got": {
+        "exit_code": 0,
+        "status": "PASS",
+        "reason_code": "OK"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.674Z"
+    },
+    {
+      "name": "proof_bundle.pass",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_pass.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": [
+          "OK"
+        ]
+      },
+      "got": {
+        "exit_code": 0,
+        "status": "PASS",
+        "reason_code": "OK"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.735Z"
+    },
+    {
+      "name": "proof_bundle.fail.invalid_signature",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_invalid_signature.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SIGNATURE_INVALID"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SIGNATURE_INVALID"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.780Z"
+    },
+    {
+      "name": "export_bundle.fail.manifest_hash_mismatch",
+      "kind": "export_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/export_bundle_fail_manifest_hash_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "HASH_MISMATCH"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "HASH_MISMATCH"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.822Z"
+    },
+    {
+      "name": "proof_bundle.fail.receipt_binding_mismatch",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_receipt_binding_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RECEIPT_BINDING_MISMATCH"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "RECEIPT_BINDING_MISMATCH"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.869Z"
+    },
+    {
+      "name": "proof_bundle.fail.unknown_envelope_version",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_unknown_envelope_version.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "UNKNOWN_ENVELOPE_VERSION"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "UNKNOWN_ENVELOPE_VERSION"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.910Z"
+    },
+    {
+      "name": "commit_sig.pass",
+      "kind": "commit_sig",
+      "input_path": "packages/schema/fixtures/protocol-conformance/commit_sig_pass.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": [
+          "OK"
+        ]
+      },
+      "got": {
+        "exit_code": 0,
+        "status": "PASS",
+        "reason_code": "OK"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.944Z"
+    },
+    {
+      "name": "commit_sig.fail.tampered_message",
+      "kind": "commit_sig",
+      "input_path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_tampered.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SIGNATURE_INVALID"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SIGNATURE_INVALID"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:25.981Z"
+    },
+    {
+      "name": "commit_sig.fail.bad_did_format",
+      "kind": "commit_sig",
+      "input_path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_bad_did.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "INVALID_DID_FORMAT"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "INVALID_DID_FORMAT"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.016Z"
+    },
+    {
+      "name": "commit_sig.fail.unknown_version",
+      "kind": "commit_sig",
+      "input_path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_bad_version.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "UNKNOWN_VERSION"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "UNKNOWN_VERSION"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.051Z"
+    },
+    {
+      "name": "commit_sig.fail.invalid_message",
+      "kind": "commit_sig",
+      "input_path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_bad_message.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "COMMIT_MESSAGE_INVALID"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "COMMIT_MESSAGE_INVALID"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.084Z"
+    },
+    {
+      "name": "proof_bundle.fail.tool_receipt_bad_version",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_tool_receipt_bad_version.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.118Z"
+    },
+    {
+      "name": "proof_bundle.fail.tool_receipt_missing_field",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_tool_receipt_missing_field.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.154Z"
+    },
+    {
+      "name": "proof_bundle.fail.tool_receipt_agent_mismatch",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_tool_receipt_agent_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.191Z"
+    },
+    {
+      "name": "proof_bundle.fail.wrong_signer_did",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_wrong_signer.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "HASH_MISMATCH"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "HASH_MISMATCH"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.227Z"
+    },
+    {
+      "name": "proof_bundle.fail.missing_envelope_field",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_missing_envelope_field.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "MALFORMED_ENVELOPE"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "MALFORMED_ENVELOPE"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.264Z"
+    },
+    {
+      "name": "proof_bundle.fail.unknown_hash_algorithm",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_unknown_hash_algo.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "UNKNOWN_HASH_ALGORITHM"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "UNKNOWN_HASH_ALGORITHM"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.299Z"
+    },
+    {
+      "name": "proof_bundle.fail.empty_event_chain",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_empty_chain.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.333Z"
+    },
+    {
+      "name": "proof_bundle.fail.side_effect_bad_class",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_side_effect_bad_class.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.370Z"
+    },
+    {
+      "name": "proof_bundle.fail.side_effect_missing_field",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_side_effect_missing_field.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.406Z"
+    },
+    {
+      "name": "proof_bundle.fail.human_approval_bad_type",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_human_approval_bad_type.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.441Z"
+    },
+    {
+      "name": "proof_bundle.fail.human_approval_agent_mismatch",
+      "kind": "proof_bundle",
+      "input_path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_human_approval_agent_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "SCHEMA_VALIDATION_FAILED"
+        ]
+      },
+      "got": {
+        "exit_code": 1,
+        "status": "FAIL",
+        "reason_code": "SCHEMA_VALIDATION_FAILED"
+      },
+      "ok": true,
+      "started_at": "2026-02-12T17:34:26.478Z"
+    }
+  ],
+  "finished_at": "2026-02-12T17:34:26.514Z"
+}

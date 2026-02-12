@@ -219,6 +219,8 @@ export interface ProofBundlePayload {
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
   tool_receipts?: ToolReceiptPayload[];
+  side_effect_receipts?: SideEffectReceiptPayload[];
+  human_approval_receipts?: HumanApprovalReceiptPayload[];
   metadata?: {
     harness?: {
       id: string;
@@ -279,6 +281,165 @@ export interface ToolCallParams {
   resultStatus?: 'success' | 'error' | 'timeout';
   /** Latency in ms. */
   latencyMs: number;
+}
+
+// ---------------------------------------------------------------------------
+// Side-effect receipt types (matches poh/side_effect_receipt.v1.json)
+// ---------------------------------------------------------------------------
+
+/** Side-effect receipt payload. Hash-only by default. */
+export interface SideEffectReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  effect_class: 'network_egress' | 'filesystem_write' | 'external_api_write';
+  target_hash_b64u: string;
+  vendor_id?: string;
+  request_hash_b64u: string;
+  response_hash_b64u: string;
+  response_status?: 'success' | 'error' | 'timeout' | 'denied';
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  latency_ms: number;
+  bytes_written?: number;
+  binding?: {
+    run_id?: string;
+    event_hash_b64u?: string;
+    nonce?: string;
+    policy_hash?: string;
+    token_scope_hash_b64u?: string;
+    capability_id?: string;
+  };
+}
+
+/** Side-effect receipt artifact collected during a run. */
+export interface SideEffectReceiptArtifact {
+  type: 'side_effect_receipt';
+  collectedAt: string;
+  effectClass: string;
+  receipt: SideEffectReceiptPayload;
+  receiptEnvelope?: SignedEnvelope<SideEffectReceiptPayload>;
+}
+
+/** Parameters for recording a side effect. */
+export interface SideEffectParams {
+  effectClass: 'network_egress' | 'filesystem_write' | 'external_api_write';
+  /** Raw target (URL, path, endpoint). Will be hashed. */
+  target: unknown;
+  vendorId?: string;
+  /** Raw request payload. Will be hashed. */
+  request: unknown;
+  /** Raw response payload. Will be hashed. */
+  response: unknown;
+  responseStatus?: 'success' | 'error' | 'timeout' | 'denied';
+  latencyMs: number;
+  bytesWritten?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Human approval receipt types (matches poh/human_approval_receipt.v1.json)
+// ---------------------------------------------------------------------------
+
+/** Human approval receipt payload. */
+export interface HumanApprovalReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  approval_type: 'explicit_approve' | 'explicit_deny' | 'auto_approve' | 'timeout_deny';
+  approver_subject: string;
+  approver_method?: 'ui_click' | 'cli_confirm' | 'api_call' | 'policy_auto' | 'timeout';
+  agent_did: string;
+  scope_hash_b64u: string;
+  scope_summary?: string;
+  policy_hash_b64u?: string;
+  minted_capability_id?: string;
+  minted_capability_ttl_seconds?: number;
+  plan_hash_b64u?: string;
+  evidence_required?: string[];
+  hash_algorithm: 'SHA-256';
+  timestamp: string;
+  binding?: {
+    run_id?: string;
+    event_hash_b64u?: string;
+    nonce?: string;
+    policy_hash?: string;
+    token_scope_hash_b64u?: string;
+  };
+}
+
+/** Human approval receipt artifact. */
+export interface HumanApprovalReceiptArtifact {
+  type: 'human_approval_receipt';
+  collectedAt: string;
+  approvalType: string;
+  receipt: HumanApprovalReceiptPayload;
+  receiptEnvelope?: SignedEnvelope<HumanApprovalReceiptPayload>;
+}
+
+/** Parameters for recording a human approval event. */
+export interface HumanApprovalParams {
+  approvalType: 'explicit_approve' | 'explicit_deny' | 'auto_approve' | 'timeout_deny';
+  approverSubject: string;
+  approverMethod?: 'ui_click' | 'cli_confirm' | 'api_call' | 'policy_auto' | 'timeout';
+  /** Raw scope claims. Will be hashed. */
+  scopeClaims: unknown;
+  scopeSummary?: string;
+  policyHashB64u?: string;
+  mintedCapabilityId?: string;
+  mintedCapabilityTtlSeconds?: number;
+  /** Raw plan/diff. Will be hashed if provided. */
+  plan?: unknown;
+  evidenceRequired?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Capability negotiation types (matches poh/capability_request/response.v1.json)
+// ---------------------------------------------------------------------------
+
+/** Capability request (agent → authority). */
+export interface CapabilityRequestPayload {
+  request_version: '1';
+  request_id: string;
+  agent_did: string;
+  requested_scope: {
+    actions: string[];
+    tools?: string[];
+    ttl_seconds?: number;
+    policy_hash_b64u?: string;
+  };
+  reason: string;
+  plan_hash_b64u?: string;
+  preflight?: boolean;
+  timestamp: string;
+  binding?: {
+    run_id?: string;
+    event_hash_b64u?: string;
+  };
+}
+
+/** Capability response (authority → agent). */
+export interface CapabilityResponsePayload {
+  response_version: '1';
+  response_id: string;
+  request_id: string;
+  decision: 'granted' | 'denied' | 'requires_approval' | 'preflight_pass' | 'preflight_fail';
+  reason_code?: string;
+  reason?: string;
+  granted_capability?: {
+    capability_id: string;
+    scope_hash_b64u: string;
+    policy_hash_b64u?: string;
+    ttl_seconds?: number;
+    expires_at?: string;
+    evidence_required?: string[];
+  };
+  denied_actions?: Array<{
+    action: string;
+    reason_code: string;
+    rule?: string;
+    suggestion?: string;
+  }>;
+  approval_channel?: string;
+  timestamp: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +519,12 @@ export interface ClawproofRun {
 
   /** Record a tool call, producing a hash-only tool receipt and event chain entry. */
   recordToolCall(params: ToolCallParams): Promise<ToolReceiptArtifact>;
+
+  /** Record a side effect (network egress, filesystem write, external API write). */
+  recordSideEffect(params: SideEffectParams): Promise<SideEffectReceiptArtifact>;
+
+  /** Record a human approval decision. */
+  recordHumanApproval(params: HumanApprovalParams): Promise<HumanApprovalReceiptArtifact>;
 
   /** Proxy an LLM call through clawproxy, automatically recording event + collecting receipt. */
   callLLM(params: LLMCallParams): Promise<LLMCallResult>;

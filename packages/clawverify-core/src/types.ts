@@ -960,6 +960,14 @@ export interface ProofBundleVerificationResult {
     tool_receipts_valid?: boolean;
     tool_receipts_count?: number;
 
+    /** CPL-US-007: side-effect receipt validation results. */
+    side_effect_receipts_valid?: boolean;
+    side_effect_receipts_count?: number;
+
+    /** CPL-US-008: human approval receipt validation results. */
+    human_approval_receipts_valid?: boolean;
+    human_approval_receipts_count?: number;
+
     /** CEA-US-010: optional execution attestation evidence (outside the proof bundle). */
     execution_attestations_valid?: boolean;
     execution_attestations_count?: number;

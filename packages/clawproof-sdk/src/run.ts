@@ -26,6 +26,9 @@ import type {
   FinalizeOptions,
   FinalizeResult,
   GatewayReceiptPayload,
+  HumanApprovalParams,
+  HumanApprovalReceiptArtifact,
+  HumanApprovalReceiptPayload,
   LLMCallParams,
   LLMCallResult,
   ProofBundlePayload,
@@ -34,6 +37,9 @@ import type {
   RecorderEvent,
   ResourceDescriptor,
   ResourceItem,
+  SideEffectParams,
+  SideEffectReceiptArtifact,
+  SideEffectReceiptPayload,
   SignedEnvelope,
   ToolCallParams,
   ToolReceiptArtifact,
@@ -184,6 +190,8 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
   const events: RecorderEvent[] = [];
   const receipts: ReceiptArtifact[] = [];
   const toolReceipts: ToolReceiptArtifact[] = [];
+  const sideEffectReceipts: SideEffectReceiptArtifact[] = [];
+  const humanApprovalReceipts: HumanApprovalReceiptArtifact[] = [];
 
   // Use closure-based methods to avoid `this` binding issues in object literals.
 
@@ -266,6 +274,91 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     };
 
     toolReceipts.push(artifact);
+    return artifact;
+  }
+
+  async function recordSideEffect(params: SideEffectParams): Promise<SideEffectReceiptArtifact> {
+    const { binding } = await recordEvent({
+      eventType: 'side_effect',
+      payload: { effect_class: params.effectClass, vendor_id: params.vendorId },
+    });
+
+    const targetHashB64u = await hashJsonB64u(params.target);
+    const requestHashB64u = await hashJsonB64u(params.request);
+    const responseHashB64u = await hashJsonB64u(params.response);
+
+    const receipt: SideEffectReceiptPayload = {
+      receipt_version: '1',
+      receipt_id: `ser_${randomUUID()}`,
+      effect_class: params.effectClass,
+      target_hash_b64u: targetHashB64u,
+      vendor_id: params.vendorId,
+      request_hash_b64u: requestHashB64u,
+      response_hash_b64u: responseHashB64u,
+      response_status: params.responseStatus,
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: new Date().toISOString(),
+      latency_ms: params.latencyMs,
+      bytes_written: params.bytesWritten,
+      binding: {
+        run_id: binding.runId,
+        event_hash_b64u: binding.eventHash,
+        nonce: binding.nonce,
+      },
+    };
+
+    const artifact: SideEffectReceiptArtifact = {
+      type: 'side_effect_receipt',
+      collectedAt: new Date().toISOString(),
+      effectClass: params.effectClass,
+      receipt,
+    };
+
+    sideEffectReceipts.push(artifact);
+    return artifact;
+  }
+
+  async function recordHumanApproval(params: HumanApprovalParams): Promise<HumanApprovalReceiptArtifact> {
+    const { binding } = await recordEvent({
+      eventType: 'human_approval',
+      payload: { approval_type: params.approvalType, approver_subject: params.approverSubject },
+    });
+
+    const scopeHashB64u = await hashJsonB64u(params.scopeClaims);
+    const planHashB64u = params.plan !== undefined ? await hashJsonB64u(params.plan) : undefined;
+
+    const receipt: HumanApprovalReceiptPayload = {
+      receipt_version: '1',
+      receipt_id: `har_${randomUUID()}`,
+      approval_type: params.approvalType,
+      approver_subject: params.approverSubject,
+      approver_method: params.approverMethod,
+      agent_did: agentDid,
+      scope_hash_b64u: scopeHashB64u,
+      scope_summary: params.scopeSummary,
+      policy_hash_b64u: params.policyHashB64u,
+      minted_capability_id: params.mintedCapabilityId,
+      minted_capability_ttl_seconds: params.mintedCapabilityTtlSeconds,
+      plan_hash_b64u: planHashB64u,
+      evidence_required: params.evidenceRequired,
+      hash_algorithm: 'SHA-256',
+      timestamp: new Date().toISOString(),
+      binding: {
+        run_id: binding.runId,
+        event_hash_b64u: binding.eventHash,
+        nonce: binding.nonce,
+      },
+    };
+
+    const artifact: HumanApprovalReceiptArtifact = {
+      type: 'human_approval_receipt',
+      collectedAt: new Date().toISOString(),
+      approvalType: params.approvalType,
+      receipt,
+    };
+
+    humanApprovalReceipts.push(artifact);
     return artifact;
   }
 
@@ -457,6 +550,12 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     if (toolReceipts.length > 0) {
       payload.tool_receipts = toolReceipts.map((a) => a.receipt);
     }
+    if (sideEffectReceipts.length > 0) {
+      payload.side_effect_receipts = sideEffectReceipts.map((a) => a.receipt);
+    }
+    if (humanApprovalReceipts.length > 0) {
+      payload.human_approval_receipts = humanApprovalReceipts.map((a) => a.receipt);
+    }
 
     // 9. Compute payload hash + sign
     const payloadHashB64u = await hashJsonB64u(payload);
@@ -488,6 +587,8 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     recordEvent,
     addReceipt,
     recordToolCall,
+    recordSideEffect,
+    recordHumanApproval,
     callLLM,
     finalize,
   };
