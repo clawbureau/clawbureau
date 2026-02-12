@@ -1,0 +1,37 @@
+{
+  "urm_version": "1",
+  "urm_id": "urm_0f628830-ddbd-4d80-9a01-952368a73dae",
+  "run_id": "run_9b86ce91-5fa7-4ebd-8e19-9394c5ecf6e0",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "issued_at": "2026-02-12T18:43:07.066Z",
+  "harness": {
+    "id": "smoke-marketplace-e2e-settlement",
+    "version": "1.0.0",
+    "runtime": "node/v24.13.0",
+    "config_hash_b64u": "ubCUncpGHO1cQ-t4egWEO4HQprp58HETCzncb9xq0eg"
+  },
+  "inputs": [
+    {
+      "type": "smoke_config",
+      "hash_b64u": "gMv-SqbZ3ZrcF7lJbeLvGK1G_LvyM7pmbgPozGRD8Bw",
+      "metadata": {
+        "env": "staging",
+        "script": "smoke-marketplace-e2e-settlement.mjs"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "smoke_result",
+      "hash_b64u": "H7x7Os_E_a11jumjOIVT8tIovmxqZ6XL5F4WsnsVPJ8",
+      "metadata": {
+        "step_count": 4
+      }
+    }
+  ],
+  "event_chain_root_hash_b64u": "J4l007EPUtz7x1SdLdoUOIiS2YyH6amFHbVqnaTSZQE",
+  "metadata": {
+    "task": "ECON-E2E-001a",
+    "description": "Full marketplace cycle: escrow → release → verify"
+  }
+}

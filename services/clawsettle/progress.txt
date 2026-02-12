@@ -546,3 +546,18 @@ Started: 2026-02-12
 
 ## 2026-02-12 - PR #35 closed (stale clawproviders fix)
 - Closed as superseded — SEO/accessibility fixes from Feb 4 need fresh branch after 150+ commits of drift.
+
+## 2026-02-12 - CPL-US-006-ECON tool receipt SDK integration validation
+- Wired smoke-econ-risk-loss-resolve-loop with @clawbureau/clawsig-sdk
+- Each HTTP call → run.recordToolCall() → tool receipt in proof bundle
+- SDK gaps documented: proof_bundle.v1.json missing tool_receipts property (BLOCKING for offline verify)
+- Evidence: artifacts/simulations/econ-risk-loss-resolve-receipted/
+
+## 2026-02-12 - ECON-E2E-001 end-to-end marketplace settlement epic
+- ECON-E2E-001a: Full marketplace cycle (clawcuts → escrow → ledger → health)
+  - Prod 4/4, staging 2/4 (stale ledger key). Validates contract shapes + fail-closed.
+- ECON-E2E-001b: Dispute cycle (loss event → risk holds → resolve → aging → recon)
+  - Staging 8/8, prod 8/8. 7 tool receipts, 9 events per run.
+- ECON-E2E-001c: Post-e2e health snapshots (prod all 7 up <31ms)
+- ECON-E2E-001d: Cross-service idempotency (escrow dedup + loss event dedup)
+- All scripts produce clawsig-sdk proof bundles with tool receipts
