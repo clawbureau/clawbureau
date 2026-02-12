@@ -1,0 +1,37 @@
+name: 'Clawsig Conformance Test'
+description: 'Test that your AI agent framework emits valid Clawsig proof bundles'
+branding:
+  icon: 'shield'
+  color: 'green'
+inputs:
+  agent_command:
+    description: 'Command to run the agent (e.g., npm run test:agent)'
+    required: true
+  expected_tier:
+    description: 'Minimum proof tier (self, gateway, sandbox, tee)'
+    required: false
+    default: 'self'
+  timeout:
+    description: 'Timeout in seconds'
+    required: false
+    default: '60'
+  output_path:
+    description: 'Path where the agent writes its proof bundle'
+    required: false
+    default: '.clawsig/proof_bundle.json'
+outputs:
+  passed:
+    description: 'Whether the conformance test passed (true/false)'
+  tier:
+    description: 'Detected proof tier (self, gateway, sandbox, tee, or none)'
+  bundle_found:
+    description: 'Whether a proof bundle was found at the output path'
+  bundle_valid:
+    description: 'Whether the proof bundle passed cryptographic verification'
+  event_chain_length:
+    description: 'Number of events in the proof bundle event chain'
+  receipt_count:
+    description: 'Total number of receipts in the proof bundle'
+runs:
+  using: 'node20'
+  main: 'dist/action.js'

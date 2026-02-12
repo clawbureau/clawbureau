@@ -1,0 +1,44 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.certification.conformance_claim.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Clawsig Conformance Claim",
+  "description": "A claim submitted by a framework author after a successful conformance test run.",
+  "type": "object",
+  "required": ["claim_version","framework_name","framework_version","framework_repo","test_run_id","conformance_result","bundle_hash_b64u","claimed_at","claimer_did"],
+  "properties": {
+    "claim_version": {"type":"string","const":"1"},
+    "framework_name": {"type":"string","minLength":1,"maxLength":128},
+    "framework_version": {"type":"string","minLength":1,"maxLength":64},
+    "framework_repo": {"type":"string","format":"uri","pattern":"^https://github\\.com/.+$"},
+    "test_run_id": {"type":"string","minLength":1,"maxLength":128},
+    "conformance_result": {
+      "type":"object",
+      "required":["passed","bundle_found","bundle_valid","tier","tier_meets_expected","event_chain_length","receipt_count","errors"],
+      "properties": {
+        "passed":{"type":"boolean"},
+        "bundle_found":{"type":"boolean"},
+        "bundle_valid":{"type":"boolean"},
+        "tier":{"type":["string","null"]},
+        "tier_meets_expected":{"type":"boolean"},
+        "event_chain_length":{"type":"integer","minimum":0},
+        "receipt_count":{"type":"integer","minimum":0},
+        "errors":{"type":"array","items":{"type":"string"}}
+      },
+      "additionalProperties":false
+    },
+    "bundle_hash_b64u": {"type":"string","pattern":"^[A-Za-z0-9_-]+$"},
+    "claimed_at": {"type":"string","format":"date-time"},
+    "claimer_did": {"type":"string","pattern":"^did:(key|web):.+"},
+    "ci_context": {
+      "type":"object",
+      "properties": {
+        "provider":{"type":"string"},
+        "workflow_ref":{"type":"string"},
+        "run_url":{"type":"string","format":"uri"},
+        "commit_sha":{"type":"string"}
+      },
+      "additionalProperties":false
+    }
+  },
+  "additionalProperties":false
+}
