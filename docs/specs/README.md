@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** specs in this folder + corresponding roadmaps
 >
 > **Scope:**
@@ -9,6 +9,8 @@
 
 # Specs
 
+- Claw Protocol:
+  - `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
 - Agent Economy:
   - `docs/specs/agent-economy/MVP.md`
 - Clawlogs:

@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-10
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** This PRD (product intent). Implementation tracking lives in service repos/worktrees when built.
 >
 > **Scope:**
@@ -34,7 +34,10 @@ Related trust design + roadmap:
   - Gateway receipts: `packages/schema/poh/gateway_receipt.v1.json`
   - Proof bundle: `packages/schema/poh/proof_bundle.v1.json`
   - Execution attestation: `packages/schema/poh/execution_attestation.v1.json`
-- **Roadmap:** `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+- **Roadmap (PoH evidence slice):** `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
+- **Protocol (narrow waist):**
+  - Spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+  - Roadmap: `docs/roadmaps/claw-protocol/`
 
 ---
 
@@ -150,6 +153,42 @@ Every agent deployed through clawea should be pre-wired for:
 **Acceptance Criteria:**
 - PATCH /v1/agents/:id/policy sets WPC hash
 - WPC is enforced in the runtime (not advisory)
+
+### Governance UX (two-phase by default)
+
+#### CEA-US-050 — Two-phase execution default (plan/diff → apply)
+**As a** human operator, **I want** two-phase execution to be the default **so that** governance is simple and safe.
+
+**Acceptance Criteria:**
+- Phase A (plan) is always allowed: read-only + plan + produce artifacts/diffs
+- Phase B (apply) requires an explicit capability (CST scopes) to perform side-effects
+- The plan output enumerates intended side-effects (repo writes, network egress, emails, etc.) in a deterministic format
+- Fail-closed: if apply capability is missing/invalid, phase B is denied with deterministic reason codes
+
+#### CEA-US-051 — One approval card + scoped delegation (Slack/Teams/GitHub)
+**As a** human operator, **I want** a single approval card **so that** I can approve once without reading logs.
+
+**Acceptance Criteria:**
+- Approval card lists: intended actions, risk flags, cost/time estimate
+- Buttons: Approve once, Approve for scope (time-bound), Deny
+- On approval, mint a new CST pinned to scope + optional WPC hash and emit a verifiable approval receipt
+- Denials are deterministic and machine-readable (agent can adapt)
+
+#### CEA-US-052 — Shareable verified run summary
+**As a** stakeholder, **I want** a shareable run artifact **so that** trust is legible without reconstruction.
+
+**Acceptance Criteria:**
+- Each run produces a summary: VERIFIED PASS/FAIL under WPC hash + scope hash
+- Summary links to the proof bundle (and export bundle when available)
+- Summary includes a “what changed” diff link (GitHub) and redacted side-effect summary (when applicable)
+
+#### CEA-US-053 — Verify-lite preflight for compliance
+**As an** agent, **I want** verify-lite preflight **so that** I can self-check compliance before executing.
+
+**Acceptance Criteria:**
+- Standard preflight endpoint or tool exists that answers: “would scope X be allowed under policy Y?”
+- Preflight returns deterministic denial codes (no freeform text-only failures)
+- Preflight can be used in CI to prevent non-compliant runs
 
 ### Compliance / evidence
 

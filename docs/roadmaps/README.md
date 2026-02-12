@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** `docs/roadmaps/*/prd.json` + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
@@ -14,17 +14,23 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 ## Active roadmaps
 
-- **Proof-of-Harness (adapters + registry + specs)**
-  - Folder: `docs/roadmaps/proof-of-harness/`
-  - Status: **POH-US-001 … POH-US-012 complete** (see `progress.txt`)
-
-- **Trust vNext (PoH hardening + prompt integrity + confidential consulting + subscription-web strategy)**
-  - Folder: `docs/roadmaps/trust-vnext/`
-  - Status: planned; seeded from oracle synthesis `docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md`
+- **Claw Protocol (narrow waist + explicit coverage + frictionless governance)**
+  - Folder: `docs/roadmaps/claw-protocol/`
+  - Status: active (see `prd.json` + `progress.txt`)
 
 - **Docs IA (docs information architecture + freshness cleanup)**
   - Folder: `docs/roadmaps/docs-ia/`
   - Status: active
+
+## Completed roadmaps
+
+- **Proof-of-Harness (adapters + registry + specs)**
+  - Folder: `docs/roadmaps/proof-of-harness/`
+  - Status: complete (see `prd.json` + `progress.txt`)
+
+- **Trust vNext (PoH hardening + prompt integrity + confidential consulting + subscription-web strategy)**
+  - Folder: `docs/roadmaps/trust-vnext/`
+  - Status: complete (see `prd.json` + `progress.txt`)
 
 ## Roadmap folder contract (Ralph-compatible)
 

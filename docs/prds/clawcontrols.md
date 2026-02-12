@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** `services/clawcontrols/prd.json` + `services/clawcontrols/progress.txt` + `docs/roadmaps/trust-vnext/{prd.json,progress.txt}`
 >
 > **Scope:**
@@ -47,6 +47,12 @@ See also (PoH vNext):
 
 ## 1) Purpose
 Policy engine for spend caps, allowlists, and kill switches.
+
+## Protocol alignment (Claw Protocol v0.1)
+
+- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- `clawcontrols` is the reference **Policy Artifact (WPC)** registry and governance surface.
+- Protocol requirement: policy artifacts are signed, immutable, and content-addressed; updates require publishing a new artifact (new hash), not mutation.
 
 ## 2) Target Users
 - OpenClaw gateway operators
@@ -182,6 +188,14 @@ Policy engine for spend caps, allowlists, and kill switches.
   - Provide policy simulation for these constraints (builds on CCO-US-004)
   - Enforcement points are explicit (clawproxy, clawea runner, clawverify)
 
+### CCO-US-013 — WPC protocol pins + capability/receipt binding semantics
+**As a** protocol implementer, **I want** standardized policy hash pinning semantics **so that** capabilities and receipts can prove which policy governed a run.
+
+**Acceptance Criteria:**
+  - Define canonical `policy_hash_b64u` computation and stability guarantees
+  - Define how CSTs can pin to a `policy_hash_b64u` (policy pin)
+  - Define how receipts/bundles reference the enforced policy hash at time of action
+  - Document fail-closed guidance for required policy pins when missing/mismatched
 
 ## 8) Success Metrics
 - Policy changes

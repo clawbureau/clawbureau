@@ -1,0 +1,4 @@
+2026-02-12
+- Seeded Claw Protocol roadmap (v0.1).
+- Goal: publish narrow waist spec + explicit coverage matrix + offline verifier + side-effect receipts + frictionless approvals wedge.
+- Reference spec: docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md
