@@ -67,6 +67,47 @@ Do **not** run long-lived or production-impacting commands unless the user expli
 
 ---
 
+## Secrets
+
+All service keys and tokens live under `~/.clawsecrets/` on the operator machine.
+
+Convention: **one file per key per environment**.
+
+```
+~/.clawsecrets/<service>/<KEY_NAME>.<env>
+```
+
+Example layout:
+
+```
+~/.clawsecrets/
+  clawsettle/
+    SETTLE_ADMIN_KEY.staging
+    SETTLE_ADMIN_KEY.prod
+    SETTLE_LOSS_READ_TOKEN.staging
+    SETTLE_LOSS_READ_TOKEN.prod
+    STRIPE_WEBHOOK_SIGNING_SECRET.staging
+    STRIPE_WEBHOOK_SIGNING_SECRET.prod
+  ledger/
+    LEDGER_ADMIN_KEY.staging
+    LEDGER_ADMIN_KEY.prod
+    LEDGER_RISK_KEY.staging
+    LEDGER_RISK_KEY.prod
+  escrow/
+    ESCROW_ADMIN_KEY.staging
+    ...
+```
+
+**Rules:**
+- Load via `cat`: `SETTLE_ADMIN_KEY="$(cat ~/.clawsecrets/clawsettle/SETTLE_ADMIN_KEY.prod)"`
+- Never write secrets to `/tmp`, project dirs, or any tracked path.
+- Never log secret values. Never include them in commit messages or PR bodies.
+- Permissions: dirs `700`, files `600`.
+- When rotating a secret via `wrangler secret put`, also update the local file.
+- When a new secret is created for a service, add it here following the naming convention.
+
+---
+
 ## Cloudflare / Wrangler safety
 
 - Never deploy to production without explicit user approval.
