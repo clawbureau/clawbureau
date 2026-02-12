@@ -1,0 +1,77 @@
+{
+  "name": "clawsig-protocol-v0.2",
+  "project": "clawbureau",
+  "description": "Clawsig Protocol v0.2 candidate stories. These are identified but not scheduled — v0.1 must see real adoption first.",
+  "branchName": "feat/protocol/clawsig-v0.2",
+  "userStories": [
+    {
+      "id": "CPL-V2-001",
+      "title": "Protocol-level rate limiting semantics",
+      "description": "Define how proof bundles express and verify rate limits — per-agent, per-model, per-tool. Allows verifiers to detect burst abuse without online state.",
+      "acceptanceCriteria": [
+        "Rate limit claims in proof bundle metadata",
+        "Verifier checks claim consistency across bundles from same agent",
+        "Conformance vectors for rate limit violations"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": "Candidate. Blocked on real adoption data to inform the right semantics."
+    },
+    {
+      "id": "CPL-V2-002",
+      "title": "Multi-party receipt co-signing",
+      "description": "Allow receipts to carry multiple signatures — agent + proxy + human approver. Enables multi-party attestation without central trust.",
+      "acceptanceCriteria": [
+        "Co-signature schema extension (additive, backward compatible)",
+        "Verifier validates all co-signatures",
+        "Threshold semantics (e.g., 2-of-3 required)"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "Candidate. Useful for high-stakes autonomous agent deployments."
+    },
+    {
+      "id": "CPL-V2-003",
+      "title": "Receipt expiry / TTL semantics",
+      "description": "Define how proof bundles and individual receipts express validity windows. Verifiers reject expired receipts.",
+      "acceptanceCriteria": [
+        "TTL field in receipt envelope schema (optional)",
+        "Verifier enforces TTL when present",
+        "Grace period semantics for clock skew"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Candidate. Needed for compliance regimes that require fresh attestations."
+    },
+    {
+      "id": "CPL-V2-004",
+      "title": "Selective disclosure for tool receipt arguments",
+      "description": "Allow tool receipts to optionally reveal specific argument fields while keeping others hashed. Uses structured commitment schemes.",
+      "acceptanceCriteria": [
+        "Selective disclosure schema (per-field reveal/hash)",
+        "Verifier validates partial disclosure against digest",
+        "Privacy-preserving: default remains hash-only"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Candidate. Enables audit use cases that need to see 'which file was read' without seeing 'what was in it'."
+    },
+    {
+      "id": "CPL-V2-005",
+      "title": "Aggregate proof bundles (bundle-of-bundles)",
+      "description": "Define a composition format for fleet-level verification — a single signed envelope containing multiple proof bundles from different agents.",
+      "acceptanceCriteria": [
+        "Aggregate bundle schema with member bundle references",
+        "Verifier validates aggregate signature + each member",
+        "Fleet summary statistics in aggregate metadata"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Candidate. Needed for enterprise fleet dashboards and compliance reporting across agent pools."
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-02-12T18:30:00Z",
+    "status": "seed — no stories scheduled"
+  }
+}
