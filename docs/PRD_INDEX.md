@@ -12,40 +12,68 @@
 
 All domain PRDs live in `docs/prds/`.
 
+## Active Services (The Diamond)
+
+| Domain | PRD | Role |
+|---|---|---|
+| clawverify.com | docs/prds/clawverify.md | Trust Oracle — deterministic verification |
+| clawproxy.com | docs/prds/clawproxy.md | Data Plane — LLM gateway + model receipts |
+| clawcontrols.com | docs/prds/clawcontrols.md | Work Policy Contracts (absorbing into clawea) |
+| clawscope.com | docs/prds/clawscope.md | Capability Scope Tokens (absorbing into clawea) |
+| clawlogs.com | docs/prds/clawlogs.md | Transparency logs (absorbing into clawverify) |
+| clawea.com | docs/prds/clawea.md | Enterprise Agents — dashboard + policy authoring |
+
+## Active Domains (no deployed service)
+
+| Domain | PRD |
+|---|---|
+| clawbureau.com | docs/prds/clawbureau.md |
+| clawsig.com | docs/prds/clawsig.md |
+| joinclaw.com | docs/prds/joinclaw.md |
+
+## Archived Services
+
+> Archived 2026-02-12 per strategic pivot (Nation-State to Notary).
+> See `docs/strategy/GEMINI_DEEP_THINK_REVIEW_2026-02-12.md` for rationale.
+> Code preserved in `services/_archived/` and git history (tag: `v0-nation-state`).
+
+| Domain | PRD | Archive Reason |
+|---|---|---|
+| clawbounties.com | docs/prds/clawbounties.md | Marketplace — dead weight, zero liquidity |
+| clawescrow.com | docs/prds/clawescrow.md | Economy — recreates Stripe Connect |
+| clawledger.com | docs/prds/clawledger.md | Economy — full-reserve banking for integer cents |
+| clawsettle.com | docs/prds/clawsettle.md | Economy — Stripe settlement |
+| clawcuts.com | docs/prds/clawcuts.md | Economy — fee engine |
+| clawclaim.com | docs/prds/clawclaim.md | Identity — bespoke DID registry, use EIP-8004 |
+| clawrep.com | docs/prds/clawrep.md | Identity — custom reputation scoring |
+| clawtrials.com | docs/prds/clawtrials.md | Economy — arbitration |
+| clawincome.com | docs/prds/clawincome.md | Economy — revenue aggregation |
+| clawinsure.com | docs/prds/clawinsure.md | Economy — SLA insurance |
+| clawdelegate.com | docs/prds/clawdelegate.md | Identity — delegation |
+| claw-domains | (landing pages) | Fluff — static domain landing pages |
+
+## Archived Packages
+
+| Package | Archive Reason |
+|---|---|
+| packages/_archived/bounties | Bounties library — only used by clawbounties |
+
+## PRDs Without Deployed Services (reference only)
+
 | Domain | PRD |
 |---|---|
 | clawadvisory.com | docs/prds/clawadvisory.md |
-| clawbounties.com | docs/prds/clawbounties.md |
-| clawbureau.com | docs/prds/clawbureau.md |
 | clawcareers.com | docs/prds/clawcareers.md |
-| clawclaim.com | docs/prds/clawclaim.md |
-| clawcontrols.com | docs/prds/clawcontrols.md |
-| clawcuts.com | docs/prds/clawcuts.md |
-| clawdelegate.com | docs/prds/clawdelegate.md |
-| clawea.com | docs/prds/clawea.md |
-| clawescrow.com | docs/prds/clawescrow.md |
 | clawforhire.com | docs/prds/clawforhire.md |
 | clawgang.com | docs/prds/clawgang.md |
 | clawgrant.com | docs/prds/clawgrant.md |
-| clawincome.com | docs/prds/clawincome.md |
-| clawinsure.com | docs/prds/clawinsure.md |
 | clawintel.com | docs/prds/clawintel.md |
-| clawledger.com | docs/prds/clawledger.md |
-| clawlogs.com | docs/prds/clawlogs.md |
 | clawmanage.com | docs/prds/clawmanage.md |
 | clawmerch.com | docs/prds/clawmerch.md |
 | clawportfolio.com | docs/prds/clawportfolio.md |
 | clawproviders.com | docs/prds/clawproviders.md |
-| clawproxy.com | docs/prds/clawproxy.md |
-| clawrep.com | docs/prds/clawrep.md |
-| clawscope.com | docs/prds/clawscope.md |
-| clawsettle.com | docs/prds/clawsettle.md |
-| clawsig.com | docs/prds/clawsig.md |
 | clawsilo.com | docs/prds/clawsilo.md |
 | clawsupply.com | docs/prds/clawsupply.md |
-| clawtrials.com | docs/prds/clawtrials.md |
-| clawverify.com | docs/prds/clawverify.md |
-| joinclaw.com | docs/prds/joinclaw.md |
 
 ## Cross-domain PRDs
 
