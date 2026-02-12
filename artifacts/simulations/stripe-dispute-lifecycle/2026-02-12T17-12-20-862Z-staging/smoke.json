@@ -1,0 +1,57 @@
+{
+  "run_id": "3e03e85b",
+  "base_url": "https://staging.clawsettle.com",
+  "timestamp": "2026-02-12T17:12:17.746Z",
+  "steps": [
+    {
+      "step": "create_dispute_loss_event",
+      "ok": true,
+      "status": 201,
+      "loss_event_id": "lse_bcb833ba43aec2793cb43152",
+      "deduped": false,
+      "dispute_id": "dp_smoke_3e03e85b"
+    },
+    {
+      "step": "verify_loss_event",
+      "ok": true,
+      "status": 200,
+      "loss_event_id": "lse_bcb833ba43aec2793cb43152",
+      "reason_code": "dispute:fraudulent",
+      "has_dispute_metadata": true,
+      "status_field": "recorded"
+    },
+    {
+      "step": "idempotency_replay",
+      "ok": false,
+      "status": 409
+    },
+    {
+      "step": "resolve_loss_event",
+      "ok": false,
+      "status": 409,
+      "loss_event_id": "lse_bcb833ba43aec2793cb43152"
+    },
+    {
+      "step": "verify_resolved",
+      "ok": false,
+      "status": 200,
+      "loss_event_id": "lse_bcb833ba43aec2793cb43152",
+      "event_status": "recorded"
+    },
+    {
+      "step": "permanent_loss_create",
+      "ok": true,
+      "status": 201,
+      "loss_event_id": "lse_d815861f68894674e6fb0a1c",
+      "dispute_id": "dp_lost_3e03e85b"
+    },
+    {
+      "step": "permanent_loss_verify",
+      "ok": true,
+      "loss_event_id": "lse_d815861f68894674e6fb0a1c",
+      "event_status": "recorded",
+      "note": "Lost dispute stays frozen — no resolve call made"
+    }
+  ],
+  "all_passed": false
+}

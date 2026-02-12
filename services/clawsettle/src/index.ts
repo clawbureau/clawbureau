@@ -14,6 +14,10 @@ import {
   resolveLossEventRetryLimit,
   shouldInlineLossEventForwarding,
 } from './loss-events';
+import {
+  classifyDisputeAction,
+  DisputeLossEventBridge,
+} from './disputes';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
@@ -105,7 +109,64 @@ async function handleStripeWebhook(request: Request, env: Env): Promise<Response
   const rawBody = await request.text();
 
   const service = createStripeWebhookService(env);
+
+  // Parse the event first for dispute classification (before processWebhook
+  // which may reject unknown event types with a non-forwarded response).
+  let parsedEvent: import('./types').StripeEvent | null = null;
+  try {
+    parsedEvent = (await import('./stripe')).parseStripeEvent(rawBody);
+  } catch {
+    // If parsing fails, processWebhook will handle the error.
+  }
+
   const response = await service.processWebhook(rawBody, signature);
+
+  // After successful webhook processing, check if this is a dispute event
+  // and bridge to the loss-event pipeline.
+  if (parsedEvent) {
+    const disputeAction = classifyDisputeAction(parsedEvent);
+    if (disputeAction) {
+      const bridge = new DisputeLossEventBridge(env);
+      const bridgeResult = await bridge.execute(disputeAction);
+
+      // If the bridge created a loss event and inline forwarding is enabled,
+      // trigger best-effort forwarding for the new loss event.
+      if (
+        bridgeResult.loss_event_id &&
+        disputeAction.action === 'create_loss_event' &&
+        !bridgeResult.deduped &&
+        shouldInlineLossEventForwarding(env)
+      ) {
+        const lossEventService = new LossEventService(env);
+        await lossEventService.retryForwarding({
+          limit: resolveLossEventRetryLimit(env),
+          loss_event_id: bridgeResult.loss_event_id,
+        });
+      }
+
+      // If the bridge resolved a loss event and inline forwarding is enabled,
+      // trigger best-effort resolve forwarding.
+      if (
+        bridgeResult.loss_event_id &&
+        disputeAction.action === 'resolve_loss_event' &&
+        !bridgeResult.deduped &&
+        shouldInlineLossEventForwarding(env)
+      ) {
+        const lossEventService = new LossEventService(env);
+        await lossEventService.retryForwarding({
+          operation: 'resolve',
+          limit: resolveLossEventRetryLimit(env),
+          loss_event_id: bridgeResult.loss_event_id,
+        });
+      }
+
+      return jsonResponse(
+        { ...response, dispute_bridge: bridgeResult },
+        200,
+        resolveVersion(env)
+      );
+    }
+  }
 
   return jsonResponse(response, 200, resolveVersion(env));
 }
@@ -400,6 +461,14 @@ async function router(request: Request, env: Env): Promise<Response> {
         <li><code>GET /v1/loss-events/:id</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
         <li><code>GET /v1/loss-events/outbox?operation=apply|resolve</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
         <li><code>POST /v1/loss-events/ops/retry</code> (admin)</li>
+      </ul>
+      <h3>Stripe dispute automation (ECON-RISK-MAX-003)</h3>
+      <p>Dispute events received via <code>POST /v1/stripe/webhook</code> are automatically bridged to the loss-event pipeline:</p>
+      <ul>
+        <li><code>charge.dispute.created</code> &rarr; creates loss event (apply freeze)</li>
+        <li><code>charge.dispute.closed</code> (status=won) &rarr; resolves loss event (unfreeze)</li>
+        <li><code>charge.dispute.closed</code> (status=lost) &rarr; marks permanent loss (stays frozen)</li>
+        <li><code>charge.dispute.updated</code> &rarr; updates bridge metadata (no state change)</li>
       </ul>
     </main>
   </body>

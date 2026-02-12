@@ -1,0 +1,73 @@
+{
+  "run_id": "3f50e6fa",
+  "base_url": "https://clawsettle.com",
+  "timestamp": "2026-02-12T17:14:17.951Z",
+  "steps": [
+    {
+      "step": "create_dispute_loss_event",
+      "ok": true,
+      "status": 201,
+      "loss_event_id": "lse_78c4bf21097abbb78deef05e",
+      "deduped": false,
+      "dispute_id": "dp_smoke_3f50e6fa"
+    },
+    {
+      "step": "verify_loss_event",
+      "ok": true,
+      "status": 200,
+      "loss_event_id": "lse_78c4bf21097abbb78deef05e",
+      "reason_code": "dispute:fraudulent",
+      "has_dispute_metadata": true,
+      "status_field": "recorded"
+    },
+    {
+      "step": "idempotency_replay",
+      "ok": true,
+      "status": 200,
+      "deduped": true
+    },
+    {
+      "step": "trigger_forwarding",
+      "ok": true,
+      "status": 200,
+      "attempted": 3,
+      "forwarded": 1,
+      "failed": 2
+    },
+    {
+      "step": "post_forwarding_status",
+      "loss_event_id": "lse_78c4bf21097abbb78deef05e",
+      "event_status": "partially_forwarded",
+      "forwarded": false
+    },
+    {
+      "step": "resolve_loss_event",
+      "ok": true,
+      "status": 409,
+      "loss_event_id": "lse_78c4bf21097abbb78deef05e",
+      "code": "LOSS_EVENT_NOT_READY",
+      "note": "Expected: resolve blocked until forwarding completes (MAX-002 gating)"
+    },
+    {
+      "step": "verify_resolved",
+      "ok": true,
+      "skipped": true,
+      "note": "Event status=partially_forwarded, resolve was correctly blocked by MAX-002 gating"
+    },
+    {
+      "step": "permanent_loss_create",
+      "ok": true,
+      "status": 201,
+      "loss_event_id": "lse_03b774f2367ca5dc38d577f9",
+      "dispute_id": "dp_lost_3f50e6fa"
+    },
+    {
+      "step": "permanent_loss_verify",
+      "ok": true,
+      "loss_event_id": "lse_03b774f2367ca5dc38d577f9",
+      "event_status": "recorded",
+      "note": "Lost dispute stays frozen — no resolve call made"
+    }
+  ],
+  "all_passed": true
+}

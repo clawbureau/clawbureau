@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "outbox": [
+    {
+      "outbox_id": "lso_fc175d1c68a2807af68af9a6",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "ledger",
+      "target_url": "https://clawledger.com/v1/risk/holds/apply",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:27.124Z",
+      "created_at": "2026-02-12T14:28:22.450Z",
+      "updated_at": "2026-02-12T14:28:27.124Z"
+    },
+    {
+      "outbox_id": "lso_c970c92b579ef7073831fbb7",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "clawbounties",
+      "target_url": "https://clawbounties.com/v1/risk/loss-events",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:26.185Z",
+      "created_at": "2026-02-12T14:28:22.450Z",
+      "updated_at": "2026-02-12T14:28:26.185Z"
+    },
+    {
+      "outbox_id": "lso_b63634367ad1d440dd451fdb",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "escrow",
+      "target_url": "https://clawescrow.com/v1/escrows/esc_4f8cc0ab-35ef-47ad-a301-c4cfd9c2ce32/risk-hold",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 200,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:25.840Z",
+      "created_at": "2026-02-12T14:28:22.450Z",
+      "updated_at": "2026-02-12T14:28:25.840Z"
+    },
+    {
+      "outbox_id": "lso_7d3029e40896b38a1f2fe303",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "clawincome",
+      "target_url": "https://clawincome.com/v1/risk/adjustments",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:25.593Z",
+      "created_at": "2026-02-12T14:28:22.450Z",
+      "updated_at": "2026-02-12T14:28:25.593Z"
+    },
+    {
+      "outbox_id": "lso_729697a477d865ce26b0b757",
+      "loss_event_id": "lse_d7ec82b06ff1a048b242cb03",
+      "target_service": "clawinsure",
+      "target_url": "https://clawinsure.com/v1/claims/auto",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:28:24.757Z",
+      "created_at": "2026-02-12T14:28:22.450Z",
+      "updated_at": "2026-02-12T14:28:24.757Z"
+    }
+  ],
+  "next_cursor": "MjAyNi0wMi0xMlQxNDoyODoyMi40NTBaOjpsc29fNzI5Njk3YTQ3N2Q4NjVjZTI2YjBiNzU3"
+}

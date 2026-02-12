@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "outbox": [
+    {
+      "outbox_id": "lso_eae9f5a11f54d838fe24ac9d",
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "target_service": "clawincome",
+      "target_url": "https://clawincome-staging.generaite.workers.dev/v1/risk/adjustments",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:23:30.013Z",
+      "created_at": "2026-02-12T14:23:28.314Z",
+      "updated_at": "2026-02-12T14:23:30.013Z"
+    },
+    {
+      "outbox_id": "lso_d94f157f1f6955ab4a49d53d",
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "target_service": "clawbounties",
+      "target_url": "https://staging.clawbounties.com/v1/risk/loss-events",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:23:29.802Z",
+      "created_at": "2026-02-12T14:23:28.314Z",
+      "updated_at": "2026-02-12T14:23:29.802Z"
+    },
+    {
+      "outbox_id": "lso_4355d358870131c9339780c4",
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "target_service": "ledger",
+      "target_url": "https://staging.clawledger.com/v1/risk/holds/apply",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:23:29.541Z",
+      "created_at": "2026-02-12T14:23:28.314Z",
+      "updated_at": "2026-02-12T14:23:29.541Z"
+    },
+    {
+      "outbox_id": "lso_01b31849291e8ad1807da945",
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "target_service": "clawinsure",
+      "target_url": "https://clawinsure-staging.generaite.workers.dev/v1/claims/auto",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 201,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:23:29.047Z",
+      "created_at": "2026-02-12T14:23:28.314Z",
+      "updated_at": "2026-02-12T14:23:29.047Z"
+    },
+    {
+      "outbox_id": "lso_00e7ddd212d68a99664411ea",
+      "loss_event_id": "lse_eed2f38cf73ef486db66b1c7",
+      "target_service": "escrow",
+      "target_url": "https://staging.clawescrow.com/v1/escrows/esc_e5310d50-19d6-475a-965f-8f0dd541ea72/risk-hold",
+      "status": "forwarded",
+      "attempts": 1,
+      "last_http_status": 200,
+      "last_error_code": null,
+      "last_error_message": null,
+      "next_retry_at": null,
+      "forwarded_at": "2026-02-12T14:23:28.765Z",
+      "created_at": "2026-02-12T14:23:28.314Z",
+      "updated_at": "2026-02-12T14:23:28.765Z"
+    }
+  ],
+  "next_cursor": "MjAyNi0wMi0xMlQxNDoyMzoyOC4zMTRaOjpsc29fMDBlN2RkZDIxMmQ2OGE5OTY2NDQxMWVh"
+}
