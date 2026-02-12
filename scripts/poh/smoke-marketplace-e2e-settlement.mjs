@@ -202,12 +202,27 @@ async function main() {
     console.log(`  ⚠ No active policy (${feeRes.status}) — using synthetic fee quote`);
   }
 
-  // Build fee_quote — use real response or synthetic fallback
+  // Build fee_quote — combine policy metadata + quote into escrow-compatible format
   // Escrow validates: policy_id, policy_version, policy_hash_b64u,
   //   buyer_total_minor, worker_net_minor, fees[] with kind, payer,
   //   amount_minor, rate_bps, min_fee_minor, floor_applied
   const feeQuote = feeRealPass
-    ? feeRes.json.quote
+    ? {
+        policy_id: feeRes.json.policy?.id ?? 'unknown',
+        policy_version: String(feeRes.json.policy?.version ?? '1'),
+        policy_hash_b64u: feeRes.json.policy?.hash_b64u ?? 'unknown',
+        buyer_total_minor: feeRes.json.quote.buyer_total_minor,
+        worker_net_minor: feeRes.json.quote.worker_net_minor,
+        fees: (feeRes.json.quote.fees ?? []).map(f => ({
+          kind: f.kind ?? 'platform_fee',
+          payer: f.payer,
+          amount_minor: f.amount_minor,
+          rate_bps: f.rate_bps,
+          min_fee_minor: f.min_fee_minor ?? '0',
+          floor_applied: f.floor_applied ?? false,
+          ...(f.splits ? { splits: f.splits } : {}),
+        })),
+      }
     : {
         policy_id: 'e2e-synthetic',
         policy_version: '1',

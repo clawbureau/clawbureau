@@ -1,0 +1,114 @@
+{
+  "generated_at": "2026-02-12T19:22:50.867Z",
+  "overall_status": "degraded",
+  "services": [
+    {
+      "service": "clawsettle",
+      "status": "up",
+      "latency_ms": 0,
+      "metrics": {
+        "loss_events_total": 8,
+        "outbox_apply_failed": 8,
+        "outbox_resolve_failed": 0,
+        "disputes_open": 0
+      }
+    },
+    {
+      "service": "ledger",
+      "status": "up",
+      "latency_ms": 13,
+      "metrics": {
+        "risk_holds_active": "available"
+      }
+    },
+    {
+      "service": "escrow",
+      "status": "up",
+      "latency_ms": 8,
+      "metrics": {
+        "active_escrows": "probe_failed"
+      }
+    },
+    {
+      "service": "clawbounties",
+      "status": "up",
+      "latency_ms": 13,
+      "metrics": {}
+    },
+    {
+      "service": "clawcuts",
+      "status": "up",
+      "latency_ms": 6,
+      "metrics": {}
+    },
+    {
+      "service": "clawincome",
+      "status": "up",
+      "latency_ms": 7,
+      "metrics": {}
+    },
+    {
+      "service": "clawinsure",
+      "status": "up",
+      "latency_ms": 11,
+      "metrics": {}
+    }
+  ],
+  "settlement": {
+    "loss_events": {
+      "total": 8,
+      "by_status": {
+        "forwarded": 4,
+        "partially_forwarded": 4
+      }
+    },
+    "outbox": {
+      "apply": {
+        "pending": 0,
+        "failed": 8,
+        "forwarded": 24
+      },
+      "resolve": {
+        "pending": 0,
+        "failed": 0,
+        "forwarded": 3
+      }
+    },
+    "disputes": {
+      "total_open": 0,
+      "total_disputed_minor": "0",
+      "aging_buckets": [
+        {
+          "label": "0-7d",
+          "count": 0,
+          "total_minor": "0"
+        },
+        {
+          "label": "7-30d",
+          "count": 0,
+          "total_minor": "0"
+        },
+        {
+          "label": "30-60d",
+          "count": 0,
+          "total_minor": "0"
+        },
+        {
+          "label": "60+d",
+          "count": 0,
+          "total_minor": "0"
+        }
+      ],
+      "fees_pending": 0
+    },
+    "recon": {
+      "mismatch_count": 0,
+      "mismatch_types": []
+    }
+  },
+  "alerts": {
+    "outbox_stale_failures": true,
+    "disputes_aging_critical": false,
+    "recon_mismatches": false
+  }
+}
