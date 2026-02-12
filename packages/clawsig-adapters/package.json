@@ -1,7 +1,6 @@
 {
   "name": "@clawbureau/clawsig-adapters",
   "version": "0.1.0",
-  "private": true,
   "description": "External harness adapters for Proof-of-Harness — wrapper scripts and runtime for Claude Code, Codex, Pi, Opencode, and Factory Droid",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,5 +18,22 @@
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
   },
+  "files": [
+    "dist",
+    "bin",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawbureau/monorepo.git",
+    "directory": "packages/clawsig-adapters"
+  },
+  "keywords": [
+    "clawsig",
+    "proof-of-harness",
+    "agent-verification",
+    "eip-8004",
+    "clawproxy"
+  ],
   "license": "MIT"
 }
