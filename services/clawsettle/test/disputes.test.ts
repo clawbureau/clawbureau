@@ -127,4 +127,62 @@ describe('classifyDisputeAction', () => {
     });
     expect(() => classifyDisputeAction(event)).toThrowError(/amount/);
   });
+
+  // MPY-US-015: partial dispute + fee extraction tests
+
+  it('extracts disputed_amount_minor equal to amount for standard disputes', () => {
+    const event = makeDisputeEvent({ type: 'charge.dispute.created' });
+    const result = classifyDisputeAction(event);
+    expect(result).not.toBeNull();
+    expect(result!.dispute.disputed_amount_minor).toBe('5000');
+    expect(result!.dispute.amount_minor).toBe('5000');
+  });
+
+  it('extracts dispute fee from balance_transactions when present', () => {
+    const event = makeDisputeEvent({
+      objectOverrides: {
+        balance_transactions: [
+          { fee: 1500, type: 'adjustment' },
+        ],
+      },
+    });
+    const result = classifyDisputeAction(event);
+    expect(result).not.toBeNull();
+    expect(result!.dispute.dispute_fee_minor).toBe('1500');
+  });
+
+  it('extracts non-standard dispute fee from balance_transactions', () => {
+    const event = makeDisputeEvent({
+      objectOverrides: {
+        balance_transactions: [
+          { fee: 2500, type: 'adjustment' },
+        ],
+      },
+    });
+    const result = classifyDisputeAction(event);
+    expect(result).not.toBeNull();
+    expect(result!.dispute.dispute_fee_minor).toBe('2500');
+  });
+
+  it('defaults dispute fee to $15 (1500 minor) when balance_transactions absent', () => {
+    const event = makeDisputeEvent({ type: 'charge.dispute.created' });
+    const result = classifyDisputeAction(event);
+    expect(result).not.toBeNull();
+    expect(result!.dispute.dispute_fee_minor).toBe('1500');
+  });
+
+  it('uses disputed amount for loss event (partial dispute support)', () => {
+    // For a $50 charge with only $30 disputed
+    const event = makeDisputeEvent({
+      objectOverrides: {
+        amount: 3000, // $30 disputed of a $50 charge
+      },
+    });
+    const result = classifyDisputeAction(event);
+    expect(result).not.toBeNull();
+    expect(result!.dispute.amount_minor).toBe('3000');
+    expect(result!.dispute.disputed_amount_minor).toBe('3000');
+    // In practice, charge_amount would come from the charge object — both are same
+    // from Stripe's perspective (amount is the disputed amount, not charge amount)
+  });
 });

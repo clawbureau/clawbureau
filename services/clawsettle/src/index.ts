@@ -17,6 +17,8 @@ import {
 import {
   classifyDisputeAction,
   DisputeLossEventBridge,
+  getDisputeAgingReport,
+  getDisputeReconReport,
 } from './disputes';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
@@ -628,6 +630,50 @@ async function router(request: Request, env: Env): Promise<Response> {
       request,
       env
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dispute aging + reconciliation (MPY-US-015)
+  // ---------------------------------------------------------------------------
+
+  if (request.method === 'GET' && path === '/v1/disputes/aging') {
+    assertSettleAdmin(request, env);
+    const report = await getDisputeAgingReport(env.DB);
+    return jsonResponse(report, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'GET' && path === '/v1/reconciliation/disputes') {
+    assertSettleAdmin(request, env);
+    const report = await getDisputeReconReport(env.DB, env);
+    return jsonResponse(report, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'GET' && path === '/v1/disputes/fees') {
+    assertSettleAdmin(request, env);
+    const limitParam = url.searchParams.get('limit');
+    const statusParam = url.searchParams.get('status');
+    const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10) || 50), 200) : 50;
+
+    let query = 'SELECT * FROM dispute_fees';
+    const binds: unknown[] = [];
+
+    if (statusParam && ['pending', 'recorded', 'failed'].includes(statusParam)) {
+      query += ' WHERE status = ?';
+      binds.push(statusParam);
+    }
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    binds.push(limit);
+
+    const stmt = env.DB.prepare(query);
+    const rows = binds.length === 2
+      ? await stmt.bind(binds[0], binds[1]).all()
+      : await stmt.bind(binds[0]).all();
+
+    return jsonResponse({
+      ok: true,
+      fees: rows.results ?? [],
+      count: (rows.results ?? []).length,
+    }, 200, resolveVersion(env));
   }
 
   return errorResponse('Not found', 'NOT_FOUND', 404, undefined, resolveVersion(env));
