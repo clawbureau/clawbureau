@@ -1,0 +1,81 @@
+{
+  "env": "prod",
+  "base_url": "https://clawrep.com",
+  "queue_status": {
+    "queue_depth": 0,
+    "event_status_counts": {
+      "pending": 0,
+      "processing": 0,
+      "processed": 25,
+      "failed": 0
+    },
+    "recent_24h": {
+      "queue_ingest_failed": 0,
+      "queue_replay": 0,
+      "queue_loop_invalid": 0
+    }
+  },
+  "queue_replay": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "replayed_count": 0,
+      "failure_count": 0,
+      "replayed": [],
+      "failures": []
+    }
+  },
+  "slo_ingest": {
+    "window_hours": 24,
+    "total_events": 25,
+    "processed": 25,
+    "failed": 0,
+    "pending": 0,
+    "success_rate": 1,
+    "latency_seconds": {
+      "p50": 0.55,
+      "p95": 1.516,
+      "max": 2.055
+    },
+    "error_buckets": {}
+  },
+  "drift_recompute": {
+    "generated_at": "2026-02-12T02:54:56.373Z",
+    "scope": "all",
+    "total_profiles_checked": 8,
+    "mismatches": [],
+    "error_buckets": {
+      "PROFILE_MISSING": 0,
+      "SCORE_MISMATCH": 0,
+      "EVENTS_COUNT_MISMATCH": 0,
+      "PENALTIES_COUNT_MISMATCH": 0,
+      "DISPUTE_COUNT_MISMATCH": 0,
+      "OWNER_VERIFIED_MISMATCH": 0
+    },
+    "repaired": 0
+  },
+  "drift_latest": {
+    "report": {
+      "generated_at": "2026-02-12T02:54:56.373Z",
+      "scope": "all",
+      "total_profiles_checked": 8,
+      "mismatches": [],
+      "error_buckets": {
+        "PROFILE_MISSING": 0,
+        "SCORE_MISMATCH": 0,
+        "EVENTS_COUNT_MISMATCH": 0,
+        "PENALTIES_COUNT_MISMATCH": 0,
+        "DISPUTE_COUNT_MISMATCH": 0,
+        "OWNER_VERIFIED_MISMATCH": 0
+      },
+      "repaired": 0
+    },
+    "created_at": "2026-02-12T02:54:56.373Z"
+  },
+  "assertions": {
+    "queue_status_has_counts": true,
+    "slo_has_success_rate": true,
+    "drift_report_has_totals": true,
+    "drift_latest_present": true
+  }
+}

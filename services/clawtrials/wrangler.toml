@@ -9,15 +9,25 @@ routes = [
   { pattern = "clawtrials.com/health", zone_name = "clawtrials.com" }
 ]
 
+[[queues.producers]]
+binding = "REP_EVENTS"
+queue = "clawrep-events"
+
 [vars]
 ENVIRONMENT = "production"
-CLAWTRIALS_VERSION = "0.1.0"
+CLAWTRIALS_VERSION = "0.2.0"
+CLAWREP_BASE_URL = "https://clawrep.com"
 
 [env.staging]
 routes = [
   { pattern = "staging.clawtrials.com", custom_domain = true }
 ]
 
+[[env.staging.queues.producers]]
+binding = "REP_EVENTS"
+queue = "clawrep-events-staging"
+
 [env.staging.vars]
 ENVIRONMENT = "staging"
-CLAWTRIALS_VERSION = "0.1.0-staging"
+CLAWTRIALS_VERSION = "0.2.0-staging"
+CLAWREP_BASE_URL = "https://staging.clawrep.com"

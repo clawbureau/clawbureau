@@ -60,6 +60,20 @@
       "priority": 4,
       "passes": true,
       "notes": "Added packages/schema/reputation/{reputation_event_ingest,reputation_profile,reviewer_selection_request,reviewer_selection_response}.v1.json and updated README listings."
+    },
+    {
+      "id": "CRP-US-008-SCHEMA",
+      "title": "Closed-loop reputation envelope + anti-collusion schema extensions",
+      "description": "As trust services, we need strict schema contracts for ingest-loop envelopes and reviewer anti-collusion metadata while preserving deterministic compatibility.",
+      "acceptanceCriteria": [
+        "Add reputation_event_loop_envelope.v1.json for closure|penalty|recovery canonical event envelopes",
+        "Extend reviewer selection request schema with requester_did/worker_did optional fields",
+        "Extend reviewer selection response schema with deterministic selection_metadata payload",
+        "Update packages/schema/README.md reputation listings"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added `reputation_event_loop_envelope.v1.json`, extended reviewer request/response schemas for anti-collusion context/metadata, and updated schema README listings."
     }
   ]
 }

@@ -138,3 +138,18 @@ Started: 2026-02-03
   - `packages/schema/reputation/reviewer_selection_request.v1.json`
   - `packages/schema/reputation/reviewer_selection_response.v1.json`
 - Updated `packages/schema/README.md` to include new `reputation/` directory and schema listing.
+
+## CRP-US-008-SCHEMA — Closed-loop reputation envelope + anti-collusion extensions (in progress)
+- Added closed-loop event schema:
+  - `packages/schema/reputation/reputation_event_loop_envelope.v1.json`
+- Extended reviewer selection contracts:
+  - request schema now supports optional `requester_did` + `worker_did`
+  - response schema now includes deterministic `selection_metadata`
+- Updated reputation schema listing in `packages/schema/README.md`.
+- Pending: finalize validation artifacts after TRUST-REP-002 smoke/deploy verification.
+
+## CRP-US-008-SCHEMA — completion
+- Finalized and validated closed-loop schema additions:
+  - `reputation_event_loop_envelope.v1.json`
+  - reviewer request/response additive anti-collusion fields
+- Consumed by clawrep TRUST-REP-002 runtime + smoke artifacts.

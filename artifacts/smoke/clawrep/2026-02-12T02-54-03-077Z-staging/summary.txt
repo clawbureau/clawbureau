@@ -1,0 +1,8 @@
+clawrep smoke (staging)
+generated_at=2026-02-12T02:54:27.863Z
+base_url=https://clawrep-staging.generaite.workers.dev
+deploy_version=e394cba6-4087-4267-80c0-7b0b3e0b925f
+didA=did:key:z6MkrepA1770864843078
+didB=did:key:z6MkrepB1770864843078
+audit_events=25
+pass=true

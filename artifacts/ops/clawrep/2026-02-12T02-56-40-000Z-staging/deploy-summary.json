@@ -1,0 +1,44 @@
+{
+  "lane": "TRUST-REP-002",
+  "environment": "staging",
+  "generated_at": "2026-02-12T02:56:40.000Z",
+  "pass": true,
+  "deploy_versions": {
+    "clawrep": "e394cba6-4087-4267-80c0-7b0b3e0b925f",
+    "clawbounties": "ac1dce64-100e-4608-a1a2-bd512c8d625c",
+    "clawtrials": "b5707849-3eec-46d9-a5ae-ca1be0ab9d76",
+    "escrow": "d640faf3-2c0f-4f40-9076-54c59801f113"
+  },
+  "migrations": {
+    "clawrep": [
+      "0002_trust_rep_closed_loop.sql"
+    ]
+  },
+  "cloudflare_stack_decisions": [
+    "Producer services publish canonical reputation loop envelopes directly to Cloudflare Queue (REP_EVENTS) with HTTP ingest fallback only when queue binding is absent.",
+    "clawrep queue consumer remains single source of profile mutation and idempotency enforcement (source_event_id unique in D1).",
+    "Queue consumers are configured with dead-letter queues for staging/prod and replay is exposed via admin endpoint.",
+    "Drift reports are persisted in D1 (rep_drift_reports) and emitted via audit trail for deterministic ops forensics."
+  ],
+  "smoke_artifacts": {
+    "clawrep_service": "artifacts/smoke/clawrep/2026-02-12T02-54-03-077Z-staging/deploy-summary.json",
+    "clawrep_producer_loop": "artifacts/smoke/clawrep-producer-loop/2026-02-12T02-55-47-426Z-staging/result.json"
+  },
+  "validation": {
+    "typecheck": [
+      "services/clawrep npm run typecheck",
+      "services/clawbounties npm run typecheck",
+      "services/clawtrials npm run typecheck",
+      "services/escrow npm run typecheck"
+    ],
+    "tests": [
+      "services/clawrep npm test"
+    ],
+    "dry_run": [
+      "services/clawrep wrangler deploy --dry-run --env staging",
+      "services/clawbounties wrangler deploy --dry-run --env staging",
+      "services/clawtrials wrangler deploy --dry-run --env staging",
+      "services/escrow wrangler deploy --dry-run --env staging"
+    ]
+  }
+}

@@ -668,3 +668,8 @@ Started: 2026-02-02T03:08:26.937005
   - gate + invalid harness replay evidence: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
 - Story closure:
   - flipped `CBT-US-028`, `CBT-US-029`, `CBT-US-030` to `passes=true` with production evidence.
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
+- Added canonical reputation loop emission hooks on requester approve/reject and auto test closure outcomes.
+- Emissions are queue-first (`REP_EVENTS`) with HTTP ingest-loop fallback when queue binding is unavailable.
+- Added wrangler queue producer bindings for staging/prod clawrep event queues.

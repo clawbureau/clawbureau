@@ -19,6 +19,8 @@
     "submission_proof_tier": {
       "type": "string",
       "enum": ["unknown", "self", "gateway", "sandbox", "tee", "witnessed_web"]
-    }
+    },
+    "requester_did": { "type": "string", "minLength": 16, "pattern": "^did:" },
+    "worker_did": { "type": "string", "minLength": 16, "pattern": "^did:" }
   }
 }

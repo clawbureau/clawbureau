@@ -1,0 +1,4 @@
+clawrep producer-loop smoke (staging)
+generated_at=2026-02-12T02:56:02.754Z
+did=did:key:z6Mktrial1770864947427
+pass=true

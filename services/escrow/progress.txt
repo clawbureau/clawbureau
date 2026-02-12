@@ -164,3 +164,8 @@ Started: 2026-02-02T03:08:26.936628
 - Deploys:
   - `clawescrow-staging`: `8f7e4c0a-7d8c-472b-b4fb-66deff3c1422`
   - `clawescrow` (prod): `008aeb79-d1ca-4474-bc3a-d589268130e4`
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
+- Added clawrep loop publication on escrow release/dispute outcomes (including idempotent replay-safe paths).
+- Publication path is queue-first (`REP_EVENTS`) with optional HTTP fallback.
+- Added staging/prod queue producer bindings to `clawrep-events*`.

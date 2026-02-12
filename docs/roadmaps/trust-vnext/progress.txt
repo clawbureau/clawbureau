@@ -995,3 +995,59 @@ Started: 2026-02-07T19:53:07Z
   - ops summaries:
     - `artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json`
     - `artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json`
+
+## 2026-02-12T14:58:00Z - TRUST-REP-002 (in progress) closed-loop reputation lane
+- What was implemented
+  - Started TRUST-REP-002 implementation branch wiring for closed-loop reputation:
+    - queue-backed canonical ingest endpoint `POST /v1/events/ingest-loop`
+    - queue consumer support for closure/penalty/recovery envelopes with idempotent `source_event_id`
+    - recovery scoring lane (`appeal_upheld_for_reviewer|appeal_upheld_for_worker`)
+    - reviewer anti-collusion deterministic signal path (cooldown/history/pair penalties)
+    - ops endpoints for queue status/replay, ingest SLO report, drift recompute/latest
+  - Added schema contracts:
+    - `packages/schema/reputation/reputation_event_loop_envelope.v1.json`
+    - reviewer selection request/response schema extensions
+  - Added Cloudflare queue DLQ bindings in `services/clawrep/wrangler.toml`.
+  - Added migration `services/clawrep/migrations/0002_trust_rep_closed_loop.sql`.
+- Pending before closure
+  - Finish cross-service event emission glue in clawbounties, clawtrials, and escrow.
+  - Complete smoke harness updates + staging/prod deploy evidence.
+  - Finalize tracker status to pass=true after verification artifacts.
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 closed-loop reputation rollout complete
+- What was implemented
+  - Shipped `clawrep` TRUST-REP-002 runtime:
+    - canonical queue ingest endpoint `POST /v1/events/ingest-loop`
+    - queue consumer support for closure/penalty/recovery loop envelopes
+    - deterministic recovery scoring and anti-collusion reviewer selection metadata
+    - ops endpoints for queue status/replay, ingest SLO, drift recompute/latest
+  - Added clawrep migration:
+    - `services/clawrep/migrations/0002_trust_rep_closed_loop.sql`
+    - applied remotely on staging + prod D1
+  - Added schema contracts:
+    - `packages/schema/reputation/reputation_event_loop_envelope.v1.json`
+    - reviewer request/response schema extensions
+  - Added producer glue + queue bindings (`REP_EVENTS`) in:
+    - `services/clawbounties`
+    - `services/clawtrials`
+    - `services/escrow`
+    - producer services publish canonical envelopes directly to `clawrep-events*` queues.
+- Cloudflare deploy versions
+  - clawrep: staging `e394cba6-4087-4267-80c0-7b0b3e0b925f`, prod `bfd887e6-fef2-43ca-870c-6b34a11d0ff3`
+  - clawbounties: staging `ac1dce64-100e-4608-a1a2-bd512c8d625c`, prod `141ddf06-9057-4c54-9206-96f9aa574653`
+  - clawtrials: staging `b5707849-3eec-46d9-a5ae-ca1be0ab9d76`, prod `c9edfd64-d714-4a19-84f8-055df5b1ac26`
+  - escrow: staging `d640faf3-2c0f-4f40-9076-54c59801f113`, prod `bf34c736-fe2b-4f68-bbf4-60f62b5b0896`
+- Validation
+  - Typecheck pass:
+    - `services/clawrep`, `services/clawbounties`, `services/clawtrials`, `services/escrow`
+  - Tests pass:
+    - `services/clawrep npm test`
+  - Dry-run hygiene pass:
+    - `wrangler deploy --dry-run` (staging + prod) for all 4 services
+- Artifacts
+  - clawrep smoke staging: `artifacts/smoke/clawrep/2026-02-12T02-54-03-077Z-staging/`
+  - clawrep smoke prod: `artifacts/smoke/clawrep/2026-02-12T02-54-33-994Z-prod/`
+  - producer-loop smoke staging: `artifacts/smoke/clawrep-producer-loop/2026-02-12T02-55-47-426Z-staging/result.json`
+  - producer-loop smoke prod: `artifacts/smoke/clawrep-producer-loop/2026-02-12T02-56-08-325Z-prod/result.json`
+  - ops summary staging: `artifacts/ops/clawrep/2026-02-12T02-56-40-000Z-staging/deploy-summary.json`
+  - ops summary prod: `artifacts/ops/clawrep/2026-02-12T02-56-58-000Z-prod/deploy-summary.json`

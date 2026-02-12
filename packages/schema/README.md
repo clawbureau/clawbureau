@@ -49,6 +49,7 @@ Shared JSON schemas for Claw Bureau services.
 
 ### `reputation/`
 - `reputation_event_ingest.v1.json`
+- `reputation_event_loop_envelope.v1.json`
 - `reputation_profile.v1.json`
 - `reviewer_selection_request.v1.json`
 - `reviewer_selection_response.v1.json`

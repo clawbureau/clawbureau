@@ -1,0 +1,77 @@
+{
+  "env": "prod",
+  "base_url": "https://clawrep.com",
+  "did": "did:key:z6MkrepA1770864873994",
+  "penalty_apply": {
+    "status": "accepted",
+    "duplicate": false,
+    "source_event_id": "rep_penalty_1770864873994_a",
+    "did": "did:key:z6MkrepA1770864873994",
+    "penalty_type": "dispute_upheld_against_reviewer",
+    "severity": 2,
+    "score_delta": -18,
+    "deterministic_dispute_penalty": true,
+    "process_result": {
+      "processed": true
+    }
+  },
+  "rep_before_decay": {
+    "did": "did:key:z6MkrepA1770864873994",
+    "reputation_score": 167.657183,
+    "events_count": 5,
+    "penalties_count": 2,
+    "dispute_penalties_count": 2,
+    "is_owner_verified": true,
+    "owner_attestation_ref": "att_1770864873994",
+    "tier": {
+      "tier": 1,
+      "tier_label": "emerging",
+      "capped_by_dispute_rate": true,
+      "dispute_rate": 0.4
+    },
+    "last_event_at": "2026-02-12T02:54:52.973Z",
+    "last_decay_at": null,
+    "updated_at": "2026-02-12T02:54:53.173Z",
+    "created_at": "2026-02-12T02:54:34.811Z"
+  },
+  "decay_first": {
+    "status": "applied",
+    "already_applied": false,
+    "run_day": "2026-02-13",
+    "affected_profiles": 8,
+    "total_delta": 21.971672,
+    "decay_rate": 0.02
+  },
+  "decay_second": {
+    "status": "already_applied",
+    "already_applied": true,
+    "run_day": "2026-02-13",
+    "affected_profiles": 0,
+    "total_delta": 0,
+    "decay_rate": 0.02
+  },
+  "rep_after_decay": {
+    "did": "did:key:z6MkrepA1770864873994",
+    "reputation_score": 164.30403900000002,
+    "events_count": 6,
+    "penalties_count": 2,
+    "dispute_penalties_count": 2,
+    "is_owner_verified": true,
+    "owner_attestation_ref": "att_1770864873994",
+    "tier": {
+      "tier": 1,
+      "tier_label": "emerging",
+      "capped_by_dispute_rate": true,
+      "dispute_rate": 0.333333
+    },
+    "last_event_at": "2026-02-13T00:00:00.000Z",
+    "last_decay_at": "2026-02-12T02:54:54.584Z",
+    "updated_at": "2026-02-12T02:54:54.584Z",
+    "created_at": "2026-02-12T02:54:34.811Z"
+  },
+  "assertions": {
+    "penalty_reduced_score": true,
+    "decay_idempotent": true,
+    "decay_non_increasing": true
+  }
+}
