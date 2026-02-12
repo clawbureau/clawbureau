@@ -691,3 +691,8 @@ Started: 2026-02-02T03:08:26.937005
   - staging+prod arbitration integration smoke:
     - `artifacts/simulations/clawtrials/2026-02-12T02-02-05-716Z-staging/smoke.json`
     - `artifacts/simulations/clawtrials/2026-02-12T02-03-12-873Z-prod/smoke.json`
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
+- Added canonical reputation loop emission hooks on requester approve/reject and auto test closure outcomes.
+- Emissions are queue-first (`REP_EVENTS`) with HTTP ingest-loop fallback when queue binding is unavailable.
+- Added wrangler queue producer bindings for staging/prod clawrep event queues.

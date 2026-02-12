@@ -1,6 +1,9 @@
 interface Env {
   ENVIRONMENT?: string;
   CLAWTRIALS_VERSION?: string;
+  CLAWREP_BASE_URL?: string;
+  CLAWREP_INGEST_KEY?: string;
+  REP_EVENTS?: Queue;
 
   TRIALS_DB: D1Database;
   TRIALS_ADMIN_KEY?: string;
@@ -136,6 +139,82 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isDidString(value: unknown): value is string {
+  return isNonEmptyString(value) && value.trim().startsWith('did:');
+}
+
+type ClawrepLoopEnvelope = {
+  schema_version: '1';
+  source_event_id: string;
+  source_service: 'clawtrials';
+  kind: 'penalty' | 'recovery';
+  did: string;
+  occurred_at: string;
+  penalty?: {
+    penalty_type:
+      | 'dispute_upheld_against_reviewer'
+      | 'dispute_upheld_against_worker'
+      | 'fraud_confirmed'
+      | 'spam_review'
+      | 'policy_violation';
+    severity?: number;
+    reason?: string;
+  };
+  recovery?: {
+    recovery_type: 'appeal_upheld_for_reviewer' | 'appeal_upheld_for_worker';
+    severity?: number;
+    reason?: string;
+  };
+  metadata?: Record<string, unknown>;
+};
+
+function resolveClawrepBaseUrl(env: Env): string {
+  const base = env.CLAWREP_BASE_URL?.trim();
+  if (base && base.length > 0) return base;
+  return 'https://clawrep.com';
+}
+
+async function emitTrialOutcomeToClawrep(env: Env, envelope: ClawrepLoopEnvelope): Promise<void> {
+  try {
+    if (env.REP_EVENTS) {
+      await env.REP_EVENTS.send(envelope, { contentType: 'json' });
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawtrials] clawrep queue send failed source_event_id=${envelope.source_event_id}: ${message}`);
+  }
+
+  if (!env.CLAWREP_INGEST_KEY || env.CLAWREP_INGEST_KEY.trim().length === 0) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(`${resolveClawrepBaseUrl(env)}/v1/events/ingest-loop`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${env.CLAWREP_INGEST_KEY}`,
+      },
+      body: JSON.stringify(envelope),
+      signal: controller.signal,
+    });
+
+    if (!response.ok && response.status !== 409) {
+      const text = await response.text();
+      console.error(
+        `[clawtrials] clawrep ingest-loop failed status=${response.status} source_event_id=${envelope.source_event_id} body=${text.slice(0, 240)}`
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawtrials] clawrep ingest-loop error source_event_id=${envelope.source_event_id}: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function d1String(value: unknown): string | null {
@@ -1888,6 +1967,55 @@ export default {
       try {
         const result = harness.evaluate(runRequest);
         const response = buildHarnessResponse(runRequest, result);
+
+        const workerDid = isRecord(runRequest.output) ? runRequest.output.worker_did : null;
+        if (isDidString(workerDid)) {
+          const sourceEventId = `clawtrials:harness:${runRequest.submission_id}:${runRequest.test_harness_id}:${response.passed ? 'pass' : 'fail'}`;
+          if (response.passed) {
+            await emitTrialOutcomeToClawrep(env, {
+              schema_version: '1',
+              source_event_id: sourceEventId,
+              source_service: 'clawtrials',
+              kind: 'recovery',
+              did: workerDid.trim(),
+              occurred_at: response.completed_at,
+              recovery: {
+                recovery_type: 'appeal_upheld_for_worker',
+                severity: 1,
+                reason: 'Trial harness passed',
+              },
+              metadata: {
+                bounty_id: runRequest.bounty_id,
+                submission_id: runRequest.submission_id,
+                test_harness_id: runRequest.test_harness_id,
+                total_tests: response.total_tests,
+                failed_tests: response.failed_tests,
+              },
+            });
+          } else {
+            await emitTrialOutcomeToClawrep(env, {
+              schema_version: '1',
+              source_event_id: sourceEventId,
+              source_service: 'clawtrials',
+              kind: 'penalty',
+              did: workerDid.trim(),
+              occurred_at: response.completed_at,
+              penalty: {
+                penalty_type: 'policy_violation',
+                severity: 1,
+                reason: 'Trial harness failed',
+              },
+              metadata: {
+                bounty_id: runRequest.bounty_id,
+                submission_id: runRequest.submission_id,
+                test_harness_id: runRequest.test_harness_id,
+                total_tests: response.total_tests,
+                failed_tests: response.failed_tests,
+              },
+            });
+          }
+        }
+
         return jsonResponse(response, 200, version);
       } catch (err) {
         const reason = err instanceof Error ? err.message : 'Unknown error';
@@ -1896,6 +2024,29 @@ export default {
           error: `HARNESS_EXECUTION_FAILED:${reason}`,
           test_results: [],
         });
+
+        const workerDid = isRecord(runRequest.output) ? runRequest.output.worker_did : null;
+        if (isDidString(workerDid)) {
+          await emitTrialOutcomeToClawrep(env, {
+            schema_version: '1',
+            source_event_id: `clawtrials:harness:${runRequest.submission_id}:${runRequest.test_harness_id}:error`,
+            source_service: 'clawtrials',
+            kind: 'penalty',
+            did: workerDid.trim(),
+            occurred_at: response.completed_at,
+            penalty: {
+              penalty_type: 'policy_violation',
+              severity: 1,
+              reason: 'Trial harness execution failed',
+            },
+            metadata: {
+              bounty_id: runRequest.bounty_id,
+              submission_id: runRequest.submission_id,
+              test_harness_id: runRequest.test_harness_id,
+            },
+          });
+        }
+
         return jsonResponse(response, 200, version);
       }
     }

@@ -1,0 +1,8 @@
+clawrep smoke (prod)
+generated_at=2026-02-12T03:10:50.478Z
+base_url=https://clawrep.com
+deploy_version=faec7ec3-0416-4939-9812-3eac37c0e00a
+didA=did:key:z6MkrepA1770865829984
+didB=did:key:z6MkrepB1770865829984
+audit_events=25
+pass=true

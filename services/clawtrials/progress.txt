@@ -89,3 +89,10 @@
   - production arbitration smoke: `artifacts/simulations/clawtrials/2026-02-12T02-03-12-873Z-prod/smoke.json` ✅
 - Story status:
   - CTR-US-001..006 verified and flipped to `passes=true` in `services/clawtrials/prd.json`.
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
+- Added clawrep loop publication on harness outcomes when `output.worker_did` is provided.
+  - pass -> recovery envelope
+  - fail/error -> penalty envelope
+- Publication path is queue-first (`REP_EVENTS`) with optional HTTP fallback.
+- Added staging/prod queue producer bindings to `clawrep-events*`.

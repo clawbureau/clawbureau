@@ -31,14 +31,18 @@ queue = "clawrep-events"
 max_batch_size = 50
 max_batch_timeout = 10
 max_retries = 8
+dead_letter_queue = "clawrep-events-dlq"
+retry_delay = 30
 
 [triggers]
 crons = ["7 0 * * *"]
 
 [vars]
-REP_VERSION = "0.1.0"
+REP_VERSION = "0.2.0"
 REP_DECAY_DAILY_RATE = "0.02"
 REP_REVIEWER_CACHE_TTL_SECONDS = "120"
+REP_REVIEWER_HISTORY_DAYS = "30"
+REP_REVIEWER_COOLDOWN_HOURS = "12"
 
 # Secrets to be set via `wrangler secret put`:
 # - REP_ADMIN_KEY
@@ -67,11 +71,15 @@ queue = "clawrep-events-staging"
 max_batch_size = 50
 max_batch_timeout = 10
 max_retries = 8
+dead_letter_queue = "clawrep-events-dlq-staging"
+retry_delay = 30
 
 [env.staging.triggers]
 crons = ["7 0 * * *"]
 
 [env.staging.vars]
-REP_VERSION = "0.1.0"
+REP_VERSION = "0.2.0"
 REP_DECAY_DAILY_RATE = "0.02"
 REP_REVIEWER_CACHE_TTL_SECONDS = "120"
+REP_REVIEWER_HISTORY_DAYS = "30"
+REP_REVIEWER_COOLDOWN_HOURS = "12"

@@ -50,3 +50,45 @@ Started: 2026-02-12T02:32:00Z
 - Ops summaries
   - staging: `artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json`
   - prod: `artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json`
+
+## 2026-02-12T14:58:00Z - TRUST-REP-002 implementation slice (in progress)
+- Added closed-loop ingest endpoint:
+  - `POST /v1/events/ingest-loop` (auth: ingest key)
+  - canonical envelope validation for `closure|penalty|recovery`
+  - queue-first processing with idempotent precheck
+- Queue processing upgrades:
+  - loop envelope parser + deterministic insert path
+  - audit events for enqueue/process/failure/replay signals
+  - DLQ support configured in wrangler (staging/prod)
+- Reputation logic upgrades:
+  - recovery scoring integration (`computeRecoveryScoreDelta`)
+  - anti-collusion reviewer selection metadata and deterministic signal scoring
+- Ops endpoints added:
+  - `GET /v1/ops/queue/status`
+  - `POST /v1/ops/queue/replay`
+  - `GET /v1/ops/slo/ingest`
+  - `POST /v1/ops/drift/recompute`
+  - `GET /v1/ops/drift/latest`
+- Schema/migration updates:
+  - `migrations/0002_trust_rep_closed_loop.sql`
+  - required-table gate now includes `rep_drift_reports`
+- Tests:
+  - expanded `test/core.test.ts` coverage for recovery + anti-collusion path
+- Pending:
+  - cross-service producer glue + end-to-end smoke/deploy artifacts
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 completion
+- Closed-loop features shipped
+  - `POST /v1/events/ingest-loop`
+  - queue processing for loop envelopes (`closure|penalty|recovery`)
+  - recovery scoring lane + anti-collusion reviewer selection metadata
+  - ops routes: queue status/replay, ingest SLO, drift recompute/latest
+- Schema and persistence
+  - migration `0002_trust_rep_closed_loop.sql` applied (staging/prod)
+  - drift reports persisted in `rep_drift_reports`
+- Deploy versions
+  - staging: `f94065ad-7ac4-4a0c-8498-d51d13d54841`
+  - prod: `faec7ec3-0416-4939-9812-3eac37c0e00a`
+- Smoke evidence
+  - staging: `artifacts/smoke/clawrep/2026-02-12T03-10-00-076Z-staging/`
+  - prod: `artifacts/smoke/clawrep/2026-02-12T03-10-29-983Z-prod/`

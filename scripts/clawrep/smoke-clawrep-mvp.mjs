@@ -88,6 +88,22 @@ function assertCondition(label, condition, context) {
   }
 }
 
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(label, fn, { attempts = 8, delayMs = 750 } = {}) {
+  let last = null;
+  for (let i = 0; i < attempts; i += 1) {
+    last = await fn();
+    if (last) return last;
+    if (i < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+  throw new Error(`${label} timed out after ${attempts} attempts`);
+}
+
 function makeDid(seed) {
   return `did:key:z6Mk${seed}`;
 }
@@ -176,6 +192,103 @@ async function main() {
     },
   };
 
+  // 1b) ingest-loop closure/penalty/recovery
+  const loopClosureSourceId = `rep_loop_${now}_closure`;
+  const loopPenaltySourceId = `rep_loop_${now}_penalty`;
+  const loopRecoverySourceId = `rep_loop_${now}_recovery`;
+
+  const loopClosure = await requestJson(`${baseUrl}/v1/events/ingest-loop`, {
+    method: 'POST',
+    headers: commonIngestHeaders,
+    body: {
+      schema_version: '1',
+      source_event_id: loopClosureSourceId,
+      source_service: 'smoke-harness',
+      kind: 'closure',
+      did: didA,
+      closure: {
+        value_usd: 40,
+        closure_type: 'manual_approve',
+        proof_tier: 'gateway',
+        owner_verified: false,
+      },
+      metadata: {
+        smoke_case: 'loop-closure',
+      },
+    },
+  });
+  assertStatus('ingest.loop.closure', loopClosure, 202);
+
+  const loopPenalty = await requestJson(`${baseUrl}/v1/events/ingest-loop`, {
+    method: 'POST',
+    headers: commonIngestHeaders,
+    body: {
+      schema_version: '1',
+      source_event_id: loopPenaltySourceId,
+      source_service: 'smoke-harness',
+      kind: 'penalty',
+      did: didA,
+      penalty: {
+        penalty_type: 'dispute_upheld_against_worker',
+        severity: 1,
+        reason: 'smoke-loop-penalty',
+      },
+      metadata: {
+        smoke_case: 'loop-penalty',
+      },
+    },
+  });
+  assertStatus('ingest.loop.penalty', loopPenalty, 202);
+
+  const loopRecovery = await requestJson(`${baseUrl}/v1/events/ingest-loop`, {
+    method: 'POST',
+    headers: commonIngestHeaders,
+    body: {
+      schema_version: '1',
+      source_event_id: loopRecoverySourceId,
+      source_service: 'smoke-harness',
+      kind: 'recovery',
+      did: didA,
+      recovery: {
+        recovery_type: 'appeal_upheld_for_worker',
+        severity: 1,
+        reason: 'smoke-loop-recovery',
+      },
+      metadata: {
+        smoke_case: 'loop-recovery',
+      },
+    },
+  });
+  assertStatus('ingest.loop.recovery', loopRecovery, 202);
+
+  const repAfterLoop = await waitFor(
+    'rep.after_loop',
+    async () => {
+      const rep = await requestJson(`${baseUrl}/v1/rep/${encodeURIComponent(didA)}`);
+      if (rep.status !== 200) return null;
+      const eventsCount = Number(rep.json?.events_count ?? 0);
+      if (eventsCount >= 4) return rep;
+      return null;
+    },
+    { attempts: 40, delayMs: 1000 }
+  );
+
+  const ingestLoopSmoke = {
+    env: args.env,
+    base_url: baseUrl,
+    did: didA,
+    closure: { status: loopClosure.status, body: loopClosure.json },
+    penalty: { status: loopPenalty.status, body: loopPenalty.json },
+    recovery: { status: loopRecovery.status, body: loopRecovery.json },
+    rep_after_loop: repAfterLoop.json,
+    assertions: {
+      closure_accepted: loopClosure.status === 202,
+      penalty_accepted: loopPenalty.status === 202,
+      recovery_accepted: loopRecovery.status === 202,
+      events_count_progressed: Number(repAfterLoop.json?.events_count ?? 0) >= 4,
+    },
+  };
+
   // Seed additional reviewers for deterministic selection checks
   const seeded = [
     { did: didB, value_usd: 220, owner_verified: true, proof_tier: 'sandbox' },
@@ -211,6 +324,8 @@ async function main() {
     require_owner_verified: false,
     exclude_dids: [didA],
     submission_proof_tier: 'gateway',
+    requester_did: didA,
+    worker_did: didB,
   };
 
   const selectFirst = await requestJson(`${baseUrl}/v1/reviewers/select`, {
@@ -250,6 +365,7 @@ async function main() {
       deterministic_ordering:
         JSON.stringify(selectFirst.json?.reviewers ?? []) === JSON.stringify(selectSecond.json?.reviewers ?? []),
       reviewer_info_found: reviewerInfo.status === 200,
+      selection_metadata_present: Array.isArray(selectFirst.json?.selection_metadata?.selected_reasoning),
     },
   };
 
@@ -272,7 +388,7 @@ async function main() {
   const repBeforeDecay = await requestJson(`${baseUrl}/v1/rep/${encodeURIComponent(didA)}`);
   assertStatus('rep.before_decay', repBeforeDecay, 200);
 
-  const runDay = new Date().toISOString().slice(0, 10);
+  const runDay = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const decayRunFirst = await requestJson(`${baseUrl}/v1/decay/run`, {
     method: 'POST',
     headers: commonAdminHeaders,
@@ -302,7 +418,7 @@ async function main() {
     rep_after_decay: repAfterDecay.json,
     assertions: {
       penalty_reduced_score:
-        Number(repBeforeDecay.json?.reputation_score ?? 0) < Number(repAfterReplay.json?.reputation_score ?? 0),
+        Number(repBeforeDecay.json?.reputation_score ?? 0) < Number(repAfterLoop.json?.reputation_score ?? 0),
       decay_idempotent: decayRunSecond.json?.status === 'already_applied',
       decay_non_increasing:
         Number(repAfterDecay.json?.reputation_score ?? 0) <= Number(repBeforeDecay.json?.reputation_score ?? 0),
@@ -329,6 +445,67 @@ async function main() {
     },
   };
 
+  // 5) queue + SLO + drift ops
+  const queueStatus = await requestJson(`${baseUrl}/v1/ops/queue/status`, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${args.repAdminKey}`,
+    },
+  });
+  assertStatus('ops.queue.status', queueStatus, 200);
+
+  const queueReplay = await requestJson(`${baseUrl}/v1/ops/queue/replay`, {
+    method: 'POST',
+    headers: commonAdminHeaders,
+    body: {
+      source_event_id: 'nonexistent-replay-target',
+      limit: 5,
+    },
+  });
+  assertCondition('ops.queue.replay.status', [200, 500].includes(queueReplay.status), queueReplay.json);
+
+  const sloIngest = await requestJson(`${baseUrl}/v1/ops/slo/ingest?window_hours=24`, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${args.repAdminKey}`,
+    },
+  });
+  assertStatus('ops.slo.ingest', sloIngest, 200);
+
+  const driftRecompute = await requestJson(`${baseUrl}/v1/ops/drift/recompute`, {
+    method: 'POST',
+    headers: commonAdminHeaders,
+    body: {
+      limit: 50,
+      apply_repair: false,
+    },
+  });
+  assertStatus('ops.drift.recompute', driftRecompute, 200);
+
+  const driftLatest = await requestJson(`${baseUrl}/v1/ops/drift/latest`, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${args.repAdminKey}`,
+    },
+  });
+  assertStatus('ops.drift.latest', driftLatest, 200);
+
+  const opsSmoke = {
+    env: args.env,
+    base_url: baseUrl,
+    queue_status: queueStatus.json,
+    queue_replay: { status: queueReplay.status, body: queueReplay.json },
+    slo_ingest: sloIngest.json,
+    drift_recompute: driftRecompute.json,
+    drift_latest: driftLatest.json,
+    assertions: {
+      queue_status_has_counts: typeof queueStatus.json?.event_status_counts === 'object' && queueStatus.json?.event_status_counts !== null,
+      slo_has_success_rate: typeof sloIngest.json?.success_rate === 'number',
+      drift_report_has_totals: typeof driftRecompute.json?.total_profiles_checked === 'number',
+      drift_latest_present: typeof driftLatest.json?.created_at === 'string',
+    },
+  };
+
   const auditEvents = await requestJson(`${baseUrl}/v1/audit/events?limit=25`, {
     method: 'GET',
     headers: {
@@ -344,9 +521,11 @@ async function main() {
     base_url: baseUrl,
     smoke_files: {
       ingest_replay: path.join(outDir, 'ingest-replay-smoke.json'),
+      ingest_loop: path.join(outDir, 'ingest-loop-smoke.json'),
       reviewer_selection: path.join(outDir, 'reviewer-selection-smoke.json'),
       decay_penalty: path.join(outDir, 'decay-penalty-smoke.json'),
       tier_calculation: path.join(outDir, 'tier-calculation-smoke.json'),
+      ops: path.join(outDir, 'ops-smoke.json'),
     },
     audit_snapshot: {
       events_count: Array.isArray(auditEvents.json?.events) ? auditEvents.json.events.length : 0,
@@ -354,16 +533,20 @@ async function main() {
     },
     pass: {
       ingest_replay: Object.values(ingestReplaySmoke.assertions).every(Boolean),
+      ingest_loop: Object.values(ingestLoopSmoke.assertions).every(Boolean),
       reviewer_selection: Object.values(reviewerSelectionSmoke.assertions).every(Boolean),
       decay_penalty: Object.values(decayPenaltySmoke.assertions).every(Boolean),
       tier_calculation: Object.values(tierCalculationSmoke.assertions).every(Boolean),
+      ops: Object.values(opsSmoke.assertions).every(Boolean),
     },
   };
 
   writeFileSync(path.join(outDir, 'ingest-replay-smoke.json'), toJsonText(ingestReplaySmoke));
+  writeFileSync(path.join(outDir, 'ingest-loop-smoke.json'), toJsonText(ingestLoopSmoke));
   writeFileSync(path.join(outDir, 'reviewer-selection-smoke.json'), toJsonText(reviewerSelectionSmoke));
   writeFileSync(path.join(outDir, 'decay-penalty-smoke.json'), toJsonText(decayPenaltySmoke));
   writeFileSync(path.join(outDir, 'tier-calculation-smoke.json'), toJsonText(tierCalculationSmoke));
+  writeFileSync(path.join(outDir, 'ops-smoke.json'), toJsonText(opsSmoke));
   writeFileSync(path.join(outDir, 'deploy-summary.json'), toJsonText(deploySummary));
 
   const summaryLines = [

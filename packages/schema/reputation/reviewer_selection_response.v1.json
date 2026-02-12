@@ -21,6 +21,70 @@
           "owner_attestation_ref": { "type": "string", "minLength": 1 }
         }
       }
+    },
+    "selection_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_hash_seed",
+        "candidate_pool_size",
+        "eligible_candidate_count",
+        "exclusion_buckets",
+        "anti_collusion",
+        "selected_reasoning"
+      ],
+      "properties": {
+        "request_hash_seed": { "type": "string", "minLength": 1 },
+        "candidate_pool_size": { "type": "integer", "minimum": 0 },
+        "eligible_candidate_count": { "type": "integer", "minimum": 0 },
+        "exclusion_buckets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["excluded_did", "owner_verification_required", "below_min_reputation", "cooldown_blocked"],
+          "properties": {
+            "excluded_did": { "type": "integer", "minimum": 0 },
+            "owner_verification_required": { "type": "integer", "minimum": 0 },
+            "below_min_reputation": { "type": "integer", "minimum": 0 },
+            "cooldown_blocked": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "anti_collusion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cooldown_hours", "history_window_days"],
+          "properties": {
+            "cooldown_hours": { "type": "integer", "minimum": 0 },
+            "history_window_days": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "selected_reasoning": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reviewer_did",
+              "base_score",
+              "owner_bonus",
+              "recency_count",
+              "recency_penalty",
+              "pair_penalty",
+              "attestation_penalty",
+              "final_score"
+            ],
+            "properties": {
+              "reviewer_did": { "type": "string", "minLength": 16, "pattern": "^did:" },
+              "base_score": { "type": "number" },
+              "owner_bonus": { "type": "number" },
+              "recency_count": { "type": "integer", "minimum": 0 },
+              "recency_penalty": { "type": "number" },
+              "pair_penalty": { "type": "number" },
+              "attestation_penalty": { "type": "number" },
+              "final_score": { "type": "number" }
+            }
+          }
+        }
+      }
     }
   }
 }

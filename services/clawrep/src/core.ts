@@ -13,7 +13,9 @@ export type PenaltyType =
   | 'spam_review'
   | 'policy_violation';
 
-export type RepEventType = 'closure' | 'penalty' | 'decay';
+export type RecoveryType = 'appeal_upheld_for_reviewer' | 'appeal_upheld_for_worker';
+
+export type RepEventType = 'closure' | 'penalty' | 'decay' | 'recovery';
 
 export interface ClosureEventInput {
   source_event_id: string;
@@ -31,6 +33,16 @@ export interface PenaltyEventInput {
   source_event_id: string;
   did: string;
   penalty_type: PenaltyType;
+  severity: number;
+  occurred_at: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RecoveryEventInput {
+  source_event_id: string;
+  did: string;
+  recovery_type: RecoveryType;
   severity: number;
   occurred_at: string;
   reason?: string;
@@ -67,6 +79,7 @@ export interface RepEvent {
   weight_proof?: number;
   weight_owner?: number;
   penalty_type?: PenaltyType;
+  recovery_type?: RecoveryType;
   severity?: number;
   occurred_at: string;
   processed_at?: string;
@@ -88,6 +101,46 @@ export interface SelectReviewersRequest {
   require_owner_verified?: boolean;
   exclude_dids?: string[];
   submission_proof_tier?: ProofTier;
+  requester_did?: string;
+  worker_did?: string;
+}
+
+export interface ReviewerSelectionSignals {
+  requester_did?: string;
+  worker_did?: string;
+  recent_selection_counts?: Record<string, number>;
+  pair_selection_counts?: Record<string, number>;
+  cooldown_blocked?: Set<string>;
+  cooldown_hours?: number;
+  history_window_days?: number;
+}
+
+export interface ReviewerSelectionReason {
+  reviewer_did: string;
+  base_score: number;
+  owner_bonus: number;
+  recency_count: number;
+  recency_penalty: number;
+  pair_penalty: number;
+  attestation_penalty: number;
+  final_score: number;
+}
+
+export interface ReviewerSelectionMetadata {
+  request_hash_seed: string;
+  candidate_pool_size: number;
+  eligible_candidate_count: number;
+  exclusion_buckets: Record<string, number>;
+  anti_collusion: {
+    cooldown_hours: number;
+    history_window_days: number;
+  };
+  selected_reasoning: ReviewerSelectionReason[];
+}
+
+export interface ReviewerSelectionResult {
+  reviewers: ReviewerInfo[];
+  metadata: ReviewerSelectionMetadata;
 }
 
 export interface TierResult {
@@ -119,6 +172,11 @@ const PENALTY_BASE: Record<PenaltyType, number> = {
   fraud_confirmed: 30,
   spam_review: 15,
   policy_violation: 8,
+};
+
+const RECOVERY_BASE: Record<RecoveryType, number> = {
+  appeal_upheld_for_reviewer: 7,
+  appeal_upheld_for_worker: 6,
 };
 
 const DISPUTE_PENALTIES = new Set<PenaltyType>([
@@ -194,6 +252,12 @@ export function computePenaltyScoreDelta(penaltyType: PenaltyType, severity: num
   return round(-PENALTY_BASE[penaltyType] * multiplier);
 }
 
+export function computeRecoveryScoreDelta(recoveryType: RecoveryType, severity: number): number {
+  const boundedSeverity = Math.min(5, Math.max(1, Math.floor(severity)));
+  const multiplier = 1 + (boundedSeverity - 1) * 0.4;
+  return round(RECOVERY_BASE[recoveryType] * multiplier);
+}
+
 export function isDisputePenalty(penaltyType: PenaltyType): boolean {
   return DISPUTE_PENALTIES.has(penaltyType);
 }
@@ -247,35 +311,162 @@ function deterministicJitter(seed: string): number {
   return (hash >>> 0) / 0xffffffff;
 }
 
+function pairKey(a: string, b: string): string {
+  return a <= b ? `${a}::${b}` : `${b}::${a}`;
+}
+
+export function selectReviewersDeterministicWithSignals(
+  request: SelectReviewersRequest,
+  candidates: ReviewerInfo[],
+  signals: ReviewerSelectionSignals = {}
+): ReviewerSelectionResult {
+  const requesterDid = (signals.requester_did ?? request.requester_did)?.trim() || null;
+  const workerDid = (signals.worker_did ?? request.worker_did)?.trim() || null;
+
+  const excludes = new Set((request.exclude_dids ?? []).map((did) => did.trim()));
+  if (requesterDid) excludes.add(requesterDid);
+  if (workerDid) excludes.add(workerDid);
+
+  const cooldownBlocked = signals.cooldown_blocked ?? new Set<string>();
+  const recentSelectionCounts = signals.recent_selection_counts ?? {};
+  const pairSelectionCounts = signals.pair_selection_counts ?? {};
+
+  const minRep = request.min_reputation_score ?? 0;
+  const effectiveMinRep = minRep + Math.max(0, request.difficulty_scalar - 1) * 5;
+
+  const exclusionBuckets: {
+    excluded_did: number;
+    owner_verification_required: number;
+    below_min_reputation: number;
+    cooldown_blocked: number;
+  } = {
+    excluded_did: 0,
+    owner_verification_required: 0,
+    below_min_reputation: 0,
+    cooldown_blocked: 0,
+  };
+
+  const eligible: ReviewerInfo[] = [];
+  for (const candidate of candidates) {
+    const did = candidate.reviewer_did.trim();
+
+    if (excludes.has(did)) {
+      exclusionBuckets.excluded_did += 1;
+      continue;
+    }
+
+    if (request.require_owner_verified && !candidate.is_owner_verified) {
+      exclusionBuckets.owner_verification_required += 1;
+      continue;
+    }
+
+    if (candidate.reputation_score < effectiveMinRep) {
+      exclusionBuckets.below_min_reputation += 1;
+      continue;
+    }
+
+    if (cooldownBlocked.has(did)) {
+      exclusionBuckets.cooldown_blocked += 1;
+      continue;
+    }
+
+    eligible.push(candidate);
+  }
+
+  const selected: ReviewerInfo[] = [];
+  const selectedReasoning: ReviewerSelectionReason[] = [];
+  const remaining = [...eligible];
+
+  while (selected.length < request.quorum_size && remaining.length > 0) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestReason: ReviewerSelectionReason | null = null;
+
+    for (let i = 0; i < remaining.length; i += 1) {
+      const candidate = remaining[i];
+      if (!candidate) continue;
+
+      const difficultyBoost = 1 + Math.max(0, request.difficulty_scalar - 1) * 0.05;
+      const ownerBonus = candidate.is_owner_verified ? 2 : 0;
+      const baseScore = candidate.reputation_score * difficultyBoost;
+      const recencyCount = Math.max(0, Math.floor(recentSelectionCounts[candidate.reviewer_did] ?? 0));
+      const recencyPenalty = recencyCount * 1.25;
+
+      let pairPenalty = 0;
+      for (const prior of selected) {
+        const count = Math.max(0, Math.floor(pairSelectionCounts[pairKey(candidate.reviewer_did, prior.reviewer_did)] ?? 0));
+        if (count > 0) {
+          pairPenalty += count * 2;
+        }
+      }
+
+      const attestationPenalty = selected.some(
+        (prior) =>
+          candidate.owner_attestation_ref &&
+          prior.owner_attestation_ref &&
+          candidate.owner_attestation_ref === prior.owner_attestation_ref
+      )
+        ? 1.5
+        : 0;
+
+      const jitter = deterministicJitter(`${request.bounty_id}:${candidate.reviewer_did}`) * 1e-6;
+      const finalScore = baseScore + ownerBonus - recencyPenalty - pairPenalty - attestationPenalty + jitter;
+
+      const reason: ReviewerSelectionReason = {
+        reviewer_did: candidate.reviewer_did,
+        base_score: round(baseScore),
+        owner_bonus: ownerBonus,
+        recency_count: recencyCount,
+        recency_penalty: round(recencyPenalty),
+        pair_penalty: round(pairPenalty),
+        attestation_penalty: round(attestationPenalty),
+        final_score: round(finalScore),
+      };
+
+      if (
+        finalScore > bestScore ||
+        (finalScore === bestScore && candidate.reviewer_did.localeCompare(remaining[bestIndex]?.reviewer_did ?? '') < 0)
+      ) {
+        bestScore = finalScore;
+        bestIndex = i;
+        bestReason = reason;
+      }
+    }
+
+    const [winner] = remaining.splice(bestIndex, 1);
+    if (!winner) {
+      break;
+    }
+
+    selected.push(winner);
+    if (bestReason) {
+      selectedReasoning.push(bestReason);
+    }
+  }
+
+  const metadata: ReviewerSelectionMetadata = {
+    request_hash_seed: `${request.bounty_id}:${request.difficulty_scalar}:${request.quorum_size}`,
+    candidate_pool_size: candidates.length,
+    eligible_candidate_count: eligible.length,
+    exclusion_buckets: exclusionBuckets,
+    anti_collusion: {
+      cooldown_hours: signals.cooldown_hours ?? 12,
+      history_window_days: signals.history_window_days ?? 30,
+    },
+    selected_reasoning: selectedReasoning,
+  };
+
+  return {
+    reviewers: selected,
+    metadata,
+  };
+}
+
 export function selectReviewersDeterministic(
   request: SelectReviewersRequest,
   candidates: ReviewerInfo[]
 ): ReviewerInfo[] {
-  const excludes = new Set((request.exclude_dids ?? []).map((did) => did.trim()));
-  const minRep = request.min_reputation_score ?? 0;
-  const effectiveMinRep = minRep + Math.max(0, request.difficulty_scalar - 1) * 5;
-
-  const filtered = candidates.filter((candidate) => {
-    if (excludes.has(candidate.reviewer_did)) return false;
-    if (request.require_owner_verified && !candidate.is_owner_verified) return false;
-    if (candidate.reputation_score < effectiveMinRep) return false;
-    return true;
-  });
-
-  const scored = filtered.map((candidate) => {
-    const difficultyBoost = 1 + Math.max(0, request.difficulty_scalar - 1) * 0.05;
-    const ownerBonus = candidate.is_owner_verified ? 2 : 0;
-    const jitter = deterministicJitter(`${request.bounty_id}:${candidate.reviewer_did}`) * 1e-6;
-    const score = candidate.reputation_score * difficultyBoost + ownerBonus + jitter;
-    return { candidate, score };
-  });
-
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.candidate.reviewer_did.localeCompare(b.candidate.reviewer_did);
-  });
-
-  return scored.slice(0, request.quorum_size).map((row) => row.candidate);
+  return selectReviewersDeterministicWithSignals(request, candidates).reviewers;
 }
 
 export class InMemoryRepEngine {
@@ -328,6 +519,32 @@ export class InMemoryRepEngine {
       score_delta: computePenaltyScoreDelta(input.penalty_type, input.severity),
       status: 'pending',
       penalty_type: input.penalty_type,
+      severity: Math.min(5, Math.max(1, Math.floor(input.severity))),
+      occurred_at: input.occurred_at,
+      metadata: {
+        ...(input.metadata ?? {}),
+        ...(input.reason ? { reason: input.reason } : {}),
+      },
+    };
+
+    this.events.set(sourceId, event);
+    return { duplicate: false, event };
+  }
+
+  ingestRecovery(input: RecoveryEventInput): { duplicate: boolean; event: RepEvent } {
+    const sourceId = normalizeSourceEventId(input.source_event_id);
+    const existing = this.events.get(sourceId);
+    if (existing) {
+      return { duplicate: true, event: existing };
+    }
+
+    const event: RepEvent = {
+      source_event_id: sourceId,
+      did: input.did,
+      event_type: 'recovery',
+      score_delta: computeRecoveryScoreDelta(input.recovery_type, input.severity),
+      status: 'pending',
+      recovery_type: input.recovery_type,
       severity: Math.min(5, Math.max(1, Math.floor(input.severity))),
       occurred_at: input.occurred_at,
       metadata: {

@@ -1,0 +1,26 @@
+{
+  "env": "staging",
+  "base_url": "https://clawrep-staging.generaite.workers.dev",
+  "didA": {
+    "did": "did:key:z6MkrepA1770865800077",
+    "reputation_score": 167.657183,
+    "tier": 1,
+    "tier_label": "emerging",
+    "capped_by_dispute_rate": true,
+    "dispute_rate": 0.4,
+    "evaluated_at": "2026-02-12T03:10:23.273Z"
+  },
+  "didB": {
+    "did": "did:key:z6MkrepB1770865800077",
+    "reputation_score": 204.687079,
+    "tier": 2,
+    "tier_label": "trusted",
+    "capped_by_dispute_rate": false,
+    "dispute_rate": 0,
+    "evaluated_at": "2026-02-12T03:10:23.311Z"
+  },
+  "assertions": {
+    "didA_tier_range": true,
+    "didB_tier_range": true
+  }
+}

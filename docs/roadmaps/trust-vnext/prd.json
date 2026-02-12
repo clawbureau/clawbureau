@@ -693,10 +693,94 @@
       "priority": 9,
       "passes": true,
       "notes": "Implemented in services/clawrep. Deploy versions: staging e41c2e88-9c81-4673-b99d-322e007e3aba, prod b54e2e0d-9062-4782-9a4b-87a84129f249. Ops artifacts: artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json and artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json."
+    },
+    {
+      "id": "CRP-US-008",
+      "title": "Closed-loop canonical ingest across marketplace, trials, and escrow",
+      "description": "As trust operations, we need deterministic queue-backed ingest-loop envelopes from clawbounties/clawtrials/escrow so outcome events are ingested with idempotent source_event_id semantics.",
+      "acceptanceCriteria": [
+        "POST /v1/events/ingest-loop accepts canonical schema envelope and enqueues to REP_EVENTS",
+        "Queue consumer applies idempotent ingest by source_event_id and deterministic processing",
+        "clawbounties, clawtrials, and escrow emit minimal glue events into clawrep ingest-loop endpoint",
+        "Staging and prod smoke artifacts validate end-to-end outcome propagation"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Delivered closed-loop queue ingest across clawrep + producer glue in clawbounties/clawtrials/escrow using canonical loop envelopes and REP_EVENTS queue bindings. Smoke evidence: artifacts/smoke/clawrep/2026-02-12T03-10-00-076Z-staging and .../2026-02-12T03-10-29-983Z-prod."
+    },
+    {
+      "id": "CRP-US-009",
+      "title": "Dispute-coupled penalties and appeal recovery path",
+      "description": "As trust governance, we need deterministic penalties for upheld disputes and deterministic positive recovery events for upheld appeals.",
+      "acceptanceCriteria": [
+        "Penalty events support dispute-upheld lanes with bounded severity",
+        "Recovery events support appeal-upheld lanes with bounded severity",
+        "Both lanes are idempotent by source_event_id and auditable",
+        "Core tests cover penalty and recovery score determinism"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Delivered dispute penalty + appeal recovery contracts in clawrep core/index with deterministic severity bounds and audit traces."
+    },
+    {
+      "id": "CRP-US-010",
+      "title": "Reviewer anti-collusion hardening with compatibility retention",
+      "description": "As marketplaces, we need deterministic anti-collusion reviewer selection signals (cooldown/history/pairing) while preserving API contract compatibility.",
+      "acceptanceCriteria": [
+        "POST /v1/reviewers/select remains contract-compatible for existing clients",
+        "Selection uses deterministic anti-collusion signals and emits selection metadata",
+        "Requester/worker DID context can be supplied for exclusion hardening",
+        "Audit logs include selected reviewers and selection metadata"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Delivered anti-collusion reviewer selection (cooldown/history/pair penalties) while preserving additive contract compatibility for existing reviewer clients."
+    },
+    {
+      "id": "CRP-US-011",
+      "title": "Queue DLQ and replay controls",
+      "description": "As operations, we need DLQ-safe queue behavior and deterministic replay controls for failed ingest-loop events.",
+      "acceptanceCriteria": [
+        "Queue consumer has dead-letter queue bindings for staging and prod",
+        "Failed loop envelopes are auditable and replayable by admin endpoint",
+        "Replay endpoint supports source_event_id targeting and bounded batch replay",
+        "Queue status endpoint reports event status and replay/failure counters"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Delivered DLQ + replay controls in clawrep wrangler/runtime (`dead_letter_queue`, `POST /v1/ops/queue/replay`, `GET /v1/ops/queue/status`) with failure audits."
+    },
+    {
+      "id": "CRP-US-012",
+      "title": "Drift detection, recompute reports, and ingest SLO contracts",
+      "description": "As trust reliability, we need deterministic profile drift detection/recompute reports and ingest SLO telemetry endpoints.",
+      "acceptanceCriteria": [
+        "POST /v1/ops/drift/recompute emits deterministic mismatch/error-bucket report",
+        "GET /v1/ops/drift/latest returns latest persisted drift report",
+        "GET /v1/ops/slo/ingest returns bounded latency/error-rate SLO metrics",
+        "Cron path emits periodic drift reports for passive monitoring"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Delivered drift/SLO ops contracts (`POST /v1/ops/drift/recompute`, `GET /v1/ops/drift/latest`, `GET /v1/ops/slo/ingest`) with persisted drift reports."
+    },
+    {
+      "id": "TRUST-REP-002",
+      "title": "Closed-loop reputation operations rollout and verification",
+      "description": "As trust operations, we need staged rollout, smoke gates, and evidence for closed-loop reputation controls across clawrep and producing services.",
+      "acceptanceCriteria": [
+        "Cloudflare dry-run/deploy hygiene passes for changed services",
+        "Staging+prod smokes validate ingest-loop, replay, anti-collusion selection, and drift endpoints",
+        "Artifacts include deploy versions, smoke outputs, and ops summaries",
+        "Proof chain includes signed commit attestation for TRUST-REP-002 lane"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Closed-loop rollout completed. Deploy versions: clawrep staging f94065ad-7ac4-4a0c-8498-d51d13d54841 / prod faec7ec3-0416-4939-9812-3eac37c0e00a; clawbounties staging a102436e-d565-4705-879d-ac1b3032f36f / prod a23e25b0-e763-428b-a583-72f69e553632; clawtrials staging 067bef7e-d424-440c-9db4-5126a345f745 / prod ddc11d4c-b3bd-4ad7-a343-d7fdc7ae61fc; escrow staging 3aa5b2f9-c9e7-42e1-a9ef-bd985d94912e / prod 520327ed-818a-49c6-8101-0b90d16994e5. Ops summaries: artifacts/ops/clawrep/2026-02-12T02-56-40-000Z-staging/deploy-summary.json and .../2026-02-12T02-56-58-000Z-prod/deploy-summary.json."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-12T01:07:00Z",
+    "updatedAt": "2026-02-12T03:12:21.364Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

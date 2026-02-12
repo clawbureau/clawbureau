@@ -4,8 +4,10 @@ import {
   computeClosureScoreDelta,
   computeConcaveValue,
   computePenaltyScoreDelta,
+  computeRecoveryScoreDelta,
   deriveTier,
   selectReviewersDeterministic,
+  selectReviewersDeterministicWithSignals,
 } from '../src/core';
 
 describe('clawrep core scoring', () => {
@@ -45,6 +47,14 @@ describe('clawrep core scoring', () => {
     expect(severityOne).toBeLessThan(0);
     expect(severityThree).toBeLessThan(severityOne);
     expect(severityThree).toBe(-24);
+  });
+
+  it('computes deterministic appeal recovery deltas', () => {
+    const low = computeRecoveryScoreDelta('appeal_upheld_for_worker', 1);
+    const high = computeRecoveryScoreDelta('appeal_upheld_for_worker', 4);
+
+    expect(low).toBeGreaterThan(0);
+    expect(high).toBeGreaterThan(low);
   });
 });
 
@@ -111,6 +121,34 @@ describe('clawrep in-memory idempotency and decay', () => {
     expect(run2.already_applied).toBe(true);
     expect(after2.reputation_score).toBe(after1.reputation_score);
   });
+
+  it('applies deterministic recovery events', () => {
+    const engine = new InMemoryRepEngine();
+    const did = 'did:key:z6MkiRepRecovery11111111111111111111111111';
+    const now = new Date().toISOString();
+
+    engine.ingestPenalty({
+      source_event_id: 'evt_rep_penalty_seed',
+      did,
+      penalty_type: 'dispute_upheld_against_worker',
+      severity: 2,
+      occurred_at: now,
+    });
+    engine.processPending();
+    const afterPenalty = engine.getProfile(did)!;
+
+    engine.ingestRecovery({
+      source_event_id: 'evt_rep_recovery_seed',
+      did,
+      recovery_type: 'appeal_upheld_for_worker',
+      severity: 3,
+      occurred_at: now,
+    });
+    engine.processPending();
+
+    const afterRecovery = engine.getProfile(did)!;
+    expect(afterRecovery.reputation_score).toBeGreaterThan(afterPenalty.reputation_score);
+  });
 });
 
 describe('clawrep tiering and reviewer selection', () => {
@@ -165,5 +203,61 @@ describe('clawrep tiering and reviewer selection', () => {
     expect(first).toEqual(second);
     expect(first).toHaveLength(2);
     expect(first.some((r) => r.reviewer_did.includes('Exclude'))).toBe(false);
+  });
+
+  it('applies anti-collusion signals deterministically', () => {
+    const req = {
+      bounty_id: 'bnty_collusion_1',
+      difficulty_scalar: 2,
+      quorum_size: 2,
+      min_reputation_score: 10,
+      require_owner_verified: false,
+      requester_did: 'did:key:z6MkiRequester11111111111111111111111111',
+      worker_did: 'did:key:z6MkiWorker11111111111111111111111111111',
+    };
+
+    const candidates = [
+      {
+        reviewer_did: 'did:key:z6MkiRequester11111111111111111111111111',
+        reputation_score: 100,
+        is_owner_verified: true,
+      },
+      {
+        reviewer_did: 'did:key:z6MkiReviewerA1111111111111111111111111111',
+        reputation_score: 48,
+        is_owner_verified: true,
+        owner_attestation_ref: 'att_a',
+      },
+      {
+        reviewer_did: 'did:key:z6MkiReviewerB1111111111111111111111111111',
+        reputation_score: 46,
+        is_owner_verified: true,
+        owner_attestation_ref: 'att_b',
+      },
+      {
+        reviewer_did: 'did:key:z6MkiReviewerC1111111111111111111111111111',
+        reputation_score: 47,
+        is_owner_verified: true,
+        owner_attestation_ref: 'att_a',
+      },
+    ];
+
+    const result = selectReviewersDeterministicWithSignals(req, candidates, {
+      cooldown_blocked: new Set(['did:key:z6MkiReviewerB1111111111111111111111111111']),
+      recent_selection_counts: {
+        'did:key:z6MkiReviewerA1111111111111111111111111111': 2,
+        'did:key:z6MkiReviewerC1111111111111111111111111111': 0,
+      },
+      pair_selection_counts: {
+        'did:key:z6MkiReviewerA1111111111111111111111111111::did:key:z6MkiReviewerC1111111111111111111111111111': 3,
+      },
+      cooldown_hours: 12,
+      history_window_days: 30,
+    });
+
+    expect(result.reviewers).toHaveLength(2);
+    expect(result.reviewers.some((r) => r.reviewer_did.includes('Requester'))).toBe(false);
+    expect(result.metadata.exclusion_buckets.cooldown_blocked).toBeGreaterThanOrEqual(1);
+    expect(result.metadata.selected_reasoning).toHaveLength(2);
   });
 });

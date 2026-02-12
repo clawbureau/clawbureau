@@ -1,0 +1,77 @@
+{
+  "env": "staging",
+  "base_url": "https://clawrep-staging.generaite.workers.dev",
+  "did": "did:key:z6MkrepA1770865800077",
+  "penalty_apply": {
+    "status": "accepted",
+    "duplicate": false,
+    "source_event_id": "rep_penalty_1770865800077_a",
+    "did": "did:key:z6MkrepA1770865800077",
+    "penalty_type": "dispute_upheld_against_reviewer",
+    "severity": 2,
+    "score_delta": -18,
+    "deterministic_dispute_penalty": true,
+    "process_result": {
+      "processed": true
+    }
+  },
+  "rep_before_decay": {
+    "did": "did:key:z6MkrepA1770865800077",
+    "reputation_score": 167.657183,
+    "events_count": 5,
+    "penalties_count": 2,
+    "dispute_penalties_count": 2,
+    "is_owner_verified": true,
+    "owner_attestation_ref": "att_1770865800077",
+    "tier": {
+      "tier": 1,
+      "tier_label": "emerging",
+      "capped_by_dispute_rate": true,
+      "dispute_rate": 0.4
+    },
+    "last_event_at": "2026-02-12T03:10:22.706Z",
+    "last_decay_at": null,
+    "updated_at": "2026-02-12T03:10:22.943Z",
+    "created_at": "2026-02-12T03:10:00.638Z"
+  },
+  "decay_first": {
+    "status": "already_applied",
+    "already_applied": true,
+    "run_day": "2026-02-13",
+    "affected_profiles": 0,
+    "total_delta": 0,
+    "decay_rate": 0.02
+  },
+  "decay_second": {
+    "status": "already_applied",
+    "already_applied": true,
+    "run_day": "2026-02-13",
+    "affected_profiles": 0,
+    "total_delta": 0,
+    "decay_rate": 0.02
+  },
+  "rep_after_decay": {
+    "did": "did:key:z6MkrepA1770865800077",
+    "reputation_score": 167.657183,
+    "events_count": 5,
+    "penalties_count": 2,
+    "dispute_penalties_count": 2,
+    "is_owner_verified": true,
+    "owner_attestation_ref": "att_1770865800077",
+    "tier": {
+      "tier": 1,
+      "tier_label": "emerging",
+      "capped_by_dispute_rate": true,
+      "dispute_rate": 0.4
+    },
+    "last_event_at": "2026-02-12T03:10:22.706Z",
+    "last_decay_at": null,
+    "updated_at": "2026-02-12T03:10:22.943Z",
+    "created_at": "2026-02-12T03:10:00.638Z"
+  },
+  "assertions": {
+    "penalty_reduced_score": true,
+    "decay_idempotent": true,
+    "decay_non_increasing": true
+  }
+}
