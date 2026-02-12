@@ -26,8 +26,7 @@ routes = [
   # clawea.com moved to dedicated Worker: services/clawea-www
   { pattern = "clawsilo.com/*",      zone_name = "clawsilo.com" },
   { pattern = "www.clawsilo.com/*",  zone_name = "clawsilo.com" },
-  { pattern = "clawdelegate.com/*",  zone_name = "clawdelegate.com" },
-  { pattern = "www.clawdelegate.com/*", zone_name = "clawdelegate.com" },
+  # clawdelegate.com moved to dedicated Worker: services/clawdelegate
   { pattern = "clawintel.com/*",     zone_name = "clawintel.com" },
   { pattern = "www.clawintel.com/*", zone_name = "clawintel.com" },
   { pattern = "clawtrials.com/*",    zone_name = "clawtrials.com" },

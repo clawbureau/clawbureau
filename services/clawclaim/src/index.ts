@@ -17,6 +17,7 @@ export interface Env {
   CLAIM_SCOPE_TIMEOUT_MS?: string;
   CLAIM_SCOPE_EXCHANGE_TTL_SECONDS?: string;
   CLAWVERIFY_BASE_URL?: string;
+  CLAIM_DELEGATE_KEY?: string;
   CLAWVERIFY_TIMEOUT_MS?: string;
   CLAIM_CLAWLOGS_BASE_URL?: string;
   CLAIM_CLAWLOGS_ADMIN_KEY?: string;
@@ -181,6 +182,25 @@ function errorResponse(code: string, message: string, status = 400): Response {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function parseBearerToken(header: string | null): string | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('bearer ')) {
+    const token = trimmed.slice(7).trim();
+    return token.length > 0 ? token : null;
+  }
+  return trimmed;
+}
+
+function isDelegateServiceAuthorized(request: Request, env: Env): boolean {
+  const expected = env.CLAIM_DELEGATE_KEY?.trim();
+  if (!expected) return false;
+  const provided = parseBearerToken(request.headers.get('authorization'));
+  return !!provided && provided === expected;
 }
 
 function challengeKey(challengeId: string): string {
@@ -532,8 +552,72 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawclaim (identity control plane)\n\nEndpoints:\n- GET /health\n- POST /v1/challenges (purpose: bind|revoke)\n- POST /v1/bind\n- POST /v1/bindings/revoke\n- POST /v1/control-plane/challenges\n- POST /v1/control-plane/controllers/register\n- POST /v1/control-plane/controllers/{controller_did}/agents/register\n- POST /v1/control-plane/controllers/{controller_did}/sensitive-policy\n- POST /v1/control-plane/rotations/confirm\n- POST /v1/control-plane/controllers/{controller_did}/transfer/request\n- POST /v1/control-plane/controllers/{controller_did}/transfer/confirm\n- POST /v1/control-plane/identity/export\n- POST /v1/control-plane/identity/import\n- GET /v1/control-plane/controllers/{controller_did}\n- GET /v1/control-plane/controllers/{controller_did}/agents\n- GET /v1/control-plane/controllers/{controller_did}/agents/{agent_did}\n\nM5 productization endpoints:\n- POST /v1/platform-claims/register\n- GET /v1/platform-claims/{owner_did}\n- POST /v1/accounts/{account_id}/primary-did\n- GET /v1/accounts/{account_id}/profile\n- GET /v1/bindings/audit\n- GET /v1/bindings/audit/export\n- POST /v1/owner-attestations/register\n- GET /v1/owner-attestations/{owner_did}\n- GET /v1/owner-attestations/lookup\n- POST /v1/scoped-tokens/challenges\n- POST /v1/scoped-tokens/exchange\n- POST /v1/orgs/{org_id}/roster-manifests\n- GET /v1/orgs/{org_id}/roster/latest\n\nBind flow:\n1) POST /v1/challenges { did } to get a message.\n2) Sign the message with your DID key.\n3) POST /v1/bind.\n\nControl-plane flow:\n1) Owner DID + controller/agent DIDs must be active bindings.\n2) POST /v1/control-plane/challenges for controller action messages.\n3) Owner signs challenge message, then submit registration/policy mutation endpoint.\n\nPortability flow:\n1) issue purpose-scoped challenge for rotation/transfer/export/import.\n2) sign challenge with owner DID key.\n3) call corresponding lifecycle endpoint (rotation confirm, transfer request/confirm, export/import).\n\n`;
+      const md = `# clawclaim (identity control plane)\n\nEndpoints:\n- GET /health\n- POST /v1/challenges (purpose: bind|revoke)\n- POST /v1/bind\n- POST /v1/bindings/revoke\n- POST /v1/delegations/bootstrap\n- POST /v1/control-plane/challenges\n- POST /v1/control-plane/controllers/register\n- POST /v1/control-plane/controllers/{controller_did}/agents/register\n- POST /v1/control-plane/controllers/{controller_did}/sensitive-policy\n- POST /v1/control-plane/rotations/confirm\n- POST /v1/control-plane/controllers/{controller_did}/transfer/request\n- POST /v1/control-plane/controllers/{controller_did}/transfer/confirm\n- POST /v1/control-plane/identity/export\n- POST /v1/control-plane/identity/import\n- GET /v1/control-plane/controllers/{controller_did}\n- GET /v1/control-plane/controllers/{controller_did}/agents\n- GET /v1/control-plane/controllers/{controller_did}/agents/{agent_did}\n\nM5 productization endpoints:\n- POST /v1/platform-claims/register\n- GET /v1/platform-claims/{owner_did}\n- POST /v1/accounts/{account_id}/primary-did\n- GET /v1/accounts/{account_id}/profile\n- GET /v1/bindings/audit\n- GET /v1/bindings/audit/export\n- POST /v1/owner-attestations/register\n- GET /v1/owner-attestations/{owner_did}\n- GET /v1/owner-attestations/lookup\n- POST /v1/scoped-tokens/challenges\n- POST /v1/scoped-tokens/exchange\n- POST /v1/orgs/{org_id}/roster-manifests\n- GET /v1/orgs/{org_id}/roster/latest\n\nBind flow:\n1) POST /v1/challenges { did } to get a message.\n2) Sign the message with your DID key.\n3) POST /v1/bind.\n\nControl-plane flow:\n1) Owner DID + controller/agent DIDs must be active bindings.\n2) POST /v1/control-plane/challenges for controller action messages.\n3) Owner signs challenge message, then submit registration/policy mutation endpoint.\n\nPortability flow:\n1) issue purpose-scoped challenge for rotation/transfer/export/import.\n2) sign challenge with owner DID key.\n3) call corresponding lifecycle endpoint (rotation confirm, transfer request/confirm, export/import).\n\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.CLAIM_VERSION);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/v1/delegations/bootstrap') {
+      const kv = env.CLAIM_STORE;
+      if (!kv) {
+        return errorResponse('STORE_NOT_CONFIGURED', 'CLAIM_STORE KV binding is not configured', 503);
+      }
+
+      if (!env.CLAIM_DELEGATE_KEY || env.CLAIM_DELEGATE_KEY.trim().length === 0) {
+        return errorResponse(
+          'DELEGATION_BOOTSTRAP_NOT_CONFIGURED',
+          'CLAIM_DELEGATE_KEY is not configured',
+          503
+        );
+      }
+
+      if (!isDelegateServiceAuthorized(request, env)) {
+        return errorResponse('UNAUTHORIZED', 'Valid delegation bootstrap service authorization is required', 401);
+      }
+
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+      }
+
+      if (typeof body !== 'object' || body === null) {
+        return errorResponse('INVALID_REQUEST', 'Request body must be a JSON object', 400);
+      }
+
+      const payload = body as Record<string, unknown>;
+      const delegatorDid = typeof payload.delegator_did === 'string' ? payload.delegator_did.trim() : '';
+      const delegateDid = typeof payload.delegate_did === 'string' ? payload.delegate_did.trim() : '';
+
+      if (!delegatorDid || !delegatorDid.startsWith('did:')) {
+        return errorResponse('INVALID_REQUEST', 'delegator_did must be a DID string', 400);
+      }
+
+      if (!delegateDid || !delegateDid.startsWith('did:')) {
+        return errorResponse('INVALID_REQUEST', 'delegate_did must be a DID string', 400);
+      }
+
+      const delegatorBinding = await getActiveBinding(kv, delegatorDid);
+      if (!delegatorBinding) {
+        return errorResponse('DELEGATOR_BINDING_REQUIRED', 'delegator_did must be an active binding', 403);
+      }
+
+      const delegateBinding = await getActiveBinding(kv, delegateDid);
+      if (!delegateBinding) {
+        return errorResponse('DELEGATE_BINDING_REQUIRED', 'delegate_did must be an active binding', 403);
+      }
+
+      return jsonResponse({
+        ok: true,
+        result: {
+          delegator_did: delegatorDid,
+          delegate_did: delegateDid,
+          delegator_binding_active: true,
+          delegate_binding_active: true,
+          checked_at: Math.floor(Date.now() / 1000),
+          checked_at_iso: new Date().toISOString(),
+        },
+      });
     }
 
     const m5Response = await handleClaimM5Routes(request, env);

@@ -15,6 +15,12 @@ export interface ScopedTokenClaimsV1 {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   jti?: string;
   nonce?: string;
@@ -43,6 +49,12 @@ export interface TokenScopeHashInputV1 {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 }
 
 export interface TransitionMatrixEntry {
@@ -168,6 +180,32 @@ export function validateScopedTokenClaimsShape(payload: unknown): payload is Sco
 
   if (p.mission_id !== undefined && !isNonEmptyString(p.mission_id)) return false;
 
+  if (p.delegation_id !== undefined && !isNonEmptyString(p.delegation_id)) return false;
+
+  if (p.delegator_did !== undefined) {
+    if (!isNonEmptyString(p.delegator_did) || !isDid(p.delegator_did.trim())) return false;
+  }
+
+  if (p.delegate_did !== undefined) {
+    if (!isNonEmptyString(p.delegate_did) || !isDid(p.delegate_did.trim())) return false;
+  }
+
+  if (p.delegation_policy_hash_b64u !== undefined) {
+    if (!isNonEmptyString(p.delegation_policy_hash_b64u) || !isSha256B64u(p.delegation_policy_hash_b64u.trim())) {
+      return false;
+    }
+  }
+
+  if (p.delegation_spend_cap_minor !== undefined) {
+    if (!isNonEmptyString(p.delegation_spend_cap_minor) || !/^[0-9]+$/.test(p.delegation_spend_cap_minor.trim())) {
+      return false;
+    }
+  }
+
+  if (p.delegation_expires_at !== undefined) {
+    if (typeof p.delegation_expires_at !== 'number' || !Number.isFinite(p.delegation_expires_at)) return false;
+  }
+
   if (p.token_lane !== undefined && p.token_lane !== 'legacy' && p.token_lane !== 'canonical') {
     return false;
   }
@@ -259,6 +297,12 @@ export function buildTokenScopeHashInput(input: {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 }): TokenScopeHashInputV1 {
   const out: TokenScopeHashInputV1 = {
     token_version: '1',
@@ -280,6 +324,22 @@ export function buildTokenScopeHashInput(input: {
     out.spend_cap = input.spend_cap;
   }
   if (isNonEmptyString(input.mission_id)) out.mission_id = input.mission_id.trim();
+  if (isNonEmptyString(input.delegation_id)) out.delegation_id = input.delegation_id.trim();
+  if (isNonEmptyString(input.delegator_did)) out.delegator_did = input.delegator_did.trim();
+  if (isNonEmptyString(input.delegate_did)) out.delegate_did = input.delegate_did.trim();
+  if (isNonEmptyString(input.delegation_policy_hash_b64u)) {
+    out.delegation_policy_hash_b64u = input.delegation_policy_hash_b64u.trim();
+  }
+  if (isNonEmptyString(input.delegation_spend_cap_minor) && /^[0-9]+$/.test(input.delegation_spend_cap_minor.trim())) {
+    out.delegation_spend_cap_minor = input.delegation_spend_cap_minor.trim();
+  }
+  if (
+    typeof input.delegation_expires_at === 'number' &&
+    Number.isFinite(input.delegation_expires_at) &&
+    input.delegation_expires_at > 0
+  ) {
+    out.delegation_expires_at = Math.floor(input.delegation_expires_at);
+  }
 
   return out;
 }
@@ -297,6 +357,12 @@ export async function computeTokenScopeHashB64u(input: {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 }): Promise<string> {
   const payload = buildTokenScopeHashInput(input);
   const canonical = canonicalize(payload);

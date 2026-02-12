@@ -712,6 +712,11 @@ type V1Bucket = 'A' | 'H' | 'B' | 'F' | 'P';
 
 type V1TransferStatus = 'applied';
 
+type DelegationSpendOperation = 'reserve' | 'consume' | 'release';
+
+const DELEGATION_ID_RE = /^dlg_[a-f0-9-]+$/;
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -765,6 +770,10 @@ function parsePositiveBigInt(value: unknown): bigint | null {
   } catch {
     return null;
   }
+}
+
+function isDelegationSpendOperation(value: unknown): value is DelegationSpendOperation {
+  return value === 'reserve' || value === 'consume' || value === 'release';
 }
 
 interface V1BalancesResponse {
@@ -1112,6 +1121,199 @@ async function handleV1Transfers(request: Request, env: Env): Promise<Response> 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse(message, 'EVENT_WRITE_FAILED', 500);
+  }
+}
+
+/**
+ * Handle POST /v1/delegations/spend/:operation
+ *
+ * Deterministic hook endpoint for delegation spend reserve/consume/release operations.
+ * This endpoint is idempotent by idempotency_key.
+ */
+async function handleDelegationSpendHook(
+  operation: DelegationSpendOperation,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const bodyRaw = await parseJsonBody<unknown>(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotencyKey = isNonEmptyString(bodyRaw.idempotency_key)
+    ? bodyRaw.idempotency_key.trim()
+    : null;
+  if (!idempotencyKey) {
+    return errorResponse('idempotency_key is required', 'INVALID_REQUEST', 400);
+  }
+
+  const delegationId = isNonEmptyString(bodyRaw.delegation_id)
+    ? bodyRaw.delegation_id.trim()
+    : null;
+  if (!delegationId || !DELEGATION_ID_RE.test(delegationId)) {
+    return errorResponse('delegation_id is invalid', 'INVALID_REQUEST', 400);
+  }
+
+  const delegatorDid = isNonEmptyString(bodyRaw.delegator_did)
+    ? bodyRaw.delegator_did.trim()
+    : null;
+  if (!delegatorDid || !isValidDid(delegatorDid)) {
+    return errorResponse('delegator_did must be a DID', 'INVALID_REQUEST', 400);
+  }
+
+  const actorDid = isNonEmptyString(bodyRaw.actor_did) ? bodyRaw.actor_did.trim() : null;
+  if (!actorDid || !isValidDid(actorDid)) {
+    return errorResponse('actor_did must be a DID', 'INVALID_REQUEST', 400);
+  }
+
+  const amountMinor = parsePositiveBigInt(bodyRaw.amount_minor);
+  if (amountMinor === null) {
+    return errorResponse('amount_minor must be a positive integer string', 'INVALID_REQUEST', 400);
+  }
+
+  const tokenHash = isNonEmptyString(bodyRaw.token_hash) ? bodyRaw.token_hash.trim().toLowerCase() : null;
+  if (tokenHash && !SHA256_HEX_RE.test(tokenHash)) {
+    return errorResponse('token_hash must be a lowercase hex sha256', 'INVALID_REQUEST', 400);
+  }
+
+  const requestFingerprint = JSON.stringify({
+    operation,
+    delegation_id: delegationId,
+    idempotency_key: idempotencyKey,
+    delegator_did: delegatorDid,
+    actor_did: actorDid,
+    amount_minor: amountMinor.toString(),
+    token_hash: tokenHash,
+  });
+
+  const existing = await env.DB
+    .prepare(
+      `SELECT event_id, operation, delegation_id, request_fingerprint, response_json
+       FROM delegation_spend_hooks
+       WHERE idempotency_key = ?
+       LIMIT 1`
+    )
+    .bind(idempotencyKey)
+    .first<Record<string, unknown>>();
+
+  if (existing) {
+    const existingOperation = isNonEmptyString(existing.operation) ? existing.operation.trim() : null;
+    const existingDelegationId = isNonEmptyString(existing.delegation_id) ? existing.delegation_id.trim() : null;
+    const existingFingerprint = isNonEmptyString(existing.request_fingerprint)
+      ? existing.request_fingerprint
+      : null;
+
+    if (
+      existingOperation !== operation ||
+      existingDelegationId !== delegationId ||
+      existingFingerprint !== requestFingerprint
+    ) {
+      return errorResponse(
+        'idempotency_key is already used with a different delegation spend payload',
+        'IDEMPOTENCY_KEY_REUSED',
+        409
+      );
+    }
+
+    try {
+      const parsed = isNonEmptyString(existing.response_json)
+        ? JSON.parse(existing.response_json)
+        : null;
+      if (!parsed || typeof parsed !== 'object') {
+        return errorResponse('Stored idempotency payload is invalid', 'INTERNAL_ERROR', 500);
+      }
+      return jsonResponse(parsed, 200);
+    } catch {
+      return errorResponse('Stored idempotency payload is invalid', 'INTERNAL_ERROR', 500);
+    }
+  }
+
+  const createdAt = new Date().toISOString();
+  const eventId = `ldg_dsp_${crypto.randomUUID()}`;
+
+  const responseBody = {
+    schema_version: '1',
+    event_id: eventId,
+    status: 'applied' as const,
+    operation,
+    delegation_id: delegationId,
+    idempotency_key: idempotencyKey,
+    delegator_did: delegatorDid,
+    actor_did: actorDid,
+    amount_minor: amountMinor.toString(),
+    token_hash: tokenHash,
+    created_at: createdAt,
+  };
+
+  await env.DB
+    .prepare(
+      `INSERT OR IGNORE INTO delegation_spend_hooks (
+         event_id,
+         idempotency_key,
+         delegation_id,
+         operation,
+         delegator_did,
+         actor_did,
+         amount_minor,
+         token_hash,
+         request_fingerprint,
+         response_json,
+         created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      eventId,
+      idempotencyKey,
+      delegationId,
+      operation,
+      delegatorDid,
+      actorDid,
+      amountMinor.toString(),
+      tokenHash,
+      requestFingerprint,
+      JSON.stringify(responseBody),
+      createdAt
+    )
+    .run();
+
+  const stored = await env.DB
+    .prepare(
+      `SELECT event_id, operation, delegation_id, request_fingerprint, response_json
+       FROM delegation_spend_hooks
+       WHERE idempotency_key = ?
+       LIMIT 1`
+    )
+    .bind(idempotencyKey)
+    .first<Record<string, unknown>>();
+
+  if (!stored || !isNonEmptyString(stored.response_json)) {
+    return errorResponse('Failed to persist delegation spend hook result', 'INTERNAL_ERROR', 500);
+  }
+
+  const storedOperation = isNonEmptyString(stored.operation) ? stored.operation.trim() : null;
+  const storedDelegationId = isNonEmptyString(stored.delegation_id) ? stored.delegation_id.trim() : null;
+  const storedFingerprint = isNonEmptyString(stored.request_fingerprint)
+    ? stored.request_fingerprint
+    : null;
+
+  if (
+    storedOperation !== operation ||
+    storedDelegationId !== delegationId ||
+    storedFingerprint !== requestFingerprint
+  ) {
+    return errorResponse(
+      'idempotency_key is already used with a different delegation spend payload',
+      'IDEMPOTENCY_KEY_REUSED',
+      409
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(stored.response_json);
+    const replay = isNonEmptyString(stored.event_id) && stored.event_id !== eventId;
+    return jsonResponse(parsed, replay ? 200 : 201);
+  } catch {
+    return errorResponse('Stored idempotency payload is invalid', 'INTERNAL_ERROR', 500);
   }
 }
 
@@ -2027,6 +2229,49 @@ export function parseAuthCandidates(request: Request): string[] {
   return [bearer, xAdminKey].filter((value): value is string => Boolean(value));
 }
 
+function resolveLedgerAdminKeys(env: Env): { ok: true; keys: Set<string> } | { ok: false; code: string; message: string } {
+  const keys = new Set<string>();
+
+  if (env.LEDGER_ADMIN_KEY?.trim()) {
+    keys.add(env.LEDGER_ADMIN_KEY.trim());
+  }
+
+  const additionalRaw = env.LEDGER_ADMIN_KEYS_JSON?.trim();
+  if (additionalRaw) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(additionalRaw);
+    } catch {
+      return {
+        ok: false,
+        code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+        message: 'LEDGER_ADMIN_KEYS_JSON must be valid JSON',
+      };
+    }
+
+    if (!Array.isArray(parsed)) {
+      return {
+        ok: false,
+        code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+        message: 'LEDGER_ADMIN_KEYS_JSON must be a JSON array',
+      };
+    }
+
+    for (const raw of parsed) {
+      if (typeof raw !== 'string' || raw.trim().length === 0) {
+        return {
+          ok: false,
+          code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+          message: 'LEDGER_ADMIN_KEYS_JSON entries must be non-empty strings',
+        };
+      }
+      keys.add(raw.trim());
+    }
+  }
+
+  return { ok: true, keys };
+}
+
 export function evaluateLedgerAuth(params: {
   request: Request;
   env: Env;
@@ -2035,7 +2280,16 @@ export function evaluateLedgerAuth(params: {
 }):
   | { ok: true }
   | { ok: false; status: number; code: string; message: string } {
-  const adminKey = params.env.LEDGER_ADMIN_KEY?.trim() || null;
+  const resolvedAdminKeys = resolveLedgerAdminKeys(params.env);
+  if (!resolvedAdminKeys.ok) {
+    return {
+      ok: false,
+      status: 503,
+      code: resolvedAdminKeys.code,
+      message: resolvedAdminKeys.message,
+    };
+  }
+
   const settlementVerifyToken =
     params.env.LEDGER_SETTLEMENT_VERIFY_TOKEN?.trim() || null;
   const allowSettlementVerifyToken = isSettlementVerificationReadRequest(
@@ -2043,7 +2297,7 @@ export function evaluateLedgerAuth(params: {
     params.path
   );
 
-  if (!adminKey && !(allowSettlementVerifyToken && settlementVerifyToken)) {
+  if (resolvedAdminKeys.keys.size === 0 && !(allowSettlementVerifyToken && settlementVerifyToken)) {
     return {
       ok: false,
       status: 503,
@@ -2054,8 +2308,7 @@ export function evaluateLedgerAuth(params: {
 
   const authCandidates = parseAuthCandidates(params.request);
 
-  const adminAuthorized =
-    Boolean(adminKey) && authCandidates.some((candidate) => candidate === adminKey);
+  const adminAuthorized = authCandidates.some((candidate) => resolvedAdminKeys.keys.has(candidate));
 
   const verifyAuthorized =
     Boolean(settlementVerifyToken) &&
@@ -2345,6 +2598,15 @@ Canonical: ${url.origin}/.well-known/security.txt
 
   if (path === '/v1/transfers' && method === 'POST') {
     return handleV1Transfers(request, env);
+  }
+
+  const delegationSpendMatch = path.match(/^\/v1\/delegations\/spend\/(reserve|consume|release)$/);
+  if (delegationSpendMatch && method === 'POST') {
+    const operation = delegationSpendMatch[1];
+    if (!isDelegationSpendOperation(operation)) {
+      return errorResponse('Unsupported delegation spend operation', 'INVALID_REQUEST', 400);
+    }
+    return handleDelegationSpendHook(operation, request, env);
   }
 
   // POST /v1/payments/settlements/ingest

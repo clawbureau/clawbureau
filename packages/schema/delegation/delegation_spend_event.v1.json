@@ -1,0 +1,42 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.delegation.spend_event.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Delegation Spend Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "delegation_id",
+    "action",
+    "idempotency_key",
+    "amount_minor",
+    "status",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "event_id": { "type": "string", "minLength": 1 },
+    "delegation_id": { "type": "string", "pattern": "^dlg_[a-f0-9-]+$" },
+    "action": {
+      "type": "string",
+      "enum": ["reserve", "consume", "release", "authorize"]
+    },
+    "idempotency_key": { "type": "string", "minLength": 8, "maxLength": 256 },
+    "amount_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["applied", "already_applied", "denied"]
+    },
+    "ledger_event_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.delegation.audit_event.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Delegation Audit Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "audit_id",
+    "delegation_id",
+    "event_type",
+    "decision",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "audit_id": { "type": "string", "minLength": 1 },
+    "delegation_id": { "type": "string", "pattern": "^dlg_[a-f0-9-]+$" },
+    "event_type": { "type": "string", "minLength": 1 },
+    "actor_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "decision": { "type": "string", "minLength": 1 },
+    "token_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "token_scope_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "details": { "type": "object", "additionalProperties": true },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

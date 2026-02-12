@@ -7,6 +7,7 @@ Shared JSON schemas for Claw Bureau services.
 - `bounties/` — marketplace request/response schemas.
 - `escrow/` — escrow record schemas.
 - `identity/` — ownership/attestation schemas.
+- `delegation/` — delegation control-plane contract and audit schemas.
 - `policy/` — policy contracts (Work Policy Contracts / WPC).
 - `poh/` — proof-of-harness schemas.
 - `payments/` — machine-payment settlement schemas.
@@ -36,6 +37,12 @@ Shared JSON schemas for Claw Bureau services.
 - `org_roster_claim_manifest.v1.json`
 - `did_rotation.v1.json`
 - `identity_export_bundle.v1.json`
+
+### `delegation/`
+- `delegation_create_request.v1.json`
+- `delegation_contract.v1.json`
+- `delegation_spend_event.v1.json`
+- `delegation_audit_event.v1.json`
 
 ### `policy/`
 - `work_policy_contract.v1.json`

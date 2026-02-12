@@ -104,6 +104,9 @@ interface RequesterAuthContext {
   token_scope_hash_b64u: string | null;
   token_lane: ScopedTokenLane | null;
   payment_account_did: string | null;
+  delegation_id: string | null;
+  delegator_did: string | null;
+  delegate_did: string | null;
   iat: number | null;
   exp: number | null;
   bearer_token: string | null;
@@ -140,6 +143,12 @@ interface ScopeIntrospectionSuccess {
   payment_account_did?: unknown;
   spend_cap?: unknown;
   mission_id?: unknown;
+  delegation_id?: unknown;
+  delegator_did?: unknown;
+  delegate_did?: unknown;
+  delegation_policy_hash_b64u?: unknown;
+  delegation_spend_cap_minor?: unknown;
+  delegation_expires_at?: unknown;
   token_lane?: unknown;
   iat?: unknown;
   exp?: unknown;
@@ -162,6 +171,12 @@ interface ScopeIntrospectionInactive {
   payment_account_did?: unknown;
   spend_cap?: unknown;
   mission_id?: unknown;
+  delegation_id?: unknown;
+  delegator_did?: unknown;
+  delegate_did?: unknown;
+  delegation_policy_hash_b64u?: unknown;
+  delegation_spend_cap_minor?: unknown;
+  delegation_expires_at?: unknown;
   token_lane?: unknown;
   iat?: unknown;
   exp?: unknown;
@@ -1837,8 +1852,86 @@ async function requireRequesterAuth(
       };
     }
 
-    const requester_did = isNonEmptyString(data.sub) ? data.sub.trim() : null;
-    if (!requester_did || !requester_did.startsWith('did:')) {
+    const requesterTokenSub = isNonEmptyString(data.sub) ? data.sub.trim() : null;
+    if (!requesterTokenSub || !requesterTokenSub.startsWith('did:')) {
+      return {
+        error: errorResponse('REQUESTER_SUB_INVALID', 'Requester token subject must be a DID', 401, undefined, version),
+      };
+    }
+
+    const delegation_id = isNonEmptyString(data.delegation_id) ? data.delegation_id.trim() : null;
+    const delegator_did = isNonEmptyString(data.delegator_did) ? data.delegator_did.trim() : null;
+    const delegate_did = isNonEmptyString(data.delegate_did) ? data.delegate_did.trim() : null;
+    const delegation_policy_hash_b64u = isNonEmptyString(data.delegation_policy_hash_b64u)
+      ? data.delegation_policy_hash_b64u.trim()
+      : null;
+    const delegation_spend_cap_minor = isNonEmptyString(data.delegation_spend_cap_minor)
+      ? data.delegation_spend_cap_minor.trim()
+      : null;
+    const delegation_expires_at =
+      typeof data.delegation_expires_at === 'number' && Number.isFinite(data.delegation_expires_at)
+        ? Math.floor(data.delegation_expires_at)
+        : null;
+
+    if (
+      delegation_id ||
+      delegator_did ||
+      delegate_did ||
+      delegation_policy_hash_b64u ||
+      delegation_spend_cap_minor ||
+      delegation_expires_at !== null
+    ) {
+      if (!delegation_id || !delegator_did || !delegate_did) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_BINDING_INVALID',
+            'Delegated requester token requires delegation_id, delegator_did, and delegate_did',
+            401,
+            undefined,
+            version
+          ),
+        };
+      }
+
+      if (delegate_did !== requesterTokenSub) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_BINDING_INVALID',
+            'delegate_did must match requester token subject',
+            401,
+            { delegate_did, requester_sub: requesterTokenSub },
+            version
+          ),
+        };
+      }
+
+      if (delegation_spend_cap_minor && !/^[0-9]+$/.test(delegation_spend_cap_minor)) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_BINDING_INVALID',
+            'delegation_spend_cap_minor claim is invalid',
+            401,
+            undefined,
+            version
+          ),
+        };
+      }
+
+      if (delegation_expires_at !== null && delegation_expires_at <= Math.floor(Date.now() / 1000)) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_EXPIRED',
+            'Delegated requester token has expired delegation binding',
+            401,
+            { delegation_expires_at },
+            version
+          ),
+        };
+      }
+    }
+
+    const requester_did = delegation_id ? delegator_did : requesterTokenSub;
+    if (!requester_did) {
       return {
         error: errorResponse('REQUESTER_SUB_INVALID', 'Requester token subject must be a DID', 401, undefined, version),
       };
@@ -1849,7 +1942,7 @@ async function requireRequesterAuth(
       return {
         error: errorResponse(
           'REQUESTER_SUB_MISMATCH',
-          'requester_did does not match requester token subject',
+          'requester_did does not match effective requester DID for this token',
           401,
           { requester_did, requested_requester_did: requesterHint },
           version
@@ -1892,7 +1985,7 @@ async function requireRequesterAuth(
     }
 
     const expectedScopeHash = await computeTokenScopeHashB64uV1({
-      sub: requester_did,
+      sub: requesterTokenSub,
       aud,
       scope,
       owner_ref: isNonEmptyString(data.owner_ref) ? data.owner_ref.trim() : undefined,
@@ -1906,6 +1999,12 @@ async function requireRequesterAuth(
       payment_account_did: isNonEmptyString(data.payment_account_did) ? data.payment_account_did.trim() : undefined,
       spend_cap: typeof data.spend_cap === 'number' && Number.isFinite(data.spend_cap) ? data.spend_cap : undefined,
       mission_id: isNonEmptyString(data.mission_id) ? data.mission_id.trim() : undefined,
+      delegation_id: delegation_id ?? undefined,
+      delegator_did: delegator_did ?? undefined,
+      delegate_did: delegate_did ?? undefined,
+      delegation_policy_hash_b64u: delegation_policy_hash_b64u ?? undefined,
+      delegation_spend_cap_minor: delegation_spend_cap_minor ?? undefined,
+      delegation_expires_at: delegation_expires_at ?? undefined,
     });
 
     if (controlClaims.token_scope_hash_b64u !== expectedScopeHash) {
@@ -1937,16 +2036,36 @@ async function requireRequesterAuth(
         };
       }
 
-      if (controlClaims.payment_account_did !== requester_did) {
+      const expectedPaymentDid = delegation_id ? delegator_did : requester_did;
+      if (!expectedPaymentDid) {
         return {
           error: errorResponse(
             'REQUESTER_CONTROL_BINDING_MISMATCH',
-            'Requester payment_account_did must match requester token subject for sensitive transitions',
+            'Requester token effective payment binding is invalid',
+            403,
+            { claim: 'payment_account_did' },
+            version
+          ),
+        };
+      }
+
+      if (controlClaims.payment_account_did !== expectedPaymentDid) {
+        return {
+          error: errorResponse(
+            'REQUESTER_CONTROL_BINDING_MISMATCH',
+            delegation_id
+              ? 'Requester payment_account_did must match delegator_did for delegated sensitive transitions'
+              : 'Requester payment_account_did must match requester token subject for sensitive transitions',
             403,
             {
               claim: 'payment_account_did',
               payment_account_did: controlClaims.payment_account_did,
+              expected_payment_account_did: expectedPaymentDid,
               requester_did,
+              delegation_id,
+              delegator_did,
+              delegate_did,
+              requester_sub: requesterTokenSub,
             },
             version
           ),
@@ -1964,6 +2083,9 @@ async function requireRequesterAuth(
         token_scope_hash_b64u: controlClaims.token_scope_hash_b64u,
         token_lane: controlClaims.token_lane,
         payment_account_did: controlClaims.payment_account_did,
+        delegation_id,
+        delegator_did,
+        delegate_did,
         iat: controlClaims.iat,
         exp: controlClaims.exp,
         bearer_token: bearerToken,
@@ -2024,6 +2146,9 @@ async function requireRequesterAuth(
       token_scope_hash_b64u: null,
       token_lane: null,
       payment_account_did: null,
+      delegation_id: null,
+      delegator_did: null,
+      delegate_did: null,
       iat: null,
       exp: null,
       bearer_token: null,
@@ -2233,6 +2358,12 @@ type TokenScopeHashInputV1 = {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 };
 
 function normalizeStringList(values: string[]): string[] {
@@ -2269,6 +2400,12 @@ async function computeTokenScopeHashB64uV1(input: {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 }): Promise<string> {
   const out: TokenScopeHashInputV1 = {
     token_version: '1',
@@ -2314,6 +2451,39 @@ async function computeTokenScopeHashB64uV1(input: {
 
   if (typeof input.mission_id === 'string' && input.mission_id.trim().length > 0) {
     out.mission_id = input.mission_id.trim();
+  }
+
+  if (typeof input.delegation_id === 'string' && input.delegation_id.trim().length > 0) {
+    out.delegation_id = input.delegation_id.trim();
+  }
+
+  if (typeof input.delegator_did === 'string' && input.delegator_did.trim().length > 0) {
+    out.delegator_did = input.delegator_did.trim();
+  }
+
+  if (typeof input.delegate_did === 'string' && input.delegate_did.trim().length > 0) {
+    out.delegate_did = input.delegate_did.trim();
+  }
+
+  if (
+    typeof input.delegation_policy_hash_b64u === 'string' &&
+    input.delegation_policy_hash_b64u.trim().length > 0
+  ) {
+    out.delegation_policy_hash_b64u = input.delegation_policy_hash_b64u.trim();
+  }
+
+  if (
+    typeof input.delegation_spend_cap_minor === 'string' &&
+    input.delegation_spend_cap_minor.trim().length > 0
+  ) {
+    out.delegation_spend_cap_minor = input.delegation_spend_cap_minor.trim();
+  }
+
+  if (
+    typeof input.delegation_expires_at === 'number' &&
+    Number.isFinite(input.delegation_expires_at)
+  ) {
+    out.delegation_expires_at = Math.floor(input.delegation_expires_at);
   }
 
   return sha256B64uUtf8(jcsCanonicalize(out));

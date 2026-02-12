@@ -43,6 +43,7 @@ CLAIM_SCOPE_EXCHANGE_TTL_SECONDS = "300"
 # - CLAIM_EXPORT_SIGNING_KEY (required for identity export/import bundle signing)
 # - CLAIM_SCOPE_ADMIN_KEY (preferred for challenge->CST exchange flow; optional x-scope-admin-key request header override supported for controlled integration tests)
 # - CLAIM_CLAWLOGS_ADMIN_KEY (optional unless CLAIM_CLAWLOGS_MODE=required)
+# - CLAIM_DELEGATE_KEY (required for /v1/delegations/bootstrap service-to-service authorization)
 
 [env.staging]
 name = "clawclaim-staging"

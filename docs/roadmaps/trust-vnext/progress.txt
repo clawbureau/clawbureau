@@ -1051,3 +1051,32 @@ Started: 2026-02-07T19:53:07Z
   - producer-loop smoke prod: `artifacts/smoke/clawrep-producer-loop/2026-02-12T03-11-14-975Z-prod/result.json`
   - ops summary staging: `artifacts/ops/clawrep/2026-02-12T02-56-40-000Z-staging/deploy-summary.json`
   - ops summary prod: `artifacts/ops/clawrep/2026-02-12T02-56-58-000Z-prod/deploy-summary.json`
+
+## 2026-02-12T04:57:00Z - CDL-MAX-001 delegation control-plane rollout complete
+- What was implemented
+  - Completed clawdelegate delivery + cross-service wiring for delegated CST lifecycle:
+    - `clawclaim`: `POST /v1/delegations/bootstrap` with `CLAIM_DELEGATE_KEY` service auth
+    - `clawdelegate`: create/approve/issue/spend/audit/export/revoke flow, spend governance hooks, deterministic idempotency and fail-closed contracts
+    - `clawproxy`: delegated idempotency nonce requirement + fail-closed delegated spend guards
+    - `ledger`: delegation spend hook tables/API and admin overlap key support
+    - `clawbounties`: delegation claim hashing fields aligned with canonical scope hash input
+  - Provisioned Cloudflare resources for clawdelegate (D1/KV/Queues) and applied remote D1 migrations on staging+prod.
+  - Executed staging+prod deploys for changed services and route handoff from `claw-domains` to dedicated `clawdelegate` worker.
+- Deploy artifacts
+  - `artifacts/ops/clawdelegate/2026-02-12T04-56-45-407Z-deploy/deploy-summary.json`
+  - Key versions:
+    - clawdelegate: staging `6ca14731-1ae9-4417-9d1d-42f706f4b92e`, prod `b94daa3a-0362-4172-bbb5-17e0766afb27`
+    - clawclaim: staging `7b6325ce-c95f-434e-b98f-454db0b9388f`, prod `43f7cfba-f465-44ac-a336-818a184a6f8a`
+    - clawscope: staging `fd43755e-8353-4cfa-9d2f-45dead2ee64a`, prod `ccedb1e7-c811-4412-991f-09159e041c86`
+    - clawproxy: staging `025fde6a-8ca5-4d73-8a57-8b5cfa6e0683`, prod `1a377d71-7ad9-4bcd-a305-b41122849abb`
+    - clawbounties: staging `03bda33f-550d-48eb-8d75-1e9142910ebd`, prod `bd4bc8af-67bd-4ebe-a6fa-31296a453880`
+    - ledger: staging `24a25b8a-13d3-4768-b1bf-006e462d8608`, prod `f748d63f-e13a-41ac-9ea3-b298ea57d1d4`
+    - claw-domains: prod `3309cae6-772c-41f7-a1ad-30bb8701db03`
+- Smoke + routing evidence
+  - staging smoke: `artifacts/smoke/clawdelegate/2026-02-12T04-56-01-753Z-staging/result.json`
+  - prod smoke: `artifacts/smoke/clawdelegate/2026-02-12T04-56-09-169Z-prod/result.json`
+  - routing check: `artifacts/ops/clawdelegate/2026-02-12T04-53-42-573Z-routing/routing-check.json`
+  - evidence summary: `artifacts/ops/clawdelegate/2026-02-12T04-57-00Z-evidence-summary.md`
+- Notes
+  - `clawdelegate.com` now serves dedicated clawdelegate APIs (401 on unauthenticated `/v1/delegations` as expected).
+  - `www.clawdelegate.com` and `staging.clawdelegate.com` currently lack resolvable DNS records; staging smoke was executed via workers.dev.

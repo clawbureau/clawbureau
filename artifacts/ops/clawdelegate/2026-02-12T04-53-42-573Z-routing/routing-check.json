@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-02-12T04:53:42.842Z",
+  "results": [
+    {
+      "name": "prod_apex",
+      "url": "https://clawdelegate.com/v1/delegations",
+      "status": 401,
+      "ok": false,
+      "body_preview": "{\n  \"error\": \"UNAUTHORIZED\",\n  \"message\": \"Missing or invalid admin key\"\n}"
+    },
+    {
+      "name": "prod_www",
+      "url": "https://www.clawdelegate.com/v1/delegations",
+      "error": "fetch failed"
+    },
+    {
+      "name": "staging_domain",
+      "url": "https://staging.clawdelegate.com/v1/delegations",
+      "error": "fetch failed"
+    },
+    {
+      "name": "staging_workers_dev",
+      "url": "https://clawdelegate-staging.generaite.workers.dev/v1/delegations",
+      "status": 401,
+      "ok": false,
+      "body_preview": "{\n  \"error\": \"UNAUTHORIZED\",\n  \"message\": \"Missing or invalid admin key\"\n}"
+    },
+    {
+      "name": "prod_workers_dev",
+      "url": "https://clawdelegate.generaite.workers.dev/v1/delegations",
+      "status": 401,
+      "ok": false,
+      "body_preview": "{\n  \"error\": \"UNAUTHORIZED\",\n  \"message\": \"Missing or invalid admin key\"\n}"
+    }
+  ]
+}
