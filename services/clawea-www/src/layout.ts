@@ -629,9 +629,26 @@ function trackingScript(): string {
     forms.forEach(function(form){
       if (!(form instanceof HTMLFormElement)) return;
       var statusEl = form.querySelector('[data-lead-form-status]');
+      var blocked = form.getAttribute('data-form-blocked') === '1';
+      var blockMessage = clip(form.getAttribute('data-form-block-message') || '', 220) || 'Submission is temporarily unavailable.';
+      var blockCode = clip(form.getAttribute('data-form-block-code') || '', 80);
+
+      if (blocked && statusEl) {
+        statusEl.textContent = blockMessage;
+      }
 
       form.addEventListener('submit', async function(e){
         e.preventDefault();
+
+        if (blocked) {
+          if (statusEl) statusEl.textContent = blockMessage;
+          track('lead_submit', {
+            actionOutcome: 'blocked',
+            ctaId: form.getAttribute('data-cta') || 'lead-form',
+            blockCode: blockCode,
+          });
+          return;
+        }
 
         var fd = new FormData(form);
         var idempotencyKey = 'lead_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -732,9 +749,26 @@ function trackingScript(): string {
     forms.forEach(function(form){
       if (!(form instanceof HTMLFormElement)) return;
       var statusEl = form.querySelector('[data-book-form-status]');
+      var blocked = form.getAttribute('data-form-blocked') === '1';
+      var blockMessage = clip(form.getAttribute('data-form-block-message') || '', 220) || 'Booking is temporarily unavailable.';
+      var blockCode = clip(form.getAttribute('data-form-block-code') || '', 80);
+
+      if (blocked && statusEl) {
+        statusEl.textContent = blockMessage;
+      }
 
       form.addEventListener('submit', async function(e){
         e.preventDefault();
+
+        if (blocked) {
+          if (statusEl) statusEl.textContent = blockMessage;
+          track('booking_submit', {
+            actionOutcome: 'blocked',
+            ctaId: form.getAttribute('data-cta') || 'book-form',
+            blockCode: blockCode,
+          });
+          return;
+        }
 
         var fd = new FormData(form);
         var slotValue = clip(String(fd.get('slotIso') || ''), 80);
