@@ -74,6 +74,15 @@ export type {
   PolicyResolver,
 } from './policy-evaluator.js';
 
+// Red Team Fix #11: TOCTOU causal integrity verification
+export { verifyCausalIntegrity } from './verify-causal-integrity.js';
+export type {
+  CausalIntegrityBundleInput,
+  CausalIntegritySeverity,
+  CausalIntegrityFinding,
+  CausalIntegrityResult,
+} from './verify-causal-integrity.js';
+
 // Red Team Fix #8: Hashcash PoW for VaaS DoS protection
 export {
   generatePoW,

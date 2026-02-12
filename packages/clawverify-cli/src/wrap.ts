@@ -84,6 +84,14 @@ export async function wrap(
     ANTHROPIC_BASE_URL: `http://127.0.0.1:${proxy.port}/v1/proxy/anthropic`,
     CLAWSIG_RUN_ID: runId,
     CLAWSIG_AGENT_DID: agentDid.did,
+
+    // RED TEAM FIX #6: Socket-level interception preload.
+    // Inject Node.js --import flag to monkey-patch http/https at socket level.
+    CLAWSIG_PROXY_PORT: String(proxy.port),
+    NODE_OPTIONS: [
+      process.env['NODE_OPTIONS'],
+      '--import @clawbureau/clawsig-sdk/preload',
+    ].filter(Boolean).join(' '),
   };
 
   // Pass through existing API keys from parent env

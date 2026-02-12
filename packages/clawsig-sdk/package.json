@@ -13,6 +13,9 @@
     "./types": {
       "import": "./dist/types.js",
       "types": "./dist/types.d.ts"
+    },
+    "./preload": {
+      "import": "./src/preload.mjs"
     }
   },
   "files": [
@@ -20,6 +23,7 @@
     "dist/**/*.d.ts",
     "dist/**/*.d.ts.map",
     "dist/**/*.js.map",
+    "src/preload.mjs",
     "README.md",
     "LICENSE",
     "dist/init.js",
