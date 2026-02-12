@@ -7,7 +7,7 @@ routes = [{ pattern = "api.clawverify.com/v1/*", zone_name = "clawverify.com" }]
 [[d1_databases]]
 binding = "LEDGER_DB"
 database_name = "clawsig-public-ledger"
-database_id = "placeholder-replace-after-d1-create"
+database_id = "d7307e0e-e672-40ca-8e9b-ed0a770a248c"
 [[r2_buckets]]
 binding = "BUNDLES"
 bucket_name = "clawsig-public-bundles"
@@ -29,7 +29,7 @@ routes = [{ pattern = "staging-api.clawverify.com/v1/*", zone_name = "clawverify
 [[env.staging.d1_databases]]
 binding = "LEDGER_DB"
 database_name = "clawsig-public-ledger-staging"
-database_id = "placeholder-replace-after-d1-create"
+database_id = "c0d9cdf4-72c3-4549-908d-1efdfd46bfea"
 [[env.staging.r2_buckets]]
 binding = "BUNDLES"
 bucket_name = "clawsig-public-bundles-staging"
@@ -44,3 +44,6 @@ max_retries = 3
 [env.staging.vars]
 SERVICE_VERSION = "0.1.0"
 CLAWLOGS_RT_URL = "https://staging.clawlogs.com"
+
+[alias]
+"@clawbureau/clawverify-core/schema-validators.generated" = "./src/schema-validators-shim.ts"

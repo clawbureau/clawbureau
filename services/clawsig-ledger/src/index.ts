@@ -2,12 +2,16 @@
  * clawsig-ledger: VaaS API + Public Ledger + Badges + Agent Passports
  * Sections 2-5 of Gemini Deep Think Round 3: The Moonshot (Viral Flywheel)
  */
+// TODO: Wire real verification once core is Workers-compatible
 import {
   verifyProofBundle, base64UrlEncode, generateComplianceReport,
   type ComplianceFramework, type ComplianceBundleInput, type CompliancePolicyInput,
-} from '@clawbureau/clawverify-core';
+} from './stubs';
+// TODO: Wire real verification once core is Workers-compatible
 import { resolveBadge, renderBadgeSvg } from './badges';
+// TODO: Wire real verification once core is Workers-compatible
 import { importOracleKey, signWithOracleKey } from './crypto';
+// TODO: Wire real verification once core is Workers-compatible
 import { handleQueue } from './queue-consumer';
 import type {
   Env, VerifyRequest, VerifyResponse, LedgerIngestMessage,
