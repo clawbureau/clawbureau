@@ -381,8 +381,9 @@ function trackingScript(): string {
 (function(){
   const EVENT_ENDPOINT = "/api/events";
   const LEAD_ENDPOINT = "/api/leads/submit";
+  const BOOK_ENDPOINT = "/api/book/submit";
   const STORAGE_KEY = "clawea-attribution-v2";
-  const INTENT_PATHS = new Set(["/pricing", "/contact", "/assessment", "/assessment/result", "/trust", "/secure-workers", "/consulting"]);
+  const INTENT_PATHS = new Set(["/pricing", "/contact", "/assessment", "/assessment/result", "/book", "/trust", "/secure-workers", "/consulting"]);
 
   const SAFE_KEYS = [
     "utm_source",
@@ -415,7 +416,7 @@ function trackingScript(): string {
     const known = new Set([
       'controls','workflows','tools','channels','policy','proof','verify','audit',
       'mcp','supply-chain','events','compliance','guides','glossary','sources',
-      'trust','secure-workers','consulting','pricing','contact','about','assessment'
+      'trust','secure-workers','consulting','pricing','contact','book','about','assessment'
     ]);
     return known.has(first) ? first : 'root';
   }
@@ -682,20 +683,115 @@ function trackingScript(): string {
             return;
           }
 
+          var defaultMessage = out.deduped
+            ? 'Thanks. We already have your brief and will follow up shortly.'
+            : 'Thanks. Your brief is in queue. We will reach out soon.';
+
+          var highIntent = String(out.scoreBand || '').toLowerCase();
+          var shouldOfferBook = Boolean(out.leadId) && (highIntent === 'high' || highIntent === 'very_high' || highIntent === 'medium');
+
           if (statusEl) {
-            statusEl.textContent = out.deduped
-              ? 'Thanks. We already have your brief and will follow up shortly.'
-              : 'Thanks. Your brief is in queue. We will reach out soon.';
+            if (shouldOfferBook) {
+              var bookHref = '/book?lead=' + encodeURIComponent(String(out.leadId || ''));
+              if (payload.email) bookHref += '&email=' + encodeURIComponent(payload.email);
+              if (payload.company) bookHref += '&company=' + encodeURIComponent(payload.company);
+              bookHref = appendAttributionToHref(bookHref);
+              statusEl.innerHTML = defaultMessage + ' <a href="' + bookHref + '">Book a rollout session</a>.';
+            } else {
+              statusEl.textContent = defaultMessage;
+            }
           }
 
           track('lead_submit', {
             actionOutcome: out.deduped ? 'deduped' : 'submitted',
             ctaId: form.getAttribute('data-cta') || 'lead-form',
             ctaVariant: experimentFromCookie().ctaVariant,
+            scoreBand: clip(String(out.scoreBand || ''), 24),
+            segment: clip(String(out.segment || ''), 24),
           });
+
+          if (shouldOfferBook) {
+            track('book_prompt_shown', {
+              actionOutcome: 'shown',
+              ctaId: form.getAttribute('data-cta') || 'lead-form',
+              leadId: clip(String(out.leadId || ''), 80),
+            });
+          }
         } catch {
           if (statusEl) statusEl.textContent = 'Submission failed. Please try again.';
           track('contact_intent_submit', { actionOutcome: 'network_error', ctaId: form.getAttribute('data-cta') || 'lead-form' });
+        }
+      });
+    });
+  }
+
+  function hydrateBookForms(){
+    var forms = document.querySelectorAll('[data-book-form]');
+    if (!forms.length) return;
+
+    forms.forEach(function(form){
+      if (!(form instanceof HTMLFormElement)) return;
+      var statusEl = form.querySelector('[data-book-form-status]');
+
+      form.addEventListener('submit', async function(e){
+        e.preventDefault();
+
+        var fd = new FormData(form);
+        var slotValue = clip(String(fd.get('slotIso') || ''), 80);
+        var slotIso = undefined;
+        if (slotValue) {
+          var parsed = new Date(slotValue);
+          if (!Number.isNaN(parsed.getTime())) slotIso = parsed.toISOString();
+        }
+
+        var payload = {
+          leadId: clip(String(fd.get('leadId') || ''), 80),
+          email: clip(String(fd.get('email') || ''), 220),
+          company: clip(String(fd.get('company') || ''), 160),
+          slotIso: slotIso,
+          notes: clip(String(fd.get('notes') || ''), 1200),
+          timezone: clip(String(fd.get('timezone') || ''), 80),
+          turnstileToken: clip(String(fd.get('cf-turnstile-response') || ''), 3000),
+        };
+
+        if (!payload.email && !payload.leadId) {
+          if (statusEl) statusEl.textContent = 'Provide work email or lead ID to continue.';
+          return;
+        }
+
+        if (statusEl) statusEl.textContent = 'Submitting booking...';
+
+        try {
+          var res = await fetch(BOOK_ENDPOINT, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+
+          var out = await res.json();
+          if (!res.ok || !out || out.ok !== true) {
+            if (statusEl) statusEl.textContent = 'Booking request failed. Please retry.';
+            track('booking_submit', {
+              actionOutcome: 'failed',
+              ctaId: form.getAttribute('data-cta') || 'book-form',
+            });
+            return;
+          }
+
+          if (statusEl) statusEl.textContent = 'Booking request received. Ops will confirm by email.';
+
+          track('booking_submit', {
+            actionOutcome: 'submitted',
+            ctaId: form.getAttribute('data-cta') || 'book-form',
+            bookingId: clip(String(out.bookingId || ''), 80),
+            leadId: clip(String(out.leadId || ''), 80),
+          });
+        } catch {
+          if (statusEl) statusEl.textContent = 'Booking request failed. Please retry.';
+          track('booking_submit', {
+            actionOutcome: 'network_error',
+            ctaId: form.getAttribute('data-cta') || 'book-form',
+          });
         }
       });
     });
@@ -705,6 +801,7 @@ function trackingScript(): string {
   applyVariantCopy();
   markVariantImpression();
   hydrateLeadForms();
+  hydrateBookForms();
 
   document.querySelectorAll("a[href]").forEach(function(el){
     const hrefAttr = clip(el.getAttribute("href"), 600);
@@ -848,6 +945,7 @@ function footer(): string {
           <li><a href="/assessment">Assessment</a></li>
           <li><a href="/mcp-security">MCP Security</a></li>
           <li><a href="/about">About</a></li>
+          <li><a href="/book">Book Session</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
       </div>

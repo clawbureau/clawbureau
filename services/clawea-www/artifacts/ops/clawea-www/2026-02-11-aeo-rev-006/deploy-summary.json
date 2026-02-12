@@ -1,0 +1,15 @@
+{
+  "story": "AEO-REV-006",
+  "timestamp": "2026-02-11T23:55:00Z",
+  "status": "not_deployed_in_this_run",
+  "reason": "Code, migrations, routing queues, and ops/reporting tooling were completed and validated locally. Remote staging/prod deployment intentionally deferred for controlled release window.",
+  "readyForDeploy": true,
+  "requiredRemoteSteps": [
+    "Create queues if missing: clawea-www-route-enterprise, clawea-www-route-smb, clawea-www-route-partner (+ staging variants)",
+    "Apply migration 0002_intent_pipeline_os.sql to staging/prod D1",
+    "Set production TURNSTILE_SITE_KEY + TURNSTILE_SECRET_KEY",
+    "Set LEADS_API_TOKEN and CRM_HANDOFF_SIGNING_SECRET",
+    "Optionally set CRM_PROVIDER_CONFIG_JSON / CRM_PROVIDER_AUTH_JSON for external CRM handoff",
+    "Deploy: wrangler deploy --env staging, then wrangler deploy"
+  ]
+}

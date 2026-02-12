@@ -17,6 +17,10 @@ routes = [
   { pattern = "www.clawea.com/*", zone_name = "clawea.com" }
 ]
 
+[[migrations]]
+tag = "v1-lead-submit-lock-do"
+new_classes = ["LeadSubmitLockDO"]
+
 [vars]
 ENVIRONMENT = "production"
 SITE_URL = "https://www.clawea.com"
@@ -34,8 +38,15 @@ INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS = "6"
 INDEX_QUEUE_RETRY_BASE_MS = "60000"
 INDEX_QUEUE_RETRY_MAX_MS = "3600000"
 TURNSTILE_REQUIRED = "1"
-EXPERIMENT_SEED = "aeo-rev-005-default"
+LEAD_SUBMIT_IP_WINDOW_LIMIT = "24"
+LEAD_SUBMIT_EMAIL_WINDOW_LIMIT = "8"
+LEAD_SUBMIT_WINDOW_MINUTES = "10"
+ROUTING_MAX_ATTEMPTS = "5"
+CRM_PROVIDER_CONFIG_KEY = "crm-provider-config-v1"
+EXPERIMENT_SEED = "aeo-rev-006-default"
 EXPERIMENT_CONFIG_KEY = "experiment-config-v1"
+EXPERIMENT_WINNER_MIN_IMPRESSIONS = "40"
+EXPERIMENT_WINNER_MIN_BOOKED = "2"
 
 # Secrets (set with `wrangler secret put <NAME>`):
 # - INDEX_AUTOMATION_TOKEN
@@ -44,6 +55,12 @@ EXPERIMENT_CONFIG_KEY = "experiment-config-v1"
 # - TURNSTILE_SECRET_KEY
 # - TURNSTILE_SITE_KEY
 # - LEAD_ID_HASH_SALT
+# - CRM_HANDOFF_SIGNING_SECRET
+# - CRM_PROVIDER_AUTH_JSON
+
+[[durable_objects.bindings]]
+name = "LEAD_SUBMIT_LOCK"
+class_name = "LeadSubmitLockDO"
 
 [[d1_databases]]
 binding = "DB"
@@ -57,12 +74,46 @@ binding = "VARIANT_CONFIG"
 id = "c026646d19914778b9c438f007485383"
 preview_id = "36e71f3724914ab09ffda6425edf6bc8"
 
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "clawea_www"
+
 [[queues.producers]]
 binding = "LEAD_JOBS"
 queue = "clawea-www-lead-jobs"
 
+[[queues.producers]]
+binding = "LEAD_ROUTE_ENTERPRISE"
+queue = "clawea-www-route-enterprise"
+
+[[queues.producers]]
+binding = "LEAD_ROUTE_SMB"
+queue = "clawea-www-route-smb"
+
+[[queues.producers]]
+binding = "LEAD_ROUTE_PARTNER"
+queue = "clawea-www-route-partner"
+
 [[queues.consumers]]
 queue = "clawea-www-lead-jobs"
+max_batch_size = 25
+max_batch_timeout = 10
+max_retries = 8
+
+[[queues.consumers]]
+queue = "clawea-www-route-enterprise"
+max_batch_size = 25
+max_batch_timeout = 10
+max_retries = 8
+
+[[queues.consumers]]
+queue = "clawea-www-route-smb"
+max_batch_size = 25
+max_batch_timeout = 10
+max_retries = 8
+
+[[queues.consumers]]
+queue = "clawea-www-route-partner"
 max_batch_size = 25
 max_batch_timeout = 10
 max_retries = 8
@@ -106,8 +157,15 @@ INDEX_QUEUE_GOOGLE_MAX_ATTEMPTS = "6"
 INDEX_QUEUE_RETRY_BASE_MS = "30000"
 INDEX_QUEUE_RETRY_MAX_MS = "1800000"
 TURNSTILE_REQUIRED = "1"
-EXPERIMENT_SEED = "aeo-rev-005-staging"
+LEAD_SUBMIT_IP_WINDOW_LIMIT = "30"
+LEAD_SUBMIT_EMAIL_WINDOW_LIMIT = "10"
+LEAD_SUBMIT_WINDOW_MINUTES = "10"
+ROUTING_MAX_ATTEMPTS = "5"
+CRM_PROVIDER_CONFIG_KEY = "crm-provider-config-v1"
+EXPERIMENT_SEED = "aeo-rev-006-staging"
 EXPERIMENT_CONFIG_KEY = "experiment-config-v1"
+EXPERIMENT_WINNER_MIN_IMPRESSIONS = "20"
+EXPERIMENT_WINNER_MIN_BOOKED = "1"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -121,12 +179,46 @@ binding = "VARIANT_CONFIG"
 id = "1051001c69364031be8fc0f79324fefc"
 preview_id = "fff86d64d9b442e180daecbb2e09fdcc"
 
+[[env.staging.analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "clawea_www_staging"
+
 [[env.staging.queues.producers]]
 binding = "LEAD_JOBS"
 queue = "clawea-www-lead-jobs-staging"
 
+[[env.staging.queues.producers]]
+binding = "LEAD_ROUTE_ENTERPRISE"
+queue = "clawea-www-route-enterprise-staging"
+
+[[env.staging.queues.producers]]
+binding = "LEAD_ROUTE_SMB"
+queue = "clawea-www-route-smb-staging"
+
+[[env.staging.queues.producers]]
+binding = "LEAD_ROUTE_PARTNER"
+queue = "clawea-www-route-partner-staging"
+
 [[env.staging.queues.consumers]]
 queue = "clawea-www-lead-jobs-staging"
+max_batch_size = 25
+max_batch_timeout = 10
+max_retries = 8
+
+[[env.staging.queues.consumers]]
+queue = "clawea-www-route-enterprise-staging"
+max_batch_size = 25
+max_batch_timeout = 10
+max_retries = 8
+
+[[env.staging.queues.consumers]]
+queue = "clawea-www-route-smb-staging"
+max_batch_size = 25
+max_batch_timeout = 10
+max_retries = 8
+
+[[env.staging.queues.consumers]]
+queue = "clawea-www-route-partner-staging"
 max_batch_size = 25
 max_batch_timeout = 10
 max_retries = 8

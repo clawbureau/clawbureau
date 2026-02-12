@@ -35,15 +35,19 @@
  *   GET /vs/*, /compare/*, /for/* → comparisons and role-based pages
  *
  *   Static pages:
- *   GET /pricing, /assessment, /assessment/result, /contact, /about, /trust, /secure-workers, /consulting, /sources
+ *   GET /pricing, /assessment, /assessment/result, /contact, /book, /about, /trust, /secure-workers, /consulting, /sources
  *
  *   System endpoints:
  *   GET /sitemap.xml, /robots.txt, /llms.txt, /health
  *   GET /<INDEXNOW_KEY>.txt
  *   GET /api/search?q=...
- *   GET /api/experiments/config, /api/experiments/assignment, /api/experiments/winners (winners is token-protected)
+ *   GET /api/experiments/config, /api/experiments/assignment, /api/experiments/winners (token-protected)
+ *   POST /api/experiments/recommend (token-protected, guardrailed recommendations)
  *   POST /api/leads/submit
  *   GET /api/leads/status, /api/leads/export (token-protected)
+ *   GET /api/routing/status, POST /api/routing/replay (token-protected)
+ *   GET /api/attribution/summary (token-protected)
+ *   POST /api/book/submit, POST /api/book/complete (complete is token-protected)
  *   POST /api/indexnow, /api/google-index, /api/index-urls
  *   GET /api/index-queue/status
  *   POST /api/index-queue/enqueue, /api/index-queue/replay
@@ -76,6 +80,11 @@ interface Env {
   DB: D1Database;
   VARIANT_CONFIG: KVNamespace;
   LEAD_JOBS: Queue;
+  LEAD_ROUTE_ENTERPRISE: Queue;
+  LEAD_ROUTE_SMB: Queue;
+  LEAD_ROUTE_PARTNER: Queue;
+  LEAD_SUBMIT_LOCK: DurableObjectNamespace;
+  ANALYTICS?: AnalyticsEngineDataset;
 
   // Indexing automation
   INDEXNOW_KEY?: string;
@@ -102,10 +111,22 @@ interface Env {
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_REQUIRED?: string;
   LEAD_ID_HASH_SALT?: string;
+  LEAD_SUBMIT_IP_WINDOW_LIMIT?: string;
+  LEAD_SUBMIT_EMAIL_WINDOW_LIMIT?: string;
+  LEAD_SUBMIT_WINDOW_MINUTES?: string;
+
+  // Routing / CRM handoff
+  ROUTING_MAX_ATTEMPTS?: string;
+  CRM_PROVIDER_CONFIG_KEY?: string;
+  CRM_PROVIDER_CONFIG_JSON?: string;
+  CRM_PROVIDER_AUTH_JSON?: string;
+  CRM_HANDOFF_SIGNING_SECRET?: string;
 
   // Experiment routing
   EXPERIMENT_SEED?: string;
   EXPERIMENT_CONFIG_KEY?: string;
+  EXPERIMENT_WINNER_MIN_IMPRESSIONS?: string;
+  EXPERIMENT_WINNER_MIN_BOOKED?: string;
 }
 
 interface Article {
@@ -148,11 +169,28 @@ interface SearchResult extends SearchDocument {
 
 type LeadLifecycleStatus =
   | "new"
-  | "enriched"
-  | "qualified"
+  | "validated"
+  | "scored"
+  | "routed"
   | "contacted"
+  | "qualified"
+  | "disqualified"
+  | "booked"
+  // legacy aliases retained for backward compatibility
+  | "enriched"
   | "closed"
   | "rejected";
+
+type LeadSegment = "enterprise" | "smb" | "partner";
+type LeadScoreBand = "high" | "medium" | "low";
+
+interface LeadBehaviorSignals {
+  sessionEvents?: number;
+  ctaClicks?: number;
+  intentViews?: number;
+  assessmentCompleted?: boolean;
+  secondsOnSite?: number;
+}
 
 interface LeadSubmissionPayload {
   fullName?: string;
@@ -169,6 +207,7 @@ interface LeadSubmissionPayload {
     riskScore?: number;
     confidenceLabel?: string;
   };
+  behavior?: LeadBehaviorSignals;
   attribution?: Record<string, string>;
   firstTouch?: {
     ts?: string;
@@ -178,6 +217,10 @@ interface LeadSubmissionPayload {
   };
   page?: string;
   pageFamily?: string;
+  variantId?: string;
+  heroVariant?: string;
+  ctaVariant?: string;
+  visitorId?: string;
   turnstileToken?: string;
   idempotencyKey?: string;
 }
@@ -204,6 +247,16 @@ interface LeadRow {
   timeline: string;
   primary_use_case: string;
   email_hint: string;
+  score_band: LeadScoreBand;
+  segment: LeadSegment;
+  campaign_id: string;
+  variant_id: string;
+  hero_variant: string;
+  cta_variant: string;
+  route_status: string;
+  routed_provider_id: string;
+  booked_at: string | null;
+  completed_at: string | null;
 }
 
 interface ExperimentVariantConfig {
@@ -215,17 +268,105 @@ interface ExperimentVariantConfig {
 }
 
 const DEFAULT_EXPERIMENT_CONFIG: ExperimentVariantConfig = {
-  seed: "aeo-rev-005-default",
+  seed: "aeo-rev-006-default",
   families: {
     home: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"] },
     assessment: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"] },
     tools: { hero: ["proof", "risk"], cta: ["assessment", "sales"] },
     workflows: { hero: ["proof", "automation"], cta: ["assessment", "sales"] },
     contact: { hero: ["fast-path", "proof"], cta: ["submit", "assessment"] },
+    book: { hero: ["proof", "speed"], cta: ["submit", "assessment"] },
     pricing: { hero: ["roi", "proof"], cta: ["proof", "roi", "sales"] },
     sources: { hero: ["proof", "citation"], cta: ["assessment", "sales"] },
     root: { hero: ["proof", "roi"], cta: ["proof", "roi"] },
   },
+};
+
+type LeadScoreResult = {
+  intentScore: number;
+  readinessScore: number;
+  roiScore: number;
+  riskScore: number;
+  qualificationScore: number;
+  confidenceLabel: string;
+  scoreBand: LeadScoreBand;
+  segment: LeadSegment;
+  denyCode?: string;
+};
+
+type CrmProvider = {
+  id: string;
+  endpoint?: string;
+  authType?: "none" | "bearer" | "header";
+  authHeader?: string;
+};
+
+type CrmRoutingConfig = {
+  defaultProviderBySegment: Record<LeadSegment, string>;
+  providers: CrmProvider[];
+};
+
+type LeadHandoffEnvelope = {
+  version: "1.0";
+  handoffId: string;
+  leadId: string;
+  idempotencyKey: string;
+  occurredAt: string;
+  segment: LeadSegment;
+  score: {
+    qualification: number;
+    band: LeadScoreBand;
+    intent: number;
+    readiness: number;
+    roi: number;
+    risk: number;
+  };
+  attribution: {
+    source: string;
+    campaignId: string;
+    pageFamily: string;
+    variantId: string;
+    heroVariant: string;
+    ctaVariant: string;
+  };
+  lead: {
+    company: string;
+    role: string;
+    teamSize: string;
+    timeline: string;
+    primaryUseCase: string;
+    emailHint: string;
+  };
+};
+
+const DEFAULT_CRM_ROUTING_CONFIG: CrmRoutingConfig = {
+  defaultProviderBySegment: {
+    enterprise: "internal-r2",
+    smb: "internal-r2",
+    partner: "internal-r2",
+  },
+  providers: [
+    { id: "internal-r2", authType: "none" },
+  ],
+};
+
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "mailinator.com",
+  "guerrillamail.com",
+  "yopmail.com",
+  "tempmail.com",
+  "10minutemail.com",
+]);
+
+const LEAD_STATE_TRANSITIONS: Record<string, ReadonlyArray<LeadLifecycleStatus>> = {
+  new: ["validated"],
+  validated: ["scored"],
+  scored: ["routed"],
+  routed: ["contacted"],
+  contacted: ["qualified", "disqualified", "booked"],
+  qualified: ["booked"],
+  disqualified: ["booked"],
+  booked: [],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -299,6 +440,81 @@ function checkOpsAuth(request: Request, env: Env): Response | null {
   }
 
   return null;
+}
+
+export class LeadSubmitLockDO {
+  constructor(private readonly state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ ok: false, error: "METHOD_NOT_ALLOWED" }), {
+        status: 405,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    const body = await request.json<any>().catch(() => ({}));
+    const now = Date.now();
+
+    if (url.pathname === "/acquire") {
+      const ttlMs = Math.max(10_000, Math.min(120_000, Number(body?.ttlMs ?? 45_000)));
+      const lock = await this.state.storage.get<any>("lock");
+
+      if (lock?.status === "done" && typeof lock.leadId === "string") {
+        return new Response(JSON.stringify({ ok: true, replay: true, leadId: lock.leadId }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (lock?.status === "processing" && Number(lock.expiresAt ?? 0) > now) {
+        return new Response(JSON.stringify({ ok: false, replay: false, inFlight: true }), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      await this.state.storage.put("lock", {
+        status: "processing",
+        startedAt: now,
+        expiresAt: now + ttlMs,
+      });
+
+      return new Response(JSON.stringify({ ok: true, replay: false }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    if (url.pathname === "/complete") {
+      const leadId = typeof body?.leadId === "string" ? body.leadId : "";
+      await this.state.storage.put("lock", {
+        status: "done",
+        leadId,
+        completedAt: now,
+        expiresAt: now + (1000 * 60 * 60 * 24),
+      });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    if (url.pathname === "/fail") {
+      await this.state.storage.delete("lock");
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ ok: false, error: "NOT_FOUND" }), {
+      status: 404,
+      headers: { "content-type": "application/json" },
+    });
+  }
 }
 
 const INDEXABLE_HOSTS = new Set(["clawea.com", "www.clawea.com"]);
@@ -1439,6 +1655,13 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     kind: "static",
   },
   {
+    path: "/book",
+    title: "Book a Rollout Session | Claw EA",
+    description: "Book a deployment planning session with lead-context prefill and conversion tracking.",
+    category: "book",
+    kind: "static",
+  },
+  {
     path: "/trust",
     title: "Trust Layer | Verified AI Agent Execution | Claw EA",
     description: "Cryptographic proof of AI agent actions.",
@@ -1597,7 +1820,10 @@ type TrackingEventType =
   | "variant_assignment"
   | "search_query"
   | "search_result_click"
-  | "search_clear";
+  | "search_clear"
+  | "book_prompt_shown"
+  | "booking_submit"
+  | "booking_complete";
 
 type TrackingEvent = {
   eventType: TrackingEventType;
@@ -1634,6 +1860,9 @@ const TRACKING_EVENT_TYPES = new Set<TrackingEventType>([
   "search_query",
   "search_result_click",
   "search_clear",
+  "book_prompt_shown",
+  "booking_submit",
+  "booking_complete",
 ]);
 
 function clipString(input: unknown, maxLen: number): string | undefined {
@@ -1671,6 +1900,7 @@ function pageFamilyFromPath(input: string | undefined): string {
     "contact",
     "assessment",
     "sources",
+    "book",
     "about",
   ]);
 
@@ -1728,6 +1958,21 @@ function anonymizeIpClassC(ip: string | null): string | undefined {
   return `${m[1]}.${m[2]}.${m[3]}.x`;
 }
 
+async function storeTrackingEvent(env: Env, event: TrackingEvent): Promise<string> {
+  const day = event.ts.slice(0, 10);
+  const random = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  const key = `events/${day}/${event.ts.replace(/[:.]/g, "-")}-${random}.json`;
+
+  await env.ARTICLES.put(key, JSON.stringify(event), {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  await persistTrackingEventD1(env, event);
+  return key;
+}
+
 async function ingestTrackingEvent(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") {
     return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
@@ -1781,18 +2026,7 @@ async function ingestTrackingEvent(request: Request, env: Env): Promise<Response
     },
   };
 
-  const day = event.ts.slice(0, 10);
-  const random = typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID().slice(0, 8)
-    : Math.random().toString(36).slice(2, 10);
-  const key = `events/${day}/${event.ts.replace(/[:.]/g, "-")}-${random}.json`;
-
-  await env.ARTICLES.put(key, JSON.stringify(event), {
-    httpMetadata: { contentType: "application/json" },
-  });
-
-  await persistTrackingEventD1(env, event);
-
+  const key = await storeTrackingEvent(env, event);
   return apiJson({ ok: true, eventId: key });
 }
 
@@ -1842,7 +2076,7 @@ function topCounts(map: Map<string, number>, limit = 10): Array<{ key: string; c
 }
 
 async function summarizeTrackingEvents(request: Request, env: Env): Promise<Response> {
-  const authError = checkAutomationAuth(request, env);
+  const authError = checkOpsAuth(request, env);
   if (authError) return authError;
 
   if (request.method !== "POST") {
@@ -1895,6 +2129,9 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
 
   let contactIntentViews = 0;
   let contactIntentActions = 0;
+  let leadSubmits = 0;
+  let bookingSubmits = 0;
+  let bookingCompletions = 0;
   let searchQueries = 0;
   let searchResultClicks = 0;
 
@@ -1919,7 +2156,7 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       const current = variantOutcome.get(ev.variantId) ?? { impressions: 0, clicks: 0, submits: 0 };
       if (ev.eventType === "variant_assignment") current.impressions += 1;
       if (ev.eventType === "cta_click") current.clicks += 1;
-      if (ev.eventType === "contact_intent_submit" || ev.eventType === "lead_submit") current.submits += 1;
+      if (ev.eventType === "contact_intent_submit" || ev.eventType === "lead_submit" || ev.eventType === "booking_submit") current.submits += 1;
       variantOutcome.set(ev.variantId, current);
     }
 
@@ -1940,9 +2177,21 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       ctaFamilyClicks.set(ev.pageFamily, (ctaFamilyClicks.get(ev.pageFamily) ?? 0) + 1);
     }
 
-    if (ev.eventType === "contact_email_click" || ev.eventType === "contact_intent_submit" || ev.eventType === "lead_submit") {
+    if (ev.eventType === "contact_email_click" || ev.eventType === "contact_intent_submit" || ev.eventType === "lead_submit" || ev.eventType === "booking_submit") {
       contactIntentActions += 1;
       ctaFamilyActions.set(ev.pageFamily, (ctaFamilyActions.get(ev.pageFamily) ?? 0) + 1);
+    }
+
+    if (ev.eventType === "lead_submit") {
+      leadSubmits += 1;
+    }
+
+    if (ev.eventType === "booking_submit") {
+      bookingSubmits += 1;
+    }
+
+    if (ev.eventType === "booking_complete") {
+      bookingCompletions += 1;
     }
 
     if (ev.eventType === "search_query" && ev.query) {
@@ -1965,6 +2214,12 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
     : 0;
   const searchToClickRate = searchQueries > 0
     ? Number((searchResultClicks / searchQueries).toFixed(4))
+    : 0;
+  const leadToBookingRate = leadSubmits > 0
+    ? Number((bookingSubmits / leadSubmits).toFixed(4))
+    : 0;
+  const bookingCompletionRate = bookingSubmits > 0
+    ? Number((bookingCompletions / bookingSubmits).toFixed(4))
     : 0;
 
   const topSearchQueries = [...searchQueryCount.entries()]
@@ -2029,7 +2284,12 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       events: events.length,
       contactIntentViews,
       contactIntentActions,
+      leadSubmits,
+      bookingSubmits,
+      bookingCompletions,
       intentToActionRate,
+      leadToBookingRate,
+      bookingCompletionRate,
       searchQueries,
       searchResultClicks,
       searchToClickRate,
@@ -2054,6 +2314,13 @@ async function summarizeTrackingEvents(request: Request, env: Env): Promise<Resp
       },
       ctaByPageFamily,
       variants: variantPerformance,
+      booking: {
+        leadSubmits,
+        bookingSubmits,
+        bookingCompletions,
+        leadToBookingRate,
+        bookingCompletionRate,
+      },
     },
     indexing: {
       queue: queueSummary,
@@ -2092,6 +2359,142 @@ async function sha256Base64Url(input: string): Promise<string> {
   return base64Url(new Uint8Array(digest));
 }
 
+async function hmacSha256Base64Url(secret: string, payload: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+  return base64Url(new Uint8Array(sig));
+}
+
+function normalizeLeadStatus(raw: string | undefined): LeadLifecycleStatus {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "enriched") return "scored";
+  if (v === "rejected") return "disqualified";
+  if (v === "closed") return "booked";
+  if (
+    v === "new"
+    || v === "validated"
+    || v === "scored"
+    || v === "routed"
+    || v === "contacted"
+    || v === "qualified"
+    || v === "disqualified"
+    || v === "booked"
+  ) {
+    return v;
+  }
+  return "new";
+}
+
+function scoreBandFromQualification(score: number): LeadScoreBand {
+  if (score >= 80) return "high";
+  if (score >= 55) return "medium";
+  return "low";
+}
+
+function segmentFromPayload(payload: LeadSubmissionPayload, qualificationScore: number): LeadSegment {
+  const source = (payload.attribution?.source ?? "").toLowerCase();
+  const campaign = (payload.attribution?.utm_campaign ?? "").toLowerCase();
+  const role = (payload.role ?? "").toLowerCase();
+  const team = (payload.teamSize ?? "").toLowerCase();
+
+  if (
+    source.includes("partner")
+    || campaign.includes("partner")
+    || role.includes("partner")
+    || role.includes("reseller")
+  ) {
+    return "partner";
+  }
+
+  if (
+    qualificationScore >= 72
+    || team.includes("500")
+    || team.includes("1000")
+    || team.includes("enterprise")
+    || role.includes("cto")
+    || role.includes("security")
+  ) {
+    return "enterprise";
+  }
+
+  return "smb";
+}
+
+function leadWindowMinutes(env: Env): number {
+  return Math.max(1, Math.min(120, Number(env.LEAD_SUBMIT_WINDOW_MINUTES ?? "10")));
+}
+
+function leadIpWindowLimit(env: Env): number {
+  return Math.max(5, Math.min(500, Number(env.LEAD_SUBMIT_IP_WINDOW_LIMIT ?? "24")));
+}
+
+function leadEmailWindowLimit(env: Env): number {
+  return Math.max(2, Math.min(100, Number(env.LEAD_SUBMIT_EMAIL_WINDOW_LIMIT ?? "8")));
+}
+
+function routingMaxAttempts(env: Env): number {
+  return Math.max(1, Math.min(12, Number(env.ROUTING_MAX_ATTEMPTS ?? "5")));
+}
+
+async function leadSubmitLockAcquire(env: Env, idempotencyKey: string): Promise<{
+  ok: boolean;
+  replay: boolean;
+  inFlight: boolean;
+  leadId?: string;
+}> {
+  const id = env.LEAD_SUBMIT_LOCK.idFromName(idempotencyKey);
+  const stub = env.LEAD_SUBMIT_LOCK.get(id);
+  const res = await stub.fetch("https://lead-submit-lock/acquire", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ttlMs: 45_000 }),
+  });
+
+  const payload = await res.json<any>().catch(() => ({}));
+  if (res.status === 409) {
+    return { ok: false, replay: false, inFlight: true };
+  }
+
+  if (!res.ok || payload?.ok !== true) {
+    return { ok: false, replay: false, inFlight: false };
+  }
+
+  return {
+    ok: true,
+    replay: payload?.replay === true,
+    inFlight: false,
+    leadId: typeof payload?.leadId === "string" ? payload.leadId : undefined,
+  };
+}
+
+async function leadSubmitLockComplete(env: Env, idempotencyKey: string, leadId: string): Promise<void> {
+  const id = env.LEAD_SUBMIT_LOCK.idFromName(idempotencyKey);
+  const stub = env.LEAD_SUBMIT_LOCK.get(id);
+  await stub.fetch("https://lead-submit-lock/complete", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ leadId }),
+  });
+}
+
+async function leadSubmitLockFail(env: Env, idempotencyKey: string): Promise<void> {
+  const id = env.LEAD_SUBMIT_LOCK.idFromName(idempotencyKey);
+  const stub = env.LEAD_SUBMIT_LOCK.get(id);
+  await stub.fetch("https://lead-submit-lock/fail", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+}
+
 function normalizeEmail(input: string | undefined): string {
   return (input ?? "").trim().toLowerCase();
 }
@@ -2106,6 +2509,10 @@ function safeJsonParse<T>(raw: string | null, fallback: T): T {
 }
 
 function normalizeLeadPayload(body: any): LeadSubmissionPayload {
+  const behaviorSrc = typeof body?.behavior === "object" && body.behavior !== null
+    ? body.behavior as Record<string, unknown>
+    : {};
+
   return {
     fullName: clipString(body?.fullName, 120),
     email: clipString(body?.email, 200),
@@ -2121,6 +2528,13 @@ function normalizeLeadPayload(body: any): LeadSubmissionPayload {
       riskScore: normalizeResultCount(body?.assessment?.riskScore),
       confidenceLabel: clipString(body?.assessment?.confidenceLabel, 80),
     },
+    behavior: {
+      sessionEvents: normalizeResultCount(behaviorSrc.sessionEvents),
+      ctaClicks: normalizeResultCount(behaviorSrc.ctaClicks),
+      intentViews: normalizeResultCount(behaviorSrc.intentViews),
+      assessmentCompleted: behaviorSrc.assessmentCompleted === true,
+      secondsOnSite: normalizeResultCount(behaviorSrc.secondsOnSite),
+    },
     attribution: normalizeAttribution(body?.attribution),
     firstTouch: {
       ts: clipString(body?.firstTouch?.ts, 80),
@@ -2130,26 +2544,23 @@ function normalizeLeadPayload(body: any): LeadSubmissionPayload {
     },
     page: clipString(body?.page, 240),
     pageFamily: clipString(body?.pageFamily, 80),
+    variantId: clipString(body?.variantId, 120),
+    heroVariant: clipString(body?.heroVariant, 120),
+    ctaVariant: clipString(body?.ctaVariant, 120),
+    visitorId: clipString(body?.visitorId, 140),
     turnstileToken: clipString(body?.turnstileToken, 3000),
     idempotencyKey: clipString(body?.idempotencyKey, 160),
   };
 }
 
-function scoreLeadIntent(payload: LeadSubmissionPayload): {
-  intentScore: number;
-  readinessScore: number;
-  roiScore: number;
-  riskScore: number;
-  qualificationScore: number;
-  confidenceLabel: string;
-} {
+function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
   const baseReadiness = Math.min(100, Math.max(0, Number(payload.assessment?.readinessScore ?? 0)));
   const baseRoi = Math.min(100, Math.max(0, Number(payload.assessment?.roiScore ?? 0)));
   const baseRisk = Math.min(100, Math.max(0, Number(payload.assessment?.riskScore ?? 40)));
 
   const teamBoost = (() => {
     const t = (payload.teamSize ?? "").toLowerCase();
-    if (/(500|1000|enterprise|global)/.test(t)) return 15;
+    if (/(500|1000|enterprise|global)/.test(t)) return 16;
     if (/(100|200|300|400)/.test(t)) return 10;
     if (/(50|75)/.test(t)) return 6;
     return 2;
@@ -2163,25 +2574,51 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): {
     return 1;
   })();
 
+  const source = String(payload.attribution?.source ?? "direct").toLowerCase();
+  const campaign = String(payload.attribution?.utm_campaign ?? "").toLowerCase();
+
+  const sourceBoost = source.startsWith("utm:") || source.includes("linkedin") || source.includes("google")
+    ? 5
+    : source.includes("partner")
+      ? 8
+      : 1;
+
+  const campaignBoost = /(enterprise|security|audit|compliance|pilot|buyer|intent)/.test(campaign)
+    ? 6
+    : 0;
+
+  const behavior = payload.behavior ?? {};
+  const behaviorBoost = Math.min(
+    18,
+    Math.round(
+      (Number(behavior.ctaClicks ?? 0) * 2.2)
+      + (Number(behavior.intentViews ?? 0) * 1.3)
+      + (Number(behavior.sessionEvents ?? 0) * 0.5)
+      + (behavior.assessmentCompleted ? 6 : 0)
+      + Math.min(5, Number(behavior.secondsOnSite ?? 0) / 120),
+    ),
+  );
+
   const intentSignals = [
     payload.primaryUseCase,
     payload.intentNote,
+    payload.role,
   ].join(" ").toLowerCase();
 
-  const urgencyBoost = /(approval|security|audit|compliance|risk|incident|production|rollout)/.test(intentSignals)
+  const urgencyBoost = /(approval|security|audit|compliance|risk|incident|production|rollout|migration|sox|hipaa|soc 2)/.test(intentSignals)
     ? 10
     : 0;
 
-  const intentScore = Math.min(100, baseReadiness + teamBoost + timelineBoost + urgencyBoost);
-  const readinessScore = Math.min(100, Math.max(0, baseReadiness || Math.round(intentScore * 0.75)));
-  const roiScore = Math.min(100, Math.max(0, baseRoi || Math.round(intentScore * 0.7)));
+  const intentScore = Math.min(100, baseReadiness + teamBoost + timelineBoost + urgencyBoost + sourceBoost + campaignBoost + behaviorBoost);
+  const readinessScore = Math.min(100, Math.max(0, baseReadiness || Math.round(intentScore * 0.72)));
+  const roiScore = Math.min(100, Math.max(0, baseRoi || Math.round(intentScore * 0.68)));
   const riskScore = Math.min(100, Math.max(0, baseRisk));
 
   const qualificationScore = Math.max(
     0,
     Math.min(
       100,
-      Math.round((intentScore * 0.38) + (readinessScore * 0.28) + (roiScore * 0.24) + ((100 - riskScore) * 0.1)),
+      Math.round((intentScore * 0.36) + (readinessScore * 0.27) + (roiScore * 0.23) + ((100 - riskScore) * 0.14)),
     ),
   );
 
@@ -2191,6 +2628,9 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): {
       ? "medium-intent"
       : "early-intent";
 
+  const scoreBand = scoreBandFromQualification(qualificationScore);
+  const segment = segmentFromPayload(payload, qualificationScore);
+
   return {
     intentScore,
     readinessScore,
@@ -2198,6 +2638,8 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): {
     riskScore,
     qualificationScore,
     confidenceLabel,
+    scoreBand,
+    segment,
   };
 }
 
@@ -2247,6 +2689,208 @@ async function verifyTurnstile(token: string | undefined, request: Request, env:
   }
 }
 
+async function transitionLeadState(
+  env: Env,
+  leadId: string,
+  nextState: LeadLifecycleStatus,
+  reasonCode: string,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  const currentRow = await env.DB.prepare(
+    `SELECT status FROM leads WHERE lead_id = ?1 LIMIT 1`,
+  ).bind(leadId).first<{ status: string }>();
+
+  const current = normalizeLeadStatus(currentRow?.status);
+  if (current === nextState) return;
+
+  const allowedNext = LEAD_STATE_TRANSITIONS[current] ?? [];
+  if (!allowedNext.includes(nextState)) {
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+
+  await env.DB.prepare(
+    `UPDATE leads SET status = ?2, lifecycle_updated_at = ?3, updated_at = ?3 WHERE lead_id = ?1`,
+  ).bind(leadId, nextState, nowIso).run();
+
+  await env.DB.prepare(
+    `INSERT INTO lead_state_transitions (
+      transition_id,
+      lead_id,
+      from_state,
+      to_state,
+      reason_code,
+      metadata_json,
+      created_at
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+  )
+    .bind(
+      randomId("lead_state"),
+      leadId,
+      current,
+      nextState,
+      reasonCode,
+      JSON.stringify(metadata),
+      nowIso,
+    )
+    .run();
+}
+
+async function hashIpForAbuse(request: Request, env: Env): Promise<string> {
+  const rawIp = clipString(request.headers.get("cf-connecting-ip"), 120) ?? "0.0.0.0";
+  const salt = env.LEAD_ID_HASH_SALT?.trim() ?? "clawea-www-lead";
+  return sha256Base64Url(`${salt}|ip|${rawIp}`);
+}
+
+async function evaluateLeadAbuse(
+  payload: LeadSubmissionPayload,
+  request: Request,
+  env: Env,
+): Promise<{
+  ok: boolean;
+  denyCode?: string;
+  ipHash: string;
+  emailHash: string | null;
+}> {
+  const email = normalizeEmail(payload.email);
+  const salt = env.LEAD_ID_HASH_SALT?.trim() ?? "clawea-www-lead";
+  const ipHash = await hashIpForAbuse(request, env);
+  const emailHash = email ? await sha256Base64Url(`${salt}|email|${email}`) : null;
+
+  const domain = email.includes("@") ? email.split("@")[1] : "";
+  if (domain && DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    return { ok: false, denyCode: "DISPOSABLE_EMAIL_DENY", ipHash, emailHash };
+  }
+
+  const minutes = leadWindowMinutes(env);
+  const cutoff = new Date(Date.now() - minutes * 60_000).toISOString();
+
+  const ipRow = await env.DB.prepare(
+    `SELECT COUNT(*) AS count
+     FROM lead_submit_attempts
+     WHERE ip_hash = ?1 AND created_at >= ?2`,
+  ).bind(ipHash, cutoff).first<{ count: number }>();
+
+  if (Number(ipRow?.count ?? 0) >= leadIpWindowLimit(env)) {
+    return { ok: false, denyCode: "RATE_LIMIT_IP_WINDOW", ipHash, emailHash };
+  }
+
+  if (emailHash) {
+    const emailRow = await env.DB.prepare(
+      `SELECT COUNT(*) AS count
+       FROM lead_submit_attempts
+       WHERE email_hash = ?1 AND created_at >= ?2`,
+    ).bind(emailHash, cutoff).first<{ count: number }>();
+
+    if (Number(emailRow?.count ?? 0) >= leadEmailWindowLimit(env)) {
+      return { ok: false, denyCode: "RATE_LIMIT_EMAIL_WINDOW", ipHash, emailHash };
+    }
+  }
+
+  return { ok: true, ipHash, emailHash };
+}
+
+async function recordLeadSubmitAttempt(env: Env, params: {
+  leadId?: string;
+  ipHash: string;
+  emailHash: string | null;
+  idempotencyKey?: string;
+  visitorId?: string;
+  source: string;
+  campaignId: string;
+  pageFamily: string;
+  outcomeCode: string;
+}): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO lead_submit_attempts (
+      attempt_id,
+      lead_id,
+      ip_hash,
+      email_hash,
+      idempotency_key,
+      visitor_id,
+      source,
+      campaign_id,
+      page_family,
+      outcome_code,
+      created_at
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+  )
+    .bind(
+      randomId("lead_attempt"),
+      params.leadId ?? null,
+      params.ipHash,
+      params.emailHash,
+      params.idempotencyKey ?? null,
+      params.visitorId ?? null,
+      params.source,
+      params.campaignId,
+      params.pageFamily,
+      params.outcomeCode,
+      new Date().toISOString(),
+    )
+    .run();
+}
+
+async function loadCrmRoutingConfig(env: Env): Promise<CrmRoutingConfig> {
+  const key = env.CRM_PROVIDER_CONFIG_KEY?.trim() || "crm-provider-config-v1";
+  const kvRaw = await env.VARIANT_CONFIG.get(key, "text").catch(() => null);
+  const envRaw = env.CRM_PROVIDER_CONFIG_JSON?.trim() || null;
+  const raw = kvRaw || envRaw;
+
+  if (!raw) return DEFAULT_CRM_ROUTING_CONFIG;
+
+  const parsed = safeJsonParse<any>(raw, {});
+  const parsedProviders = Array.isArray(parsed?.providers) ? parsed.providers as Array<Record<string, unknown>> : [];
+
+  const providers: CrmProvider[] = parsedProviders.length > 0
+    ? parsedProviders
+      .filter((p) => typeof p?.id === "string")
+      .map((p) => {
+        const authTypeRaw = typeof p.authType === "string" ? p.authType : "none";
+        const authType: CrmProvider["authType"] = authTypeRaw === "bearer" || authTypeRaw === "header" || authTypeRaw === "none"
+          ? authTypeRaw
+          : "none";
+
+        return {
+          id: String(p.id),
+          endpoint: typeof p.endpoint === "string" ? p.endpoint : undefined,
+          authType,
+          authHeader: typeof p.authHeader === "string" ? p.authHeader : undefined,
+        };
+      })
+    : DEFAULT_CRM_ROUTING_CONFIG.providers;
+
+  const defaults = (parsed?.defaultProviderBySegment ?? {}) as Partial<Record<LeadSegment, string>>;
+
+  const config: CrmRoutingConfig = {
+    defaultProviderBySegment: {
+      enterprise: typeof defaults.enterprise === "string" ? defaults.enterprise : DEFAULT_CRM_ROUTING_CONFIG.defaultProviderBySegment.enterprise,
+      smb: typeof defaults.smb === "string" ? defaults.smb : DEFAULT_CRM_ROUTING_CONFIG.defaultProviderBySegment.smb,
+      partner: typeof defaults.partner === "string" ? defaults.partner : DEFAULT_CRM_ROUTING_CONFIG.defaultProviderBySegment.partner,
+    },
+    providers,
+  };
+
+  return config;
+}
+
+function crmAuthTokenMap(env: Env): Record<string, string> {
+  return safeJsonParse<Record<string, string>>(env.CRM_PROVIDER_AUTH_JSON ?? null, {});
+}
+
+function queueForSegment(env: Env, segment: LeadSegment): Queue {
+  if (segment === "enterprise") return env.LEAD_ROUTE_ENTERPRISE;
+  if (segment === "partner") return env.LEAD_ROUTE_PARTNER;
+  return env.LEAD_ROUTE_SMB;
+}
+
+async function enqueueRoutingJob(env: Env, segment: LeadSegment, body: Record<string, unknown>): Promise<void> {
+  const q = queueForSegment(env, segment);
+  await q.send(body);
+}
+
 async function persistTrackingEventD1(env: Env, event: TrackingEvent): Promise<void> {
   try {
     await env.DB.prepare(
@@ -2291,6 +2935,16 @@ async function persistTrackingEventD1(env: Env, event: TrackingEvent): Promise<v
         new Date().toISOString(),
       )
       .run();
+
+    env.ANALYTICS?.writeDataPoint({
+      indexes: [event.eventType, event.pageFamily, event.ctaVariant ?? "none", event.source],
+      blobs: [event.page, event.variantId ?? "none", event.actionOutcome ?? "none"],
+      doubles: [
+        Number(event.resultCount ?? 0),
+        Number(event.eventType === "cta_click" ? 1 : 0),
+        Number(event.eventType === "lead_submit" ? 1 : 0),
+      ],
+    });
   } catch (err) {
     console.error("FUNNEL_EVENT_D1_INSERT_FAILED", err);
   }
@@ -2300,7 +2954,10 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
   leadId: string;
   deduped: boolean;
   idempotentReplay: boolean;
-  scores: ReturnType<typeof scoreLeadIntent>;
+  scores: LeadScoreResult;
+  idempotencyKey: string;
+  segment: LeadSegment;
+  routeJobId: string | null;
 }> {
   const nowIso = new Date().toISOString();
   const email = normalizeEmail(payload.email);
@@ -2309,207 +2966,330 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
     throw new Error("EMAIL_INVALID");
   }
 
-  const idempotencyKey = payload.idempotencyKey ?? randomId("idem");
+  const idempotencyKey = payload.idempotencyKey
+    ?? `idem_${(await sha256Base64Url([
+      email,
+      payload.page ?? "/contact",
+      payload.attribution?.utm_campaign ?? "",
+      payload.visitorId ?? "",
+    ].join("|"))).slice(0, 30)}`;
 
-  const idemExisting = await env.DB.prepare(
-    `SELECT lead_id FROM lead_idempotency WHERE idempotency_key = ?1 LIMIT 1`,
-  ).bind(idempotencyKey).first<{ lead_id: string }>();
+  const lock = await leadSubmitLockAcquire(env, idempotencyKey);
+  if (!lock.ok) {
+    if (lock.inFlight) {
+      throw new Error("IDEMPOTENCY_IN_FLIGHT");
+    }
+    throw new Error("IDEMPOTENCY_LOCK_FAILED");
+  }
 
-  if (idemExisting?.lead_id) {
+  if (lock.replay && lock.leadId) {
     return {
-      leadId: idemExisting.lead_id,
+      leadId: lock.leadId,
       deduped: true,
       idempotentReplay: true,
       scores: scoreLeadIntent(payload),
+      idempotencyKey,
+      segment: segmentFromPayload(payload, scoreLeadIntent(payload).qualificationScore),
+      routeJobId: null,
     };
   }
 
-  const salt = env.LEAD_ID_HASH_SALT?.trim() ?? "clawea-www-lead";
-  const identityHash = await sha256Base64Url(`${salt}|${email}`);
-  const emailHash = await sha256Base64Url(email);
+  try {
+    const salt = env.LEAD_ID_HASH_SALT?.trim() ?? "clawea-www-lead";
+    const identityHash = await sha256Base64Url(`${salt}|${email}`);
+    const emailHash = await sha256Base64Url(email);
 
-  const page = payload.page ?? "/contact";
-  const pageFamily = payload.pageFamily ?? pageFamilyFromPath(page);
-  const source = payload.attribution?.source ?? payload.firstTouch?.source ?? "direct";
+    const page = payload.page ?? "/contact";
+    const pageFamily = payload.pageFamily ?? pageFamilyFromPath(page);
+    const source = payload.attribution?.source ?? payload.firstTouch?.source ?? "direct";
+    const campaignId = payload.attribution?.utm_campaign ?? "";
 
-  const scores = scoreLeadIntent(payload);
+    const scores = scoreLeadIntent(payload);
 
-  const emailParts = email.split("@");
-  const emailHint = emailParts.length === 2
-    ? `${emailParts[0].slice(0, 2)}***@${emailParts[1]}`
-    : "***";
+    const emailParts = email.split("@");
+    const emailHint = emailParts.length === 2
+      ? `${emailParts[0].slice(0, 2)}***@${emailParts[1]}`
+      : "***";
 
-  const existing = await env.DB.prepare(
-    `SELECT lead_id, dedupe_count FROM leads WHERE identity_hash = ?1 LIMIT 1`,
-  ).bind(identityHash).first<{ lead_id: string; dedupe_count: number }>();
+    const existing = await env.DB.prepare(
+      `SELECT lead_id, dedupe_count, status FROM leads WHERE identity_hash = ?1 LIMIT 1`,
+    ).bind(identityHash).first<{ lead_id: string; dedupe_count: number; status: string }>();
 
-  const leadId = existing?.lead_id ?? randomId("lead");
-  const deduped = Boolean(existing?.lead_id);
+    const leadId = existing?.lead_id ?? randomId("lead");
+    const deduped = Boolean(existing?.lead_id);
 
-  if (!deduped) {
+    if (!deduped) {
+      await env.DB.prepare(
+        `INSERT INTO leads (
+          lead_id,
+          identity_hash,
+          email_hash,
+          email_hint,
+          full_name,
+          company,
+          role,
+          team_size,
+          timeline,
+          primary_use_case,
+          intent_note,
+          source,
+          page,
+          page_family,
+          attribution_json,
+          first_touch_json,
+          assessment_json,
+          behavior_json,
+          readiness_score,
+          roi_score,
+          risk_score,
+          intent_score,
+          qualification_score,
+          score_band,
+          segment,
+          campaign_id,
+          variant_id,
+          hero_variant,
+          cta_variant,
+          status,
+          route_status,
+          dedupe_count,
+          created_at,
+          updated_at,
+          last_seen_at,
+          lifecycle_updated_at
+        ) VALUES (
+          ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+          ?12, ?13, ?14, ?15, ?16, ?17, ?18,
+          ?19, ?20, ?21, ?22, ?23, ?24, ?25,
+          ?26, ?27, ?28, ?29, 'new', 'pending', 0, ?30, ?30, ?30, ?30
+        )`,
+      )
+        .bind(
+          leadId,
+          identityHash,
+          emailHash,
+          emailHint,
+          payload.fullName ?? "",
+          payload.company ?? "",
+          payload.role ?? "",
+          payload.teamSize ?? "",
+          payload.timeline ?? "",
+          payload.primaryUseCase ?? "",
+          payload.intentNote ?? "",
+          source,
+          page,
+          pageFamily,
+          JSON.stringify(payload.attribution ?? {}),
+          JSON.stringify(payload.firstTouch ?? {}),
+          JSON.stringify(payload.assessment ?? {}),
+          JSON.stringify(payload.behavior ?? {}),
+          scores.readinessScore,
+          scores.roiScore,
+          scores.riskScore,
+          scores.intentScore,
+          scores.qualificationScore,
+          scores.scoreBand,
+          scores.segment,
+          campaignId,
+          payload.variantId ?? "",
+          payload.heroVariant ?? "",
+          payload.ctaVariant ?? "",
+          nowIso,
+        )
+        .run();
+    } else {
+      await env.DB.prepare(
+        `UPDATE leads
+          SET
+            full_name = COALESCE(NULLIF(?2,''), full_name),
+            company = COALESCE(NULLIF(?3,''), company),
+            role = COALESCE(NULLIF(?4,''), role),
+            team_size = COALESCE(NULLIF(?5,''), team_size),
+            timeline = COALESCE(NULLIF(?6,''), timeline),
+            primary_use_case = COALESCE(NULLIF(?7,''), primary_use_case),
+            intent_note = COALESCE(NULLIF(?8,''), intent_note),
+            source = COALESCE(NULLIF(?9,''), source),
+            page = COALESCE(NULLIF(?10,''), page),
+            page_family = COALESCE(NULLIF(?11,''), page_family),
+            campaign_id = COALESCE(NULLIF(?12,''), campaign_id),
+            variant_id = COALESCE(NULLIF(?13,''), variant_id),
+            hero_variant = COALESCE(NULLIF(?14,''), hero_variant),
+            cta_variant = COALESCE(NULLIF(?15,''), cta_variant),
+            attribution_json = CASE WHEN ?16 <> '{}' THEN ?16 ELSE attribution_json END,
+            first_touch_json = CASE WHEN ?17 <> '{}' THEN ?17 ELSE first_touch_json END,
+            assessment_json = CASE WHEN ?18 <> '{}' THEN ?18 ELSE assessment_json END,
+            behavior_json = CASE WHEN ?19 <> '{}' THEN ?19 ELSE behavior_json END,
+            readiness_score = MAX(readiness_score, ?20),
+            roi_score = MAX(roi_score, ?21),
+            risk_score = MIN(risk_score, ?22),
+            intent_score = MAX(intent_score, ?23),
+            qualification_score = MAX(qualification_score, ?24),
+            score_band = CASE WHEN MAX(qualification_score, ?24) >= 80 THEN 'high' WHEN MAX(qualification_score, ?24) >= 55 THEN 'medium' ELSE 'low' END,
+            segment = CASE WHEN ?25 = 'partner' THEN 'partner' WHEN ?25 = 'enterprise' THEN 'enterprise' ELSE segment END,
+            dedupe_count = dedupe_count + 1,
+            updated_at = ?26,
+            last_seen_at = ?26
+          WHERE lead_id = ?1`,
+      )
+        .bind(
+          leadId,
+          payload.fullName ?? "",
+          payload.company ?? "",
+          payload.role ?? "",
+          payload.teamSize ?? "",
+          payload.timeline ?? "",
+          payload.primaryUseCase ?? "",
+          payload.intentNote ?? "",
+          source,
+          page,
+          pageFamily,
+          campaignId,
+          payload.variantId ?? "",
+          payload.heroVariant ?? "",
+          payload.ctaVariant ?? "",
+          JSON.stringify(payload.attribution ?? {}),
+          JSON.stringify(payload.firstTouch ?? {}),
+          JSON.stringify(payload.assessment ?? {}),
+          JSON.stringify(payload.behavior ?? {}),
+          scores.readinessScore,
+          scores.roiScore,
+          scores.riskScore,
+          scores.intentScore,
+          scores.qualificationScore,
+          scores.segment,
+          nowIso,
+        )
+        .run();
+    }
+
     await env.DB.prepare(
-      `INSERT INTO leads (
+      `INSERT OR REPLACE INTO lead_idempotency (idempotency_key, lead_id, created_at)
+       VALUES (?1, ?2, ?3)`,
+    ).bind(idempotencyKey, leadId, nowIso).run();
+
+    await env.DB.prepare(
+      `INSERT INTO lead_events (
+        event_id,
         lead_id,
-        identity_hash,
-        email_hash,
-        email_hint,
-        full_name,
-        company,
-        role,
-        team_size,
-        timeline,
-        primary_use_case,
-        intent_note,
+        event_type,
+        event_payload_json,
         source,
         page,
         page_family,
-        attribution_json,
-        first_touch_json,
-        assessment_json,
-        readiness_score,
-        roi_score,
-        risk_score,
-        intent_score,
-        qualification_score,
-        status,
-        dedupe_count,
-        created_at,
-        updated_at,
-        last_seen_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, 0, ?24, ?24, ?24)
-      `,
+        created_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
     )
       .bind(
+        randomId("lead_evt"),
         leadId,
-        identityHash,
-        emailHash,
-        emailHint,
-        payload.fullName ?? "",
-        payload.company ?? "",
-        payload.role ?? "",
-        payload.teamSize ?? "",
-        payload.timeline ?? "",
-        payload.primaryUseCase ?? "",
-        payload.intentNote ?? "",
+        deduped ? "lead_deduped" : "lead_submitted",
+        JSON.stringify({
+          deduped,
+          scores,
+          emailHint,
+          attribution: payload.attribution ?? {},
+          campaignId,
+          variantId: payload.variantId ?? null,
+          ctaVariant: payload.ctaVariant ?? null,
+          heroVariant: payload.heroVariant ?? null,
+        }),
         source,
         page,
         pageFamily,
-        JSON.stringify(payload.attribution ?? {}),
-        JSON.stringify(payload.firstTouch ?? {}),
-        JSON.stringify(payload.assessment ?? {}),
-        scores.readinessScore,
-        scores.roiScore,
-        scores.riskScore,
-        scores.intentScore,
-        scores.qualificationScore,
-        (scores.qualificationScore >= 78 ? "qualified" : "new"),
         nowIso,
       )
       .run();
-  } else {
-    await env.DB.prepare(
-      `UPDATE leads
-        SET
-          full_name = COALESCE(NULLIF(?2,''), full_name),
-          company = COALESCE(NULLIF(?3,''), company),
-          role = COALESCE(NULLIF(?4,''), role),
-          team_size = COALESCE(NULLIF(?5,''), team_size),
-          timeline = COALESCE(NULLIF(?6,''), timeline),
-          primary_use_case = COALESCE(NULLIF(?7,''), primary_use_case),
-          intent_note = COALESCE(NULLIF(?8,''), intent_note),
-          source = COALESCE(NULLIF(?9,''), source),
-          page = COALESCE(NULLIF(?10,''), page),
-          page_family = COALESCE(NULLIF(?11,''), page_family),
-          attribution_json = CASE WHEN ?12 <> '{}' THEN ?12 ELSE attribution_json END,
-          first_touch_json = CASE WHEN ?13 <> '{}' THEN ?13 ELSE first_touch_json END,
-          assessment_json = CASE WHEN ?14 <> '{}' THEN ?14 ELSE assessment_json END,
-          readiness_score = MAX(readiness_score, ?15),
-          roi_score = MAX(roi_score, ?16),
-          risk_score = MIN(risk_score, ?17),
-          intent_score = MAX(intent_score, ?18),
-          qualification_score = MAX(qualification_score, ?19),
-          status = CASE WHEN MAX(qualification_score, ?19) >= 78 THEN 'qualified' ELSE status END,
-          dedupe_count = dedupe_count + 1,
-          updated_at = ?20,
-          last_seen_at = ?20
-        WHERE lead_id = ?1
-      `,
-    )
-      .bind(
-        leadId,
-        payload.fullName ?? "",
-        payload.company ?? "",
-        payload.role ?? "",
-        payload.teamSize ?? "",
-        payload.timeline ?? "",
-        payload.primaryUseCase ?? "",
-        payload.intentNote ?? "",
-        source,
-        page,
-        pageFamily,
-        JSON.stringify(payload.attribution ?? {}),
-        JSON.stringify(payload.firstTouch ?? {}),
-        JSON.stringify(payload.assessment ?? {}),
-        scores.readinessScore,
-        scores.roiScore,
-        scores.riskScore,
-        scores.intentScore,
-        scores.qualificationScore,
-        nowIso,
-      )
-      .run();
-  }
 
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO lead_idempotency (idempotency_key, lead_id, created_at)
-     VALUES (?1, ?2, ?3)`,
-  ).bind(idempotencyKey, leadId, nowIso).run();
-
-  await env.DB.prepare(
-    `INSERT INTO lead_events (
-      event_id,
-      lead_id,
-      event_type,
-      event_payload_json,
+    await transitionLeadState(env, leadId, "validated", "turnstile_validated", {
       source,
-      page,
-      page_family,
-      created_at
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-  )
-    .bind(
-      randomId("lead_evt"),
-      leadId,
-      deduped ? "lead_deduped" : "lead_submitted",
-      JSON.stringify({
-        deduped,
-        scores,
-        emailHint,
-        attribution: payload.attribution ?? {},
-      }),
-      source,
-      page,
       pageFamily,
-      nowIso,
-    )
-    .run();
-
-  try {
-    await env.LEAD_JOBS.send({
-      type: "lead_enrich",
-      leadId,
-      submittedAt: nowIso,
     });
-  } catch (err) {
-    console.error("LEAD_QUEUE_SEND_FAILED", err);
-  }
+    await transitionLeadState(env, leadId, "scored", "score_v2", {
+      qualificationScore: scores.qualificationScore,
+      scoreBand: scores.scoreBand,
+      segment: scores.segment,
+    });
 
-  return {
-    leadId,
-    deduped,
-    idempotentReplay: false,
-    scores,
-  };
+    const routingConfig = await loadCrmRoutingConfig(env);
+    const providerId = routingConfig.defaultProviderBySegment[scores.segment] ?? "internal-r2";
+
+    await transitionLeadState(env, leadId, "routed", "routing_enqueued", {
+      segment: scores.segment,
+      providerId,
+    });
+
+    let routeJobId: string | null = null;
+
+    const existingJob = await env.DB.prepare(
+      `SELECT job_id FROM lead_routing_jobs WHERE idempotency_key = ?1 LIMIT 1`,
+    ).bind(idempotencyKey).first<{ job_id: string }>();
+
+    if (existingJob?.job_id) {
+      routeJobId = existingJob.job_id;
+    } else {
+      routeJobId = randomId("route_job");
+
+      await env.DB.prepare(
+        `INSERT INTO lead_routing_jobs (
+          job_id,
+          lead_id,
+          segment,
+          provider_id,
+          state,
+          attempts,
+          max_attempts,
+          payload_json,
+          idempotency_key,
+          created_at,
+          updated_at
+        ) VALUES (?1, ?2, ?3, ?4, 'queued', 0, ?5, ?6, ?7, ?8, ?8)`,
+      )
+        .bind(
+          routeJobId,
+          leadId,
+          scores.segment,
+          providerId,
+          routingMaxAttempts(env),
+          JSON.stringify({
+            source,
+            campaignId,
+            scoreBand: scores.scoreBand,
+            variantId: payload.variantId ?? null,
+          }),
+          idempotencyKey,
+          nowIso,
+        )
+        .run();
+
+      await env.DB.prepare(
+        `UPDATE leads
+         SET route_status = 'queued', routed_provider_id = ?2, updated_at = ?3
+         WHERE lead_id = ?1`,
+      ).bind(leadId, providerId, nowIso).run();
+
+      await enqueueRoutingJob(env, scores.segment, {
+        type: "lead_route_dispatch",
+        routeJobId,
+        leadId,
+        segment: scores.segment,
+      });
+    }
+
+    await leadSubmitLockComplete(env, idempotencyKey, leadId);
+
+    return {
+      leadId,
+      deduped,
+      idempotentReplay: false,
+      scores,
+      idempotencyKey,
+      segment: scores.segment,
+      routeJobId,
+    };
+  } catch (err) {
+    await leadSubmitLockFail(env, idempotencyKey);
+    throw err;
+  }
 }
 
 async function submitLead(request: Request, env: Env): Promise<Response> {
@@ -2525,29 +3305,138 @@ async function submitLead(request: Request, env: Env): Promise<Response> {
   }
 
   const payload = normalizeLeadPayload(body);
+  const source = payload.attribution?.source ?? payload.firstTouch?.source ?? "direct";
+  const campaignId = payload.attribution?.utm_campaign ?? "";
+  const pageFamily = payload.pageFamily ?? pageFamilyFromPath(payload.page ?? "/contact");
+
+  const abuse = await evaluateLeadAbuse(payload, request, env);
+  if (!abuse.ok) {
+    await recordLeadSubmitAttempt(env, {
+      ipHash: abuse.ipHash,
+      emailHash: abuse.emailHash,
+      idempotencyKey: payload.idempotencyKey,
+      visitorId: payload.visitorId,
+      source,
+      campaignId,
+      pageFamily,
+      outcomeCode: abuse.denyCode ?? "RATE_LIMIT_DENY",
+    });
+
+    return apiError(
+      abuse.denyCode ?? "RATE_LIMIT_DENY",
+      "Lead submission blocked by abuse protection policy",
+      429,
+    );
+  }
 
   const turnstile = await verifyTurnstile(payload.turnstileToken, request, env);
   if (!turnstile.ok) {
+    await recordLeadSubmitAttempt(env, {
+      ipHash: abuse.ipHash,
+      emailHash: abuse.emailHash,
+      idempotencyKey: payload.idempotencyKey,
+      visitorId: payload.visitorId,
+      source,
+      campaignId,
+      pageFamily,
+      outcomeCode: `TURNSTILE_${turnstile.error ?? "FAILED"}`,
+    });
+
     return apiError("TURNSTILE_FAILED", turnstile.error ?? "Turnstile validation failed", 403);
   }
 
   try {
     const saved = await upsertLeadFromPayload(payload, request, env);
+
+    await recordLeadSubmitAttempt(env, {
+      leadId: saved.leadId,
+      ipHash: abuse.ipHash,
+      emailHash: abuse.emailHash,
+      idempotencyKey: saved.idempotencyKey,
+      visitorId: payload.visitorId,
+      source,
+      campaignId,
+      pageFamily,
+      outcomeCode: saved.idempotentReplay ? "IDEMPOTENT_REPLAY" : (saved.deduped ? "DEDUPED" : "ACCEPTED"),
+    });
+
+    try {
+      await storeTrackingEvent(env, {
+        eventType: "lead_submit",
+        page: payload.page ?? "/contact",
+        pageFamily,
+        source,
+        ctaId: payload.pageFamily === "assessment" ? "assessment-result-submit" : "contact-fast-submit",
+        ctaVariant: payload.ctaVariant ?? "submit",
+        actionOutcome: saved.deduped ? "deduped" : "submitted",
+        variantId: payload.variantId ?? `${pageFamily}:proof:submit`,
+        heroVariant: payload.heroVariant ?? "proof",
+        visitorId: payload.visitorId,
+        ts: new Date().toISOString(),
+        attribution: payload.attribution ?? {},
+        context: {},
+        targetPath: saved.routeJobId ? "/api/routing/status" : undefined,
+      });
+    } catch (telemetryErr) {
+      console.error("LEAD_SUBMIT_TELEMETRY_FAILED", telemetryErr);
+    }
+
     return apiJson({
       ok: true,
       leadId: saved.leadId,
+      routeJobId: saved.routeJobId,
+      segment: saved.segment,
+      scoreBand: saved.scores.scoreBand,
       deduped: saved.deduped,
       idempotentReplay: saved.idempotentReplay,
       confidenceLabel: saved.scores.confidenceLabel,
       qualificationScore: saved.scores.qualificationScore,
       next: saved.scores.qualificationScore >= 78 ? "priority_follow_up" : "standard_follow_up",
+      bookPath: `/book?lead=${encodeURIComponent(saved.leadId)}`,
     });
   } catch (err: any) {
     const code = String(err?.message ?? "LEAD_SUBMIT_FAILED");
+
+    if (code === "IDEMPOTENCY_IN_FLIGHT") {
+      await recordLeadSubmitAttempt(env, {
+        ipHash: abuse.ipHash,
+        emailHash: abuse.emailHash,
+        idempotencyKey: payload.idempotencyKey,
+        visitorId: payload.visitorId,
+        source,
+        campaignId,
+        pageFamily,
+        outcomeCode: "IDEMPOTENCY_IN_FLIGHT",
+      });
+      return apiError("IDEMPOTENCY_IN_FLIGHT", "A lead submission with this key is already processing", 409);
+    }
+
     if (code === "EMAIL_INVALID") {
+      await recordLeadSubmitAttempt(env, {
+        ipHash: abuse.ipHash,
+        emailHash: abuse.emailHash,
+        idempotencyKey: payload.idempotencyKey,
+        visitorId: payload.visitorId,
+        source,
+        campaignId,
+        pageFamily,
+        outcomeCode: "EMAIL_INVALID",
+      });
       return apiError("EMAIL_INVALID", "A valid work email is required", 400);
     }
+
     console.error("LEAD_SUBMIT_FAILED", err);
+    await recordLeadSubmitAttempt(env, {
+      ipHash: abuse.ipHash,
+      emailHash: abuse.emailHash,
+      idempotencyKey: payload.idempotencyKey,
+      visitorId: payload.visitorId,
+      source,
+      campaignId,
+      pageFamily,
+      outcomeCode: "LEAD_SUBMIT_FAILED",
+    });
+
     return apiError("LEAD_SUBMIT_FAILED", "Lead intake failed", 500);
   }
 }
@@ -2582,6 +3471,10 @@ async function leadsStatus(request: Request, env: Env): Promise<Response> {
     `SELECT page_family AS key, COUNT(*) AS count FROM leads GROUP BY page_family ORDER BY count DESC LIMIT 20`,
   ).all<{ key: string; count: number }>();
 
+  const transitionRows = await env.DB.prepare(
+    `SELECT to_state AS key, COUNT(*) AS count FROM lead_state_transitions GROUP BY to_state ORDER BY count DESC LIMIT 20`,
+  ).all<{ key: string; count: number }>();
+
   const recentRows = await env.DB.prepare(
     `SELECT
       lead_id,
@@ -2604,7 +3497,17 @@ async function leadsStatus(request: Request, env: Env): Promise<Response> {
       team_size,
       timeline,
       primary_use_case,
-      email_hint
+      email_hint,
+      score_band,
+      segment,
+      campaign_id,
+      variant_id,
+      hero_variant,
+      cta_variant,
+      route_status,
+      routed_provider_id,
+      booked_at,
+      completed_at
     FROM leads
     ORDER BY last_seen_at DESC
     LIMIT 50`,
@@ -2621,6 +3524,7 @@ async function leadsStatus(request: Request, env: Env): Promise<Response> {
       byStatus: statusRows.results ?? [],
       bySource: sourceRows.results ?? [],
       byPageFamily: familyRows.results ?? [],
+      byTransition: transitionRows.results ?? [],
     },
     recent: (recentRows.results ?? []).map((row) => ({
       leadId: row.lead_id,
@@ -2638,6 +3542,16 @@ async function leadsStatus(request: Request, env: Env): Promise<Response> {
       role: row.role,
       teamSize: row.team_size,
       timeline: row.timeline,
+      scoreBand: row.score_band,
+      segment: row.segment,
+      campaignId: row.campaign_id,
+      variantId: row.variant_id,
+      heroVariant: row.hero_variant,
+      ctaVariant: row.cta_variant,
+      routeStatus: row.route_status,
+      routedProviderId: row.routed_provider_id,
+      bookedAt: row.booked_at,
+      completedAt: row.completed_at,
       emailHint: row.email_hint,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -2657,6 +3571,8 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const format = (clipString(url.searchParams.get("format"), 12) ?? "json").toLowerCase();
   const statusFilter = clipString(url.searchParams.get("status"), 32);
+  const segmentFilter = clipString(url.searchParams.get("segment"), 24);
+  const scoreBandFilter = clipString(url.searchParams.get("scoreBand"), 24);
   const limit = Math.min(2000, Math.max(1, Number(url.searchParams.get("limit") ?? "500")));
 
   let sql = `SELECT
@@ -2677,20 +3593,48 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
     timeline,
     primary_use_case,
     email_hint,
+    score_band,
+    segment,
+    campaign_id,
+    variant_id,
+    hero_variant,
+    cta_variant,
+    route_status,
+    routed_provider_id,
+    booked_at,
+    completed_at,
     created_at,
     updated_at,
     last_seen_at
   FROM leads`;
 
   const binds: Array<string | number> = [];
+  const where: string[] = [];
+
   if (statusFilter) {
-    sql += ` WHERE status = ?1`;
+    where.push(`status = ?${binds.length + 1}`);
     binds.push(statusFilter);
+  }
+
+  if (segmentFilter) {
+    where.push(`segment = ?${binds.length + 1}`);
+    binds.push(segmentFilter);
+  }
+
+  if (scoreBandFilter) {
+    where.push(`score_band = ?${binds.length + 1}`);
+    binds.push(scoreBandFilter);
+  }
+
+  if (where.length > 0) {
+    sql += ` WHERE ${where.join(" AND ")}`;
   }
 
   sql += ` ORDER BY last_seen_at DESC LIMIT ${limit}`;
 
-  const rows = await env.DB.prepare(sql).bind(...binds).all<Record<string, unknown>>();
+  const rows = binds.length > 0
+    ? await env.DB.prepare(sql).bind(...binds).all<Record<string, unknown>>()
+    : await env.DB.prepare(sql).all<Record<string, unknown>>();
   const results = rows.results ?? [];
 
   if (format === "csv") {
@@ -2702,6 +3646,14 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
       "readiness_score",
       "roi_score",
       "risk_score",
+      "score_band",
+      "segment",
+      "campaign_id",
+      "variant_id",
+      "hero_variant",
+      "cta_variant",
+      "route_status",
+      "routed_provider_id",
       "dedupe_count",
       "source",
       "page",
@@ -2712,6 +3664,8 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
       "timeline",
       "primary_use_case",
       "email_hint",
+      "booked_at",
+      "completed_at",
       "created_at",
       "updated_at",
       "last_seen_at",
@@ -2736,6 +3690,681 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
     generatedAt: new Date().toISOString(),
     count: results.length,
     leads: results,
+  });
+}
+
+async function routingStatus(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const byState = await env.DB.prepare(
+    `SELECT state AS key, COUNT(*) AS count FROM lead_routing_jobs GROUP BY state ORDER BY count DESC`,
+  ).all<{ key: string; count: number }>();
+
+  const bySegment = await env.DB.prepare(
+    `SELECT segment AS key, COUNT(*) AS count FROM lead_routing_jobs GROUP BY segment ORDER BY count DESC`,
+  ).all<{ key: string; count: number }>();
+
+  const deadLetter = await env.DB.prepare(
+    `SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN replayed_at IS NULL THEN 1 ELSE 0 END) AS pending
+    FROM lead_handoff_dead_letter`,
+  ).first<{ total: number; pending: number }>();
+
+  const recentJobs = await env.DB.prepare(
+    `SELECT
+      job_id,
+      lead_id,
+      segment,
+      provider_id,
+      state,
+      attempts,
+      max_attempts,
+      last_error_code,
+      updated_at,
+      sent_at,
+      dead_lettered_at
+    FROM lead_routing_jobs
+    ORDER BY updated_at DESC
+    LIMIT 40`,
+  ).all<Record<string, unknown>>();
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    summary: {
+      byState: byState.results ?? [],
+      bySegment: bySegment.results ?? [],
+      deadLetter: {
+        total: Number(deadLetter?.total ?? 0),
+        pending: Number(deadLetter?.pending ?? 0),
+      },
+    },
+    recentJobs: recentJobs.results ?? [],
+  });
+}
+
+async function routingReplay(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const body = await request.json<any>().catch(() => ({}));
+  const limit = Math.max(1, Math.min(100, Number(body?.limit ?? 10)));
+  const rawIds: unknown[] = Array.isArray(body?.jobIds) ? body.jobIds : [];
+  const ids = rawIds
+    .map((x) => clipString(x, 80))
+    .filter((x): x is string => Boolean(x));
+
+  let rows: Array<{ job_id: string; segment: string }> = [];
+
+  if (ids.length > 0) {
+    const placeholders = ids.map((_: string, i: number) => `?${i + 1}`).join(",");
+    const out = await env.DB.prepare(
+      `SELECT DISTINCT job_id, segment
+       FROM lead_handoff_dead_letter
+       WHERE job_id IN (${placeholders})
+       LIMIT ${limit}`,
+    ).bind(...ids).all<{ job_id: string; segment: string }>();
+    rows = out.results ?? [];
+  } else {
+    const out = await env.DB.prepare(
+      `SELECT DISTINCT job_id, segment
+       FROM lead_handoff_dead_letter
+       WHERE replayed_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT ${limit}`,
+    ).all<{ job_id: string; segment: string }>();
+    rows = out.results ?? [];
+  }
+
+  let requeued = 0;
+  const failures: Array<{ jobId: string; error: string }> = [];
+
+  for (const row of rows) {
+    const segment = (clipString(row.segment, 24) ?? "smb") as LeadSegment;
+    const nowIso = new Date().toISOString();
+
+    try {
+      await env.DB.prepare(
+        `UPDATE lead_routing_jobs
+         SET state = 'queued', attempts = 0, last_error_code = '', last_error_message = '', updated_at = ?2, dead_lettered_at = NULL
+         WHERE job_id = ?1`,
+      ).bind(row.job_id, nowIso).run();
+
+      await env.DB.prepare(
+        `UPDATE leads
+         SET route_status = 'queued', updated_at = ?2
+         WHERE lead_id = (SELECT lead_id FROM lead_routing_jobs WHERE job_id = ?1 LIMIT 1)`,
+      ).bind(row.job_id, nowIso).run();
+
+      await env.DB.prepare(
+        `UPDATE lead_handoff_dead_letter
+         SET replay_count = replay_count + 1, replayed_at = ?2
+         WHERE job_id = ?1`,
+      ).bind(row.job_id, nowIso).run();
+
+      await enqueueRoutingJob(env, segment, {
+        type: "lead_route_dispatch",
+        routeJobId: row.job_id,
+        replay: true,
+      });
+
+      requeued += 1;
+    } catch (err: any) {
+      failures.push({ jobId: row.job_id, error: String(err?.message ?? err) });
+    }
+  }
+
+  return apiJson({
+    ok: failures.length === 0,
+    requested: rows.length,
+    requeued,
+    failures,
+  });
+}
+
+async function attributionSummary(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const url = new URL(request.url);
+  const days = Math.max(1, Math.min(90, Number(url.searchParams.get("days") ?? "7")));
+  const to = new Date();
+  const from = new Date(to.getTime() - (days * 24 * 60 * 60 * 1000));
+  const fromIso = from.toISOString();
+  const toIso = to.toISOString();
+
+  const rows = await env.DB.prepare(
+    `SELECT
+      source,
+      campaign_id,
+      page_family,
+      cta_variant,
+      score_band,
+      COUNT(*) AS leads,
+      SUM(CASE WHEN status = 'booked' OR completed_at IS NOT NULL THEN 1 ELSE 0 END) AS booked
+    FROM leads
+    WHERE created_at >= ?1 AND created_at <= ?2
+    GROUP BY source, campaign_id, page_family, cta_variant, score_band
+    ORDER BY leads DESC
+    LIMIT 500`,
+  ).bind(fromIso, toIso).all<any>();
+
+  const normalized = (rows.results ?? []).map((row) => {
+    const leads = Number(row.leads ?? 0);
+    const booked = Number(row.booked ?? 0);
+    return {
+      source: String(row.source ?? "direct"),
+      campaignId: String(row.campaign_id ?? ""),
+      pageFamily: String(row.page_family ?? "root"),
+      variant: String(row.cta_variant ?? ""),
+      scoreBand: String(row.score_band ?? "low"),
+      leads,
+      booked,
+      bookedRate: leads > 0 ? Number((booked / leads).toFixed(4)) : 0,
+    };
+  });
+
+  const totals = normalized.reduce(
+    (acc, row) => {
+      acc.leads += row.leads;
+      acc.booked += row.booked;
+      return acc;
+    },
+    { leads: 0, booked: 0 },
+  );
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    range: { from: fromIso, to: toIso, days },
+    totals: {
+      leads: totals.leads,
+      booked: totals.booked,
+      bookedRate: totals.leads > 0 ? Number((totals.booked / totals.leads).toFixed(4)) : 0,
+    },
+    rows: normalized,
+  });
+}
+
+async function recommendExperimentWinners(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const body = await request.json<any>().catch(() => ({}));
+  const days = Math.max(1, Math.min(90, Number(body?.days ?? 7)));
+  const to = new Date();
+  const from = new Date(to.getTime() - (days * 24 * 60 * 60 * 1000));
+  const fromIso = from.toISOString();
+  const toIso = to.toISOString();
+
+  const impressionRows = await env.DB.prepare(
+    `SELECT page_family, cta_variant, COUNT(*) AS impressions
+     FROM funnel_events
+     WHERE event_type = 'variant_assignment'
+       AND event_ts >= ?1 AND event_ts <= ?2
+       AND cta_variant IS NOT NULL
+     GROUP BY page_family, cta_variant`,
+  ).bind(fromIso, toIso).all<any>();
+
+  const submitRows = await env.DB.prepare(
+    `SELECT page_family, cta_variant, COUNT(*) AS submits
+     FROM funnel_events
+     WHERE event_type IN ('lead_submit', 'contact_intent_submit', 'booking_submit')
+       AND event_ts >= ?1 AND event_ts <= ?2
+       AND cta_variant IS NOT NULL
+     GROUP BY page_family, cta_variant`,
+  ).bind(fromIso, toIso).all<any>();
+
+  const bookedRows = await env.DB.prepare(
+    `SELECT page_family, cta_variant, COUNT(*) AS booked
+     FROM leads
+     WHERE created_at >= ?1 AND created_at <= ?2
+       AND cta_variant <> ''
+       AND status = 'booked'
+     GROUP BY page_family, cta_variant`,
+  ).bind(fromIso, toIso).all<any>();
+
+  const map = new Map<string, { pageFamily: string; variant: string; impressions: number; submits: number; booked: number }>();
+  const keyFor = (family: string, variant: string) => `${family}::${variant}`;
+
+  for (const row of impressionRows.results ?? []) {
+    const family = String(row.page_family ?? "root");
+    const variant = String(row.cta_variant ?? "unknown");
+    map.set(keyFor(family, variant), {
+      pageFamily: family,
+      variant,
+      impressions: Number(row.impressions ?? 0),
+      submits: 0,
+      booked: 0,
+    });
+  }
+
+  for (const row of submitRows.results ?? []) {
+    const family = String(row.page_family ?? "root");
+    const variant = String(row.cta_variant ?? "unknown");
+    const key = keyFor(family, variant);
+    const current = map.get(key) ?? { pageFamily: family, variant, impressions: 0, submits: 0, booked: 0 };
+    current.submits = Number(row.submits ?? 0);
+    map.set(key, current);
+  }
+
+  for (const row of bookedRows.results ?? []) {
+    const family = String(row.page_family ?? "root");
+    const variant = String(row.cta_variant ?? "unknown");
+    const key = keyFor(family, variant);
+    const current = map.get(key) ?? { pageFamily: family, variant, impressions: 0, submits: 0, booked: 0 };
+    current.booked = Number(row.booked ?? 0);
+    map.set(key, current);
+  }
+
+  const grouped = new Map<string, Array<{ pageFamily: string; variant: string; impressions: number; submits: number; booked: number }>>();
+  for (const row of map.values()) {
+    const existing = grouped.get(row.pageFamily) ?? [];
+    existing.push(row);
+    grouped.set(row.pageFamily, existing);
+  }
+
+  const minImpressions = Math.max(1, Number(env.EXPERIMENT_WINNER_MIN_IMPRESSIONS ?? "40"));
+  const minBooked = Math.max(0, Number(env.EXPERIMENT_WINNER_MIN_BOOKED ?? "2"));
+  const nowIso = new Date().toISOString();
+
+  const recommendations = [...grouped.entries()].map(([pageFamily, variants]) => {
+    const sorted = [...variants]
+      .map((v) => ({
+        ...v,
+        submitRate: v.impressions > 0 ? Number((v.submits / v.impressions).toFixed(4)) : 0,
+        bookedRate: v.impressions > 0 ? Number((v.booked / v.impressions).toFixed(4)) : 0,
+      }))
+      .sort((a, b) => (b.bookedRate - a.bookedRate) || (b.submitRate - a.submitRate) || (b.impressions - a.impressions));
+
+    const winner = sorted[0] ?? null;
+    const runnerUp = sorted[1] ?? null;
+
+    const guardrailNotes: string[] = [];
+    let recommendedVariant: string | null = winner?.variant ?? null;
+
+    if (!winner) {
+      guardrailNotes.push("no_variants");
+      recommendedVariant = null;
+    } else {
+      if (winner.impressions < minImpressions) guardrailNotes.push("insufficient_impressions");
+      if (winner.booked < minBooked) guardrailNotes.push("insufficient_bookings");
+      if (runnerUp && winner.bookedRate - runnerUp.bookedRate < 0.01) guardrailNotes.push("margin_too_small");
+    }
+
+    if (guardrailNotes.length > 0) {
+      recommendedVariant = null;
+    }
+
+    return {
+      pageFamily,
+      recommendedVariant,
+      winner,
+      runnerUp,
+      candidates: sorted,
+      guardrailNotes,
+    };
+  });
+
+  for (const rec of recommendations) {
+    await env.DB.prepare(
+      `INSERT INTO experiment_winner_recommendations (
+        recommendation_id,
+        period_from,
+        period_to,
+        page_family,
+        recommended_variant,
+        support_impressions,
+        support_submits,
+        support_booked,
+        confidence,
+        guardrail_notes,
+        metadata_json,
+        created_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+    )
+      .bind(
+        randomId("winner_rec"),
+        fromIso,
+        toIso,
+        rec.pageFamily,
+        rec.recommendedVariant,
+        Number(rec.winner?.impressions ?? 0),
+        Number(rec.winner?.submits ?? 0),
+        Number(rec.winner?.booked ?? 0),
+        Number(rec.winner?.bookedRate ?? 0),
+        rec.guardrailNotes.join(","),
+        JSON.stringify({
+          winner: rec.winner,
+          runnerUp: rec.runnerUp,
+          candidates: rec.candidates,
+          autoApply: false,
+        }),
+        nowIso,
+      )
+      .run();
+  }
+
+  const artifact = {
+    generatedAt: nowIso,
+    range: { from: fromIso, to: toIso, days },
+    guardrails: { minImpressions, minBooked, autoApply: false },
+    recommendations,
+  };
+
+  const key = `reports/growth/experiment-winner-recommendation-${nowIso.slice(0, 10)}.json`;
+  await env.ARTICLES.put(key, JSON.stringify(artifact, null, 2), {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  return apiJson({
+    ok: true,
+    key,
+    guardrails: { minImpressions, minBooked, autoApply: false },
+    recommendations,
+  });
+}
+
+async function findLeadForBooking(env: Env, leadId: string | undefined, email: string | undefined): Promise<{ leadId: string; created: boolean }> {
+  const nowIso = new Date().toISOString();
+  const emailNorm = normalizeEmail(email);
+  const salt = env.LEAD_ID_HASH_SALT?.trim() ?? "clawea-www-lead";
+
+  if (leadId) {
+    const existing = await env.DB.prepare(
+      `SELECT lead_id FROM leads WHERE lead_id = ?1 LIMIT 1`,
+    ).bind(leadId).first<{ lead_id: string }>();
+
+    if (existing?.lead_id) {
+      return { leadId: existing.lead_id, created: false };
+    }
+  }
+
+  if (emailNorm) {
+    const identityHash = await sha256Base64Url(`${salt}|${emailNorm}`);
+    const existingByEmail = await env.DB.prepare(
+      `SELECT lead_id FROM leads WHERE identity_hash = ?1 LIMIT 1`,
+    ).bind(identityHash).first<{ lead_id: string }>();
+
+    if (existingByEmail?.lead_id) {
+      return { leadId: existingByEmail.lead_id, created: false };
+    }
+
+    const leadIdNew = randomId("lead");
+    const emailHash = await sha256Base64Url(emailNorm);
+    const emailParts = emailNorm.split("@");
+    const emailHint = emailParts.length === 2 ? `${emailParts[0].slice(0, 2)}***@${emailParts[1]}` : "***";
+
+    await env.DB.prepare(
+      `INSERT INTO leads (
+        lead_id,
+        identity_hash,
+        email_hash,
+        email_hint,
+        source,
+        page,
+        page_family,
+        readiness_score,
+        roi_score,
+        risk_score,
+        intent_score,
+        qualification_score,
+        score_band,
+        segment,
+        status,
+        route_status,
+        created_at,
+        updated_at,
+        last_seen_at,
+        lifecycle_updated_at
+      ) VALUES (?1, ?2, ?3, ?4, 'book-form', '/book', 'book', 50, 50, 30, 55, 60, 'medium', 'enterprise', 'new', 'booking_direct', ?5, ?5, ?5, ?5)`,
+    )
+      .bind(leadIdNew, identityHash, emailHash, emailHint, nowIso)
+      .run();
+
+    return { leadId: leadIdNew, created: true };
+  }
+
+  throw new Error("LEAD_NOT_FOUND");
+}
+
+async function bookSubmit(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  const body = await request.json<any>().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
+  }
+
+  const leadIdIn = clipString(body?.leadId, 80);
+  const email = clipString(body?.email, 200);
+  const company = clipString(body?.company, 160) ?? "";
+  const slotIso = clipString(body?.slotIso, 80);
+  const notes = clipString(body?.notes, 1200) ?? "";
+
+  if (!email && !leadIdIn) {
+    return apiError("EMAIL_OR_LEAD_REQUIRED", "Provide leadId or work email", 400);
+  }
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return apiError("EMAIL_INVALID", "A valid work email is required", 400);
+  }
+
+  const turnstileToken = clipString(body?.turnstileToken, 3000);
+  const turnstile = await verifyTurnstile(turnstileToken, request, env);
+  if (!turnstile.ok) {
+    return apiError("TURNSTILE_FAILED", turnstile.error ?? "Turnstile validation failed", 403);
+  }
+
+  const nowIso = new Date().toISOString();
+
+  try {
+    const found = await findLeadForBooking(env, leadIdIn ?? undefined, email ?? undefined);
+
+    if (company) {
+      await env.DB.prepare(
+        `UPDATE leads SET company = COALESCE(NULLIF(?2,''), company), updated_at = ?3, last_seen_at = ?3 WHERE lead_id = ?1`,
+      ).bind(found.leadId, company, nowIso).run();
+    }
+
+    await transitionLeadState(env, found.leadId, "validated", "book_submit");
+    await transitionLeadState(env, found.leadId, "scored", "book_submit");
+    await transitionLeadState(env, found.leadId, "routed", "book_submit");
+    await transitionLeadState(env, found.leadId, "contacted", "book_submit");
+    await transitionLeadState(env, found.leadId, "qualified", "book_submit");
+    await transitionLeadState(env, found.leadId, "booked", "book_submit");
+
+    await env.DB.prepare(
+      `UPDATE leads SET booked_at = ?2, updated_at = ?2, last_seen_at = ?2 WHERE lead_id = ?1`,
+    ).bind(found.leadId, nowIso).run();
+
+    const bookingId = randomId("booking");
+
+    await env.DB.prepare(
+      `INSERT INTO booking_events (
+        booking_id,
+        lead_id,
+        status,
+        slot_iso,
+        notes,
+        source,
+        metadata_json,
+        created_at,
+        updated_at
+      ) VALUES (?1, ?2, 'booked', ?3, ?4, 'book-form', ?5, ?6, ?6)`,
+    )
+      .bind(
+        bookingId,
+        found.leadId,
+        slotIso ?? null,
+        notes,
+        JSON.stringify({
+          createdLead: found.created,
+          company,
+        }),
+        nowIso,
+      )
+      .run();
+
+    await env.DB.prepare(
+      `INSERT INTO lead_events (
+        event_id,
+        lead_id,
+        event_type,
+        event_payload_json,
+        source,
+        page,
+        page_family,
+        created_at
+      ) VALUES (?1, ?2, 'booking_booked', ?3, 'book-form', '/book', 'book', ?4)`,
+    )
+      .bind(
+        randomId("lead_evt"),
+        found.leadId,
+        JSON.stringify({
+          bookingId,
+          slotIso,
+          notes,
+        }),
+        nowIso,
+      )
+      .run();
+
+    try {
+      await storeTrackingEvent(env, {
+        eventType: "booking_submit",
+        page: "/book",
+        pageFamily: "book",
+        source: "book-form",
+        ctaId: "book-submit-primary",
+        ctaVariant: "submit",
+        actionOutcome: "submitted",
+        variantId: "book:proof:submit",
+        heroVariant: "proof",
+        visitorId: undefined,
+        ts: nowIso,
+        attribution: {},
+        context: {},
+      });
+    } catch (telemetryErr) {
+      console.error("BOOKING_SUBMIT_TELEMETRY_FAILED", telemetryErr);
+    }
+
+    return apiJson({
+      ok: true,
+      bookingId,
+      leadId: found.leadId,
+      createdLead: found.created,
+      status: "booked",
+    });
+  } catch (err: any) {
+    const code = String(err?.message ?? "BOOK_SUBMIT_FAILED");
+    if (code === "LEAD_NOT_FOUND") {
+      return apiError("LEAD_NOT_FOUND", "Could not resolve lead for booking", 404);
+    }
+    console.error("BOOK_SUBMIT_FAILED", err);
+    return apiError("BOOK_SUBMIT_FAILED", "Booking submission failed", 500);
+  }
+}
+
+async function bookComplete(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError("METHOD_NOT_ALLOWED", "Use POST for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const body = await request.json<any>().catch(() => null);
+  const bookingId = clipString(body?.bookingId, 80);
+
+  if (!bookingId) {
+    return apiError("BOOKING_ID_REQUIRED", "bookingId is required", 400);
+  }
+
+  const row = await env.DB.prepare(
+    `SELECT booking_id, lead_id FROM booking_events WHERE booking_id = ?1 LIMIT 1`,
+  ).bind(bookingId).first<{ booking_id: string; lead_id: string }>();
+
+  if (!row?.booking_id) {
+    return apiError("BOOKING_NOT_FOUND", "Booking not found", 404);
+  }
+
+  const nowIso = new Date().toISOString();
+
+  await env.DB.prepare(
+    `UPDATE booking_events SET status = 'completed', completed_at = ?2, updated_at = ?2 WHERE booking_id = ?1`,
+  ).bind(bookingId, nowIso).run();
+
+  await env.DB.prepare(
+    `UPDATE leads SET completed_at = ?2, updated_at = ?2, last_seen_at = ?2 WHERE lead_id = ?1`,
+  ).bind(row.lead_id, nowIso).run();
+
+  await env.DB.prepare(
+    `INSERT INTO lead_events (
+      event_id,
+      lead_id,
+      event_type,
+      event_payload_json,
+      source,
+      page,
+      page_family,
+      created_at
+    ) VALUES (?1, ?2, 'booking_completed', ?3, 'book-api', '/book', 'book', ?4)`,
+  )
+    .bind(
+      randomId("lead_evt"),
+      row.lead_id,
+      JSON.stringify({ bookingId }),
+      nowIso,
+    )
+    .run();
+
+  try {
+    await storeTrackingEvent(env, {
+      eventType: "booking_complete",
+      page: "/book",
+      pageFamily: "book",
+      source: "book-api",
+      ctaId: "booking-complete",
+      ctaVariant: "submit",
+      actionOutcome: "completed",
+      variantId: "book:proof:submit",
+      heroVariant: "proof",
+      visitorId: undefined,
+      ts: nowIso,
+      attribution: {},
+      context: {},
+    });
+  } catch (telemetryErr) {
+    console.error("BOOKING_COMPLETE_TELEMETRY_FAILED", telemetryErr);
+  }
+
+  return apiJson({
+    ok: true,
+    bookingId,
+    leadId: row.lead_id,
+    status: "completed",
   });
 }
 
@@ -2928,38 +4557,253 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
         }
 
         const lead = await env.DB.prepare(
+          `SELECT lead_id, qualification_score FROM leads WHERE lead_id = ?1 LIMIT 1`,
+        ).bind(leadId).first<{ lead_id: string; qualification_score: number }>();
+
+        if (!lead?.lead_id) {
+          message.ack();
+          continue;
+        }
+
+        if (Number(lead.qualification_score ?? 0) >= 78) {
+          await transitionLeadState(env, leadId, "qualified", "lead_enrich");
+        }
+
+        message.ack();
+        continue;
+      }
+
+      if (type === "lead_route_dispatch") {
+        const routeJobId = clipString(payload?.routeJobId, 80);
+        if (!routeJobId) {
+          message.ack();
+          continue;
+        }
+
+        const job = await env.DB.prepare(
+          `SELECT
+            job_id,
+            lead_id,
+            segment,
+            provider_id,
+            state,
+            attempts,
+            max_attempts,
+            idempotency_key
+          FROM lead_routing_jobs
+          WHERE job_id = ?1
+          LIMIT 1`,
+        ).bind(routeJobId).first<any>();
+
+        if (!job?.job_id) {
+          message.ack();
+          continue;
+        }
+
+        const currentState = String(job.state ?? "queued");
+        if (currentState === "sent" || currentState === "dead_letter") {
+          message.ack();
+          continue;
+        }
+
+        if (Number(job.attempts ?? 0) >= Number(job.max_attempts ?? routingMaxAttempts(env))) {
+          message.ack();
+          continue;
+        }
+
+        const lead = await env.DB.prepare(
           `SELECT
             lead_id,
+            company,
+            role,
+            team_size,
+            timeline,
+            primary_use_case,
+            email_hint,
+            source,
+            campaign_id,
+            page_family,
+            variant_id,
+            hero_variant,
+            cta_variant,
             qualification_score,
             intent_score,
             readiness_score,
             roi_score,
             risk_score,
-            status,
-            source,
-            page,
-            page_family
+            score_band,
+            segment,
+            status
           FROM leads
           WHERE lead_id = ?1
           LIMIT 1`,
-        ).bind(leadId).first<any>();
+        ).bind(String(job.lead_id)).first<any>();
 
-        if (!lead) {
+        if (!lead?.lead_id) {
           message.ack();
           continue;
         }
 
-        const status = Number(lead.qualification_score ?? 0) >= 78
-          ? "qualified"
-          : Number(lead.qualification_score ?? 0) >= 55
-            ? "enriched"
-            : "new";
-
+        const attempts = Number(job.attempts ?? 0) + 1;
         const nowIso = new Date().toISOString();
 
         await env.DB.prepare(
-          `UPDATE leads SET status = ?2, updated_at = ?3 WHERE lead_id = ?1`,
-        ).bind(leadId, status, nowIso).run();
+          `UPDATE lead_routing_jobs
+           SET state = 'processing', attempts = ?2, updated_at = ?3
+           WHERE job_id = ?1`,
+        ).bind(routeJobId, attempts, nowIso).run();
+
+        const routingConfig = await loadCrmRoutingConfig(env);
+        const provider = routingConfig.providers.find((p) => p.id === String(job.provider_id));
+
+        if (!provider) {
+          throw new Error("ROUTING_PROVIDER_NOT_CONFIGURED");
+        }
+
+        const envelope: LeadHandoffEnvelope = {
+          version: "1.0",
+          handoffId: String(job.job_id),
+          leadId: String(lead.lead_id),
+          idempotencyKey: String(job.idempotency_key),
+          occurredAt: nowIso,
+          segment: (clipString(lead.segment, 24) ?? "smb") as LeadSegment,
+          score: {
+            qualification: Number(lead.qualification_score ?? 0),
+            band: (clipString(lead.score_band, 24) ?? "low") as LeadScoreBand,
+            intent: Number(lead.intent_score ?? 0),
+            readiness: Number(lead.readiness_score ?? 0),
+            roi: Number(lead.roi_score ?? 0),
+            risk: Number(lead.risk_score ?? 0),
+          },
+          attribution: {
+            source: String(lead.source ?? "direct"),
+            campaignId: String(lead.campaign_id ?? ""),
+            pageFamily: String(lead.page_family ?? "root"),
+            variantId: String(lead.variant_id ?? ""),
+            heroVariant: String(lead.hero_variant ?? ""),
+            ctaVariant: String(lead.cta_variant ?? ""),
+          },
+          lead: {
+            company: String(lead.company ?? ""),
+            role: String(lead.role ?? ""),
+            teamSize: String(lead.team_size ?? ""),
+            timeline: String(lead.timeline ?? ""),
+            primaryUseCase: String(lead.primary_use_case ?? ""),
+            emailHint: String(lead.email_hint ?? ""),
+          },
+        };
+
+        const signingSecret = env.CRM_HANDOFF_SIGNING_SECRET?.trim()
+          || env.LEAD_ID_HASH_SALT?.trim()
+          || "clawea-handoff";
+        const envelopeJson = JSON.stringify(envelope);
+        const signature = await hmacSha256Base64Url(signingSecret, envelopeJson);
+
+        let endpoint = provider.endpoint ?? "r2://internal-handoff";
+        let status = "success";
+        let httpStatus: number | null = 200;
+        let responseSnippet = "ok";
+
+        if (provider.id === "internal-r2") {
+          const key = `handoffs/${nowIso.slice(0, 10)}/${routeJobId}.json`;
+          await env.ARTICLES.put(key, JSON.stringify({ envelope, signature }, null, 2), {
+            httpMetadata: { contentType: "application/json" },
+          });
+          responseSnippet = `stored:${key}`;
+        } else {
+          if (!provider.endpoint) {
+            throw new Error("ROUTING_PROVIDER_ENDPOINT_MISSING");
+          }
+
+          endpoint = provider.endpoint;
+          const authMap = crmAuthTokenMap(env);
+          const headers: Record<string, string> = {
+            "content-type": "application/json",
+            "x-clawea-signature": `sha256=${signature}`,
+            "x-clawea-idempotency-key": String(job.idempotency_key),
+          };
+
+          if (provider.authType === "bearer") {
+            const token = authMap[provider.id];
+            if (!token) throw new Error("CRM_PROVIDER_AUTH_MISSING");
+            headers.authorization = `Bearer ${token}`;
+          }
+
+          if (provider.authType === "header") {
+            const token = authMap[provider.id];
+            if (!token) throw new Error("CRM_PROVIDER_AUTH_MISSING");
+            headers[provider.authHeader || "x-api-key"] = token;
+          }
+
+          const res = await fetch(provider.endpoint, {
+            method: "POST",
+            headers,
+            body: envelopeJson,
+          });
+
+          httpStatus = res.status;
+          responseSnippet = (await res.text()).slice(0, 500);
+
+          if (!res.ok) {
+            throw new Error(`ROUTING_UPSTREAM_${res.status}`);
+          }
+        }
+
+        await env.DB.prepare(
+          `UPDATE lead_routing_jobs
+           SET state = 'sent', sent_at = ?2, updated_at = ?2, last_error_code = '', last_error_message = ''
+           WHERE job_id = ?1`,
+        ).bind(routeJobId, nowIso).run();
+
+        await env.DB.prepare(
+          `UPDATE leads
+           SET route_status = 'sent', routed_provider_id = ?2, updated_at = ?3
+           WHERE lead_id = ?1`,
+        ).bind(String(lead.lead_id), String(job.provider_id), nowIso).run();
+
+        await env.DB.prepare(
+          `INSERT INTO lead_handoff_deliveries (
+            delivery_id,
+            job_id,
+            lead_id,
+            provider_id,
+            endpoint,
+            status,
+            http_status,
+            response_snippet,
+            signature,
+            attempt,
+            created_at
+          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
+        )
+          .bind(
+            randomId("handoff_delivery"),
+            routeJobId,
+            String(lead.lead_id),
+            String(job.provider_id),
+            endpoint,
+            status,
+            httpStatus,
+            responseSnippet,
+            signature,
+            attempts,
+            nowIso,
+          )
+          .run();
+
+        await transitionLeadState(env, String(lead.lead_id), "contacted", "routing_delivery", {
+          providerId: job.provider_id,
+          routeJobId,
+        });
+
+        const qualificationScore = Number(lead.qualification_score ?? 0);
+        await transitionLeadState(
+          env,
+          String(lead.lead_id),
+          qualificationScore >= 72 ? "qualified" : "disqualified",
+          "routing_scored_disposition",
+          { qualificationScore },
+        );
 
         await env.DB.prepare(
           `INSERT INTO lead_events (
@@ -2971,18 +4815,16 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
             page,
             page_family,
             created_at
-          ) VALUES (?1, ?2, 'lead_enriched', ?3, ?4, ?5, ?6, ?7)`,
+          ) VALUES (?1, ?2, 'lead_routed', ?3, ?4, ?5, ?6, ?7)`,
         )
           .bind(
             randomId("lead_evt"),
-            leadId,
+            String(lead.lead_id),
             JSON.stringify({
-              status,
-              qualificationScore: lead.qualification_score,
-              intentScore: lead.intent_score,
-              readinessScore: lead.readiness_score,
-              roiScore: lead.roi_score,
-              riskScore: lead.risk_score,
+              routeJobId,
+              providerId: job.provider_id,
+              attempt: attempts,
+              responseSnippet,
             }),
             String(lead.source ?? "direct"),
             String(lead.page ?? "/contact"),
@@ -3005,7 +4847,7 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
             cta_variant,
             COUNT(*) AS events,
             SUM(CASE WHEN event_type = 'cta_click' THEN 1 ELSE 0 END) AS cta_clicks,
-            SUM(CASE WHEN event_type = 'contact_intent_submit' THEN 1 ELSE 0 END) AS contact_submits
+            SUM(CASE WHEN event_type IN ('contact_intent_submit', 'lead_submit', 'booking_submit') THEN 1 ELSE 0 END) AS contact_submits
           FROM funnel_events
           WHERE event_ts >= ?1 AND event_ts <= ?2
             AND cta_variant IS NOT NULL
@@ -3013,24 +4855,49 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
           ORDER BY page_family ASC, events DESC`,
         ).bind(fromIso, nowIso).all<any>();
 
-        const grouped = new Map<string, Array<any>>();
+        const bookedRows = await env.DB.prepare(
+          `SELECT page_family, cta_variant, COUNT(*) AS booked
+           FROM leads
+           WHERE created_at >= ?1 AND created_at <= ?2
+             AND cta_variant <> ''
+             AND status = 'booked'
+           GROUP BY page_family, cta_variant`,
+        ).bind(fromIso, nowIso).all<any>();
+
+        const byFamily = new Map<string, Array<any>>();
         for (const row of rows.results ?? []) {
           const family = String(row.page_family ?? "root");
-          const existing = grouped.get(family) ?? [];
-          existing.push({
+          const variants = byFamily.get(family) ?? [];
+          variants.push({
             variant: String(row.cta_variant ?? "unknown"),
             events: Number(row.events ?? 0),
             ctaClicks: Number(row.cta_clicks ?? 0),
             contactSubmits: Number(row.contact_submits ?? 0),
+            booked: 0,
           });
-          grouped.set(family, existing);
+          byFamily.set(family, variants);
         }
 
-        const winners = [...grouped.entries()].map(([family, variants]) => {
-          const sorted = [...variants].sort((a, b) => {
-            const aRate = a.events > 0 ? (a.contactSubmits / a.events) : 0;
-            const bRate = b.events > 0 ? (b.contactSubmits / b.events) : 0;
-            if (bRate !== aRate) return bRate - aRate;
+        const bookedMap = new Map<string, number>();
+        for (const row of bookedRows.results ?? []) {
+          const key = `${String(row.page_family ?? "root")}::${String(row.cta_variant ?? "unknown")}`;
+          bookedMap.set(key, Number(row.booked ?? 0));
+        }
+
+        const winners = [...byFamily.entries()].map(([family, variants]) => {
+          const hydrated = variants.map((v) => {
+            const booked = bookedMap.get(`${family}::${v.variant}`) ?? 0;
+            return {
+              ...v,
+              booked,
+              submitRate: v.events > 0 ? Number((v.contactSubmits / v.events).toFixed(4)) : 0,
+              bookedRate: v.events > 0 ? Number((booked / v.events).toFixed(4)) : 0,
+            };
+          });
+
+          const sorted = [...hydrated].sort((a, b) => {
+            if (b.bookedRate !== a.bookedRate) return b.bookedRate - a.bookedRate;
+            if (b.submitRate !== a.submitRate) return b.submitRate - a.submitRate;
             return b.events - a.events;
           });
 
@@ -3046,6 +4913,10 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
           generatedAt: nowIso,
           range: { from: fromIso, to: nowIso, days: 7 },
           winners,
+          guardrail: {
+            autoPublish: false,
+            note: "winner suggestions are advisory and require explicit operator approval",
+          },
         };
 
         const key = `reports/growth/variant-performance-${nowIso.slice(0, 10)}.json`;
@@ -3058,8 +4929,118 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
       }
 
       message.ack();
-    } catch (err) {
-      console.error("LEAD_QUEUE_MESSAGE_FAILED", { type, err });
+    } catch (err: any) {
+      const routeJobId = clipString(payload?.routeJobId, 80);
+      const typeLocal = String(payload?.type ?? "");
+      console.error("LEAD_QUEUE_MESSAGE_FAILED", { type: typeLocal, routeJobId, err });
+
+      if (typeLocal === "lead_route_dispatch" && routeJobId) {
+        const job = await env.DB.prepare(
+          `SELECT job_id, lead_id, segment, provider_id, attempts, max_attempts FROM lead_routing_jobs WHERE job_id = ?1 LIMIT 1`,
+        ).bind(routeJobId).first<any>();
+
+        if (job?.job_id) {
+          const attempts = Number(job.attempts ?? 1);
+          const maxAttempts = Number(job.max_attempts ?? routingMaxAttempts(env));
+          const nowIso = new Date().toISOString();
+          const errorCode = String(err?.message ?? "ROUTING_UNKNOWN_ERROR").slice(0, 80);
+          const errorMessage = String(err?.stack ?? err?.message ?? err).slice(0, 800);
+
+          if (attempts >= maxAttempts) {
+            await env.DB.prepare(
+              `UPDATE lead_routing_jobs
+               SET state = 'dead_letter', last_error_code = ?2, last_error_message = ?3, updated_at = ?4, dead_lettered_at = ?4
+               WHERE job_id = ?1`,
+            ).bind(routeJobId, errorCode, errorMessage, nowIso).run();
+
+            await env.DB.prepare(
+              `UPDATE leads SET route_status = 'dead_letter', updated_at = ?2, last_deny_code = ?3 WHERE lead_id = ?1`,
+            ).bind(String(job.lead_id), nowIso, errorCode).run();
+
+            await env.DB.prepare(
+              `INSERT INTO lead_handoff_dead_letter (
+                dead_letter_id,
+                job_id,
+                lead_id,
+                segment,
+                provider_id,
+                reason_code,
+                reason_message,
+                payload_json,
+                created_at
+              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+            )
+              .bind(
+                randomId("dead_letter"),
+                routeJobId,
+                String(job.lead_id),
+                String(job.segment ?? "smb"),
+                String(job.provider_id ?? "unknown"),
+                errorCode,
+                errorMessage,
+                JSON.stringify(payload ?? {}),
+                nowIso,
+              )
+              .run();
+
+            await env.DB.prepare(
+              `INSERT INTO lead_events (
+                event_id,
+                lead_id,
+                event_type,
+                event_payload_json,
+                source,
+                page,
+                page_family,
+                created_at
+              ) VALUES (?1, ?2, 'lead_routing_dead_letter', ?3, 'queue', '/api/routing', 'ops', ?4)`,
+            )
+              .bind(
+                randomId("lead_evt"),
+                String(job.lead_id),
+                JSON.stringify({ routeJobId, errorCode, errorMessage }),
+                nowIso,
+              )
+              .run();
+
+            message.ack();
+            continue;
+          }
+
+          await env.DB.prepare(
+            `UPDATE lead_routing_jobs
+             SET state = 'failed', last_error_code = ?2, last_error_message = ?3, updated_at = ?4
+             WHERE job_id = ?1`,
+          ).bind(routeJobId, errorCode, errorMessage, nowIso).run();
+
+          await env.DB.prepare(
+            `UPDATE leads
+             SET route_status = 'retrying', updated_at = ?2, last_deny_code = ?3
+             WHERE lead_id = ?1`,
+          ).bind(String(job.lead_id), nowIso, errorCode).run();
+
+          await env.DB.prepare(
+            `INSERT INTO lead_events (
+              event_id,
+              lead_id,
+              event_type,
+              event_payload_json,
+              source,
+              page,
+              page_family,
+              created_at
+            ) VALUES (?1, ?2, 'lead_routing_retry', ?3, 'queue', '/api/routing', 'ops', ?4)`,
+          )
+            .bind(
+              randomId("lead_evt"),
+              String(job.lead_id),
+              JSON.stringify({ routeJobId, errorCode, attempts, maxAttempts }),
+              nowIso,
+            )
+            .run();
+        }
+      }
+
       message.retry();
     }
   }
@@ -3625,6 +5606,7 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
           <h2>Want a tailored rollout plan?</h2>
           <p>Submit one short form and we return a deployment recommendation with control policy examples.</p>
           <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-lg" data-cta="assessment-result-contact" data-cta-copy>Request tailored plan</a>
+          <a href="/book?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-book">Book rollout session</a>
           <a href="/trust" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-trust">Review trust controls</a>
         </div>
 
@@ -3756,6 +5738,73 @@ function contactPage(turnstileSiteKey: string): string {
   });
 }
 
+function bookPage(requestUrl: URL, turnstileSiteKey: string): string {
+  const leadId = clipString(requestUrl.searchParams.get("lead"), 80) ?? "";
+  const email = clipString(requestUrl.searchParams.get("email"), 220) ?? "";
+  const company = clipString(requestUrl.searchParams.get("company"), 160) ?? "";
+
+  return layout({
+    meta: {
+      title: "Book a Rollout Session | Claw EA",
+      description: "Book a deployment planning session for your enterprise AI agent rollout.",
+      path: "/book",
+    },
+    breadcrumbs: [{ name: "Home", path: "/" }, { name: "Book", path: "/book" }],
+    body: `
+    <section class="section content-page">
+      <div class="wrap" style="max-width:760px">
+        <span class="badge badge-blue">High-intent conversion</span>
+        <h1>Book your deployment planning session</h1>
+        <p class="lead">Share minimal details and reserve a rollout session. We prefill context from your assessment/contact path when available.</p>
+
+        <form class="card lead-form" data-book-form data-cta="book-submit-form">
+          <input type="hidden" name="leadId" value="${esc(leadId)}">
+
+          <div class="form-grid-2">
+            <label class="form-field">
+              <span>Work email</span>
+              <input type="email" name="email" value="${esc(email)}" placeholder="you@company.com" autocomplete="email">
+            </label>
+            <label class="form-field">
+              <span>Company</span>
+              <input type="text" name="company" value="${esc(company)}" placeholder="Company name" autocomplete="organization">
+            </label>
+            <label class="form-field">
+              <span>Preferred start (UTC)</span>
+              <input type="datetime-local" name="slotIso">
+            </label>
+            <label class="form-field">
+              <span>Timezone</span>
+              <input type="text" name="timezone" placeholder="Europe/Berlin, America/New_York...">
+            </label>
+            <label class="form-field form-field-wide">
+              <span>Context for the session</span>
+              <textarea name="notes" rows="4" placeholder="Scope, teams involved, compliance constraints, deadlines"></textarea>
+            </label>
+          </div>
+
+          <div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="cta-btn cta-btn-lg" data-cta="book-submit-primary">Confirm booking request</button>
+            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="book-assessment">Run assessment first</a>
+            <span class="form-status" data-book-form-status aria-live="polite"></span>
+          </div>
+
+          <p class="form-note">Ops will confirm by email with exact session time and preparation checklist.</p>
+        </form>
+      </div>
+    </section>`,
+    schemas: [
+      serviceSchema(
+        "Claw EA Rollout Planning Session",
+        "Book an enterprise rollout planning and qualification session for verified AI agents.",
+        "https://www.clawea.com/book",
+      ),
+    ],
+  });
+}
+
 function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
   const rows = Object.entries(manifest)
     .map(([slug, meta]) => ({ slug, meta }))
@@ -3812,6 +5861,7 @@ function sourcesHubPage(manifest: Record<string, ManifestEntry>): string {
             <ul>
               <li><a href="/assessment">Run readiness assessment</a></li>
               <li><a href="/contact">Submit high-intent brief</a></li>
+              <li><a href="/book">Book rollout session</a></li>
               <li><a href="/trust">Review trust controls</a></li>
               <li><a href="/pricing">Review pricing and rollout tiers</a></li>
             </ul>
@@ -3838,6 +5888,7 @@ function notFoundPage(): string {
         <div class="actions" style="margin-top:2rem;justify-content:center">
           <a href="/" class="cta-btn cta-btn-lg">Back to Home</a>
           <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg">Run assessment</a>
+          <a href="/book" class="cta-btn cta-btn-outline cta-btn-lg">Book session</a>
           <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg">Talk to sales</a>
         </div>
       </div>
@@ -4250,6 +6301,30 @@ export default {
         return await leadsExport(request, env);
       }
 
+      if (path === "/api/routing/status") {
+        return await routingStatus(request, env);
+      }
+
+      if (path === "/api/routing/replay") {
+        return await routingReplay(request, env);
+      }
+
+      if (path === "/api/attribution/summary") {
+        return await attributionSummary(request, env);
+      }
+
+      if (path === "/api/experiments/recommend") {
+        return await recommendExperimentWinners(request, env);
+      }
+
+      if (path === "/api/book/submit") {
+        return await bookSubmit(request, env);
+      }
+
+      if (path === "/api/book/complete") {
+        return await bookComplete(request, env);
+      }
+
       // Protected telemetry summary endpoint
       if (path === "/api/events/summary") {
         return await summarizeTrackingEvents(request, env);
@@ -4522,6 +6597,7 @@ export default {
     if (path === "/assessment") return await htmlWithExperiment(html(assessmentPage(turnstileSiteKey), 200, 1800), path);
     if (path === "/assessment/result") return await htmlWithExperiment(html(assessmentResultPage(parseAssessmentResult(url), turnstileSiteKey), 200, 900), "/assessment/result");
     if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstileSiteKey)), path);
+    if (path === "/book") return await htmlWithExperiment(html(bookPage(url, turnstileSiteKey), 200, 900), path);
     if (path === "/trust") return await htmlWithExperiment(html(trustPage()), path);
     if (path === "/secure-workers") return await htmlWithExperiment(html(secureWorkersPage()), path);
     if (path === "/consulting") return await htmlWithExperiment(html(consultingPage()), path);
@@ -4552,6 +6628,7 @@ export default {
           "## High-intent routes",
           "- https://www.clawea.com/assessment",
           "- https://www.clawea.com/contact",
+          "- https://www.clawea.com/book",
           "- https://www.clawea.com/trust",
           "- https://www.clawea.com/sources",
           "",
@@ -4635,6 +6712,7 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "consulting", priority: "0.8" },
     { slug: "pricing", priority: "0.8" },
     { slug: "contact", priority: "0.8" },
+    { slug: "book", priority: "0.85" },
     { slug: "sources", priority: "0.7" },
     { slug: "about", priority: "0.6" },
   ];

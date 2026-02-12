@@ -1,0 +1,101 @@
+{
+  "story": "AEO-REV-006",
+  "timestamp": "2026-02-11T23:55:30Z",
+  "environment": "local-wrangler-dev",
+  "validation": {
+    "typecheck": "pass",
+    "humanToneLintNoStrict": {
+      "status": "pass",
+      "scanned": 117,
+      "failed": 0,
+      "report": "services/clawea-www/artifacts/ops/clawea-www/human-tone-lint-2026-02-11.json"
+    },
+    "migrationsLocal": [
+      "0001_lead_intake.sql",
+      "0002_intent_pipeline_os.sql"
+    ]
+  },
+  "smoke": [
+    {
+      "name": "GET /health",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "body": { "ok": true, "service": "clawea-www" }
+      }
+    },
+    {
+      "name": "GET /book",
+      "result": "pass",
+      "details": { "status": 200 }
+    },
+    {
+      "name": "POST /api/leads/submit (TURNSTILE_REQUIRED=0 override)",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "responseFields": ["leadId", "routeJobId", "segment", "scoreBand", "bookPath"]
+      }
+    },
+    {
+      "name": "GET /api/leads/status (Bearer token)",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "totalsObserved": { "leads": 1 }
+      }
+    },
+    {
+      "name": "POST /api/book/submit (TURNSTILE_REQUIRED=0 override)",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "responseFields": ["bookingId", "leadId", "status"]
+      }
+    },
+    {
+      "name": "GET /api/routing/status (Bearer token)",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "summaryFields": ["byState", "bySegment", "deadLetter"]
+      }
+    },
+    {
+      "name": "GET /api/attribution/summary?days=7 (Bearer token)",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "totalsObserved": { "leads": 1, "booked": 1, "bookedRate": 1 }
+      }
+    },
+    {
+      "name": "POST /api/experiments/recommend (Bearer token)",
+      "result": "pass",
+      "details": {
+        "status": 200,
+        "guardrailExample": ["insufficient_impressions", "insufficient_bookings"]
+      }
+    },
+    {
+      "name": "scripts/recommend-winners.ts",
+      "result": "pass",
+      "details": { "artifact": "/tmp/aeo-rev-006-recommend-script.json" }
+    },
+    {
+      "name": "scripts/routing-replay.ts",
+      "result": "pass",
+      "details": { "artifact": "/tmp/aeo-rev-006-routing-replay-script.json" }
+    },
+    {
+      "name": "scripts/weekly-growth-report.ts",
+      "result": "pass",
+      "details": { "artifact": "/tmp/aeo-rev-006-weekly-growth.json" }
+    },
+    {
+      "name": "scripts/weekly-conversion-summary.ts",
+      "result": "pass",
+      "details": { "artifact": "/tmp/aeo-rev-006-weekly-conversion2.json" }
+    }
+  ]
+}
