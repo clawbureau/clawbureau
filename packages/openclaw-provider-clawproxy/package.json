@@ -1,7 +1,6 @@
 {
   "name": "@openclaw/provider-clawproxy",
   "version": "0.1.0",
-  "private": true,
   "description": "OpenClaw provider plugin that routes model calls through clawproxy with run bindings for automatic receipts",
   "type": "module",
   "main": "./dist/index.js",
@@ -21,5 +20,23 @@
   "devDependencies": {
     "typescript": "^5.7.0"
   },
+  "files": [
+    "dist",
+    "presets",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawbureau/monorepo.git",
+    "directory": "packages/openclaw-provider-clawproxy"
+  },
+  "keywords": [
+    "openclaw",
+    "clawproxy",
+    "clawsig",
+    "provider",
+    "proof-of-harness"
+  ],
   "license": "MIT"
 }
