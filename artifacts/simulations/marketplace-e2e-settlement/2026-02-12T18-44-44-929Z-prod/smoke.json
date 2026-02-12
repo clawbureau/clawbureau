@@ -1,0 +1,57 @@
+{
+  "ok": false,
+  "env": "prod",
+  "run_id": "run_6ada73a9-bf61-494e-b5ca-6bc4de50ea7d",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "requester_did": "did:key:z6Mkreqbe6d773amljt5zpk",
+  "worker_did": "did:key:z6Mkwkrbe6d773amljt5zpk",
+  "sdk": {
+    "tool_receipts": 6,
+    "events": 8,
+    "bundle_id": "bundle_620e3674-a411-4272-ab53-4f4b3d7060cb"
+  },
+  "steps": [
+    {
+      "step": "simulate_fees",
+      "status": 404,
+      "pass": false,
+      "elapsed_ms": 136
+    },
+    {
+      "step": "fund_buyer",
+      "status": 400,
+      "pass": false,
+      "amount_minor": "2750",
+      "elapsed_ms": 390
+    },
+    {
+      "step": "fund_worker",
+      "status": 400,
+      "pass": false,
+      "elapsed_ms": 240
+    },
+    {
+      "step": "create_escrow",
+      "status": 502,
+      "pass": false,
+      "elapsed_ms": 358
+    },
+    {
+      "step": "ledger_risk_holds",
+      "status": 200,
+      "pass": true,
+      "holds_returned": 3,
+      "elapsed_ms": 57
+    },
+    {
+      "step": "economy_health",
+      "status": 200,
+      "pass": "degraded",
+      "overall_status": "degraded",
+      "services_up": 7,
+      "services_total": 7,
+      "elapsed_ms": 299
+    }
+  ],
+  "generated_at": "2026-02-12T18:44:46.417Z"
+}
