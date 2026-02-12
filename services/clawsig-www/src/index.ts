@@ -14,12 +14,42 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
 
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+
     if (url.pathname === '/verify' && request.method === 'POST') {
       return handleVerify(request);
     }
 
     if (url.pathname === '/badge/conformance.svg') {
-      return conformanceBadge();
+      return conformanceBadge({ style: url.searchParams.get('style') ?? 'flat' });
+    }
+
+    if (url.pathname === '/badge/coverage.svg') {
+      return coverageBadge({ style: url.searchParams.get('style') ?? 'flat' });
+    }
+
+    if (url.pathname === '/badge/version.svg') {
+      return versionBadge({ style: url.searchParams.get('style') ?? 'flat' });
+    }
+
+    if (url.pathname === '/health') {
+      return new Response(JSON.stringify({ ok: true, version: '0.1.1', ts: new Date().toISOString() }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.pathname === '/.well-known/clawsig.json') {
+      return protocolMeta();
     }
 
     return landing();
@@ -70,28 +100,104 @@ async function handleVerify(request: Request): Promise<Response> {
   }
 }
 
-// ── Conformance badge ────────────────────────────────────────────
-function conformanceBadge(): Response {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="20" role="img" aria-label="conformance: 22/22 pass">
-  <title>conformance: 22/22 pass</title>
-  <linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>
-  <clipPath id="r"><rect width="220" height="20" rx="3" fill="#fff"/></clipPath>
+// ── Badge helpers ────────────────────────────────────────────────
+
+const CONFORMANCE_TOTAL = 23;
+const CONFORMANCE_PASS = 23;
+const COVERAGE_LEVEL = 'MTS';
+const PROTOCOL_VERSION = '0.1';
+const PKG_VERSION = '0.1.1';
+
+interface BadgeOpts {
+  style?: string;
+}
+
+function shieldsBadge(label: string, message: string, color: string, opts: BadgeOpts = {}): Response {
+  const style = opts.style === 'flat-square' ? 'flat-square' : 'flat';
+  const lw = label.length * 6.5 + 12;
+  const mw = message.length * 6.5 + 12;
+  const w = lw + mw;
+
+  const isFlat = style === 'flat';
+  const gradientId = isFlat ? 's' : '';
+  const gradient = isFlat
+    ? `<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/><stop offset="1" stop-opacity=".1"/></linearGradient>`
+    : '';
+  const fill = isFlat ? `<rect width="${w}" height="20" fill="url(#s)"/>` : '';
+  const rx = isFlat ? '3' : '0';
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="20" role="img" aria-label="${label}: ${message}">
+  <title>${label}: ${message}</title>
+  ${gradient}
+  <clipPath id="r"><rect width="${w}" height="20" rx="${rx}" fill="#fff"/></clipPath>
   <g clip-path="url(#r)">
-    <rect width="110" height="20" fill="#555"/>
-    <rect x="110" width="110" height="20" fill="#4c1"/>
-    <rect width="220" height="20" fill="url(#s)"/>
+    <rect width="${lw}" height="20" fill="#555"/>
+    <rect x="${lw}" width="${mw}" height="20" fill="${color}"/>
+    ${fill}
   </g>
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
-    <text x="55" y="15" fill="#010101" fill-opacity=".3">conformance</text>
-    <text x="55" y="14">conformance</text>
-    <text x="165" y="15" fill="#010101" fill-opacity=".3">22/22 pass</text>
-    <text x="165" y="14">22/22 pass</text>
+    <text x="${lw / 2}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
+    <text x="${lw / 2}" y="14">${label}</text>
+    <text x="${lw + mw / 2}" y="15" fill="#010101" fill-opacity=".3">${message}</text>
+    <text x="${lw + mw / 2}" y="14">${message}</text>
   </g>
 </svg>`;
   return new Response(svg, {
     headers: {
       'Content-Type': 'image/svg+xml',
       'Cache-Control': 'public, max-age=3600',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
+}
+
+function conformanceBadge(opts: BadgeOpts = {}): Response {
+  const allPass = CONFORMANCE_PASS === CONFORMANCE_TOTAL;
+  return shieldsBadge(
+    'conformance',
+    `${CONFORMANCE_PASS}/${CONFORMANCE_TOTAL} pass`,
+    allPass ? '#4c1' : '#e05d44',
+    opts,
+  );
+}
+
+function coverageBadge(opts: BadgeOpts = {}): Response {
+  const colors: Record<string, string> = { M: '#dfb317', MT: '#97ca00', MTS: '#4c1' };
+  return shieldsBadge('coverage', COVERAGE_LEVEL, colors[COVERAGE_LEVEL] ?? '#555', opts);
+}
+
+function versionBadge(opts: BadgeOpts = {}): Response {
+  return shieldsBadge('clawsig', `v${PROTOCOL_VERSION}`, '#007ec6', opts);
+}
+
+// ── Protocol metadata ────────────────────────────────────────────
+function protocolMeta(): Response {
+  return new Response(JSON.stringify({
+    protocol: 'clawsig',
+    version: PROTOCOL_VERSION,
+    package_version: PKG_VERSION,
+    coverage: COVERAGE_LEVEL,
+    conformance: { total: CONFORMANCE_TOTAL, passed: CONFORMANCE_PASS },
+    endpoints: {
+      verify: '/verify',
+      badges: {
+        conformance: '/badge/conformance.svg',
+        coverage: '/badge/coverage.svg',
+        version: '/badge/version.svg',
+      },
+      health: '/health',
+    },
+    spec: 'https://github.com/clawbureau/clawbureau/blob/main/docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md',
+    npm: {
+      sdk: 'https://www.npmjs.com/package/@clawbureau/clawsig-sdk',
+      cli: 'https://www.npmjs.com/package/@clawbureau/clawverify-cli',
+      core: 'https://www.npmjs.com/package/@clawbureau/clawverify-core',
+    },
+  }, null, 2), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=3600',
+      'Access-Control-Allow-Origin': '*',
     },
   });
 }
@@ -201,12 +307,13 @@ function landing(): Response {
 <body>
   <div class="container">
     <h1><span>Clawsig</span> Protocol</h1>
-    <span class="version">v0.1.0 · Coverage MTS · 22 conformance vectors</span>
+    <span class="version">v0.1 · Coverage MTS · 23 conformance vectors</span>
 
     <p class="tagline">Cryptographically signed proof bundles for AI agent actions. Verify offline what any agent did, which tools it used, what side-effects it caused, and who approved it.</p>
 
     <div class="badges">
-      <a href="https://github.com/clawbureau/clawbureau/actions"><img src="/badge/conformance.svg" alt="conformance: 22/22 pass"></a>
+      <a href="https://github.com/clawbureau/clawbureau/actions"><img src="/badge/conformance.svg" alt="conformance: 23/23 pass"></a>
+      <a href="/badge/coverage.svg"><img src="/badge/coverage.svg" alt="coverage: MTS"></a>
       <a href="https://www.npmjs.com/package/@clawbureau/clawsig-sdk"><img src="https://img.shields.io/npm/v/@clawbureau/clawsig-sdk?label=clawsig-sdk&color=4c1" alt="npm"></a>
       <a href="https://www.npmjs.com/package/@clawbureau/clawverify-cli"><img src="https://img.shields.io/npm/v/@clawbureau/clawverify-cli?label=clawverify-cli&color=4c1" alt="npm"></a>
     </div>
@@ -250,7 +357,7 @@ const bundle = await run.finalize();</code></pre>
       <li><a href="https://www.npmjs.com/package/@clawbureau/clawverify-cli">@clawbureau/clawverify-cli on npm</a></li>
       <li><a href="https://www.npmjs.com/package/@clawbureau/clawverify-core">@clawbureau/clawverify-core on npm</a></li>
       <li><a href="https://github.com/clawbureau/clawbureau/blob/main/docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md">Reason code registry</a></li>
-      <li><a href="https://github.com/clawbureau/clawbureau/blob/main/packages/schema/fixtures/protocol-conformance/manifest.v1.json">Conformance suite (22 vectors)</a></li>
+      <li><a href="https://github.com/clawbureau/clawbureau/blob/main/packages/schema/fixtures/protocol-conformance/manifest.v1.json">Conformance suite (23 vectors)</a></li>
       <li><a href="https://github.com/clawbureau/clawbureau">GitHub repository</a></li>
     </ul>
 
@@ -275,7 +382,7 @@ const bundle = await run.finalize();</code></pre>
     </div>
 
     <footer>
-      <p>Clawsig Protocol v0.1.0 · <a href="https://clawbureau.com">Clawbureau</a> · MIT License</p>
+      <p>Clawsig Protocol v0.1 · <a href="https://clawbureau.com">Clawbureau</a> · MIT License</p>
     </footer>
   </div>
 

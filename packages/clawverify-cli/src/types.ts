@@ -7,6 +7,8 @@ export interface CliOutputBase {
   verified_at: string;
   reason_code: string;
   reason: string;
+  /** Actionable hint for how to fix the issue. Only present on FAIL/ERROR. */
+  hint?: string;
 }
 
 export interface CliVerifyOutput extends CliOutputBase {
