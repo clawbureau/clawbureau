@@ -12,6 +12,9 @@ export interface Env {
   /** Admin key for /v1 endpoints. Set via `wrangler secret put`. */
   BOUNTIES_ADMIN_KEY?: string;
 
+  /** Dedicated risk service key for loss-event intake endpoint. */
+  BOUNTIES_RISK_KEY?: string;
+
   /** Escrow service key (ESCROW_ADMIN_KEY from clawescrow). Set via `wrangler secret put`. */
   ESCROW_SERVICE_KEY?: string;
 
@@ -328,6 +331,23 @@ interface BountyV2 {
 
   // internal
   fee_quote: CutsSimulateResponse;
+  updated_at: string;
+}
+
+interface BountyRiskEventRecord {
+  risk_event_id: string;
+  idempotency_key: string;
+  source_loss_event_id: string;
+  source_service: string;
+  source_event_id: string | null;
+  bounty_id: string;
+  account_did: string | null;
+  amount_minor: string;
+  currency: 'USD';
+  reason_code: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  metadata_json: string | null;
+  created_at: string;
   updated_at: string;
 }
 
@@ -1063,6 +1083,23 @@ function requireAdmin(request: Request, env: Env, version: string): Response | n
 
   if (token !== env.BOUNTIES_ADMIN_KEY) {
     return errorResponse('UNAUTHORIZED', 'Invalid admin token', 401, undefined, version);
+  }
+
+  return null;
+}
+
+function requireRiskService(request: Request, env: Env, version: string): Response | null {
+  if (!env.BOUNTIES_RISK_KEY || env.BOUNTIES_RISK_KEY.trim().length === 0) {
+    return errorResponse('RISK_KEY_NOT_CONFIGURED', 'BOUNTIES_RISK_KEY is not configured', 503, undefined, version);
+  }
+
+  const token = getBearerToken(request.headers.get('authorization')) ?? request.headers.get('x-admin-key')?.trim() ?? null;
+  if (!token) {
+    return errorResponse('UNAUTHORIZED', 'Missing risk token', 401, undefined, version);
+  }
+
+  if (token !== env.BOUNTIES_RISK_KEY) {
+    return errorResponse('UNAUTHORIZED', 'Invalid risk token', 401, undefined, version);
   }
 
   return null;
@@ -5709,6 +5746,61 @@ async function updateSubmissionStatus(
   }
 }
 
+function parseBountyRiskEventRow(row: unknown): BountyRiskEventRecord | null {
+  if (!isRecord(row)) return null;
+
+  const risk_event_id = d1String(row.risk_event_id);
+  const idempotency_key = d1String(row.idempotency_key);
+  const source_loss_event_id = d1String(row.source_loss_event_id);
+  const source_service = d1String(row.source_service);
+  const source_event_id = d1String(row.source_event_id);
+  const bounty_id = d1String(row.bounty_id);
+  const account_did = d1String(row.account_did);
+  const amount_minor = d1String(row.amount_minor);
+  const currency = d1String(row.currency);
+  const reason_code = d1String(row.reason_code);
+  const severityRaw = d1String(row.severity);
+  const metadata_json = d1String(row.metadata_json);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (!risk_event_id || !idempotency_key || !source_loss_event_id || !source_service || !bounty_id || !amount_minor || !currency || !reason_code || !severityRaw || !created_at || !updated_at) {
+    return null;
+  }
+
+  if (currency !== 'USD') return null;
+  if (severityRaw !== 'low' && severityRaw !== 'medium' && severityRaw !== 'high' && severityRaw !== 'critical') {
+    return null;
+  }
+
+  return {
+    risk_event_id,
+    idempotency_key,
+    source_loss_event_id,
+    source_service,
+    source_event_id,
+    bounty_id,
+    account_did,
+    amount_minor,
+    currency: 'USD',
+    reason_code,
+    severity: severityRaw,
+    metadata_json,
+    created_at,
+    updated_at,
+  };
+}
+
+async function getBountyRiskEventByIdempotencyKey(db: D1Database, key: string): Promise<BountyRiskEventRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_risk_events WHERE idempotency_key = ?').bind(key).first();
+  return parseBountyRiskEventRow(row);
+}
+
+async function getBountyRiskEventById(db: D1Database, riskEventId: string): Promise<BountyRiskEventRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_risk_events WHERE risk_event_id = ?').bind(riskEventId).first();
+  return parseBountyRiskEventRow(row);
+}
+
 function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, unknown> {
   return {
     artifacts: submission.artifacts ?? [],
@@ -9888,6 +9980,191 @@ async function handleListBountiesForWorker(request: Request, url: URL, env: Env,
   return jsonResponse({ bounties }, 200, version);
 }
 
+async function handleRiskLossEvent(
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const authError = requireRiskService(request, env, version);
+  if (authError) return authError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(body.idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, { field: 'idempotency_key' }, version);
+  }
+  if (!isNonEmptyString(body.source_loss_event_id)) {
+    return errorResponse('INVALID_REQUEST', 'source_loss_event_id is required', 400, { field: 'source_loss_event_id' }, version);
+  }
+  if (!isNonEmptyString(body.bounty_id) || !body.bounty_id.trim().startsWith('bty_')) {
+    return errorResponse('INVALID_REQUEST', 'bounty_id must be a bounty id', 400, { field: 'bounty_id' }, version);
+  }
+  if (!isNonEmptyString(body.amount_minor) || parsePositiveMinor(body.amount_minor) === null) {
+    return errorResponse('INVALID_REQUEST', 'amount_minor must be a positive integer string', 400, { field: 'amount_minor' }, version);
+  }
+  if (!isNonEmptyString(body.reason_code)) {
+    return errorResponse('INVALID_REQUEST', 'reason_code is required', 400, { field: 'reason_code' }, version);
+  }
+
+  const severityRaw = isNonEmptyString(body.severity) ? body.severity.trim() : 'high';
+  if (severityRaw !== 'low' && severityRaw !== 'medium' && severityRaw !== 'high' && severityRaw !== 'critical') {
+    return errorResponse('INVALID_REQUEST', 'severity must be low|medium|high|critical', 400, { field: 'severity' }, version);
+  }
+
+  if (body.currency !== undefined && (!isNonEmptyString(body.currency) || body.currency.trim().toUpperCase() !== 'USD')) {
+    return errorResponse('UNSUPPORTED_CURRENCY', 'currency must be USD', 400, { field: 'currency' }, version);
+  }
+
+  if (body.metadata !== undefined && body.metadata !== null && !isRecord(body.metadata)) {
+    return errorResponse('INVALID_REQUEST', 'metadata must be an object', 400, { field: 'metadata' }, version);
+  }
+
+  const idempotencyKey = body.idempotency_key.trim();
+  const sourceLossEventId = body.source_loss_event_id.trim();
+  const bountyId = body.bounty_id.trim();
+  const amountMinor = body.amount_minor.trim();
+  const reasonCode = body.reason_code.trim();
+  const metadata = isRecord(body.metadata) ? body.metadata : null;
+
+  const existing = await getBountyRiskEventByIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+  if (existing) {
+    if (
+      existing.source_loss_event_id !== sourceLossEventId ||
+      existing.bounty_id !== bountyId ||
+      existing.amount_minor !== amountMinor ||
+      existing.reason_code !== reasonCode ||
+      existing.severity !== severityRaw
+    ) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used with a different payload',
+        409,
+        { idempotency_key: idempotencyKey, risk_event_id: existing.risk_event_id },
+        version
+      );
+    }
+
+    const replayBounty = await getBountyById(env.BOUNTIES_DB, existing.bounty_id);
+    return jsonResponse(
+      {
+        ok: true,
+        replay: true,
+        risk_event: existing,
+        bounty: replayBounty
+          ? {
+              bounty_id: replayBounty.bounty_id,
+              status: replayBounty.status,
+              trial_case_id: replayBounty.trial_case_id,
+            }
+          : null,
+      },
+      200,
+      version
+    );
+  }
+
+  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, { bounty_id: bountyId }, version);
+  }
+
+  const now = new Date().toISOString();
+  const riskEventId = `brk_${crypto.randomUUID()}`;
+
+  try {
+    await env.BOUNTIES_DB
+      .prepare(
+        `INSERT INTO bounty_risk_events (
+          risk_event_id,
+          idempotency_key,
+          source_loss_event_id,
+          source_service,
+          source_event_id,
+          bounty_id,
+          account_did,
+          amount_minor,
+          currency,
+          reason_code,
+          severity,
+          metadata_json,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'USD', ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        riskEventId,
+        idempotencyKey,
+        sourceLossEventId,
+        isNonEmptyString(body.source_service) ? body.source_service.trim() : 'clawsettle',
+        isNonEmptyString(body.source_event_id) ? body.source_event_id.trim() : null,
+        bountyId,
+        isNonEmptyString(body.account_did) ? body.account_did.trim() : null,
+        amountMinor,
+        reasonCode,
+        severityRaw,
+        metadata ? JSON.stringify(metadata) : null,
+        now,
+        now
+      )
+      .run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('UNIQUE constraint failed')) {
+      const raced = await getBountyRiskEventByIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+      if (raced) {
+        return jsonResponse({ ok: true, replay: true, risk_event: raced }, 200, version);
+      }
+      return errorResponse('CONFLICT', 'Risk event already exists', 409, undefined, version);
+    }
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  if (bounty.status !== 'disputed' && bounty.status !== 'cancelled') {
+    try {
+      await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'disputed', now);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  if (metadata && isNonEmptyString(metadata.trial_case_id) && isNonEmptyString(metadata.trial_opened_at)) {
+    try {
+      await updateBountyTrialCase(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        trial_case_id: metadata.trial_case_id.trim(),
+        trial_opened_at: metadata.trial_opened_at.trim(),
+        now,
+      });
+    } catch {
+      // best-effort only
+    }
+  }
+
+  const saved = await getBountyRiskEventById(env.BOUNTIES_DB, riskEventId);
+  const refreshedBounty = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
+
+  return jsonResponse(
+    {
+      ok: true,
+      replay: false,
+      risk_event: saved,
+      bounty: refreshedBounty
+        ? {
+            bounty_id: refreshedBounty.bounty_id,
+            status: refreshedBounty.status,
+            trial_case_id: refreshedBounty.trial_case_id,
+          }
+        : null,
+    },
+    201,
+    version
+  );
+}
+
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
   const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   if (!bounty) {
@@ -10188,6 +10465,10 @@ export default {
 
     // API
     if (path.startsWith('/v1/')) {
+      if (path === '/v1/risk/loss-events' && method === 'POST') {
+        return handleRiskLossEvent(request, env, version);
+      }
+
       // Worker API (public)
       if (path === '/v1/workers/register' && method === 'POST') {
         return handleRegisterWorker(request, env, version);

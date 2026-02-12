@@ -86,6 +86,21 @@
       "priority": 6,
       "passes": true,
       "notes": "Scope-auth own-data enforcement + admin override + access_audit_events logging validated in staging/prod smoke."
+    },
+    {
+      "id": "CIN-US-007",
+      "title": "Risk adjustment intake",
+      "description": "As risk ops, I want deterministic loss-event adjustments recorded in clawincome so adverse events are reflected in income/tax reporting pipelines.",
+      "acceptanceCriteria": [
+        "Add risk_adjustments table with idempotency + source-loss-event uniqueness",
+        "Implement POST /v1/risk/adjustments protected by INCOME_RISK_KEY",
+        "Enforce deterministic payload validation (USD + minor-unit integer math)",
+        "Replay-safe idempotency conflicts return deterministic 409",
+        "Persist severity/reason/source metadata for downstream reporting"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0002 risk_adjustments and INCOME_RISK_KEY-protected POST /v1/risk/adjustments (deterministic payload validation + idempotency replay/conflict semantics). Verified in ECON risk-loop smokes and zero-failure watch summaries."
     }
   ]
 }

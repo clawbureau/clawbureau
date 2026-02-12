@@ -232,6 +232,21 @@
       "priority": 16,
       "passes": true,
       "notes": "Implemented exact-once ingest hardening via create-claim/CAS-claim flow, race-loser dedupe behavior, parallel race tests, and burst smoke validation. Rolled out to staging + production with successful burst-mode smoke evidence."
+    },
+    {
+      "id": "CLD-US-017",
+      "title": "Deterministic risk-hold controls",
+      "description": "As risk ops, I want deterministic A↔H risk hold controls with strict idempotency so adverse events can freeze/release spendable funds without double-applying ledger side effects.",
+      "acceptanceCriteria": [
+        "Add risk_holds persistence with source-loss-event uniqueness and idempotency-key replay protection",
+        "Implement POST /v1/risk/holds/apply (A→H) and POST /v1/risk/holds/:id/release (H→A)",
+        "Implement GET /v1/risk/holds query/list endpoint",
+        "Require fail-closed auth for risk routes (LEDGER_ADMIN_KEY or dedicated LEDGER_RISK_KEY)",
+        "Expose deterministic replay/conflict/funds errors"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0008 risk_holds schema and deterministic apply/release/list routes. End-to-end evidence captured via ECON risk-loop smokes artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json."
     }
   ]
 }

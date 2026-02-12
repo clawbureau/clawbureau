@@ -451,6 +451,21 @@
       "priority": 31,
       "passes": true,
       "notes": "Production complete. Simulation/gate pack is strict-auth API-only: requester legacy header path is explicitly rejected (`REQUESTER_TOKEN_REQUIRED`), worker legacy registration token path is explicitly rejected (`WORKER_TOKEN_CANONICAL_REQUIRED`), and worker/requester scoped tokens are auto-issued through clawscope for deterministic replay. Staging artifacts: requester e2e `artifacts/simulations/clawbounties/2026-02-11T23-06-24-298Z-requester-e2e/requester-smoke.json`, test e2e `artifacts/simulations/clawbounties/2026-02-11T23-06-32-801Z-test-e2e/test-smoke.json`, batch 10/50/200 `artifacts/simulations/clawbounties/2026-02-11T23-06-49-664Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-07-27-180Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-09-15-458Z-batch-200/summary.json`, gate (includes invalid-harness replay) `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`. Prod artifacts: requester/test e2e `artifacts/simulations/clawbounties/2026-02-11T23-10-20-634Z-requester-e2e/requester-smoke.json`, `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`; batch 10/50/200 `artifacts/simulations/clawbounties/2026-02-11T23-10-42-942Z-batch-10/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-11-14-085Z-batch-50/summary.json`, `artifacts/simulations/clawbounties/2026-02-11T23-12-36-717Z-batch-200/summary.json`; gate (includes invalid-harness replay) `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`."
+    },
+    {
+      "id": "CBT-US-031",
+      "title": "Loss-event risk coupling",
+      "description": "As marketplace risk ops, I want clawbounties to ingest adverse loss events and force deterministic disputed-state coupling for affected bounties.",
+      "acceptanceCriteria": [
+        "Add bounty_risk_events persistence with idempotency + source-loss-event uniqueness",
+        "Implement POST /v1/risk/loss-events protected by BOUNTIES_RISK_KEY",
+        "On first risk event, move mutable bounties into disputed status fail-closed",
+        "Persist source metadata (severity/reason/amount/account_did) for auditability",
+        "Replay path must be deterministic and conflict on mismatched idempotency payload"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0017 bounty_risk_events and BOUNTIES_RISK_KEY-protected POST /v1/risk/loss-events. Deterministic replay/conflict behavior and disputed-state coupling validated via ECON risk-loop smokes artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json."
     }
   ]
 }

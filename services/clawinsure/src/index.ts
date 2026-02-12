@@ -3,6 +3,7 @@ interface Env {
   INSURE_DB: D1Database;
 
   INSURE_ADMIN_KEY?: string;
+  INSURE_RISK_KEY?: string;
   CLAWSCOPE_BASE_URL?: string;
   INSURE_REQUIRED_AUDIENCE?: string;
   INSURE_SCOPE_REQUIRED?: string;
@@ -382,6 +383,20 @@ function requireAdmin(request: Request, env: Env): void {
   }
   if (provided !== configured) {
     throw new InsureError('Invalid admin token', 'UNAUTHORIZED', 401);
+  }
+}
+
+function requireRiskService(request: Request, env: Env): void {
+  const configured = env.INSURE_RISK_KEY?.trim();
+  if (!configured) {
+    throw new InsureError('INSURE_RISK_KEY is not configured', 'ADMIN_KEY_NOT_CONFIGURED', 503);
+  }
+  const provided = parseAdminToken(request);
+  if (!provided) {
+    throw new InsureError('Missing risk token', 'UNAUTHORIZED', 401);
+  }
+  if (provided !== configured) {
+    throw new InsureError('Invalid risk token', 'UNAUTHORIZED', 401);
   }
 }
 
@@ -826,6 +841,22 @@ async function getPolicyById(db: D1Database, policyId: string): Promise<PolicyRe
 
 async function getPolicyByCreateIdempotencyKey(db: D1Database, key: string): Promise<PolicyRecord | null> {
   const row = await db.prepare('SELECT * FROM policies WHERE create_idempotency_key = ?').bind(key).first();
+  return parsePolicyRow(row);
+}
+
+async function getLatestClaimablePolicyByHolderDid(db: D1Database, holderDid: string): Promise<PolicyRecord | null> {
+  const row = await db
+    .prepare(
+      `SELECT *
+       FROM policies
+       WHERE policy_holder_did = ?
+         AND status IN ('active', 'exhausted')
+       ORDER BY created_at DESC, policy_id DESC
+       LIMIT 1`
+    )
+    .bind(holderDid)
+    .first();
+
   return parsePolicyRow(row);
 }
 
@@ -1439,6 +1470,161 @@ async function handlePostClaim(request: Request, env: Env, version: string): Pro
   return jsonResponse({ claim, replay: false }, 201, version);
 }
 
+async function handleAutoClaim(request: Request, env: Env, version: string): Promise<Response> {
+  requireRiskService(request, env);
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    throw new InsureError('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!isNonEmptyString(body.idempotency_key)) {
+    throw new InsureError('idempotency_key is required', 'INVALID_REQUEST', 400, { field: 'idempotency_key' });
+  }
+  if (!isNonEmptyString(body.source_loss_event_id)) {
+    throw new InsureError('source_loss_event_id is required', 'INVALID_REQUEST', 400, { field: 'source_loss_event_id' });
+  }
+  if (!isNonEmptyString(body.reason_code)) {
+    throw new InsureError('reason_code is required', 'INVALID_REQUEST', 400, { field: 'reason_code' });
+  }
+
+  const idempotencyKey = body.idempotency_key.trim();
+  const existing = await getClaimByCreateIdempotencyKey(env.INSURE_DB, idempotencyKey);
+  if (existing) {
+    return jsonResponse({ claim: existing, replay: true, auto: true }, 200, version);
+  }
+
+  const amountMinor = parseMinor(body.amount_minor, 'amount_minor');
+  const currency = isNonEmptyString(body.currency) ? body.currency.trim() : 'USD';
+  if (currency !== 'USD') {
+    throw new InsureError('Only USD auto claims are supported', 'UNSUPPORTED_CURRENCY', 400, {
+      field: 'currency',
+      value: currency,
+    });
+  }
+
+  let policy: PolicyRecord | null = null;
+  if (isNonEmptyString(body.policy_id)) {
+    policy = await getPolicyById(env.INSURE_DB, body.policy_id.trim());
+  } else if (isNonEmptyString(body.account_did) && isDid(body.account_did.trim())) {
+    policy = await getLatestClaimablePolicyByHolderDid(env.INSURE_DB, body.account_did.trim());
+  }
+
+  if (!policy) {
+    throw new InsureError('No claimable policy found for auto claim', 'NOT_FOUND', 404, {
+      account_did: isNonEmptyString(body.account_did) ? body.account_did.trim() : null,
+      policy_id: isNonEmptyString(body.policy_id) ? body.policy_id.trim() : null,
+    });
+  }
+
+  if (policy.status !== 'active' && policy.status !== 'exhausted') {
+    throw new InsureError('Policy is not claimable', 'POLICY_NOT_CLAIMABLE', 409, {
+      policy_id: policy.policy_id,
+      policy_status: policy.status,
+    });
+  }
+
+  const coverageMinor = parseMinor(policy.coverage_amount_minor, 'coverage_amount_minor', { allowZero: true });
+  const paidOutMinor = parseMinor(policy.paid_out_minor, 'paid_out_minor', { allowZero: true });
+  const remainingCoverage = coverageMinor > paidOutMinor ? coverageMinor - paidOutMinor : 0n;
+  if (remainingCoverage <= 0n) {
+    throw new InsureError('Policy has no remaining coverage', 'REQUEST_EXCEEDS_COVERAGE', 409, {
+      policy_id: policy.policy_id,
+      remaining_coverage_minor: '0',
+    });
+  }
+
+  const requestedAmount = amountMinor > remainingCoverage ? remainingCoverage : amountMinor;
+
+  const metadata = isRecord(body.metadata) ? body.metadata : null;
+  const trialCaseId =
+    metadata && isNonEmptyString(metadata.trial_case_id) ? metadata.trial_case_id.trim() :
+    isNonEmptyString(body.trial_case_id) ? body.trial_case_id.trim() :
+    undefined;
+  const escrowId =
+    metadata && isNonEmptyString(metadata.escrow_id) ? metadata.escrow_id.trim() :
+    isNonEmptyString(body.escrow_id) ? body.escrow_id.trim() :
+    undefined;
+
+  const proofHash = await sha256B64u(
+    stableStringify({
+      source_loss_event_id: body.source_loss_event_id.trim(),
+      reason_code: body.reason_code.trim(),
+      account_id: isNonEmptyString(body.account_id) ? body.account_id.trim() : null,
+      account_did: isNonEmptyString(body.account_did) ? body.account_did.trim() : null,
+      amount_minor: amountMinor.toString(),
+      currency,
+      occurred_at: isNonEmptyString(body.occurred_at) ? parseIsoDate(body.occurred_at, 'occurred_at') : nowIso(),
+      policy_id: policy.policy_id,
+      metadata,
+    })
+  );
+
+  const evidence: ClaimEvidence = {
+    proof_bundle_hash_b64u: proofHash,
+    receipt_refs: [`loss-event:${body.source_loss_event_id.trim()}`],
+    artifact_refs: [`loss-event-envelope:${body.source_loss_event_id.trim()}`],
+    ...(trialCaseId ? { trial_case_id: trialCaseId } : {}),
+    ...(escrowId ? { escrow_id: escrowId } : {}),
+  };
+
+  const evidenceResolution = await validateEvidenceReferences(evidence, env);
+
+  const claimId = `clm_${crypto.randomUUID()}`;
+  const createdAt = nowIso();
+
+  await env.INSURE_DB.prepare(
+    `INSERT INTO claims (
+      claim_id, create_idempotency_key, policy_id, claimant_did, status, reason,
+      requested_amount_minor, approved_amount_minor, trial_case_id, escrow_id,
+      evidence_json, evidence_resolution_json,
+      adjudicate_idempotency_key, adjudication_json, adjudicated_at,
+      payout_idempotency_key, payout_transfer_event_id, payout_json, paid_at,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, ?, ?)`
+  )
+    .bind(
+      claimId,
+      idempotencyKey,
+      policy.policy_id,
+      policy.policy_holder_did,
+      'submitted',
+      `auto_loss_event:${body.source_loss_event_id.trim()}:${body.reason_code.trim()}`,
+      requestedAmount.toString(),
+      null,
+      trialCaseId ?? null,
+      escrowId ?? null,
+      JSON.stringify(evidence),
+      JSON.stringify({
+        ...evidenceResolution,
+        source_loss_event_id: body.source_loss_event_id.trim(),
+        created_by: 'auto_loss_event',
+      }),
+      createdAt,
+      createdAt
+    )
+    .run();
+
+  const claim = await getClaimById(env.INSURE_DB, claimId);
+  if (!claim) {
+    throw new InsureError('Claim persistence failed', 'DB_WRITE_FAILED', 500);
+  }
+
+  return jsonResponse(
+    {
+      claim,
+      replay: false,
+      auto: true,
+      policy_id: policy.policy_id,
+      source_loss_event_id: body.source_loss_event_id.trim(),
+      requested_amount_minor: requestedAmount.toString(),
+      capped_by_coverage: requestedAmount !== amountMinor,
+    },
+    201,
+    version
+  );
+}
+
 async function authorizeClaimRead(request: Request, env: Env, claim: ClaimRecord): Promise<void> {
   if (isAdminAuthorized(request, env)) return;
   const claimant = await requireClaimant(request, env);
@@ -1840,6 +2026,7 @@ function docsHtml(origin: string): string {
         <li><code>POST ${origin}/v1/policies</code></li>
         <li><code>GET ${origin}/v1/policies/:id</code></li>
         <li><code>POST ${origin}/v1/claims</code></li>
+        <li><code>POST ${origin}/v1/claims/auto</code> (risk service key)</li>
         <li><code>GET ${origin}/v1/claims/:id</code></li>
         <li><code>POST ${origin}/v1/claims/:id/adjudicate</code></li>
         <li><code>POST ${origin}/v1/claims/:id/payout</code></li>
@@ -1897,6 +2084,10 @@ export default {
       const policyMatch = path.match(/^\/v1\/policies\/(pol_[a-f0-9-]+)$/);
       if (policyMatch && method === 'GET') {
         return await handleGetPolicy(policyMatch[1], request, env, version);
+      }
+
+      if (method === 'POST' && path === '/v1/claims/auto') {
+        return await handleAutoClaim(request, env, version);
       }
 
       if (method === 'POST' && path === '/v1/claims') {

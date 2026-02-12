@@ -186,3 +186,31 @@ Started: 2026-02-02T03:08:26.936628
 - Added clawrep loop publication on escrow release/dispute outcomes (including idempotent replay-safe paths).
 - Publication path is queue-first (`REP_EVENTS`) with optional HTTP fallback.
 - Added staging/prod queue producer bindings to `clawrep-events*`.
+
+## 2026-02-12 - CES-US-009 (ECON-RISK-MAX-001) implementation in progress
+- Added escrow risk-hold persistence fields:
+  - migration `migrations/0004_risk_hold_controls.sql`
+  - columns: `risk_hold_status`, `risk_hold_json`, `risk_hold_updated_at`
+- Added risk service-key endpoint:
+  - `POST /v1/escrows/:id/risk-hold` (requires `ESCROW_RISK_KEY`)
+  - supports deterministic `apply`/`release` operations with idempotency checks
+- Enforced fail-closed payout gating:
+  - `POST /v1/escrows/:id/release` now blocks with `RISK_HOLD_ACTIVE` when active hold exists
+  - trials resolution `worker_award` path now blocks with `RISK_HOLD_ACTIVE` when active hold exists
+- Exposed risk hold state in escrow reads/lists (`risk_hold.status/details/updated_at`).
+- Validation (local):
+  - `pnpm --dir services/escrow typecheck` ✅
+  - `pnpm --dir services/escrow test` ✅
+- Status:
+  - CES-US-009 remains `passes:false` pending staging+prod migration/deploy + cross-service smoke evidence.
+
+## 2026-02-12 - CES-US-009 rollout complete (staging + prod)
+- Applied migration `migrations/0004_risk_hold_controls.sql` remotely in staging+prod.
+- Deployed escrow versions:
+  - staging `568cb546-d24e-4c77-af3f-00e798b743ec`
+  - prod `8ed372d2-efab-4d32-8160-ad4bf6fa8b93`
+- Verified risk-hold apply path + fail-closed payout gating via ECON risk-loop smoke/watch:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+  - staging watch: `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - prod watch: `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`

@@ -303,6 +303,9 @@ export interface Env {
    */
   LEDGER_SETTLEMENT_VERIFY_TOKEN?: string;
 
+  /** Optional dedicated service key for risk-hold routes. */
+  LEDGER_RISK_KEY?: string;
+
   /** Optional webhook URL for reconciliation alerts */
   ALERT_WEBHOOK_URL?: string;
   /** Optional webhook URL for event notifications */

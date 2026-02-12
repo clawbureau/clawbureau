@@ -14,6 +14,9 @@ export interface Env {
   /** Dedicated service key for clawtrials decision enforcement endpoint. */
   ESCROW_TRIALS_KEY?: string;
 
+  /** Dedicated service key for risk-loss pipeline writes. */
+  ESCROW_RISK_KEY?: string;
+
   /** Used to call clawledger. Set via `wrangler secret put`. */
   LEDGER_ADMIN_KEY?: string;
 
@@ -130,6 +133,15 @@ interface ResolveEscrowResponseBody {
   };
 }
 
+interface EscrowRiskHoldResponseBody {
+  escrow_id: string;
+  risk_hold: {
+    status: 'clear' | 'active';
+    updated_at: string;
+    details: Record<string, unknown> | null;
+  };
+}
+
 interface EscrowRecord {
   escrow_id: string;
   create_idempotency_key: string;
@@ -157,6 +169,9 @@ interface EscrowRecord {
   release_idempotency_key: string | null;
   dispute_idempotency_key: string | null;
   resolve_idempotency_key: string | null;
+  risk_hold_status: 'clear' | 'active';
+  risk_hold: Record<string, unknown> | null;
+  risk_hold_updated_at: string | null;
   verification: Record<string, unknown> | null;
   dispute: Record<string, unknown> | null;
   resolution: Record<string, unknown> | null;
@@ -275,6 +290,24 @@ function requireTrialsAuth(request: Request, env: Env, version: string): Respons
 
   if (token !== trialsKey) {
     return errorResponse('UNAUTHORIZED', 'Invalid trials token', 401, undefined, version);
+  }
+
+  return null;
+}
+
+function requireRiskServiceAuth(request: Request, env: Env, version: string): Response | null {
+  const riskKey = env.ESCROW_RISK_KEY?.trim();
+  if (!riskKey) {
+    return errorResponse('RISK_KEY_NOT_CONFIGURED', 'ESCROW_RISK_KEY is not configured', 503, undefined, version);
+  }
+
+  const token = getAdminToken(request);
+  if (!token) {
+    return errorResponse('UNAUTHORIZED', 'Missing risk token', 401, undefined, version);
+  }
+
+  if (token !== riskKey) {
+    return errorResponse('UNAUTHORIZED', 'Invalid risk token', 401, undefined, version);
   }
 
   return null;
@@ -696,6 +729,10 @@ function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
   const verification = safeJsonParse<Record<string, unknown>>(d1String(row.verification_json));
   const dispute = safeJsonParse<Record<string, unknown>>(d1String(row.dispute_json));
   const resolution = safeJsonParse<Record<string, unknown>>(d1String(row.resolution_json));
+  const risk_hold_status_raw = d1String(row.risk_hold_status);
+  const risk_hold_status: 'clear' | 'active' = risk_hold_status_raw === 'active' ? 'active' : 'clear';
+  const risk_hold = safeJsonParse<Record<string, unknown>>(d1String(row.risk_hold_json));
+  const risk_hold_updated_at = d1String(row.risk_hold_updated_at);
 
   const statusTyped = status as EscrowStatus;
   if (statusTyped !== 'held' && statusTyped !== 'released' && statusTyped !== 'frozen' && statusTyped !== 'cancelled') {
@@ -729,6 +766,9 @@ function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
     release_idempotency_key: d1String(row.release_idempotency_key),
     dispute_idempotency_key: d1String(row.dispute_idempotency_key),
     resolve_idempotency_key: d1String(row.resolve_idempotency_key),
+    risk_hold_status,
+    risk_hold,
+    risk_hold_updated_at,
     verification,
     dispute,
     resolution,
@@ -914,11 +954,14 @@ async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void>
         release_idempotency_key,
         dispute_idempotency_key,
         resolve_idempotency_key,
+        risk_hold_status,
+        risk_hold_json,
+        risk_hold_updated_at,
         verification_json,
         dispute_json,
         resolution_json,
         resolved_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.escrow_id,
@@ -947,6 +990,9 @@ async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void>
       record.release_idempotency_key,
       record.dispute_idempotency_key,
       record.resolve_idempotency_key,
+      record.risk_hold_status,
+      record.risk_hold ? JSON.stringify(record.risk_hold) : null,
+      record.risk_hold_updated_at,
       record.verification ? JSON.stringify(record.verification) : null,
       record.dispute ? JSON.stringify(record.dispute) : null,
       record.resolution ? JSON.stringify(record.resolution) : null,
@@ -963,6 +1009,34 @@ async function updateEscrowAssign(db: D1Database, escrowId: string, workerDid: s
        WHERE escrow_id = ?`
     )
     .bind(workerDid, idempotencyKey, now, escrowId)
+    .run();
+}
+
+async function updateEscrowRiskHold(
+  db: D1Database,
+  params: {
+    escrow_id: string;
+    status: 'clear' | 'active';
+    hold: Record<string, unknown> | null;
+    updated_at: string;
+  }
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE escrows
+       SET risk_hold_status = ?,
+           risk_hold_json = ?,
+           risk_hold_updated_at = ?,
+           updated_at = ?
+       WHERE escrow_id = ?`
+    )
+    .bind(
+      params.status,
+      params.hold ? JSON.stringify(params.hold) : null,
+      params.updated_at,
+      params.updated_at,
+      params.escrow_id
+    )
     .run();
 }
 
@@ -1184,9 +1258,11 @@ function docsPage(origin: string): string {
       <li><code>GET /.well-known/security.txt</code></li>
     </ul>
 
-    <h2>Escrow API (admin)</h2>
+    <h2>Escrow API (admin + service keys)</h2>
     <p>
-      All <code>/v1/*</code> endpoints require <code>Authorization: Bearer &lt;ESCROW_ADMIN_KEY&gt;</code>.
+      Most <code>/v1/*</code> endpoints require <code>Authorization: Bearer &lt;ESCROW_ADMIN_KEY&gt;</code>.
+      <code>/v1/escrows/{id}/resolve</code> requires <code>ESCROW_TRIALS_KEY</code> and
+      <code>/v1/escrows/{id}/risk-hold</code> requires <code>ESCROW_RISK_KEY</code>.
     </p>
     <ul>
       <li><code>POST /v1/escrows</code> — create escrow hold (calls clawledger /v1/transfers A→H)</li>
@@ -1195,6 +1271,7 @@ function docsPage(origin: string): string {
       <li><code>POST /v1/escrows/{escrow_id}/release</code> — release to worker + fee pool (calls clawledger /v1/transfers)</li>
       <li><code>POST /v1/escrows/{escrow_id}/dispute</code> — freeze within dispute window</li>
       <li><code>POST /v1/escrows/{escrow_id}/resolve</code> — clawtrials-only decision enforcement (worker award or requester refund)</li>
+      <li><code>POST /v1/escrows/{escrow_id}/risk-hold</code> — risk pipeline hold toggle (service-key protected)</li>
       <li><code>GET /v1/escrows/{escrow_id}</code> — fetch escrow record</li>
     </ul>
 
@@ -1216,7 +1293,7 @@ function skillMarkdown(origin: string, version: string): string {
       docs: `${origin}/docs`,
       health: `${origin}/health`,
     },
-    capabilities: ['escrow_hold', 'escrow_release', 'disputes', 'status'],
+    capabilities: ['escrow_hold', 'escrow_release', 'escrow_risk_hold', 'disputes', 'status'],
   });
 
   return `---
@@ -1574,6 +1651,9 @@ async function handleCreateEscrow(request: Request, env: Env, version: string): 
     release_idempotency_key: null,
     dispute_idempotency_key: null,
     resolve_idempotency_key: null,
+    risk_hold_status: 'clear',
+    risk_hold: null,
+    risk_hold_updated_at: null,
     verification: null,
     dispute: null,
     resolution: null,
@@ -1646,6 +1726,11 @@ async function handleGetEscrow(escrowId: string, env: Env, version: string): Pro
         refund_transfer: escrow.ledger_refund_event_id,
         fee_transfers: escrow.ledger_fee_event_ids,
         referral_transfers: escrow.ledger_referral_event_ids,
+      },
+      risk_hold: {
+        status: escrow.risk_hold_status,
+        updated_at: escrow.risk_hold_updated_at,
+        details: escrow.risk_hold,
       },
       verification: escrow.verification,
       dispute: escrow.dispute,
@@ -1737,6 +1822,11 @@ async function handleListEscrows(request: Request, env: Env, version: string): P
           refund_transfer: escrow.ledger_refund_event_id,
           fee_transfers: escrow.ledger_fee_event_ids,
           referral_transfers: escrow.ledger_referral_event_ids,
+        },
+        risk_hold: {
+          status: escrow.risk_hold_status,
+          updated_at: escrow.risk_hold_updated_at,
+          details: escrow.risk_hold,
         },
         resolution: escrow.resolution,
       })),
@@ -1857,6 +1947,13 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
     return errorResponse('INVALID_STATUS', `Cannot release escrow in status '${escrow.status}'`, 409, undefined, version);
   }
 
+  if (escrow.risk_hold_status === 'active') {
+    return errorResponse('RISK_HOLD_ACTIVE', 'Escrow is blocked by active risk hold', 423, {
+      escrow_id: escrow.escrow_id,
+      risk_hold: escrow.risk_hold,
+    }, version);
+  }
+
   if (!escrow.worker_did) {
     return errorResponse('WORKER_NOT_ASSIGNED', 'Escrow has no worker assigned', 409, undefined, version);
   }
@@ -1888,6 +1985,13 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
 
   if (!locked.worker_did) {
     return errorResponse('WORKER_NOT_ASSIGNED', 'Escrow has no worker assigned', 409, undefined, version);
+  }
+
+  if (locked.risk_hold_status === 'active') {
+    return errorResponse('RISK_HOLD_ACTIVE', 'Escrow is blocked by active risk hold', 423, {
+      escrow_id: locked.escrow_id,
+      risk_hold: locked.risk_hold,
+    }, version);
   }
 
   const feeTotal = sumFeesMinor(locked.fee_quote.fees);
@@ -2212,6 +2316,173 @@ async function handleDisputeEscrow(escrowId: string, request: Request, env: Env,
   return jsonResponse(response, 200, version);
 }
 
+async function handleEscrowRiskHold(
+  escrowId: string,
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotency_key = bodyRaw.idempotency_key;
+  const action = bodyRaw.action;
+  const source_loss_event_id = bodyRaw.source_loss_event_id;
+  const reason = bodyRaw.reason;
+  const metadata = bodyRaw.metadata;
+
+  if (!isNonEmptyString(idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'Missing required field: idempotency_key', 400, undefined, version);
+  }
+
+  if (action !== 'apply' && action !== 'release') {
+    return errorResponse('INVALID_REQUEST', 'action must be apply|release', 400, undefined, version);
+  }
+
+  if (action === 'apply' && !isNonEmptyString(source_loss_event_id)) {
+    return errorResponse('INVALID_REQUEST', 'source_loss_event_id is required for apply', 400, undefined, version);
+  }
+
+  if (reason !== undefined && reason !== null && !isNonEmptyString(reason)) {
+    return errorResponse('INVALID_REQUEST', 'reason must be a non-empty string', 400, undefined, version);
+  }
+
+  if (metadata !== undefined && metadata !== null && !isRecord(metadata)) {
+    return errorResponse('INVALID_REQUEST', 'metadata must be an object when provided', 400, undefined, version);
+  }
+
+  const escrow = await getEscrowById(env.ESCROW_DB, escrowId);
+  if (!escrow) {
+    return errorResponse('NOT_FOUND', 'Escrow not found', 404, undefined, version);
+  }
+
+  const idempotencyKey = idempotency_key.trim();
+  const now = nowIso();
+  const existingDetails = escrow.risk_hold;
+  const existingIdempotencyRaw = existingDetails ? existingDetails.idempotency_key : null;
+  const existingIdempotency = isNonEmptyString(existingIdempotencyRaw)
+    ? existingIdempotencyRaw.trim()
+    : null;
+
+  if (action === 'apply') {
+    if (escrow.status !== 'held' && escrow.status !== 'frozen') {
+      return errorResponse('INVALID_STATUS', `Cannot apply risk hold in status '${escrow.status}'`, 409, undefined, version);
+    }
+
+    if (escrow.risk_hold_status === 'active') {
+      if (existingIdempotency === idempotencyKey) {
+        const replayResponse: EscrowRiskHoldResponseBody = {
+          escrow_id: escrow.escrow_id,
+          risk_hold: {
+            status: 'active',
+            updated_at: escrow.risk_hold_updated_at ?? escrow.updated_at,
+            details: escrow.risk_hold,
+          },
+        };
+        return jsonResponse(replayResponse, 200, version);
+      }
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'Escrow already has an active risk hold with different idempotency_key',
+        409,
+        { existing_idempotency_key: existingIdempotency },
+        version
+      );
+    }
+
+    const holdDetails: Record<string, unknown> = {
+      idempotency_key: idempotencyKey,
+      source_loss_event_id: isNonEmptyString(source_loss_event_id) ? source_loss_event_id.trim() : null,
+      reason: isNonEmptyString(reason) ? reason.trim() : 'risk hold applied',
+      applied_at: now,
+      metadata: isRecord(metadata) ? metadata : null,
+    };
+
+    await updateEscrowRiskHold(env.ESCROW_DB, {
+      escrow_id: escrow.escrow_id,
+      status: 'active',
+      hold: holdDetails,
+      updated_at: now,
+    });
+
+    const updated = await getEscrowById(env.ESCROW_DB, escrow.escrow_id);
+    if (!updated) {
+      return errorResponse('DB_WRITE_FAILED', 'Failed to persist escrow risk hold', 500, undefined, version);
+    }
+
+    const response: EscrowRiskHoldResponseBody = {
+      escrow_id: updated.escrow_id,
+      risk_hold: {
+        status: updated.risk_hold_status,
+        updated_at: updated.risk_hold_updated_at ?? updated.updated_at,
+        details: updated.risk_hold,
+      },
+    };
+
+    return jsonResponse(response, 200, version);
+  }
+
+  if (escrow.risk_hold_status === 'clear') {
+    if (existingIdempotency === idempotencyKey) {
+      const replayResponse: EscrowRiskHoldResponseBody = {
+        escrow_id: escrow.escrow_id,
+        risk_hold: {
+          status: 'clear',
+          updated_at: escrow.risk_hold_updated_at ?? escrow.updated_at,
+          details: escrow.risk_hold,
+        },
+      };
+      return jsonResponse(replayResponse, 200, version);
+    }
+
+    return errorResponse('RISK_HOLD_NOT_ACTIVE', 'Escrow risk hold is already clear', 409, undefined, version);
+  }
+
+  if (existingIdempotency && existingIdempotency !== idempotencyKey) {
+    // release operations get their own deterministic key namespace in details
+    const releaseKeyRaw = existingDetails ? existingDetails.release_idempotency_key : null;
+    const releaseKey = isNonEmptyString(releaseKeyRaw) ? releaseKeyRaw.trim() : null;
+
+    if (releaseKey && releaseKey !== idempotencyKey) {
+      return errorResponse('IDEMPOTENCY_CONFLICT', 'Risk hold release already processed with different idempotency_key', 409, {
+        existing_idempotency_key: releaseKey,
+      }, version);
+    }
+  }
+
+  const releaseDetails: Record<string, unknown> = {
+    ...(escrow.risk_hold ?? {}),
+    release_idempotency_key: idempotencyKey,
+    release_reason: isNonEmptyString(reason) ? reason.trim() : 'risk hold cleared',
+    released_at: now,
+  };
+
+  await updateEscrowRiskHold(env.ESCROW_DB, {
+    escrow_id: escrow.escrow_id,
+    status: 'clear',
+    hold: releaseDetails,
+    updated_at: now,
+  });
+
+  const updated = await getEscrowById(env.ESCROW_DB, escrow.escrow_id);
+  if (!updated) {
+    return errorResponse('DB_WRITE_FAILED', 'Failed to persist escrow risk hold release', 500, undefined, version);
+  }
+
+  const response: EscrowRiskHoldResponseBody = {
+    escrow_id: updated.escrow_id,
+    risk_hold: {
+      status: updated.risk_hold_status,
+      updated_at: updated.risk_hold_updated_at ?? updated.updated_at,
+      details: updated.risk_hold,
+    },
+  };
+
+  return jsonResponse(response, 200, version);
+}
+
 async function handleResolveEscrow(escrowId: string, request: Request, env: Env, version: string): Promise<Response> {
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
@@ -2359,6 +2630,13 @@ async function handleResolveEscrow(escrowId: string, request: Request, env: Env,
   };
 
   if (decision === 'worker_award') {
+    if (locked.risk_hold_status === 'active') {
+      return errorResponse('RISK_HOLD_ACTIVE', 'Worker award blocked by active risk hold', 423, {
+        escrow_id: locked.escrow_id,
+        risk_hold: locked.risk_hold,
+      }, version);
+    }
+
     if (!locked.worker_did) {
       return errorResponse('WORKER_NOT_ASSIGNED', 'Escrow has no worker assigned', 409, undefined, version);
     }
@@ -2637,6 +2915,13 @@ export default {
         const trialsError = requireTrialsAuth(request, env, version);
         if (trialsError) return trialsError;
         return handleResolveEscrow(resolveMatch[1], request, env, version);
+      }
+
+      const riskHoldMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)\/risk-hold$/);
+      if (riskHoldMatch && method === 'POST') {
+        const riskError = requireRiskServiceAuth(request, env, version);
+        if (riskError) return riskError;
+        return handleEscrowRiskHold(riskHoldMatch[1], request, env, version);
       }
 
       const adminError = requireAdmin(request, env, version);

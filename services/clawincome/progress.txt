@@ -111,3 +111,29 @@ Started: 2026-02-12
   - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/summary.json`
   - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/staging.json`
   - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/prod.json`
+
+## 2026-02-12 - CIN-US-007 (ECON-RISK-MAX-001) implementation in progress
+- Added deterministic risk adjustment intake:
+  - migration `migrations/0002_risk_adjustments.sql`
+  - endpoint `POST /v1/risk/adjustments` (requires `INCOME_RISK_KEY`)
+- Endpoint guarantees:
+  - strict payload validation (USD-only, positive minor units, bounded severity enum)
+  - idempotency replay detection with deterministic conflict response
+  - persistent source metadata (`source_loss_event_id`, `source_service`, `reason_code`, `severity`)
+- Validation (local):
+  - `pnpm --dir services/clawincome typecheck` ✅
+  - `pnpm --dir services/clawincome test` ✅
+- Status:
+  - CIN-US-007 remains `passes:false` pending staging+prod migration/deploy + smoke evidence.
+
+## 2026-02-12 - CIN-US-007 rollout complete (staging + prod)
+- Applied migration `migrations/0002_risk_adjustments.sql` remotely in staging+prod.
+- Deployed clawincome versions:
+  - staging `7fbfe8f9-8d52-4ac8-9fb3-30909d279f73`
+  - prod `2b9ceb82-7fde-454d-b718-9422dac509cd`
+- Verified `POST /v1/risk/adjustments` deterministic intake via ECON risk-loop smoke:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+- Watch evidence confirms zero failed adjustments fanout from clawsettle:
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`
