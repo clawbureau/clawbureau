@@ -1,0 +1,45 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.identity.agent_passport.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Passport (W3C Verifiable Credential)",
+  "type": "object",
+  "required": ["@context", "type", "issuer", "issuanceDate", "credentialSubject", "proof"],
+  "properties": {
+    "@context": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "type": { "type": "array", "items": { "type": "string" }, "contains": { "const": "VerifiableCredential" } },
+    "issuer": { "type": "string", "const": "did:web:clawverify.com" },
+    "issuanceDate": { "type": "string", "format": "date-time" },
+    "credentialSubject": {
+      "type": "object",
+      "required": ["id", "reputation_metrics", "first_seen_at"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^did:" },
+        "reputation_metrics": {
+          "type": "object",
+          "required": ["total_verified_runs", "gateway_tier_runs", "policy_violations"],
+          "properties": {
+            "total_verified_runs": { "type": "integer", "minimum": 0 },
+            "gateway_tier_runs": { "type": "integer", "minimum": 0 },
+            "policy_violations": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "top_models_used": { "type": "array", "items": { "type": "string" }, "maxItems": 10 },
+        "first_seen_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "proof": {
+      "type": "object",
+      "required": ["type", "verificationMethod", "created", "signatureValue"],
+      "properties": {
+        "type": { "type": "string", "const": "Ed25519Signature2020" },
+        "verificationMethod": { "type": "string" },
+        "created": { "type": "string", "format": "date-time" },
+        "signatureValue": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

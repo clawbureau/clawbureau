@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "ESNext", "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"], "moduleResolution": "bundler",
+    "strict": true, "skipLibCheck": true, "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true, "noEmit": true,
+    "resolveJsonModule": true, "isolatedModules": true, "declaration": true, "outDir": "./dist"
+  },
+  "include": ["src/**/*.ts"], "exclude": ["node_modules", "dist"]
+}
