@@ -50,20 +50,17 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build clawverify-core
+      - name: Install + build clawverify-core
         working-directory: packages/clawverify-core
-        run: npm run build
+        run: npm install && npm run build
 
-      - name: Build clawverify-cli
+      - name: Install + build clawverify-cli
         working-directory: packages/clawverify-cli
-        run: npm run build
+        run: npm install && npm run build
 
-      - name: Build clawsig-sdk
+      - name: Install + build clawsig-sdk
         working-directory: packages/clawsig-sdk
-        run: npm run build
+        run: npm install && npm run build
 
       - name: Run cross-platform tests
         run: node --test packages/clawverify-cli/test/cross-platform.test.ts
