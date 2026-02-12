@@ -91,6 +91,10 @@
           "type": "string",
           "minLength": 1,
           "description": "Payment network (e.g., base-sepolia, base). Present when request was paid via x402."
+        },
+        "log_inclusion_proof": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.log_inclusion_proof.v1.json",
+          "description": "Receipt Transparency (RT) inclusion proof. Present when the receipt hash has been submitted to the clawlogs append-only Merkle tree. A receipt without this field has not been transparency-logged and should be treated with lower trust by verifiers."
         }
       },
       "additionalProperties": true

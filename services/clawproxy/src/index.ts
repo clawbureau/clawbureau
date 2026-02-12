@@ -46,6 +46,7 @@ import {
   type SigningContext,
   type EncryptionContext,
 } from './receipt';
+import { isRtEnabled, submitReceiptToRt } from './rt';
 import { buildReceiptMetadataWithModelIdentity } from './model-identity';
 import {
   importEd25519Key,
@@ -2692,6 +2693,21 @@ async function handleProxy(
             metadata: receiptMetadata,
           });
 
+          // RT: submit receipt hash to Receipt Transparency log (best-effort, non-blocking)
+          if (isRtEnabled(env)) {
+            try {
+              const rtProof = await submitReceiptToRt(env, receiptEnvelope.payload_hash_b64u);
+              if (rtProof) {
+                receiptEnvelope.payload.metadata = {
+                  ...(receiptEnvelope.payload.metadata ?? {}),
+                  log_inclusion_proof: rtProof,
+                };
+              }
+            } catch (err) {
+              console.error('[RT] streaming receipt RT submission failed (non-fatal):', err);
+            }
+          }
+
           // Log token hash with receipt metadata (never log token itself)
           if (validatedCst) {
             logTokenUsed(request, {
@@ -2824,6 +2840,21 @@ async function handleProxy(
       gatewayId,
       metadata: receiptMetadata,
     });
+
+    // RT: submit receipt hash to Receipt Transparency log (best-effort, non-blocking)
+    if (isRtEnabled(env)) {
+      try {
+        const rtProof = await submitReceiptToRt(env, receiptEnvelope.payload_hash_b64u);
+        if (rtProof) {
+          receiptEnvelope.payload.metadata = {
+            ...(receiptEnvelope.payload.metadata ?? {}),
+            log_inclusion_proof: rtProof,
+          };
+        }
+      } catch (err) {
+        console.error('[RT] non-streaming receipt RT submission failed (non-fatal):', err);
+      }
+    }
   } catch (err) {
     if (idempotency) {
       try {
