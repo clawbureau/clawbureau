@@ -75,6 +75,10 @@ import {
 import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
 import { compareManualAuditPage, compareGuardrailsPage, compareLangfusePage, compareCustomWrappersPage, compareGovernanceLandscapePage } from "./pages/compare";
 import { guideGithubActionsProofPage, guideOktaScopedTokensPage, guideComplianceExportPage } from "./pages/guides";
+import { industryFinancialServicesPage, industryHealthcarePage, industryGovernmentPage, industryInsurancePage, industryLegalPage, industryTechnologyPage } from "./pages/industries";
+import { pricingStarterPage, pricingTeamPage, pricingEnterprisePage } from "./pages/pricing-tiers";
+import { proofPointsPage } from "./pages/proof-points";
+import { resourceProtocolWhitepaperPage, resourceSecurityChecklistPage, resourceComplianceMappingPage } from "./pages/resources";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1814,6 +1818,97 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     title: "About Claw Bureau | Enterprise AI Trust Infrastructure",
     description: "About Claw Bureau and the trust infrastructure approach for enterprise AI.",
     category: "about",
+    kind: "static",
+  },
+  {
+    path: "/proof-points",
+    title: "Why Trust Claw EA | Protocol Proof Points",
+    description: "Protocol adoption metrics, open source transparency, dogfooding evidence, and architecture credibility.",
+    category: "trust",
+    kind: "static",
+  },
+  {
+    path: "/resources/protocol-whitepaper",
+    title: "Download: Clawsig Protocol v0.1 Specification",
+    description: "Five cryptographic primitives for verifiable AI agent execution.",
+    category: "resources",
+    kind: "static",
+  },
+  {
+    path: "/resources/security-checklist",
+    title: "Agent Security Checklist: 15 Controls",
+    description: "Controls every enterprise needs before deploying AI agents.",
+    category: "resources",
+    kind: "static",
+  },
+  {
+    path: "/resources/compliance-mapping",
+    title: "Regulatory Mapping: SOX, HIPAA, FedRAMP → Controls",
+    description: "Map regulations to specific AI agent controls and evidence.",
+    category: "resources",
+    kind: "static",
+  },
+  {
+    path: "/pricing/starter",
+    title: "Starter Plan | $49/mo | Claw EA",
+    description: "1 AI agent, execution attestation, 90-day retention.",
+    category: "pricing",
+    kind: "static",
+  },
+  {
+    path: "/pricing/team",
+    title: "Team Plan | $249/mo | Claw EA",
+    description: "5 agents, Work Policy Contracts, budget controls, 1-year retention.",
+    category: "pricing",
+    kind: "static",
+  },
+  {
+    path: "/pricing/enterprise",
+    title: "Enterprise Plan | Custom | Claw EA",
+    description: "Unlimited agents, custom compliance mapping, 7-year retention, BAA/DPA.",
+    category: "pricing",
+    kind: "static",
+  },
+  {
+    path: "/industries/financial-services",
+    title: "AI Agent Compliance for Financial Services",
+    description: "SOX-grade evidence, budget controls, approval gates for banks and fintechs.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/healthcare",
+    title: "AI Agent HIPAA Compliance for Healthcare",
+    description: "DLP redaction, secret boundaries, egress allowlists for healthcare organizations.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/government",
+    title: "AI Agent FedRAMP & Government Compliance",
+    description: "Two-person rule, kill switch, forced dry-run, tamper-evident logs for government.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/insurance",
+    title: "AI Agent Insurance Underwriting Automation",
+    description: "Approval gates, proof bundles, reconciliation controls for insurance carriers.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/legal",
+    title: "AI Agent Legal Document Review Governance",
+    description: "File path scopes, DLP, two-person rule, audit replay for law firms.",
+    category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/industries/technology",
+    title: "AI Agent DevOps Governance for Technology",
+    description: "Deploy approvals, GitHub Actions integration, credential rotation for engineering teams.",
+    category: "industries",
     kind: "static",
   },
   {
@@ -6541,7 +6636,7 @@ function pricingPage(): string {
               <li>Execution attestation</li>
               <li>90-day audit log retention</li>
             </ul>
-            <a href="/contact" class="cta-btn cta-btn-outline">Get Started</a>
+            <a href="/pricing/starter" class="cta-btn cta-btn-outline">See details</a>
           </div>
           <div class="price-card">
             <div class="tier">Team</div>
@@ -6556,7 +6651,7 @@ function pricingPage(): string {
               <li>1-year audit log retention</li>
               <li>Budget controls</li>
             </ul>
-            <a href="/contact" class="cta-btn cta-btn-outline">Get Started</a>
+            <a href="/pricing/team" class="cta-btn cta-btn-outline">See details</a>
           </div>
           <div class="price-card featured">
             <div class="tier" style="color:var(--accent)">Business</div>
@@ -6589,7 +6684,7 @@ function pricingPage(): string {
               <li>BAA / DPA available</li>
               <li>On-prem option</li>
             </ul>
-            <a href="/contact" class="cta-btn cta-btn-outline">Talk to Sales</a>
+            <a href="/pricing/enterprise" class="cta-btn cta-btn-outline">See details</a>
           </div>
         </div>
       </div>
@@ -8084,6 +8179,28 @@ export default {
     if (path === "/guides/okta-scoped-tokens") return await htmlWithExperiment(html(guideOktaScopedTokensPage()), path);
     if (path === "/guides/compliance-evidence-export") return await htmlWithExperiment(html(guideComplianceExportPage()), path);
 
+    // Industry vertical pages
+    if (path === "/industries/financial-services") return await htmlWithExperiment(html(industryFinancialServicesPage()), path);
+    if (path === "/industries/healthcare") return await htmlWithExperiment(html(industryHealthcarePage()), path);
+    if (path === "/industries/government") return await htmlWithExperiment(html(industryGovernmentPage()), path);
+    if (path === "/industries/insurance") return await htmlWithExperiment(html(industryInsurancePage()), path);
+    if (path === "/industries/legal") return await htmlWithExperiment(html(industryLegalPage()), path);
+    if (path === "/industries/technology") return await htmlWithExperiment(html(industryTechnologyPage()), path);
+
+    // Proof points
+    if (path === "/proof-points") return await htmlWithExperiment(html(proofPointsPage()), path);
+
+    // Pricing tier detail pages
+    if (path === "/pricing/starter") return await htmlWithExperiment(html(pricingStarterPage()), path);
+    if (path === "/pricing/team") return await htmlWithExperiment(html(pricingTeamPage()), path);
+    if (path === "/pricing/enterprise") return await htmlWithExperiment(html(pricingEnterprisePage()), path);
+
+    // Resource gate pages (email capture)
+    const tsHtml = renderTurnstileBlock(turnstile, { widgetEnabled });
+    if (path === "/resources/protocol-whitepaper") return await htmlWithExperiment(html(resourceProtocolWhitepaperPage(tsHtml)), path);
+    if (path === "/resources/security-checklist") return await htmlWithExperiment(html(resourceSecurityChecklistPage(tsHtml)), path);
+    if (path === "/resources/compliance-mapping") return await htmlWithExperiment(html(resourceComplianceMappingPage(tsHtml)), path);
+
     if (path === "/sources") {
       const manifest = await loadManifest(env);
       return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
@@ -8113,6 +8230,8 @@ export default {
           "- https://www.clawea.com/book",
           "- https://www.clawea.com/trust",
           "- https://www.clawea.com/trust/security-review",
+          "- https://www.clawea.com/proof-points",
+          "- https://www.clawea.com/pricing",
           "- https://www.clawea.com/sources",
           "",
           "## Core references",
@@ -8226,6 +8345,19 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "guides/github-actions-proof-pipeline", priority: "0.8" },
     { slug: "guides/okta-scoped-tokens", priority: "0.7" },
     { slug: "guides/compliance-evidence-export", priority: "0.7" },
+    { slug: "proof-points", priority: "0.8" },
+    { slug: "resources/protocol-whitepaper", priority: "0.6" },
+    { slug: "resources/security-checklist", priority: "0.6" },
+    { slug: "resources/compliance-mapping", priority: "0.6" },
+    { slug: "pricing/starter", priority: "0.7" },
+    { slug: "pricing/team", priority: "0.7" },
+    { slug: "pricing/enterprise", priority: "0.8" },
+    { slug: "industries/financial-services", priority: "0.8" },
+    { slug: "industries/healthcare", priority: "0.8" },
+    { slug: "industries/government", priority: "0.8" },
+    { slug: "industries/insurance", priority: "0.7" },
+    { slug: "industries/legal", priority: "0.7" },
+    { slug: "industries/technology", priority: "0.8" },
   ];
 
   let entries = staticPages.map((p) => `  <url><loc>https://www.clawea.com/${p.slug}</loc><priority>${p.priority}</priority><changefreq>weekly</changefreq></url>`);
@@ -8384,6 +8516,27 @@ function generateLlmsFullTxt(manifest: Record<string, { title?: string; category
     { path: "/book", title: "Book a Rollout Session", summary: "Booking form for deployment planning sessions with lead-context prefill.", category: "contact" },
     { path: "/sources", title: "Citation Source Hub", summary: "Central hub routing to citation-backed pages with explicit source attribution.", category: "reference" },
     { path: "/about", title: "About Claw Bureau", summary: "Mission, approach, and ecosystem overview. Links to clawverify, clawproxy, clawbounties, clawescrow, clawcuts.", category: "about" },
+    { path: "/proof-points", title: "Proof Points", summary: "Protocol adoption metrics (22 conformance vectors, 8 receipt schemas, 30+ reason codes, 150+ pages). Dogfooding evidence (DID commit proofs on every PR). Architecture credibility (Cloudflare Workers, Ed25519, SHA-256, offline verification).", category: "trust" },
+    { path: "/compare/claw-vs-manual-audit", title: "Claw EA vs Manual Audit Evidence", summary: "Head-to-head comparison of automated proof bundles vs spreadsheet-based manual evidence collection.", category: "compare" },
+    { path: "/compare/claw-vs-guardrails", title: "Claw EA vs Guardrails", summary: "Protocol-level proof of execution vs inference-time guardrails (NeMo, Guardrails AI). Complementary, not competing.", category: "compare" },
+    { path: "/compare/claw-vs-langfuse", title: "Claw EA vs Langfuse", summary: "Cryptographic receipts vs observability dashboards. Proof and monitoring solve different compliance requirements.", category: "compare" },
+    { path: "/compare/claw-vs-custom-wrappers", title: "Claw EA vs Custom Wrappers", summary: "Protocol-level receipts vs ad-hoc custom wrapper logging. Standard schemas and signing vs team-maintained code.", category: "compare" },
+    { path: "/compare/agent-governance-platforms", title: "Agent Governance Platforms Landscape", summary: "Four approaches compared: guardrails, observability, custom wrappers, protocol-first proof. When to use what.", category: "compare" },
+    { path: "/guides/github-actions-proof-pipeline", title: "GitHub Actions Proof Pipeline Guide", summary: "Step-by-step: install SDK, configure allowlist, sign commits, add workflow, push and verify.", category: "guides" },
+    { path: "/guides/okta-scoped-tokens", title: "Okta Scoped Tokens Guide", summary: "Map Okta groups to CST scopes for policy-gated agent execution with audit trail.", category: "guides" },
+    { path: "/guides/compliance-evidence-export", title: "Compliance Evidence Export Guide", summary: "Generate export bundles, verify offline, deliver to auditors for SOX/SOC 2 evidence.", category: "guides" },
+    { path: "/industries/financial-services", title: "Financial Services", summary: "AI agent compliance for banks, asset managers, and fintechs. SOX, OCC, FFIEC, MAS TRM regulatory mapping.", category: "industries" },
+    { path: "/industries/healthcare", title: "Healthcare", summary: "HIPAA, HITECH, 21 CFR Part 11 compliance for AI agents. DLP redaction, secret boundaries, egress controls.", category: "industries" },
+    { path: "/industries/government", title: "Government", summary: "FedRAMP, NIST 800-53, EO 14110 compliance. Two-person rule, kill switch, forced dry-run, Merkle logs.", category: "industries" },
+    { path: "/industries/insurance", title: "Insurance", summary: "Underwriting and claims governance. NAIC model laws, Colorado SB 21-169, EU AI Act. Approval gates and proof bundles.", category: "industries" },
+    { path: "/industries/legal", title: "Legal", summary: "Attorney-client privilege protection. File path scopes, DLP, two-person rule, audit replay for law firms.", category: "industries" },
+    { path: "/industries/technology", title: "Technology", summary: "DevOps governance. Deploy approvals, GitHub Actions proof pipeline, credential rotation, rate limits.", category: "industries" },
+    { path: "/pricing/starter", title: "Starter Plan ($49/mo)", summary: "1 agent, 5 skills, execution attestation, 90-day retention. Entry point for proof-first governance.", category: "pricing" },
+    { path: "/pricing/team", title: "Team Plan ($249/mo)", summary: "5 agents, Work Policy Contracts, budget controls, model routing, 1-year retention.", category: "pricing" },
+    { path: "/pricing/enterprise", title: "Enterprise Plan (Custom)", summary: "Unlimited agents, custom compliance mapping, 7-year retention, BAA/DPA, on-prem option.", category: "pricing" },
+    { path: "/resources/protocol-whitepaper", title: "Clawsig Protocol v0.1 Spec (Download)", summary: "Full protocol specification with five primitives, JSON schemas, and verification algorithm.", category: "resources" },
+    { path: "/resources/security-checklist", title: "Agent Security Checklist (Download)", summary: "15 controls every enterprise needs: policy, identity, data protection, monitoring.", category: "resources" },
+    { path: "/resources/compliance-mapping", title: "Regulatory Mapping (Download)", summary: "SOX, HIPAA, FedRAMP, SOC 2, EU AI Act mapped to specific agent controls and evidence.", category: "resources" },
   ];
 
   ln("### Static Pages");

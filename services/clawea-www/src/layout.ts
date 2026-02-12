@@ -969,14 +969,41 @@ function footer(): string {
         </ul>
       </div>
       <div>
+        <h4>Industries</h4>
+        <ul>
+          <li><a href="/industries/financial-services">Financial Services</a></li>
+          <li><a href="/industries/healthcare">Healthcare</a></li>
+          <li><a href="/industries/government">Government</a></li>
+          <li><a href="/industries/insurance">Insurance</a></li>
+          <li><a href="/industries/legal">Legal</a></li>
+          <li><a href="/industries/technology">Technology</a></li>
+        </ul>
+      </div>
+      <div>
         <h4>Resources</h4>
         <ul>
-          <li><a href="/guides">Guides</a></li>
+          <li><a href="/guides/github-actions-proof-pipeline">GitHub Actions Guide</a></li>
+          <li><a href="/guides/okta-scoped-tokens">Okta Tokens Guide</a></li>
+          <li><a href="/guides/compliance-evidence-export">Evidence Export Guide</a></li>
+          <li><a href="/compare/agent-governance-platforms">Governance Comparison</a></li>
+          <li><a href="/proof-points">Proof Points</a></li>
+          <li><a href="/resources/protocol-whitepaper">Protocol Spec</a></li>
+          <li><a href="/resources/security-checklist">Security Checklist</a></li>
+          <li><a href="/resources/compliance-mapping">Compliance Mapping</a></li>
           <li><a href="/glossary">Glossary</a></li>
           <li><a href="/sources">Source Hub</a></li>
-          <li><a href="/assessment">Assessment</a></li>
-          <li><a href="/mcp-security">MCP Security</a></li>
           <li><a href="/about">About</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Get Started</h4>
+        <ul>
+          <li><a href="/assessment">Assessment</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/pricing/starter">Starter Plan</a></li>
+          <li><a href="/pricing/team">Team Plan</a></li>
+          <li><a href="/pricing/enterprise">Enterprise Plan</a></li>
+          <li><a href="/consulting">Consulting</a></li>
           <li><a href="/book">Book Session</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
