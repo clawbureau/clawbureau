@@ -22,8 +22,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ENVS = {
-  staging: 'https://clawsettle.claw-staging.workers.dev',
-  prod: 'https://clawsettle.clawbureau.workers.dev',
+  staging: 'https://staging.clawsettle.com',
+  prod: 'https://clawsettle.com',
 };
 
 function resolveEnv() {
