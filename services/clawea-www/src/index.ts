@@ -70,7 +70,7 @@ import {
   productSchema,
   type PageMeta,
 } from "./seo";
-import { trustPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
+import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1725,6 +1725,13 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     path: "/trust",
     title: "Trust Layer | Verified AI Agent Execution | Claw EA",
     description: "Cryptographic proof of AI agent actions.",
+    category: "trust",
+    kind: "static",
+  },
+  {
+    path: "/trust/security-review",
+    title: "Security Review Pack | Claw EA Enterprise AI Agents",
+    description: "Architecture, threat model, proof artifacts, and deployment integrity for security review.",
     category: "trust",
     kind: "static",
   },
@@ -6272,17 +6279,17 @@ function homePage(): string {
     body: `
     <section class="hero">
       <div class="wrap">
-        <span class="badge badge-blue">Enterprise AI Infrastructure</span>
-        <h1 data-hero-copy data-hero-proof="AI Agents Your Security Team Can Defend" data-hero-roi="AI Agents That Ship Value Without Governance Debt" data-hero-speed="AI Agents You Can Launch This Month, Not Next Year">AI Agents That Your Enterprise Can Actually Trust</h1>
-        <p class="sub">Deploy verified AI agents across Slack, Teams, Discord, and 20+ channels. Every action attested. Every model call receipted. No vendor lock-in. Works with Claude, GPT, Gemini, Llama, and any model you choose.</p>
+        <span class="badge badge-blue">Proof-First Agent Pilots</span>
+        <h1>Ship Irreversible Agent Workflows With Proof</h1>
+        <p class="sub">Policy-as-code controls. Cryptographic receipts. Offline verification. Start with one production deploy approval workflow and expand from evidence, not assumptions. Two-week pilot.</p>
         <div class="actions">
-          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-assessment" data-cta-copy data-cta-proof="Run assessment" data-cta-roi="Estimate rollout ROI" data-cta-speed="Start 2-minute assessment">Run assessment</a>
-          <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="home-contact">Talk to Sales</a>
+          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-assessment">Take the assessment</a>
+          <a href="/trust/security-review" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="home-security-review">See the Security Review Pack</a>
         </div>
-        <ul class="trust-proof-list" aria-label="Trust posture highlights">
-          <li>SOC 2 control mapping</li>
-          <li>HIPAA/GDPR evidence ready</li>
-          <li>SIEM export compatible</li>
+        <ul class="trust-proof-list" aria-label="What your security team gets">
+          <li>Every model call receipted (Ed25519)</li>
+          <li>Tamper-evident audit logs (Merkle)</li>
+          <li>Offline-verifiable proof bundles</li>
         </ul>
       </div>
     </section>
@@ -6415,10 +6422,10 @@ function homePage(): string {
     <section class="section">
       <div class="wrap">
         <div class="cta-banner">
-          <h2>Deploy Your First Enterprise AI Agent With a Controlled Pilot</h2>
-          <p>Start with a scored readiness path, then move to a proof-backed pilot plan your security and platform teams can approve.</p>
-          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-bottom-assessment" data-cta-copy>Run assessment</a>
-          <a href="/contact" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="home-bottom-contact">Talk to Sales</a>
+          <h2>Start With a Two-Week Proof-First Pilot</h2>
+          <p>Pick one irreversible workflow. We deploy controls, receipts, and proof bundles. Your security team verifies independently. You decide whether to expand.</p>
+          <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="home-bottom-assessment">Take the assessment</a>
+          <a href="/trust/security-review" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="home-bottom-security-review">Security Review Pack</a>
         </div>
       </div>
     </section>`,
@@ -6825,6 +6832,24 @@ function assessmentResultPage(result: AssessmentResult, turnstile: TurnstilePost
           </ul>
         </div>
 
+        <div class="card" style="margin-top:1.5rem;border-left:3px solid var(--accent)">
+          <h3 style="margin-bottom:.5rem">Recommended controls for your profile</h3>
+          <p style="font-size:.9rem;color:var(--text-secondary);margin-bottom:.75rem">Based on your assessment scores, these are the controls that matter most for your rollout.</p>
+          <div class="grid-2">
+            ${result.riskScore >= 50 ? `
+            <a href="/controls/approval-gates" class="card card-link" data-cta="result-control-approval-gates"><h4>Approval Gates</h4><p>Step-up human approvals for irreversible actions.</p></a>
+            <a href="/controls/two-person-rule" class="card card-link" data-cta="result-control-two-person"><h4>Two-Person Rule</h4><p>Require two humans for high-risk steps.</p></a>
+            ` : ""}
+            <a href="/controls/egress-allowlist" class="card card-link" data-cta="result-control-egress"><h4>Egress Allowlist</h4><p>Lock down what agents can reach.</p></a>
+            <a href="/controls/dlp-redaction" class="card card-link" data-cta="result-control-dlp"><h4>DLP Redaction</h4><p>Strip sensitive data before it leaves the boundary.</p></a>
+            ${result.readinessScore < 60 ? `
+            <a href="/controls/budgets" class="card card-link" data-cta="result-control-budgets"><h4>Budget Controls</h4><p>Set token and cost limits per workflow.</p></a>
+            ` : ""}
+            <a href="/controls/kill-switch" class="card card-link" data-cta="result-control-kill-switch"><h4>Kill Switch</h4><p>Stop execution instantly when policy is violated.</p></a>
+          </div>
+          <p style="margin-top:.75rem;font-size:.9rem"><a href="/trust/security-review" data-cta="result-security-review-pack">See the full Security Review Pack &rarr;</a></p>
+        </div>
+
         <form class="card lead-form" data-lead-form data-cta="assessment-result-form" style="margin-top:2rem"${formGuardAttrs(turnstile)}>
           <h3 style="margin-bottom:.5rem">Get your tailored rollout plan</h3>
           <p class="form-note" style="margin-bottom:1rem">This takes less than 45 seconds.</p>
@@ -6864,7 +6889,7 @@ function assessmentResultPage(result: AssessmentResult, turnstile: TurnstilePost
           <p>Book a rollout session directly or review trust controls before you proceed.</p>
           <a href="/book?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-lg" data-cta="assessment-result-book">Book rollout session</a>
           <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-contact" data-cta-copy>Talk to Sales</a>
-          <p style="margin-top:.9rem;font-size:.9rem"><a href="/trust" style="color:var(--text);text-decoration:underline" data-cta="assessment-result-trust">Review trust controls first</a></p>
+          <p style="margin-top:.9rem;font-size:.9rem"><a href="/trust/security-review" style="color:var(--text);text-decoration:underline" data-cta="assessment-result-security-review">Review the Security Review Pack first</a></p>
         </div>
 
         <div style="margin-top:1.25rem">${renderLeadIntakeTrustRail(turnstile)}</div>
@@ -7434,6 +7459,7 @@ function articlePage(article: Article): string {
           ${tocHtml}
           <div class="article-main">
             <div class="article-body">${bodyHtml}</div>
+            ${clusterCtaForArticle(article.slug)}
             ${relatedHtml}
           </div>
         </div>
@@ -7444,6 +7470,79 @@ function articlePage(article: Article): string {
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ── Money Cluster CTAs ────────────────────────────────────────── */
+
+interface ClusterDef {
+  label: string;
+  hub: string;
+  hubTitle: string;
+  children: string[];
+  angle: string;
+}
+
+const MONEY_CLUSTERS: ClusterDef[] = [
+  {
+    label: "Production Deploy Approvals",
+    hub: "workflows/production-deploy-approval",
+    hubTitle: "Production Deploy Approval Workflow",
+    children: [
+      "tools/github", "tools/argocd", "tools/terraform-cloud",
+      "controls/two-person-rule", "controls/approval-gates",
+      "workflows/cicd-policy-enforcement",
+    ],
+    angle: "We run this on our own repo. Every agent PR carries a verifiable evidence pack.",
+  },
+  {
+    label: "Identity / Access Request Automation",
+    hub: "workflows/access-request-automation",
+    hubTitle: "Access Request Automation Workflow",
+    children: [
+      "tools/okta", "tools/entra-id", "tools/google-admin",
+      "controls/scoped-tokens", "controls/approval-gates",
+    ],
+    angle: "Scoped tokens bind agent identity to permissions to audit trail.",
+  },
+  {
+    label: "Compliance Evidence Collection",
+    hub: "workflows/siem-evidence-collection",
+    hubTitle: "SIEM Evidence Collection Workflow",
+    children: [
+      "compliance/sox-controls", "audit/tamper-evident-logs",
+      "proof/proof-bundles", "compliance",
+    ],
+    angle: "Proof bundles are offline-verifiable evidence artifacts. No vendor lock-in.",
+  },
+];
+
+function clusterCtaForArticle(slug: string): string {
+  for (const cluster of MONEY_CLUSTERS) {
+    const isHub = slug === cluster.hub;
+    const isChild = cluster.children.includes(slug);
+    if (!isHub && !isChild) continue;
+
+    const hubLink = isHub
+      ? ""
+      : `<p style="margin-bottom:.5rem"><a href="/${cluster.hub}">&larr; ${esc(cluster.hubTitle)}</a></p>`;
+
+    return `
+    <div class="cta-banner" style="margin-top:2rem">
+      ${hubLink}
+      <h2>See how this works for your stack</h2>
+      <p>${esc(cluster.angle)}</p>
+      <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="cluster-assessment-${esc(cluster.hub.split("/").pop() ?? "")}">Take the assessment</a>
+      <a href="/trust/security-review" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="cluster-security-review">Security Review Pack</a>
+    </div>`;
+  }
+
+  // Default CTA for non-cluster pages
+  return `
+    <div class="cta-banner" style="margin-top:2rem">
+      <h2>See how this applies to your environment</h2>
+      <p>Take the two-minute assessment. We map controls to your stack and risk profile.</p>
+      <a href="/assessment" class="cta-btn cta-btn-lg" data-cta="article-assessment">Take the assessment</a>
+    </div>`;
 }
 
 // ── Router ────────────────────────────────────────────────────────
@@ -7876,6 +7975,7 @@ export default {
     if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstile, { widgetEnabled })), path);
     if (path === "/book") return await htmlWithExperiment(html(bookPage(url, turnstile, { widgetEnabled }), 200, 900), path);
     if (path === "/trust") return await htmlWithExperiment(html(trustPage()), path);
+    if (path === "/trust/security-review") return await htmlWithExperiment(html(securityReviewPackPage()), path);
     if (path === "/secure-workers") return await htmlWithExperiment(html(secureWorkersPage()), path);
     if (path === "/consulting") return await htmlWithExperiment(html(consultingPage()), path);
     if (path === "/about") return await htmlWithExperiment(html(aboutPage()), path);
@@ -7907,6 +8007,7 @@ export default {
           "- https://www.clawea.com/contact",
           "- https://www.clawea.com/book",
           "- https://www.clawea.com/trust",
+          "- https://www.clawea.com/trust/security-review",
           "- https://www.clawea.com/sources",
           "",
           "## Core references",
@@ -7994,6 +8095,7 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "", priority: "1.0" },
     { slug: "assessment", priority: "0.9" },
     { slug: "trust", priority: "0.8" },
+    { slug: "trust/security-review", priority: "0.9" },
     { slug: "secure-workers", priority: "0.8" },
     { slug: "consulting", priority: "0.8" },
     { slug: "pricing", priority: "0.8" },
