@@ -1,74 +1,91 @@
 > **Type:** PRD
-> **Status:** ACTIVE (production harness lane)
+> **Status:** ACTIVE (arbitration MVP live)
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-11
-> **Source of truth:** `services/clawtrials/` (harness lane) + this PRD (broader future scope)
+> **Last reviewed:** 2026-02-12
+> **Source of truth:** `services/clawtrials/`
 
-# clawtrials.com (Dispute Arbitration + Test Harness) — PRD
+# clawtrials.com (Dispute Arbitration + Harness) — PRD
 
 **Domain:** clawtrials.com  
 **Pillar:** Governance & Risk Controls  
-**Status:** Active (harness lane live on staging + production; full dispute product not implemented)  
+**Status:** Production live for arbitration MVP + harness compatibility
 
 ---
 
-## Implementation status (current)
-
-### Live now
-- `services/clawtrials/` worker implemented for simulation/test-lane operability.
-- Deterministic harness API:
-  - `POST /v1/harness/run`
-  - `GET /v1/harness/catalog`
-  - `GET /health`
-- Staging deployment + validation:
-  - `staging.clawtrials.com` route active
-  - workers.dev endpoint active (`https://clawtrials-staging.generaite.workers.dev`)
-  - latest staging version: `3625d6b1-4fc9-4f97-a29f-d3a024ef47f1`
-- Production deployment + route fix:
-  - added production routes for API paths to avoid parked-landing fallback:
-    - `clawtrials.com/v1/harness*`
-    - `clawtrials.com/health`
-  - latest production version: `e61dde2b-06a5-4c99-9e6d-6010f8d5412c`
-- Evidence artifacts:
-  - staging gate report: `artifacts/simulations/clawbounties/2026-02-11T23-13-16-036Z-prod-gate/gate-report.json`
-  - prod gate report: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
-  - prod test-lane smoke: `artifacts/simulations/clawbounties/2026-02-11T23-10-29-162Z-test-e2e/test-smoke.json`
-
-### Not yet implemented
-- Full dispute intake / judge assignment / arbitration workflows remain roadmap scope.
-
----
+## Implementation status
+- Service tracker: `services/clawtrials/prd.json`
+- Service progress log: `services/clawtrials/progress.txt`
+- Current state: arbitration MVP (`CTR-US-001..006`) is implemented and deployed in staging + production.
 
 ## 1) Purpose
-- **Near term:** deterministic test harness execution for `closure_type=test` in clawbounties.
-- **Long term:** dispute arbitration service for marketplace and contracts.
+- Provide deterministic dispute arbitration for clawbounties rejection flows.
+- Preserve harness lane compatibility (`/v1/harness/*`) for existing test-closure automation.
+- Enforce escrow outcomes deterministically from trial decisions.
 
-## 2) Target Users
-- Marketplace operators
-- Requesters
-- Workers
-- Future judges/arbiters
+## 2) Implemented scope (CTR-OPS-001)
 
-## 3) MVP Scope (current tranche)
-- Validate harness-run request payloads fail-closed.
-- Execute deterministic harness policies (pass/fail/error) by harness id.
-- Return stable machine-readable harness-run response contract.
+### Arbitration API (admin-gated)
+`Authorization: Bearer <TRIALS_ADMIN_KEY>`
 
-## 4) Non-Goals (current tranche)
-- No court/appeals/arbitration UX.
-- No judge marketplace yet.
+- `POST /v1/trials/cases`
+- `GET /v1/trials/cases/:id`
+- `GET /v1/trials/cases` (filters + cursor)
+- `POST /v1/trials/cases/:id/decision`
+- `POST /v1/trials/cases/:id/appeal`
+- `GET /v1/trials/reports/disputes`
 
-## 5) Dependencies
-- clawbounties.com (primary consumer)
-- clawverify.com (indirect via clawbounties submission paths)
+### Compatibility lane (public)
+- `GET /health`
+- `GET /v1/harness/catalog`
+- `POST /v1/harness/run`
 
-## 6) Core User Journeys
-- Clawbounties submits payload to `/v1/harness/run` → harness returns deterministic verdict → clawbounties auto-approves/auto-rejects or fail-closes.
+## 3) Key guarantees
+- **Deterministic judge assignment** via hash over stable case inputs + configured `TRIALS_JUDGE_POOL`.
+- **Strict evidence validation (fail-closed)** on case intake:
+  - `proof_bundle_hash`
+  - `receipt_refs` (non-empty)
+  - `artifact_refs` (non-empty)
+- **Escrow enforcement integration** on decisions through `POST /v1/escrows/:id/resolve` with shared service auth.
+- **Idempotency and replay safety** for case intake, decisions, and appeals.
+- **Dispute metrics** endpoint with totals, outcomes, and resolution latency stats.
 
-## 7) User Stories (future)
-- CTR-US-001 intake, CTR-US-002 assignment, CTR-US-003 decision, CTR-US-004 appeals, CTR-US-005 metrics, CTR-US-006 evidence bundle.
+## 4) Cross-service integrations
+- **clawbounties**
+  - requester rejection now freezes escrow and opens clawtrials case.
+  - bounty record stores `trial_case_id` + `trial_opened_at`.
+- **clawescrow**
+  - added admin endpoint `POST /v1/escrows/:id/resolve` (trials-auth only)
+  - supports `worker_award` and `requester_refund`, with deterministic idempotency.
 
-## 8) Success Metrics
-- Harness API availability in staging + production.
-- Deterministic error behavior under dependency/network faults.
-- Test closure latency and stuck-state reduction in clawbounties.
+## 5) Data model
+- D1 migration: `services/clawtrials/migrations/0001_init.sql`
+- Core tables:
+  - `trial_cases`
+  - `trial_case_events`
+  - `trial_case_idempotency`
+
+## 6) Validation evidence (staging + production)
+- Staging arbitration smoke:
+  - `artifacts/simulations/clawtrials/2026-02-12T02-02-05-716Z-staging/smoke.json`
+- Production arbitration smoke:
+  - `artifacts/simulations/clawtrials/2026-02-12T02-03-12-873Z-prod/smoke.json`
+
+Both runs validated:
+- dispute intake from clawbounties reject flow,
+- deterministic judge assignment,
+- decision enforcement (`released`) through escrow,
+- decision replay behavior (`200` replay + `409` conflict for new key),
+- appeals + appeal re-decision,
+- blocked appeal outcome changes,
+- metrics endpoint availability.
+
+## 7) Deploy state (current)
+- **staging**
+  - clawtrials version: `402d04df-f812-48f1-9835-da1d466bcd97`
+- **production**
+  - clawtrials version: `82f7e2fe-698a-4b8b-b071-f7ebaed8580d`
+
+## 8) Out of scope (this tranche)
+- Human judge marketplace UX.
+- Multi-judge voting/quorum.
+- External evidence retrieval/storage system (currently references only).

@@ -668,3 +668,26 @@ Started: 2026-02-02T03:08:26.937005
   - gate + invalid harness replay evidence: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
 - Story closure:
   - flipped `CBT-US-028`, `CBT-US-029`, `CBT-US-030` to `passes=true` with production evidence.
+
+## 2026-02-12 - CTR-OPS-001 integration (clawbounties -> clawtrials)
+- Wired requester rejection flow to open arbitration cases in clawtrials (instead of escrow-only dispute freeze).
+  - `POST /v1/bounties/{bounty_id}/reject` now:
+    1) disputes escrow,
+    2) opens `POST /v1/trials/cases`,
+    3) persists `trial_case_id` + `trial_opened_at` on bounty.
+- Added trial references to bounty model/DB surface:
+  - D1 migration `migrations/0016_dispute_trial_case_refs.sql`
+  - fields: `trial_case_id`, `trial_opened_at`
+- Added env/config wiring for trials integration:
+  - `TRIALS_BASE_URL` var
+  - `TRIALS_SERVICE_KEY` secret
+  - bumped `BOUNTIES_VERSION` to `0.8.0`
+- Extended deterministic auto-reject (test lane) path to open trial case before bounty rejection persistence.
+- Deploys:
+  - `clawbounties-staging` version `17da8f3f-3071-4d6c-a0a7-c2fd5bb237f1`
+  - `clawbounties` version `39f1bceb-6e0f-4f92-80b3-10ef29f833ab`
+- Validation:
+  - typecheck: `pnpm --dir services/clawbounties typecheck` ✅
+  - staging+prod arbitration integration smoke:
+    - `artifacts/simulations/clawtrials/2026-02-12T02-02-05-716Z-staging/smoke.json`
+    - `artifacts/simulations/clawtrials/2026-02-12T02-03-12-873Z-prod/smoke.json`

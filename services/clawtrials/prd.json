@@ -1,0 +1,91 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/marketplace/CTR-OPS-001-clawtrials-arbitration-mvp",
+  "description": "clawtrials arbitration MVP with dispute intake, deterministic judge assignment, escrow decision enforcement, and dispute metrics.",
+  "userStories": [
+    {
+      "id": "CTR-US-001",
+      "title": "Dispute case intake",
+      "description": "As a marketplace system, I can create a trial case for a disputed bounty submission.",
+      "acceptanceCriteria": [
+        "POST /v1/trials/cases persists case state in D1",
+        "Request validation is fail-closed",
+        "Idempotent case creation by idempotency key",
+        "Bounties reject flow routes into case creation"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Verified in staging+prod arbitration smoke: artifacts/simulations/clawtrials/2026-02-12T02-02-05-716Z-staging/smoke.json and .../2026-02-12T02-03-12-873Z-prod/smoke.json"
+    },
+    {
+      "id": "CTR-US-002",
+      "title": "Deterministic judge assignment",
+      "description": "As an operator, I can rely on deterministic judge assignment from a configured roster.",
+      "acceptanceCriteria": [
+        "Judge assigned via deterministic hash",
+        "Judge pool configured by env",
+        "Assignment hash persisted and returned",
+        "No random/non-deterministic assignment path"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Smoke assertions confirm deterministic assignment hash + non-empty judge_did across staging/prod runs."
+    },
+    {
+      "id": "CTR-US-003",
+      "title": "Decision and escrow enforcement",
+      "description": "As a judge/admin, I can decide disputes and enforce payouts/refunds through escrow safely.",
+      "acceptanceCriteria": [
+        "POST /v1/trials/cases/:id/decision implemented",
+        "Escrow resolution endpoint enforced on decision",
+        "Deterministic idempotency and replay behavior",
+        "Invalid state transitions return deterministic error codes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Decision path enforced release via clawescrow /v1/escrows/:id/resolve, with replay-safe 200/409 semantics verified in both environments."
+    },
+    {
+      "id": "CTR-US-004",
+      "title": "Appeals",
+      "description": "As a party, I can appeal a decided case and receive deterministic transition handling.",
+      "acceptanceCriteria": [
+        "POST /v1/trials/cases/:id/appeal implemented",
+        "Appeal idempotency enforced",
+        "Appealed cases can be re-decided under deterministic constraints",
+        "Invalid appeal transitions fail closed"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Appeal -> re-decision -> blocked outcome-change path validated in staging/prod smoke."
+    },
+    {
+      "id": "CTR-US-005",
+      "title": "Dispute metrics reporting",
+      "description": "As an operator, I can retrieve dispute outcome and resolution-time metrics.",
+      "acceptanceCriteria": [
+        "GET /v1/trials/reports/disputes implemented",
+        "Resolution time aggregates (avg/p95) included",
+        "Outcome counts included",
+        "Filter window accepted via from/to"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Metrics endpoint hit successfully in both smoke runs with totals+latency payload assertions."
+    },
+    {
+      "id": "CTR-US-006",
+      "title": "Evidence bundle integrity",
+      "description": "As a verifier, I can trust that case evidence references are complete and persisted.",
+      "acceptanceCriteria": [
+        "Case creation requires proof_bundle_hash + receipt refs + artifact refs",
+        "Evidence references are persisted in D1",
+        "Evidence references are returned by case APIs",
+        "Missing required evidence fails closed"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Strict evidence validator enforces required bundle fields and returns deterministic 400 on missing evidence; exercised via integration flow."
+    }
+  ]
+}
