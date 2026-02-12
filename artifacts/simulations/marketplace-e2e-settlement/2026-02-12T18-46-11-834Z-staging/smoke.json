@@ -1,0 +1,47 @@
+{
+  "ok": false,
+  "env": "staging",
+  "run_id": "run_d7ecc954-25c8-4b49-9bf8-fe34a08fe72a",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "requester_did": "did:key:z6Mkreq9257cc51mljt7url",
+  "worker_did": "did:key:z6Mkwkr9257cc51mljt7url",
+  "sdk": {
+    "tool_receipts": 4,
+    "events": 6,
+    "bundle_id": "bundle_f666f3ba-539b-4948-a43a-abdee4adff0c"
+  },
+  "steps": [
+    {
+      "step": "simulate_fees",
+      "status": 404,
+      "pass": true,
+      "policy_active": false,
+      "elapsed_ms": 310
+    },
+    {
+      "step": "create_escrow",
+      "status": 502,
+      "pass": false,
+      "contract_valid": false,
+      "fully_funded": false,
+      "elapsed_ms": 322
+    },
+    {
+      "step": "ledger_risk_holds",
+      "status": 401,
+      "pass": false,
+      "holds_returned": null,
+      "elapsed_ms": 68
+    },
+    {
+      "step": "economy_health",
+      "status": 200,
+      "pass": "degraded",
+      "overall_status": "degraded",
+      "services_up": 5,
+      "services_total": 7,
+      "elapsed_ms": 314
+    }
+  ],
+  "generated_at": "2026-02-12T18:46:12.858Z"
+}
