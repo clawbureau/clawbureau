@@ -76,6 +76,9 @@ import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, a
 import { compareManualAuditPage, compareGuardrailsPage, compareLangfusePage, compareCustomWrappersPage, compareGovernanceLandscapePage } from "./pages/compare";
 import { guideGithubActionsProofPage, guideOktaScopedTokensPage, guideComplianceExportPage } from "./pages/guides";
 import { industryFinancialServicesPage, industryHealthcarePage, industryGovernmentPage, industryInsurancePage, industryLegalPage, industryTechnologyPage } from "./pages/industries";
+import { pricingStarterPage, pricingTeamPage, pricingEnterprisePage } from "./pages/pricing-tiers";
+import { proofPointsPage } from "./pages/proof-points";
+import { resourceProtocolWhitepaperPage, resourceSecurityChecklistPage, resourceComplianceMappingPage } from "./pages/resources";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1815,6 +1818,55 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     title: "About Claw Bureau | Enterprise AI Trust Infrastructure",
     description: "About Claw Bureau and the trust infrastructure approach for enterprise AI.",
     category: "about",
+    kind: "static",
+  },
+  {
+    path: "/proof-points",
+    title: "Why Trust Claw EA | Protocol Proof Points",
+    description: "Protocol adoption metrics, open source transparency, dogfooding evidence, and architecture credibility.",
+    category: "trust",
+    kind: "static",
+  },
+  {
+    path: "/resources/protocol-whitepaper",
+    title: "Download: Clawsig Protocol v0.1 Specification",
+    description: "Five cryptographic primitives for verifiable AI agent execution.",
+    category: "resources",
+    kind: "static",
+  },
+  {
+    path: "/resources/security-checklist",
+    title: "Agent Security Checklist: 15 Controls",
+    description: "Controls every enterprise needs before deploying AI agents.",
+    category: "resources",
+    kind: "static",
+  },
+  {
+    path: "/resources/compliance-mapping",
+    title: "Regulatory Mapping: SOX, HIPAA, FedRAMP → Controls",
+    description: "Map regulations to specific AI agent controls and evidence.",
+    category: "resources",
+    kind: "static",
+  },
+  {
+    path: "/pricing/starter",
+    title: "Starter Plan | $49/mo | Claw EA",
+    description: "1 AI agent, execution attestation, 90-day retention.",
+    category: "pricing",
+    kind: "static",
+  },
+  {
+    path: "/pricing/team",
+    title: "Team Plan | $249/mo | Claw EA",
+    description: "5 agents, Work Policy Contracts, budget controls, 1-year retention.",
+    category: "pricing",
+    kind: "static",
+  },
+  {
+    path: "/pricing/enterprise",
+    title: "Enterprise Plan | Custom | Claw EA",
+    description: "Unlimited agents, custom compliance mapping, 7-year retention, BAA/DPA.",
+    category: "pricing",
     kind: "static",
   },
   {
@@ -8135,6 +8187,20 @@ export default {
     if (path === "/industries/legal") return await htmlWithExperiment(html(industryLegalPage()), path);
     if (path === "/industries/technology") return await htmlWithExperiment(html(industryTechnologyPage()), path);
 
+    // Proof points
+    if (path === "/proof-points") return await htmlWithExperiment(html(proofPointsPage()), path);
+
+    // Pricing tier detail pages
+    if (path === "/pricing/starter") return await htmlWithExperiment(html(pricingStarterPage()), path);
+    if (path === "/pricing/team") return await htmlWithExperiment(html(pricingTeamPage()), path);
+    if (path === "/pricing/enterprise") return await htmlWithExperiment(html(pricingEnterprisePage()), path);
+
+    // Resource gate pages (email capture)
+    const tsHtml = renderTurnstileBlock(turnstile, { widgetEnabled });
+    if (path === "/resources/protocol-whitepaper") return await htmlWithExperiment(html(resourceProtocolWhitepaperPage(tsHtml)), path);
+    if (path === "/resources/security-checklist") return await htmlWithExperiment(html(resourceSecurityChecklistPage(tsHtml)), path);
+    if (path === "/resources/compliance-mapping") return await htmlWithExperiment(html(resourceComplianceMappingPage(tsHtml)), path);
+
     if (path === "/sources") {
       const manifest = await loadManifest(env);
       return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
@@ -8277,6 +8343,13 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "guides/github-actions-proof-pipeline", priority: "0.8" },
     { slug: "guides/okta-scoped-tokens", priority: "0.7" },
     { slug: "guides/compliance-evidence-export", priority: "0.7" },
+    { slug: "proof-points", priority: "0.8" },
+    { slug: "resources/protocol-whitepaper", priority: "0.6" },
+    { slug: "resources/security-checklist", priority: "0.6" },
+    { slug: "resources/compliance-mapping", priority: "0.6" },
+    { slug: "pricing/starter", priority: "0.7" },
+    { slug: "pricing/team", priority: "0.7" },
+    { slug: "pricing/enterprise", priority: "0.8" },
     { slug: "industries/financial-services", priority: "0.8" },
     { slug: "industries/healthcare", priority: "0.8" },
     { slug: "industries/government", priority: "0.8" },
