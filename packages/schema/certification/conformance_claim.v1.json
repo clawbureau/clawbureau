@@ -1,0 +1,104 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.certification.conformance_claim.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Clawsig Conformance Claim",
+  "description": "A claim submitted by a framework author after a successful conformance test run, used to register or renew Clawsig Inside certification.",
+  "type": "object",
+  "required": [
+    "claim_version",
+    "framework_name",
+    "framework_version",
+    "framework_repo",
+    "test_run_id",
+    "conformance_result",
+    "bundle_hash_b64u",
+    "claimed_at",
+    "claimer_did"
+  ],
+  "properties": {
+    "claim_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version for this claim format."
+    },
+    "framework_name": {
+      "type": "string",
+      "description": "Human-readable name of the agent framework (e.g., LangChain, CrewAI, Vercel AI SDK).",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "framework_version": {
+      "type": "string",
+      "description": "Semantic version of the framework that was tested.",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "framework_repo": {
+      "type": "string",
+      "description": "GitHub repository URL for the framework.",
+      "format": "uri",
+      "pattern": "^https://github\\.com/.+$"
+    },
+    "test_run_id": {
+      "type": "string",
+      "description": "Unique identifier for this conformance test run (UUID or CI-generated).",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "conformance_result": {
+      "type": "object",
+      "description": "The full ConformanceResult from the test runner.",
+      "required": [
+        "passed",
+        "bundle_found",
+        "bundle_valid",
+        "tier",
+        "tier_meets_expected",
+        "event_chain_length",
+        "receipt_count",
+        "errors"
+      ],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "bundle_found": { "type": "boolean" },
+        "bundle_valid": { "type": "boolean" },
+        "tier": { "type": ["string", "null"] },
+        "tier_meets_expected": { "type": "boolean" },
+        "event_chain_length": { "type": "integer", "minimum": 0 },
+        "receipt_count": { "type": "integer", "minimum": 0 },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "bundle_hash_b64u": {
+      "type": "string",
+      "description": "SHA-256 hash of the proof bundle JSON (base64url, no padding).",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "claimed_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp of when this claim was submitted.",
+      "format": "date-time"
+    },
+    "claimer_did": {
+      "type": "string",
+      "description": "DID of the entity submitting this claim (did:key:...).",
+      "pattern": "^did:(key|web):.+"
+    },
+    "ci_context": {
+      "type": "object",
+      "description": "Optional CI/CD context for provenance.",
+      "properties": {
+        "provider": { "type": "string", "description": "CI provider (e.g., github-actions, gitlab-ci)." },
+        "workflow_ref": { "type": "string", "description": "Workflow file or pipeline reference." },
+        "run_url": { "type": "string", "format": "uri", "description": "URL to the CI run." },
+        "commit_sha": { "type": "string", "description": "Git commit SHA that triggered the test." }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

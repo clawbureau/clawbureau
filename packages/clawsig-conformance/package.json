@@ -1,0 +1,55 @@
+{
+  "name": "@clawbureau/clawsig-conformance",
+  "version": "0.1.0",
+  "description": "Conformance test runner and GitHub Action for the Clawsig Inside program — validates that AI agent frameworks emit correct proof bundles.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "dist/**/*.js.map",
+    "action.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "clawsig",
+    "conformance",
+    "proof-bundle",
+    "agent-verification",
+    "github-action",
+    "clawsig-inside"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawbureau/clawbureau",
+    "directory": "packages/clawsig-conformance"
+  },
+  "homepage": "https://clawsig.com/directory",
+  "bugs": "https://github.com/clawbureau/clawbureau/issues",
+  "dependencies": {
+    "@clawbureau/clawverify-core": "^0.1.1"
+  },
+  "devDependencies": {
+    "@actions/core": "^1.11.1",
+    "@types/node": "^25.2.1",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
