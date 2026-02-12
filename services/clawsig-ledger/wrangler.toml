@@ -1,0 +1,46 @@
+name = "clawsig-ledger"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-11"
+compatibility_flags = ["nodejs_compat"]
+routes = [{ pattern = "api.clawverify.com/v1/*", zone_name = "clawverify.com" }]
+[[d1_databases]]
+binding = "LEDGER_DB"
+database_name = "clawsig-public-ledger"
+database_id = "placeholder-replace-after-d1-create"
+[[r2_buckets]]
+binding = "BUNDLES"
+bucket_name = "clawsig-public-bundles"
+[[queues.producers]]
+binding = "LEDGER_QUEUE"
+queue = "ledger-ingest"
+[[queues.consumers]]
+queue = "ledger-ingest"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "ledger-ingest-dlq"
+[vars]
+SERVICE_VERSION = "0.1.0"
+CLAWLOGS_RT_URL = "https://clawlogs.com"
+[env.staging]
+name = "clawsig-ledger-staging"
+routes = [{ pattern = "staging-api.clawverify.com/v1/*", zone_name = "clawverify.com" }]
+[[env.staging.d1_databases]]
+binding = "LEDGER_DB"
+database_name = "clawsig-public-ledger-staging"
+database_id = "placeholder-replace-after-d1-create"
+[[env.staging.r2_buckets]]
+binding = "BUNDLES"
+bucket_name = "clawsig-public-bundles-staging"
+[[env.staging.queues.producers]]
+binding = "LEDGER_QUEUE"
+queue = "ledger-ingest-staging"
+[[env.staging.queues.consumers]]
+queue = "ledger-ingest-staging"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+[env.staging.vars]
+SERVICE_VERSION = "0.1.0"
+CLAWLOGS_RT_URL = "https://staging.clawlogs.com"

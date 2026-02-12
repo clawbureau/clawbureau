@@ -1,0 +1,16 @@
+{
+  "name": "@clawbureau/clawsig-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": { "dev": "wrangler dev", "deploy": "wrangler deploy", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@clawbureau/clawverify-core": "file:../../packages/clawverify-core",
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.0.0"
+  }
+}
