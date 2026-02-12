@@ -278,4 +278,30 @@ Validation + rollout evidence:
 
 ---
 
+## 12) 2026-02-12 addendum — ICP-M6 claim exchange bootstrap + release evidence refresh
+
+M6 conformance runner now bootstraps canonical CSTs via `clawclaim` challenge/exchange flow:
+- `POST /v1/scoped-tokens/challenges`
+- `POST /v1/scoped-tokens/exchange`
+
+Why this matters:
+- Removes suite coupling to direct scope-admin canonical issuance for bootstrap.
+- Keeps fail-closed dependency contract explicit (`SCOPE_DEPENDENCY_NOT_CONFIGURED`) when scope bridge settings are missing.
+- Preserves deterministic owner-signed issuance semantics.
+
+Operational alignment:
+- Scope bridge secret binding synchronized (name only): `CLAIM_SCOPE_ADMIN_KEY` in staging + prod.
+
+Validation evidence:
+- M6 conformance matrices (pass):
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`
+- Baseline smoke refresh:
+  - hard-cutover staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-11-396Z-staging/result.json`
+  - hard-cutover prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-20-846Z-prod/result.json`
+  - M5 staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-58-14-942Z-staging-m5/result.json`
+  - M5 prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-58-35-479Z-prod-m5/result.json`
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*

@@ -1,0 +1,12 @@
+identity-control-plane-m5 smoke (staging)
+generated_at=2026-02-12T00:58:14.943Z
+clawclaim_version=2204a9ff-2376-4910-944c-8b517a526122
+clawscope_version=028de033-b1ac-45b5-82f5-904cd517e5b7
+clawverify_version=e21fce86-ca5c-4ac1-92c2-8f7794b80d6e
+owner_did=did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR
+token_hash=72a4bdb774f0c82f03b0d1c9312379b536c4be19554b19d838d5d5c65d7a7070
+trace_id=trace-m5-staging-1770857894943
+usage_rows=10
+alert_events=12
+mission_rows=14
+status=PASS

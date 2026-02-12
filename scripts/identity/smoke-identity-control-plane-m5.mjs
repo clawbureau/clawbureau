@@ -692,7 +692,10 @@ async function main() {
 
   const revokeToken = await request(`${urls.clawscope}/v1/tokens/revoke`, {
     method: 'POST',
-    headers: adminHeaders,
+    headers: {
+      'content-type': 'application/json',
+      'x-cst': scopedToken,
+    },
     body: {
       token_hash: scopedTokenHash,
       reason: `smoke_${runId}`,

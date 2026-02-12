@@ -875,3 +875,57 @@ Started: 2026-02-07T19:53:07Z
   - `TOKEN_EXCHANGE_CHALLENGE_USED`
   - `TRANSITION_UNKNOWN`
   - revoked-token introspection state (`active=false`, `revoked=true`)
+
+## 2026-02-12T01:10:00Z - ICP-M6 universal enforcement + governance closure
+- What was implemented
+  - Completed M6 conformance/ops runner path hardening in `scripts/identity/run-identity-control-plane-m6-suite.mjs`:
+    - canonical token bootstrap now uses `clawclaim` challenge/exchange flow (no direct suite dependency on scope canonical issue endpoint)
+    - conformance semantics updated for deterministic 201 WPC create behavior
+    - report ordering fixed so transparency/SLO checks run before conformance revocation
+    - audience generation made environment-aware (`staging.*` + prod domains)
+  - Finalized cross-service runtime alignment for universal canonical enforcement:
+    - `clawscope`: protected auth + governance route fixes (`/v1/reports/revocation-slo` bypass from observability admin router, snapshot transition contract fix)
+    - `clawcontrols`: canonical token-control required-scope contract normalized
+    - `clawproxy`: staging issuer public key aligned to active transparency kid
+  - Updated smoke baselines for canonical-auth mode compatibility:
+    - `scripts/identity/smoke-identity-control-plane-hard-cutover.mjs` now uses canonical CST for protected revoke/stream operations
+    - `scripts/identity/smoke-identity-control-plane-m5.mjs` revoke step now uses canonical CST header (`x-cst`) instead of legacy admin auth
+- Cloudflare/runtime operations
+  - Rotated and synchronized scope admin integration secrets (name only, values redacted):
+    - `SCOPE_ADMIN_KEY` (staging/prod)
+    - `CLAIM_SCOPE_ADMIN_KEY` (staging/prod)
+  - Applied existing governance migration remotely (already created in prior tranche):
+    - `services/clawscope/migrations/0002_governance_transparency_revocation_slo.sql`
+  - Deployed updated services:
+    - `clawscope-staging` -> `028de033-b1ac-45b5-82f5-904cd517e5b7`
+    - `clawscope` -> `89b90fad-84da-4920-aceb-27d46c45256a`
+    - `clawcontrols-staging` -> `48dc04b6-24ae-4cde-917d-48fd0781ef48`
+    - `clawcontrols` -> `0c6685f9-b82c-41fe-9d40-8b375f6bdde7`
+    - `clawproxy-staging` -> `e6d6aa64-983b-40ad-bf45-92db7b4ce975`
+- Quality checks
+  - Service gates (all pass):
+    - `cd services/clawclaim && npm run typecheck && npm test`
+    - `cd services/clawscope && npm run typecheck && npm test`
+    - `cd services/clawverify && npm run typecheck && npm test`
+    - `cd services/clawcontrols && npm run typecheck && npm test`
+    - `cd services/clawproxy && npm run typecheck && npm test`
+  - Cloudflare validation (version-compatible):
+    - `wrangler deploy --dry-run` (staging + prod) for clawclaim/clawscope/clawverify/clawcontrols/clawproxy
+    - `wrangler types <out-path>` for all five services
+- M6 artifact evidence
+  - conformance+ops suite (PASS)
+    - staging smoke: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`
+    - prod smoke: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`
+    - staging ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`
+    - prod ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`
+  - baseline gate revalidation (PASS)
+    - hard-cutover staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-11-396Z-staging/result.json`
+    - hard-cutover prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-20-846Z-prod/result.json`
+    - M5 staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-58-14-942Z-staging-m5/result.json`
+    - M5 prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-58-35-479Z-prod-m5/result.json`
+    - kid interop: `artifacts/smoke/identity-control-plane/2026-02-12T00-59-01-203Z-kid-interop/result.json`
+- Deterministic contracts reaffirmed
+  - legacy auth rejections under canonical mode (`LEGACY_AUTH_FORBIDDEN`)
+  - key transparency/token-control deterministic outcomes (`TOKEN_CONTROL_TRANSPARENCY_*`)
+  - transition contract enforcement (`TOKEN_CONTROL_TRANSITION_FORBIDDEN`)
+  - revocation fail-closed behavior (`TOKEN_REVOKED` path after canonical revoke)

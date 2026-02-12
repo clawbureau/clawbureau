@@ -1,0 +1,32 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T00:52:22.771Z",
+  "export": {
+    "status": "exported",
+    "event_key": "events:control-plane:8229142457:identity-export:did:key:z6MkkhS9ktQeEm9R7q32CYWQNfcTHicDJYdj6DJ2SYyKxMPL:mB3IT22KaZEdnzGSRziuzDyIs3mfjZ39KRfyJmcJu1U"
+  },
+  "tampered_import": {
+    "status": 409,
+    "error": "IMPORT_BUNDLE_TAMPERED",
+    "message": "bundle_hash_b64u does not match payload hash",
+    "pass": true
+  },
+  "import_valid": {
+    "status": 200,
+    "body": {
+      "status": "imported",
+      "bundle_hash_b64u": "mB3IT22KaZEdnzGSRziuzDyIs3mfjZ39KRfyJmcJu1U",
+      "controller_did": "did:key:z6MkgeEfRsjw2b7Xcp3jkfzmPi1ajbnSGv5EgJ4oBhdm8LCc",
+      "event_key": "events:control-plane:8229142456:identity-import:did:key:z6MkkhS9ktQeEm9R7q32CYWQNfcTHicDJYdj6DJ2SYyKxMPL:mB3IT22KaZEdnzGSRziuzDyIs3mfjZ39KRfyJmcJu1U"
+    },
+    "pass": true
+  },
+  "import_replay": {
+    "status": 200,
+    "body": {
+      "status": "already_imported",
+      "bundle_hash_b64u": "mB3IT22KaZEdnzGSRziuzDyIs3mfjZ39KRfyJmcJu1U"
+    },
+    "pass": true
+  }
+}

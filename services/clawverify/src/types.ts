@@ -244,7 +244,10 @@ export type VerificationErrorCode =
   | 'TOKEN_CONTROL_CHAIN_MISSING'
   | 'TOKEN_CONTROL_SUBJECT_MISMATCH'
   | 'TOKEN_CONTROL_KEY_UNKNOWN'
-  | 'TOKEN_CONTROL_KEY_EXPIRED';
+  | 'TOKEN_CONTROL_KEY_EXPIRED'
+  | 'TOKEN_CONTROL_TRANSPARENCY_STALE'
+  | 'TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN'
+  | 'TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED';
 
 /**
  * Structured error for verification failures
@@ -683,6 +686,14 @@ export interface VerifyTokenControlResponse {
       reason: string;
     }
   >;
+  transparency_snapshot?: {
+    snapshot_id?: string;
+    generated_at?: number;
+    generated_at_iso?: string;
+    active_kid?: string;
+    accepted_kids?: string[];
+    kid_observed?: string;
+  };
   remediation_hints?: RemediationHint[];
   error?: VerificationError;
 }

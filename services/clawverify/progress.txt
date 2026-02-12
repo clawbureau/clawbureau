@@ -443,3 +443,19 @@ Started: 2026-02-02T03:08:26.937416
   - `scripts/identity/RUNBOOK-identity-control-plane-operations.md`
   - `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md`
 ---
+
+## 2026-02-12 - CVF-US-034 (token-control transparency freshness enforcement)
+- Token-control verification contract now enforces transparency governance state:
+  - freshness max-age gate (`CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS`)
+  - accepted-kid membership and overlap-expiry checks
+- Deterministic fail-closed error taxonomy active:
+  - `TOKEN_CONTROL_TRANSPARENCY_STALE`
+  - `TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN`
+  - `TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED`
+- Verification responses include `transparency_snapshot` context for auditability.
+- Evidence:
+  - staging ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`
+  - prod ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`
+- Quality checks:
+  - `cd services/clawverify && npm run typecheck && npm test`
+---

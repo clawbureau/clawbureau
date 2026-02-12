@@ -1,0 +1,9 @@
+{
+  "version": "m1",
+  "type": "message_signature",
+  "algo": "ed25519",
+  "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+  "message": "54821d9f042f61fccfb1161b5960c96a96606666",
+  "createdAt": "2026-02-12T01:05:28.644Z",
+  "signature": "CflDwqwKla4TJkDLUiMO7PvlXt2/8zS5hETHBi/h43RpMTOHVboShYqNKWwPUsdj8zIFqGejjTNz+FsKCNBjAg=="
+}

@@ -1,0 +1,277 @@
+{
+  "env": "prod",
+  "generated_at": "2026-02-12T00:58:35.479Z",
+  "urls": {
+    "clawclaim": "https://clawclaim.com",
+    "clawscope": "https://clawscope.com",
+    "clawverify": "https://clawverify.com"
+  },
+  "versions": {
+    "clawclaim": "b2be579c-eb85-4c41-b3cd-80a439848368",
+    "clawscope": "89b90fad-84da-4920-aceb-27d46c45256a",
+    "clawverify": "eff65cd5-00ef-456c-8aa1-8fb6bef4727f"
+  },
+  "identities": {
+    "owner_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD",
+    "controller_did": "did:key:z6Mkun6qzpETDBGr5FZzhLtg9y5x7bWKvcESkGmdcaziVXrh",
+    "agent_did": "did:key:z6MkrTLu7BYj7aM61C2wMLiGb3XzSnxgzebqERinK2e5FVQc",
+    "member_did": "did:key:z6MktUasXBfFFy3qXcgf3W89x8A3sRhu4uXbDBpFMF6VV9JF"
+  },
+  "steps": {
+    "health": {
+      "clawclaim": {
+        "status": 200,
+        "ok": true
+      },
+      "clawscope": {
+        "status": 200,
+        "ok": true
+      },
+      "clawverify": {
+        "status": 200,
+        "ok": true
+      }
+    },
+    "bindings": {
+      "owner": {
+        "challenge": {
+          "challenge_id": "405774fd-592c-44ee-b556-6597c515a20e",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD",
+          "bound_at": 1770857915
+        }
+      },
+      "controller": {
+        "challenge": {
+          "challenge_id": "ed726605-5e53-4ef0-a044-f95a252ea12e",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6Mkun6qzpETDBGr5FZzhLtg9y5x7bWKvcESkGmdcaziVXrh",
+          "bound_at": 1770857916
+        }
+      },
+      "agent": {
+        "challenge": {
+          "challenge_id": "814fce23-60fe-4dd5-9158-18d6a5a52489",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MkrTLu7BYj7aM61C2wMLiGb3XzSnxgzebqERinK2e5FVQc",
+          "bound_at": 1770857916
+        }
+      },
+      "member": {
+        "challenge": {
+          "challenge_id": "506ecbec-5f1d-4434-affd-d38a0dac7496",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MktUasXBfFFy3qXcgf3W89x8A3sRhu4uXbDBpFMF6VV9JF",
+          "bound_at": 1770857916
+        }
+      }
+    },
+    "control_chain": {
+      "register_controller": {
+        "status": "registered"
+      },
+      "register_agent": {
+        "status": "registered"
+      }
+    },
+    "platform_claims": {
+      "register": {
+        "status": "registered",
+        "claim": {
+          "claim_id": "f23653e98011c1ac93422b0939313aabcf3eea16fcf48c7adc240c8bd89e91d7",
+          "owner_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD",
+          "platform": "github",
+          "handle": "smoke_mlir2yve",
+          "proof_url": "https://github.com/smoke_mlir2yve",
+          "verification_ref": "0sAX_rMbjbpjtfntE7aPyF5_9-JHaToCvzikB44mjtk",
+          "verifier_signer_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD"
+        }
+      },
+      "list_count": 1
+    },
+    "primary_did": {
+      "set": {
+        "status": "updated",
+        "account_id": "acct-m5-prod-1770857915479",
+        "primary_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD"
+      },
+      "profile": {
+        "status": 200,
+        "x_cache": "miss",
+        "platform_claims": 1
+      }
+    },
+    "binding_audit": {
+      "list_count": 18,
+      "export": {
+        "status": "exported",
+        "key": "binding-audit/2026-02-12T00-58-40-031Z.csv",
+        "format": "csv",
+        "rows": 18,
+        "sha256": "0ddc7ac57db6adb208b2f9bc1a48d1cba6e0bd22c5aa10e4ce9b265d2df9e878"
+      }
+    },
+    "owner_attestations": {
+      "register": {
+        "status": "registered",
+        "attestation": {
+          "attestation_id": "att_1770857921055",
+          "owner_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD",
+          "owner_provider": "oauth",
+          "provider_ref": "provider-ref-m5-prod-1770857915479",
+          "verification_level": "high",
+          "expires_at": null,
+          "verifier_owner_status": "verified"
+        }
+      },
+      "list_count": 1,
+      "lookup_count": 1
+    },
+    "scope_exchange": {
+      "challenge": {
+        "challenge_id": "scope_chl_9e21bec0-7cde-4665-ab8f-139f779ef374",
+        "owner_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD",
+        "expires_at": 1770858521,
+        "ttl_sec": 600
+      },
+      "exchange": {
+        "status": "issued",
+        "owner_did": "did:key:z6MkvdirVCkWMosaQ9H4yyepYDNbn5eVfue7hPoSyjx6EdXD",
+        "token_hash": "7998b12d350f81e406315b866c0316679d2d086bfc6b1a3eb3737448ea3fc8e4",
+        "policy_version": "1",
+        "token_lane": "canonical",
+        "kid": "66a63dae7bbf4bda",
+        "clawlogs_status": "skipped"
+      },
+      "replay_denied": {
+        "status": 409,
+        "error": "TOKEN_EXCHANGE_CHALLENGE_USED"
+      }
+    },
+    "org_roster": {
+      "register": {
+        "status": "registered"
+      },
+      "latest": {
+        "status": 200,
+        "members": 1,
+        "manifest": {
+          "manifest_id": "8553d25dc6bdbf477ab2bfe926eb78c03086095250f86254d3d82f3ca2390644",
+          "manifest_hash_b64u": "yR7z9Y_4miqUK_ccLS7p2faPkbAojB-JsYZ2Rw_BOXY",
+          "member_count": 1
+        }
+      }
+    },
+    "observability": {
+      "alert_rule": {
+        "status": "created",
+        "rule": {
+          "rule_id": "rule_cfda876a-2a66-464c-bd12-0c2a723d2753",
+          "metric_name": "request_count",
+          "comparison": "gte",
+          "threshold": 1,
+          "window_minutes": 120,
+          "service": "clawscope",
+          "route": "/v1/tokens/introspect",
+          "mission_id": "mission-m5-prod-1770857915479"
+        }
+      },
+      "introspect_active": {
+        "active": true,
+        "token_hash": "7998b12d350f81e406315b866c0316679d2d086bfc6b1a3eb3737448ea3fc8e4",
+        "kid": "66a63dae7bbf4bda",
+        "kid_source": "header",
+        "mission_id": "mission-m5-prod-1770857915479"
+      },
+      "matrix_allowed": {
+        "active": true,
+        "transition": "token.revoke",
+        "transition_result": {
+          "allowed": true,
+          "reason_code": "ALLOWED",
+          "reason": "Transition requirements satisfied"
+        }
+      },
+      "matrix_unknown_transition": {
+        "status": 400,
+        "error": "TRANSITION_UNKNOWN"
+      },
+      "revoke": {
+        "status": "revoked",
+        "token_hash": "7998b12d350f81e406315b866c0316679d2d086bfc6b1a3eb3737448ea3fc8e4",
+        "revoked_at_iso": "2026-02-12T00:58:42.000Z"
+      },
+      "introspect_revoked": {
+        "active": false,
+        "revoked": true,
+        "token_hash": "7998b12d350f81e406315b866c0316679d2d086bfc6b1a3eb3737448ea3fc8e4"
+      },
+      "rollups": {
+        "status": "ok",
+        "day": "2026-02-12",
+        "generated_at": 1770857939
+      },
+      "dashboard": {
+        "status": "ok",
+        "window_minutes": 60
+      },
+      "usage_json_rows": 10,
+      "usage_csv": {
+        "status": 200,
+        "report_key": "usage/usage-2026-02-12T00-59-00-729Z.csv",
+        "bytes": 820
+      },
+      "alert_events_count": 6,
+      "cost_totals": {
+        "requests": 47,
+        "compute_usd": 0.000057,
+        "storage_usd": 0.00001,
+        "total_usd": 0.000067
+      },
+      "trace_event_count": 1,
+      "traces_count": 1,
+      "sla_rows": 0,
+      "mission_rows": 5
+    }
+  },
+  "summary": {
+    "pass": true,
+    "stories": {
+      "clawclaim": [
+        "CCL-US-004",
+        "CCL-US-005",
+        "CCL-US-006",
+        "CCL-US-007",
+        "CCL-US-008",
+        "CCL-US-009"
+      ],
+      "clawscope": [
+        "CSC-US-007",
+        "CSC-US-008",
+        "CSC-US-009",
+        "CSC-US-010",
+        "CSC-US-011",
+        "CSC-US-012",
+        "CSC-US-013"
+      ]
+    },
+    "checks": {
+      "replay_denied": true,
+      "unknown_transition_denied": true,
+      "token_revoked_state": true,
+      "trace_present": true
+    }
+  }
+}
