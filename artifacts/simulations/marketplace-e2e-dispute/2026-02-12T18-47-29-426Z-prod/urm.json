@@ -1,0 +1,38 @@
+{
+  "urm_version": "1",
+  "urm_id": "urm_ae900768-03b7-464e-af12-b75b408eb5d5",
+  "run_id": "run_e2e1ebff-ffe9-48c6-afd6-14277c833e17",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "issued_at": "2026-02-12T18:47:31.863Z",
+  "harness": {
+    "id": "smoke-marketplace-e2e-dispute",
+    "version": "1.0.0",
+    "runtime": "node/v24.13.0",
+    "config_hash_b64u": "kohylwWwP4sTMJuBYByustH1xDs2OAmH2g0krJBV8zE"
+  },
+  "inputs": [
+    {
+      "type": "smoke_config",
+      "hash_b64u": "_fZbwPys4tn6ogEHRin4tZ-P7TaVFpcwmk35G-WwJhs",
+      "metadata": {
+        "env": "prod",
+        "script": "smoke-marketplace-e2e-dispute.mjs"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "smoke_result",
+      "hash_b64u": "r4eyA_f0gkLvKFdCBADp0FvWoKHa4auRek85P50f0fc",
+      "metadata": {
+        "loss_event_id": "lse_f52aeba13a374f1ad8821b05",
+        "step_count": 8
+      }
+    }
+  ],
+  "event_chain_root_hash_b64u": "I96BGipU_vyqAU59J5pUTaj90xScI-8LVuTQzgDlx24",
+  "metadata": {
+    "task": "ECON-E2E-001b",
+    "description": "Dispute cycle e2e: loss event → risk holds → resolve → aging → recon"
+  }
+}
