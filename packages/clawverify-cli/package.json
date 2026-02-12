@@ -4,7 +4,8 @@
   "description": "Offline verifier CLI for the Clawsig Protocol \u2014 verify proof bundles, export bundles, and commit signatures without network access.",
   "type": "module",
   "bin": {
-    "clawverify": "./dist/cli.js"
+    "clawverify": "./dist/cli.js",
+    "clawsig": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

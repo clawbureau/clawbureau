@@ -1,0 +1,19 @@
+{
+  "name": "@clawbureau/claw-verified-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claw Verified GitHub App — cryptographic verification for AI-generated pull requests. Posts Check Runs based on Clawsig proof bundle validation.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clawbureau/clawverify-core": "file:../../packages/clawverify-core"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.0.0"
+  }
+}

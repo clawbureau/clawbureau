@@ -1,0 +1,22 @@
+# Claw Verified GitHub App
+# Cloudflare Worker that receives GitHub webhook events for PRs,
+# verifies Clawsig proof bundles, and posts Check Runs.
+#
+# DO NOT DEPLOY until secrets are configured and App is registered.
+
+name = "claw-verified-app"
+main = "src/index.ts"
+compatibility_date = "2026-02-11"
+
+[vars]
+ENVIRONMENT = "production"
+
+# Secrets (set via `wrangler secret put`):
+#   GITHUB_APP_ID          — GitHub App numeric ID
+#   GITHUB_PRIVATE_KEY     — PEM-encoded private key for JWT signing
+#   GITHUB_WEBHOOK_SECRET  — Webhook HMAC secret
+
+[env.staging]
+name = "claw-verified-app-staging"
+[env.staging.vars]
+ENVIRONMENT = "staging"
