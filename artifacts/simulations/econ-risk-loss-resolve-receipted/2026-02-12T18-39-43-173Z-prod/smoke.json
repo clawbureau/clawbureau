@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "env": "prod",
+  "run_id": "run_368108ed-c1cb-40d9-ab04-5b38603c7d06",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "loss_event_id": "lse_12f2c641480425d75e288cbb",
+  "sdk_integration": {
+    "tool_receipt_count": 4,
+    "event_chain_length": 6,
+    "bundle_id": "bundle_1e2ab587-3141-49ff-b422-c03c9f004711",
+    "urm_id": "urm_94e763a6-08e8-4948-8bd5-32efe2daf320"
+  },
+  "steps": [
+    {
+      "step": "create_loss_event",
+      "status": 201,
+      "loss_event_id": "lse_12f2c641480425d75e288cbb",
+      "elapsed_ms": 481
+    },
+    {
+      "step": "retry_apply",
+      "status": 200,
+      "forwarded": 1,
+      "elapsed_ms": 2073
+    },
+    {
+      "step": "readback",
+      "status": 200,
+      "event_status": "partially_forwarded",
+      "elapsed_ms": 71
+    },
+    {
+      "step": "outbox_apply",
+      "total": 3,
+      "forwarded": 1,
+      "failed": 2
+    }
+  ],
+  "generated_at": "2026-02-12T18:39:45.913Z"
+}

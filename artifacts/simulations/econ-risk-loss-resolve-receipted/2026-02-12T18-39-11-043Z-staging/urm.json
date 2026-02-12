@@ -1,0 +1,38 @@
+{
+  "urm_version": "1",
+  "urm_id": "urm_842bdb92-5121-4e72-9857-babce8be2e43",
+  "run_id": "run_2479271e-8fcd-466c-bdbc-6cd6c5494dd5",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "issued_at": "2026-02-12T18:39:12.408Z",
+  "harness": {
+    "id": "smoke-econ-risk-loss-resolve-loop-receipted",
+    "version": "1.0.0",
+    "runtime": "node/v24.13.0",
+    "config_hash_b64u": "VqiaMhYpJQoewjdVkLZ0ba2fX5FuzRbEe7MNeKpTNR4"
+  },
+  "inputs": [
+    {
+      "type": "smoke_config",
+      "hash_b64u": "aS_VTxAX2MlIAZpB_9fKpAHnAJv4ZHeQiNiA-bqjfLs",
+      "metadata": {
+        "env": "staging",
+        "script": "smoke-econ-risk-loss-resolve-loop-receipted.mjs"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "smoke_result",
+      "hash_b64u": "Q7fo3dQ3PqmEodlBkYBZ84FFWfX9kDF8LMdDFuNeva0",
+      "metadata": {
+        "loss_event_id": "lse_4353e26f28d7cef4f82082cb",
+        "step_count": 4
+      }
+    }
+  ],
+  "event_chain_root_hash_b64u": "BbPScGZXkY4Bn2lwm4_Zo3g9yX9Iopr3XfaqETgjH6M",
+  "metadata": {
+    "task": "CPL-US-006-ECON",
+    "description": "Tool receipt SDK integration validation — loss event create/resolve lifecycle"
+  }
+}
