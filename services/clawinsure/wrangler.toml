@@ -50,6 +50,7 @@ INCOME_BASE_URL = "https://staging.clawincome.com"
 
 # Secrets to set via wrangler secret put:
 # - INSURE_ADMIN_KEY
+# - INSURE_RISK_KEY
 # - LEDGER_ADMIN_KEY
 # - TRIALS_ADMIN_KEY
 # - ESCROW_ADMIN_KEY

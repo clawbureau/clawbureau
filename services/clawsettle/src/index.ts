@@ -8,6 +8,12 @@ import {
   NettingService,
   parseNettingRequestBody,
 } from './netting';
+import {
+  LossEventService,
+  assertLossEventAuth,
+  resolveLossEventRetryLimit,
+  shouldInlineLossEventForwarding,
+} from './loss-events';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
@@ -355,6 +361,8 @@ async function router(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
 
+  const lossEventService = new LossEventService(env);
+
   if (request.method === 'GET' && path === '/health') {
     return jsonResponse({ status: 'ok', service: 'clawsettle' }, 200, resolveVersion(env));
   }
@@ -386,6 +394,11 @@ async function router(request: Request, env: Env): Promise<Response> {
         <li><code>POST /v1/netting/runs</code> (admin, idempotency required)</li>
         <li><code>GET /v1/netting/runs/:id</code> (admin)</li>
         <li><code>GET /v1/netting/runs/:id/report?format=json|csv</code> (admin)</li>
+        <li><code>POST /v1/loss-events</code> (admin, idempotency required)</li>
+        <li><code>GET /v1/loss-events</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
+        <li><code>GET /v1/loss-events/:id</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
+        <li><code>GET /v1/loss-events/outbox</code> (admin or SETTLE_LOSS_READ_TOKEN)</li>
+        <li><code>POST /v1/loss-events/ops/retry</code> (admin)</li>
       </ul>
     </main>
   </body>
@@ -438,6 +451,71 @@ async function router(request: Request, env: Env): Promise<Response> {
     return handleCreateNettingRun(request, env);
   }
 
+  // === Loss events (adverse financial event normalization) ===
+  if (path === '/v1/loss-events' && request.method === 'POST') {
+    assertSettleAdmin(request, env);
+
+    const idempotencyKey = extractIdempotencyKey(request);
+    if (!idempotencyKey) {
+      throw new ClawSettleError('Missing idempotency key', 'INVALID_REQUEST', 400, {
+        field: 'idempotency_key',
+      });
+    }
+
+    const bodyRaw = await parseJsonRequestBody(request);
+    const response = await lossEventService.createLossEvent(bodyRaw, idempotencyKey);
+
+    if (shouldInlineLossEventForwarding(env)) {
+      // Best-effort forwarding attempt; durable state persists in outbox.
+      await lossEventService.retryForwarding({
+        limit: resolveLossEventRetryLimit(env),
+        loss_event_id: response.event.loss_event_id,
+      });
+    }
+
+    return jsonResponse(response, response.deduped ? 200 : 201, resolveVersion(env));
+  }
+
+  if (path === '/v1/loss-events' && request.method === 'GET') {
+    assertLossEventAuth(request, env, request.method, path);
+    const response = await lossEventService.listLossEvents(url);
+    return jsonResponse(response, 200, resolveVersion(env));
+  }
+
+  if (path === '/v1/loss-events/outbox' && request.method === 'GET') {
+    assertLossEventAuth(request, env, request.method, path);
+    const response = await lossEventService.listOutbox(url);
+    return jsonResponse(response, 200, resolveVersion(env));
+  }
+
+  const lossEventByIdMatch = path.match(/^\/v1\/loss-events\/([^/]+)$/);
+  if (lossEventByIdMatch && request.method === 'GET') {
+    assertLossEventAuth(request, env, request.method, path);
+    const response = await lossEventService.getLossEvent(decodeURIComponent(lossEventByIdMatch[1] ?? ''));
+    return jsonResponse(response, 200, resolveVersion(env));
+  }
+
+  if (path === '/v1/loss-events/ops/retry' && request.method === 'POST') {
+    assertSettleAdmin(request, env);
+
+    const contentType = request.headers.get('content-type') ?? '';
+    let parsedBody: unknown = null;
+    if (contentType.toLowerCase().includes('application/json')) {
+      const raw = await request.text();
+      if (raw.trim().length > 0) {
+        try {
+          parsedBody = JSON.parse(raw);
+        } catch {
+          throw new ClawSettleError('Invalid JSON payload', 'INVALID_REQUEST', 400);
+        }
+      }
+    }
+
+    const body = LossEventService.parseRetryBody(parsedBody);
+    const response = await lossEventService.retryForwarding(body);
+    return jsonResponse(response, 200, resolveVersion(env));
+  }
+
   const nettingRunById = path.match(/^\/v1\/netting\/runs\/([^/]+)$/);
   if (nettingRunById && request.method === 'GET') {
     return handleGetNettingRun(decodeURIComponent(nettingRunById[1] ?? ''), request, env);
@@ -476,12 +554,49 @@ export default {
     }
   },
 
+  async queue(batch: MessageBatch<unknown>, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const lossEvents = new LossEventService(env);
+
+    for (const message of batch.messages) {
+      try {
+        await lossEvents.processQueueMessage(message.body);
+        message.ack();
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : String(error);
+        console.error('[clawsettle] loss-event queue processing failed', messageText);
+
+        const permanent =
+          messageText.includes('INVALID_REQUEST') ||
+          messageText.includes('NOT_FOUND') ||
+          messageText.includes('UNSUPPORTED_CURRENCY');
+
+        if (permanent) {
+          message.ack();
+        } else {
+          message.retry({ delaySeconds: 30 });
+        }
+      }
+    }
+  },
+
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const service = createStripeWebhookService(env);
+    const stripeService = createStripeWebhookService(env);
+    const lossService = new LossEventService(env);
+
     ctx.waitUntil(
-      service.retryFailedForwarding().catch((err) => {
+      stripeService.retryFailedForwarding().catch((err) => {
         console.error('scheduled-forwarding-retry-failed', err);
       })
+    );
+
+    ctx.waitUntil(
+      lossService
+        .retryForwarding({
+          limit: resolveLossEventRetryLimit(env),
+        })
+        .catch((err) => {
+          console.error('scheduled-loss-forwarding-retry-failed', err);
+        })
     );
   },
 };

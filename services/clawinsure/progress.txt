@@ -55,3 +55,29 @@ Started: 2026-02-12
   - prod smoke: `artifacts/simulations/clawinsure/2026-02-12T03-25-51-801Z-prod/smoke.json` ✅
 - Ops artifact:
   - `artifacts/ops/clawinsure/2026-02-12T03-21-09Z/deploy-summary.json`
+
+## 2026-02-12 - CINR-US-007 (ECON-RISK-MAX-001) implementation in progress
+- Added service-key auto-claim intake endpoint:
+  - `POST /v1/claims/auto` (requires `INSURE_RISK_KEY`)
+- Auto-claim behavior:
+  - deterministic idempotency via `create_idempotency_key`
+  - policy resolution by `policy_id` or fallback to latest claimable policy for `account_did`
+  - requested amount auto-capped to remaining coverage
+  - synthetic evidence bundle anchored to `source_loss_event_id` + deterministic hash
+  - evidence refs revalidated (trial/escrow when provided)
+- Validation (local):
+  - `pnpm --dir services/clawinsure typecheck` ✅
+  - `pnpm --dir services/clawinsure test` ✅
+- Status:
+  - CINR-US-007 remains `passes:false` pending staging+prod deploy + smoke evidence.
+
+## 2026-02-12 - CINR-US-007 rollout complete (staging + prod)
+- Deployed clawinsure versions:
+  - staging `55c554d6-c34f-41b0-b9f7-b575253f22e1`
+  - prod `c172d275-f494-484f-a289-7225e7a30268`
+- Verified `POST /v1/claims/auto` forwarding + deterministic idempotent claim creation via ECON risk-loop smoke:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+- Watch evidence confirms no failed outbox forwards:
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`

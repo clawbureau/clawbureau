@@ -1,0 +1,137 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.payments.loss_event.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Loss Event v1",
+  "description": "Deterministic normalized loss event used for refund/chargeback/reversal risk handling.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "loss_event_version",
+    "loss_event_id",
+    "source",
+    "kind",
+    "account_did",
+    "amount_minor",
+    "currency",
+    "occurred_at",
+    "evidence"
+  ],
+  "properties": {
+    "loss_event_version": {
+      "const": "1"
+    },
+    "loss_event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "provider", "external_event_id"],
+      "properties": {
+        "service": {
+          "type": "string",
+          "enum": ["clawsettle", "clawledger", "external"]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "external_event_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "external_payment_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["chargeback", "refund", "reversal"]
+    },
+    "account_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[A-Za-z0-9._:-]+$"
+    },
+    "account_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "escrow_id": {
+      "type": "string",
+      "pattern": "^esc_[a-f0-9-]+$"
+    },
+    "bounty_id": {
+      "type": "string",
+      "pattern": "^bnty_[a-f0-9-]+$"
+    },
+    "trial_case_id": {
+      "type": "string",
+      "pattern": "^trc_[a-f0-9-]+$"
+    },
+    "amount_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "currency": {
+      "type": "string",
+      "const": "USD"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "risk_hold_required"],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "risk_hold_required": {
+          "type": "boolean"
+        },
+        "hold_reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proof_bundle_hash_b64u", "receipt_refs", "artifact_refs"],
+      "properties": {
+        "proof_bundle_hash_b64u": {
+          "type": "string",
+          "minLength": 1
+        },
+        "receipt_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "artifact_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

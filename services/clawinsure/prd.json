@@ -86,6 +86,21 @@
       "priority": 6,
       "passes": true,
       "notes": "Risk endpoint and claims report exercised in staging+prod smoke with totals and latency payload assertions."
+    },
+    {
+      "id": "CINR-US-007",
+      "title": "Loss-event auto-claim intake",
+      "description": "As risk ops, I want clawinsure to ingest canonical loss events via service-key auth and open deterministic claims without claimant-interactive flows.",
+      "acceptanceCriteria": [
+        "Implement POST /v1/claims/auto protected by INSURE_RISK_KEY",
+        "Idempotent auto-claim creation keyed by upstream loss-event idempotency",
+        "Policy resolution by explicit policy_id or claimant DID fallback",
+        "Coverage cap applied deterministically (requested capped to remaining coverage)",
+        "Auto-claim evidence bundle + revalidation persisted for auditability"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Shipped to staging+prod with INSURE_RISK_KEY-protected POST /v1/claims/auto, deterministic idempotency replay, policy DID fallback, and coverage-cap enforcement. Verified in ECON risk-loop smokes: artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json."
     }
   ]
 }

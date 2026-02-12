@@ -109,6 +109,21 @@
       "priority": 7,
       "passes": true,
       "notes": "Shipped to staging + production: netting schema/endpoints/replay hardening live, production migration/deploy complete, and full regression smoke set passed (webhook/livemode, forwarding retry, payout lifecycle, payout reconciliation, netting runs)."
+    },
+    {
+      "id": "MPY-US-012",
+      "title": "Adverse loss-event normalization + fanout outbox",
+      "description": "As economy ops, I want clawsettle to canonicalize adverse financial loss events and fan them out through a replay-safe outbox so downstream risk controls are deterministic and auditable.",
+      "acceptanceCriteria": [
+        "Implement POST /v1/loss-events with strict idempotency and deterministic request hash",
+        "Persist canonical loss_events + loss_event_outbox records with replay-safe uniqueness",
+        "Forward to ledger/escrow/insurance/income/bounties risk handlers with deterministic per-target idempotency keys",
+        "Support queue + cron/manual retry execution paths with deterministic error buckets",
+        "Expose GET /v1/loss-events, GET /v1/loss-events/:id, GET /v1/loss-events/outbox, POST /v1/loss-events/ops/retry"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0005 + queue fanout bindings live. Evidence: smokes artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json; watches artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json and artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json (failed buckets = 0)."
     }
   ]
 }

@@ -14,6 +14,18 @@ binding = "DB"
 database_name = "clawsettle"
 database_id = "1f2be28f-dfb5-4dd5-baa5-c23828ef26b0"
 
+[[queues.producers]]
+binding = "LOSS_EVENTS"
+queue = "clawsettle-loss-events"
+
+[[queues.consumers]]
+queue = "clawsettle-loss-events"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+dead_letter_queue = "clawsettle-loss-events-dlq"
+retry_delay = 30
+
 [vars]
 SETTLE_VERSION = "0.1.1"
 SETTLE_ENV = "production"
@@ -29,6 +41,12 @@ NETTING_TARGET_CLEARING_DOMAIN = "clawsettle.netting"
 NETTING_RUN_DEFAULT_LIMIT = "100"
 STRIPE_CONNECT_ONBOARD_BASE_URL = "https://dashboard.stripe.com/connect/accounts"
 LEDGER_BASE_URL = "https://clawledger.com"
+ESCROW_BASE_URL = "https://clawescrow.com"
+CLAWINSURE_BASE_URL = "https://clawinsure.com"
+CLAWINCOME_BASE_URL = "https://clawincome.com"
+CLAWBOUNTIES_BASE_URL = "https://clawbounties.com"
+LOSS_FORWARD_RETRY_BATCH_LIMIT = "25"
+LOSS_EVENTS_FORCE_INLINE = "false"
 
 [triggers]
 crons = ["*/2 * * * *"]
@@ -44,6 +62,18 @@ binding = "DB"
 database_name = "clawsettle-staging"
 database_id = "9edcb398-ac3e-4f78-be41-13470a5c2155"
 
+[[env.staging.queues.producers]]
+binding = "LOSS_EVENTS"
+queue = "clawsettle-loss-events-staging"
+
+[[env.staging.queues.consumers]]
+queue = "clawsettle-loss-events-staging"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+dead_letter_queue = "clawsettle-loss-events-dlq-staging"
+retry_delay = 30
+
 [env.staging.vars]
 SETTLE_VERSION = "0.1.1"
 SETTLE_ENV = "staging"
@@ -58,6 +88,12 @@ NETTING_TARGET_CLEARING_DOMAIN = "clawsettle.netting"
 NETTING_RUN_DEFAULT_LIMIT = "100"
 STRIPE_CONNECT_ONBOARD_BASE_URL = "https://dashboard.stripe.com/connect/accounts"
 LEDGER_BASE_URL = "https://staging.clawledger.com"
+ESCROW_BASE_URL = "https://staging.clawescrow.com"
+CLAWINSURE_BASE_URL = "https://clawinsure-staging.generaite.workers.dev"
+CLAWINCOME_BASE_URL = "https://clawincome-staging.generaite.workers.dev"
+CLAWBOUNTIES_BASE_URL = "https://staging.clawbounties.com"
+LOSS_FORWARD_RETRY_BATCH_LIMIT = "25"
+LOSS_EVENTS_FORCE_INLINE = "false"
 
 [env.staging.triggers]
 crons = ["*/2 * * * *"]
@@ -65,4 +101,10 @@ crons = ["*/2 * * * *"]
 # Secrets (set via wrangler secret put):
 # - STRIPE_WEBHOOK_SIGNING_SECRET
 # - LEDGER_ADMIN_KEY
+# - LEDGER_RISK_KEY (optional; falls back to LEDGER_ADMIN_KEY)
 # - SETTLE_ADMIN_KEY
+# - SETTLE_LOSS_READ_TOKEN (optional read-only token)
+# - ESCROW_RISK_KEY
+# - INSURE_RISK_KEY
+# - INCOME_RISK_KEY
+# - BOUNTIES_RISK_KEY

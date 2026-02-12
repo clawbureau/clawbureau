@@ -1,0 +1,98 @@
+{
+  "ok": true,
+  "lane": "ECON-RISK-MAX-001",
+  "generated_at": "2026-02-12T05:02:40Z",
+  "migrations": {
+    "staging": [
+      "services/ledger/migrations/0008_create_risk_holds.sql",
+      "services/escrow/migrations/0004_risk_hold_controls.sql",
+      "services/clawincome/migrations/0002_risk_adjustments.sql",
+      "services/clawbounties/migrations/0017_loss_event_risk_flags.sql",
+      "services/clawsettle/migrations/0005_create_loss_event_loop.sql"
+    ],
+    "prod": [
+      "services/ledger/migrations/0008_create_risk_holds.sql",
+      "services/escrow/migrations/0004_risk_hold_controls.sql",
+      "services/clawincome/migrations/0002_risk_adjustments.sql",
+      "services/clawbounties/migrations/0017_loss_event_risk_flags.sql",
+      "services/clawsettle/migrations/0005_create_loss_event_loop.sql"
+    ]
+  },
+  "queues": {
+    "created": [
+      "clawsettle-loss-events",
+      "clawsettle-loss-events-dlq",
+      "clawsettle-loss-events-staging",
+      "clawsettle-loss-events-dlq-staging"
+    ],
+    "bindings_verified_in_deploy": true
+  },
+  "deployments": {
+    "staging": {
+      "ledger": "1b650c7e-8069-4667-b14b-d6b7f7357f1e",
+      "escrow": "568cb546-d24e-4c77-af3f-00e798b743ec",
+      "clawinsure": "55c554d6-c34f-41b0-b9f7-b575253f22e1",
+      "clawincome": "7fbfe8f9-8d52-4ac8-9fb3-30909d279f73",
+      "clawbounties": "bd1ffc97-75d5-4397-8bf4-6539aadd5799",
+      "clawsettle": "5fcd9a2b-1ea8-4746-906a-a6019c49d698"
+    },
+    "prod": {
+      "ledger": "41bb6d08-b8e2-46ed-9c3e-b5dd57aaeeb2",
+      "escrow": "8ed372d2-efab-4d32-8160-ad4bf6fa8b93",
+      "clawinsure": "c172d275-f494-484f-a289-7225e7a30268",
+      "clawincome": "2b9ceb82-7fde-454d-b718-9422dac509cd",
+      "clawbounties": "7ed41212-3514-4c71-b824-b17c7d5e77a0",
+      "clawsettle": "2199a3d0-c889-4fb9-bbf2-d4a880d763df"
+    }
+  },
+  "secrets": {
+    "rotated": [
+      "LEDGER_RISK_KEY",
+      "ESCROW_RISK_KEY",
+      "INSURE_RISK_KEY",
+      "INCOME_RISK_KEY",
+      "BOUNTIES_RISK_KEY",
+      "SETTLE_LOSS_READ_TOKEN",
+      "SETTLE_ADMIN_KEY",
+      "LEDGER_ADMIN_KEY",
+      "ESCROW_ADMIN_KEY"
+    ],
+    "values_logged": false
+  },
+  "evidence": {
+    "smokes": {
+      "staging": "artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json",
+      "prod": "artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json"
+    },
+    "watches": {
+      "staging": "artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json",
+      "prod": "artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json"
+    }
+  },
+  "outcome": {
+    "staging_forwarded_targets": [
+      "ledger",
+      "escrow",
+      "clawinsure",
+      "clawincome",
+      "clawbounties"
+    ],
+    "prod_forwarded_targets": [
+      "ledger",
+      "escrow",
+      "clawinsure",
+      "clawincome",
+      "clawbounties"
+    ],
+    "deterministic_error_buckets": {
+      "staging": {
+        "event_failed_count": 0,
+        "outbox_failed_count": 0
+      },
+      "prod": {
+        "event_failed_count": 0,
+        "outbox_failed_count": 0
+      }
+    }
+  }
+}

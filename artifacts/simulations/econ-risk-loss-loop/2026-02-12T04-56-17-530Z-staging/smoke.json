@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "env": "staging",
+  "settle_base_url": "https://staging.clawsettle.com",
+  "loss_event_id": "lse_b2651dd15ce808b80d7908e3",
+  "idempotency_key": "smoke:loss-event:7a1a55eb-0850-4312-86ac-df7c3b038d92",
+  "require_fully_forwarded": true,
+  "event_status": "forwarded",
+  "outbox": {
+    "total": 5,
+    "forwarded": 5,
+    "failed": 0
+  },
+  "steps": [
+    {
+      "step": "create_loss_event",
+      "status": 201,
+      "elapsed_ms": 366,
+      "deduped": false,
+      "loss_event_id": "lse_b2651dd15ce808b80d7908e3",
+      "target_count": 5
+    },
+    {
+      "step": "retry_forwarding",
+      "status": 200,
+      "elapsed_ms": 4348,
+      "attempted": 5,
+      "forwarded": 5,
+      "failed": 0
+    },
+    {
+      "step": "readback",
+      "event_status": "forwarded",
+      "outbox_count": 5,
+      "forwarded_count": 5,
+      "failed_count": 0
+    }
+  ]
+}

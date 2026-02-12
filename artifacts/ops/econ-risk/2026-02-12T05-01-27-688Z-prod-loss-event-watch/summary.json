@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "env": "prod",
+  "settle_base_url": "https://clawsettle.com",
+  "generated_at": "2026-02-12T05:01:27.687Z",
+  "limit": 200,
+  "event_count": 3,
+  "event_status_buckets": {
+    "recorded": 0,
+    "processing": 0,
+    "partially_forwarded": 0,
+    "forwarded": 3,
+    "failed": 0,
+    "unknown": 0
+  },
+  "outbox_count": 15,
+  "outbox_status_buckets": {
+    "pending": 0,
+    "forwarded": 15,
+    "failed": 0
+  },
+  "outbox_by_target": {
+    "clawbounties": {
+      "pending": 0,
+      "forwarded": 3,
+      "failed": 0,
+      "unknown": 0
+    },
+    "clawincome": {
+      "pending": 0,
+      "forwarded": 3,
+      "failed": 0,
+      "unknown": 0
+    },
+    "clawinsure": {
+      "pending": 0,
+      "forwarded": 3,
+      "failed": 0,
+      "unknown": 0
+    },
+    "ledger": {
+      "pending": 0,
+      "forwarded": 3,
+      "failed": 0,
+      "unknown": 0
+    },
+    "escrow": {
+      "pending": 0,
+      "forwarded": 3,
+      "failed": 0,
+      "unknown": 0
+    }
+  },
+  "deterministic_error_buckets": {
+    "event_failed_count": 0,
+    "outbox_failed_count": 0
+  }
+}

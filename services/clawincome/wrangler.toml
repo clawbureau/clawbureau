@@ -3,6 +3,7 @@ account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 routes = [
   { pattern = "clawincome.com/*", zone_name = "clawincome.com" },
@@ -42,3 +43,11 @@ ESCROW_BASE_URL = "https://staging.clawescrow.com"
 CUTS_BASE_URL = "https://staging.clawcuts.com"
 SETTLE_BASE_URL = "https://staging.clawsettle.com"
 INCOME_SCOPE_REQUIRED = "clawincome:read"
+
+# Secrets:
+# - INCOME_ADMIN_KEY
+# - INCOME_RISK_KEY
+# - LEDGER_ADMIN_KEY
+# - ESCROW_ADMIN_KEY
+# - CUTS_ADMIN_KEY
+# - SETTLE_ADMIN_KEY

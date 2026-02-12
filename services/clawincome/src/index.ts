@@ -3,6 +3,7 @@ export interface Env {
   INCOME_DB: D1Database;
 
   INCOME_ADMIN_KEY?: string;
+  INCOME_RISK_KEY?: string;
   INCOME_SCOPE_REQUIRED?: string;
 
   CLAWSCOPE_BASE_URL?: string;
@@ -36,6 +37,25 @@ interface ReportSnapshotRow {
   payload_hash_b64u: string;
   source_refs_json: string | null;
   created_at: string;
+}
+
+interface RiskAdjustmentRow {
+  adjustment_id: string;
+  idempotency_key: string;
+  source_loss_event_id: string;
+  source_service: string;
+  source_event_id: string | null;
+  account_id: string;
+  account_did: string | null;
+  direction: 'debit' | 'credit';
+  amount_minor: string;
+  currency: 'USD';
+  reason_code: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  occurred_at: string;
+  metadata_json: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ViewerContext {
@@ -434,6 +454,14 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+async function parseJsonBody(request: Request): Promise<unknown | null> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
 function parsePositiveMinor(value: string, field: string): bigint {
   if (!/^[0-9]+$/.test(value)) {
     throw new IncomeError(`${field} must be a positive integer string`, 'INVALID_RESPONSE', 502, { field, value });
@@ -760,6 +788,289 @@ async function fetchJson(url: string, init: RequestInit, dependency: string): Pr
   }
 
   return json;
+}
+
+function requireRiskService(request: Request, env: Env): void {
+  const configured = env.INCOME_RISK_KEY?.trim();
+  if (!configured) {
+    throw new IncomeError('INCOME_RISK_KEY is not configured', 'ADMIN_KEY_NOT_CONFIGURED', 503, {
+      field: 'INCOME_RISK_KEY',
+    });
+  }
+
+  const candidate = parseAdminHeader(request) ?? parseBearerToken(request);
+  if (!candidate) {
+    throw new IncomeError('Missing risk token', 'UNAUTHORIZED', 401);
+  }
+
+  if (candidate !== configured) {
+    throw new IncomeError('Invalid risk token', 'UNAUTHORIZED', 401);
+  }
+}
+
+function parseRiskAdjustmentPayload(input: unknown): {
+  idempotency_key: string;
+  source_loss_event_id: string;
+  source_service: string;
+  source_event_id: string | null;
+  account_id: string;
+  account_did: string | null;
+  direction: 'debit' | 'credit';
+  amount_minor: string;
+  currency: 'USD';
+  reason_code: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  occurred_at: string;
+  metadata: Record<string, unknown> | null;
+} {
+  if (!isRecord(input)) {
+    throw new IncomeError('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  if (!isNonEmptyString(input.idempotency_key)) {
+    throw new IncomeError('idempotency_key is required', 'INVALID_REQUEST', 400, { field: 'idempotency_key' });
+  }
+
+  if (!isNonEmptyString(input.source_loss_event_id)) {
+    throw new IncomeError('source_loss_event_id is required', 'INVALID_REQUEST', 400, { field: 'source_loss_event_id' });
+  }
+
+  const currency = isNonEmptyString(input.currency) ? input.currency.trim() : 'USD';
+  if (currency !== 'USD') {
+    throw new IncomeError('Only USD adjustments are supported', 'UNSUPPORTED_CURRENCY', 400, {
+      field: 'currency',
+      value: currency,
+    });
+  }
+
+  if (!isNonEmptyString(input.account_id)) {
+    throw new IncomeError('account_id is required', 'INVALID_REQUEST', 400, { field: 'account_id' });
+  }
+
+  const directionRaw = isNonEmptyString(input.direction) ? input.direction.trim() : null;
+  if (directionRaw !== 'debit' && directionRaw !== 'credit') {
+    throw new IncomeError('direction must be debit|credit', 'INVALID_REQUEST', 400, { field: 'direction' });
+  }
+
+  if (!isNonEmptyString(input.amount_minor) || !/^[0-9]+$/.test(input.amount_minor.trim())) {
+    throw new IncomeError('amount_minor must be a non-negative integer string', 'INVALID_REQUEST', 400, { field: 'amount_minor' });
+  }
+  const amountMinor = BigInt(input.amount_minor.trim());
+  if (amountMinor <= 0n) {
+    throw new IncomeError('amount_minor must be greater than zero', 'INVALID_REQUEST', 400, { field: 'amount_minor' });
+  }
+
+  if (!isNonEmptyString(input.reason_code)) {
+    throw new IncomeError('reason_code is required', 'INVALID_REQUEST', 400, { field: 'reason_code' });
+  }
+
+  const severityRaw = isNonEmptyString(input.severity) ? input.severity.trim() : 'high';
+  if (severityRaw !== 'low' && severityRaw !== 'medium' && severityRaw !== 'high' && severityRaw !== 'critical') {
+    throw new IncomeError('severity must be low|medium|high|critical', 'INVALID_REQUEST', 400, { field: 'severity' });
+  }
+
+  const occurredAtRaw = isNonEmptyString(input.occurred_at) ? input.occurred_at.trim() : nowIso();
+  const occurredAtDate = new Date(occurredAtRaw);
+  if (!Number.isFinite(occurredAtDate.getTime())) {
+    throw new IncomeError('occurred_at must be an ISO timestamp', 'INVALID_REQUEST', 400, { field: 'occurred_at' });
+  }
+
+  const metadata = isRecord(input.metadata) ? (input.metadata as Record<string, unknown>) : null;
+
+  return {
+    idempotency_key: input.idempotency_key.trim(),
+    source_loss_event_id: input.source_loss_event_id.trim(),
+    source_service: isNonEmptyString(input.source_service) ? input.source_service.trim() : 'unknown',
+    source_event_id: isNonEmptyString(input.source_event_id) ? input.source_event_id.trim() : null,
+    account_id: input.account_id.trim(),
+    account_did: isNonEmptyString(input.account_did) ? input.account_did.trim() : null,
+    direction: directionRaw,
+    amount_minor: amountMinor.toString(),
+    currency: 'USD',
+    reason_code: input.reason_code.trim(),
+    severity: severityRaw,
+    occurred_at: occurredAtDate.toISOString(),
+    metadata,
+  };
+}
+
+function parseRiskAdjustmentRow(row: unknown): RiskAdjustmentRow | null {
+  if (!isRecord(row)) return null;
+
+  const adjustment_id = isNonEmptyString(row.adjustment_id) ? row.adjustment_id.trim() : null;
+  const idempotency_key = isNonEmptyString(row.idempotency_key) ? row.idempotency_key.trim() : null;
+  const source_loss_event_id = isNonEmptyString(row.source_loss_event_id) ? row.source_loss_event_id.trim() : null;
+  const source_service = isNonEmptyString(row.source_service) ? row.source_service.trim() : null;
+  const account_id = isNonEmptyString(row.account_id) ? row.account_id.trim() : null;
+  const amount_minor = isNonEmptyString(row.amount_minor) ? row.amount_minor.trim() : null;
+  const currency = isNonEmptyString(row.currency) ? row.currency.trim() : null;
+  const reason_code = isNonEmptyString(row.reason_code) ? row.reason_code.trim() : null;
+  const severity = isNonEmptyString(row.severity) ? row.severity.trim() : null;
+  const direction = isNonEmptyString(row.direction) ? row.direction.trim() : null;
+  const occurred_at = isNonEmptyString(row.occurred_at) ? row.occurred_at.trim() : null;
+  const created_at = isNonEmptyString(row.created_at) ? row.created_at.trim() : null;
+  const updated_at = isNonEmptyString(row.updated_at) ? row.updated_at.trim() : null;
+
+  if (!adjustment_id || !idempotency_key || !source_loss_event_id || !source_service || !account_id || !amount_minor || !currency || !reason_code || !severity || !direction || !occurred_at || !created_at || !updated_at) {
+    return null;
+  }
+
+  if (currency !== 'USD') return null;
+  if (direction !== 'debit' && direction !== 'credit') return null;
+  if (severity !== 'low' && severity !== 'medium' && severity !== 'high' && severity !== 'critical') return null;
+
+  return {
+    adjustment_id,
+    idempotency_key,
+    source_loss_event_id,
+    source_service,
+    source_event_id: isNonEmptyString(row.source_event_id) ? row.source_event_id.trim() : null,
+    account_id,
+    account_did: isNonEmptyString(row.account_did) ? row.account_did.trim() : null,
+    direction,
+    amount_minor,
+    currency: 'USD',
+    reason_code,
+    severity,
+    occurred_at,
+    metadata_json: isNonEmptyString(row.metadata_json) ? row.metadata_json.trim() : null,
+    created_at,
+    updated_at,
+  };
+}
+
+async function getRiskAdjustmentByIdempotencyKey(db: D1Database, key: string): Promise<RiskAdjustmentRow | null> {
+  const row = await db.prepare('SELECT * FROM risk_adjustments WHERE idempotency_key = ?').bind(key).first();
+  return parseRiskAdjustmentRow(row);
+}
+
+async function getRiskAdjustmentById(db: D1Database, adjustmentId: string): Promise<RiskAdjustmentRow | null> {
+  const row = await db.prepare('SELECT * FROM risk_adjustments WHERE adjustment_id = ?').bind(adjustmentId).first();
+  return parseRiskAdjustmentRow(row);
+}
+
+async function insertRiskAdjustment(db: D1Database, record: RiskAdjustmentRow): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO risk_adjustments (
+        adjustment_id,
+        idempotency_key,
+        source_loss_event_id,
+        source_service,
+        source_event_id,
+        account_id,
+        account_did,
+        direction,
+        amount_minor,
+        currency,
+        reason_code,
+        severity,
+        occurred_at,
+        metadata_json,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      record.adjustment_id,
+      record.idempotency_key,
+      record.source_loss_event_id,
+      record.source_service,
+      record.source_event_id,
+      record.account_id,
+      record.account_did,
+      record.direction,
+      record.amount_minor,
+      record.currency,
+      record.reason_code,
+      record.severity,
+      record.occurred_at,
+      record.metadata_json,
+      record.created_at,
+      record.updated_at
+    )
+    .run();
+}
+
+async function handleRiskAdjustment(request: Request, env: Env, version: string): Promise<Response> {
+  requireRiskService(request, env);
+
+  const body = await parseJsonBody(request);
+  const payload = parseRiskAdjustmentPayload(body);
+
+  const existing = await getRiskAdjustmentByIdempotencyKey(env.INCOME_DB, payload.idempotency_key);
+  if (existing) {
+    const existingHash = await sha256B64uUtf8(
+      stableStringify({
+        source_loss_event_id: existing.source_loss_event_id,
+        source_service: existing.source_service,
+        source_event_id: existing.source_event_id,
+        account_id: existing.account_id,
+        account_did: existing.account_did,
+        direction: existing.direction,
+        amount_minor: existing.amount_minor,
+        currency: existing.currency,
+        reason_code: existing.reason_code,
+        severity: existing.severity,
+        occurred_at: existing.occurred_at,
+        metadata: existing.metadata_json ? JSON.parse(existing.metadata_json) : null,
+      })
+    );
+
+    const newHash = await sha256B64uUtf8(
+      stableStringify({
+        source_loss_event_id: payload.source_loss_event_id,
+        source_service: payload.source_service,
+        source_event_id: payload.source_event_id,
+        account_id: payload.account_id,
+        account_did: payload.account_did,
+        direction: payload.direction,
+        amount_minor: payload.amount_minor,
+        currency: payload.currency,
+        reason_code: payload.reason_code,
+        severity: payload.severity,
+        occurred_at: payload.occurred_at,
+        metadata: payload.metadata,
+      })
+    );
+
+    if (existingHash !== newHash) {
+      throw new IncomeError('Idempotency key replay with mismatched payload', 'IDEMPOTENCY_CONFLICT', 409, {
+        idempotency_key: payload.idempotency_key,
+        adjustment_id: existing.adjustment_id,
+      });
+    }
+
+    return jsonResponse({ ok: true, adjustment: existing, replay: true }, 200, version);
+  }
+
+  const record: RiskAdjustmentRow = {
+    adjustment_id: `rad_${crypto.randomUUID()}`,
+    idempotency_key: payload.idempotency_key,
+    source_loss_event_id: payload.source_loss_event_id,
+    source_service: payload.source_service,
+    source_event_id: payload.source_event_id,
+    account_id: payload.account_id,
+    account_did: payload.account_did,
+    direction: payload.direction,
+    amount_minor: payload.amount_minor,
+    currency: 'USD',
+    reason_code: payload.reason_code,
+    severity: payload.severity,
+    occurred_at: payload.occurred_at,
+    metadata_json: payload.metadata ? JSON.stringify(payload.metadata) : null,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  };
+
+  await insertRiskAdjustment(env.INCOME_DB, record);
+
+  const saved = await getRiskAdjustmentById(env.INCOME_DB, record.adjustment_id);
+  if (!saved) {
+    throw new IncomeError('Risk adjustment persistence failed', 'DB_WRITE_FAILED', 500);
+  }
+
+  return jsonResponse({ ok: true, adjustment: saved, replay: false }, 201, version);
 }
 
 async function ledgerGetAccountByDid(did: string, env: Env): Promise<LedgerAccountResponse> {
@@ -2524,6 +2835,7 @@ function renderLanding(origin: string): string {
         <li><code>GET /v1/invoices?did=...&amp;month=YYYY-MM</code></li>
         <li><code>GET /v1/tax-lots?did=...&amp;year=YYYY</code></li>
         <li><code>GET /v1/income?did=...&amp;from=ISO&amp;to=ISO&amp;cursor=...</code></li>
+        <li><code>POST /v1/risk/adjustments</code> (risk service key)</li>
       </ul>
       <p><a href="${origin}/skill.md">skill.md</a></p>
     </main>
@@ -2543,10 +2855,11 @@ function renderSkill(origin: string): string {
       { method: 'GET', path: '/v1/invoices' },
       { method: 'GET', path: '/v1/tax-lots' },
       { method: 'GET', path: '/v1/income' },
+      { method: 'POST', path: '/v1/risk/adjustments' },
     ],
   };
 
-  return `---\nmetadata: '${JSON.stringify(metadata)}'\n---\n\n# clawincome\n\nEndpoints:\n- GET /health\n- GET /v1/statements/monthly\n- GET /v1/statements/monthly.csv\n- GET /v1/invoices\n- GET /v1/tax-lots\n- GET /v1/income\n\nExample:\n\n\`\`\`bash\ncurl -sS \\\n  -H 'authorization: Bearer <token>' \\\n  "${origin}/v1/statements/monthly?did=did:key:z...&month=2026-02"\n\`\`\`\n`;
+  return `---\nmetadata: '${JSON.stringify(metadata)}'\n---\n\n# clawincome\n\nEndpoints:\n- GET /health\n- GET /v1/statements/monthly\n- GET /v1/statements/monthly.csv\n- GET /v1/invoices\n- GET /v1/tax-lots\n- GET /v1/income\n- POST /v1/risk/adjustments (risk service key)\n\nExample:\n\n\`\`\`bash\ncurl -sS \\\n  -H 'authorization: Bearer <token>' \\\n  "${origin}/v1/statements/monthly?did=did:key:z...&month=2026-02"\n\`\`\`\n`;
 }
 
 async function router(request: Request, env: Env): Promise<Response> {
@@ -2586,6 +2899,10 @@ async function router(request: Request, env: Env): Promise<Response> {
 
   if (method === 'GET' && path === '/v1/income') {
     return handleIncomeTimeline(request, env);
+  }
+
+  if (method === 'POST' && path === '/v1/risk/adjustments') {
+    return handleRiskAdjustment(request, env, version);
   }
 
   throw new IncomeError('Not found', 'NOT_FOUND', 404);

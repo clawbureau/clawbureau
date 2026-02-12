@@ -121,6 +121,21 @@
       "priority": 8,
       "passes": true,
       "notes": "Implemented escrow API in services/escrow/src/worker.ts with D1 storage, admin auth, and clawledger /v1/transfers integration."
+    },
+    {
+      "id": "CES-US-009",
+      "title": "Risk-hold enforcement for release/resolution",
+      "description": "As risk ops, I want escrow payouts blocked when a linked risk hold is active so disputed/loss events fail closed before worker-award release paths.",
+      "acceptanceCriteria": [
+        "Add risk hold fields to escrows persistence schema",
+        "Implement service-key endpoint POST /v1/escrows/:id/risk-hold for apply/release toggles",
+        "Block POST /v1/escrows/:id/release when risk_hold_status=active",
+        "Block trials worker_award resolution when risk_hold_status=active",
+        "Expose risk_hold status/details in GET escrow/list responses"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0004 risk-hold controls, service-key /v1/escrows/:id/risk-hold, and fail-closed release/resolution gating when risk_hold_status=active. Cross-service evidence: ECON risk-loop smokes + zero-failure watch summaries under artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json and .../2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json."
     }
   ]
 }
