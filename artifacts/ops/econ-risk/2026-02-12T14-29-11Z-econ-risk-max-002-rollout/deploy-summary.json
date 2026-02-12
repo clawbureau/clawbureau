@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "lane": "ECON-RISK-MAX-002",
+  "title": "Loss-event resolution + deterministic unfreeze",
+  "branch": "feat/economy/ECON-RISK-MAX-002-loss-event-resolution",
+  "implementation_commit": "9f4deb8397792affc29eed66d8df5fb717befd4c",
+  "proof_commit": "a4a883858aa961a8d7a092f594fe674c0d74bc97",
+  "generated_at": "2026-02-12T14:29:11Z",
+  "migrations": {
+    "clawsettle": "services/clawsettle/migrations/0006_loss_event_resolution.sql",
+    "clawbounties": "services/clawbounties/migrations/0018_loss_event_risk_clears.sql"
+  },
+  "deployments": {
+    "staging": {
+      "clawsettle": {
+        "env": "staging",
+        "version_id": "0884e281-ef21-46e2-81e5-805082d22aee"
+      },
+      "ledger": {
+        "env": "staging",
+        "version_id": "d5b51484-5eb0-4bde-8a14-0a45ce057c67"
+      },
+      "clawbounties": {
+        "env": "staging",
+        "version_id": "b7adf1ae-e172-42a6-9271-34e6de5dd1e3"
+      }
+    },
+    "prod": {
+      "clawsettle": {
+        "env": "production",
+        "version_id": "738f89fc-774a-4ed5-b292-31151e6d7fb9"
+      },
+      "ledger": {
+        "env": "production",
+        "version_id": "a1770dde-503d-419d-9643-979b9d0c4c80"
+      },
+      "clawbounties": {
+        "env": "production",
+        "version_id": "6a33fec8-4a24-4fdc-ada2-dd9b0ae811c1"
+      }
+    }
+  },
+  "evidence": {
+    "smokes": {
+      "staging": "artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json",
+      "prod": "artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json"
+    },
+    "watches": {
+      "staging": "artifacts/ops/econ-risk/2026-02-12T14-25-43-531Z-staging-loss-event-watch/summary.json",
+      "prod": "artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json"
+    }
+  },
+  "notes": [
+    "staging watch uses --limit=5 to focus on post-deploy sample window; earlier pre-deploy loss events included permanent clawinsure NOT_FOUND / ledger insufficient-funds failures from operator testing.",
+    "resolve outbox targets: ledger (release-by-source), escrow (risk-hold release), clawbounties (risk clear record).",
+    "apply outbox remains MAX-001 semantics; resolve is fail-closed unless apply status is forwarded."
+  ]
+}
