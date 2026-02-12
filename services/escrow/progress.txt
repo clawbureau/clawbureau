@@ -155,3 +155,12 @@ Started: 2026-02-02T03:08:26.936628
   - new column `ledger_referral_event_ids_json` (`migrations/0002_add_referral_event_ids.sql`)
   - release/get responses now include `ledger_refs.referral_transfers`
 - Extended fee quote snapshot validation to support optional split metadata and preserve it through escrow persistence.
+
+## 2026-02-12 - CIN-OPS-001 dependency extension
+- Added admin list endpoint `GET /v1/escrows` with fail-closed filtering and cursor pagination:
+  - filters: `did`, `buyer_did`, `worker_did`, `status`, `from`, `to`
+  - cursor order: `(released_at, escrow_id)`
+- Included list endpoint in docs page output.
+- Deploys:
+  - `clawescrow-staging`: `8f7e4c0a-7d8c-472b-b4fb-66deff3c1422`
+  - `clawescrow` (prod): `008aeb79-d1ca-4474-bc3a-d589268130e4`

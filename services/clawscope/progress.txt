@@ -234,3 +234,12 @@ Started: 2026-02-02T22:30:00Z
   - hard-cutover prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-22-079Z-prod/result.json`
   - kid interop: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-43-712Z-kid-interop/result.json`
 ---
+
+## 2026-02-12 - CIN-OPS-001 scope policy extension
+- Added `clawincome:` to allowed scope prefixes for default policy tier:
+  - `SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:,clawincome:,control:"`
+- Rotated `SCOPE_ADMIN_KEY` (staging+prod) and validated token issuance for `clawincome:read` scope.
+- Deploy versions:
+  - staging: `a974681a-cb0d-4d02-99ed-69fcc73cda88`
+  - prod: `0be4c370-3473-4f61-b53f-c84895960918`
+---

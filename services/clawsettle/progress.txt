@@ -381,3 +381,15 @@ Started: 2026-02-12
 - Release status
   - MPY-US-011 shipped to staging + production.
 ---
+
+## 2026-02-12 - CIN-OPS-001 dependency extension
+- Added admin payout listing endpoint `GET /v1/payouts` for clawincome integration:
+  - required query: `from`, `to`
+  - optional: `account_did`, `status`, `cursor`, `limit`
+  - deterministic cursor pagination by `(created_at, payout_id)`
+- Updated landing/docs endpoint list to include list API.
+- Deploys:
+  - `clawsettle-staging`: `6dcd7a27-ef74-43c1-a36f-872f172b69d0`
+  - `clawsettle` (prod): `b0170168-a6a4-4843-bbe5-282e9be7ec9c`
+- Secret rotation follow-up (staging+prod):
+  - `SETTLE_ADMIN_KEY` rotated and aligned with clawincome integration.

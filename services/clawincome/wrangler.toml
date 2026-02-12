@@ -1,0 +1,44 @@
+name = "clawincome"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "clawincome.com/*", zone_name = "clawincome.com" },
+  { pattern = "www.clawincome.com/*", zone_name = "clawincome.com" }
+]
+
+[[d1_databases]]
+binding = "INCOME_DB"
+database_name = "clawincome"
+database_id = "eab80ccb-e5bb-4aa9-85e1-b5507b4ee901"
+
+[vars]
+INCOME_VERSION = "0.1.0"
+CLAWSCOPE_BASE_URL = "https://clawscope.com"
+LEDGER_BASE_URL = "https://clawledger.com"
+ESCROW_BASE_URL = "https://clawescrow.com"
+CUTS_BASE_URL = "https://clawcuts.com"
+SETTLE_BASE_URL = "https://clawsettle.com"
+INCOME_SCOPE_REQUIRED = "clawincome:read"
+
+[env.staging]
+name = "clawincome-staging"
+routes = [
+  { pattern = "staging.clawincome.com/*", zone_name = "clawincome.com" }
+]
+
+[[env.staging.d1_databases]]
+binding = "INCOME_DB"
+database_name = "clawincome-staging"
+database_id = "e39ad887-f4ad-4211-89c9-9e149333da19"
+
+[env.staging.vars]
+INCOME_VERSION = "0.1.0"
+CLAWSCOPE_BASE_URL = "https://staging.clawscope.com"
+LEDGER_BASE_URL = "https://staging.clawledger.com"
+ESCROW_BASE_URL = "https://staging.clawescrow.com"
+CUTS_BASE_URL = "https://staging.clawcuts.com"
+SETTLE_BASE_URL = "https://staging.clawsettle.com"
+INCOME_SCOPE_REQUIRED = "clawincome:read"

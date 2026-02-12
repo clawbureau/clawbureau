@@ -221,6 +221,38 @@ async function handleListFailedPayouts(url: URL, request: Request, env: Env): Pr
   return jsonResponse(response, 200, resolveVersion(env));
 }
 
+async function handleListPayouts(url: URL, request: Request, env: Env): Promise<Response> {
+  assertSettleAdmin(request, env);
+
+  const accountDid = url.searchParams.get('account_did');
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+
+  if (!from || from.trim().length === 0) {
+    throw new ClawSettleError('Missing required query parameter: from', 'INVALID_REQUEST', 400, {
+      field: 'from',
+    });
+  }
+
+  if (!to || to.trim().length === 0) {
+    throw new ClawSettleError('Missing required query parameter: to', 'INVALID_REQUEST', 400, {
+      field: 'to',
+    });
+  }
+
+  const service = new PayoutService(env);
+  const response = await service.listPayoutsByRange({
+    accountDid,
+    from: from.trim(),
+    to: to.trim(),
+    cursor: url.searchParams.get('cursor'),
+    limit: url.searchParams.get('limit'),
+    status: url.searchParams.get('status'),
+  });
+
+  return jsonResponse(response, 200, resolveVersion(env));
+}
+
 async function handleDailyReconciliation(url: URL, request: Request, env: Env): Promise<Response> {
   assertSettleAdmin(request, env);
 
@@ -345,6 +377,7 @@ async function router(request: Request, env: Env): Promise<Response> {
         <li><code>POST /v1/stripe/forwarding/retry</code> (admin)</li>
         <li><code>POST /v1/payouts/connect/onboard</code></li>
         <li><code>POST /v1/payouts</code> (idempotency required)</li>
+        <li><code>GET /v1/payouts?account_did=...&amp;from=...&amp;to=...&amp;cursor=...&amp;limit=...</code> (admin)</li>
         <li><code>GET /v1/payouts/:id</code></li>
         <li><code>POST /v1/payouts/:id/retry</code> (admin)</li>
         <li><code>GET /v1/payouts/ops/stuck</code> (admin)</li>
@@ -373,6 +406,10 @@ async function router(request: Request, env: Env): Promise<Response> {
 
   if (request.method === 'POST' && path === '/v1/payouts') {
     return handleCreatePayout(request, env);
+  }
+
+  if (request.method === 'GET' && path === '/v1/payouts') {
+    return handleListPayouts(url, request, env);
   }
 
   if (request.method === 'GET' && path === '/v1/payouts/ops/stuck') {

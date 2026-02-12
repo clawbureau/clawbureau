@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "env": "prod",
+  "did": "did:key:zcinbuyermlirgovdjvm53490",
+  "month": "2026-02",
+  "year": "2026",
+  "escrow": {
+    "escrow_id": "esc_3a5be06a-f094-4566-b833-4585ceeb70b2",
+    "release_idempotency_key": "smoke:clawincome:release:mlirgovdtkn23j",
+    "worker_transfer": "evt_mlirgsj4_or282hyo",
+    "fee_transfer_count": 1
+  },
+  "statements": {
+    "snapshot_id": "irs_266007bb-712e-4478-89f1-389bcac751ff",
+    "snapshot_hash_b64u": "mnofE0PpyMsdKB3QfmA_7LL1GOmB8BKbRsTInDP2FXc",
+    "csv_source_snapshot_id": "irs_266007bb-712e-4478-89f1-389bcac751ff",
+    "csv_snapshot_id": "irs_89ccaff8-e5e6-4847-bcdd-fd76cc654761"
+  },
+  "invoices": {
+    "count": 1
+  },
+  "tax_lots": {
+    "count": 1
+  },
+  "income": {
+    "page1_count": 1,
+    "page2_count": 0,
+    "next_cursor_present": false
+  },
+  "privacy": {
+    "cross_did_status": 403,
+    "admin_read_status": 200
+  }
+}

@@ -611,6 +611,135 @@ async function getEscrowByCreateIdempotencyKey(db: D1Database, key: string): Pro
   return parseEscrowRow(row);
 }
 
+function base64urlEncode(input: string): string {
+  return btoa(input).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64urlDecode(input: string): string | null {
+  try {
+    const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4 || 4)) % 4);
+    return atob(padded);
+  } catch {
+    return null;
+  }
+}
+
+function encodeEscrowCursor(releasedAt: string, escrowId: string): string {
+  return base64urlEncode(`${releasedAt}::${escrowId}`);
+}
+
+function decodeEscrowCursor(cursor: string | null): { released_at: string; escrow_id: string } | null {
+  if (!cursor || cursor.trim().length === 0) return null;
+
+  const decoded = base64urlDecode(cursor.trim());
+  if (!decoded) return null;
+
+  const [releasedAt, escrowId] = decoded.split('::');
+  if (!releasedAt || !escrowId) return null;
+
+  const releasedAtIso = new Date(releasedAt);
+  if (!Number.isFinite(releasedAtIso.getTime())) return null;
+  if (!escrowId.startsWith('esc_')) return null;
+
+  return {
+    released_at: releasedAtIso.toISOString(),
+    escrow_id: escrowId,
+  };
+}
+
+async function listEscrows(
+  db: D1Database,
+  params: {
+    did?: string;
+    buyer_did?: string;
+    worker_did?: string;
+    status?: EscrowStatus;
+    from?: string;
+    to?: string;
+    cursor?: { released_at: string; escrow_id: string };
+    limit: number;
+  }
+): Promise<{ escrows: EscrowRecord[]; next_cursor?: string }> {
+  const where: string[] = [];
+  const binds: Array<string | number | null> = [];
+
+  if (params.did) {
+    where.push('(buyer_did = ? OR worker_did = ?)');
+    binds.push(params.did, params.did);
+  }
+
+  if (params.buyer_did) {
+    where.push('buyer_did = ?');
+    binds.push(params.buyer_did);
+  }
+
+  if (params.worker_did) {
+    where.push('worker_did = ?');
+    binds.push(params.worker_did);
+  }
+
+  if (params.status) {
+    where.push('status = ?');
+    binds.push(params.status);
+  }
+
+  if (params.from) {
+    where.push('released_at IS NOT NULL');
+    where.push('released_at >= ?');
+    binds.push(params.from);
+  }
+
+  if (params.to) {
+    where.push('released_at IS NOT NULL');
+    where.push('released_at < ?');
+    binds.push(params.to);
+  }
+
+  if (params.cursor) {
+    where.push('released_at IS NOT NULL');
+    where.push('(released_at > ? OR (released_at = ? AND escrow_id > ?))');
+    binds.push(params.cursor.released_at, params.cursor.released_at, params.cursor.escrow_id);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const result = await db
+    .prepare(
+      `SELECT *
+       FROM escrows
+       ${whereSql}
+       ORDER BY COALESCE(released_at, created_at) ASC, escrow_id ASC
+       LIMIT ?`
+    )
+    .bind(...binds, params.limit + 1)
+    .all();
+
+  const rows = Array.isArray(result.results) ? result.results : [];
+  const parsed: EscrowRecord[] = [];
+  for (const row of rows) {
+    if (!isRecord(row)) continue;
+    const escrow = parseEscrowRow(row);
+    if (escrow) parsed.push(escrow);
+  }
+
+  const hasMore = parsed.length > params.limit;
+  const page = hasMore ? parsed.slice(0, params.limit) : parsed;
+
+  let nextCursor: string | undefined;
+  if (hasMore) {
+    const last = page[page.length - 1];
+    if (last && last.released_at) {
+      nextCursor = encodeEscrowCursor(last.released_at, last.escrow_id);
+    }
+  }
+
+  return {
+    escrows: page,
+    ...(nextCursor ? { next_cursor: nextCursor } : {}),
+  };
+}
+
 async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void> {
   await db
     .prepare(
@@ -821,6 +950,7 @@ function docsPage(origin: string): string {
     </p>
     <ul>
       <li><code>POST /v1/escrows</code> — create escrow hold (calls clawledger /v1/transfers A→H)</li>
+      <li><code>GET /v1/escrows</code> — list/filter escrows (admin, cursor pagination)</li>
       <li><code>POST /v1/escrows/{escrow_id}/assign</code> — set worker DID</li>
       <li><code>POST /v1/escrows/{escrow_id}/release</code> — release to worker + fee pool (calls clawledger /v1/transfers)</li>
       <li><code>POST /v1/escrows/{escrow_id}/dispute</code> — freeze within dispute window</li>
@@ -1278,6 +1408,94 @@ async function handleGetEscrow(escrowId: string, env: Env, version: string): Pro
   );
 }
 
+async function handleListEscrows(request: Request, env: Env, version: string): Promise<Response> {
+  const url = new URL(request.url);
+
+  const did = isNonEmptyString(url.searchParams.get('did')) ? url.searchParams.get('did')!.trim() : undefined;
+  const buyer_did = isNonEmptyString(url.searchParams.get('buyer_did')) ? url.searchParams.get('buyer_did')!.trim() : undefined;
+  const worker_did = isNonEmptyString(url.searchParams.get('worker_did')) ? url.searchParams.get('worker_did')!.trim() : undefined;
+  const statusRaw = isNonEmptyString(url.searchParams.get('status')) ? url.searchParams.get('status')!.trim() : undefined;
+  const fromRaw = isNonEmptyString(url.searchParams.get('from')) ? url.searchParams.get('from')!.trim() : undefined;
+  const toRaw = isNonEmptyString(url.searchParams.get('to')) ? url.searchParams.get('to')!.trim() : undefined;
+  const cursorRaw = isNonEmptyString(url.searchParams.get('cursor')) ? url.searchParams.get('cursor')!.trim() : null;
+
+  let status: EscrowStatus | undefined;
+  if (statusRaw !== undefined) {
+    if (statusRaw !== 'held' && statusRaw !== 'released' && statusRaw !== 'frozen' && statusRaw !== 'cancelled') {
+      return errorResponse('INVALID_REQUEST', 'status must be one of held|released|frozen|cancelled', 400, undefined, version);
+    }
+    status = statusRaw;
+  }
+
+  const from = fromRaw ? new Date(fromRaw) : null;
+  if (fromRaw && (!from || !Number.isFinite(from.getTime()))) {
+    return errorResponse('INVALID_REQUEST', 'from must be an ISO timestamp', 400, undefined, version);
+  }
+
+  const to = toRaw ? new Date(toRaw) : null;
+  if (toRaw && (!to || !Number.isFinite(to.getTime()))) {
+    return errorResponse('INVALID_REQUEST', 'to must be an ISO timestamp', 400, undefined, version);
+  }
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 50;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, undefined, version);
+    }
+    limit = Math.min(parsed, 200);
+  }
+
+  const cursor = decodeEscrowCursor(cursorRaw);
+  if (cursorRaw && !cursor) {
+    return errorResponse('INVALID_CURSOR', 'cursor is invalid', 400, undefined, version);
+  }
+
+  const list = await listEscrows(env.ESCROW_DB, {
+    did,
+    buyer_did,
+    worker_did,
+    status,
+    from: from ? from.toISOString() : undefined,
+    to: to ? to.toISOString() : undefined,
+    cursor: cursor ?? undefined,
+    limit,
+  });
+
+  return jsonResponse(
+    {
+      escrows: list.escrows.map((escrow) => ({
+        escrow_id: escrow.escrow_id,
+        status: escrow.status,
+        buyer_did: escrow.buyer_did,
+        worker_did: escrow.worker_did,
+        currency: escrow.currency,
+        amount_minor: escrow.amount_minor,
+        buyer_total_minor: escrow.buyer_total_minor,
+        worker_net_minor: escrow.worker_net_minor,
+        fee_quote: escrow.fee_quote,
+        metadata: escrow.metadata,
+        timestamps: {
+          created_at: escrow.created_at,
+          held_at: escrow.held_at,
+          released_at: escrow.released_at,
+          updated_at: escrow.updated_at,
+        },
+        ledger_refs: {
+          hold_transfer: escrow.ledger_hold_event_id,
+          worker_transfer: escrow.ledger_worker_event_id,
+          fee_transfers: escrow.ledger_fee_event_ids,
+          referral_transfers: escrow.ledger_referral_event_ids,
+        },
+      })),
+      next_cursor: list.next_cursor ?? null,
+    },
+    200,
+    version
+  );
+}
+
 async function handleAssignEscrow(escrowId: string, request: Request, env: Env, version: string): Promise<Response> {
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
@@ -1680,6 +1898,10 @@ export default {
 
       if (path === '/v1/escrows' && method === 'POST') {
         return handleCreateEscrow(request, env, version);
+      }
+
+      if (path === '/v1/escrows' && method === 'GET') {
+        return handleListEscrows(request, env, version);
       }
 
       const getMatch = path.match(/^\/v1\/escrows\/(esc_[a-f0-9-]+)$/);
