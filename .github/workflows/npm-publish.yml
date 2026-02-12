@@ -1,0 +1,41 @@
+##
+# Red Team Fix #10: NPM Provenance CI Config
+#
+# Publishes packages with --provenance to prevent supply-chain attacks.
+# SIGSTORE attestation ties every published tarball to this GitHub repo
+# and the exact commit SHA, making rogue maintainer pushes detectable.
+##
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish'
+        required: true
+        type: choice
+        options:
+          - clawsig-sdk
+          - clawverify-cli
+          - clawverify-core
+          - clawsig-conformance
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install and publish with provenance
+        run: cd packages/${{ inputs.package }} && npm ci && npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

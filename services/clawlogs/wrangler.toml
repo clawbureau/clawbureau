@@ -18,6 +18,10 @@ class_name = "LogDurableObject"
 tag = "v1"
 new_classes = ["LogDurableObject"]
 
+# Red Team Fix #3: Daily L2 Merkle root anchoring
+[triggers]
+crons = ["0 0 * * *"]
+
 [vars]
 SERVICE_VERSION = "0.1.0"
 
@@ -39,6 +43,10 @@ class_name = "LogDurableObject"
 [[env.staging.migrations]]
 tag = "v1"
 new_classes = ["LogDurableObject"]
+
+# Red Team Fix #3: Daily L2 anchoring (staging)
+[env.staging.triggers]
+crons = ["0 0 * * *"]
 
 [env.staging.vars]
 SERVICE_VERSION = "0.1.0"
