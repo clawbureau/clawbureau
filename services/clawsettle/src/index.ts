@@ -25,6 +25,9 @@ import {
   queryOpsAlerts,
   runOpsAlertChecks,
 } from './economy-health';
+import {
+  createPaymentIntent,
+} from './stripe-api';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
@@ -709,6 +712,46 @@ async function router(request: Request, env: Env): Promise<Response> {
     assertSettleAdmin(request, env);
     const result = await runOpsAlertChecks(env.DB);
     return jsonResponse({ ok: true, ...result }, 200, resolveVersion(env));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stripe PaymentIntent creation for escrow funding (ECON-SETTLE-002)
+  // ---------------------------------------------------------------------------
+
+  if (request.method === 'POST' && path === '/v1/funding/payment-intent') {
+    assertSettleAdmin(request, env);
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return errorResponse('Invalid JSON', 'INVALID_REQUEST', 400, undefined, resolveVersion(env));
+    }
+
+    const b = body as Record<string, unknown>;
+    const escrowId = typeof b.escrow_id === 'string' ? b.escrow_id.trim() : '';
+    const accountId = typeof b.account_id === 'string' ? b.account_id.trim() : '';
+    const amountMinor = typeof b.amount_minor === 'string' ? b.amount_minor.trim() : '';
+    const currency = typeof b.currency === 'string' ? b.currency.trim() : 'USD';
+    const idempotencyKey = typeof b.idempotency_key === 'string' ? b.idempotency_key.trim() : '';
+
+    if (!escrowId || !accountId || !amountMinor || !idempotencyKey) {
+      return errorResponse(
+        'Missing required fields: escrow_id, account_id, amount_minor, idempotency_key',
+        'INVALID_REQUEST', 400, undefined, resolveVersion(env)
+      );
+    }
+
+    if (!/^[0-9]+$/.test(amountMinor) || BigInt(amountMinor) <= 0n) {
+      return errorResponse('amount_minor must be a positive integer', 'INVALID_REQUEST', 400, undefined, resolveVersion(env));
+    }
+
+    const result = await createPaymentIntent(env, {
+      amount_minor: amountMinor,
+      currency,
+      escrow_id: escrowId,
+      account_id: accountId,
+      idempotency_key: idempotencyKey,
+    });
+
+    return jsonResponse({ ok: true, ...result }, 201, resolveVersion(env));
   }
 
   return errorResponse('Not found', 'NOT_FOUND', 404, undefined, resolveVersion(env));
