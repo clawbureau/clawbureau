@@ -24,7 +24,7 @@ This spec is designed to align with existing Claw Bureau PRDs:
 - Trust layer: `clawverify`, `clawproxy`, `clawscope`, `clawcontrols`, `clawlogs`
 
 Protocol layer (narrow waist; marketplace/payments are optional modules built on top):
-- `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 
 And with OpenClaw capabilities documented in `docs/openclaw/`:
 - Multi-agent isolation (`4.3-multi-agent-configuration.md`)

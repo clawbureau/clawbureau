@@ -72,9 +72,9 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 
 **Hard rule:** fail-closed on unknown `schema_id` / `version` / `envelope_type` / `algorithm`.
 
-## Protocol alignment (Claw Protocol v0.1)
+## Protocol alignment (Clawsig Protocol v0.1)
 
-- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- Canonical narrow-waist spec: `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 - `clawverify` is the reference **Verifier** primitive: deterministic PASS/FAIL + reason codes.
 - Offline-capable verification is a protocol requirement; hosted verification APIs and hosted viewers are optional modules.
 

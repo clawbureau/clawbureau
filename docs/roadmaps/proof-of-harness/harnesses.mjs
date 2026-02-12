@@ -72,20 +72,20 @@ export const harnesses = [
 
   {
     id: 'script',
-    displayName: 'Ad-hoc scripts (clawproof SDK)',
+    displayName: 'Ad-hoc scripts (clawsig SDK)',
     kind: 'sdk',
     status: 'supported',
     knowsOfFiles: [
-      'packages/clawproof-sdk/src/run.ts',
+      'packages/clawsig-sdk/src/run.ts',
       'services/clawproxy/src/index.ts',
       'services/clawverify/src/verify-proof-bundle.ts',
     ],
     connectsVia: [
-      '`@clawbureau/clawproof-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce).',
+      '`@clawbureau/clawsig-sdk` calls `clawproxy` directly and injects PoH binding headers (run/event/nonce).',
       'SDK collects `_receipt_envelope`, builds URM + event chain, and signs a proof bundle with an agent DID key.',
     ],
     recommendedCommands: [
-      '# Programmatic (Node): use @clawbureau/clawproof-sdk createRun() + callLLM() + finalize()',
+      '# Programmatic (Node): use @clawbureau/clawsig-sdk createRun() + callLLM() + finalize()',
     ],
     baseUrlOverrides: {
       '(sdk config)': 'proxyBaseUrl passed to createRun({ proxyBaseUrl })',
@@ -110,16 +110,16 @@ export const harnesses = [
     kind: 'external-cli',
     status: 'supported',
     knowsOfFiles: [
-      'packages/clawproof-adapters/src/adapters/claude-code.ts',
-      'packages/clawproof-adapters/src/shim.ts',
-      'packages/clawproof-adapters/src/session.ts',
+      'packages/clawsig-adapters/src/adapters/claude-code.ts',
+      'packages/clawsig-adapters/src/shim.ts',
+      'packages/clawsig-adapters/src/session.ts',
     ],
     connectsVia: [
-      'clawproof-adapters starts a local shim server and points `ANTHROPIC_BASE_URL` at it.',
+      'clawsig-adapters starts a local shim server and points `ANTHROPIC_BASE_URL` at it.',
       'Shim forwards each request to clawproxy via session.proxyLLMCall() to inject PoH binding headers + capture receipts.',
     ],
     recommendedCommands: [
-      'clawproof-wrap claude-code -- claude --print "fix the failing test"',
+      'clawsig-wrap claude-code -- claude --print "fix the failing test"',
     ],
     baseUrlOverrides: {
       ANTHROPIC_BASE_URL: '<shim>/v1/anthropic',
@@ -130,7 +130,7 @@ export const harnesses = [
     bestPractices: [
       'Use `--print` (non-interactive) for repeatable output and easier log capture.',
       'Prefer simple tool call visibility; if tool logs are not present, expect a minimal tool_call chain.',
-      'Keep upstream provider key as `ANTHROPIC_API_KEY`; clawproof does not replace provider keys.',
+      'Keep upstream provider key as `ANTHROPIC_API_KEY`; clawsig does not replace provider keys.',
     ],
     limitations: [
       'Shim currently assumes non-streaming JSON responses; if the harness uses streaming-only flows, support may be partial.',
@@ -143,16 +143,16 @@ export const harnesses = [
     kind: 'external-cli',
     status: 'supported',
     knowsOfFiles: [
-      'packages/clawproof-adapters/src/adapters/codex.ts',
-      'packages/clawproof-adapters/src/shim.ts',
-      'packages/clawproof-adapters/src/session.ts',
+      'packages/clawsig-adapters/src/adapters/codex.ts',
+      'packages/clawsig-adapters/src/shim.ts',
+      'packages/clawsig-adapters/src/session.ts',
     ],
     connectsVia: [
-      'clawproof-adapters starts a local shim server and points `OPENAI_BASE_URL` at it.',
+      'clawsig-adapters starts a local shim server and points `OPENAI_BASE_URL` at it.',
       'Shim extracts upstream key from Authorization and forwards to clawproxy as X-Provider-API-Key.',
     ],
     recommendedCommands: [
-      'clawproof-wrap codex -- codex exec --json "implement the feature"',
+      'clawsig-wrap codex -- codex exec --json "implement the feature"',
     ],
     baseUrlOverrides: {
       OPENAI_BASE_URL: '<shim>/v1/openai',
@@ -161,7 +161,7 @@ export const harnesses = [
       'OPENAI_API_KEY (upstream provider key)',
     ],
     bestPractices: [
-      'Use `codex exec --json` to emit JSONL events; clawproof can extract tool_call events best-effort.',
+      'Use `codex exec --json` to emit JSONL events; clawsig can extract tool_call events best-effort.',
       'If you see streaming-related errors, try non-interactive subcommands (exec/review) rather than the interactive TUI.',
     ],
     limitations: [
@@ -175,16 +175,16 @@ export const harnesses = [
     kind: 'external-cli',
     status: 'supported',
     knowsOfFiles: [
-      'packages/clawproof-adapters/src/adapters/opencode.ts',
-      'packages/clawproof-adapters/src/shim.ts',
-      'packages/clawproof-adapters/src/session.ts',
+      'packages/clawsig-adapters/src/adapters/opencode.ts',
+      'packages/clawsig-adapters/src/shim.ts',
+      'packages/clawsig-adapters/src/session.ts',
     ],
     connectsVia: [
-      'clawproof-adapters starts a local shim server and points provider base URLs at it.',
+      'clawsig-adapters starts a local shim server and points provider base URLs at it.',
       'Shim forwards to clawproxy with PoH binding headers and captures `_receipt_envelope`.',
     ],
     recommendedCommands: [
-      'clawproof-wrap opencode -- opencode run --format json "refactor module"',
+      'clawsig-wrap opencode -- opencode run --format json "refactor module"',
     ],
     baseUrlOverrides: {
       ANTHROPIC_BASE_URL: '<shim>/v1/anthropic',
@@ -208,17 +208,17 @@ export const harnesses = [
     kind: 'external-cli',
     status: 'experimental',
     knowsOfFiles: [
-      'packages/clawproof-adapters/src/adapters/pi.ts',
-      'packages/clawproof-adapters/src/shim.ts',
-      'packages/clawproof-adapters/src/session.ts',
+      'packages/clawsig-adapters/src/adapters/pi.ts',
+      'packages/clawsig-adapters/src/shim.ts',
+      'packages/clawsig-adapters/src/session.ts',
       'scripts/ralph/ralph.sh',
     ],
     connectsVia: [
-      'clawproof-adapters starts a local shim server and points provider base URLs at it.',
+      'clawsig-adapters starts a local shim server and points provider base URLs at it.',
       'Shim forwards to clawproxy with PoH binding headers and captures receipts.',
     ],
     recommendedCommands: [
-      'clawproof-wrap pi -- pi -p "run the tests"',
+      'clawsig-wrap pi -- pi -p "run the tests"',
     ],
     baseUrlOverrides: {
       ANTHROPIC_BASE_URL: '<shim>/v1/anthropic',
@@ -242,15 +242,15 @@ export const harnesses = [
     kind: 'external-cli',
     status: 'planned',
     knowsOfFiles: [
-      'packages/clawproof-adapters/src/adapters/factory-droid.ts',
-      'packages/clawproof-adapters/src/shim.ts',
-      'packages/clawproof-adapters/src/session.ts',
+      'packages/clawsig-adapters/src/adapters/factory-droid.ts',
+      'packages/clawsig-adapters/src/shim.ts',
+      'packages/clawsig-adapters/src/session.ts',
     ],
     connectsVia: [
-      'Planned: use clawproof-adapters shim routing (same as other external CLIs).',
+      'Planned: use clawsig-adapters shim routing (same as other external CLIs).',
     ],
     recommendedCommands: [
-      'clawproof-wrap factory-droid -- factory-droid run --task "build feature"',
+      'clawsig-wrap factory-droid -- factory-droid run --task "build feature"',
     ],
     baseUrlOverrides: {
       ANTHROPIC_BASE_URL: '<shim>/v1/anthropic',
@@ -279,7 +279,7 @@ export const harnesses = [
       'Planned: route Google Generative AI calls through clawproxy provider=google and capture receipts in a PoH bundle.',
     ],
     recommendedCommands: [
-      '# TODO: add a clawproof-adapters harness adapter once we confirm Gemini CLI base URL override behavior.',
+      '# TODO: add a clawsig-adapters harness adapter once we confirm Gemini CLI base URL override behavior.',
     ],
     baseUrlOverrides: {
       '(unknown)': 'Need research: which env vars/flags control Gemini CLI base URL',

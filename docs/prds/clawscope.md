@@ -38,9 +38,9 @@ See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 ## 1) Purpose
 Define and enforce scoped token access (CST), issue/introspect/revoke tokens, and provide auditability suitable for OpenClaw multi-agent + multi-session operation.
 
-## Protocol alignment (Claw Protocol v0.1)
+## Protocol alignment (Clawsig Protocol v0.1)
 
-- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- Canonical narrow-waist spec: `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 - `clawscope` is the reference **Capability Token (CST)** primitive.
 - Protocol requirements: short TTL, deterministic scope hashing, optional policy hash pinning, and deterministic denial semantics.
 - Protocol identity is bring-your-own; DID is supported but must not be the only viable subject model.

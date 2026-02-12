@@ -4,7 +4,7 @@ We are building a trust platform / agent economy where workers submit artifacts 
 
 Context (current system):
 - `clawproxy` is a gateway that proxies LLM calls to providers (Anthropic/OpenAI/Google) and emits signed receipts (`_receipt_envelope`) that include binding fields (`run_id`, `event_hash_b64u`, `nonce`, `policy_hash`, `token_scope_hash_b64u`).
-- `clawproof` SDK/adapters record a hash-linked event chain, generate a URM, collect receipts, and sign a proof bundle.
+- `clawsig` SDK/adapters record a hash-linked event chain, generate a URM, collect receipts, and sign a proof bundle.
 - `clawverify` verifies the proof bundle, verifies receipt signatures against an allowlist, and enforces receipt↔event-chain binding.
 
 Task:

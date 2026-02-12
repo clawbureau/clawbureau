@@ -48,9 +48,9 @@ See also (PoH vNext):
 ## 1) Purpose
 Policy engine for spend caps, allowlists, and kill switches.
 
-## Protocol alignment (Claw Protocol v0.1)
+## Protocol alignment (Clawsig Protocol v0.1)
 
-- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- Canonical narrow-waist spec: `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 - `clawcontrols` is the reference **Policy Artifact (WPC)** registry and governance surface.
 - Protocol requirement: policy artifacts are signed, immutable, and content-addressed; updates require publishing a new artifact (new hash), not mutation.
 

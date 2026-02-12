@@ -46,11 +46,11 @@ See also (PoH vNext):
 ## 1) Purpose
 Gateway proxy that issues signed receipts for model calls (proof-of-harness). BYOK-friendly.
 
-## Protocol alignment (Claw Protocol v0.1)
+## Protocol alignment (Clawsig Protocol v0.1)
 
-- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- Canonical narrow-waist spec: `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 - `clawproxy` is the reference implementation for **model gateway receipts** (Coverage M).
-- Scope note (credibility): model receipts do not imply “every action attested”; tool/side-effect receipts are separate protocol primitives and are tracked in `docs/roadmaps/claw-protocol/`.
+- Scope note (credibility): model receipts do not imply “every action attested”; tool/side-effect receipts are separate protocol primitives and are tracked in `docs/roadmaps/clawsig-protocol/`.
 
 ## 2) Target Users
 - OpenClaw gateway operators (self-hosted)

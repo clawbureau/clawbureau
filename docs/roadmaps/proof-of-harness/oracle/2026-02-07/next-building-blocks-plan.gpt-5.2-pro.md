@@ -419,7 +419,7 @@ These are “must fix” to avoid accidental over-trust (many are called out dir
 - **AC:** witness-signed `web_receipt` bound to run/event; tier only upgrades if witness signer allowlisted; never equals gateway by default.  
 - **Deps:** #1, #4, #6.
 
-(Parallel but important enabling work: streaming shim rewrite for external CLIs, per `packages/clawproof-adapters/src/shim.ts` buffering limitation described in `docs/roadmaps/proof-of-harness/oracle/2026-02-07/harness-enforcement.google-gemini-3-pro-preview.md`.)
+(Parallel but important enabling work: streaming shim rewrite for external CLIs, per `packages/clawsig-adapters/src/shim.ts` buffering limitation described in `docs/roadmaps/proof-of-harness/oracle/2026-02-07/harness-enforcement.google-gemini-3-pro-preview.md`.)
 
 ---
 
@@ -457,7 +457,7 @@ These are “must fix” to avoid accidental over-trust (many are called out dir
 - `docs/OPENCLAW_INTEGRATION.md` (Airlock pattern + policy-driven enforcement)
 
 ### External harness adapters
-- `packages/clawproof-adapters/src/shim.ts` (rewrite to streaming passthrough; currently buffers request/response)
+- `packages/clawsig-adapters/src/shim.ts` (rewrite to streaming passthrough; currently buffers request/response)
 - `docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md` (update limitations once shim is streaming-safe)
 
 ### Marketplace spec alignment

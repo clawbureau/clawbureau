@@ -441,7 +441,7 @@ All harnesses should be able to route model calls via clawproxy using base URL o
 
 ### 9.4 Ad-hoc scripts (SDK)
 
-Provide a small SDK (`clawproof`) to:
+Provide a small SDK (`clawsig`) to:
 
 - open a run
 - record events

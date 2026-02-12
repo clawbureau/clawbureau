@@ -1604,9 +1604,9 @@ export default {
 
       const keyFile = cfg.keyFile
         ? api.resolvePath?.(cfg.keyFile) ?? cfg.keyFile
-        : path.join(stateDir, 'clawproof', 'keys', `${agentId}.jwk.json`);
+        : path.join(stateDir, 'clawsig', 'keys', `${agentId}.jwk.json`);
 
-      const outputDirRel = cfg.outputDir ?? path.join('.clawproof', 'openclaw');
+      const outputDirRel = cfg.outputDir ?? path.join('.clawsig', 'openclaw');
       const outputDir = path.isAbsolute(outputDirRel)
         ? outputDirRel
         : path.join(workspaceDir, outputDirRel);
@@ -1711,7 +1711,7 @@ export default {
       const sessionKey = store.sessionKey ?? asString(ctx?.sessionKey);
       const workspaceDir = asString(ctx?.workspaceDir) ?? process.cwd();
 
-      const outputDirRel = cfg.outputDir ?? path.join('.clawproof', 'openclaw');
+      const outputDirRel = cfg.outputDir ?? path.join('.clawsig', 'openclaw');
       const outputDir = path.isAbsolute(outputDirRel)
         ? outputDirRel
         : path.join(workspaceDir, outputDirRel);

@@ -17,7 +17,7 @@
 3. `docs/foundations/INTERCONNECTION.md`
 4. `docs/foundations/GIT_STRATEGY.md`
 5. `docs/roadmaps/README.md`
-6. `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+6. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
 
 ## Marketplace engineer (clawbounties / escrow / ledger)
 
@@ -30,8 +30,8 @@
 
 ## Trust / PoH engineer (clawproxy / clawverify / protocol)
 
-1. `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
-2. `docs/roadmaps/claw-protocol/README.md`
+1. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
+2. `docs/roadmaps/clawsig-protocol/README.md`
 3. `docs/roadmaps/proof-of-harness/README.md`
 4. `docs/roadmaps/proof-of-harness/ADAPTER_SPEC_v1.md`
 5. `docs/roadmaps/proof-of-harness/HARNESS_REGISTRY.md`

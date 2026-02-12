@@ -2,18 +2,18 @@
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
 > **Last reviewed:** 2026-02-12
-> **Source of truth:** this PRD (intent) + `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md` + `docs/roadmaps/claw-protocol/prd.json`
+> **Source of truth:** this PRD (intent) + `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md` + `docs/roadmaps/clawsig-protocol/prd.json`
 >
 > **Scope:**
-> - Product requirements for **Claw Protocol** as an open narrow waist.
+> - Product requirements for **Clawsig Protocol** as an open narrow waist.
 > - This is intentionally cross-service and modular: third parties should be able to implement the protocol without adopting Claw’s full stack.
 
-# Claw Protocol — PRD
+# Clawsig Protocol — PRD
 
 ## Implementation status (current)
 
-- **Spec (canonical):** `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
-- **Execution roadmap:** `docs/roadmaps/claw-protocol/{prd.json,progress.txt}`
+- **Spec (canonical):** `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
+- **Execution roadmap:** `docs/roadmaps/clawsig-protocol/{prd.json,progress.txt}`
 - **Reference implementations (current services):**
   - Policy registry: `clawcontrols` (`docs/prds/clawcontrols.md`)
   - Capability tokens: `clawscope` (`docs/prds/clawscope.md`)

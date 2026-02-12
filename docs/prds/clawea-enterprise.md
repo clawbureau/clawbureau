@@ -36,8 +36,8 @@ Related trust design + roadmap:
   - Execution attestation: `packages/schema/poh/execution_attestation.v1.json`
 - **Roadmap (PoH evidence slice):** `docs/roadmaps/proof-of-harness/ROADMAP_vNext.md`
 - **Protocol (narrow waist):**
-  - Spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
-  - Roadmap: `docs/roadmaps/claw-protocol/`
+  - Spec: `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md`
+  - Roadmap: `docs/roadmaps/clawsig-protocol/`
 
 ---
 

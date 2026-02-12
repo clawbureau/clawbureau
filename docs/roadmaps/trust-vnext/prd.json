@@ -259,7 +259,7 @@
     {
       "id": "POH-US-019",
       "title": "Streaming-safe shim for external harness CLIs",
-      "description": "As an operator, I want the clawproof shim proxy to support streaming/SSE so external harnesses can reliably produce gateway-tier bundles.",
+      "description": "As an operator, I want the clawsig shim proxy to support streaming/SSE so external harnesses can reliably produce gateway-tier bundles.",
       "acceptanceCriteria": [
         "Shim forwards streaming responses without buffering entire bodies",
         "Receipts are extracted/attached in a deterministic way (e.g. final event or trailer object)",
@@ -276,14 +276,14 @@
       "description": "As a platform, we must redact secrets/PII before hashing event payloads or embedding URM metadata so proofs are safe to store/share and cannot leak credentials via future materialization/debugging.",
       "acceptanceCriteria": [
         "Implement a redaction utility (regex-based) ported from agentlog/redact.py",
-        "clawproof-adapters recordEvent() redacts payload before computing payload_hash_b64u and event_hash_b64u",
+        "clawsig-adapters recordEvent() redacts payload before computing payload_hash_b64u and event_hash_b64u",
         "OpenClaw recorder recordEvent() redacts payload before hashing",
         "URM metadata is redacted and bounded to verifier metadata limits",
         "Add unit tests covering common secret patterns (JWT, Bearer, sk-*, ghp_*, etc.)"
       ],
       "priority": 21,
       "passes": true,
-      "notes": "Implemented pre-hash redaction in packages/clawproof-adapters and packages/openclaw-provider-clawproxy (recorder). Added redaction utility modules and vitest coverage in clawproof-adapters. URM metadata is redacted and bounded to 16KB to avoid fail-closed verifier rejection."
+      "notes": "Implemented pre-hash redaction in packages/clawsig-adapters and packages/openclaw-provider-clawproxy (recorder). Added redaction utility modules and vitest coverage in clawsig-adapters. URM metadata is redacted and bounded to 16KB to avoid fail-closed verifier rejection."
     },
     {
       "id": "OCL-US-004",
@@ -298,7 +298,7 @@
       ],
       "priority": 22,
       "passes": true,
-      "notes": "Added packages/schema/poh/trust_pulse.v1.json. The clawproof adapter session + OpenClaw recorder now generate a Trust Pulse document, attach a trust_pulse pointer in URM metadata, and include the trust pulse hash as a URM output resource (self-reported, tier_uplift=false)."
+      "notes": "Added packages/schema/poh/trust_pulse.v1.json. The clawsig adapter session + OpenClaw recorder now generate a Trust Pulse document, attach a trust_pulse pointer in URM metadata, and include the trust pulse hash as a URM output resource (self-reported, tier_uplift=false)."
     },
     {
       "id": "AGL-US-001",
@@ -311,7 +311,7 @@
       ],
       "priority": 23,
       "passes": true,
-      "notes": "Implemented `agentlog verify` in /Users/gfw/code/agentlog/cli.py. The command discovers bundle+URM JSON artifacts (e.g. .clawproof/*-bundle.json + *-urm.json), calls clawverify /v1/verify/bundle with {envelope, urm}, and prints a derived-only VERIFIED/UNVERIFIED badge with proof_tier/trust_tier. Fail-closed on missing URM or verifier invalidation."
+      "notes": "Implemented `agentlog verify` in /Users/gfw/code/agentlog/cli.py. The command discovers bundle+URM JSON artifacts (e.g. .clawsig/*-bundle.json + *-urm.json), calls clawverify /v1/verify/bundle with {envelope, urm}, and prints a derived-only VERIFIED/UNVERIFIED badge with proof_tier/trust_tier. Fail-closed on missing URM or verifier invalidation."
     },
     {
       "id": "CBT-US-022",

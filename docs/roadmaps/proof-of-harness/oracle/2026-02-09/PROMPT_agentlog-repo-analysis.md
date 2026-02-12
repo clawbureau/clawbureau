@@ -16,7 +16,7 @@ Please produce:
 4) **Concrete integration proposals** (at least 5), each with:
    - description
    - target users and value
-   - where it would live (OpenClaw skill/plugin, clawproof-adapters changes, clawproxy changes, clawverify changes, docs)
+   - where it would live (OpenClaw skill/plugin, clawsig-adapters changes, clawproxy changes, clawverify changes, docs)
    - complexity/risk
 5) **Recommended next steps**: 2-3 phased plan; include 1-2 “quick wins” that can ship in a day.
 

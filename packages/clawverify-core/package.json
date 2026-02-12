@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pure, offline-capable verification primitives for Claw Protocol (reference implementation)",
+  "description": "Pure, offline-capable verification primitives for Clawsig Protocol (reference implementation)",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

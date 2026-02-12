@@ -38,7 +38,10 @@ package-lock.json
 # local scratch
 .tmp-main-required-pr-reviews.json
 
-# clawproof local keys / scratch output (do not commit)
+# clawsig local keys / scratch output (do not commit)
+.clawsig-key.json
+.clawsig/
+# Legacy clawproof names (transition compat)
 .clawproof-key.json
 .clawproof/
 

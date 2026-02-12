@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Offline verifier CLI for Claw Protocol (reference implementation)",
+  "description": "Offline verifier CLI for Clawsig Protocol (reference implementation)",
   "bin": {
     "clawverify": "./dist/cli.js"
   },

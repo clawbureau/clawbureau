@@ -21,7 +21,7 @@ function b64uJson(obj) {
 }
 
 async function main() {
-  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'clawproof-openclaw-plugin-'));
+  const tmpRoot = await mkdtemp(path.join(os.tmpdir(), 'clawsig-openclaw-plugin-'));
   const stateDir = path.join(tmpRoot, 'state');
 
   const storedByNonce = new Map();
@@ -229,7 +229,7 @@ async function main() {
     pluginConfig: {
       baseUrl: proxyBaseUrl,
       mode: 'enforce',
-      outputDir: path.join('.clawproof', 'openclaw'),
+      outputDir: path.join('.clawsig', 'openclaw'),
       keyFile: path.join(stateDir, 'agent-key.jwk.json'),
       intercept: { openai: true, anthropic: false, google: false },
       includePromptPack: true,
@@ -316,7 +316,7 @@ async function main() {
       { agentId: 'main', sessionKey, workspaceDir },
     );
 
-    const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
+    const outDir = path.join(workspaceDir, '.clawsig', 'openclaw');
     const files = await readdir(outDir);
     const bundle = files.find((f) => f.endsWith('-bundle.json'));
     assert.ok(bundle, `expected bundle.json in ${outDir}`);
@@ -385,7 +385,7 @@ async function main() {
       { agentId: 'main', sessionKey, workspaceDir },
     );
 
-    const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
+    const outDir = path.join(workspaceDir, '.clawsig', 'openclaw');
     const files = await readdir(outDir);
     const bundle = files.find((f) => f.endsWith('-bundle.json'));
     assert.ok(bundle);
@@ -448,7 +448,7 @@ async function main() {
       { agentId: 'main', sessionKey, workspaceDir },
     );
 
-    const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
+    const outDir = path.join(workspaceDir, '.clawsig', 'openclaw');
     const files = await readdir(outDir);
     const bundle = files.find((f) => f.endsWith('-bundle.json'));
     assert.ok(bundle);
@@ -514,7 +514,7 @@ async function main() {
 
     assert.ok(receiptLookupHits > beforeHits, 'expected GET /v1/receipt/:nonce lookup');
 
-    const outDir = path.join(workspaceDir, '.clawproof', 'openclaw');
+    const outDir = path.join(workspaceDir, '.clawsig', 'openclaw');
     const files = await readdir(outDir);
     const bundle = files.find((f) => f.endsWith('-bundle.json'));
     assert.ok(bundle);

@@ -4,7 +4,7 @@ Goal: PoH should be *automatic* and hard to “forget to do”.
 
 We currently have:
 - OpenClaw native plugin path (provider plugin + recorder)
-- External harness wrappers (clawproof-adapters) using a local shim
+- External harness wrappers (clawsig-adapters) using a local shim
 
 Task:
 1) For each harness:

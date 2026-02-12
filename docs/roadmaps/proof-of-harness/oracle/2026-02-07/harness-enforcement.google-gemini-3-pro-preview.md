@@ -3,7 +3,7 @@ Here is the PoH enforcement strategy, tailored for the specific capabilities dis
 ### 1-2. Per-Harness Playbook
 
 #### **Global Strategy: The "Shim" vs. "Native" Divide**
-The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claude, Codex), but **unnecessary overhead** for extensible agents like Pi and OpenClaw.
+The current `clawsig-adapters` shim is necessary for closed-source CLIs (Claude, Codex), but **unnecessary overhead** for extensible agents like Pi and OpenClaw.
 
 ---
 
@@ -24,14 +24,14 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 ### Harness 2: Claude Code
 
 *   **Integration Point:** Wrapper + Env Vars + JSON Stream.
-*   **Enforcement:** `clawproof-wrap claude-code`.
+*   **Enforcement:** `clawsig-wrap claude-code`.
 *   **Golden Path Configuration:**
     *   **Command:** use `--output-format=stream-json` (or `json`) and `--input-format=stream-json`.
     *   **Reasoning:** The `parseToolEvents` in `adapter/claude-code.ts` currently relies on regexing `toolPattern`. This is brittle. Using `stream-json` provides structured data.
     *   **Wrapper Logic:**
         ```bash
         # Suggested invocation
-        clawproof-wrap claude-code -- claude --print --output-format=stream-json "task"
+        clawsig-wrap claude-code -- claude --print --output-format=stream-json "task"
         ```
 *   **Binding & Receipts:** Controlled by `shim.ts`. The adapter points `ANTHROPIC_BASE_URL` to the local shim.
 *   **Tool Chains:** Switch `adapters/claude-code.ts` from regex parsing to `JSON.parse()` of the `stream-json` output chunks to capture tool inputs/outputs accurately.
@@ -44,7 +44,7 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 ### Harness 3: Codex CLI
 
 *   **Integration Point:** Wrapper + JSON Mode.
-*   **Enforcement:** `clawproof-wrap codex`.
+*   **Enforcement:** `clawsig-wrap codex`.
 *   **Golden Path Configuration:**
     *   **Command:** `codex exec --json`. Use the `exec` subcommand for automation/PoH generation rather than the TUI.
     *   **Config:** Pass `--config model_provider=openai` (or compatible) via the wrapper to ensure it hits the network (and thus the proxy) rather than trying to load local models.
@@ -57,7 +57,7 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 ### Harness 4: OpenCode
 
 *   **Integration Point:** Wrapper + Format Flag.
-*   **Enforcement:** `clawproof-wrap opencode`.
+*   **Enforcement:** `clawsig-wrap opencode`.
 *   **Golden Path Configuration:**
     *   **Command:** `opencode run --format json`.
 *   **Binding & Receipts:** `adapters/opencode.ts` overrides base URLs correctly.
@@ -69,7 +69,7 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 
 *   **Integration Point:** **Custom Extension** (Replaces Shim).
 *   **Enforcement:** `pi --extension ./packages/poh-pi-extension/dist/index.js`.
-*   **Current Restriction:** The file `packages/clawproof-adapters/src/adapters/pi.ts` currently uses the shim.
+*   **Current Restriction:** The file `packages/clawsig-adapters/src/adapters/pi.ts` currently uses the shim.
 *   **Proposed Change (High Leverage):**
     *   Pi supports `pi.registerProvider`. We should build a small TS extension that registers a provider `clawproxy`.
     *   This extension can inject `X-Run-Id` headers using the `headers` property in `registerProvider`.
@@ -81,7 +81,7 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
     ```
 *   **Binding & Receipts:**
     *   *Headers:* Injected by the extension.
-    *   *Receipts:* Pi's extension API (based on `docs/custom-provider.md`) allows defining a custom `streamSimple` function. We can implement this to read the `_receipt` from the Clawproxy response body directly within the Pi process, then save it to a sidecar file that `clawproof-wrap` (running as parent) can pick up.
+    *   *Receipts:* Pi's extension API (based on `docs/custom-provider.md`) allows defining a custom `streamSimple` function. We can implement this to read the `_receipt` from the Clawproxy response body directly within the Pi process, then save it to a sidecar file that `clawsig-wrap` (running as parent) can pick up.
 
 ---
 
@@ -92,7 +92,7 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 2.  **Assumption:** "Regex parsing logs is sufficient for tool events."
     *   **Correction:** All tools (Claude, Codex, OpenCode) have JSON output flags. We must enforce these flags in the wrapper to guarantee 100% accurate tool call hashing. Regex is fragile and breaks the "hard to forget" goal if the output format changes slightly.
 3.  **Assumption:** "The shim supports streaming."
-    *   **Correction:** `packages/clawproof-adapters/src/shim.ts` uses `readJsonBody` which buffers the entire request, and `sendJson` which buffers the entire response. This **breaks** any harness that relies on Server-Sent Events (SSE) or long-polling. The shim must be rewritten to support streaming passthrough.
+    *   **Correction:** `packages/clawsig-adapters/src/shim.ts` uses `readJsonBody` which buffers the entire request, and `sendJson` which buffers the entire response. This **breaks** any harness that relies on Server-Sent Events (SSE) or long-polling. The shim must be rewritten to support streaming passthrough.
 4.  **Assumption:** "Environment variables are enough for Base URL overrides."
     *   **Correction:** Some tools (like Pi) might default to internal provider logic if specific "provider" flags aren't set. We must strictly map the harness arguments (like `--provider`) in the wrapper to match the shimmed endpoints.
 
@@ -103,9 +103,9 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 | Harness | Enforcement Method | Tool Capture Strategy | Binding Injection | Receipt Capture | Streaming Support |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **OpenClaw** | Native Plugin | Internal Events | Plugin Headers | Plugin (Stream-aware) | ✅ Native |
-| **Claude Code** | `clawproof-wrap` | `stream-json` output | Shim | Shim | ❌ **Broken in Shim** |
-| **Codex CLI** | `clawproof-wrap` | `--json` output | Shim | Shim | ⚠️ Partial (Exec only) |
-| **OpenCode** | `clawproof-wrap` | `--format json` | Shim | Shim | ❌ **Broken in Shim** |
+| **Claude Code** | `clawsig-wrap` | `stream-json` output | Shim | Shim | ❌ **Broken in Shim** |
+| **Codex CLI** | `clawsig-wrap` | `--json` output | Shim | Shim | ⚠️ Partial (Exec only) |
+| **OpenCode** | `clawsig-wrap` | `--format json` | Shim | Shim | ❌ **Broken in Shim** |
 | **Pi** | `pi --extension` | Extension Event Hooks | Extension Headers | Extension (Custom Stream) | ✅ Extension API |
 
 **CI Test Plan:**
@@ -118,7 +118,7 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
 ### 5. High-Leverage Engineering Changes
 
 1.  **Rewrite `shim.ts` for Streaming:**
-    *   Modify `packages/clawproof-adapters/src/shim.ts` to use Node.js streams (`req.pipe(proxyReq)`).
+    *   Modify `packages/clawsig-adapters/src/shim.ts` to use Node.js streams (`req.pipe(proxyReq)`).
     *   Implement a **PassThrough stream** for the response that buffers chunks to detect the `_receipt_envelope` (usually at the end) while simultaneously flushing data to the CLI client.
 
 2.  **Create `@clawbureau/pi-extension`:**
@@ -131,4 +131,4 @@ The current `clawproof-adapters` shim is necessary for closed-source CLIs (Claud
     *   Update parsers to handle JSON lines instead of regex.
 
 4.  **Auto-Config Generation:**
-    *   Instead of asking users to set env vars manually, `clawproof-wrap` should automatically generate a temporary configuration file (e.g., `codex` TOML or `pi` settings) that points to the proxy, and pass that config file to the subprocess.
+    *   Instead of asking users to set env vars manually, `clawsig-wrap` should automatically generate a temporary configuration file (e.g., `codex` TOML or `pi` settings) that points to the proxy, and pass that config file to the subprocess.

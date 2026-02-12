@@ -115,7 +115,7 @@
     },
     {
       "id": "POH-US-008",
-      "title": "clawproof SDK for API scripts",
+      "title": "clawsig SDK for API scripts",
       "description": "As a developer, I want a small SDK to emit proof bundles from scripts so that API workloads are auditable.",
       "acceptanceCriteria": [
         "SDK records event chain + URM",
@@ -190,7 +190,7 @@
       "priority": 12,
       "passes": true,
       "notes": "Inspired by vercel-labs/skills agent registry + sync scripts; keeps our PoH harness map centralized.",
-      "completionNotes": "Implemented a local shim server in clawproof-adapters + added a PoH harness registry + sync/validate scripts + CI workflow."
+      "completionNotes": "Implemented a local shim server in clawsig-adapters + added a PoH harness registry + sync/validate scripts + CI workflow."
     },
     {
       "id": "POHVN-US-001",
