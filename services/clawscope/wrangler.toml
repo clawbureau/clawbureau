@@ -62,11 +62,14 @@ SCOPE_POLICY_TIER = "default"
 
 # Simple policy knobs (used if SCOPE_POLICY_JSON is not set):
 SCOPE_ALLOW_WILDCARDS = "0"
-SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:,control:"
+SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:,clawincome:,control:"
 SCOPE_ALLOWED_SCOPES = ""
 SCOPE_SENSITIVE_SCOPE_PREFIXES = "control:"
 SCOPE_LEGACY_EXCHANGE_MODE = "migration"
 SCOPE_KEY_ROTATION_OVERLAP_SECONDS = "3600"
+SCOPE_PROTECTED_AUTH_MODE = "canonical_cst"
+SCOPE_KEY_TRANSPARENCY_REFRESH_SECONDS = "300"
+SCOPE_REVOCATION_SLO_TARGET_SECONDS = "60"
 CLAIM_CONTROL_BASE_URL = "https://clawclaim.com"
 
 # Limits (also used as fallback defaults for tiers):
@@ -88,7 +91,7 @@ SCOPE_ALERT_DEFAULT_REQUEST_COUNT = "200"
 # - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required unless using SCOPE_SIGNING_KEYS_JSON)
 # - SCOPE_SIGNING_KEYS_JSON (JSON array of Ed25519 seeds; base64url; first key is active; optional)
 # - SCOPE_VERIFY_PUBLIC_KEYS_JSON (JSON array of verify-only Ed25519 public keys for overlap/interoperability)
-# - SCOPE_ADMIN_KEY (string; required for token issuance/revocation + observability admin endpoints)
+# - SCOPE_ADMIN_KEY (string; bootstrap/admin-token mode for issuance + observability admin endpoints)
 # - SCOPE_ADMIN_KEYS_JSON (optional JSON array of additional admin tokens for overlap/rotation)
 
 [env.staging]
@@ -113,11 +116,14 @@ SCOPE_VERSION = "0.1.0"
 SCOPE_POLICY_VERSION = "1"
 SCOPE_POLICY_TIER = "default"
 SCOPE_ALLOW_WILDCARDS = "0"
-SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:,control:"
+SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:,clawincome:,control:"
 SCOPE_ALLOWED_SCOPES = ""
 SCOPE_SENSITIVE_SCOPE_PREFIXES = "control:"
 SCOPE_LEGACY_EXCHANGE_MODE = "migration"
 SCOPE_KEY_ROTATION_OVERLAP_SECONDS = "3600"
+SCOPE_PROTECTED_AUTH_MODE = "canonical_cst"
+SCOPE_KEY_TRANSPARENCY_REFRESH_SECONDS = "300"
+SCOPE_REVOCATION_SLO_TARGET_SECONDS = "60"
 CLAIM_CONTROL_BASE_URL = "https://staging.clawclaim.com"
 SCOPE_MAX_TTL_SECONDS = "3600"
 SCOPE_MAX_SCOPE_ITEMS = "64"

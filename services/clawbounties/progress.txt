@@ -668,3 +668,59 @@ Started: 2026-02-02T03:08:26.937005
   - gate + invalid harness replay evidence: `artifacts/simulations/clawbounties/2026-02-11T23-13-25-303Z-prod-gate/gate-report.json`
 - Story closure:
   - flipped `CBT-US-028`, `CBT-US-029`, `CBT-US-030` to `passes=true` with production evidence.
+
+## 2026-02-12 - CTR-OPS-001 integration (clawbounties -> clawtrials)
+- Wired requester rejection flow to open arbitration cases in clawtrials (instead of escrow-only dispute freeze).
+  - `POST /v1/bounties/{bounty_id}/reject` now:
+    1) disputes escrow,
+    2) opens `POST /v1/trials/cases`,
+    3) persists `trial_case_id` + `trial_opened_at` on bounty.
+- Added trial references to bounty model/DB surface:
+  - D1 migration `migrations/0016_dispute_trial_case_refs.sql`
+  - fields: `trial_case_id`, `trial_opened_at`
+- Added env/config wiring for trials integration:
+  - `TRIALS_BASE_URL` var
+  - `TRIALS_SERVICE_KEY` secret
+  - bumped `BOUNTIES_VERSION` to `0.8.0`
+- Extended deterministic auto-reject (test lane) path to open trial case before bounty rejection persistence.
+- Deploys:
+  - `clawbounties-staging` version `17da8f3f-3071-4d6c-a0a7-c2fd5bb237f1`
+  - `clawbounties` version `39f1bceb-6e0f-4f92-80b3-10ef29f833ab`
+- Validation:
+  - typecheck: `pnpm --dir services/clawbounties typecheck` ✅
+  - staging+prod arbitration integration smoke:
+    - `artifacts/simulations/clawtrials/2026-02-12T02-02-05-716Z-staging/smoke.json`
+    - `artifacts/simulations/clawtrials/2026-02-12T02-03-12-873Z-prod/smoke.json`
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
+- Added canonical reputation loop emission hooks on requester approve/reject and auto test closure outcomes.
+- Emissions are queue-first (`REP_EVENTS`) with HTTP ingest-loop fallback when queue binding is unavailable.
+- Added wrangler queue producer bindings for staging/prod clawrep event queues.
+
+## 2026-02-12 - CBT-US-031 (ECON-RISK-MAX-001) implementation in progress
+- Added loss-event risk coupling persistence:
+  - migration `migrations/0017_loss_event_risk_flags.sql`
+  - table `bounty_risk_events` with idempotency + source-event uniqueness
+- Added risk intake endpoint:
+  - `POST /v1/risk/loss-events` (requires `BOUNTIES_RISK_KEY`)
+- Coupling behavior:
+  - records canonical risk event metadata (reason/severity/amount/source/account)
+  - transitions mutable bounties into `disputed` state fail-closed on first risk event
+  - optional trial refs from metadata are wired into bounty trial linkage when provided
+- Validation (local):
+  - `pnpm --dir services/clawbounties typecheck` ✅
+- Status:
+  - CBT-US-031 remains `passes:false` pending staging+prod migration/deploy + smoke evidence.
+
+## 2026-02-12 - CBT-US-031 rollout complete (staging + prod)
+- Applied migration `migrations/0017_loss_event_risk_flags.sql` remotely in staging+prod.
+- Deployed clawbounties versions:
+  - staging `bd1ffc97-75d5-4397-8bf4-6539aadd5799`
+  - prod `7ed41212-3514-4c71-b824-b17c7d5e77a0`
+- Verified `POST /v1/risk/loss-events` deterministic ingestion and disputed-state coupling via ECON risk-loop smoke:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+- Watch evidence confirms all bounties risk fanout records are forwarded (no failed outbox rows):
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`
+- Note: this service currently has no `test` npm script; validation lane is typecheck + live integration smokes.

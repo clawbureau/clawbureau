@@ -155,3 +155,62 @@ Started: 2026-02-02T03:08:26.936628
   - new column `ledger_referral_event_ids_json` (`migrations/0002_add_referral_event_ids.sql`)
   - release/get responses now include `ledger_refs.referral_transfers`
 - Extended fee quote snapshot validation to support optional split metadata and preserve it through escrow persistence.
+
+## 2026-02-12 - CIN-OPS-001 dependency extension
+- Added admin list endpoint `GET /v1/escrows` with fail-closed filtering and cursor pagination:
+  - filters: `did`, `buyer_did`, `worker_did`, `status`, `from`, `to`
+  - cursor order: `(released_at, escrow_id)`
+- Included list endpoint in docs page output.
+- Deploys:
+  - `clawescrow-staging`: `8f7e4c0a-7d8c-472b-b4fb-66deff3c1422`
+  - `clawescrow` (prod): `008aeb79-d1ca-4474-bc3a-d589268130e4`
+
+## 2026-02-12 - CTR-OPS-001 arbitration enforcement integration
+- Added trials-owned escrow resolution endpoint:
+  - `POST /v1/escrows/:id/resolve`
+  - auth: `Authorization: Bearer <ESCROW_TRIALS_KEY>` (separate from admin key)
+  - supported outcomes: `worker_award`, `requester_refund`
+  - deterministic idempotency handling via `resolve_idempotency_key`
+- Added persistence for trial decision traces:
+  - migration `migrations/0003_trials_resolution.sql`
+  - fields: `resolve_idempotency_key`, `resolution_json`, `resolved_at`, `ledger_refund_event_id`
+- Deploys:
+  - `clawescrow-staging` version `0c34ba28-faca-4b78-81b2-909b423949a4`
+  - `clawescrow` version `bde08d5f-dc92-49d2-9742-1ea8da1f3bab`
+- Validation:
+  - typecheck: `pnpm --dir services/escrow typecheck` ✅
+  - tests: `pnpm --dir services/escrow test` ✅
+  - enforcement exercised through clawtrials decision flow in staging+prod arbitration smoke artifacts.
+
+## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
+- Added clawrep loop publication on escrow release/dispute outcomes (including idempotent replay-safe paths).
+- Publication path is queue-first (`REP_EVENTS`) with optional HTTP fallback.
+- Added staging/prod queue producer bindings to `clawrep-events*`.
+
+## 2026-02-12 - CES-US-009 (ECON-RISK-MAX-001) implementation in progress
+- Added escrow risk-hold persistence fields:
+  - migration `migrations/0004_risk_hold_controls.sql`
+  - columns: `risk_hold_status`, `risk_hold_json`, `risk_hold_updated_at`
+- Added risk service-key endpoint:
+  - `POST /v1/escrows/:id/risk-hold` (requires `ESCROW_RISK_KEY`)
+  - supports deterministic `apply`/`release` operations with idempotency checks
+- Enforced fail-closed payout gating:
+  - `POST /v1/escrows/:id/release` now blocks with `RISK_HOLD_ACTIVE` when active hold exists
+  - trials resolution `worker_award` path now blocks with `RISK_HOLD_ACTIVE` when active hold exists
+- Exposed risk hold state in escrow reads/lists (`risk_hold.status/details/updated_at`).
+- Validation (local):
+  - `pnpm --dir services/escrow typecheck` ✅
+  - `pnpm --dir services/escrow test` ✅
+- Status:
+  - CES-US-009 remains `passes:false` pending staging+prod migration/deploy + cross-service smoke evidence.
+
+## 2026-02-12 - CES-US-009 rollout complete (staging + prod)
+- Applied migration `migrations/0004_risk_hold_controls.sql` remotely in staging+prod.
+- Deployed escrow versions:
+  - staging `568cb546-d24e-4c77-af3f-00e798b743ec`
+  - prod `8ed372d2-efab-4d32-8160-ad4bf6fa8b93`
+- Verified risk-hold apply path + fail-closed payout gating via ECON risk-loop smoke/watch:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+  - staging watch: `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - prod watch: `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`

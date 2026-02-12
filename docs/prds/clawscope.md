@@ -315,4 +315,37 @@ Validation + rollout evidence:
 
 ---
 
+## 12) 2026-02-12 addendum — ICP-M6 universal enforcement + governance closure (CSC-US-019)
+
+Shipped governance/auth closure in `services/clawscope/src/index.ts` with canonical protected access defaults:
+- `SCOPE_PROTECTED_AUTH_MODE=canonical_cst` (default)
+- protected routes enforce canonical CST and reject legacy admin-token headers in canonical mode
+
+Governance APIs now first-class:
+- key transparency:
+  - `GET /v1/keys/transparency/latest`
+  - `GET /v1/keys/transparency/history`
+  - `POST /v1/keys/transparency/snapshot`
+- revocation propagation SLO:
+  - `GET /v1/reports/revocation-slo`
+
+M6 hardening fixes applied during closure:
+- `/v1/reports/revocation-slo` routed through canonical protected auth (not observability admin-token router)
+- transparency snapshot transition contract normalized to `key.rotate`
+
+Cloudflare evidence:
+- governance migration active: `services/clawscope/migrations/0002_governance_transparency_revocation_slo.sql`
+- deploys:
+  - staging: `clawscope-staging` version `028de033-b1ac-45b5-82f5-904cd517e5b7`
+  - prod: `clawscope` version `89b90fad-84da-4920-aceb-27d46c45256a`
+
+M6 pass artifacts:
+- staging ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`
+- prod ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`
+- baseline hard-cutover refresh:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-11-396Z-staging/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-20-846Z-prod/result.json`
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*

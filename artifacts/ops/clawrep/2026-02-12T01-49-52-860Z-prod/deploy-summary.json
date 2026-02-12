@@ -1,0 +1,31 @@
+{
+  "service": "clawrep",
+  "environment": "prod",
+  "generated_at": "2026-02-12T01:50:17.732Z",
+  "deploy_version": "b54e2e0d-9062-4782-9a4b-87a84129f249",
+  "worker_name": "clawrep",
+  "base_url": "https://clawrep.com",
+  "cloudflare_stack": {
+    "runtime": "Workers",
+    "d1": "clawrep",
+    "queue": "clawrep-events",
+    "cron": "7 0 * * *",
+    "kv": "REP_CACHE:d949e219f2704be79474853a560d7710"
+  },
+  "smoke_paths": {
+    "ingest_replay": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-52-860Z-prod/ingest-replay-smoke.json",
+    "reviewer_selection": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-52-860Z-prod/reviewer-selection-smoke.json",
+    "decay_penalty": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-52-860Z-prod/decay-penalty-smoke.json",
+    "tier_calculation": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-52-860Z-prod/tier-calculation-smoke.json"
+  },
+  "pass": {
+    "ingest_replay": true,
+    "reviewer_selection": true,
+    "decay_penalty": true,
+    "tier_calculation": true
+  },
+  "audit_snapshot": {
+    "events_count": 17,
+    "next_cursor": null
+  }
+}

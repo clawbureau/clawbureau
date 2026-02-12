@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "env": "prod",
+  "settle_base_url": "https://clawsettle.com",
+  "loss_event_id": "lse_a61f17ebf7b009ad0b120825",
+  "idempotency_key": "smoke:loss-event:473af54f-8d72-48ac-b324-c9ca0ce044b0",
+  "require_fully_forwarded": true,
+  "event_status": "forwarded",
+  "outbox": {
+    "total": 5,
+    "forwarded": 5,
+    "failed": 0
+  },
+  "steps": [
+    {
+      "step": "create_loss_event",
+      "status": 201,
+      "elapsed_ms": 872,
+      "deduped": false,
+      "loss_event_id": "lse_a61f17ebf7b009ad0b120825",
+      "target_count": 5
+    },
+    {
+      "step": "retry_forwarding",
+      "status": 200,
+      "elapsed_ms": 3167,
+      "attempted": 5,
+      "forwarded": 5,
+      "failed": 0
+    },
+    {
+      "step": "readback",
+      "event_status": "forwarded",
+      "outbox_count": 5,
+      "forwarded_count": 5,
+      "failed_count": 0
+    }
+  ]
+}

@@ -1,24 +1,42 @@
-# clawtrials (harness lane)
+# clawtrials (arbitration MVP + harness lane)
 
-Deterministic test-harness worker used by clawbounties `closure_type=test` auto-decision flow.
+Deterministic arbitration service for marketplace disputes, plus legacy harness endpoints used by test-lane bounty closure.
 
-## Endpoints
+## Public endpoints
 
 - `GET /health`
 - `GET /v1/harness/catalog`
 - `POST /v1/harness/run`
 
-## Harness IDs
+## Admin endpoints (`Authorization: Bearer <TRIALS_ADMIN_KEY>`)
 
-- `th_smoke_pass_v1` — deterministic pass
-- `th_smoke_fail_v1` — deterministic fail
-- `th_policy_summary_v1` — pass/fail/error by `output.result_summary` markers
+- `POST /v1/trials/cases`
+- `GET /v1/trials/cases`
+- `GET /v1/trials/cases/:id`
+- `POST /v1/trials/cases/:id/decision`
+- `POST /v1/trials/cases/:id/appeal`
+- `GET /v1/trials/reports/disputes`
 
-## Staging deploy
+## Required bindings / secrets
+
+- D1: `TRIALS_DB`
+- `TRIALS_ADMIN_KEY`
+- `TRIALS_JUDGE_POOL` (comma-separated DID list)
+- `ESCROW_BASE_URL`
+- `TRIALS_ESCROW_KEY` (must match `ESCROW_TRIALS_KEY` on clawescrow)
+
+## Migrations
+
+```bash
+cd services/clawtrials
+npx wrangler d1 migrations apply clawtrials-staging --env staging --remote
+npx wrangler d1 migrations apply clawtrials --remote
+```
+
+## Deploy
 
 ```bash
 cd services/clawtrials
 npx wrangler deploy --env staging
+npx wrangler deploy
 ```
-
-Wrangler emits the workers.dev URL and configured route/custom-domain trigger.

@@ -1,0 +1,83 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.delegation.contract.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Delegation Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "delegation_id",
+    "delegator_did",
+    "delegate_did",
+    "aud",
+    "scope",
+    "ttl_seconds",
+    "spend_cap_minor",
+    "state",
+    "created_at",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "delegation_id": { "type": "string", "pattern": "^dlg_[a-f0-9-]+$" },
+    "delegator_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "delegate_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "aud": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 31536000
+    },
+    "spend_cap_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "policy_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["pending_approval", "approved", "revoked", "expired"]
+    },
+    "reserved_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "consumed_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "revoked_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

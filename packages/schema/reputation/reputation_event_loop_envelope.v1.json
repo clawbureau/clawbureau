@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/claw.reputation.reputation_event_loop_envelope.v1.json",
+  "title": "Reputation Event Loop Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_event_id", "source_service", "kind", "did"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "source_event_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "source_service": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "kind": { "type": "string", "enum": ["closure", "penalty", "recovery"] },
+    "did": { "type": "string", "minLength": 16, "pattern": "^did:" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "closure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value_usd", "closure_type", "proof_tier"],
+      "properties": {
+        "value_usd": { "type": "number", "minimum": 0, "maximum": 1000000 },
+        "closure_type": {
+          "type": "string",
+          "enum": ["auto_approve", "quorum_approve", "manual_approve", "dispute_resolved"]
+        },
+        "proof_tier": {
+          "type": "string",
+          "enum": ["unknown", "self", "gateway", "sandbox", "tee", "witnessed_web"]
+        },
+        "owner_verified": { "type": "boolean" },
+        "owner_attestation_ref": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "penalty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["penalty_type"],
+      "properties": {
+        "penalty_type": {
+          "type": "string",
+          "enum": [
+            "dispute_upheld_against_reviewer",
+            "dispute_upheld_against_worker",
+            "fraud_confirmed",
+            "spam_review",
+            "policy_violation"
+          ]
+        },
+        "severity": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 600 }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recovery_type"],
+      "properties": {
+        "recovery_type": {
+          "type": "string",
+          "enum": ["appeal_upheld_for_reviewer", "appeal_upheld_for_worker"]
+        },
+        "severity": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 600 }
+      }
+    },
+    "metadata": { "type": "object", "additionalProperties": true }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "closure" } }, "required": ["kind"] },
+      "then": { "required": ["closure"] }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "penalty" } }, "required": ["kind"] },
+      "then": { "required": ["penalty"] }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "recovery" } }, "required": ["kind"] },
+      "then": { "required": ["recovery"] }
+    }
+  ]
+}

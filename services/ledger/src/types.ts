@@ -281,11 +281,19 @@ export interface Env {
   ACCOUNT_DO?: DurableObjectNamespace;
 
   /**
-   * Admin key for mutating endpoints.
+   * Primary admin key for mutating endpoints.
    *
-   * If unset, the worker should fail-closed (503) for any non-public endpoint.
+   * If unset, the worker should fail-closed (503) for any non-public endpoint
+   * unless LEDGER_ADMIN_KEYS_JSON provides at least one key.
    */
   LEDGER_ADMIN_KEY?: string;
+
+  /**
+   * Optional JSON array of additional admin keys.
+   *
+   * Used for controlled key overlap windows without rotating LEDGER_ADMIN_KEY.
+   */
+  LEDGER_ADMIN_KEYS_JSON?: string;
 
   /**
    * Optional read-only verification token for settlement lookup endpoints.
@@ -294,6 +302,9 @@ export interface Env {
    * instead of LEDGER_ADMIN_KEY.
    */
   LEDGER_SETTLEMENT_VERIFY_TOKEN?: string;
+
+  /** Optional dedicated service key for risk-hold routes. */
+  LEDGER_RISK_KEY?: string;
 
   /** Optional webhook URL for reconciliation alerts */
   ALERT_WEBHOOK_URL?: string;

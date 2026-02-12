@@ -317,6 +317,32 @@ function parseStuckMinutes(value: string | null, fallback: number): number {
   return Math.min(parsed, 24 * 60 * 30);
 }
 
+function encodePayoutCursor(createdAt: string, payoutId: string): string {
+  const raw = `${createdAt}::${payoutId}`;
+  return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodePayoutCursor(cursor: string | null): { created_at: string; payout_id: string } | null {
+  if (!cursor || cursor.trim().length === 0) return null;
+
+  try {
+    const normalized = cursor.trim().replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4 || 4)) % 4);
+    const decoded = atob(padded);
+    const [createdAt, payoutId] = decoded.split('::');
+
+    if (!createdAt || !payoutId) return null;
+    if (!Number.isFinite(new Date(createdAt).getTime())) return null;
+
+    return {
+      created_at: new Date(createdAt).toISOString(),
+      payout_id: payoutId,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export class LedgerPayoutClient implements LedgerClientLike {
   constructor(
     private readonly ledgerBaseUrl: string,
@@ -1885,6 +1911,98 @@ export class PayoutService {
     return {
       ok: true,
       payouts,
+    };
+  }
+
+  async listPayoutsByRange(query: {
+    accountDid?: string | null;
+    from: string;
+    to: string;
+    cursor?: string | null;
+    limit?: string | null;
+    status?: string | null;
+  }): Promise<{
+    ok: true;
+    payouts: PayoutRecord[];
+    next_cursor?: string;
+  }> {
+    const startDate = new Date(query.from);
+    const endDate = new Date(query.to);
+
+    if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) {
+      throw new ClawSettleError('from/to must be valid ISO timestamps', 'INVALID_REQUEST', 400, {
+        fields: ['from', 'to'],
+      });
+    }
+
+    const startIso = startDate.toISOString();
+    const endIso = endDate.toISOString();
+
+    if (startIso >= endIso) {
+      throw new ClawSettleError('from must be strictly before to', 'INVALID_REQUEST', 400, {
+        from: startIso,
+        to: endIso,
+      });
+    }
+
+    const limit = parsePositiveLimit(query.limit ?? null, 100, 'limit', 200);
+
+    const cursor = decodePayoutCursor(query.cursor ?? null);
+    if ((query.cursor ?? null) && !cursor) {
+      throw new ClawSettleError('Invalid cursor', 'INVALID_CURSOR', 400, {
+        field: 'cursor',
+      });
+    }
+
+    const statusFilter = isNonEmptyString(query.status)
+      ? parsePayoutStatus(query.status.trim())
+      : null;
+
+    const records = await this.repository.listByCreatedRange({
+      startIso,
+      endIso,
+      limit: 1000,
+    });
+
+    const filtered = records
+      .filter((record) => {
+        if (isNonEmptyString(query.accountDid) && record.account_did !== query.accountDid!.trim()) {
+          return false;
+        }
+        if (statusFilter && record.status !== statusFilter) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (a.created_at < b.created_at) return -1;
+        if (a.created_at > b.created_at) return 1;
+        return a.id.localeCompare(b.id);
+      });
+
+    const startIndex = cursor
+      ? filtered.findIndex((record) => {
+          if (record.created_at > cursor.created_at) return true;
+          if (record.created_at < cursor.created_at) return false;
+          return record.id > cursor.payout_id;
+        })
+      : 0;
+
+    const normalizedStart = startIndex < 0 ? filtered.length : startIndex;
+    const page = filtered.slice(normalizedStart, normalizedStart + limit);
+
+    let nextCursor: string | undefined;
+    if (normalizedStart + page.length < filtered.length) {
+      const last = page[page.length - 1];
+      if (last) {
+        nextCursor = encodePayoutCursor(last.created_at, last.id);
+      }
+    }
+
+    return {
+      ok: true,
+      payouts: page,
+      ...(nextCursor ? { next_cursor: nextCursor } : {}),
     };
   }
 

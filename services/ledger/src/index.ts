@@ -712,6 +712,11 @@ type V1Bucket = 'A' | 'H' | 'B' | 'F' | 'P';
 
 type V1TransferStatus = 'applied';
 
+type DelegationSpendOperation = 'reserve' | 'consume' | 'release';
+
+const DELEGATION_ID_RE = /^dlg_[a-f0-9-]+$/;
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -765,6 +770,10 @@ function parsePositiveBigInt(value: unknown): bigint | null {
   } catch {
     return null;
   }
+}
+
+function isDelegationSpendOperation(value: unknown): value is DelegationSpendOperation {
+  return value === 'reserve' || value === 'consume' || value === 'release';
 }
 
 interface V1BalancesResponse {
@@ -1112,6 +1121,678 @@ async function handleV1Transfers(request: Request, env: Env): Promise<Response> 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse(message, 'EVENT_WRITE_FAILED', 500);
+  }
+}
+
+interface RiskHoldRecord {
+  hold_id: string;
+  idempotency_key: string;
+  source_loss_event_id: string;
+  account_ref: string;
+  account_id: string | null;
+  amount_minor: string;
+  currency: 'USD';
+  reason: string;
+  status: 'active' | 'released';
+  hold_transfer_event_id: string;
+  release_idempotency_key: string | null;
+  release_transfer_event_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  released_at: string | null;
+}
+
+function parseRiskHoldRow(row: Record<string, unknown>): RiskHoldRecord | null {
+  const holdId = typeof row.hold_id === 'string' ? row.hold_id.trim() : '';
+  const idempotencyKey = typeof row.idempotency_key === 'string' ? row.idempotency_key.trim() : '';
+  const sourceLossEventId = typeof row.source_loss_event_id === 'string' ? row.source_loss_event_id.trim() : '';
+  const accountRef = typeof row.account_ref === 'string' ? row.account_ref.trim() : '';
+  const amountMinor = typeof row.amount_minor === 'string' ? row.amount_minor.trim() : '';
+  const currency = typeof row.currency === 'string' ? row.currency.trim().toUpperCase() : '';
+  const reason = typeof row.reason === 'string' ? row.reason.trim() : '';
+  const status = typeof row.status === 'string' ? row.status.trim() : '';
+  const holdTransferEventId = typeof row.hold_transfer_event_id === 'string' ? row.hold_transfer_event_id.trim() : '';
+  const createdAt = typeof row.created_at === 'string' ? row.created_at.trim() : '';
+  const updatedAt = typeof row.updated_at === 'string' ? row.updated_at.trim() : '';
+
+  if (
+    !holdId ||
+    !idempotencyKey ||
+    !sourceLossEventId ||
+    !accountRef ||
+    !amountMinor ||
+    currency !== 'USD' ||
+    !reason ||
+    (status !== 'active' && status !== 'released') ||
+    !holdTransferEventId ||
+    !createdAt ||
+    !updatedAt
+  ) {
+    return null;
+  }
+
+  const metadataRaw = typeof row.metadata === 'string' ? row.metadata : null;
+  let metadata: Record<string, unknown> | null = null;
+  if (metadataRaw) {
+    try {
+      const parsed = JSON.parse(metadataRaw);
+      metadata = isRecord(parsed) ? parsed : null;
+    } catch {
+      metadata = null;
+    }
+  }
+
+  return {
+    hold_id: holdId,
+    idempotency_key: idempotencyKey,
+    source_loss_event_id: sourceLossEventId,
+    account_ref: accountRef,
+    account_id: typeof row.account_id === 'string' ? row.account_id.trim() : null,
+    amount_minor: amountMinor,
+    currency: 'USD',
+    reason,
+    status,
+    hold_transfer_event_id: holdTransferEventId,
+    release_idempotency_key: typeof row.release_idempotency_key === 'string' ? row.release_idempotency_key.trim() : null,
+    release_transfer_event_id: typeof row.release_transfer_event_id === 'string' ? row.release_transfer_event_id.trim() : null,
+    metadata,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    released_at: typeof row.released_at === 'string' ? row.released_at.trim() : null,
+  };
+}
+
+async function getRiskHoldById(db: D1Database, holdId: string): Promise<RiskHoldRecord | null> {
+  const row = await db.prepare('SELECT * FROM risk_holds WHERE hold_id = ?').bind(holdId).first();
+  if (!row || !isRecord(row)) return null;
+  return parseRiskHoldRow(row);
+}
+
+async function getRiskHoldByIdempotencyKey(db: D1Database, idempotencyKey: string): Promise<RiskHoldRecord | null> {
+  const row = await db.prepare('SELECT * FROM risk_holds WHERE idempotency_key = ?').bind(idempotencyKey).first();
+  if (!row || !isRecord(row)) return null;
+  return parseRiskHoldRow(row);
+}
+
+async function getRiskHoldBySourceEvent(db: D1Database, sourceLossEventId: string): Promise<RiskHoldRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM risk_holds WHERE source_loss_event_id = ?')
+    .bind(sourceLossEventId)
+    .first();
+  if (!row || !isRecord(row)) return null;
+  return parseRiskHoldRow(row);
+}
+
+async function applyRiskBucketTransfer(params: {
+  env: Env;
+  idempotency_key: string;
+  from_account: string;
+  from_bucket: V1Bucket;
+  to_account: string;
+  to_bucket: V1Bucket;
+  amount_minor: string;
+  metadata: Record<string, unknown>;
+}): Promise<{ event_id: string }> {
+  const req = new Request('https://internal/v1/transfers', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      idempotency_key: params.idempotency_key,
+      currency: 'USD',
+      from: {
+        account: params.from_account,
+        bucket: params.from_bucket,
+      },
+      to: {
+        account: params.to_account,
+        bucket: params.to_bucket,
+      },
+      amount_minor: params.amount_minor,
+      metadata: params.metadata,
+    }),
+  });
+
+  const res = await handleV1Transfers(req, params.env);
+  const text = await res.text();
+
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok || !isRecord(json) || !isNonEmptyString(json.event_id)) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`RISK_HOLD_TRANSFER_FAILED:${res.status}:${JSON.stringify(details)}`);
+  }
+
+  return {
+    event_id: json.event_id.trim(),
+  };
+}
+
+async function handleApplyRiskHold(request: Request, env: Env): Promise<Response> {
+  const body = await parseJsonBody<unknown>(request);
+  if (!isRecord(body)) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotencyKeyRaw = body.idempotency_key;
+  const sourceLossEventIdRaw = body.source_loss_event_id;
+  const accountRaw = body.account;
+  const amountMinorRaw = body.amount_minor;
+  const reasonRaw = body.reason;
+  const currencyRaw = body.currency;
+  const metadataRaw = body.metadata;
+
+  if (!isNonEmptyString(idempotencyKeyRaw)) {
+    return errorResponse('Missing required field: idempotency_key', 'INVALID_REQUEST', 400);
+  }
+  if (!isNonEmptyString(sourceLossEventIdRaw)) {
+    return errorResponse('Missing required field: source_loss_event_id', 'INVALID_REQUEST', 400);
+  }
+  if (!isNonEmptyString(accountRaw)) {
+    return errorResponse('Missing required field: account', 'INVALID_REQUEST', 400);
+  }
+  if (!isNonEmptyString(amountMinorRaw) || parsePositiveBigInt(amountMinorRaw) === null) {
+    return errorResponse('amount_minor must be a positive integer string', 'INVALID_REQUEST', 400);
+  }
+  if (currencyRaw !== undefined && (!isNonEmptyString(currencyRaw) || currencyRaw.trim().toUpperCase() !== 'USD')) {
+    return errorResponse('currency must be USD', 'UNSUPPORTED_CURRENCY', 400);
+  }
+  if (!isNonEmptyString(reasonRaw)) {
+    return errorResponse('Missing required field: reason', 'INVALID_REQUEST', 400);
+  }
+  if (metadataRaw !== undefined && !isRecord(metadataRaw)) {
+    return errorResponse('metadata must be an object', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotencyKey = idempotencyKeyRaw.trim();
+  const sourceLossEventId = sourceLossEventIdRaw.trim();
+  const accountRef = accountRaw.trim();
+  const amountMinor = amountMinorRaw.trim();
+  const reason = reasonRaw.trim();
+  const metadata = isRecord(metadataRaw) ? metadataRaw : {};
+
+  const replayByIdempotency = await getRiskHoldByIdempotencyKey(env.DB, idempotencyKey);
+  if (replayByIdempotency) {
+    if (
+      replayByIdempotency.source_loss_event_id !== sourceLossEventId ||
+      replayByIdempotency.account_ref !== accountRef ||
+      replayByIdempotency.amount_minor !== amountMinor
+    ) {
+      return errorResponse(
+        'idempotency_key already used with a different payload',
+        'IDEMPOTENCY_KEY_REUSED',
+        409
+      );
+    }
+    return jsonResponse({ hold: replayByIdempotency, replay: true }, 200);
+  }
+
+  const replayBySource = await getRiskHoldBySourceEvent(env.DB, sourceLossEventId);
+  if (replayBySource) {
+    return errorResponse(
+      'source_loss_event_id already has a risk hold',
+      'SOURCE_LOSS_EVENT_ALREADY_BOUND',
+      409,
+      { hold_id: replayBySource.hold_id }
+    );
+  }
+
+  let resolved: V1ResolvedAccount;
+  try {
+    resolved = await resolveV1AccountRef(accountRef, env);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message === 'INVALID_DID' || message === 'INVALID_CLEARING_DOMAIN' || message === 'UNSUPPORTED_ACCOUNT') {
+      return errorResponse('account must be did:* or clearing:<domain>', 'INVALID_ACCOUNT', 400);
+    }
+    return errorResponse('Failed to resolve account', 'ACCOUNT_RESOLUTION_FAILED', 500);
+  }
+
+  const holdTransferIdempotency = `risk_hold:${idempotencyKey}:apply`;
+
+  let transferEventId: string;
+  try {
+    const transfer = await applyRiskBucketTransfer({
+      env,
+      idempotency_key: holdTransferIdempotency,
+      from_account: accountRef,
+      from_bucket: 'A',
+      to_account: accountRef,
+      to_bucket: 'H',
+      amount_minor: amountMinor,
+      metadata: {
+        source_domain: 'clawledger',
+        source_ref: sourceLossEventId,
+        transfer_kind: 'risk_hold_apply',
+        reason,
+        ...metadata,
+      },
+    });
+    transferEventId = transfer.event_id;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('INSUFFICIENT_FUNDS')) {
+      return errorResponse('Insufficient funds for risk hold', 'INSUFFICIENT_FUNDS', 400);
+    }
+    if (message.includes('RISK_HOLD_TRANSFER_FAILED')) {
+      const parts = message.split(':');
+      const status = Number.parseInt(parts[1] || '500', 10);
+      const detailsRaw = parts.slice(2).join(':');
+      let details: Record<string, unknown> | undefined;
+      try {
+        const parsed = JSON.parse(detailsRaw);
+        details = isRecord(parsed) ? parsed : undefined;
+      } catch {
+        details = undefined;
+      }
+      return errorResponse('Risk hold transfer failed', 'RISK_HOLD_TRANSFER_FAILED', Number.isFinite(status) ? status : 500, details);
+    }
+    return errorResponse(message, 'RISK_HOLD_TRANSFER_FAILED', 500);
+  }
+
+  const holdId = `rsk_${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+
+  try {
+    await env.DB
+      .prepare(
+        `INSERT INTO risk_holds (
+           hold_id, idempotency_key, source_loss_event_id, account_ref, account_id,
+           amount_minor, currency, reason, status,
+           hold_transfer_event_id, metadata, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 'USD', ?, 'active', ?, ?, ?, ?)`
+      )
+      .bind(
+        holdId,
+        idempotencyKey,
+        sourceLossEventId,
+        accountRef,
+        resolved.id,
+        amountMinor,
+        reason,
+        transferEventId,
+        JSON.stringify(metadata),
+        now,
+        now
+      )
+      .run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('UNIQUE constraint failed')) {
+      const raced = await getRiskHoldByIdempotencyKey(env.DB, idempotencyKey);
+      if (raced) {
+        return jsonResponse({ hold: raced, replay: true }, 200);
+      }
+      return errorResponse('Risk hold already exists', 'DUPLICATE_CONFLICT', 409);
+    }
+    return errorResponse(message, 'RISK_HOLD_WRITE_FAILED', 500);
+  }
+
+  const hold = await getRiskHoldById(env.DB, holdId);
+  if (!hold) {
+    return errorResponse('Risk hold persistence failed', 'RISK_HOLD_WRITE_FAILED', 500);
+  }
+
+  return jsonResponse({ hold, replay: false }, 201);
+}
+
+async function handleReleaseRiskHold(holdId: string, request: Request, env: Env): Promise<Response> {
+  const body = await parseJsonBody<unknown>(request);
+  if (!isRecord(body)) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotencyKeyRaw = body.idempotency_key;
+  const reasonRaw = body.reason;
+
+  if (!isNonEmptyString(idempotencyKeyRaw)) {
+    return errorResponse('Missing required field: idempotency_key', 'INVALID_REQUEST', 400);
+  }
+
+  if (reasonRaw !== undefined && reasonRaw !== null && !isNonEmptyString(reasonRaw)) {
+    return errorResponse('reason must be a non-empty string', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotencyKey = idempotencyKeyRaw.trim();
+
+  const hold = await getRiskHoldById(env.DB, holdId);
+  if (!hold) {
+    return errorResponse('Risk hold not found', 'NOT_FOUND', 404, { hold_id: holdId });
+  }
+
+  if (hold.status === 'released') {
+    if (hold.release_idempotency_key && hold.release_idempotency_key !== idempotencyKey) {
+      return errorResponse(
+        'Risk hold already released with different idempotency_key',
+        'IDEMPOTENCY_CONFLICT',
+        409,
+        { release_idempotency_key: hold.release_idempotency_key }
+      );
+    }
+    return jsonResponse({ hold, replay: true }, 200);
+  }
+
+  const releaseTransferIdempotency = `risk_hold:${hold.hold_id}:release:${idempotencyKey}`;
+
+  let releaseEventId: string;
+  try {
+    const transfer = await applyRiskBucketTransfer({
+      env,
+      idempotency_key: releaseTransferIdempotency,
+      from_account: hold.account_ref,
+      from_bucket: 'H',
+      to_account: hold.account_ref,
+      to_bucket: 'A',
+      amount_minor: hold.amount_minor,
+      metadata: {
+        source_domain: 'clawledger',
+        source_ref: hold.source_loss_event_id,
+        transfer_kind: 'risk_hold_release',
+        reason: reasonRaw && isNonEmptyString(reasonRaw) ? reasonRaw.trim() : 'risk hold released',
+      },
+    });
+    releaseEventId = transfer.event_id;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('RISK_HOLD_TRANSFER_FAILED')) {
+      const parts = message.split(':');
+      const status = Number.parseInt(parts[1] || '500', 10);
+      const detailsRaw = parts.slice(2).join(':');
+      let details: Record<string, unknown> | undefined;
+      try {
+        const parsed = JSON.parse(detailsRaw);
+        details = isRecord(parsed) ? parsed : undefined;
+      } catch {
+        details = undefined;
+      }
+      return errorResponse('Risk hold release transfer failed', 'RISK_HOLD_RELEASE_FAILED', Number.isFinite(status) ? status : 500, details);
+    }
+    return errorResponse(message, 'RISK_HOLD_RELEASE_FAILED', 500);
+  }
+
+  const releasedAt = new Date().toISOString();
+  const update = await env.DB
+    .prepare(
+      `UPDATE risk_holds
+       SET status = 'released',
+           release_idempotency_key = ?,
+           release_transfer_event_id = ?,
+           released_at = ?,
+           updated_at = ?
+       WHERE hold_id = ? AND status = 'active'`
+    )
+    .bind(idempotencyKey, releaseEventId, releasedAt, releasedAt, holdId)
+    .run();
+
+  const changes = typeof update.meta?.changes === 'number' ? update.meta.changes : 0;
+  if (changes === 0) {
+    const existing = await getRiskHoldById(env.DB, holdId);
+    if (existing && existing.status === 'released') {
+      if (existing.release_idempotency_key && existing.release_idempotency_key !== idempotencyKey) {
+        return errorResponse(
+          'Risk hold already released with different idempotency_key',
+          'IDEMPOTENCY_CONFLICT',
+          409,
+          { release_idempotency_key: existing.release_idempotency_key }
+        );
+      }
+      return jsonResponse({ hold: existing, replay: true }, 200);
+    }
+    return errorResponse('Risk hold release update failed', 'RISK_HOLD_RELEASE_FAILED', 409);
+  }
+
+  const released = await getRiskHoldById(env.DB, holdId);
+  if (!released) {
+    return errorResponse('Risk hold release persistence failed', 'RISK_HOLD_RELEASE_FAILED', 500);
+  }
+
+  return jsonResponse({ hold: released, replay: false }, 200);
+}
+
+async function handleListRiskHolds(url: URL, env: Env): Promise<Response> {
+  const status = url.searchParams.get('status')?.trim();
+  const accountRef = url.searchParams.get('account')?.trim();
+  const sourceLossEventId = url.searchParams.get('source_loss_event_id')?.trim();
+  const limitRaw = url.searchParams.get('limit')?.trim() ?? '100';
+  const limit = Number.parseInt(limitRaw, 10);
+
+  if (!Number.isFinite(limit) || limit <= 0 || limit > 500) {
+    return errorResponse('limit must be between 1 and 500', 'INVALID_REQUEST', 400);
+  }
+
+  if (status && status !== 'active' && status !== 'released') {
+    return errorResponse('status must be active|released', 'INVALID_REQUEST', 400);
+  }
+
+  const where: string[] = [];
+  const binds: unknown[] = [];
+
+  if (status) {
+    where.push('status = ?');
+    binds.push(status);
+  }
+
+  if (accountRef) {
+    where.push('account_ref = ?');
+    binds.push(accountRef);
+  }
+
+  if (sourceLossEventId) {
+    where.push('source_loss_event_id = ?');
+    binds.push(sourceLossEventId);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = await env.DB
+    .prepare(`SELECT * FROM risk_holds ${whereSql} ORDER BY created_at DESC, hold_id DESC LIMIT ?`)
+    .bind(...binds, limit)
+    .all();
+
+  const holds = (rows.results ?? [])
+    .filter((row): row is Record<string, unknown> => isRecord(row))
+    .map((row) => parseRiskHoldRow(row))
+    .filter((row): row is RiskHoldRecord => row !== null);
+
+  return jsonResponse({ holds, count: holds.length });
+}
+
+/**
+ * Handle POST /v1/delegations/spend/:operation
+ *
+ * Deterministic hook endpoint for delegation spend reserve/consume/release operations.
+ * This endpoint is idempotent by idempotency_key.
+ */
+async function handleDelegationSpendHook(
+  operation: DelegationSpendOperation,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const bodyRaw = await parseJsonBody<unknown>(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('Invalid JSON body', 'INVALID_REQUEST', 400);
+  }
+
+  const idempotencyKey = isNonEmptyString(bodyRaw.idempotency_key)
+    ? bodyRaw.idempotency_key.trim()
+    : null;
+  if (!idempotencyKey) {
+    return errorResponse('idempotency_key is required', 'INVALID_REQUEST', 400);
+  }
+
+  const delegationId = isNonEmptyString(bodyRaw.delegation_id)
+    ? bodyRaw.delegation_id.trim()
+    : null;
+  if (!delegationId || !DELEGATION_ID_RE.test(delegationId)) {
+    return errorResponse('delegation_id is invalid', 'INVALID_REQUEST', 400);
+  }
+
+  const delegatorDid = isNonEmptyString(bodyRaw.delegator_did)
+    ? bodyRaw.delegator_did.trim()
+    : null;
+  if (!delegatorDid || !isValidDid(delegatorDid)) {
+    return errorResponse('delegator_did must be a DID', 'INVALID_REQUEST', 400);
+  }
+
+  const actorDid = isNonEmptyString(bodyRaw.actor_did) ? bodyRaw.actor_did.trim() : null;
+  if (!actorDid || !isValidDid(actorDid)) {
+    return errorResponse('actor_did must be a DID', 'INVALID_REQUEST', 400);
+  }
+
+  const amountMinor = parsePositiveBigInt(bodyRaw.amount_minor);
+  if (amountMinor === null) {
+    return errorResponse('amount_minor must be a positive integer string', 'INVALID_REQUEST', 400);
+  }
+
+  const tokenHash = isNonEmptyString(bodyRaw.token_hash) ? bodyRaw.token_hash.trim().toLowerCase() : null;
+  if (tokenHash && !SHA256_HEX_RE.test(tokenHash)) {
+    return errorResponse('token_hash must be a lowercase hex sha256', 'INVALID_REQUEST', 400);
+  }
+
+  const requestFingerprint = JSON.stringify({
+    operation,
+    delegation_id: delegationId,
+    idempotency_key: idempotencyKey,
+    delegator_did: delegatorDid,
+    actor_did: actorDid,
+    amount_minor: amountMinor.toString(),
+    token_hash: tokenHash,
+  });
+
+  const existing = await env.DB
+    .prepare(
+      `SELECT event_id, operation, delegation_id, request_fingerprint, response_json
+       FROM delegation_spend_hooks
+       WHERE idempotency_key = ?
+       LIMIT 1`
+    )
+    .bind(idempotencyKey)
+    .first<Record<string, unknown>>();
+
+  if (existing) {
+    const existingOperation = isNonEmptyString(existing.operation) ? existing.operation.trim() : null;
+    const existingDelegationId = isNonEmptyString(existing.delegation_id) ? existing.delegation_id.trim() : null;
+    const existingFingerprint = isNonEmptyString(existing.request_fingerprint)
+      ? existing.request_fingerprint
+      : null;
+
+    if (
+      existingOperation !== operation ||
+      existingDelegationId !== delegationId ||
+      existingFingerprint !== requestFingerprint
+    ) {
+      return errorResponse(
+        'idempotency_key is already used with a different delegation spend payload',
+        'IDEMPOTENCY_KEY_REUSED',
+        409
+      );
+    }
+
+    try {
+      const parsed = isNonEmptyString(existing.response_json)
+        ? JSON.parse(existing.response_json)
+        : null;
+      if (!parsed || typeof parsed !== 'object') {
+        return errorResponse('Stored idempotency payload is invalid', 'INTERNAL_ERROR', 500);
+      }
+      return jsonResponse(parsed, 200);
+    } catch {
+      return errorResponse('Stored idempotency payload is invalid', 'INTERNAL_ERROR', 500);
+    }
+  }
+
+  const createdAt = new Date().toISOString();
+  const eventId = `ldg_dsp_${crypto.randomUUID()}`;
+
+  const responseBody = {
+    schema_version: '1',
+    event_id: eventId,
+    status: 'applied' as const,
+    operation,
+    delegation_id: delegationId,
+    idempotency_key: idempotencyKey,
+    delegator_did: delegatorDid,
+    actor_did: actorDid,
+    amount_minor: amountMinor.toString(),
+    token_hash: tokenHash,
+    created_at: createdAt,
+  };
+
+  await env.DB
+    .prepare(
+      `INSERT OR IGNORE INTO delegation_spend_hooks (
+         event_id,
+         idempotency_key,
+         delegation_id,
+         operation,
+         delegator_did,
+         actor_did,
+         amount_minor,
+         token_hash,
+         request_fingerprint,
+         response_json,
+         created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      eventId,
+      idempotencyKey,
+      delegationId,
+      operation,
+      delegatorDid,
+      actorDid,
+      amountMinor.toString(),
+      tokenHash,
+      requestFingerprint,
+      JSON.stringify(responseBody),
+      createdAt
+    )
+    .run();
+
+  const stored = await env.DB
+    .prepare(
+      `SELECT event_id, operation, delegation_id, request_fingerprint, response_json
+       FROM delegation_spend_hooks
+       WHERE idempotency_key = ?
+       LIMIT 1`
+    )
+    .bind(idempotencyKey)
+    .first<Record<string, unknown>>();
+
+  if (!stored || !isNonEmptyString(stored.response_json)) {
+    return errorResponse('Failed to persist delegation spend hook result', 'INTERNAL_ERROR', 500);
+  }
+
+  const storedOperation = isNonEmptyString(stored.operation) ? stored.operation.trim() : null;
+  const storedDelegationId = isNonEmptyString(stored.delegation_id) ? stored.delegation_id.trim() : null;
+  const storedFingerprint = isNonEmptyString(stored.request_fingerprint)
+    ? stored.request_fingerprint
+    : null;
+
+  if (
+    storedOperation !== operation ||
+    storedDelegationId !== delegationId ||
+    storedFingerprint !== requestFingerprint
+  ) {
+    return errorResponse(
+      'idempotency_key is already used with a different delegation spend payload',
+      'IDEMPOTENCY_KEY_REUSED',
+      409
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(stored.response_json);
+    const replay = isNonEmptyString(stored.event_id) && stored.event_id !== eventId;
+    return jsonResponse(parsed, replay ? 200 : 201);
+  } catch {
+    return errorResponse('Stored idempotency payload is invalid', 'INTERNAL_ERROR', 500);
   }
 }
 
@@ -2013,6 +2694,18 @@ export function isSettlementVerificationReadRequest(method: string, path: string
   return false;
 }
 
+export function isRiskHoldServiceRequest(method: string, path: string): boolean {
+  if (method === 'POST' && path === '/v1/risk/holds/apply') {
+    return true;
+  }
+
+  if (method === 'POST' && /^\/v1\/risk\/holds\/[^/]+\/release$/.test(path)) {
+    return true;
+  }
+
+  return false;
+}
+
 export function parseAuthCandidates(request: Request): string[] {
   const authHeader =
     request.headers.get('authorization') ??
@@ -2027,6 +2720,49 @@ export function parseAuthCandidates(request: Request): string[] {
   return [bearer, xAdminKey].filter((value): value is string => Boolean(value));
 }
 
+function resolveLedgerAdminKeys(env: Env): { ok: true; keys: Set<string> } | { ok: false; code: string; message: string } {
+  const keys = new Set<string>();
+
+  if (env.LEDGER_ADMIN_KEY?.trim()) {
+    keys.add(env.LEDGER_ADMIN_KEY.trim());
+  }
+
+  const additionalRaw = env.LEDGER_ADMIN_KEYS_JSON?.trim();
+  if (additionalRaw) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(additionalRaw);
+    } catch {
+      return {
+        ok: false,
+        code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+        message: 'LEDGER_ADMIN_KEYS_JSON must be valid JSON',
+      };
+    }
+
+    if (!Array.isArray(parsed)) {
+      return {
+        ok: false,
+        code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+        message: 'LEDGER_ADMIN_KEYS_JSON must be a JSON array',
+      };
+    }
+
+    for (const raw of parsed) {
+      if (typeof raw !== 'string' || raw.trim().length === 0) {
+        return {
+          ok: false,
+          code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+          message: 'LEDGER_ADMIN_KEYS_JSON entries must be non-empty strings',
+        };
+      }
+      keys.add(raw.trim());
+    }
+  }
+
+  return { ok: true, keys };
+}
+
 export function evaluateLedgerAuth(params: {
   request: Request;
   env: Env;
@@ -2035,15 +2771,30 @@ export function evaluateLedgerAuth(params: {
 }):
   | { ok: true }
   | { ok: false; status: number; code: string; message: string } {
-  const adminKey = params.env.LEDGER_ADMIN_KEY?.trim() || null;
+  const resolvedAdminKeys = resolveLedgerAdminKeys(params.env);
+  if (!resolvedAdminKeys.ok) {
+    return {
+      ok: false,
+      status: 503,
+      code: resolvedAdminKeys.code,
+      message: resolvedAdminKeys.message,
+    };
+  }
+
   const settlementVerifyToken =
     params.env.LEDGER_SETTLEMENT_VERIFY_TOKEN?.trim() || null;
+  const riskServiceKey = params.env.LEDGER_RISK_KEY?.trim() || null;
   const allowSettlementVerifyToken = isSettlementVerificationReadRequest(
     params.method,
     params.path
   );
+  const allowRiskServiceKey = isRiskHoldServiceRequest(params.method, params.path);
 
-  if (!adminKey && !(allowSettlementVerifyToken && settlementVerifyToken)) {
+  if (
+    resolvedAdminKeys.keys.size === 0 &&
+    !(allowSettlementVerifyToken && settlementVerifyToken) &&
+    !(allowRiskServiceKey && riskServiceKey)
+  ) {
     return {
       ok: false,
       status: 503,
@@ -2054,15 +2805,19 @@ export function evaluateLedgerAuth(params: {
 
   const authCandidates = parseAuthCandidates(params.request);
 
-  const adminAuthorized =
-    Boolean(adminKey) && authCandidates.some((candidate) => candidate === adminKey);
+  const adminAuthorized = authCandidates.some((candidate) => resolvedAdminKeys.keys.has(candidate));
 
   const verifyAuthorized =
     Boolean(settlementVerifyToken) &&
     allowSettlementVerifyToken &&
     authCandidates.some((candidate) => candidate === settlementVerifyToken);
 
-  if (!adminAuthorized && !verifyAuthorized) {
+  const riskAuthorized =
+    Boolean(riskServiceKey) &&
+    allowRiskServiceKey &&
+    authCandidates.some((candidate) => candidate === riskServiceKey);
+
+  if (!adminAuthorized && !verifyAuthorized && !riskAuthorized) {
     return {
       ok: false,
       status: 401,
@@ -2160,6 +2915,9 @@ async function router(
         <li><code>POST /v1/payments/settlements/ingest</code> — Ingest provider-agnostic settlement updates (admin + idempotency required).</li>
         <li><code>GET /v1/payments/settlements/:provider/:external_payment_id</code> — Lookup settlement(s) by provider external id.</li>
         <li><code>GET /v1/payments/settlements</code> — List settlements (deterministic cursor pagination).</li>
+        <li><code>POST /v1/risk/holds/apply</code> — Apply deterministic risk hold (A→H).</li>
+        <li><code>POST /v1/risk/holds/:id/release</code> — Release deterministic risk hold (H→A).</li>
+        <li><code>GET /v1/risk/holds</code> — List risk-hold records.</li>
         <li><code>GET /attestation/reserve</code> — Signed reserve coverage attestation (public).</li>
         <li><code>POST /reserve/compute</code> — Upsert compute reserve assets (Gemini/FAL credits).</li>
       </ul>
@@ -2190,6 +2948,9 @@ async function router(
           { method: 'POST', path: '/v1/payments/settlements/ingest' },
           { method: 'GET', path: '/v1/payments/settlements/:provider/:external_payment_id' },
           { method: 'GET', path: '/v1/payments/settlements' },
+          { method: 'POST', path: '/v1/risk/holds/apply' },
+          { method: 'POST', path: '/v1/risk/holds/:id/release' },
+          { method: 'GET', path: '/v1/risk/holds' },
           { method: 'GET', path: '/attestation/reserve' },
           { method: 'POST', path: '/reserve/compute' },
         ],
@@ -2347,6 +3108,15 @@ Canonical: ${url.origin}/.well-known/security.txt
     return handleV1Transfers(request, env);
   }
 
+  const delegationSpendMatch = path.match(/^\/v1\/delegations\/spend\/(reserve|consume|release)$/);
+  if (delegationSpendMatch && method === 'POST') {
+    const operation = delegationSpendMatch[1];
+    if (!isDelegationSpendOperation(operation)) {
+      return errorResponse('Unsupported delegation spend operation', 'INVALID_REQUEST', 400);
+    }
+    return handleDelegationSpendHook(operation, request, env);
+  }
+
   // POST /v1/payments/settlements/ingest
   if (path === '/v1/payments/settlements/ingest' && method === 'POST') {
     return handleIngestPaymentSettlement(request, env);
@@ -2368,6 +3138,22 @@ Canonical: ${url.origin}/.well-known/security.txt
   // GET /v1/payments/settlements
   if (path === '/v1/payments/settlements' && method === 'GET') {
     return handleListPaymentSettlements(env, url);
+  }
+
+  // POST /v1/risk/holds/apply
+  if (path === '/v1/risk/holds/apply' && method === 'POST') {
+    return handleApplyRiskHold(request, env);
+  }
+
+  // GET /v1/risk/holds
+  if (path === '/v1/risk/holds' && method === 'GET') {
+    return handleListRiskHolds(url, env);
+  }
+
+  // POST /v1/risk/holds/:id/release
+  const riskHoldReleaseMatch = path.match(/^\/v1\/risk\/holds\/([^/]+)\/release$/);
+  if (riskHoldReleaseMatch && method === 'POST') {
+    return handleReleaseRiskHold(decodeURIComponent(riskHoldReleaseMatch[1]), request, env);
   }
 
   // GET /balances - List account balances

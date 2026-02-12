@@ -1,0 +1,58 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.delegation.create_request.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Delegation Create Request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "idempotency_key",
+    "delegator_did",
+    "delegate_did",
+    "aud",
+    "scope",
+    "ttl_seconds",
+    "spend_cap_minor"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "idempotency_key": { "type": "string", "minLength": 8, "maxLength": 256 },
+    "delegator_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "delegate_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "aud": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "ttl_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 31536000
+    },
+    "spend_cap_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "policy_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "created_by": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    }
+  }
+}

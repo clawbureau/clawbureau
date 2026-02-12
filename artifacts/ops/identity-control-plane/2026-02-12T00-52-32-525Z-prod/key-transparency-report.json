@@ -1,0 +1,110 @@
+{
+  "env": "prod",
+  "generated_at": "2026-02-12T00:52:36.685Z",
+  "latest": {
+    "status": 200,
+    "payload": {
+      "snapshot_version": "1",
+      "generated_at": 1770857555,
+      "generated_at_iso": "2026-02-12T00:52:35.000Z",
+      "active_kid": "66a63dae7bbf4bda",
+      "accepted_kids": [
+        "66a63dae7bbf4bda",
+        "65b60673d6ed884b"
+      ],
+      "signing_kids": [
+        "66a63dae7bbf4bda"
+      ],
+      "verify_only_kids": [
+        "65b60673d6ed884b"
+      ],
+      "expiring_kids": [
+        {
+          "kid": "65b60673d6ed884b",
+          "not_after_unix": 1771108817
+        }
+      ],
+      "overlap_seconds": 3600,
+      "snapshot_id": "kts_1770857555_66a63dae7bbf4bda",
+      "snapshot_hash_b64u": "VnkABA41nKviy8DZIqPgdnL9xoud8u_GG6sD2N5OXC8",
+      "signer_kid": "66a63dae7bbf4bda",
+      "signature_b64u": "kTkGN8S-Aj1mYYCMVVJ2qWTlGvHxAF9IYg9t0jGZalC1Hg8Qddtg0TmudaoDqopVaX7cpbs8YC56Nc19W2syDw",
+      "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T00:52:35.000Z-kts_1770857555_66a63dae7bbf4bda.json"
+    }
+  },
+  "history": {
+    "status": 200,
+    "payload": {
+      "snapshots": [
+        {
+          "snapshot_version": "1",
+          "generated_at": 1770857555,
+          "generated_at_iso": "2026-02-12T00:52:35.000Z",
+          "active_kid": "66a63dae7bbf4bda",
+          "accepted_kids": [
+            "66a63dae7bbf4bda",
+            "65b60673d6ed884b"
+          ],
+          "signing_kids": [
+            "66a63dae7bbf4bda"
+          ],
+          "verify_only_kids": [
+            "65b60673d6ed884b"
+          ],
+          "expiring_kids": [
+            {
+              "kid": "65b60673d6ed884b",
+              "not_after_unix": 1771108817
+            }
+          ],
+          "overlap_seconds": 3600,
+          "snapshot_id": "kts_1770857555_66a63dae7bbf4bda",
+          "snapshot_hash_b64u": "VnkABA41nKviy8DZIqPgdnL9xoud8u_GG6sD2N5OXC8",
+          "signer_kid": "66a63dae7bbf4bda",
+          "signature_b64u": "kTkGN8S-Aj1mYYCMVVJ2qWTlGvHxAF9IYg9t0jGZalC1Hg8Qddtg0TmudaoDqopVaX7cpbs8YC56Nc19W2syDw",
+          "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T00:52:35.000Z-kts_1770857555_66a63dae7bbf4bda.json"
+        }
+      ]
+    }
+  },
+  "force_snapshot": {
+    "status": 200,
+    "payload": {
+      "status": "snapshot_created",
+      "snapshot": {
+        "snapshot_version": "1",
+        "generated_at": 1770857556,
+        "generated_at_iso": "2026-02-12T00:52:36.000Z",
+        "active_kid": "66a63dae7bbf4bda",
+        "accepted_kids": [
+          "66a63dae7bbf4bda",
+          "65b60673d6ed884b"
+        ],
+        "signing_kids": [
+          "66a63dae7bbf4bda"
+        ],
+        "verify_only_kids": [
+          "65b60673d6ed884b"
+        ],
+        "expiring_kids": [
+          {
+            "kid": "65b60673d6ed884b",
+            "not_after_unix": 1771108817
+          }
+        ],
+        "overlap_seconds": 3600,
+        "snapshot_id": "kts_1770857556_66a63dae7bbf4bda",
+        "snapshot_hash_b64u": "2f0Ubx1czwlKSBKIoyoU2KEip5zyd08l0y8-gP_tJdY",
+        "signer_kid": "66a63dae7bbf4bda",
+        "signature_b64u": "bl6VfOv0S1PxoTshtH7Hj_MOlg85bsaGgeVWn9WW07a_aOneAKarlB_Uoh-8A5zSa3yCHGmO0BN5okDnLtwNDQ",
+        "r2_object_key": "identity-control-plane/key-transparency/2026-02-12T00:52:36.000Z-kts_1770857556_66a63dae7bbf4bda.json"
+      }
+    }
+  },
+  "validations": {
+    "latest_has_active_kid": true,
+    "latest_has_accepted_kids": true,
+    "latest_signature_present": true,
+    "forced_snapshot_succeeded": true
+  }
+}

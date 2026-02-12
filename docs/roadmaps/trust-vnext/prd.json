@@ -206,7 +206,7 @@
     {
       "id": "POH-US-018",
       "title": "Witnessed-web receipts for subscription/web auth",
-      "description": "As a platform, I want a credible path for subscription-web usage evidence (ChatGPT/Claude/Gemini web) that does not rely on a worker\u2019s local machine.",
+      "description": "As a platform, I want a credible path for subscription-web usage evidence (ChatGPT/Claude/Gemini web) that does not rely on a worker’s local machine.",
       "acceptanceCriteria": [
         "Define a web_receipt schema and signed envelope type",
         "Introduce an allowlisted witness service that can sign web receipts",
@@ -499,10 +499,302 @@
       "priority": 37,
       "passes": true,
       "notes": "Compatibility guidance published in `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md` + identity runbook, validated by `scripts/identity/smoke-scope-kid-interop.mjs` artifact set."
+    },
+    {
+      "id": "CCL-US-016",
+      "title": "M6 canonical issuance bootstrap via claim challenge/exchange",
+      "description": "As identity operations, we need M6 conformance automation to obtain canonical CSTs through claim challenge/exchange flow without direct scope issuance assumptions.",
+      "acceptanceCriteria": [
+        "Conformance runner uses claim scoped-token challenge/exchange for canonical token bootstrap",
+        "Dependency misconfiguration remains deterministic and fail-closed",
+        "Staging/prod M6 conformance matrices pass with this issuance path"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": "Implemented in `scripts/identity/run-identity-control-plane-m6-suite.mjs`; validated by staging/prod conformance artifacts: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`, `.../2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`."
+    },
+    {
+      "id": "CPX-US-017",
+      "title": "M6 universal canonical CST enforcement in clawproxy",
+      "description": "As trust operations, we need clawproxy to enforce canonical CST requirements consistently across staging/prod with deterministic failures.",
+      "acceptanceCriteria": [
+        "Proxy rejects missing legacy auth in strict canonical mode",
+        "Canonical CST subject/chain consistency checks are enforced",
+        "M6 conformance matrix shows legacy reject + canonical path behavior"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Staging config key alignment deployed (`e6d6aa64-983b-40ad-bf45-92db7b4ce975`), production enforcement remained on (`21044cf8-d891-45f4-a1ef-ba5f05164603`). Evidence in M6 conformance matrices."
+    },
+    {
+      "id": "CCO-US-022",
+      "title": "M6 canonical token-control enforcement for clawcontrols writes",
+      "description": "As policy governance, we need clawcontrols write APIs to require canonical CST verification through clawverify token-control contract.",
+      "acceptanceCriteria": [
+        "Legacy admin auth is rejected when canonical requirement flag is enabled",
+        "Canonical token-control verification is required before WPC writes",
+        "M6 conformance matrix validates legacy rejection and canonical acceptance"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": "Deploys: staging `48dc04b6-24ae-4cde-917d-48fd0781ef48`, prod `0c6685f9-b82c-41fe-9d40-8b375f6bdde7`. Evidence in M6 conformance matrices."
+    },
+    {
+      "id": "CSC-US-019",
+      "title": "M6 key transparency + revocation SLO governance closure",
+      "description": "As security operations, we need key transparency history/snapshot APIs and revocation SLO reporting as first-class runtime contracts.",
+      "acceptanceCriteria": [
+        "Signed transparency snapshots are queryable and auditable",
+        "Revocation SLO report endpoint is protected and returns deterministic telemetry schema",
+        "M6 ops suite reports pass in staging and prod"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": "Deploys: staging `028de033-b1ac-45b5-82f5-904cd517e5b7`, prod `89b90fad-84da-4920-aceb-27d46c45256a`. Ops evidence: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`, `.../2026-02-12T00-52-32-525Z-prod/deploy-summary.json`."
+    },
+    {
+      "id": "CVF-US-034",
+      "title": "M6 transparency-aware token-control verification",
+      "description": "As downstream enforcement systems, we need token-control verification to fail closed on stale/unknown/expired transparency key states.",
+      "acceptanceCriteria": [
+        "Transparency freshness and kid checks are enforced in token-control verification",
+        "Deterministic transparency error taxonomy is returned",
+        "M6 ops suite passes in staging and prod"
+      ],
+      "priority": 42,
+      "passes": true,
+      "notes": "Implemented in `services/clawverify/src/verify-token-control.ts`; validated by M6 suite pass across staging/prod deploy summaries."
+    },
+    {
+      "id": "ICP-US-004",
+      "title": "M6 conformance + DR evidence runner",
+      "description": "As release operations, we need a single M6 suite that emits conformance, transparency, revocation SLO, and recovery drill artifacts with deploy versions.",
+      "acceptanceCriteria": [
+        "Runner writes conformance matrix, key transparency report, revocation SLO report, recovery drill report, and deploy summary",
+        "Staging and prod runs produce pass=true deployment summaries",
+        "Artifacts are saved under smoke/ops identity-control-plane directories with immutable timestamps"
+      ],
+      "priority": 43,
+      "passes": true,
+      "notes": "Runner: `scripts/identity/run-identity-control-plane-m6-suite.mjs`. Passing artifacts: staging `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`, prod `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`."
+    },
+    {
+      "id": "TRUST-REP-001",
+      "title": "Identity control plane M6 post-deploy stabilization watch",
+      "description": "As trust operators, we need interval conformance reruns with error-bucket/auth-drift deltas so post-deploy regressions are detected quickly.",
+      "acceptanceCriteria": [
+        "Run identity M6 conformance suite for staging + prod in watch window",
+        "Publish error-bucket deltas against baseline conformance matrix",
+        "Publish auth drift evidence for canonical vs legacy protected routes",
+        "Store watch artifact under artifacts/ops/identity-control-plane/*/watch-report.json"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Post-deploy watch completed. Staging watch: artifacts/ops/identity-control-plane/2026-02-12T01-50-25-165Z-staging/watch-report.json. Prod watch: artifacts/ops/identity-control-plane/2026-02-12T01-50-52-559Z-prod/watch-report.json. Error-bucket deltas remained zero and no auth drift detected."
+    },
+    {
+      "id": "CRP-US-001",
+      "title": "clawrep deterministic reputation ingest",
+      "description": "As trust infrastructure, we need idempotent closure ingest and deterministic scoring.",
+      "acceptanceCriteria": [
+        "POST /v1/events/ingest is idempotent by source_event_id",
+        "Scoring uses concave contribution and deterministic weighting",
+        "Audit trail records ingest and duplicate outcomes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Shipped in services/clawrep with migration 0001_reputation_foundation.sql and smoke evidence in artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/ingest-replay-smoke.json + prod counterpart."
+    },
+    {
+      "id": "CRP-US-002",
+      "title": "clawrep daily deterministic decay",
+      "description": "As trust operations, we need deterministic daily decay with idempotent run-day semantics.",
+      "acceptanceCriteria": [
+        "POST /v1/decay/run supports deterministic idempotency by run_day",
+        "Cron trigger executes daily decay run",
+        "Decay operations are auditable"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Delivered via clawrep cron trigger (7 0 * * *) + decay_runs table + audit records. Smoke: artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/decay-penalty-smoke.json and prod equivalent."
+    },
+    {
+      "id": "CRP-US-003",
+      "title": "clawrep trust tier calculation",
+      "description": "As marketplaces, we need deterministic tier outputs with dispute-rate controls.",
+      "acceptanceCriteria": [
+        "GET /v1/tiers/:did returns deterministic tier data",
+        "Dispute-rate capping is enforced fail-closed"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Delivered via deriveTier() policy and /v1/tiers/:did endpoint. Smoke evidence in tier-calculation-smoke.json (staging/prod)."
+    },
+    {
+      "id": "CRP-US-004",
+      "title": "clawrep deterministic penalties",
+      "description": "As trust operations, we need deterministic penalty schedules and idempotent application.",
+      "acceptanceCriteria": [
+        "POST /v1/penalties/apply enforces deterministic penalty schedule",
+        "Penalty ingest is idempotent by source_event_id",
+        "Penalty events are auditable"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Delivered with penalty schedule in services/clawrep/src/core.ts and endpoint /v1/penalties/apply. Smoke evidence in decay-penalty-smoke.json (staging/prod)."
+    },
+    {
+      "id": "CRP-US-005",
+      "title": "clawrep reviewer contract compatibility",
+      "description": "As clawbounties integration, we need reviewer APIs to stay contract-compatible and deterministic.",
+      "acceptanceCriteria": [
+        "POST /v1/reviewers/select request/response shape is preserved",
+        "GET /v1/reviewers/:did contract is preserved",
+        "Selection ordering is deterministic"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Compatibility note recorded in services/clawrep/COMPATIBILITY-NOTE-AGENT-C-reviewer-contract.md. Smoke evidence in reviewer-selection-smoke.json (staging/prod)."
+    },
+    {
+      "id": "CRP-US-006",
+      "title": "clawrep public reputation read",
+      "description": "As platform clients, we need deterministic profile reads for trust display and policy decisions.",
+      "acceptanceCriteria": [
+        "GET /v1/rep/:did returns stable profile shape",
+        "Unknown DIDs return deterministic NOT_FOUND"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Implemented in services/clawrep/src/index.ts with deterministic NOT_FOUND contract and tier context."
+    },
+    {
+      "id": "CRP-US-007",
+      "title": "clawrep owner-verified weighting",
+      "description": "As trust systems, we need owner-verified scoring influence and reviewer visibility to reduce sybil risk.",
+      "acceptanceCriteria": [
+        "Owner-verified multiplier is included in deterministic scoring",
+        "Reviewer APIs expose owner-verified state and attestation ref when present"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Delivered via computeClosureScoreDelta owner weight and reviewer profile responses with owner verification fields."
+    },
+    {
+      "id": "CRP-OPS-001",
+      "title": "clawrep.com productionization MVP",
+      "description": "As trust platform ops, we need clawrep productionized on Cloudflare with D1/Queues/Cron/KV and reproducible deploy evidence.",
+      "acceptanceCriteria": [
+        "Worker service deployed for staging + prod with D1, queue, cron, and optional KV bindings",
+        "Wrangler hygiene passes (types + dry-run deploys)",
+        "MVP endpoint suite is live with fail-closed auth",
+        "Staging + prod smoke artifacts and ops summaries are published"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Implemented in services/clawrep. Deploy versions: staging e41c2e88-9c81-4673-b99d-322e007e3aba, prod b54e2e0d-9062-4782-9a4b-87a84129f249. Ops artifacts: artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json and artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json."
+    },
+    {
+      "id": "CRP-US-008",
+      "title": "Closed-loop canonical ingest across marketplace, trials, and escrow",
+      "description": "As trust operations, we need deterministic queue-backed ingest-loop envelopes from clawbounties/clawtrials/escrow so outcome events are ingested with idempotent source_event_id semantics.",
+      "acceptanceCriteria": [
+        "POST /v1/events/ingest-loop accepts canonical schema envelope and enqueues to REP_EVENTS",
+        "Queue consumer applies idempotent ingest by source_event_id and deterministic processing",
+        "clawbounties, clawtrials, and escrow emit minimal glue events into clawrep ingest-loop endpoint",
+        "Staging and prod smoke artifacts validate end-to-end outcome propagation"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Delivered closed-loop queue ingest across clawrep + producer glue in clawbounties/clawtrials/escrow using canonical loop envelopes and REP_EVENTS queue bindings. Smoke evidence: artifacts/smoke/clawrep/2026-02-12T03-10-00-076Z-staging and .../2026-02-12T03-10-29-983Z-prod."
+    },
+    {
+      "id": "CRP-US-009",
+      "title": "Dispute-coupled penalties and appeal recovery path",
+      "description": "As trust governance, we need deterministic penalties for upheld disputes and deterministic positive recovery events for upheld appeals.",
+      "acceptanceCriteria": [
+        "Penalty events support dispute-upheld lanes with bounded severity",
+        "Recovery events support appeal-upheld lanes with bounded severity",
+        "Both lanes are idempotent by source_event_id and auditable",
+        "Core tests cover penalty and recovery score determinism"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Delivered dispute penalty + appeal recovery contracts in clawrep core/index with deterministic severity bounds and audit traces."
+    },
+    {
+      "id": "CRP-US-010",
+      "title": "Reviewer anti-collusion hardening with compatibility retention",
+      "description": "As marketplaces, we need deterministic anti-collusion reviewer selection signals (cooldown/history/pairing) while preserving API contract compatibility.",
+      "acceptanceCriteria": [
+        "POST /v1/reviewers/select remains contract-compatible for existing clients",
+        "Selection uses deterministic anti-collusion signals and emits selection metadata",
+        "Requester/worker DID context can be supplied for exclusion hardening",
+        "Audit logs include selected reviewers and selection metadata"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Delivered anti-collusion reviewer selection (cooldown/history/pair penalties) while preserving additive contract compatibility for existing reviewer clients."
+    },
+    {
+      "id": "CRP-US-011",
+      "title": "Queue DLQ and replay controls",
+      "description": "As operations, we need DLQ-safe queue behavior and deterministic replay controls for failed ingest-loop events.",
+      "acceptanceCriteria": [
+        "Queue consumer has dead-letter queue bindings for staging and prod",
+        "Failed loop envelopes are auditable and replayable by admin endpoint",
+        "Replay endpoint supports source_event_id targeting and bounded batch replay",
+        "Queue status endpoint reports event status and replay/failure counters"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Delivered DLQ + replay controls in clawrep wrangler/runtime (`dead_letter_queue`, `POST /v1/ops/queue/replay`, `GET /v1/ops/queue/status`) with failure audits."
+    },
+    {
+      "id": "CRP-US-012",
+      "title": "Drift detection, recompute reports, and ingest SLO contracts",
+      "description": "As trust reliability, we need deterministic profile drift detection/recompute reports and ingest SLO telemetry endpoints.",
+      "acceptanceCriteria": [
+        "POST /v1/ops/drift/recompute emits deterministic mismatch/error-bucket report",
+        "GET /v1/ops/drift/latest returns latest persisted drift report",
+        "GET /v1/ops/slo/ingest returns bounded latency/error-rate SLO metrics",
+        "Cron path emits periodic drift reports for passive monitoring"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Delivered drift/SLO ops contracts (`POST /v1/ops/drift/recompute`, `GET /v1/ops/drift/latest`, `GET /v1/ops/slo/ingest`) with persisted drift reports."
+    },
+    {
+      "id": "TRUST-REP-002",
+      "title": "Closed-loop reputation operations rollout and verification",
+      "description": "As trust operations, we need staged rollout, smoke gates, and evidence for closed-loop reputation controls across clawrep and producing services.",
+      "acceptanceCriteria": [
+        "Cloudflare dry-run/deploy hygiene passes for changed services",
+        "Staging+prod smokes validate ingest-loop, replay, anti-collusion selection, and drift endpoints",
+        "Artifacts include deploy versions, smoke outputs, and ops summaries",
+        "Proof chain includes signed commit attestation for TRUST-REP-002 lane"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Closed-loop rollout completed. Deploy versions: clawrep staging f94065ad-7ac4-4a0c-8498-d51d13d54841 / prod faec7ec3-0416-4939-9812-3eac37c0e00a; clawbounties staging a102436e-d565-4705-879d-ac1b3032f36f / prod a23e25b0-e763-428b-a583-72f69e553632; clawtrials staging 067bef7e-d424-440c-9db4-5126a345f745 / prod ddc11d4c-b3bd-4ad7-a343-d7fdc7ae61fc; escrow staging 3aa5b2f9-c9e7-42e1-a9ef-bd985d94912e / prod 520327ed-818a-49c6-8101-0b90d16994e5. Ops summaries: artifacts/ops/clawrep/2026-02-12T02-56-40-000Z-staging/deploy-summary.json and .../2026-02-12T02-56-58-000Z-prod/deploy-summary.json."
+    },
+    {
+      "id": "CDL-MAX-001",
+      "title": "Delegation control-plane max rollout for clawdelegate.com",
+      "description": "As identity and trust operations, we need a production delegation control plane with deterministic delegated CST lifecycle, spend governance hooks, and immutable rollout evidence.",
+      "acceptanceCriteria": [
+        "clawdelegate endpoint suite ships for create/approve/issue/spend/audit/export/revoke with fail-closed deterministic errors",
+        "Cross-service wiring is live (clawclaim delegation bootstrap, clawscope canonical issuance, clawproxy delegated idempotency guard, ledger spend hooks)",
+        "Cloudflare resources and remote D1 migrations are applied for staging+prod",
+        "Staging+prod smoke flow passes and artifacts include deploy versions + route/routing verification evidence"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "CDL rollout completed with deploy evidence in artifacts/ops/clawdelegate/2026-02-12T04-56-45-407Z-deploy/deploy-summary.json and smoke evidence in artifacts/smoke/clawdelegate/2026-02-12T04-56-01-753Z-staging/result.json and artifacts/smoke/clawdelegate/2026-02-12T04-56-09-169Z-prod/result.json. Key deploy versions: clawdelegate staging 6ca14731-1ae9-4417-9d1d-42f706f4b92e / prod b94daa3a-0362-4172-bbb5-17e0766afb27; clawclaim staging 7b6325ce-c95f-434e-b98f-454db0b9388f / prod 43f7cfba-f465-44ac-a336-818a184a6f8a; clawscope staging fd43755e-8353-4cfa-9d2f-45dead2ee64a / prod ccedb1e7-c811-4412-991f-09159e041c86; clawproxy staging 025fde6a-8ca5-4d73-8a57-8b5cfa6e0683 / prod 1a377d71-7ad9-4bcd-a305-b41122849abb; clawbounties staging 03bda33f-550d-48eb-8d75-1e9142910ebd / prod bd4bc8af-67bd-4ebe-a6fa-31296a453880; ledger staging 24a25b8a-13d3-4768-b1bf-006e462d8608 / prod f748d63f-e13a-41ac-9ea3-b298ea57d1d4; claw-domains prod 3309cae6-772c-41f7-a1ad-30bb8701db03. PR #167 merged at commit f33de6a525c58acad2c821847cd31b96867504aa with DID proof at proofs/feat/identity/CDL-MAX-001-delegation-control-plane/commit.sig.json."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-11T23:45:00Z",
+    "updatedAt": "2026-02-12T05:07:00.000Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

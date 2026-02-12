@@ -15,6 +15,20 @@
       "priority": 1,
       "passes": true,
       "notes": "Implemented services/clawcontrols with POST/GET /v1/wpc backed by Durable Objects. WPCs are addressed by policy_hash_b64u = sha256(JCS(payload)) and returned as signed envelopes (Ed25519, signer_did=did:key)."
+    },
+    {
+      "id": "CCO-US-022",
+      "title": "Canonical CST enforcement for WPC writes via token-control contract",
+      "description": "As governance operations, we need WPC mutation APIs to enforce canonical CST verification instead of static admin tokens.",
+      "acceptanceCriteria": [
+        "POST /v1/wpc verifies canonical CST using clawverify /v1/verify/token-control",
+        "Legacy ADMIN_TOKEN fallback only active when explicit canonical requirement flag is disabled",
+        "Deterministic legacy rejection semantics are returned when canonical CST is required",
+        "Typecheck and tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented in `services/clawcontrols/src/index.ts` with env gates `CONTROL_REQUIRE_CANONICAL_CST`, `CLAWVERIFY_BASE_URL`, `CONTROL_VERIFY_TIMEOUT_MS`. Deploys: staging `48dc04b6-24ae-4cde-917d-48fd0781ef48`, prod `0c6685f9-b82c-41fe-9d40-8b375f6bdde7`. M6 conformance evidence: staging/prod matrices under `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/` and `.../2026-02-12T00-52-32-525Z-prod/`."
     }
   ]
 }

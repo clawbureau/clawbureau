@@ -46,7 +46,7 @@
     "token_scope_hash_b64u": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$",
-      "description": "Deterministic scope hash derived from token authorization-relevant claims: token_scope_hash_b64u = sha256(JCS({token_version, sub, aud[], scope[], owner_ref?, owner_did?, controller_did?, agent_did?, policy_hash_b64u?, control_plane_policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?})) base64url. Excludes iat/exp/jti/nonce to remain stable across re-issuance."
+      "description": "Deterministic scope hash derived from token authorization-relevant claims: token_scope_hash_b64u = sha256(JCS({token_version, sub, aud[], scope[], owner_ref?, owner_did?, controller_did?, agent_did?, policy_hash_b64u?, control_plane_policy_hash_b64u?, payment_account_did?, spend_cap?, mission_id?, delegation_id?, delegator_did?, delegate_did?, delegation_policy_hash_b64u?, delegation_spend_cap_minor?, delegation_expires_at?})) base64url. Excludes iat/exp/jti/nonce to remain stable across re-issuance."
     },
     "payment_account_did": {
       "type": "string",
@@ -55,6 +55,34 @@
     },
     "spend_cap": { "type": "number", "minimum": 0 },
     "mission_id": { "type": "string" },
+    "delegation_id": {
+      "type": "string",
+      "description": "Optional delegation contract identifier when this CST was minted via clawdelegate."
+    },
+    "delegator_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$",
+      "description": "Delegator DID bound to delegation-backed CST."
+    },
+    "delegate_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$",
+      "description": "Delegate DID bound to delegation-backed CST (must match token subject)."
+    },
+    "delegation_policy_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "Optional pinned policy hash inherited from delegation contract."
+    },
+    "delegation_spend_cap_minor": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "Delegation spend cap in minor units as an integer string."
+    },
+    "delegation_expires_at": {
+      "type": "integer",
+      "description": "Delegation expiry timestamp (epoch seconds) embedded for fail-closed enforcement."
+    },
     "token_lane": {
       "type": "string",
       "enum": ["legacy", "canonical"],

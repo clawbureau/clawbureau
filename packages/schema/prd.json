@@ -46,6 +46,48 @@
       "priority": 3,
       "passes": true,
       "notes": "Added explicit PoH schemas for gateway receipts and proof bundle envelopes and tightened receipt.binding validation by referencing receipt_binding.v1.json."
+    },
+    {
+      "id": "CRP-OPS-001-SCHEMA",
+      "title": "Reputation schema contracts for clawrep MVP",
+      "description": "As trust services, we need strict versioned reputation schemas for ingest/profile/reviewer contracts.",
+      "acceptanceCriteria": [
+        "Add reputation_event_ingest.v1.json with strict closure ingest fields",
+        "Add reputation_profile.v1.json for deterministic profile/tier output",
+        "Add reviewer selection request/response schemas",
+        "Update packages/schema/README.md listings"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Added packages/schema/reputation/{reputation_event_ingest,reputation_profile,reviewer_selection_request,reviewer_selection_response}.v1.json and updated README listings."
+    },
+    {
+      "id": "CRP-US-008-SCHEMA",
+      "title": "Closed-loop reputation envelope + anti-collusion schema extensions",
+      "description": "As trust services, we need strict schema contracts for ingest-loop envelopes and reviewer anti-collusion metadata while preserving deterministic compatibility.",
+      "acceptanceCriteria": [
+        "Add reputation_event_loop_envelope.v1.json for closure|penalty|recovery canonical event envelopes",
+        "Extend reviewer selection request schema with requester_did/worker_did optional fields",
+        "Extend reviewer selection response schema with deterministic selection_metadata payload",
+        "Update packages/schema/README.md reputation listings"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Added `reputation_event_loop_envelope.v1.json`, extended reviewer request/response schemas for anti-collusion context/metadata, and updated schema README listings."
+    },
+    {
+      "id": "AEM-US-016",
+      "title": "Loss-event + insurance auto-claim schemas",
+      "description": "As economy services, we need canonical schema contracts for normalized loss events and insurance auto-claim payloads so queue fanout and settlement-risk loops remain deterministic.",
+      "acceptanceCriteria": [
+        "Add payments/loss_event.v1.json payload schema",
+        "Add payments/loss_event_envelope.v1.json transport envelope schema",
+        "Add insurance/insurance_auto_claim.v1.json schema",
+        "Update packages/schema/README.md directory + schema listings"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Shipped with ECON-RISK-MAX-001 rollout. Runtime evidence: staging/prod loss-loop smokes (`artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`, `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`) and zero-failure watch summaries under `artifacts/ops/econ-risk/` (2026-02-12T05-01-24-573Z, 2026-02-12T05-01-27-688Z)."
     }
   ]
 }

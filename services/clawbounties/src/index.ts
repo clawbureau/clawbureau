@@ -12,6 +12,9 @@ export interface Env {
   /** Admin key for /v1 endpoints. Set via `wrangler secret put`. */
   BOUNTIES_ADMIN_KEY?: string;
 
+  /** Dedicated risk service key for loss-event intake endpoint. */
+  BOUNTIES_RISK_KEY?: string;
+
   /** Escrow service key (ESCROW_ADMIN_KEY from clawescrow). Set via `wrangler secret put`. */
   ESCROW_SERVICE_KEY?: string;
 
@@ -27,11 +30,23 @@ export interface Env {
   /** Base URL for clawscope (defaults to https://clawscope.com). */
   SCOPE_BASE_URL?: string;
 
+  /** Base URL for clawrep (defaults to https://clawrep.com). */
+  CLAWREP_BASE_URL?: string;
+
+  /** Ingest key for clawrep loop endpoint (set via `wrangler secret put`). */
+  CLAWREP_INGEST_KEY?: string;
+
   /** Admin key for calling clawscope /v1/tokens/issue (set via `wrangler secret put`). */
   SCOPE_ADMIN_KEY?: string;
 
   /** Base URL for test harness service (required for closure_type=test auto-approval). */
   TEST_HARNESS_BASE_URL?: string;
+
+  /** Base URL for dispute arbitration service. */
+  TRIALS_BASE_URL?: string;
+
+  /** Service token for clawtrials arbitration APIs. */
+  TRIALS_SERVICE_KEY?: string;
 
   /** Test harness timeout override in milliseconds. */
   TEST_HARNESS_TIMEOUT_MS?: string;
@@ -59,6 +74,9 @@ export interface Env {
 
   /** D1 database binding */
   BOUNTIES_DB: D1Database;
+
+  /** Optional direct queue producer binding to clawrep events. */
+  REP_EVENTS?: Queue;
 }
 
 type ClosureType = 'test' | 'requester' | 'quorum';
@@ -89,6 +107,9 @@ interface RequesterAuthContext {
   token_scope_hash_b64u: string | null;
   token_lane: ScopedTokenLane | null;
   payment_account_did: string | null;
+  delegation_id: string | null;
+  delegator_did: string | null;
+  delegate_did: string | null;
   iat: number | null;
   exp: number | null;
   bearer_token: string | null;
@@ -125,6 +146,12 @@ interface ScopeIntrospectionSuccess {
   payment_account_did?: unknown;
   spend_cap?: unknown;
   mission_id?: unknown;
+  delegation_id?: unknown;
+  delegator_did?: unknown;
+  delegate_did?: unknown;
+  delegation_policy_hash_b64u?: unknown;
+  delegation_spend_cap_minor?: unknown;
+  delegation_expires_at?: unknown;
   token_lane?: unknown;
   iat?: unknown;
   exp?: unknown;
@@ -147,6 +174,12 @@ interface ScopeIntrospectionInactive {
   payment_account_did?: unknown;
   spend_cap?: unknown;
   mission_id?: unknown;
+  delegation_id?: unknown;
+  delegator_did?: unknown;
+  delegate_did?: unknown;
+  delegation_policy_hash_b64u?: unknown;
+  delegation_spend_cap_minor?: unknown;
+  delegation_expires_at?: unknown;
   token_lane?: unknown;
   iat?: unknown;
   exp?: unknown;
@@ -281,6 +314,8 @@ interface BountyV2 {
   rejected_submission_id: string | null;
   reject_idempotency_key: string | null;
   rejected_at: string | null;
+  trial_case_id: string | null;
+  trial_opened_at: string | null;
 
   // recommended/common
   is_code_bounty: boolean;
@@ -296,6 +331,23 @@ interface BountyV2 {
 
   // internal
   fee_quote: CutsSimulateResponse;
+  updated_at: string;
+}
+
+interface BountyRiskEventRecord {
+  risk_event_id: string;
+  idempotency_key: string;
+  source_loss_event_id: string;
+  source_service: string;
+  source_event_id: string | null;
+  bounty_id: string;
+  account_did: string | null;
+  amount_minor: string;
+  currency: 'USD';
+  reason_code: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  metadata_json: string | null;
+  created_at: string;
   updated_at: string;
 }
 
@@ -593,6 +645,13 @@ interface EscrowDisputeResponse {
   dispute_window_ends_at: string;
 }
 
+interface TrialCaseSummary {
+  case_id: string;
+  status: 'open' | 'appealed' | 'decided';
+  judge_did: string;
+  opened_at: string;
+}
+
 interface ApproveBountyResponseV1 {
   bounty_id: string;
   submission_id: string;
@@ -606,6 +665,7 @@ interface RejectBountyResponseV1 {
   submission_id: string;
   status: 'disputed';
   escrow: EscrowDisputeResponse;
+  trial_case: TrialCaseSummary;
   decided_at: string;
 }
 
@@ -1023,6 +1083,23 @@ function requireAdmin(request: Request, env: Env, version: string): Response | n
 
   if (token !== env.BOUNTIES_ADMIN_KEY) {
     return errorResponse('UNAUTHORIZED', 'Invalid admin token', 401, undefined, version);
+  }
+
+  return null;
+}
+
+function requireRiskService(request: Request, env: Env, version: string): Response | null {
+  if (!env.BOUNTIES_RISK_KEY || env.BOUNTIES_RISK_KEY.trim().length === 0) {
+    return errorResponse('RISK_KEY_NOT_CONFIGURED', 'BOUNTIES_RISK_KEY is not configured', 503, undefined, version);
+  }
+
+  const token = getBearerToken(request.headers.get('authorization')) ?? request.headers.get('x-admin-key')?.trim() ?? null;
+  if (!token) {
+    return errorResponse('UNAUTHORIZED', 'Missing risk token', 401, undefined, version);
+  }
+
+  if (token !== env.BOUNTIES_RISK_KEY) {
+    return errorResponse('UNAUTHORIZED', 'Invalid risk token', 401, undefined, version);
   }
 
   return null;
@@ -1812,8 +1889,86 @@ async function requireRequesterAuth(
       };
     }
 
-    const requester_did = isNonEmptyString(data.sub) ? data.sub.trim() : null;
-    if (!requester_did || !requester_did.startsWith('did:')) {
+    const requesterTokenSub = isNonEmptyString(data.sub) ? data.sub.trim() : null;
+    if (!requesterTokenSub || !requesterTokenSub.startsWith('did:')) {
+      return {
+        error: errorResponse('REQUESTER_SUB_INVALID', 'Requester token subject must be a DID', 401, undefined, version),
+      };
+    }
+
+    const delegation_id = isNonEmptyString(data.delegation_id) ? data.delegation_id.trim() : null;
+    const delegator_did = isNonEmptyString(data.delegator_did) ? data.delegator_did.trim() : null;
+    const delegate_did = isNonEmptyString(data.delegate_did) ? data.delegate_did.trim() : null;
+    const delegation_policy_hash_b64u = isNonEmptyString(data.delegation_policy_hash_b64u)
+      ? data.delegation_policy_hash_b64u.trim()
+      : null;
+    const delegation_spend_cap_minor = isNonEmptyString(data.delegation_spend_cap_minor)
+      ? data.delegation_spend_cap_minor.trim()
+      : null;
+    const delegation_expires_at =
+      typeof data.delegation_expires_at === 'number' && Number.isFinite(data.delegation_expires_at)
+        ? Math.floor(data.delegation_expires_at)
+        : null;
+
+    if (
+      delegation_id ||
+      delegator_did ||
+      delegate_did ||
+      delegation_policy_hash_b64u ||
+      delegation_spend_cap_minor ||
+      delegation_expires_at !== null
+    ) {
+      if (!delegation_id || !delegator_did || !delegate_did) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_BINDING_INVALID',
+            'Delegated requester token requires delegation_id, delegator_did, and delegate_did',
+            401,
+            undefined,
+            version
+          ),
+        };
+      }
+
+      if (delegate_did !== requesterTokenSub) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_BINDING_INVALID',
+            'delegate_did must match requester token subject',
+            401,
+            { delegate_did, requester_sub: requesterTokenSub },
+            version
+          ),
+        };
+      }
+
+      if (delegation_spend_cap_minor && !/^[0-9]+$/.test(delegation_spend_cap_minor)) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_BINDING_INVALID',
+            'delegation_spend_cap_minor claim is invalid',
+            401,
+            undefined,
+            version
+          ),
+        };
+      }
+
+      if (delegation_expires_at !== null && delegation_expires_at <= Math.floor(Date.now() / 1000)) {
+        return {
+          error: errorResponse(
+            'REQUESTER_DELEGATION_EXPIRED',
+            'Delegated requester token has expired delegation binding',
+            401,
+            { delegation_expires_at },
+            version
+          ),
+        };
+      }
+    }
+
+    const requester_did = delegation_id ? delegator_did : requesterTokenSub;
+    if (!requester_did) {
       return {
         error: errorResponse('REQUESTER_SUB_INVALID', 'Requester token subject must be a DID', 401, undefined, version),
       };
@@ -1824,7 +1979,7 @@ async function requireRequesterAuth(
       return {
         error: errorResponse(
           'REQUESTER_SUB_MISMATCH',
-          'requester_did does not match requester token subject',
+          'requester_did does not match effective requester DID for this token',
           401,
           { requester_did, requested_requester_did: requesterHint },
           version
@@ -1867,7 +2022,7 @@ async function requireRequesterAuth(
     }
 
     const expectedScopeHash = await computeTokenScopeHashB64uV1({
-      sub: requester_did,
+      sub: requesterTokenSub,
       aud,
       scope,
       owner_ref: isNonEmptyString(data.owner_ref) ? data.owner_ref.trim() : undefined,
@@ -1881,6 +2036,12 @@ async function requireRequesterAuth(
       payment_account_did: isNonEmptyString(data.payment_account_did) ? data.payment_account_did.trim() : undefined,
       spend_cap: typeof data.spend_cap === 'number' && Number.isFinite(data.spend_cap) ? data.spend_cap : undefined,
       mission_id: isNonEmptyString(data.mission_id) ? data.mission_id.trim() : undefined,
+      delegation_id: delegation_id ?? undefined,
+      delegator_did: delegator_did ?? undefined,
+      delegate_did: delegate_did ?? undefined,
+      delegation_policy_hash_b64u: delegation_policy_hash_b64u ?? undefined,
+      delegation_spend_cap_minor: delegation_spend_cap_minor ?? undefined,
+      delegation_expires_at: delegation_expires_at ?? undefined,
     });
 
     if (controlClaims.token_scope_hash_b64u !== expectedScopeHash) {
@@ -1912,16 +2073,36 @@ async function requireRequesterAuth(
         };
       }
 
-      if (controlClaims.payment_account_did !== requester_did) {
+      const expectedPaymentDid = delegation_id ? delegator_did : requester_did;
+      if (!expectedPaymentDid) {
         return {
           error: errorResponse(
             'REQUESTER_CONTROL_BINDING_MISMATCH',
-            'Requester payment_account_did must match requester token subject for sensitive transitions',
+            'Requester token effective payment binding is invalid',
+            403,
+            { claim: 'payment_account_did' },
+            version
+          ),
+        };
+      }
+
+      if (controlClaims.payment_account_did !== expectedPaymentDid) {
+        return {
+          error: errorResponse(
+            'REQUESTER_CONTROL_BINDING_MISMATCH',
+            delegation_id
+              ? 'Requester payment_account_did must match delegator_did for delegated sensitive transitions'
+              : 'Requester payment_account_did must match requester token subject for sensitive transitions',
             403,
             {
               claim: 'payment_account_did',
               payment_account_did: controlClaims.payment_account_did,
+              expected_payment_account_did: expectedPaymentDid,
               requester_did,
+              delegation_id,
+              delegator_did,
+              delegate_did,
+              requester_sub: requesterTokenSub,
             },
             version
           ),
@@ -1939,6 +2120,9 @@ async function requireRequesterAuth(
         token_scope_hash_b64u: controlClaims.token_scope_hash_b64u,
         token_lane: controlClaims.token_lane,
         payment_account_did: controlClaims.payment_account_did,
+        delegation_id,
+        delegator_did,
+        delegate_did,
         iat: controlClaims.iat,
         exp: controlClaims.exp,
         bearer_token: bearerToken,
@@ -1999,6 +2183,9 @@ async function requireRequesterAuth(
       token_scope_hash_b64u: null,
       token_lane: null,
       payment_account_did: null,
+      delegation_id: null,
+      delegator_did: null,
+      delegate_did: null,
       iat: null,
       exp: null,
       bearer_token: null,
@@ -2121,9 +2308,25 @@ function resolveScopeBaseUrl(env: Env): string {
   return 'https://clawscope.com';
 }
 
+function resolveClawrepBaseUrl(env: Env): string {
+  const v = env.CLAWREP_BASE_URL?.trim();
+  if (v && v.length > 0) return v;
+  return 'https://clawrep.com';
+}
+
 function resolveTestHarnessBaseUrl(env: Env): string | null {
   const v = env.TEST_HARNESS_BASE_URL?.trim();
   if (v && v.length > 0) return v;
+  return null;
+}
+
+function resolveTrialsBaseUrl(env: Env): string | null {
+  const v = env.TRIALS_BASE_URL?.trim();
+  if (v && v.length > 0) return v;
+
+  const harness = resolveTestHarnessBaseUrl(env);
+  if (harness) return harness;
+
   return null;
 }
 
@@ -2192,6 +2395,12 @@ type TokenScopeHashInputV1 = {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 };
 
 function normalizeStringList(values: string[]): string[] {
@@ -2228,6 +2437,12 @@ async function computeTokenScopeHashB64uV1(input: {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 }): Promise<string> {
   const out: TokenScopeHashInputV1 = {
     token_version: '1',
@@ -2273,6 +2488,39 @@ async function computeTokenScopeHashB64uV1(input: {
 
   if (typeof input.mission_id === 'string' && input.mission_id.trim().length > 0) {
     out.mission_id = input.mission_id.trim();
+  }
+
+  if (typeof input.delegation_id === 'string' && input.delegation_id.trim().length > 0) {
+    out.delegation_id = input.delegation_id.trim();
+  }
+
+  if (typeof input.delegator_did === 'string' && input.delegator_did.trim().length > 0) {
+    out.delegator_did = input.delegator_did.trim();
+  }
+
+  if (typeof input.delegate_did === 'string' && input.delegate_did.trim().length > 0) {
+    out.delegate_did = input.delegate_did.trim();
+  }
+
+  if (
+    typeof input.delegation_policy_hash_b64u === 'string' &&
+    input.delegation_policy_hash_b64u.trim().length > 0
+  ) {
+    out.delegation_policy_hash_b64u = input.delegation_policy_hash_b64u.trim();
+  }
+
+  if (
+    typeof input.delegation_spend_cap_minor === 'string' &&
+    input.delegation_spend_cap_minor.trim().length > 0
+  ) {
+    out.delegation_spend_cap_minor = input.delegation_spend_cap_minor.trim();
+  }
+
+  if (
+    typeof input.delegation_expires_at === 'number' &&
+    Number.isFinite(input.delegation_expires_at)
+  ) {
+    out.delegation_expires_at = Math.floor(input.delegation_expires_at);
   }
 
   return sha256B64uUtf8(jcsCanonicalize(out));
@@ -2974,6 +3222,137 @@ async function escrowGetDisputed(env: Env, escrow_id: string): Promise<EscrowDis
   };
 }
 
+async function trialsCreateCase(
+  env: Env,
+  params: {
+    idempotency_key: string;
+    source_system: string;
+    source_ref: string;
+    submission_id: string;
+    escrow_id: string;
+    requester_did: string;
+    worker_did: string;
+    opened_by: string;
+    reason?: string | null;
+    evidence: {
+      proof_bundle_hash_b64u: string;
+      receipt_refs: string[];
+      artifact_refs: string[];
+    };
+  }
+): Promise<TrialCaseSummary> {
+  const baseUrl = resolveTrialsBaseUrl(env);
+  if (!baseUrl) {
+    throw new Error('TRIALS_BASE_URL_NOT_CONFIGURED');
+  }
+
+  const serviceKey = env.TRIALS_SERVICE_KEY?.trim();
+  if (!serviceKey) {
+    throw new Error('TRIALS_SERVICE_KEY_NOT_CONFIGURED');
+  }
+
+  const response = await fetch(`${baseUrl}/v1/trials/cases`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${serviceKey}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      idempotency_key: params.idempotency_key,
+      source_system: params.source_system,
+      source_ref: params.source_ref,
+      submission_id: params.submission_id,
+      escrow_id: params.escrow_id,
+      requester_did: params.requester_did,
+      worker_did: params.worker_did,
+      opened_by: params.opened_by,
+      reason: params.reason,
+      evidence: params.evidence,
+    }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`TRIALS_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.case) || !isRecord(json.case.judge) || !isRecord(json.case.timestamps)) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  const caseId = json.case.case_id;
+  const status = json.case.status;
+  const judgeDid = json.case.judge.judge_did;
+  const openedAt = json.case.timestamps.opened_at;
+
+  if (!isNonEmptyString(caseId) || !caseId.trim().startsWith('trc_')) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  if (status !== 'open' && status !== 'appealed' && status !== 'decided') {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  if (!isNonEmptyString(judgeDid) || !judgeDid.trim().startsWith('did:')) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  if (!isNonEmptyString(openedAt)) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  return {
+    case_id: caseId.trim(),
+    status,
+    judge_did: judgeDid.trim(),
+    opened_at: openedAt.trim(),
+  };
+}
+
+function buildSubmissionTrialEvidence(submission: SubmissionRecord): {
+  proof_bundle_hash_b64u: string;
+  receipt_refs: string[];
+  artifact_refs: string[];
+} {
+  const proofHash = submission.proof_bundle_hash_b64u?.trim() ?? '';
+  if (!proofHash) {
+    throw new Error('TRIALS_EVIDENCE_MISSING_PROOF_BUNDLE_HASH');
+  }
+
+  const receiptRefs = new Set<string>();
+  receiptRefs.add(`proof_bundle:${proofHash}`);
+  if (submission.commit_proof_hash_b64u && submission.commit_proof_hash_b64u.trim().length > 0) {
+    receiptRefs.add(`commit_proof:${submission.commit_proof_hash_b64u.trim()}`);
+  }
+
+  const artifactRefs = new Set<string>();
+  if (Array.isArray(submission.artifacts)) {
+    for (const artifact of submission.artifacts) {
+      if (!isRecord(artifact)) continue;
+      const uri = artifact.uri;
+      if (isNonEmptyString(uri)) {
+        artifactRefs.add(uri.trim());
+      }
+    }
+  }
+
+  artifactRefs.add(`clawbounties:submission:${submission.submission_id}`);
+
+  return {
+    proof_bundle_hash_b64u: proofHash,
+    receipt_refs: Array.from(receiptRefs),
+    artifact_refs: Array.from(artifactRefs),
+  };
+}
+
 function buildTestHarnessFailureResponse(
   request: TestHarnessRunRequest,
   message: string
@@ -3531,6 +3910,99 @@ function parseNonNegativeMinor(input: unknown): bigint | null {
   }
 }
 
+type ClawrepLoopEnvelope = {
+  schema_version: '1';
+  source_event_id: string;
+  source_service: 'clawbounties';
+  kind: 'closure' | 'penalty' | 'recovery';
+  did: string;
+  occurred_at: string;
+  closure?: {
+    value_usd: number;
+    closure_type: 'auto_approve' | 'quorum_approve' | 'manual_approve' | 'dispute_resolved';
+    proof_tier: 'unknown' | 'self' | 'gateway' | 'sandbox' | 'tee' | 'witnessed_web';
+    owner_verified?: boolean;
+    owner_attestation_ref?: string;
+  };
+  penalty?: {
+    penalty_type:
+      | 'dispute_upheld_against_reviewer'
+      | 'dispute_upheld_against_worker'
+      | 'fraud_confirmed'
+      | 'spam_review'
+      | 'policy_violation';
+    severity?: number;
+    reason?: string;
+  };
+  recovery?: {
+    recovery_type: 'appeal_upheld_for_reviewer' | 'appeal_upheld_for_worker';
+    severity?: number;
+    reason?: string;
+  };
+  metadata?: Record<string, unknown>;
+};
+
+function minorToUsd(minor: string): number {
+  const parsed = parseNonNegativeMinor(minor);
+  if (parsed === null) return 0;
+  const integer = Number(parsed / 100n);
+  const cents = Number(parsed % 100n);
+  return integer + cents / 100;
+}
+
+function toRepProofTier(value: string | null | undefined): 'unknown' | 'self' | 'gateway' | 'sandbox' | 'tee' | 'witnessed_web' {
+  if (value === 'self' || value === 'gateway' || value === 'sandbox') {
+    return value;
+  }
+  if (value === 'tee') return 'tee';
+  if (value === 'witnessed_web') return 'witnessed_web';
+  return 'unknown';
+}
+
+async function emitClawrepLoopEvent(env: Env, envelope: ClawrepLoopEnvelope): Promise<void> {
+  try {
+    if (env.REP_EVENTS) {
+      await env.REP_EVENTS.send(envelope, { contentType: 'json' });
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawbounties] clawrep queue send failed source_event_id=${envelope.source_event_id}: ${message}`);
+  }
+
+  if (!env.CLAWREP_INGEST_KEY || env.CLAWREP_INGEST_KEY.trim().length === 0) {
+    return;
+  }
+
+  const url = `${resolveClawrepBaseUrl(env)}/v1/events/ingest-loop`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${env.CLAWREP_INGEST_KEY}`,
+      },
+      body: JSON.stringify(envelope),
+      signal: controller.signal,
+    });
+
+    if (!response.ok && response.status !== 409) {
+      const text = await response.text();
+      console.error(
+        `[clawbounties] clawrep ingest-loop failed status=${response.status} source_event_id=${envelope.source_event_id} body=${text.slice(0, 240)}`
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawbounties] clawrep ingest-loop error source_event_id=${envelope.source_event_id}: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function sumFeesMinor(items: FeeItem[]): bigint {
   let total = 0n;
   for (const item of items) {
@@ -4002,6 +4474,8 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const rejected_submission_id = d1String(row.rejected_submission_id);
   const reject_idempotency_key = d1String(row.reject_idempotency_key);
   const rejected_at = d1String(row.rejected_at);
+  const trial_case_id = d1String(row.trial_case_id);
+  const trial_opened_at = d1String(row.trial_opened_at);
 
   const is_code_bounty_num = d1Number(row.is_code_bounty);
   const tags_json = d1String(row.tags_json);
@@ -4132,6 +4606,8 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     rejected_submission_id: rejected_submission_id ? rejected_submission_id.trim() : null,
     reject_idempotency_key: reject_idempotency_key ? reject_idempotency_key.trim() : null,
     rejected_at: rejected_at ? rejected_at.trim() : null,
+    trial_case_id: trial_case_id ? trial_case_id.trim() : null,
+    trial_opened_at: trial_opened_at ? trial_opened_at.trim() : null,
 
     is_code_bounty: Boolean(is_code_bounty_num),
     tags,
@@ -4720,6 +5196,8 @@ async function updateBountyRejected(
     idempotency_key: string;
     rejected_at: string;
     now: string;
+    trial_case_id?: string | null;
+    trial_opened_at?: string | null;
   }
 ): Promise<void> {
   const result = await db
@@ -4729,6 +5207,8 @@ async function updateBountyRejected(
              rejected_submission_id = COALESCE(rejected_submission_id, ?),
              reject_idempotency_key = COALESCE(reject_idempotency_key, ?),
              rejected_at = COALESCE(rejected_at, ?),
+             trial_case_id = COALESCE(trial_case_id, ?),
+             trial_opened_at = COALESCE(trial_opened_at, ?),
              updated_at = ?
        WHERE bounty_id = ?
          AND status = 'pending_review'`
@@ -4737,6 +5217,8 @@ async function updateBountyRejected(
       params.submission_id,
       params.idempotency_key,
       params.rejected_at,
+      params.trial_case_id ?? null,
+      params.trial_opened_at ?? null,
       params.now,
       params.bounty_id
     )
@@ -4744,6 +5226,31 @@ async function updateBountyRejected(
 
   if (!result || !result.success || !result.meta || result.meta.changes === 0) {
     throw new Error('BOUNTY_DECISION_UPDATE_FAILED');
+  }
+}
+
+async function updateBountyTrialCase(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    trial_case_id: string;
+    trial_opened_at: string;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+         SET trial_case_id = COALESCE(trial_case_id, ?),
+             trial_opened_at = COALESCE(trial_opened_at, ?),
+             updated_at = ?
+       WHERE bounty_id = ?`
+    )
+    .bind(params.trial_case_id, params.trial_opened_at, params.now, params.bounty_id)
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_TRIAL_CASE_UPDATE_FAILED');
   }
 }
 
@@ -5239,6 +5746,61 @@ async function updateSubmissionStatus(
   }
 }
 
+function parseBountyRiskEventRow(row: unknown): BountyRiskEventRecord | null {
+  if (!isRecord(row)) return null;
+
+  const risk_event_id = d1String(row.risk_event_id);
+  const idempotency_key = d1String(row.idempotency_key);
+  const source_loss_event_id = d1String(row.source_loss_event_id);
+  const source_service = d1String(row.source_service);
+  const source_event_id = d1String(row.source_event_id);
+  const bounty_id = d1String(row.bounty_id);
+  const account_did = d1String(row.account_did);
+  const amount_minor = d1String(row.amount_minor);
+  const currency = d1String(row.currency);
+  const reason_code = d1String(row.reason_code);
+  const severityRaw = d1String(row.severity);
+  const metadata_json = d1String(row.metadata_json);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (!risk_event_id || !idempotency_key || !source_loss_event_id || !source_service || !bounty_id || !amount_minor || !currency || !reason_code || !severityRaw || !created_at || !updated_at) {
+    return null;
+  }
+
+  if (currency !== 'USD') return null;
+  if (severityRaw !== 'low' && severityRaw !== 'medium' && severityRaw !== 'high' && severityRaw !== 'critical') {
+    return null;
+  }
+
+  return {
+    risk_event_id,
+    idempotency_key,
+    source_loss_event_id,
+    source_service,
+    source_event_id,
+    bounty_id,
+    account_did,
+    amount_minor,
+    currency: 'USD',
+    reason_code,
+    severity: severityRaw,
+    metadata_json,
+    created_at,
+    updated_at,
+  };
+}
+
+async function getBountyRiskEventByIdempotencyKey(db: D1Database, key: string): Promise<BountyRiskEventRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_risk_events WHERE idempotency_key = ?').bind(key).first();
+  return parseBountyRiskEventRow(row);
+}
+
+async function getBountyRiskEventById(db: D1Database, riskEventId: string): Promise<BountyRiskEventRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_risk_events WHERE risk_event_id = ?').bind(riskEventId).first();
+  return parseBountyRiskEventRow(row);
+}
+
 function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, unknown> {
   return {
     artifacts: submission.artifacts ?? [],
@@ -5247,6 +5809,8 @@ function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, un
     commit_sha: submission.commit_sha ?? null,
     repo_url: submission.repo_url ?? null,
     repo_claim_id: submission.repo_claim_id ?? null,
+    worker_did: submission.worker_did,
+    proof_tier: submission.proof_tier ?? null,
   };
 }
 
@@ -5456,6 +6020,28 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       }
     }
 
+    await emitClawrepLoopEvent(env, {
+      schema_version: '1',
+      source_event_id: `clawbounties:auto-approve:${bounty.bounty_id}:${submission.submission_id}:${approveKey}`,
+      source_service: 'clawbounties',
+      kind: 'closure',
+      did: submission.worker_did,
+      occurred_at: now,
+      closure: {
+        value_usd: minorToUsd(bounty.reward.amount_minor),
+        closure_type: 'auto_approve',
+        proof_tier: toRepProofTier(submission.proof_tier),
+        owner_verified: false,
+      },
+      metadata: {
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        test_harness_id,
+        test_result_id: testResultId,
+        closure_type: bounty.closure_type,
+      },
+    });
+
     return { applied: true };
   }
 
@@ -5494,6 +6080,32 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     };
   }
 
+  let trialCase: TrialCaseSummary;
+  try {
+    trialCase = await trialsCreateCase(env, {
+      idempotency_key: `trial:reject:${bounty.bounty_id}:${rejectKey}`,
+      source_system: 'clawbounties',
+      source_ref: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      escrow_id: bounty.escrow_id,
+      requester_did: bounty.requester_did,
+      worker_did: submission.worker_did,
+      opened_by: bounty.requester_did,
+      reason: 'Auto-rejected: test harness failed',
+      evidence: buildSubmissionTrialEvidence(submission),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
+      applied: false,
+      failure: {
+        code: 'AUTO_REJECTION_TRIALS_FAILED',
+        message,
+        status: 502,
+      },
+    };
+  }
+
   try {
     await updateBountyRejected(env.BOUNTIES_DB, {
       bounty_id: bounty.bounty_id,
@@ -5501,6 +6113,8 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       idempotency_key: rejectKey,
       rejected_at: now,
       now,
+      trial_case_id: trialCase.case_id,
+      trial_opened_at: trialCase.opened_at,
     });
   } catch (err) {
     try {
@@ -5563,6 +6177,27 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       };
     }
   }
+
+  await emitClawrepLoopEvent(env, {
+    schema_version: '1',
+    source_event_id: `clawbounties:auto-reject:${bounty.bounty_id}:${submission.submission_id}:${rejectKey}`,
+    source_service: 'clawbounties',
+    kind: 'penalty',
+    did: submission.worker_did,
+    occurred_at: now,
+    penalty: {
+      penalty_type: 'dispute_upheld_against_worker',
+      severity: 2,
+      reason: 'Auto-rejected: test harness failed',
+    },
+    metadata: {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      test_harness_id,
+      test_result_id: testResultId,
+      closure_type: bounty.closure_type,
+    },
+  });
 
   return { applied: true };
 }
@@ -6052,7 +6687,7 @@ function docsPage(origin: string): string {
       <ul>
         <li><code>POST /v1/bounties</code> — post a bounty (schema v2; calls clawcuts + clawescrow)</li>
         <li><code>POST /v1/bounties/{bounty_id}/approve</code> — approve requester-closure bounty (release escrow)</li>
-        <li><code>POST /v1/bounties/{bounty_id}/reject</code> — reject requester-closure bounty (dispute escrow)</li>
+        <li><code>POST /v1/bounties/{bounty_id}/reject</code> — reject requester-closure bounty (freeze escrow + open clawtrials case)</li>
         <li><code>GET /v1/bounties/{bounty_id}/submissions</code> — list bounty submissions (requester read scope or admin)</li>
         <li><code>GET /v1/submissions/{submission_id}</code> — submission detail (requester read scope, owning worker, or admin)</li>
       </ul>
@@ -8281,6 +8916,29 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
       decided_at: bounty.approved_at ?? bounty.updated_at,
     };
 
+    const sourceId = `clawbounties:approve:${bounty.bounty_id}:${resolvedSubmissionId}:${
+      bounty.approve_idempotency_key ?? idempotency_key
+    }`;
+    await emitClawrepLoopEvent(env, {
+      schema_version: '1',
+      source_event_id: sourceId,
+      source_service: 'clawbounties',
+      kind: 'closure',
+      did: bounty.worker_did,
+      occurred_at: response.decided_at,
+      closure: {
+        value_usd: minorToUsd(bounty.reward.amount_minor),
+        closure_type: 'manual_approve',
+        proof_tier: 'unknown',
+        owner_verified: false,
+      },
+      metadata: {
+        bounty_id: bounty.bounty_id,
+        submission_id: resolvedSubmissionId,
+        closure_path: 'requester_already_approved',
+      },
+    });
+
     return jsonResponse(response, 200, version);
   }
 
@@ -8420,6 +9078,27 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
     decided_at: decidedAt,
   };
 
+  await emitClawrepLoopEvent(env, {
+    schema_version: '1',
+    source_event_id: `clawbounties:approve:${bounty.bounty_id}:${submission.submission_id}:${idempotency_key}`,
+    source_service: 'clawbounties',
+    kind: 'closure',
+    did: submission.worker_did,
+    occurred_at: decidedAt,
+    closure: {
+      value_usd: minorToUsd(bounty.reward.amount_minor),
+      closure_type: 'manual_approve',
+      proof_tier: toRepProofTier(submission.proof_tier),
+      owner_verified: false,
+    },
+    metadata: {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      closure_type: bounty.closure_type,
+      requester_did: requesterAuth.requester_did,
+    },
+  });
+
   return jsonResponse(response, 200, version);
 }
 
@@ -8552,6 +9231,57 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     const now = new Date().toISOString();
     const resolvedSubmissionId = bounty.rejected_submission_id ?? submission_id;
 
+    let resolvedSubmission: SubmissionRecord | null;
+    try {
+      resolvedSubmission = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    if (!resolvedSubmission) {
+      return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id: resolvedSubmissionId }, version);
+    }
+
+    if (resolvedSubmission.bounty_id !== bounty.bounty_id) {
+      return errorResponse('INVALID_REQUEST', 'submission_id does not belong to bounty', 400, undefined, version);
+    }
+
+    if (resolvedSubmission.worker_did !== bounty.worker_did) {
+      return errorResponse('INVALID_REQUEST', 'submission worker does not match bounty worker', 400, undefined, version);
+    }
+
+    let trialCase: TrialCaseSummary;
+    try {
+      trialCase = await trialsCreateCase(env, {
+        idempotency_key: `trial:reject:${bounty.bounty_id}:${idempotency_key}`,
+        source_system: 'clawbounties',
+        source_ref: bounty.bounty_id,
+        submission_id: resolvedSubmission.submission_id,
+        escrow_id: bounty.escrow_id,
+        requester_did: requesterAuth.requester_did,
+        worker_did: bounty.worker_did,
+        opened_by: requesterAuth.requester_did,
+        reason,
+        evidence: buildSubmissionTrialEvidence(resolvedSubmission),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('TRIALS_FAILED', message, 502, undefined, version);
+    }
+
+    try {
+      await updateBountyTrialCase(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        trial_case_id: trialCase.case_id,
+        trial_opened_at: trialCase.opened_at,
+        now,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+
     try {
       await updateSubmissionStatus(env.BOUNTIES_DB, resolvedSubmissionId, 'rejected', now, 'pending_review');
     } catch (err) {
@@ -8571,8 +9301,31 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       submission_id: resolvedSubmissionId,
       status: 'disputed',
       escrow: escrowResponse,
+      trial_case: trialCase,
       decided_at: bounty.rejected_at ?? bounty.updated_at,
     };
+
+    const sourceId = `clawbounties:reject:${bounty.bounty_id}:${resolvedSubmissionId}:${
+      bounty.reject_idempotency_key ?? idempotency_key
+    }`;
+    await emitClawrepLoopEvent(env, {
+      schema_version: '1',
+      source_event_id: sourceId,
+      source_service: 'clawbounties',
+      kind: 'penalty',
+      did: bounty.worker_did,
+      occurred_at: response.decided_at,
+      penalty: {
+        penalty_type: 'dispute_upheld_against_worker',
+        severity: 2,
+        reason: reason ?? 'Requester disputed submission',
+      },
+      metadata: {
+        bounty_id: bounty.bounty_id,
+        submission_id: resolvedSubmissionId,
+        dispute_path: 'requester_already_disputed',
+      },
+    });
 
     return jsonResponse(response, 200, version);
   }
@@ -8629,6 +9382,25 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
   }
 
+  let trialCase: TrialCaseSummary;
+  try {
+    trialCase = await trialsCreateCase(env, {
+      idempotency_key: `trial:reject:${bounty.bounty_id}:${idempotency_key}`,
+      source_system: 'clawbounties',
+      source_ref: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      escrow_id: bounty.escrow_id,
+      requester_did: requesterAuth.requester_did,
+      worker_did: bounty.worker_did,
+      opened_by: requesterAuth.requester_did,
+      reason,
+      evidence: buildSubmissionTrialEvidence(submission),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('TRIALS_FAILED', message, 502, undefined, version);
+  }
+
   let decidedAt = now;
 
   try {
@@ -8638,6 +9410,8 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       idempotency_key,
       rejected_at: now,
       now,
+      trial_case_id: trialCase.case_id,
+      trial_opened_at: trialCase.opened_at,
     });
   } catch (err) {
     try {
@@ -8692,8 +9466,29 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     submission_id: submission.submission_id,
     status: 'disputed',
     escrow: escrowResponse,
+    trial_case: trialCase,
     decided_at: decidedAt,
   };
+
+  await emitClawrepLoopEvent(env, {
+    schema_version: '1',
+    source_event_id: `clawbounties:reject:${bounty.bounty_id}:${submission.submission_id}:${idempotency_key}`,
+    source_service: 'clawbounties',
+    kind: 'penalty',
+    did: submission.worker_did,
+    occurred_at: decidedAt,
+    penalty: {
+      penalty_type: 'dispute_upheld_against_worker',
+      severity: 2,
+      reason: reason ?? 'Requester disputed submission',
+    },
+    metadata: {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      closure_type: bounty.closure_type,
+      requester_did: requesterAuth.requester_did,
+    },
+  });
 
   return jsonResponse(response, 200, version);
 }
@@ -9067,6 +9862,8 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     rejected_submission_id: null,
     reject_idempotency_key: null,
     rejected_at: null,
+    trial_case_id: null,
+    trial_opened_at: null,
 
     is_code_bounty,
     tags,
@@ -9181,6 +9978,191 @@ async function handleListBountiesForWorker(request: Request, url: URL, env: Env,
     100
   );
   return jsonResponse({ bounties }, 200, version);
+}
+
+async function handleRiskLossEvent(
+  request: Request,
+  env: Env,
+  version: string
+): Promise<Response> {
+  const authError = requireRiskService(request, env, version);
+  if (authError) return authError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  if (!isNonEmptyString(body.idempotency_key)) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, { field: 'idempotency_key' }, version);
+  }
+  if (!isNonEmptyString(body.source_loss_event_id)) {
+    return errorResponse('INVALID_REQUEST', 'source_loss_event_id is required', 400, { field: 'source_loss_event_id' }, version);
+  }
+  if (!isNonEmptyString(body.bounty_id) || !body.bounty_id.trim().startsWith('bty_')) {
+    return errorResponse('INVALID_REQUEST', 'bounty_id must be a bounty id', 400, { field: 'bounty_id' }, version);
+  }
+  if (!isNonEmptyString(body.amount_minor) || parsePositiveMinor(body.amount_minor) === null) {
+    return errorResponse('INVALID_REQUEST', 'amount_minor must be a positive integer string', 400, { field: 'amount_minor' }, version);
+  }
+  if (!isNonEmptyString(body.reason_code)) {
+    return errorResponse('INVALID_REQUEST', 'reason_code is required', 400, { field: 'reason_code' }, version);
+  }
+
+  const severityRaw = isNonEmptyString(body.severity) ? body.severity.trim() : 'high';
+  if (severityRaw !== 'low' && severityRaw !== 'medium' && severityRaw !== 'high' && severityRaw !== 'critical') {
+    return errorResponse('INVALID_REQUEST', 'severity must be low|medium|high|critical', 400, { field: 'severity' }, version);
+  }
+
+  if (body.currency !== undefined && (!isNonEmptyString(body.currency) || body.currency.trim().toUpperCase() !== 'USD')) {
+    return errorResponse('UNSUPPORTED_CURRENCY', 'currency must be USD', 400, { field: 'currency' }, version);
+  }
+
+  if (body.metadata !== undefined && body.metadata !== null && !isRecord(body.metadata)) {
+    return errorResponse('INVALID_REQUEST', 'metadata must be an object', 400, { field: 'metadata' }, version);
+  }
+
+  const idempotencyKey = body.idempotency_key.trim();
+  const sourceLossEventId = body.source_loss_event_id.trim();
+  const bountyId = body.bounty_id.trim();
+  const amountMinor = body.amount_minor.trim();
+  const reasonCode = body.reason_code.trim();
+  const metadata = isRecord(body.metadata) ? body.metadata : null;
+
+  const existing = await getBountyRiskEventByIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+  if (existing) {
+    if (
+      existing.source_loss_event_id !== sourceLossEventId ||
+      existing.bounty_id !== bountyId ||
+      existing.amount_minor !== amountMinor ||
+      existing.reason_code !== reasonCode ||
+      existing.severity !== severityRaw
+    ) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used with a different payload',
+        409,
+        { idempotency_key: idempotencyKey, risk_event_id: existing.risk_event_id },
+        version
+      );
+    }
+
+    const replayBounty = await getBountyById(env.BOUNTIES_DB, existing.bounty_id);
+    return jsonResponse(
+      {
+        ok: true,
+        replay: true,
+        risk_event: existing,
+        bounty: replayBounty
+          ? {
+              bounty_id: replayBounty.bounty_id,
+              status: replayBounty.status,
+              trial_case_id: replayBounty.trial_case_id,
+            }
+          : null,
+      },
+      200,
+      version
+    );
+  }
+
+  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, { bounty_id: bountyId }, version);
+  }
+
+  const now = new Date().toISOString();
+  const riskEventId = `brk_${crypto.randomUUID()}`;
+
+  try {
+    await env.BOUNTIES_DB
+      .prepare(
+        `INSERT INTO bounty_risk_events (
+          risk_event_id,
+          idempotency_key,
+          source_loss_event_id,
+          source_service,
+          source_event_id,
+          bounty_id,
+          account_did,
+          amount_minor,
+          currency,
+          reason_code,
+          severity,
+          metadata_json,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'USD', ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        riskEventId,
+        idempotencyKey,
+        sourceLossEventId,
+        isNonEmptyString(body.source_service) ? body.source_service.trim() : 'clawsettle',
+        isNonEmptyString(body.source_event_id) ? body.source_event_id.trim() : null,
+        bountyId,
+        isNonEmptyString(body.account_did) ? body.account_did.trim() : null,
+        amountMinor,
+        reasonCode,
+        severityRaw,
+        metadata ? JSON.stringify(metadata) : null,
+        now,
+        now
+      )
+      .run();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    if (message.includes('UNIQUE constraint failed')) {
+      const raced = await getBountyRiskEventByIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+      if (raced) {
+        return jsonResponse({ ok: true, replay: true, risk_event: raced }, 200, version);
+      }
+      return errorResponse('CONFLICT', 'Risk event already exists', 409, undefined, version);
+    }
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  if (bounty.status !== 'disputed' && bounty.status !== 'cancelled') {
+    try {
+      await updateBountyStatus(env.BOUNTIES_DB, bounty.bounty_id, 'disputed', now);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+  }
+
+  if (metadata && isNonEmptyString(metadata.trial_case_id) && isNonEmptyString(metadata.trial_opened_at)) {
+    try {
+      await updateBountyTrialCase(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        trial_case_id: metadata.trial_case_id.trim(),
+        trial_opened_at: metadata.trial_opened_at.trim(),
+        now,
+      });
+    } catch {
+      // best-effort only
+    }
+  }
+
+  const saved = await getBountyRiskEventById(env.BOUNTIES_DB, riskEventId);
+  const refreshedBounty = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
+
+  return jsonResponse(
+    {
+      ok: true,
+      replay: false,
+      risk_event: saved,
+      bounty: refreshedBounty
+        ? {
+            bounty_id: refreshedBounty.bounty_id,
+            status: refreshedBounty.status,
+            trial_case_id: refreshedBounty.trial_case_id,
+          }
+        : null,
+    },
+    201,
+    version
+  );
 }
 
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
@@ -9483,6 +10465,10 @@ export default {
 
     // API
     if (path.startsWith('/v1/')) {
+      if (path === '/v1/risk/loss-events' && method === 'POST') {
+        return handleRiskLossEvent(request, env, version);
+      }
+
       // Worker API (public)
       if (path === '/v1/workers/register' && method === 'POST') {
         return handleRegisterWorker(request, env, version);

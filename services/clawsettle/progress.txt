@@ -381,3 +381,56 @@ Started: 2026-02-12
 - Release status
   - MPY-US-011 shipped to staging + production.
 ---
+
+## 2026-02-12 - CIN-OPS-001 dependency extension
+- Added admin payout listing endpoint `GET /v1/payouts` for clawincome integration:
+  - required query: `from`, `to`
+  - optional: `account_did`, `status`, `cursor`, `limit`
+  - deterministic cursor pagination by `(created_at, payout_id)`
+- Updated landing/docs endpoint list to include list API.
+- Deploys:
+  - `clawsettle-staging`: `6dcd7a27-ef74-43c1-a36f-872f172b69d0`
+  - `clawsettle` (prod): `b0170168-a6a4-4843-bbe5-282e9be7ec9c`
+- Secret rotation follow-up (staging+prod):
+  - `SETTLE_ADMIN_KEY` rotated and aligned with clawincome integration.
+
+## 2026-02-12 - MPY-US-012 (ECON-RISK-MAX-001) implementation in progress
+- Added adverse loss-event normalization surface in clawsettle:
+  - `POST /v1/loss-events` (idempotent, deterministic request hash)
+  - `GET /v1/loss-events`
+  - `GET /v1/loss-events/:id`
+  - `GET /v1/loss-events/outbox`
+  - `POST /v1/loss-events/ops/retry`
+- Added durable outbox schema + processing logic:
+  - migration `migrations/0005_create_loss_event_loop.sql`
+  - tables: `loss_events`, `loss_event_outbox`
+  - deterministic per-target idempotency fanout keys `loss-event:<id>:<target>`
+- Added queue + cron retry path:
+  - wrangler queue binding `LOSS_EVENTS` (+ staging variant)
+  - queue consumer handler in worker
+  - scheduled retry integrated with existing stripe forwarding retry loop
+- Added new smoke/watch scripts:
+  - `scripts/poh/smoke-econ-risk-loss-loop.mjs`
+  - `scripts/poh/watch-econ-risk-loss-events.mjs`
+- Validation (local):
+  - `pnpm --dir services/clawsettle typecheck` ✅
+  - `pnpm --dir services/clawsettle test` ✅
+- Status:
+  - MPY-US-012 remains `passes:false` until staging+prod migration/deploy + smoke/watch artifacts are captured.
+
+## 2026-02-12 - MPY-US-012 rollout complete (staging + prod)
+- Applied migration `migrations/0005_create_loss_event_loop.sql` remotely in staging+prod.
+- Created Cloudflare queues for loss-event fanout + DLQ:
+  - `clawsettle-loss-events`, `clawsettle-loss-events-dlq`
+  - `clawsettle-loss-events-staging`, `clawsettle-loss-events-dlq-staging`
+- Deployed clawsettle versions:
+  - staging `5fcd9a2b-1ea8-4746-906a-a6019c49d698`
+  - prod `2199a3d0-c889-4fb9-bbf2-d4a880d763df`
+- ECON risk-loop smoke evidence (fully forwarded all 5 targets):
+  - `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+- Watch evidence (`event_failed_count=0`, `outbox_failed_count=0`):
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`
+- Consolidated rollout summary:
+  - `artifacts/ops/econ-risk/2026-02-12T05-02-40Z-econ-risk-max-rollout/deploy-summary.json`

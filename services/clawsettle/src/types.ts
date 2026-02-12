@@ -49,6 +49,45 @@ export interface Env {
 
   /** Default max payout candidate count per netting run. */
   NETTING_RUN_DEFAULT_LIMIT?: string;
+
+  /** Optional read-only token for loss-event observability GET endpoints. */
+  SETTLE_LOSS_READ_TOKEN?: string;
+
+  /** Retry batch size for loss-event forwarding loops (default: 25). */
+  LOSS_FORWARD_RETRY_BATCH_LIMIT?: string;
+
+  /** If true, force inline forwarding attempts after loss-event creation. */
+  LOSS_EVENTS_FORCE_INLINE?: string;
+
+  /** Optional dedicated ledger token for risk hold calls (falls back to LEDGER_ADMIN_KEY). */
+  LEDGER_RISK_KEY?: string;
+
+  /** Escrow base URL for risk-hold fanout. */
+  ESCROW_BASE_URL?: string;
+
+  /** Escrow service key for risk-hold fanout. */
+  ESCROW_RISK_KEY?: string;
+
+  /** Clawinsure base URL for auto-claim fanout. */
+  CLAWINSURE_BASE_URL?: string;
+
+  /** Clawinsure risk service key for auto-claim fanout. */
+  INSURE_RISK_KEY?: string;
+
+  /** Clawincome base URL for adjustment fanout. */
+  CLAWINCOME_BASE_URL?: string;
+
+  /** Clawincome risk service key for adjustment fanout. */
+  INCOME_RISK_KEY?: string;
+
+  /** Clawbounties base URL for bounty risk fanout. */
+  CLAWBOUNTIES_BASE_URL?: string;
+
+  /** Clawbounties risk service key for bounty risk fanout. */
+  BOUNTIES_RISK_KEY?: string;
+
+  /** Optional queue used for loss-event forwarding fanout. */
+  LOSS_EVENTS?: Queue<unknown>;
 }
 
 export interface ErrorResponse {

@@ -1,0 +1,22 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T01:49:49.816Z",
+  "deploy_version": "e41c2e88-9c81-4673-b99d-322e007e3aba",
+  "base_url": "https://clawrep-staging.generaite.workers.dev",
+  "smoke_files": {
+    "ingest_replay": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/ingest-replay-smoke.json",
+    "reviewer_selection": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/reviewer-selection-smoke.json",
+    "decay_penalty": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/decay-penalty-smoke.json",
+    "tier_calculation": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/tier-calculation-smoke.json"
+  },
+  "audit_snapshot": {
+    "events_count": 17,
+    "next_cursor": null
+  },
+  "pass": {
+    "ingest_replay": true,
+    "reviewer_selection": true,
+    "decay_penalty": true,
+    "tier_calculation": true
+  }
+}

@@ -61,3 +61,12 @@ Started: 2026-02-03
 - Migrations applied (remote):
   - `services/clawcuts/migrations/0001_init.sql` -> `clawcuts-staging`, `clawcuts`
   - `services/escrow/migrations/0002_add_referral_event_ids.sql` -> `clawescrow-staging`, `clawescrow`
+
+## 2026-02-12 - CIN-OPS-001 dependency extension
+- Added `GET /v1/fees/apply/events` (admin, cursor pagination) to support clawincome finance-reference verification.
+- Included endpoint in skill metadata/docs.
+- Deploys:
+  - `clawcuts-staging`: `7dd7c491-0730-45a8-9a54-5251625154a1`
+  - `clawcuts` (prod): `fa0e332f-a016-4211-a44f-ddbbd7ad2c6f`
+- Regression smoke re-check:
+  - staging/prod `scripts/poh/smoke-clawcuts-monetization.mjs` passed after deployment.

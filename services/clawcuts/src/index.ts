@@ -1441,6 +1441,129 @@ async function getFeeApplyEventByIdempotencyKey(env: Env, idempotencyKey: string
   return parseFeeApplyEventRow(row);
 }
 
+function base64urlEncodeString(value: string): string {
+  return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64urlDecodeString(value: string): string | null {
+  try {
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4 || 4)) % 4);
+    return atob(padded);
+  } catch {
+    return null;
+  }
+}
+
+function encodeApplyCursor(createdAt: string, applyId: string): string {
+  return base64urlEncodeString(`${createdAt}::${applyId}`);
+}
+
+function decodeApplyCursor(cursor: string | null): { created_at: string; apply_id: string } | null {
+  if (!cursor || cursor.trim().length === 0) return null;
+
+  const decoded = base64urlDecodeString(cursor.trim());
+  if (!decoded) return null;
+
+  const [createdAt, applyId] = decoded.split('::');
+  if (!createdAt || !applyId) return null;
+  if (!applyId.startsWith('cap_')) return null;
+
+  const createdAtDate = new Date(createdAt);
+  if (!Number.isFinite(createdAtDate.getTime())) return null;
+
+  return {
+    created_at: createdAtDate.toISOString(),
+    apply_id: applyId,
+  };
+}
+
+async function listFeeApplyEvents(
+  env: Env,
+  params: {
+    settlement_ref?: string;
+    month?: string;
+    cursor?: { created_at: string; apply_id: string };
+    limit: number;
+  }
+): Promise<{ events: FeeApplyEventRow[]; next_cursor?: string }> {
+  const where: string[] = [];
+  const binds: Array<string | number> = [];
+
+  if (params.settlement_ref) {
+    where.push('settlement_ref = ?');
+    binds.push(params.settlement_ref);
+  }
+
+  if (params.month) {
+    where.push('month = ?');
+    binds.push(params.month);
+  }
+
+  if (params.cursor) {
+    where.push('(created_at > ? OR (created_at = ? AND apply_id > ?))');
+    binds.push(params.cursor.created_at, params.cursor.created_at, params.cursor.apply_id);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const result = await env.CUTS_DB.prepare(
+    `SELECT
+      apply_id,
+      idempotency_key,
+      product,
+      settlement_ref,
+      month,
+      currency,
+      policy_id,
+      policy_version,
+      policy_hash_b64u,
+      principal_minor,
+      buyer_total_minor,
+      worker_net_minor,
+      total_fee_minor,
+      platform_fee_minor,
+      referral_fee_minor,
+      platform_retained_minor,
+      transfer_plan_json,
+      snapshot_json,
+      context_json,
+      ledger_fee_event_ids_json,
+      ledger_referral_event_ids_json,
+      created_at,
+      finalized_at
+     FROM fee_apply_events
+     ${whereSql}
+     ORDER BY created_at ASC, apply_id ASC
+     LIMIT ?`
+  )
+    .bind(...binds, params.limit + 1)
+    .all();
+
+  const rows = Array.isArray(result.results) ? result.results : [];
+  const parsed: FeeApplyEventRow[] = [];
+  for (const row of rows) {
+    const parsedRow = parseFeeApplyEventRow(row);
+    if (parsedRow) parsed.push(parsedRow);
+  }
+
+  const hasMore = parsed.length > params.limit;
+  const page = hasMore ? parsed.slice(0, params.limit) : parsed;
+
+  let nextCursor: string | undefined;
+  if (hasMore) {
+    const last = page[page.length - 1];
+    if (last) {
+      nextCursor = encodeApplyCursor(last.created_at, last.apply_id);
+    }
+  }
+
+  return {
+    events: page,
+    ...(nextCursor ? { next_cursor: nextCursor } : {}),
+  };
+}
+
 function parseJsonArrayString(value: string | null): string[] {
   if (!value) return [];
   try {
@@ -1485,6 +1608,7 @@ function renderSkillMarkdown(origin: string): string {
       { method: 'POST', path: '/v1/fees/simulate' },
       { method: 'POST', path: '/v1/fees/apply (auth)' },
       { method: 'POST', path: '/v1/fees/apply/finalize (auth)' },
+      { method: 'GET', path: '/v1/fees/apply/events (admin)' },
       { method: 'POST', path: '/v1/policies/versions (admin)' },
       { method: 'POST', path: '/v1/policies/activate (admin)' },
       { method: 'POST', path: '/v1/policies/deactivate (admin)' },
@@ -1494,7 +1618,7 @@ function renderSkillMarkdown(origin: string): string {
     ],
   };
 
-  return `---\nmetadata: '${JSON.stringify(metadata)}'\n---\n\n# clawcuts\n\nEndpoints:\n- GET /health\n- POST /v1/fees/simulate\n- POST /v1/fees/apply (auth)\n- POST /v1/fees/apply/finalize (auth)\n- POST /v1/policies/versions (admin)\n- POST /v1/policies/activate (admin)\n- POST /v1/policies/deactivate (admin)\n- GET /v1/policies/{product}/{policy_id}/active\n- GET /v1/policies/{product}/{policy_id}/history(.csv)\n- GET /v1/reports/revenue/monthly?month=YYYY-MM[&product=...][&format=csv] (admin)\n\nSimulation example:\n\n\`\`\`bash\ncurl -sS \\\n  -X POST "${origin}/v1/fees/simulate" \\\n  -H 'content-type: application/json' \\\n  -d '{"product":"clawbounties","policy_id":"bounties_v1","amount_minor":"5000","currency":"USD","params":{"is_code_bounty":true,"closure_type":"test"}}'\n\`\`\`\n`;
+  return `---\nmetadata: '${JSON.stringify(metadata)}'\n---\n\n# clawcuts\n\nEndpoints:\n- GET /health\n- POST /v1/fees/simulate\n- POST /v1/fees/apply (auth)\n- POST /v1/fees/apply/finalize (auth)\n- GET /v1/fees/apply/events (admin)\n- POST /v1/policies/versions (admin)\n- POST /v1/policies/activate (admin)\n- POST /v1/policies/deactivate (admin)\n- GET /v1/policies/{product}/{policy_id}/active\n- GET /v1/policies/{product}/{policy_id}/history(.csv)\n- GET /v1/reports/revenue/monthly?month=YYYY-MM[&product=...][&format=csv] (admin)\n\nSimulation example:\n\n\`\`\`bash\ncurl -sS \\\n  -X POST "${origin}/v1/fees/simulate" \\\n  -H 'content-type: application/json' \\\n  -d '{"product":"clawbounties","policy_id":"bounties_v1","amount_minor":"5000","currency":"USD","params":{"is_code_bounty":true,"closure_type":"test"}}'\n\`\`\`\n`;
 }
 
 async function handleCreatePolicyVersion(request: Request, env: Env, version: string): Promise<Response> {
@@ -2371,6 +2495,100 @@ async function handleFinalizeApply(request: Request, env: Env, version: string):
   );
 }
 
+async function handleListFeeApplyEvents(request: Request, env: Env, version: string): Promise<Response> {
+  const adminCheck = requireAdmin(request, env, version);
+  if (adminCheck) return adminCheck;
+
+  const url = new URL(request.url);
+  const settlementRef = isNonEmptyString(url.searchParams.get('settlement_ref'))
+    ? url.searchParams.get('settlement_ref')!.trim()
+    : undefined;
+
+  const month = parseMonthParam(url.searchParams.get('month')) ?? undefined;
+
+  if (!settlementRef && !month) {
+    return errorResponse('INVALID_REQUEST', 'settlement_ref or month is required', 400, undefined, version);
+  }
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 50;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, undefined, version);
+    }
+    limit = Math.min(parsed, 200);
+  }
+
+  const cursorRaw = isNonEmptyString(url.searchParams.get('cursor')) ? url.searchParams.get('cursor')!.trim() : null;
+  const cursor = decodeApplyCursor(cursorRaw);
+  if (cursorRaw && !cursor) {
+    return errorResponse('INVALID_CURSOR', 'cursor is invalid', 400, undefined, version);
+  }
+
+  const list = await listFeeApplyEvents(env, {
+    settlement_ref: settlementRef,
+    month,
+    cursor: cursor ?? undefined,
+    limit,
+  });
+
+  const events = await Promise.all(
+    list.events.map(async (row) => {
+      const snapshotHash = await sha256B64uUtf8(row.snapshot_json);
+
+      let transfers: unknown[] = [];
+      try {
+        const parsed = JSON.parse(row.transfer_plan_json);
+        if (Array.isArray(parsed)) transfers = parsed;
+      } catch {
+        transfers = [];
+      }
+
+      return {
+        apply_id: row.apply_id,
+        idempotency_key: row.idempotency_key,
+        product: row.product,
+        settlement_ref: row.settlement_ref,
+        month: row.month,
+        policy: {
+          id: row.policy_id,
+          version: row.policy_version.toString(),
+          hash_b64u: row.policy_hash_b64u,
+        },
+        fee_summary: {
+          principal_minor: row.principal_minor,
+          buyer_total_minor: row.buyer_total_minor,
+          worker_net_minor: row.worker_net_minor,
+          total_fee_minor: row.total_fee_minor,
+          platform_fee_minor: row.platform_fee_minor,
+          referral_payout_minor: row.referral_fee_minor,
+          platform_retained_minor: row.platform_retained_minor,
+        },
+        transfer_plan: {
+          transfers,
+        },
+        ledger_refs: {
+          fee_transfers: parseJsonArrayString(row.ledger_fee_event_ids_json),
+          referral_transfers: parseJsonArrayString(row.ledger_referral_event_ids_json),
+        },
+        finalized_at: row.finalized_at,
+        snapshot_hash_b64u: snapshotHash,
+        created_at: row.created_at,
+      };
+    })
+  );
+
+  return jsonResponse(
+    {
+      events,
+      next_cursor: list.next_cursor ?? null,
+    },
+    200,
+    version
+  );
+}
+
 async function handleMonthlyRevenueReport(request: Request, env: Env, version: string): Promise<Response> {
   const adminCheck = requireAdmin(request, env, version);
   if (adminCheck) return adminCheck;
@@ -2626,6 +2844,10 @@ export default {
 
     if (method === 'POST' && path === '/v1/fees/apply/finalize') {
       return handleFinalizeApply(request, env, version);
+    }
+
+    if (method === 'GET' && path === '/v1/fees/apply/events') {
+      return handleListFeeApplyEvents(request, env, version);
     }
 
     if (method === 'POST' && path === '/v1/policies/versions') {

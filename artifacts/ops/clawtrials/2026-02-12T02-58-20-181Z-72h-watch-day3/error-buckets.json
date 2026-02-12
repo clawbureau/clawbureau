@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-02-12T02:58:26.479Z",
+  "staging": {
+    "ok": 12,
+    "unauthorized_expected": 0,
+    "contract_drift": 48,
+    "server_error": 0,
+    "network_error": 0
+  },
+  "prod": {
+    "ok": 12,
+    "unauthorized_expected": 0,
+    "contract_drift": 48,
+    "server_error": 0,
+    "network_error": 0
+  }
+}

@@ -267,8 +267,13 @@ nav .links a:hover{color:var(--text)}
 .form-status{font-size:.82rem;color:var(--text-secondary)}
 .form-note{margin-top:.85rem;font-size:.8rem;color:var(--text-secondary);max-width:none!important}
 .cf-turnstile{margin-top:1rem}
-.turnstile-preview{margin-top:1rem;padding:.7rem .8rem;border:1px dashed var(--border-light);
-  border-radius:.6rem;background:var(--surface);color:var(--text-secondary);font-size:.82rem}
+.form-security-note{margin-top:.7rem;font-size:.79rem;color:var(--text-secondary);line-height:1.45}
+.form-security-note-critical{color:var(--amber)}
+
+.trust-rail{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem}
+.trust-rail h3{font-size:.95rem;margin:.55rem 0 .55rem;color:var(--text)}
+.trust-rail ul{margin:0;padding-left:1rem;max-width:none}
+.trust-rail li{margin-bottom:.35rem;font-size:.84rem;color:var(--text-secondary)}
 
 .score-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin-top:1.25rem}
 .score-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem 1.15rem}

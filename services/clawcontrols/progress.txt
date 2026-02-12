@@ -32,3 +32,19 @@ Started: 2026-02-10T00:38:35Z
 - Quality checks
   - cd services/clawcontrols && npm run typecheck && npm test
 ---
+
+## 2026-02-12 - CCO-US-022 (canonical CST enforcement for WPC writes)
+- `POST /v1/wpc` now enforces canonical CST verification via:
+  - `POST /v1/verify/token-control` on clawverify
+- Legacy admin token path is only available when canonical requirement is explicitly disabled.
+- Canonical acceptance contract normalized for M6 conformance semantics (201 create is accepted).
+- Deploy versions:
+  - staging: `clawcontrols-staging` -> `48dc04b6-24ae-4cde-917d-48fd0781ef48`
+  - prod: `clawcontrols` -> `0c6685f9-b82c-41fe-9d40-8b375f6bdde7`
+- Evidence:
+  - conformance matrices:
+    - `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`
+    - `artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`
+- Quality checks:
+  - `cd services/clawcontrols && npm run typecheck && npm test`
+---

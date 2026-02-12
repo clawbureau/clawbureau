@@ -514,3 +514,32 @@ Started: 2026-02-02T03:08:26.936251
 - Secrets ops (names only)
   - production `LEDGER_ADMIN_KEY` updated.
 ---
+
+## 2026-02-12 - CLD-US-017 (ECON-RISK-MAX-001) implementation in progress
+- Added deterministic risk hold model + endpoints:
+  - migration `migrations/0008_create_risk_holds.sql`
+  - `POST /v1/risk/holds/apply` (A→H)
+  - `POST /v1/risk/holds/:id/release` (H→A)
+  - `GET /v1/risk/holds`
+- Added replay protections:
+  - unique idempotency key handling
+  - source loss-event uniqueness guard
+  - deterministic replay/conflict responses
+- Added dedicated auth lane for risk service calls:
+  - `LEDGER_RISK_KEY` accepted on risk routes
+  - preserves existing admin + settlement read-token behavior
+- Validation (local):
+  - `pnpm --dir services/ledger typecheck` ✅
+  - `pnpm --dir services/ledger test` ✅
+- Status:
+  - CLD-US-017 remains `passes:false` pending staging+prod migration/deploy/smoke evidence.
+
+## 2026-02-12 - CLD-US-017 rollout complete (staging + prod)
+- Applied migration `migrations/0008_create_risk_holds.sql` remotely in staging+prod.
+- Deployed ledger versions:
+  - staging `1b650c7e-8069-4667-b14b-d6b7f7357f1e`
+  - prod `41bb6d08-b8e2-46ed-9c3e-b5dd57aaeeb2`
+- Verified risk-hold route availability on staging+prod and end-to-end forwarding via clawsettle ECON smoke artifacts:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+- Rollout summary: `artifacts/ops/econ-risk/2026-02-12T05-02-40Z-econ-risk-max-rollout/deploy-summary.json`

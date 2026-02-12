@@ -1,0 +1,82 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T01:50:33.722Z",
+  "urls": {
+    "clawclaim": "https://staging.clawclaim.com",
+    "clawscope": "https://staging.clawscope.com",
+    "clawverify": "https://staging.clawverify.com",
+    "clawcontrols": "https://staging.clawcontrols.com",
+    "clawproxy": "https://staging.clawproxy.com"
+  },
+  "token_context": {
+    "owner_did": "did:key:z6MkpWqYdUVRyS8vBLu1opmL6fXsPCQs8ks3ypw4fm3AVGwY",
+    "controller_did": "did:key:z6Mkq2x4ZUFnagjUKnc9sBhibDQeB1CPVWwcWhbpDBZfcGQg",
+    "agent_did": "did:key:z6Mkpt4ztswrUb4rZNTWkHq4ZqnTTN8gRsEXgmXMMphZQNmA",
+    "token_hash": "55db61f3cc4555807a5ca563c1edc5812456908e86e55c6965b96b3891e22557",
+    "token_kid": "66a63dae7bbf4bda"
+  },
+  "cases": [
+    {
+      "name": "clawscope.revoke.legacy_rejected",
+      "status": 401,
+      "error": "LEGACY_AUTH_FORBIDDEN",
+      "message": "Admin token headers are not accepted in canonical auth mode; provide X-CST",
+      "pass": true
+    },
+    {
+      "name": "clawscope.audit.legacy_rejected",
+      "status": 401,
+      "error": "LEGACY_AUTH_FORBIDDEN",
+      "message": "Admin token headers are not accepted in canonical auth mode; provide X-CST",
+      "pass": true
+    },
+    {
+      "name": "clawscope.audit.canonical_accepted",
+      "status": 200,
+      "error": null,
+      "message": "{\n  \"events\": [\n    {\n      \"key\": \"events:issuance:8229138972:55db61f3cc4555807a5ca563c1edc5812456908e86e55c6965b96b3891e22557\",\n      \"record\": {\n        \"token_hash\": \"55db61f3cc4555807a5ca563c1edc5812456908e86e55c6965b96b3891e22557\",\n        \"issued_at\": 1770861027,\n        \"issued_at_iso\": \"2026-02-12T01:50:27.000Z\",\n        \"sub\": \"did:key:z6Mkpt4ztswrUb4rZNTWkHq4ZqnTTN8gRsEXgmXMMphZQNmA\",\n        \"aud\": [\n          \"clawcontrols.com\",\n          \"clawproxy.com\",\n          \"clawscope.com\",\n          \"staging.clawcontrols.com\",\n          \"staging.clawproxy.com\",\n          \"staging.clawscope.com\"\n        ],\n        \"scope\": [\n          \"control:audit:read\",\n          \"control:key:rotate\",\n          \"control:policy:update\",\n          \"control:token:issue_sensitive\",\n          \"control:token:revoke\",\n          \"proxy:call\"\n        ],\n        \"iat\": 1770861027,\n        \"exp\": 1770861927,\n        \"kid\": \"66a63dae7bbf4bda\",\n        \"policy_version\": \"1\",\n        \"policy_tier\": \"default\",\n        \"owner_did\": \"did:key:z6MkpWqYdUVRyS8vBLu1opmL6fXsPCQs8ks3ypw4fm3AVGwY\",\n        \"controller_did\": \"did:key:z6Mkq2x4ZUFnagjUKnc9sBhibDQeB1CPVWwcWhbpDBZfcGQg\",\n        \"agent_did\": \"did:key:z6Mkpt4ztswrUb4rZNTWkHq4ZqnTTN8gRsEXgmXMMphZQNmA\",\n        \"control_plane_policy_hash_b64u\": \"asVC1ahAEBUuDWnJBeRQMt9XNz8S9Bs4hT_QWZUw6a0\",\n        \"token_scope_hash_b64u\": \"af4MERf2evmK6wYQ9-VDXDaEzW3w6CGzuVENOf2iLBs\",\n        \"mission_id\": \"m6-conformance-1770861027246\",\n        \"token_lane\": \"canonical\",\n        \"jti\": \"2d701a24-059a-4a4b-93cf-01b4fd6be90e\"\n      }\n    }\n  ],\n  \"cursor\": \"AAAAANa_78kKOhS1M5ssLbjTmBlfl8Q-xDLfuUb8EP_Q8l2hK-D7wXlKCatZM0U49hsodGQKj8rGPDgLcy9tWlXykXnnR6xfCTXoC7PVdTOMmFtg6ZMFqdj4s-S2WyN_PYEej7fpNZeTrJhN5ywxG0enpF966KDc0wkxby-RLWny0gZJHP2zI8DOVVrNigmeBPav-DamwJ90Icae4X4wTruIPvNL6f1W3FkG7PJP7l1YgylGPb3nudwC1esM1kwLp3oy_KPiNLzj4cQAWQ9PLOaRNudkBlcdrR0u9XVOzCMSuERlI1mBF-shN0R0RHlZ0RqhUwgLO5ntbyt9gJc5AHoCnEiq7sghjnUnKFnd-KmDaQTFDuuHw9my-Mb-YaAPmib01iIDkxIEaOVeBdZXVW8aiL0F2tn_dEL0WHTo\",\n  \"list_complete\": false\n}",
+      "pass": true
+    },
+    {
+      "name": "clawcontrols.wpc.legacy_rejected",
+      "status": 401,
+      "error": "LEGACY_AUTH_FORBIDDEN",
+      "message": "Authorization header admin tokens are not accepted; provide canonical CST via X-CST",
+      "pass": true
+    },
+    {
+      "name": "clawcontrols.wpc.canonical_accepted",
+      "status": 201,
+      "error": null,
+      "message": "{\"ok\":true,\"existed\":false,\"policy_hash_b64u\":\"2tfoIxwA2TdKGP9-GuAUsQQV4uFurSA9hZVuf2IT5o8\",\"envelope\":{\"envelope_version\":\"1\",\"envelope_type\":\"work_policy_contract\",\"payload\":{\"policy_version\":\"1\",\"policy_id\":\"pol_canonical_1770861032717\",\"issuer_did\":\"did:key:z6MkpWqYdUVRyS8vBLu1opmL6fXsPCQs8ks3ypw4fm3AVGwY\",\"allowed_providers\":[\"openai\"],\"allowed_models\":[\"gpt-5.*\"],\"redaction_rules\":[{\"path\":\"$.messages[*].content\",\"action\":\"hash\"}],\"receipt_privacy_mode\":\"hash_only\",\"egress_allowlist\":[]},\"payload_hash_b64u\":\"2tfoIxwA2TdKGP9-GuAUsQQV4uFurSA9hZVuf2IT5o8\",\"hash_algorithm\":\"SHA-256\",\"signature_b64u\":\"pzP_dZYU50wmhYCj6o6EUx2u-Xz8wdIuwAVyeu_cuvRTWsOoik-e5-i8yVU-6qfvYZkrmvDOISXABLPi-netAA\",\"algorithm\":\"Ed25519\",\"signer_did\":\"did:key:z6Mkoy4MkeFsYo2VTuRRVZ6QoguECQgT1wRJkhfoAu2bHKZt\",\"issued_at\":\"2026-02-12T01:50:33.142Z\"}}",
+      "pass": true
+    },
+    {
+      "name": "clawproxy.proxy.legacy_rejected",
+      "status": 401,
+      "error": "TOKEN_REQUIRED",
+      "message": "Canonical CST token is required. Provide X-CST (or X-Scoped-Token).",
+      "pass": true
+    },
+    {
+      "name": "clawproxy.proxy.canonical_accepted",
+      "status": 401,
+      "error": "PLATFORM_PAID_REQUIRES_DID",
+      "message": "X-Client-DID is required for platform-paid requests",
+      "pass": true
+    },
+    {
+      "name": "clawscope.revoke.canonical_accepted",
+      "status": 200,
+      "error": null,
+      "message": "{\n  \"status\": \"revoked\",\n  \"token_hash\": \"55db61f3cc4555807a5ca563c1edc5812456908e86e55c6965b96b3891e22557\",\n  \"revoked_at\": 1770861033,\n  \"revoked_at_iso\": \"2026-02-12T01:50:33.000Z\",\n  \"event_key\": \"events:revocations:8229138966:55db61f3cc4555807a5ca563c1edc5812456908e86e55c6965b96b3891e22557\"\n}",
+      "revoke_status": "revoked",
+      "pass": true
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  }
+}

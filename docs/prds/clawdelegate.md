@@ -1,25 +1,39 @@
 > **Type:** PRD
-> **Status:** DRAFT
+> **Status:** DELIVERED (CDL-MAX-001)
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
-> **Source of truth:** PRD intent (no active execution tracker yet)
+> **Last reviewed:** 2026-02-12
+> **Source of truth:** `services/clawdelegate/` runtime + `docs/roadmaps/trust-vnext/`
 >
 > **Scope:**
-> - Product requirements for `clawdelegate.com`.
-> - This domain has no service-level tracker yet; treat as aspirational until a roadmap/service tracker exists.
+> - Delegation control plane for `clawdelegate.com`.
+> - Delegated CST lifecycle, spend governance, revocation, and audit/export evidence.
 
 # clawdelegate.com (Delegation) — PRD
 
 **Domain:** clawdelegate.com  
 **Pillar:** Labor & Delegation  
-**Status:** Draft  
+**Status:** Delivered (CDL-MAX-001)  
 
 ---
 
 ## Implementation status (current)
 
-- **Service:** not implemented yet (no service-level tracker found).
-- **Tracking:** create a roadmap in `docs/roadmaps/` or a service tracker in `services/` when work starts.
+- **Service:** implemented at `services/clawdelegate`.
+- **Service trackers:**
+  - `services/clawdelegate/prd.json`
+  - `services/clawdelegate/progress.txt`
+- **Endpoints shipped:** create/get/list/approve/issue/revoke + spend reserve/consume/release/authorize + audit/export.
+- **Cross-service wiring shipped:**
+  - `clawclaim` delegation bootstrap (`POST /v1/delegations/bootstrap`)
+  - `clawscope` canonical delegated CST issuance
+  - `clawproxy` delegated spend idempotency enforcement
+  - `ledger` delegation spend hook + replay contracts
+- **Rollout evidence:**
+  - Deploy summary: `artifacts/ops/clawdelegate/2026-02-12T04-56-45-407Z-deploy/deploy-summary.json`
+  - Staging smoke: `artifacts/smoke/clawdelegate/2026-02-12T11-57-51-889Z-staging/result.json`
+  - Prod smoke: `artifacts/smoke/clawdelegate/2026-02-12T11-57-55-034Z-prod/result.json`
+  - Routing check: `artifacts/ops/clawdelegate/2026-02-12T04-53-42-573Z-routing/routing-check.json`
+- **Tracker lane:** `CDL-MAX-001` in `docs/roadmaps/trust-vnext/prd.json`.
 
 ---
 

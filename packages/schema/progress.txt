@@ -130,3 +130,39 @@ Started: 2026-02-03
   - `packages/schema/identity/platform_claim.v1.json`
   - `packages/schema/identity/org_roster_claim_manifest.v1.json`
 - Establishes deterministic external identity claim and org/team roster manifest contracts used by clawclaim M5 endpoints.
+
+## CRP-OPS-001 — Reputation schemas (clawrep MVP)
+- Added deterministic reputation schemas:
+  - `packages/schema/reputation/reputation_event_ingest.v1.json`
+  - `packages/schema/reputation/reputation_profile.v1.json`
+  - `packages/schema/reputation/reviewer_selection_request.v1.json`
+  - `packages/schema/reputation/reviewer_selection_response.v1.json`
+- Updated `packages/schema/README.md` to include new `reputation/` directory and schema listing.
+
+## CRP-US-008-SCHEMA — Closed-loop reputation envelope + anti-collusion extensions (in progress)
+- Added closed-loop event schema:
+  - `packages/schema/reputation/reputation_event_loop_envelope.v1.json`
+- Extended reviewer selection contracts:
+  - request schema now supports optional `requester_did` + `worker_did`
+  - response schema now includes deterministic `selection_metadata`
+- Updated reputation schema listing in `packages/schema/README.md`.
+- Pending: finalize validation artifacts after TRUST-REP-002 smoke/deploy verification.
+
+## CRP-US-008-SCHEMA — completion
+- Finalized and validated closed-loop schema additions:
+  - `reputation_event_loop_envelope.v1.json`
+  - reviewer request/response additive anti-collusion fields
+- Consumed by clawrep TRUST-REP-002 runtime + smoke artifacts.
+
+## AEM-US-016 — Loss-event + insurance auto-claim schemas
+- Added deterministic payments schema contracts:
+  - `packages/schema/payments/loss_event.v1.json`
+  - `packages/schema/payments/loss_event_envelope.v1.json`
+- Added deterministic insurance schema contract:
+  - `packages/schema/insurance/insurance_auto_claim.v1.json`
+- Updated `packages/schema/README.md` to include the new `insurance/` directory and schema listings.
+- Completion evidence (ECON-RISK-MAX-001):
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+  - staging watch: `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - prod watch: `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`

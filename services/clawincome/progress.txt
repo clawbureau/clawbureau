@@ -1,0 +1,139 @@
+## Codebase Patterns
+- Cloudflare Worker service under `services/clawincome/`.
+- Deterministic minor-unit (`amount_minor`) math via BigInt only.
+- Report snapshots are append-only and hash-addressed (`report_type`,`did`,`period_key` unique).
+- Fail-closed dependency/auth behavior (no silent fallbacks).
+
+# Ralph Progress Log
+Started: 2026-02-12
+---
+## 2026-02-12 — CIN-OPS-001 shipped
+
+### Implemented (services/clawincome)
+- Created new service `services/clawincome` with:
+  - `src/index.ts`
+  - `migrations/0001_init.sql`
+  - `test/index.test.ts`
+  - `wrangler.toml`
+  - `package.json`, `tsconfig.json`, `prd.json`
+- Endpoints shipped:
+  - `GET /v1/statements/monthly`
+  - `GET /v1/statements/monthly.csv`
+  - `GET /v1/invoices`
+  - `GET /v1/tax-lots`
+  - `GET /v1/income`
+- Auth/privacy shipped:
+  - own-data-only for scoped tokens (`sub === requested did`)
+  - admin override via `INCOME_ADMIN_KEY`
+  - required scope gate (`INCOME_SCOPE_REQUIRED`, default `clawincome:read`)
+  - access audit trail persisted in `access_audit_events`
+- Report idempotency shipped:
+  - append-only `report_snapshots` with deterministic payload hash (`payload_hash_b64u`)
+  - stable replay for `(did, month/year, report_type)`
+
+### Dependency integration hardening shipped
+- `services/escrow/src/worker.ts`
+  - Added admin `GET /v1/escrows` list/filter API with cursor pagination (`released_at`,`escrow_id` cursor).
+- `services/clawcuts/src/index.ts`
+  - Added admin `GET /v1/fees/apply/events` list endpoint with cursor pagination and snapshot hash projection.
+- `services/clawsettle/src/payouts.ts`, `src/index.ts`
+  - Added admin `GET /v1/payouts` list-by-range endpoint with cursor pagination.
+
+### Infra + config
+- D1 created:
+  - `clawincome-staging` `e39ad887-f4ad-4211-89c9-9e149333da19`
+  - `clawincome` `eab80ccb-e5bb-4aa9-85e1-b5507b4ee901`
+- `services/clawincome/wrangler.toml` wired with `INCOME_DB` bindings (staging+prod).
+- Remote migrations applied:
+  - `services/clawincome/migrations/0001_init.sql` on staging+prod.
+
+### Secret alignment / rotations (fail-closed recovery)
+- Rotated and aligned `LEDGER_ADMIN_KEY` across:
+  - `clawledger` (staging+prod)
+  - `clawescrow` (staging+prod)
+  - `clawsettle` (staging+prod)
+  - `clawproxy` (staging+prod)
+  - `clawincome` (staging+prod)
+- Rotated and aligned `SETTLE_ADMIN_KEY` across:
+  - `clawsettle` (staging+prod)
+  - `clawincome` (staging+prod)
+- Rotated `SCOPE_ADMIN_KEY` for `clawscope` (staging+prod).
+- Extended `clawscope` scope policy prefixes to allow `clawincome:` issuance:
+  - `SCOPE_ALLOWED_SCOPE_PREFIXES` includes `clawincome:`.
+
+### Domain routing
+- `clawincome.com` moved off parked worker:
+  - removed `clawincome.com/*` and `www.clawincome.com/*` from `services/claw-domains/wrangler.toml`
+  - deployed `claw-domains` to release route ownership.
+
+### Deploys
+- `clawcuts-staging` `7dd7c491-0730-45a8-9a54-5251625154a1`
+- `clawcuts` `fa0e332f-a016-4211-a44f-ddbbd7ad2c6f`
+- `clawescrow-staging` `8f7e4c0a-7d8c-472b-b4fb-66deff3c1422`
+- `clawescrow` `008aeb79-d1ca-4474-bc3a-d589268130e4`
+- `clawsettle-staging` `6dcd7a27-ef74-43c1-a36f-872f172b69d0`
+- `clawsettle` `b0170168-a6a4-4843-bbe5-282e9be7ec9c`
+- `clawscope-staging` `a974681a-cb0d-4d02-99ed-69fcc73cda88`
+- `clawscope` `0be4c370-3473-4f61-b53f-c84895960918`
+- `clawincome-staging` `07b00b3f-ef74-40bf-9775-dfd37114eeed`
+- `clawincome` `7ef9bcdf-87b9-46eb-9936-9e3e235a2188`
+
+### Validation
+- `pnpm --dir services/clawincome typecheck`
+- `pnpm --dir services/clawincome test`
+- `pnpm --dir services/escrow typecheck`
+- `pnpm --dir services/clawcuts typecheck`
+- `pnpm --dir services/clawcuts test`
+- `pnpm --dir services/clawsettle typecheck`
+- `pnpm --dir services/clawsettle test`
+- `node --check scripts/poh/smoke-clawincome-mvp.mjs`
+
+### Smoke evidence
+- `artifacts/simulations/clawincome/2026-02-12T01-09-04-3NZ-staging/smoke.json`
+- `artifacts/simulations/clawincome/2026-02-12T01-09-18-3NZ-prod/smoke.json`
+- Staging smoke uses resolver override for domain propagation edge-case:
+  - `--clawincome-resolve-ip 104.21.52.203`
+
+### 24h post-merge watch pass (sanity)
+- Executed unauthenticated endpoint-sanity watch against staging+prod over 12 rounds per endpoint (72 requests per env):
+  - `node <inline watch script>` (saved outputs under `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/`)
+- Results:
+  - staging: 72/72 requests non-5xx (`server_error_rate_percent=0`)
+  - prod: 72/72 requests non-5xx (`server_error_rate_percent=0`)
+- Endpoint checks covered:
+  - `GET /health` expected 200
+  - `GET /v1/statements/monthly` expected auth denial without token (401/403)
+  - `GET /v1/statements/monthly.csv` expected auth denial without token (401/403)
+  - `GET /v1/invoices` expected auth denial without token (401/403)
+  - `GET /v1/tax-lots` expected auth denial without token (401/403)
+  - `GET /v1/income` expected auth denial without token (401/403)
+- Evidence:
+  - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/summary.json`
+  - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/staging.json`
+  - `artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity/prod.json`
+
+## 2026-02-12 - CIN-US-007 (ECON-RISK-MAX-001) implementation in progress
+- Added deterministic risk adjustment intake:
+  - migration `migrations/0002_risk_adjustments.sql`
+  - endpoint `POST /v1/risk/adjustments` (requires `INCOME_RISK_KEY`)
+- Endpoint guarantees:
+  - strict payload validation (USD-only, positive minor units, bounded severity enum)
+  - idempotency replay detection with deterministic conflict response
+  - persistent source metadata (`source_loss_event_id`, `source_service`, `reason_code`, `severity`)
+- Validation (local):
+  - `pnpm --dir services/clawincome typecheck` ✅
+  - `pnpm --dir services/clawincome test` ✅
+- Status:
+  - CIN-US-007 remains `passes:false` pending staging+prod migration/deploy + smoke evidence.
+
+## 2026-02-12 - CIN-US-007 rollout complete (staging + prod)
+- Applied migration `migrations/0002_risk_adjustments.sql` remotely in staging+prod.
+- Deployed clawincome versions:
+  - staging `7fbfe8f9-8d52-4ac8-9fb3-30909d279f73`
+  - prod `2b9ceb82-7fde-454d-b718-9422dac509cd`
+- Verified `POST /v1/risk/adjustments` deterministic intake via ECON risk-loop smoke:
+  - staging smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json`
+  - prod smoke: `artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json`
+- Watch evidence confirms zero failed adjustments fanout from clawsettle:
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-24-573Z-staging-loss-event-watch/summary.json`
+  - `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`

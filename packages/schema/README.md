@@ -7,9 +7,12 @@ Shared JSON schemas for Claw Bureau services.
 - `bounties/` — marketplace request/response schemas.
 - `escrow/` — escrow record schemas.
 - `identity/` — ownership/attestation schemas.
+- `delegation/` — delegation control-plane contract and audit schemas.
 - `policy/` — policy contracts (Work Policy Contracts / WPC).
 - `poh/` — proof-of-harness schemas.
-- `payments/` — machine-payment settlement schemas.
+- `payments/` — machine-payment settlement + loss-event schemas.
+- `insurance/` — insurance claim / auto-claim schemas.
+- `reputation/` — deterministic reputation/selection schemas.
 - `fixtures/` — non-schema fixtures/test vectors (used by verifiers/tests).
 
 ## Money conventions
@@ -36,6 +39,12 @@ Shared JSON schemas for Claw Bureau services.
 - `did_rotation.v1.json`
 - `identity_export_bundle.v1.json`
 
+### `delegation/`
+- `delegation_create_request.v1.json`
+- `delegation_contract.v1.json`
+- `delegation_spend_event.v1.json`
+- `delegation_audit_event.v1.json`
+
 ### `policy/`
 - `work_policy_contract.v1.json`
 - `work_policy_contract_envelope.v1.json`
@@ -45,6 +54,18 @@ Shared JSON schemas for Claw Bureau services.
 ### `payments/`
 - `machine_payment_settlement.v1.json`
 - `machine_payment_settlement_envelope.v1.json`
+- `loss_event.v1.json`
+- `loss_event_envelope.v1.json`
+
+### `insurance/`
+- `insurance_auto_claim.v1.json`
+
+### `reputation/`
+- `reputation_event_ingest.v1.json`
+- `reputation_event_loop_envelope.v1.json`
+- `reputation_profile.v1.json`
+- `reviewer_selection_request.v1.json`
+- `reviewer_selection_response.v1.json`
 
 ### `poh/`
 - `commit_proof.v1.json`

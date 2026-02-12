@@ -514,3 +514,20 @@ Started: 2026-02-02T03:08:26.937763
 - Release status
   - MPY-US-005 shipped to staging + production.
 ---
+
+## 2026-02-12 - CPX-US-017 (universal canonical CST enforcement validation)
+- Confirmed strict canonical CST posture remains fail-closed:
+  - `STRICT_AUTH_HEADERS=true`
+  - `PROXY_REQUIRE_CST=true`
+  - `PROXY_REQUIRE_CANONICAL_CST=true`
+- Staging issuer key contract aligned with active scope transparency kid to prevent signature mismatch in conformance runs.
+- Runtime/config deploy:
+  - staging: `clawproxy-staging` -> `e6d6aa64-983b-40ad-bf45-92db7b4ce975`
+  - production remained on current canonical-enforcement version: `21044cf8-d891-45f4-a1ef-ba5f05164603`
+- Evidence:
+  - staging/prod conformance matrices:
+    - `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`
+    - `artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`
+- Quality checks:
+  - `cd services/clawproxy && npm run typecheck && npm test`
+---

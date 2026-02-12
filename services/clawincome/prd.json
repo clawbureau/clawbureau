@@ -1,0 +1,106 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/economy/CIN-OPS-001-clawincome-mvp",
+  "description": "clawincome.com (Income & Tax) — MVP statements, invoices, tax-lots, and income API.",
+  "userStories": [
+    {
+      "id": "CIN-US-001",
+      "title": "Monthly statements",
+      "description": "As an agent, I want monthly earnings statements so I can report income.",
+      "acceptanceCriteria": [
+        "Generate monthly report",
+        "Include payouts + fees",
+        "Download JSON/CSV",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented in services/clawincome with report snapshots + hash evidence; staging/prod smoke verified."
+    },
+    {
+      "id": "CIN-US-002",
+      "title": "Invoice export",
+      "description": "As an enterprise, I want invoices so I can reconcile spend.",
+      "acceptanceCriteria": [
+        "Generate invoices per escrow",
+        "Include tax-ready fields",
+        "Export JSON",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "GET /v1/invoices shipped with clawcuts apply reference integrity checks and snapshot persistence."
+    },
+    {
+      "id": "CIN-US-003",
+      "title": "Tax lots",
+      "description": "As an accountant, I want tax-lot exports so I can file taxes.",
+      "acceptanceCriteria": [
+        "Filter by year",
+        "Include lot metadata",
+        "Deterministic minor-unit math",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "GET /v1/tax-lots shipped with deterministic BigInt minor-unit accounting and yearly filters."
+    },
+    {
+      "id": "CIN-US-004",
+      "title": "Income API",
+      "description": "As a platform, I want income data endpoints so I can integrate.",
+      "acceptanceCriteria": [
+        "GET /v1/income",
+        "Date filters",
+        "Cursor pagination",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "GET /v1/income shipped with cursor pagination and dependency consistency enforcement."
+    },
+    {
+      "id": "CIN-US-005",
+      "title": "Expense reports",
+      "description": "As an enterprise, I want expense exports so budgeting is easier.",
+      "acceptanceCriteria": [
+        "Aggregate spend",
+        "Tag by policy/escrow",
+        "Export via statement/invoice APIs",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Buyer spend and fee aggregation included in monthly statements/invoices/tax-lots outputs."
+    },
+    {
+      "id": "CIN-US-006",
+      "title": "Privacy controls",
+      "description": "As a user, I want privacy controls so my data is protected.",
+      "acceptanceCriteria": [
+        "Own-data-only access unless admin",
+        "Audit access logging",
+        "Fail-closed auth",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Scope-auth own-data enforcement + admin override + access_audit_events logging validated in staging/prod smoke."
+    },
+    {
+      "id": "CIN-US-007",
+      "title": "Risk adjustment intake",
+      "description": "As risk ops, I want deterministic loss-event adjustments recorded in clawincome so adverse events are reflected in income/tax reporting pipelines.",
+      "acceptanceCriteria": [
+        "Add risk_adjustments table with idempotency + source-loss-event uniqueness",
+        "Implement POST /v1/risk/adjustments protected by INCOME_RISK_KEY",
+        "Enforce deterministic payload validation (USD + minor-unit integer math)",
+        "Replay-safe idempotency conflicts return deterministic 409",
+        "Persist severity/reason/source metadata for downstream reporting"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0002 risk_adjustments and INCOME_RISK_KEY-protected POST /v1/risk/adjustments (deterministic payload validation + idempotency replay/conflict semantics). Verified in ECON risk-loop smokes and zero-failure watch summaries."
+    }
+  ]
+}

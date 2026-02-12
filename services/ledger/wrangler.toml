@@ -25,10 +25,15 @@ crons = ["0 2 * * *"]
 # ALERT_WEBHOOK_URL = "https://your-webhook-endpoint.com/alerts"
 # EVENT_WEBHOOK_URL = "https://your-webhook-endpoint.com/events"
 
-# Optional secret (set via wrangler secret put):
-# LEDGER_SETTLEMENT_VERIFY_TOKEN
-# - allows read-only auth for settlement verification paths:
+# Optional secrets (set via wrangler secret put):
+# - LEDGER_ADMIN_KEY (primary admin key)
+# - LEDGER_ADMIN_KEYS_JSON (optional JSON array of overlap admin keys)
+# - LEDGER_SETTLEMENT_VERIFY_TOKEN
+#   allows read-only auth for settlement verification paths:
 #   GET /v1/payments/settlements/*, GET /accounts/id/*
+# - LEDGER_RISK_KEY
+#   optional service key for risk-hold routes:
+#   POST /v1/risk/holds/apply, POST /v1/risk/holds/:id/release
 
 [env.staging]
 name = "clawledger-staging"

@@ -5,6 +5,7 @@ import {
   importEd25519Key,
   importEd25519PublicKey,
   sha256,
+  sha256B64u,
   signEd25519,
   verifyEd25519,
 } from './crypto';
@@ -16,6 +17,7 @@ import {
   processScopeObservabilityQueueBatch,
   runScopeObservabilityScheduled,
 } from './observability';
+import { hasRequiredScope, validateCanonicalControlContext } from '../../../packages/identity-auth/src/index';
 import { computeTokenScopeHashB64u } from './token-scope-hash';
 
 const SCOPE_DID = 'did:web:clawscope.com';
@@ -40,6 +42,9 @@ export interface Env {
   SCOPE_LEGACY_EXCHANGE_MODE?: string; // enabled|migration|disabled
   SCOPE_SENSITIVE_SCOPE_PREFIXES?: string;
   SCOPE_KEY_ROTATION_OVERLAP_SECONDS?: string;
+  SCOPE_PROTECTED_AUTH_MODE?: string; // canonical_cst|admin_token (default canonical_cst)
+  SCOPE_KEY_TRANSPARENCY_REFRESH_SECONDS?: string;
+  SCOPE_REVOCATION_SLO_TARGET_SECONDS?: string;
 
   // control-plane dependency (clawclaim)
   CLAIM_CONTROL_BASE_URL?: string;
@@ -87,6 +92,12 @@ export interface ScopedTokenClaims {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   jti?: string;
   nonce?: string;
@@ -107,6 +118,12 @@ export interface IssueTokenRequest {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   tier?: string;
 }
@@ -180,6 +197,12 @@ interface IssuanceRecord {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   jti?: string;
 }
@@ -400,6 +423,176 @@ function requireAdmin(request: Request, env: Env): Response | null {
   }
 
   return null;
+}
+
+type ScopeProtectedAuthMode = 'canonical_cst' | 'admin_token';
+
+function parseProtectedAuthMode(env: Env): ScopeProtectedAuthMode {
+  const raw = env.SCOPE_PROTECTED_AUTH_MODE?.trim().toLowerCase();
+  if (raw === 'admin_token') return 'admin_token';
+  return 'canonical_cst';
+}
+
+function looksLikeJwt(token: string): boolean {
+  return token.split('.').length === 3;
+}
+
+function getScopedTokenFromHeaders(request: Request):
+  | { ok: true; token: string }
+  | { ok: false; response: Response } {
+  const xCst = getBearerToken(request.headers.get('x-cst'));
+  const xScoped = getBearerToken(request.headers.get('x-scoped-token'));
+
+  if (xCst && xScoped && xCst !== xScoped) {
+    return {
+      ok: false,
+      response: errorResponse('TOKEN_MALFORMED', 'Conflicting CST headers: X-CST and X-Scoped-Token differ', 401),
+    };
+  }
+
+  const explicit = xCst ?? xScoped;
+  if (explicit) return { ok: true, token: explicit };
+
+  const auth = getBearerToken(request.headers.get('authorization'));
+  if (auth && looksLikeJwt(auth)) {
+    return { ok: true, token: auth };
+  }
+
+  if (auth) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'LEGACY_AUTH_FORBIDDEN',
+        'Admin token headers are not accepted in canonical auth mode; provide X-CST',
+        401
+      ),
+    };
+  }
+
+  return {
+    ok: false,
+    response: errorResponse('TOKEN_REQUIRED', 'Canonical CST token is required (X-CST or X-Scoped-Token)', 401),
+  };
+}
+
+interface ProtectedAccessContext {
+  token_hash: string;
+  claims: ScopedTokenClaims;
+  matrix?: ReturnType<typeof evaluateTransitionMatrix>;
+}
+
+async function requireProtectedAccess(
+  request: Request,
+  env: Env,
+  options?: {
+    requiredScopes?: string[];
+    requiredTransitions?: string[];
+  }
+): Promise<{ ok: true; context: ProtectedAccessContext } | { ok: false; response: Response }> {
+  const mode = parseProtectedAuthMode(env);
+  if (mode === 'admin_token') {
+    const adminErr = requireAdmin(request, env);
+    if (adminErr) return { ok: false, response: adminErr };
+    return {
+      ok: true,
+      context: {
+        token_hash: 'admin_token',
+        claims: {
+          token_version: '1',
+          sub: 'did:system:scope-admin',
+          aud: ['clawscope.com'],
+          scope: [
+            'control:token:revoke',
+            'control:token:issue_sensitive',
+            'control:policy:update',
+            'control:key:rotate',
+            'control:audit:read',
+          ],
+          iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + 60,
+          owner_did: 'did:system:scope-admin',
+          controller_did: 'did:system:scope-admin',
+          agent_did: 'did:system:scope-admin',
+          token_lane: 'canonical',
+        },
+      },
+    };
+  }
+
+  const token = getScopedTokenFromHeaders(request);
+  if (!token.ok) return { ok: false, response: token.response };
+
+  const introspection = await getIntrospectionResult(token.token, env);
+  if (!introspection.ok) {
+    return { ok: false, response: introspection.res };
+  }
+
+  if (introspection.revoked) {
+    return {
+      ok: false,
+      response: errorResponse('TOKEN_REVOKED', 'Token is revoked and cannot authorize protected operations', 401),
+    };
+  }
+
+  const canonical = validateCanonicalControlContext(
+    {
+      owner_did: introspection.claims.owner_did,
+      controller_did: introspection.claims.controller_did,
+      agent_did: introspection.claims.agent_did,
+      token_lane: introspection.claims.token_lane,
+    },
+    undefined
+  );
+
+  if (!canonical.ok) {
+    return {
+      ok: false,
+      response: errorResponse(
+        canonical.code ?? 'TOKEN_CONTROL_CHAIN_MISSING',
+        canonical.message ?? 'Canonical control-chain claims are required',
+        401
+      ),
+    };
+  }
+
+  const requiredScopes = options?.requiredScopes ?? [];
+  if (requiredScopes.length > 0 && !hasRequiredScope(introspection.claims.scope, requiredScopes)) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'TOKEN_INSUFFICIENT_SCOPE',
+        `Token does not include required scope(s): ${requiredScopes.join(', ')}`,
+        403
+      ),
+    };
+  }
+
+  const requiredTransitions = (options?.requiredTransitions ?? []).filter((value) => value.trim().length > 0);
+  let matrix: ReturnType<typeof evaluateTransitionMatrix> | undefined;
+  if (requiredTransitions.length > 0) {
+    matrix = evaluateTransitionMatrix(introspection.claims);
+
+    const denied = requiredTransitions.filter((transition) => matrix?.[transition]?.allowed !== true);
+    if (denied.length > 0) {
+      return {
+        ok: false,
+        response: errorResponse(
+          'TOKEN_CONTROL_TRANSITION_FORBIDDEN',
+          `Token is not authorized for transition(s): ${denied.join(', ')}`,
+          403
+        ),
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    context: {
+      token_hash: introspection.token_hash,
+      claims: introspection.claims,
+      matrix,
+    },
+  };
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -882,6 +1075,99 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   if (typeof b.spend_cap === 'number') req.spend_cap = b.spend_cap;
   if (typeof b.mission_id === 'string') req.mission_id = b.mission_id;
 
+  const delegationIdInput = typeof b.delegation_id === 'string' ? b.delegation_id.trim() : '';
+  if (delegationIdInput) {
+    req.delegation_id = delegationIdInput;
+  }
+
+  const delegatorDidInput = typeof b.delegator_did === 'string' ? b.delegator_did.trim() : '';
+  if (delegatorDidInput) {
+    if (!isDid(delegatorDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('DELEGATOR_DID_INVALID', 'delegator_did must be a valid DID string', 400),
+      };
+    }
+    req.delegator_did = delegatorDidInput;
+  }
+
+  const delegateDidInput = typeof b.delegate_did === 'string' ? b.delegate_did.trim() : '';
+  if (delegateDidInput) {
+    if (!isDid(delegateDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('DELEGATE_DID_INVALID', 'delegate_did must be a valid DID string', 400),
+      };
+    }
+    req.delegate_did = delegateDidInput;
+  }
+
+  const delegationPolicyHashInput =
+    typeof b.delegation_policy_hash_b64u === 'string' ? b.delegation_policy_hash_b64u.trim() : '';
+  if (delegationPolicyHashInput) {
+    if (!isSha256B64u(delegationPolicyHashInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'DELEGATION_POLICY_HASH_INVALID',
+          'delegation_policy_hash_b64u must be a SHA-256 base64url hash (length 43)',
+          400
+        ),
+      };
+    }
+    req.delegation_policy_hash_b64u = delegationPolicyHashInput;
+  }
+
+  const delegationSpendCapInput =
+    typeof b.delegation_spend_cap_minor === 'string' ? b.delegation_spend_cap_minor.trim() : '';
+  if (delegationSpendCapInput) {
+    if (!/^[0-9]+$/.test(delegationSpendCapInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'DELEGATION_SPEND_CAP_INVALID',
+          'delegation_spend_cap_minor must be an integer string',
+          400
+        ),
+      };
+    }
+    req.delegation_spend_cap_minor = delegationSpendCapInput;
+  }
+
+  if (typeof b.delegation_expires_at === 'number' && Number.isFinite(b.delegation_expires_at)) {
+    req.delegation_expires_at = Math.floor(b.delegation_expires_at);
+  }
+
+  if (req.delegate_did && req.delegate_did !== req.sub) {
+    return {
+      ok: false,
+      res: errorResponse('DELEGATE_DID_SUB_MISMATCH', 'delegate_did must match sub for delegated tokens', 400),
+    };
+  }
+
+  if (req.delegator_did && req.owner_did && req.delegator_did !== req.owner_did) {
+    return {
+      ok: false,
+      res: errorResponse('DELEGATOR_OWNER_MISMATCH', 'delegator_did must match owner_did when both are set', 400),
+    };
+  }
+
+  if (
+    req.delegation_id ||
+    req.delegator_did ||
+    req.delegate_did ||
+    req.delegation_policy_hash_b64u ||
+    req.delegation_spend_cap_minor ||
+    req.delegation_expires_at !== undefined
+  ) {
+    if (req.token_lane !== 'canonical') {
+      return {
+        ok: false,
+        res: errorResponse('DELEGATION_CANONICAL_REQUIRED', 'delegation claims require token_lane=canonical', 400),
+      };
+    }
+  }
+
   try {
     const policy = resolveScopePolicy(env, tier);
     const enforced = enforceScopePolicy(req.scope, policy);
@@ -935,7 +1221,9 @@ function evaluateTransitionMatrix(claims: ScopedTokenClaims): Record<string, {
       continue;
     }
 
-    const missing = requiredScopes.filter((scope) => !scopeSet.has(scope));
+    const missing = requiredScopes.filter(
+      (scope) => !scopeSet.has(scope) && !scopeSet.has('control:*') && !scopeSet.has('*')
+    );
     if (missing.length > 0) {
       out[transition] = {
         allowed: false,
@@ -1242,6 +1530,414 @@ async function getIssuerKeySet(env: Env): Promise<IssuerKeySet | null> {
   return keyset;
 }
 
+interface KeyTransparencySnapshot {
+  snapshot_version: '1';
+  snapshot_id: string;
+  generated_at: number;
+  generated_at_iso: string;
+  active_kid: string;
+  accepted_kids: string[];
+  signing_kids: string[];
+  verify_only_kids: string[];
+  expiring_kids: Array<{ kid: string; not_after_unix: number }>;
+  overlap_seconds: number;
+  snapshot_hash_b64u: string;
+  signer_kid: string;
+  signature_b64u: string;
+  r2_object_key?: string;
+}
+
+interface RevocationSloReport {
+  report_version: '1';
+  generated_at: number;
+  generated_at_iso: string;
+  window_hours: number;
+  slo_target_seconds: number;
+  total_revocations: number;
+  observed_revocations: number;
+  pending_revocations: number;
+  compliance_ratio: number;
+  latency_seconds: {
+    min: number;
+    p50: number;
+    p95: number;
+    p99: number;
+    max: number;
+  };
+  r2_object_key?: string;
+}
+
+let governanceSchemaInitialized = false;
+
+async function ensureScopeGovernanceSchema(db: D1Database): Promise<void> {
+  if (governanceSchemaInitialized) return;
+
+  await db.batch([
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS scope_key_transparency_snapshots (
+        snapshot_id TEXT PRIMARY KEY,
+        generated_at INTEGER NOT NULL,
+        generated_at_iso TEXT NOT NULL,
+        active_kid TEXT NOT NULL,
+        accepted_kids_json TEXT NOT NULL,
+        signing_kids_json TEXT NOT NULL,
+        verify_only_kids_json TEXT NOT NULL,
+        expiring_kids_json TEXT NOT NULL,
+        overlap_seconds INTEGER NOT NULL,
+        snapshot_hash_b64u TEXT NOT NULL,
+        signer_kid TEXT NOT NULL,
+        signature_b64u TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        r2_object_key TEXT,
+        persisted_at INTEGER NOT NULL
+      )
+    `),
+    db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_scope_key_transparency_generated ON scope_key_transparency_snapshots(generated_at DESC)`
+    ),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS scope_revocation_slo_tokens (
+        token_hash TEXT PRIMARY KEY,
+        revoked_at INTEGER NOT NULL,
+        revoked_at_iso TEXT NOT NULL,
+        first_observed_revoked_at INTEGER,
+        last_observed_revoked_at INTEGER,
+        observed_count INTEGER NOT NULL DEFAULT 0
+      )
+    `),
+    db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_scope_revocation_slo_revoked_at ON scope_revocation_slo_tokens(revoked_at DESC)`
+    ),
+  ]);
+
+  governanceSchemaInitialized = true;
+}
+
+function quantile(values: number[], q: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * q) - 1));
+  return Number(sorted[idx] ?? 0);
+}
+
+async function buildKeyTransparencySnapshot(env: Env, keyset: IssuerKeySet): Promise<KeyTransparencySnapshot> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const nowIso = new Date(nowSec * 1000).toISOString();
+  const overlapSeconds = parseIntOrDefault(env.SCOPE_KEY_ROTATION_OVERLAP_SECONDS, 3600);
+
+  const acceptedKeys = keyset.keys.filter((key) => isKeyAcceptedNow(key, nowSec));
+  const expiringKeys = acceptedKeys
+    .filter((key) => key.not_after_unix !== undefined)
+    .map((key) => ({
+      kid: key.kid,
+      not_after_unix: key.not_after_unix as number,
+    }));
+
+  const payload = {
+    snapshot_version: '1' as const,
+    generated_at: nowSec,
+    generated_at_iso: nowIso,
+    active_kid: keyset.active.kid,
+    accepted_kids: acceptedKeys.map((key) => key.kid),
+    signing_kids: keyset.signingKeys.map((key) => key.kid),
+    verify_only_kids: acceptedKeys.filter((key) => key.verify_only).map((key) => key.kid),
+    expiring_kids: expiringKeys,
+    overlap_seconds: overlapSeconds,
+  };
+
+  if (!keyset.active.privateKey) {
+    throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
+  }
+
+  const payloadJson = JSON.stringify(payload);
+  const snapshotHashB64u = await sha256B64u(payloadJson);
+  const signatureB64u = await signEd25519(keyset.active.privateKey, payloadJson);
+
+  const snapshotId = `kts_${nowSec}_${keyset.active.kid}`;
+
+  return {
+    ...payload,
+    snapshot_id: snapshotId,
+    snapshot_hash_b64u: snapshotHashB64u,
+    signer_kid: keyset.active.kid,
+    signature_b64u: signatureB64u,
+  };
+}
+
+async function parseSnapshotRow(row: unknown): Promise<KeyTransparencySnapshot | null> {
+  if (!row || typeof row !== 'object') return null;
+  const r = row as Record<string, unknown>;
+
+  const snapshotJson = typeof r.snapshot_json === 'string' ? r.snapshot_json : undefined;
+  if (!snapshotJson) return null;
+
+  try {
+    return JSON.parse(snapshotJson) as KeyTransparencySnapshot;
+  } catch {
+    return null;
+  }
+}
+
+async function readLatestKeyTransparencySnapshot(env: Env): Promise<KeyTransparencySnapshot | null> {
+  const db = env.SCOPE_OBSERVABILITY_DB;
+  if (!db) return null;
+
+  await ensureScopeGovernanceSchema(db);
+  const row = await db
+    .prepare(
+      `SELECT snapshot_json FROM scope_key_transparency_snapshots ORDER BY generated_at DESC LIMIT 1`
+    )
+    .first();
+
+  return parseSnapshotRow(row);
+}
+
+async function persistKeyTransparencySnapshot(
+  env: Env,
+  snapshot: KeyTransparencySnapshot
+): Promise<KeyTransparencySnapshot> {
+  const persistedAt = Math.floor(Date.now() / 1000);
+  let r2ObjectKey: string | undefined;
+
+  if (env.SCOPE_REPORTS_BUCKET) {
+    const key = `identity-control-plane/key-transparency/${snapshot.generated_at_iso}-${snapshot.snapshot_id}.json`;
+    await env.SCOPE_REPORTS_BUCKET.put(key, JSON.stringify(snapshot, null, 2), {
+      httpMetadata: { contentType: 'application/json; charset=utf-8' },
+    });
+    r2ObjectKey = key;
+  }
+
+  const db = env.SCOPE_OBSERVABILITY_DB;
+  if (db) {
+    await ensureScopeGovernanceSchema(db);
+    await db
+      .prepare(
+        `INSERT OR REPLACE INTO scope_key_transparency_snapshots (
+          snapshot_id,
+          generated_at,
+          generated_at_iso,
+          active_kid,
+          accepted_kids_json,
+          signing_kids_json,
+          verify_only_kids_json,
+          expiring_kids_json,
+          overlap_seconds,
+          snapshot_hash_b64u,
+          signer_kid,
+          signature_b64u,
+          snapshot_json,
+          r2_object_key,
+          persisted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        snapshot.snapshot_id,
+        snapshot.generated_at,
+        snapshot.generated_at_iso,
+        snapshot.active_kid,
+        JSON.stringify(snapshot.accepted_kids),
+        JSON.stringify(snapshot.signing_kids),
+        JSON.stringify(snapshot.verify_only_kids),
+        JSON.stringify(snapshot.expiring_kids),
+        snapshot.overlap_seconds,
+        snapshot.snapshot_hash_b64u,
+        snapshot.signer_kid,
+        snapshot.signature_b64u,
+        JSON.stringify({ ...snapshot, r2_object_key: r2ObjectKey ?? snapshot.r2_object_key }),
+        r2ObjectKey ?? null,
+        persistedAt
+      )
+      .run();
+  }
+
+  return {
+    ...snapshot,
+    r2_object_key: r2ObjectKey ?? snapshot.r2_object_key,
+  };
+}
+
+async function getOrCreateKeyTransparencySnapshot(
+  env: Env,
+  forceRefresh = false
+): Promise<KeyTransparencySnapshot> {
+  const refreshSeconds = parseIntOrDefault(env.SCOPE_KEY_TRANSPARENCY_REFRESH_SECONDS, 300);
+
+  if (!forceRefresh) {
+    const latest = await readLatestKeyTransparencySnapshot(env);
+    if (latest) {
+      const ageSec = Math.floor(Date.now() / 1000) - latest.generated_at;
+      if (ageSec >= 0 && ageSec <= refreshSeconds) {
+        return latest;
+      }
+    }
+  }
+
+  const keyset = await getIssuerKeySet(env);
+  if (!keyset) {
+    throw new Error('SCOPE_SIGNING_KEY_NOT_CONFIGURED');
+  }
+
+  const snapshot = await buildKeyTransparencySnapshot(env, keyset);
+  return persistKeyTransparencySnapshot(env, snapshot);
+}
+
+async function seedRevocationSloToken(
+  env: Env,
+  tokenHash: string,
+  revokedAtSec: number,
+  revokedAtIso: string
+): Promise<void> {
+  const db = env.SCOPE_OBSERVABILITY_DB;
+  if (!db) return;
+
+  await ensureScopeGovernanceSchema(db);
+
+  await db
+    .prepare(
+      `INSERT INTO scope_revocation_slo_tokens (
+        token_hash,
+        revoked_at,
+        revoked_at_iso,
+        first_observed_revoked_at,
+        last_observed_revoked_at,
+        observed_count
+      ) VALUES (?, ?, ?, NULL, NULL, 0)
+      ON CONFLICT(token_hash) DO UPDATE SET
+        revoked_at = MIN(scope_revocation_slo_tokens.revoked_at, excluded.revoked_at),
+        revoked_at_iso = CASE
+          WHEN excluded.revoked_at < scope_revocation_slo_tokens.revoked_at THEN excluded.revoked_at_iso
+          ELSE scope_revocation_slo_tokens.revoked_at_iso
+        END`
+    )
+    .bind(tokenHash, revokedAtSec, revokedAtIso)
+    .run();
+}
+
+async function observeRevocationSloToken(env: Env, tokenHash: string, observedAtSec: number): Promise<void> {
+  const db = env.SCOPE_OBSERVABILITY_DB;
+  if (!db) return;
+
+  await ensureScopeGovernanceSchema(db);
+
+  await db
+    .prepare(
+      `INSERT INTO scope_revocation_slo_tokens (
+        token_hash,
+        revoked_at,
+        revoked_at_iso,
+        first_observed_revoked_at,
+        last_observed_revoked_at,
+        observed_count
+      ) VALUES (?, ?, ?, ?, ?, 1)
+      ON CONFLICT(token_hash) DO UPDATE SET
+        first_observed_revoked_at = COALESCE(scope_revocation_slo_tokens.first_observed_revoked_at, excluded.first_observed_revoked_at),
+        last_observed_revoked_at = excluded.last_observed_revoked_at,
+        observed_count = scope_revocation_slo_tokens.observed_count + 1`
+    )
+    .bind(
+      tokenHash,
+      observedAtSec,
+      new Date(observedAtSec * 1000).toISOString(),
+      observedAtSec,
+      observedAtSec
+    )
+    .run();
+}
+
+async function buildRevocationSloReport(env: Env, windowHours: number): Promise<RevocationSloReport> {
+  const db = env.SCOPE_OBSERVABILITY_DB;
+  if (!db) {
+    throw new Error('OBSERVABILITY_DB_NOT_CONFIGURED');
+  }
+
+  await ensureScopeGovernanceSchema(db);
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const fromSec = nowSec - windowHours * 60 * 60;
+
+  const rows = await db
+    .prepare(
+      `SELECT token_hash, revoked_at, first_observed_revoked_at
+       FROM scope_revocation_slo_tokens
+       WHERE revoked_at >= ?
+       ORDER BY revoked_at DESC`
+    )
+    .bind(fromSec)
+    .all();
+
+  const results = rows.results ?? [];
+  const latencies: number[] = [];
+
+  for (const row of results) {
+    const record = row as Record<string, unknown>;
+    const revokedAt = typeof record.revoked_at === 'number' ? record.revoked_at : Number(record.revoked_at);
+    const firstObservedRaw = record.first_observed_revoked_at;
+    const firstObserved =
+      typeof firstObservedRaw === 'number' ? firstObservedRaw : Number(firstObservedRaw ?? Number.NaN);
+
+    if (Number.isFinite(revokedAt) && Number.isFinite(firstObserved) && firstObserved >= revokedAt) {
+      latencies.push(firstObserved - revokedAt);
+    }
+  }
+
+  const totalRevocations = results.length;
+  const observedRevocations = latencies.length;
+  const pendingRevocations = totalRevocations - observedRevocations;
+  const sloTargetSeconds = parseIntOrDefault(env.SCOPE_REVOCATION_SLO_TARGET_SECONDS, 60);
+  const compliant = latencies.filter((latency) => latency <= sloTargetSeconds).length;
+
+  return {
+    report_version: '1',
+    generated_at: nowSec,
+    generated_at_iso: new Date(nowSec * 1000).toISOString(),
+    window_hours: windowHours,
+    slo_target_seconds: sloTargetSeconds,
+    total_revocations: totalRevocations,
+    observed_revocations: observedRevocations,
+    pending_revocations: pendingRevocations,
+    compliance_ratio: observedRevocations > 0 ? compliant / observedRevocations : 1,
+    latency_seconds: {
+      min: observedRevocations > 0 ? Math.min(...latencies) : 0,
+      p50: quantile(latencies, 0.5),
+      p95: quantile(latencies, 0.95),
+      p99: quantile(latencies, 0.99),
+      max: observedRevocations > 0 ? Math.max(...latencies) : 0,
+    },
+  };
+}
+
+async function persistRevocationSloReport(
+  env: Env,
+  report: RevocationSloReport
+): Promise<RevocationSloReport> {
+  if (!env.SCOPE_REPORTS_BUCKET) return report;
+
+  const key = `identity-control-plane/revocation-slo/${report.generated_at_iso}.json`;
+  await env.SCOPE_REPORTS_BUCKET.put(key, JSON.stringify(report, null, 2), {
+    httpMetadata: { contentType: 'application/json; charset=utf-8' },
+  });
+
+  return {
+    ...report,
+    r2_object_key: key,
+  };
+}
+
+async function runScopeGovernanceScheduled(env: Env): Promise<void> {
+  try {
+    await getOrCreateKeyTransparencySnapshot(env, true);
+  } catch (error) {
+    console.error('SCOPE_KEY_TRANSPARENCY_SCHEDULED_FAILED', error);
+  }
+
+  try {
+    const report = await buildRevocationSloReport(env, 24);
+    await persistRevocationSloReport(env, report);
+  } catch (error) {
+    console.error('SCOPE_REVOCATION_SLO_SCHEDULED_FAILED', error);
+  }
+}
+
 function encodeJwtJson(obj: unknown): string {
   const json = JSON.stringify(obj);
   return base64urlEncode(new TextEncoder().encode(json));
@@ -1284,6 +1980,35 @@ function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
   if (p.control_plane_policy_hash_b64u !== undefined) {
     if (!isNonEmptyString(p.control_plane_policy_hash_b64u)) return false;
     if (!isSha256B64u(p.control_plane_policy_hash_b64u.trim())) return false;
+  }
+
+  if (p.delegation_id !== undefined && !isNonEmptyString(p.delegation_id)) return false;
+
+  if (p.delegator_did !== undefined) {
+    if (!isNonEmptyString(p.delegator_did) || !isDid(p.delegator_did.trim())) return false;
+  }
+
+  if (p.delegate_did !== undefined) {
+    if (!isNonEmptyString(p.delegate_did) || !isDid(p.delegate_did.trim())) return false;
+  }
+
+  if (p.delegation_policy_hash_b64u !== undefined) {
+    if (!isNonEmptyString(p.delegation_policy_hash_b64u) || !isSha256B64u(p.delegation_policy_hash_b64u.trim())) {
+      return false;
+    }
+  }
+
+  if (p.delegation_spend_cap_minor !== undefined) {
+    if (
+      !isNonEmptyString(p.delegation_spend_cap_minor) ||
+      !/^[0-9]+$/.test(p.delegation_spend_cap_minor.trim())
+    ) {
+      return false;
+    }
+  }
+
+  if (p.delegation_expires_at !== undefined) {
+    if (typeof p.delegation_expires_at !== 'number' || !Number.isFinite(p.delegation_expires_at)) return false;
   }
 
   if (p.token_lane !== undefined) {
@@ -1340,6 +2065,12 @@ async function issueToken(
     payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
+    delegation_id: req.delegation_id,
+    delegator_did: req.delegator_did,
+    delegate_did: req.delegate_did,
+    delegation_policy_hash_b64u: req.delegation_policy_hash_b64u,
+    delegation_spend_cap_minor: req.delegation_spend_cap_minor,
+    delegation_expires_at: req.delegation_expires_at,
   });
 
   const claims: ScopedTokenClaims = {
@@ -1359,6 +2090,12 @@ async function issueToken(
     payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
+    delegation_id: req.delegation_id,
+    delegator_did: req.delegator_did,
+    delegate_did: req.delegate_did,
+    delegation_policy_hash_b64u: req.delegation_policy_hash_b64u,
+    delegation_spend_cap_minor: req.delegation_spend_cap_minor,
+    delegation_expires_at: req.delegation_expires_at,
     token_lane: req.token_lane,
     jti: crypto.randomUUID(),
     nonce: crypto.randomUUID(),
@@ -1468,12 +2205,15 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (canonical CST control lane)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- GET /v1/keys/rotation-contract\n- POST /v1/tokens/issue/canonical (admin)\n- POST /v1/tokens/issue (admin, legacy migration lane)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/revocations/stream (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n- POST /v1/tokens/introspect/matrix\n\nObservability endpoints:\n- GET /v1/metrics/dashboard (admin)\n- POST /v1/reports/rollups/run (admin)\n- GET /v1/reports/usage (admin)\n- POST /v1/alerts/rules (admin)\n- GET /v1/alerts/events (admin)\n- GET /v1/analytics/cost (admin)\n- GET /v1/traces/:trace_id (admin)\n- GET /v1/reports/sla (admin)\n- GET /v1/missions/aggregate (admin)\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (canonical CST control lane)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- GET /v1/keys/rotation-contract\n- GET /v1/keys/transparency/latest\n- GET /v1/keys/transparency/history (protected)\n- POST /v1/keys/transparency/snapshot (protected)\n- POST /v1/tokens/issue/canonical (admin bootstrap)\n- POST /v1/tokens/issue (admin bootstrap, legacy migration lane)\n- POST /v1/tokens/revoke (protected)\n- GET /v1/revocations/events (protected)\n- GET /v1/revocations/stream (protected)\n- GET /v1/audit/issuance (protected)\n- GET /v1/audit/bundle (protected)\n- GET /v1/reports/revocation-slo (protected)\n- POST /v1/tokens/introspect\n- POST /v1/tokens/introspect/matrix\n\nObservability endpoints:\n- GET /v1/metrics/dashboard (admin)\n- POST /v1/reports/rollups/run (admin)\n- GET /v1/reports/usage (admin)\n- POST /v1/alerts/rules (admin)\n- GET /v1/alerts/events (admin)\n- GET /v1/analytics/cost (admin)\n- GET /v1/traces/:trace_id (admin)\n- GET /v1/reports/sla (admin)\n- GET /v1/missions/aggregate (admin)\n\nProtected auth mode: \`SCOPE_PROTECTED_AUTH_MODE=canonical_cst\` (default) or \`admin_token\`.\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
-    const observabilityResponse = await handleScopeObservabilityRoutes(request, env);
-    if (observabilityResponse) return observabilityResponse;
+    const bypassObservabilityRouter = url.pathname === '/v1/reports/revocation-slo';
+    if (!bypassObservabilityRouter) {
+      const observabilityResponse = await handleScopeObservabilityRoutes(request, env);
+      if (observabilityResponse) return observabilityResponse;
+    }
 
     // Token issuance (CSC-US-014) — Canonical lane
     if (request.method === 'POST' && url.pathname === '/v1/tokens/issue/canonical') {
@@ -1594,6 +2334,12 @@ export default {
           payment_account_did: claims.payment_account_did,
           spend_cap: claims.spend_cap,
           mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           token_lane: claims.token_lane,
           jti: claims.jti,
         };
@@ -1611,11 +2357,19 @@ export default {
           policy_hash_b64u: claims.policy_hash_b64u,
           token_scope_hash_b64u: claims.token_scope_hash_b64u,
           payment_account_did: claims.payment_account_did,
+          mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           policy_version: policy.policy_version,
           policy_tier: policy.tier,
           kid,
           iat: claims.iat,
           exp: claims.exp,
+          claims,
         };
 
         const response = jsonResponse(responseBody);
@@ -1768,6 +2522,12 @@ export default {
           payment_account_did: claims.payment_account_did,
           spend_cap: claims.spend_cap,
           mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           token_lane: claims.token_lane,
           jti: claims.jti,
         };
@@ -1786,11 +2546,19 @@ export default {
           policy_hash_b64u: claims.policy_hash_b64u,
           token_scope_hash_b64u: claims.token_scope_hash_b64u,
           payment_account_did: claims.payment_account_did,
+          mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           policy_version: policy.policy_version,
           policy_tier: policy.tier,
           kid,
           iat: claims.iat,
           exp: claims.exp,
+          claims,
         };
 
         const response = jsonResponse(responseBody);
@@ -1845,8 +2613,11 @@ export default {
     // Token revocation (CSC-US-003)
     if (request.method === 'POST' && url.pathname === '/v1/tokens/revoke') {
       const revokeStartedAtMs = Date.now();
-      const adminErr = requireAdmin(request, env);
-      if (adminErr) return adminErr;
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:token:revoke', 'control:token:issue_sensitive'],
+        requiredTransitions: ['token.revoke'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
 
       const kv = env.SCOPE_REVOCATIONS;
       if (!kv) {
@@ -1908,7 +2679,7 @@ export default {
         revoked_at: revokedAtSec,
         revoked_at_iso: new Date(revokedAtSec * 1000).toISOString(),
         reason,
-        revoked_by: 'admin',
+        revoked_by: protectedAccess.context.claims.sub,
       };
 
       const ttl = parseIntOrDefault(env.SCOPE_REVOCATION_TTL_SECONDS, 60 * 60 * 24 * 30);
@@ -1917,6 +2688,8 @@ export default {
 
       const eventKey = revocationEventKey(revokedAtSec, token_hash);
       await kv.put(eventKey, JSON.stringify(record), { expirationTtl: ttl });
+
+      await seedRevocationSloToken(env, token_hash, record.revoked_at, record.revoked_at_iso);
 
       const responseBody = {
         status: 'revoked',
@@ -1948,8 +2721,10 @@ export default {
 
     // Revocation events (CSC-US-003)
     if (request.method === 'GET' && url.pathname === '/v1/revocations/events') {
-      const adminErr = requireAdmin(request, env);
-      if (adminErr) return adminErr;
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:audit:read'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
 
       const kv = env.SCOPE_REVOCATIONS;
       if (!kv) {
@@ -1993,8 +2768,10 @@ export default {
 
     // Revocation stream contract (CSC-US-014)
     if (request.method === 'GET' && url.pathname === '/v1/revocations/stream') {
-      const adminErr = requireAdmin(request, env);
-      if (adminErr) return adminErr;
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:audit:read'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
 
       const kv = env.SCOPE_REVOCATIONS;
       if (!kv) {
@@ -2083,10 +2860,124 @@ export default {
       });
     }
 
+    // Key transparency snapshots (ICP-M6.3)
+    if (request.method === 'GET' && url.pathname === '/v1/keys/transparency/latest') {
+      try {
+        const snapshot = await getOrCreateKeyTransparencySnapshot(env, false);
+        return jsonResponse(snapshot);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
+        if (
+          msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_DUPLICATE_KID'
+        ) {
+          return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+        }
+        return errorResponse('KEY_TRANSPARENCY_UNAVAILABLE', 'Failed to generate key transparency snapshot', 503);
+      }
+    }
+
+    if (request.method === 'GET' && url.pathname === '/v1/keys/transparency/history') {
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:audit:read'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
+
+      const db = env.SCOPE_OBSERVABILITY_DB;
+      if (!db) {
+        return errorResponse('OBSERVABILITY_DB_NOT_CONFIGURED', 'SCOPE_OBSERVABILITY_DB is not configured', 503);
+      }
+
+      await ensureScopeGovernanceSchema(db);
+
+      const limit = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('limit') ?? undefined, 20), 1),
+        100
+      );
+
+      const rows = await db
+        .prepare(
+          `SELECT snapshot_json
+             FROM scope_key_transparency_snapshots
+             ORDER BY generated_at DESC
+             LIMIT ?`
+        )
+        .bind(limit)
+        .all();
+
+      const snapshots: KeyTransparencySnapshot[] = [];
+      for (const row of rows.results ?? []) {
+        const parsed = await parseSnapshotRow(row);
+        if (parsed) snapshots.push(parsed);
+      }
+
+      return jsonResponse({ snapshots });
+    }
+
+    if (request.method === 'POST' && url.pathname === '/v1/keys/transparency/snapshot') {
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:key:rotate', 'control:token:issue_sensitive'],
+        requiredTransitions: ['key.rotate'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
+
+      try {
+        const snapshot = await getOrCreateKeyTransparencySnapshot(env, true);
+        return jsonResponse({ status: 'snapshot_created', snapshot });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'SCOPE_SIGNING_KEY_NOT_CONFIGURED') {
+          return errorResponse('SIGNING_NOT_CONFIGURED', 'SCOPE_SIGNING_KEY is not configured', 503);
+        }
+        if (
+          msg === 'SCOPE_SIGNING_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_SIGNING_KEYS_DUPLICATE_KID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_JSON_INVALID' ||
+          msg === 'SCOPE_VERIFY_PUBLIC_KEYS_DUPLICATE_KID'
+        ) {
+          return errorResponse('SIGNING_CONFIG_INVALID', 'Signing key configuration is invalid', 503);
+        }
+        return errorResponse('KEY_TRANSPARENCY_UNAVAILABLE', 'Failed to generate key transparency snapshot', 503);
+      }
+    }
+
+    // Revocation propagation SLO report (ICP-M6.4)
+    if (request.method === 'GET' && url.pathname === '/v1/reports/revocation-slo') {
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:audit:read'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
+
+      const windowHours = Math.min(
+        Math.max(parseIntOrDefault(url.searchParams.get('window_hours') ?? undefined, 24), 1),
+        24 * 14
+      );
+
+      try {
+        const report = await buildRevocationSloReport(env, windowHours);
+        const shouldPersist = url.searchParams.get('persist') === 'true';
+        const maybePersisted = shouldPersist ? await persistRevocationSloReport(env, report) : report;
+        return jsonResponse(maybePersisted);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message === 'OBSERVABILITY_DB_NOT_CONFIGURED') {
+          return errorResponse('OBSERVABILITY_DB_NOT_CONFIGURED', 'SCOPE_OBSERVABILITY_DB is not configured', 503);
+        }
+        return errorResponse('REVOCATION_SLO_REPORT_FAILED', 'Failed to build revocation SLO report', 500);
+      }
+    }
+
     // Issuance audit events (CSC-US-006)
     if (request.method === 'GET' && url.pathname === '/v1/audit/issuance') {
-      const adminErr = requireAdmin(request, env);
-      if (adminErr) return adminErr;
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:audit:read'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
 
       const kv = env.SCOPE_REVOCATIONS;
       if (!kv) {
@@ -2129,8 +3020,10 @@ export default {
 
     // Audit bundle export (CSC-US-006)
     if (request.method === 'GET' && url.pathname === '/v1/audit/bundle') {
-      const adminErr = requireAdmin(request, env);
-      if (adminErr) return adminErr;
+      const protectedAccess = await requireProtectedAccess(request, env, {
+        requiredScopes: ['control:audit:read'],
+      });
+      if (!protectedAccess.ok) return protectedAccess.response;
 
       const kv = env.SCOPE_REVOCATIONS;
       if (!kv) {
@@ -2254,6 +3147,12 @@ export default {
           payment_account_did: payload.payment_account_did,
           spend_cap: payload.spend_cap,
           mission_id: payload.mission_id,
+          delegation_id: payload.delegation_id,
+          delegator_did: payload.delegator_did,
+          delegate_did: payload.delegate_did,
+          delegation_policy_hash_b64u: payload.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: payload.delegation_spend_cap_minor,
+          delegation_expires_at: payload.delegation_expires_at,
           token_lane: payload.token_lane,
           iat: payload.iat,
           exp: payload.exp,
@@ -2262,6 +3161,8 @@ export default {
           revoked_at: introspection.revoked_at,
           revoked_at_iso: introspection.revoked_at_iso,
         };
+
+        await observeRevocationSloToken(env, introspection.token_hash, Math.floor(Date.now() / 1000));
 
         const response = jsonResponse(revokedBody);
         await emitScopeObservabilityBestEffort(
@@ -2301,6 +3202,12 @@ export default {
         payment_account_did: payload.payment_account_did,
         spend_cap: payload.spend_cap,
         mission_id: payload.mission_id,
+        delegation_id: payload.delegation_id,
+        delegator_did: payload.delegator_did,
+        delegate_did: payload.delegate_did,
+        delegation_policy_hash_b64u: payload.delegation_policy_hash_b64u,
+        delegation_spend_cap_minor: payload.delegation_spend_cap_minor,
+        delegation_expires_at: payload.delegation_expires_at,
         token_lane: payload.token_lane,
         iat: payload.iat,
         exp: payload.exp,
@@ -2390,6 +3297,8 @@ export default {
           message: 'Token is revoked and cannot authorize sensitive transitions',
         };
 
+        await observeRevocationSloToken(env, introspection.token_hash, Math.floor(Date.now() / 1000));
+
         const response = jsonResponse(revokedBody);
         await emitScopeObservabilityBestEffort(
           env,
@@ -2456,6 +3365,7 @@ export default {
 
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
     await runScopeObservabilityScheduled(env, controller.cron, controller.scheduledTime);
+    await runScopeGovernanceScheduled(env);
   },
 
   async queue(batch: MessageBatch<any>, env: Env): Promise<void> {

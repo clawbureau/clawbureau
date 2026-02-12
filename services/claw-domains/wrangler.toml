@@ -9,8 +9,7 @@ compatibility_date = "2026-02-01"
 
 routes = [
   # For-sale candidates
-  { pattern = "clawinsure.com/*",    zone_name = "clawinsure.com" },
-  { pattern = "www.clawinsure.com/*", zone_name = "clawinsure.com" },
+  # clawinsure.com moved to dedicated Worker: services/clawinsure
   # clawsettle.com moved to dedicated Worker: services/clawsettle
   { pattern = "clawportfolio.com/*", zone_name = "clawportfolio.com" },
   { pattern = "www.clawportfolio.com/*", zone_name = "clawportfolio.com" },
@@ -27,8 +26,7 @@ routes = [
   # clawea.com moved to dedicated Worker: services/clawea-www
   { pattern = "clawsilo.com/*",      zone_name = "clawsilo.com" },
   { pattern = "www.clawsilo.com/*",  zone_name = "clawsilo.com" },
-  { pattern = "clawdelegate.com/*",  zone_name = "clawdelegate.com" },
-  { pattern = "www.clawdelegate.com/*", zone_name = "clawdelegate.com" },
+  # clawdelegate.com moved to dedicated Worker: services/clawdelegate
   { pattern = "clawintel.com/*",     zone_name = "clawintel.com" },
   { pattern = "www.clawintel.com/*", zone_name = "clawintel.com" },
   { pattern = "clawtrials.com/*",    zone_name = "clawtrials.com" },
@@ -42,8 +40,7 @@ routes = [
   { pattern = "www.clawproviders.com/*", zone_name = "clawproviders.com" },
   { pattern = "clawsupply.com/*",    zone_name = "clawsupply.com" },
   { pattern = "www.clawsupply.com/*", zone_name = "clawsupply.com" },
-  { pattern = "clawincome.com/*",    zone_name = "clawincome.com" },
-  { pattern = "www.clawincome.com/*", zone_name = "clawincome.com" },
+  # clawincome.com moved to dedicated Worker: services/clawincome
   { pattern = "clawgrant.com/*",     zone_name = "clawgrant.com" },
   { pattern = "www.clawgrant.com/*", zone_name = "clawgrant.com" },
   { pattern = "clawgang.com/*",      zone_name = "clawgang.com" },

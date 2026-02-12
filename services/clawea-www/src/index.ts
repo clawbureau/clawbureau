@@ -47,7 +47,7 @@
  *   GET /api/leads/status, /api/leads/export (token-protected)
  *   GET /api/routing/status, POST /api/routing/replay (token-protected)
  *   GET /api/attribution/summary, /api/attribution/revenue (token-protected)
- *   GET /api/ops/lead-funnel-health, /api/ops/routing-health, /api/ops/conversion-heatmap, /api/ops/failing-steps (token-protected)
+ *   GET /api/ops/lead-funnel-health, /api/ops/routing-health, /api/ops/conversion-heatmap, /api/ops/failing-steps, /api/ops/lead-intake-security (token-protected)
  *   POST /api/book/submit, POST /api/book/complete (complete is token-protected)
  *   POST /api/indexnow, /api/google-index, /api/index-urls
  *   GET /api/index-queue/status
@@ -111,6 +111,7 @@ interface Env {
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   TURNSTILE_REQUIRED?: string;
+  TURNSTILE_STRICT_REAL_KEY?: string;
   LEAD_ID_HASH_SALT?: string;
   LEAD_SUBMIT_IP_WINDOW_LIMIT?: string;
   LEAD_SUBMIT_EMAIL_WINDOW_LIMIT?: string;
@@ -172,6 +173,24 @@ interface SearchDocument {
 
 interface SearchResult extends SearchDocument {
   score: number;
+}
+
+type TurnstilePostureCode =
+  | "TURNSTILE_OPTIONAL"
+  | "TURNSTILE_READY"
+  | "TURNSTILE_NOT_CONFIGURED"
+  | "TURNSTILE_SITE_KEY_MISSING"
+  | "TURNSTILE_TEST_KEY_FORBIDDEN";
+
+interface TurnstilePosture {
+  required: boolean;
+  strictRealKey: boolean;
+  siteKey?: string;
+  secretConfigured: boolean;
+  usesTestSiteKey: boolean;
+  formEnabled: boolean;
+  code: TurnstilePostureCode;
+  message: string;
 }
 
 type LeadLifecycleStatus =
@@ -2377,6 +2396,94 @@ function envFlag(value: string | undefined, fallback = false): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
+const TURNSTILE_DEFAULT_TEST_SITE_KEY = "1x00000000000000000000AA";
+const TURNSTILE_TEST_SITE_KEYS = new Set([
+  TURNSTILE_DEFAULT_TEST_SITE_KEY,
+  "2x00000000000000000000AB",
+]);
+
+function isTurnstileTestSiteKey(siteKey: string | undefined): boolean {
+  if (!siteKey) return false;
+  return TURNSTILE_TEST_SITE_KEYS.has(siteKey);
+}
+
+function resolveTurnstilePosture(env: Env): TurnstilePosture {
+  const required = envFlag(env.TURNSTILE_REQUIRED, true);
+  const strictRealKey = envFlag(env.TURNSTILE_STRICT_REAL_KEY, (env.ENVIRONMENT ?? "").trim().toLowerCase() === "production");
+  const siteKey = clipString(env.TURNSTILE_SITE_KEY, 120);
+  const secretConfigured = Boolean(clipString(env.TURNSTILE_SECRET_KEY, 200));
+  const usesTestSiteKey = isTurnstileTestSiteKey(siteKey);
+
+  if (!required) {
+    return {
+      required,
+      strictRealKey,
+      siteKey,
+      secretConfigured,
+      usesTestSiteKey,
+      formEnabled: true,
+      code: "TURNSTILE_OPTIONAL",
+      message: siteKey
+        ? "Form protection is optional in this environment."
+        : "Form protection is optional in this environment and Turnstile is disabled.",
+    };
+  }
+
+  if (!secretConfigured) {
+    return {
+      required,
+      strictRealKey,
+      siteKey,
+      secretConfigured,
+      usesTestSiteKey,
+      formEnabled: false,
+      code: "TURNSTILE_NOT_CONFIGURED",
+      message: "Lead intake is temporarily unavailable while bot protection is being configured.",
+    };
+  }
+
+  if (!siteKey) {
+    return {
+      required,
+      strictRealKey,
+      siteKey,
+      secretConfigured,
+      usesTestSiteKey,
+      formEnabled: false,
+      code: "TURNSTILE_SITE_KEY_MISSING",
+      message: "Lead intake is temporarily unavailable while bot protection keys are being rotated.",
+    };
+  }
+
+  if (strictRealKey && usesTestSiteKey) {
+    return {
+      required,
+      strictRealKey,
+      siteKey,
+      secretConfigured,
+      usesTestSiteKey,
+      formEnabled: false,
+      code: "TURNSTILE_TEST_KEY_FORBIDDEN",
+      message: "Lead intake is paused until production-grade Turnstile keys are active.",
+    };
+  }
+
+  return {
+    required,
+    strictRealKey,
+    siteKey,
+    secretConfigured,
+    usesTestSiteKey,
+    formEnabled: true,
+    code: "TURNSTILE_READY",
+    message: "Bot protection active.",
+  };
+}
+
+function shouldRenderTurnstileWidget(posture: TurnstilePosture): boolean {
+  return Boolean(posture.siteKey) && posture.formEnabled;
+}
+
 function randomId(prefix = "id"): string {
   const raw = typeof crypto.randomUUID === "function"
     ? crypto.randomUUID().replace(/-/g, "")
@@ -2755,13 +2862,17 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
 }
 
 async function verifyTurnstile(token: string | undefined, request: Request, env: Env): Promise<{ ok: boolean; error?: string }> {
-  const required = envFlag(env.TURNSTILE_REQUIRED, true);
-  const secret = env.TURNSTILE_SECRET_KEY?.trim();
+  const posture = resolveTurnstilePosture(env);
 
-  if (!required) {
+  if (!posture.required) {
     return { ok: true };
   }
 
+  if (!posture.formEnabled) {
+    return { ok: false, error: posture.code };
+  }
+
+  const secret = env.TURNSTILE_SECRET_KEY?.trim();
   if (!secret) {
     return { ok: false, error: "TURNSTILE_NOT_CONFIGURED" };
   }
@@ -4361,6 +4472,43 @@ async function conversionHeatmap(env: Env, days: number): Promise<{
   );
 
   return { fromIso, toIso, rows: normalized, totals };
+}
+
+function redactKeyPreview(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length <= 8) return "••••";
+  return `${trimmed.slice(0, 4)}••••${trimmed.slice(-4)}`;
+}
+
+async function opsLeadIntakeSecurityPosture(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const posture = resolveTurnstilePosture(env);
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    environment: clipString(env.ENVIRONMENT, 40) ?? "unknown",
+    leadIntake: {
+      turnstile: {
+        required: posture.required,
+        strictRealKey: posture.strictRealKey,
+        formEnabled: posture.formEnabled,
+        code: posture.code,
+        message: posture.message,
+        usesTestSiteKey: posture.usesTestSiteKey,
+        siteKeyPreview: redactKeyPreview(posture.siteKey),
+        secretConfigured: posture.secretConfigured,
+      },
+    },
+  });
 }
 
 async function opsLeadFunnelHealth(request: Request, env: Env): Promise<Response> {
@@ -6425,12 +6573,52 @@ function parseAssessmentResult(url: URL): AssessmentResult {
   };
 }
 
-function renderTurnstileBlock(turnstileSiteKey: string, enableLiveWidget: boolean): string {
-  if (!enableLiveWidget) return "";
-  return `<div class="cf-turnstile" data-sitekey="${esc(turnstileSiteKey)}"></div>`;
+function formGuardAttrs(posture: TurnstilePosture): string {
+  if (posture.formEnabled) return "";
+  return ` data-form-blocked="1" data-form-block-message="${esc(posture.message)}" data-form-block-code="${esc(posture.code)}"`;
 }
 
-function assessmentPage(turnstileSiteKey: string): string {
+function submitGuardAttrs(posture: TurnstilePosture): string {
+  if (posture.formEnabled) return "";
+  return " disabled aria-disabled=\"true\"";
+}
+
+function renderTurnstileBlock(posture: TurnstilePosture, opts?: { widgetEnabled?: boolean }): string {
+  const widgetEnabled = opts?.widgetEnabled ?? true;
+  const widget = widgetEnabled && shouldRenderTurnstileWidget(posture) && posture.siteKey
+    ? `<div class="cf-turnstile" data-sitekey="${esc(posture.siteKey)}"></div>`
+    : "";
+
+  const statusClass = posture.formEnabled
+    ? "form-security-note"
+    : "form-security-note form-security-note-critical";
+
+  const statusText = posture.formEnabled
+    ? posture.required
+      ? "Bot protection enabled via Cloudflare Turnstile."
+      : "Bot protection optional in this environment."
+    : posture.message;
+
+  return `${widget}<p class="${statusClass}" data-form-security-note>${esc(statusText)}</p>`;
+}
+
+function renderLeadIntakeTrustRail(posture: TurnstilePosture): string {
+  const postureLine = posture.formEnabled
+    ? "Turnstile challenge required before lead or booking submission."
+    : posture.message;
+
+  return `<aside class="trust-rail" aria-label="Lead intake safeguards">
+    <span class="badge ${posture.formEnabled ? "badge-green" : "badge-purple"}">${posture.formEnabled ? "Protection active" : "Protection paused"}</span>
+    <h3>Submission safeguards</h3>
+    <ul>
+      <li>${esc(postureLine)}</li>
+      <li>Duplicate suppression enforced by Durable Object lead locks.</li>
+      <li>Lead and booking transitions are captured in immutable audit rows.</li>
+    </ul>
+  </aside>`;
+}
+
+function assessmentPage(turnstile: TurnstilePosture): string {
   return layout({
     meta: {
       title: "AI Readiness Assessment | Claw EA",
@@ -6508,6 +6696,8 @@ function assessmentPage(turnstileSiteKey: string): string {
 
           <p class="form-note">No signup required for scoring. You can submit your details on the result page if you want a tailored plan.</p>
         </form>
+
+        <div style="margin-top:1.25rem">${renderLeadIntakeTrustRail(turnstile)}</div>
       </div>
     </section>
     <script>
@@ -6577,7 +6767,7 @@ function assessmentPage(turnstileSiteKey: string): string {
   });
 }
 
-function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string, enableLiveTurnstile: boolean): string {
+function assessmentResultPage(result: AssessmentResult, turnstile: TurnstilePosture, opts?: { widgetEnabled?: boolean }): string {
   const trackLabel = result.recommendedTrack === "guided-pilot"
     ? "Guided pilot"
     : result.recommendedTrack === "architecture-review"
@@ -6635,7 +6825,7 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
           </ul>
         </div>
 
-        <form class="card lead-form" data-lead-form data-cta="assessment-result-form" style="margin-top:2rem">
+        <form class="card lead-form" data-lead-form data-cta="assessment-result-form" style="margin-top:2rem"${formGuardAttrs(turnstile)}>
           <h3 style="margin-bottom:.5rem">Get your tailored rollout plan</h3>
           <p class="form-note" style="margin-bottom:1rem">This takes less than 45 seconds.</p>
 
@@ -6661,10 +6851,10 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
           <input type="hidden" name="assessment.confidenceLabel" value="${esc(result.confidenceLabel)}">
           <input type="hidden" name="timeline" value="${esc(result.timeline ?? "")}">
 
-          ${renderTurnstileBlock(turnstileSiteKey, enableLiveTurnstile)}
+          ${renderTurnstileBlock(turnstile, { widgetEnabled: opts?.widgetEnabled })}
 
           <div class="form-actions">
-            <button type="submit" class="cta-btn" data-cta="assessment-result-submit">Email me the tailored plan</button>
+            <button type="submit" class="cta-btn" data-cta="assessment-result-submit"${submitGuardAttrs(turnstile)}>Email me the tailored plan</button>
             <span class="form-status" data-lead-form-status aria-live="polite"></span>
           </div>
         </form>
@@ -6676,6 +6866,8 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
           <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-contact" data-cta-copy>Talk to Sales</a>
           <p style="margin-top:.9rem;font-size:.9rem"><a href="/trust" style="color:var(--text);text-decoration:underline" data-cta="assessment-result-trust">Review trust controls first</a></p>
         </div>
+
+        <div style="margin-top:1.25rem">${renderLeadIntakeTrustRail(turnstile)}</div>
       </div>
     </section>`,
     schemas: [
@@ -6688,7 +6880,7 @@ function assessmentResultPage(result: AssessmentResult, turnstileSiteKey: string
   });
 }
 
-function contactPage(turnstileSiteKey: string, enableLiveTurnstile: boolean): string {
+function contactPage(turnstile: TurnstilePosture, opts?: { widgetEnabled?: boolean }): string {
   return layout({
     meta: {
       title: "Contact Sales | Claw EA Enterprise AI Agents",
@@ -6702,7 +6894,7 @@ function contactPage(turnstileSiteKey: string, enableLiveTurnstile: boolean): st
         <h1>Talk to Sales</h1>
         <p class="lead">Short path: share your contact details and use case. We reply with a scoped recommendation and next steps.</p>
 
-        <form class="card lead-form" data-lead-form data-cta="contact-lead-form">
+        <form class="card lead-form" data-lead-form data-cta="contact-lead-form"${formGuardAttrs(turnstile)}>
           <div class="form-grid-2">
             <label class="form-field">
               <span>Work email *</span>
@@ -6726,24 +6918,20 @@ function contactPage(turnstileSiteKey: string, enableLiveTurnstile: boolean): st
             </label>
           </div>
 
-          ${renderTurnstileBlock(turnstileSiteKey, enableLiveTurnstile)}
+          ${renderTurnstileBlock(turnstile, { widgetEnabled: opts?.widgetEnabled })}
 
           <p class="form-note" style="margin:.75rem 0 0">By submitting, you agree to follow-up from Claw EA and our <a href="/policy" aria-label="Read privacy policy">privacy policy</a>.</p>
 
           <div class="form-actions">
-            <button type="submit" class="cta-btn cta-btn-lg" data-cta="contact-fast-submit" data-cta-copy>Request tailored plan</button>
+            <button type="submit" class="cta-btn cta-btn-lg" data-cta="contact-fast-submit" data-cta-copy${submitGuardAttrs(turnstile)}>Request tailored plan</button>
+            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="contact-assessment">Run readiness assessment</a>
             <span class="form-status" data-lead-form-status aria-live="polite"></span>
           </div>
 
           <p class="form-note">Prefer email? Write to <a href="mailto:enterprise@clawbureau.com">enterprise@clawbureau.com</a>. Include company, role, and target use case.</p>
         </form>
 
-        <div style="margin-top:1rem">
-          <p class="form-note" style="margin:.2rem 0 .5rem">Not ready to submit? Start with the assessment.</p>
-          <div class="actions" style="justify-content:flex-start">
-            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="contact-assessment">Run assessment</a>
-          </div>
-        </div>
+        <div style="margin-top:1.25rem">${renderLeadIntakeTrustRail(turnstile)}</div>
       </div>
     </section>`,
     schemas: [
@@ -6756,7 +6944,7 @@ function contactPage(turnstileSiteKey: string, enableLiveTurnstile: boolean): st
   });
 }
 
-function bookPage(requestUrl: URL, turnstileSiteKey: string, enableLiveTurnstile: boolean): string {
+function bookPage(requestUrl: URL, turnstile: TurnstilePosture, opts?: { widgetEnabled?: boolean }): string {
   const leadId = clipString(requestUrl.searchParams.get("lead"), 80) ?? "";
   const email = clipString(requestUrl.searchParams.get("email"), 220) ?? "";
   const company = clipString(requestUrl.searchParams.get("company"), 160) ?? "";
@@ -6775,7 +6963,7 @@ function bookPage(requestUrl: URL, turnstileSiteKey: string, enableLiveTurnstile
         <h1>Book your deployment planning session</h1>
         <p class="lead">Share minimal details and reserve a rollout session. We prefill context from your assessment/contact path when available.</p>
 
-        <form class="card lead-form" data-book-form data-cta="book-submit-form">
+        <form class="card lead-form" data-book-form data-cta="book-submit-form"${formGuardAttrs(turnstile)}>
           <input type="hidden" name="leadId" value="${esc(leadId)}">
 
           <div class="form-grid-2">
@@ -6815,22 +7003,18 @@ function bookPage(requestUrl: URL, turnstileSiteKey: string, enableLiveTurnstile
             </label>
           </div>
 
-          ${renderTurnstileBlock(turnstileSiteKey, enableLiveTurnstile)}
+          ${renderTurnstileBlock(turnstile, { widgetEnabled: opts?.widgetEnabled })}
 
           <div class="form-actions">
-            <button type="submit" class="cta-btn cta-btn-lg" data-cta="book-submit-primary">Confirm booking request</button>
+            <button type="submit" class="cta-btn cta-btn-lg" data-cta="book-submit-primary"${submitGuardAttrs(turnstile)}>Confirm booking request</button>
+            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="book-assessment">Run assessment first</a>
             <span class="form-status" data-book-form-status aria-live="polite"></span>
           </div>
 
           <p class="form-note">Ops will confirm by email with exact session time and preparation checklist.</p>
         </form>
 
-        <div style="margin-top:1rem">
-          <p class="form-note" style="margin:.2rem 0 .5rem">Not ready to book yet? Run the readiness assessment first.</p>
-          <div class="actions" style="justify-content:flex-start">
-            <a href="/assessment" class="cta-btn cta-btn-outline cta-btn-lg" data-cta="book-assessment">Run assessment first</a>
-          </div>
-        </div>
+        <div style="margin-top:1.25rem">${renderLeadIntakeTrustRail(turnstile)}</div>
       </div>
     </section>`,
     schemas: [
@@ -7395,6 +7579,10 @@ export default {
         return await opsFailingSteps(request, env);
       }
 
+      if (path === "/api/ops/lead-intake-security") {
+        return await opsLeadIntakeSecurityPosture(request, env);
+      }
+
       if (path === "/api/experiments/recommend") {
         return await recommendExperimentWinners(request, env);
       }
@@ -7672,16 +7860,21 @@ export default {
     // ── Static routes ──
     if (path === "/health") return json({ ok: true, service: "clawea-www", ts: new Date().toISOString() });
 
-    const turnstileSiteKey = env.TURNSTILE_SITE_KEY?.trim() || "1x00000000000000000000AA";
+    const turnstile = resolveTurnstilePosture(env);
     const host = url.hostname.toLowerCase();
-    const enableLiveTurnstile = host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
+    const widgetEnabled = host !== "localhost" && host !== "127.0.0.1" && host !== "::1";
 
     if (path === "/") return await htmlWithExperiment(html(homePage(), 200, 7200), path);
     if (path === "/pricing") return await htmlWithExperiment(html(pricingPage()), path);
-    if (path === "/assessment") return await htmlWithExperiment(html(assessmentPage(turnstileSiteKey), 200, 1800), path);
-    if (path === "/assessment/result") return await htmlWithExperiment(html(assessmentResultPage(parseAssessmentResult(url), turnstileSiteKey, enableLiveTurnstile), 200, 900), "/assessment/result");
-    if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstileSiteKey, enableLiveTurnstile)), path);
-    if (path === "/book") return await htmlWithExperiment(html(bookPage(url, turnstileSiteKey, enableLiveTurnstile), 200, 900), path);
+    if (path === "/assessment") return await htmlWithExperiment(html(assessmentPage(turnstile), 200, 1800), path);
+    if (path === "/assessment/result") {
+      return await htmlWithExperiment(
+        html(assessmentResultPage(parseAssessmentResult(url), turnstile, { widgetEnabled }), 200, 900),
+        "/assessment/result",
+      );
+    }
+    if (path === "/contact") return await htmlWithExperiment(html(contactPage(turnstile, { widgetEnabled })), path);
+    if (path === "/book") return await htmlWithExperiment(html(bookPage(url, turnstile, { widgetEnabled }), 200, 900), path);
     if (path === "/trust") return await htmlWithExperiment(html(trustPage()), path);
     if (path === "/secure-workers") return await htmlWithExperiment(html(secureWorkersPage()), path);
     if (path === "/consulting") return await htmlWithExperiment(html(consultingPage()), path);

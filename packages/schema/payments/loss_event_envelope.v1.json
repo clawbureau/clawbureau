@@ -1,0 +1,48 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.payments.loss_event_envelope.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Loss Event Envelope v1",
+  "description": "Signed envelope for deterministic loss event transport across queues/services.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "issued_at",
+    "payload",
+    "payload_hash_b64u",
+    "hash_algorithm",
+    "source_ref"
+  ],
+  "properties": {
+    "envelope_version": {
+      "const": "1"
+    },
+    "envelope_type": {
+      "const": "loss_event"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "$ref": "./loss_event.v1.json"
+    },
+    "payload_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "const": "SHA-256"
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

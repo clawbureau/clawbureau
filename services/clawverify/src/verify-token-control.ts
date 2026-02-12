@@ -1,16 +1,22 @@
+import {
+  computeTokenScopeHashB64u,
+  normalizeAudience,
+  normalizeScope,
+  revalidateSensitiveTransitions,
+  validateCanonicalControlContext,
+} from '../../../packages/identity-auth/src/index';
 import type {
   RemediationHint,
   VerificationError,
   VerifyTokenControlRequest,
   VerifyTokenControlResponse,
 } from './types';
-import { base64UrlEncode } from './crypto';
-import { jcsCanonicalize } from './jcs';
 import { isValidDidFormat } from './schema-registry';
 
 interface VerifyTokenControlOptions {
   clawscopeBaseUrl?: string;
   timeoutMs?: number;
+  transparencyMaxAgeSeconds?: number;
   fetcher?: typeof fetch;
 }
 
@@ -32,21 +38,19 @@ interface IntrospectionResponse {
   spend_cap?: number;
   mission_id?: string;
   token_lane?: 'legacy' | 'canonical';
+  kid?: string;
+  kid_source?: string;
   iat?: number;
   exp?: number;
 }
 
-interface MatrixResponse {
-  active: boolean;
-  revoked: boolean;
-  matrix?: Record<
-    string,
-    {
-      allowed: boolean;
-      reason_code: string;
-      reason: string;
-    }
-  >;
+interface KeyTransparencySnapshot {
+  snapshot_id?: string;
+  generated_at?: number;
+  generated_at_iso?: string;
+  active_kid?: string;
+  accepted_kids?: string[];
+  expiring_kids?: Array<{ kid: string; not_after_unix: number }>;
 }
 
 interface JsonResponse {
@@ -61,18 +65,6 @@ function hint(code: RemediationHint['code'], message: string, action: string): R
 
 function uniqueStrings(values: string[]): string[] {
   return Array.from(new Set(values.map((v) => v.trim()).filter((v) => v.length > 0))).sort();
-}
-
-function normalizeAudience(value: string | string[]): string[] {
-  if (Array.isArray(value)) {
-    return uniqueStrings(value.filter((v) => typeof v === 'string'));
-  }
-
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return [value.trim()];
-  }
-
-  return [];
 }
 
 function buildInvalidResponse(
@@ -111,6 +103,41 @@ async function postJson(
         accept: 'application/json',
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    const text = await response.text();
+    let json: unknown = null;
+    try {
+      json = text ? (JSON.parse(text) as unknown) : null;
+    } catch {
+      json = null;
+    }
+
+    return {
+      status: response.status,
+      ok: response.ok,
+      json,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getJson(
+  fetcher: typeof fetch,
+  url: string,
+  timeoutMs: number
+): Promise<JsonResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetcher(url, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
       signal: controller.signal,
     });
 
@@ -215,10 +242,7 @@ function validateRequest(
     normalized.expected_agent_did = req.expected_agent_did.trim();
   }
 
-  if (
-    normalized.expected_owner_did &&
-    !isValidDidFormat(normalized.expected_owner_did)
-  ) {
+  if (normalized.expected_owner_did && !isValidDidFormat(normalized.expected_owner_did)) {
     return {
       ok: false,
       response: buildInvalidResponse(
@@ -241,10 +265,7 @@ function validateRequest(
     };
   }
 
-  if (
-    normalized.expected_controller_did &&
-    !isValidDidFormat(normalized.expected_controller_did)
-  ) {
+  if (normalized.expected_controller_did && !isValidDidFormat(normalized.expected_controller_did)) {
     return {
       ok: false,
       response: buildInvalidResponse(
@@ -267,10 +288,7 @@ function validateRequest(
     };
   }
 
-  if (
-    normalized.expected_agent_did &&
-    !isValidDidFormat(normalized.expected_agent_did)
-  ) {
+  if (normalized.expected_agent_did && !isValidDidFormat(normalized.expected_agent_did)) {
     return {
       ok: false,
       response: buildInvalidResponse(
@@ -302,11 +320,11 @@ function validateRequest(
   }
 
   if (Array.isArray(req.required_scope)) {
-    normalized.required_scope = uniqueStrings(req.required_scope.filter((v) => typeof v === 'string'));
+    normalized.required_scope = normalizeScope(req.required_scope.filter((v) => typeof v === 'string'));
   }
 
   if (Array.isArray(req.required_transitions)) {
-    normalized.required_transitions = uniqueStrings(
+    normalized.required_transitions = normalizeScope(
       req.required_transitions.filter((v) => typeof v === 'string')
     );
   }
@@ -317,57 +335,24 @@ function validateRequest(
   };
 }
 
-async function computeTokenScopeHashB64u(introspection: IntrospectionResponse): Promise<string> {
-  const canonical: Record<string, unknown> = {
-    token_version: '1',
-    sub: introspection.sub,
-    aud: normalizeAudience(introspection.aud),
-    scope: uniqueStrings(introspection.scope ?? []),
-  };
-
-  if (typeof introspection.owner_ref === 'string' && introspection.owner_ref.trim().length > 0) {
-    canonical.owner_ref = introspection.owner_ref.trim();
-  }
-  if (typeof introspection.owner_did === 'string' && introspection.owner_did.trim().length > 0) {
-    canonical.owner_did = introspection.owner_did.trim();
-  }
-  if (
-    typeof introspection.controller_did === 'string' &&
-    introspection.controller_did.trim().length > 0
-  ) {
-    canonical.controller_did = introspection.controller_did.trim();
-  }
-  if (typeof introspection.agent_did === 'string' && introspection.agent_did.trim().length > 0) {
-    canonical.agent_did = introspection.agent_did.trim();
-  }
-  if (
-    typeof introspection.policy_hash_b64u === 'string' &&
-    introspection.policy_hash_b64u.trim().length > 0
-  ) {
-    canonical.policy_hash_b64u = introspection.policy_hash_b64u.trim();
-  }
-  if (
-    typeof introspection.control_plane_policy_hash_b64u === 'string' &&
-    introspection.control_plane_policy_hash_b64u.trim().length > 0
-  ) {
-    canonical.control_plane_policy_hash_b64u = introspection.control_plane_policy_hash_b64u.trim();
-  }
-  if (
-    typeof introspection.payment_account_did === 'string' &&
-    introspection.payment_account_did.trim().length > 0
-  ) {
-    canonical.payment_account_did = introspection.payment_account_did.trim();
-  }
-  if (typeof introspection.spend_cap === 'number' && Number.isFinite(introspection.spend_cap)) {
-    canonical.spend_cap = introspection.spend_cap;
-  }
-  if (typeof introspection.mission_id === 'string' && introspection.mission_id.trim().length > 0) {
-    canonical.mission_id = introspection.mission_id.trim();
+function normalizeRequiredAudience(value: VerifyTokenControlRequest['required_audience']): string[] {
+  if (Array.isArray(value)) {
+    return uniqueStrings(value);
   }
 
-  const bytes = new TextEncoder().encode(jcsCanonicalize(canonical));
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return base64UrlEncode(new Uint8Array(digest));
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return [value.trim()];
+  }
+
+  return [];
+}
+
+async function fetchTransparencySnapshot(
+  fetcher: typeof fetch,
+  baseUrl: string,
+  timeoutMs: number
+): Promise<JsonResponse> {
+  return getJson(fetcher, `${baseUrl.replace(/\/$/, '')}/v1/keys/transparency/latest`, timeoutMs);
 }
 
 export async function verifyTokenControl(
@@ -384,6 +369,10 @@ export async function verifyTokenControl(
   const req = validated.req;
   const fetcher = options.fetcher ?? fetch;
   const timeoutMs = options.timeoutMs && Number.isFinite(options.timeoutMs) ? options.timeoutMs : 5000;
+  const transparencyMaxAgeSeconds =
+    options.transparencyMaxAgeSeconds && Number.isFinite(options.transparencyMaxAgeSeconds)
+      ? Math.max(60, Math.floor(options.transparencyMaxAgeSeconds))
+      : 60 * 60;
   const baseUrl = options.clawscopeBaseUrl?.trim();
 
   if (!baseUrl) {
@@ -475,11 +464,7 @@ export async function verifyTokenControl(
         },
         {},
         [
-          hint(
-            'REISSUE_TOKEN',
-            'Token uses an expired overlap key',
-            'Reissue token with the current active key'
-          ),
+          hint('REISSUE_TOKEN', 'Token uses an expired overlap key', 'Reissue token with the current active key'),
         ]
       );
     }
@@ -542,18 +527,27 @@ export async function verifyTokenControl(
     );
   }
 
-  if (
-    !introspection.owner_did ||
-    !introspection.controller_did ||
-    !introspection.agent_did ||
-    tokenLane !== 'canonical'
-  ) {
+  const canonicalContext = validateCanonicalControlContext(
+    {
+      owner_did: introspection.owner_did,
+      controller_did: introspection.controller_did,
+      agent_did: introspection.agent_did,
+      token_lane: introspection.token_lane,
+    },
+    {
+      owner_did: req.expected_owner_did,
+      controller_did: req.expected_controller_did,
+      agent_did: req.expected_agent_did,
+    }
+  );
+
+  if (!canonicalContext.ok) {
     return buildInvalidResponse(
       now,
-      'Token is not bound to canonical owner/controller/agent chain',
+      canonicalContext.message ?? 'Token control context mismatch',
       {
-        code: 'TOKEN_CONTROL_CHAIN_MISSING',
-        message: 'Canonical chain claims are required: owner_did, controller_did, agent_did, token_lane=canonical',
+        code: canonicalContext.code ?? 'TOKEN_CONTROL_CHAIN_MISSING',
+        message: canonicalContext.message ?? 'Token control context mismatch',
       },
       {
         token_hash: tokenHash,
@@ -566,103 +560,34 @@ export async function verifyTokenControl(
       },
       [
         hint(
-          'USE_CANONICAL_CST_LANE',
-          'Legacy CST lane cannot satisfy strict control-plane verification',
-          'Issue via /v1/tokens/issue/canonical with chain-bound claims'
+          canonicalContext.code === 'TOKEN_CONTROL_CHAIN_MISSING'
+            ? 'USE_CANONICAL_CST_LANE'
+            : canonicalContext.code === 'TOKEN_CONTROL_SUBJECT_MISMATCH'
+              ? 'REGISTER_AGENT_UNDER_CONTROLLER'
+              : 'CHECK_CONTROL_CHAIN_CONFIG',
+          'Token claims do not satisfy canonical control-chain constraints',
+          'Issue a canonical token for the expected owner/controller/agent context and retry'
         ),
       ]
     );
   }
 
-  if (req.expected_owner_did && req.expected_owner_did !== introspection.owner_did) {
-    return buildInvalidResponse(
-      now,
-      'Token owner_did does not match expected_owner_did',
-      {
-        code: 'CONTROL_CHAIN_CONTEXT_MISMATCH',
-        message: 'owner_did claim mismatch',
-        field: 'expected_owner_did',
-      },
-      {
-        token_hash: tokenHash,
-        active: true,
-        revoked: false,
-        token_lane: tokenLane,
-        owner_did: introspection.owner_did,
-        controller_did: introspection.controller_did,
-        agent_did: introspection.agent_did,
-      },
-      [
-        hint(
-          'REGISTER_OWNER_BINDING',
-          'Token owner does not match requested owner context',
-          'Issue token for the intended owner/controller/agent chain'
-        ),
-      ]
-    );
-  }
+  const calculatedScopeHash = await computeTokenScopeHashB64u({
+    sub: introspection.sub,
+    aud: introspection.aud,
+    scope: introspection.scope,
+    owner_ref: introspection.owner_ref,
+    owner_did: introspection.owner_did,
+    controller_did: introspection.controller_did,
+    agent_did: introspection.agent_did,
+    policy_hash_b64u: introspection.policy_hash_b64u,
+    control_plane_policy_hash_b64u: introspection.control_plane_policy_hash_b64u,
+    payment_account_did: introspection.payment_account_did,
+    spend_cap: introspection.spend_cap,
+    mission_id: introspection.mission_id,
+  });
 
-  if (req.expected_controller_did && req.expected_controller_did !== introspection.controller_did) {
-    return buildInvalidResponse(
-      now,
-      'Token controller_did does not match expected_controller_did',
-      {
-        code: 'CONTROL_CHAIN_CONTEXT_MISMATCH',
-        message: 'controller_did claim mismatch',
-        field: 'expected_controller_did',
-      },
-      {
-        token_hash: tokenHash,
-        active: true,
-        revoked: false,
-        token_lane: tokenLane,
-        owner_did: introspection.owner_did,
-        controller_did: introspection.controller_did,
-        agent_did: introspection.agent_did,
-      },
-      [
-        hint(
-          'REGISTER_CONTROLLER',
-          'Token controller does not match expected control context',
-          'Issue token for the expected controller DID'
-        ),
-      ]
-    );
-  }
-
-  if (req.expected_agent_did && req.expected_agent_did !== introspection.agent_did) {
-    return buildInvalidResponse(
-      now,
-      'Token agent_did does not match expected_agent_did',
-      {
-        code: 'TOKEN_CONTROL_SUBJECT_MISMATCH',
-        message: 'agent_did claim mismatch',
-        field: 'expected_agent_did',
-      },
-      {
-        token_hash: tokenHash,
-        active: true,
-        revoked: false,
-        token_lane: tokenLane,
-        owner_did: introspection.owner_did,
-        controller_did: introspection.controller_did,
-        agent_did: introspection.agent_did,
-      },
-      [
-        hint(
-          'REGISTER_AGENT_UNDER_CONTROLLER',
-          'Token agent does not match expected execution subject',
-          'Issue token for the expected agent DID'
-        ),
-      ]
-    );
-  }
-
-  const calculatedScopeHash = await computeTokenScopeHashB64u(introspection);
-  if (
-    !introspection.token_scope_hash_b64u ||
-    introspection.token_scope_hash_b64u !== calculatedScopeHash
-  ) {
+  if (!introspection.token_scope_hash_b64u || introspection.token_scope_hash_b64u !== calculatedScopeHash) {
     return buildInvalidResponse(
       now,
       'token_scope_hash_b64u does not match recomputed claim hash',
@@ -691,8 +616,8 @@ export async function verifyTokenControl(
     );
   }
 
-  const tokenScopeSet = new Set(uniqueStrings(introspection.scope ?? []));
-  const requiredScope = uniqueStrings(req.required_scope ?? []);
+  const tokenScopeSet = new Set(normalizeScope(introspection.scope ?? []));
+  const requiredScope = normalizeScope(req.required_scope ?? []);
   const missingScope = requiredScope.filter((scope) => !tokenScopeSet.has(scope));
   if (missingScope.length > 0) {
     return buildInvalidResponse(
@@ -730,12 +655,7 @@ export async function verifyTokenControl(
     );
   }
 
-  const requiredAudience = Array.isArray(req.required_audience)
-    ? uniqueStrings(req.required_audience)
-    : typeof req.required_audience === 'string' && req.required_audience.trim().length > 0
-      ? [req.required_audience.trim()]
-      : [];
-
+  const requiredAudience = normalizeRequiredAudience(req.required_audience);
   const tokenAudience = new Set(normalizeAudience(introspection.aud));
   const missingAudience = requiredAudience.filter((aud) => !tokenAudience.has(aud));
   if (missingAudience.length > 0) {
@@ -769,25 +689,18 @@ export async function verifyTokenControl(
     );
   }
 
-  let transitionMatrix: MatrixResponse['matrix'] | undefined;
-  const requiredTransitions = uniqueStrings(req.required_transitions ?? []);
-  if (requiredTransitions.length > 0) {
-    let matrixResponse: JsonResponse;
-    try {
-      matrixResponse = await postJson(
-        fetcher,
-        `${baseUrl.replace(/\/$/, '')}/v1/tokens/introspect/matrix`,
-        { token: req.token },
-        timeoutMs
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+  let transparencySnapshot: KeyTransparencySnapshot | undefined;
+  try {
+    const snapshotResponse = await fetchTransparencySnapshot(fetcher, baseUrl, timeoutMs);
+    if (snapshotResponse.status !== 200 || !snapshotResponse.json) {
       return buildInvalidResponse(
         now,
-        'Failed to query clawscope transition matrix endpoint',
+        'Failed to read key transparency snapshot',
         {
           code: 'DEPENDENCY_NOT_CONFIGURED',
-          message,
+          message:
+            getUpstreamErrorMessage(snapshotResponse.json) ??
+            `Key transparency endpoint failed with status ${snapshotResponse.status}`,
         },
         {
           token_hash: tokenHash,
@@ -800,23 +713,232 @@ export async function verifyTokenControl(
         },
         [
           hint(
-            'CHECK_CONTROL_CHAIN_CONFIG',
-            'Transition matrix endpoint unavailable',
-            'Check clawscope /v1/tokens/introspect/matrix availability'
+            'SYNC_REVOCATION_STREAM',
+            'Key transparency snapshot is unavailable',
+            'Restore clawscope key transparency endpoint and retry'
           ),
         ]
       );
     }
 
-    if (matrixResponse.status !== 200 || !matrixResponse.json) {
+    transparencySnapshot = snapshotResponse.json as KeyTransparencySnapshot;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return buildInvalidResponse(
+      now,
+      'Failed to query key transparency snapshot',
+      {
+        code: 'DEPENDENCY_NOT_CONFIGURED',
+        message,
+      },
+      {
+        token_hash: tokenHash,
+        active: true,
+        revoked: false,
+        token_lane: tokenLane,
+        owner_did: introspection.owner_did,
+        controller_did: introspection.controller_did,
+        agent_did: introspection.agent_did,
+      },
+      [
+        hint(
+          'CHECK_CONTROL_CHAIN_CONFIG',
+          'Key transparency dependency is unavailable',
+          'Verify clawscope /v1/keys/transparency/latest health'
+        ),
+      ]
+    );
+  }
+
+  if (!transparencySnapshot || typeof transparencySnapshot.generated_at !== 'number') {
+    return buildInvalidResponse(
+      now,
+      'Key transparency snapshot payload is invalid',
+      {
+        code: 'DEPENDENCY_NOT_CONFIGURED',
+        message: 'generated_at is required in transparency snapshot',
+      },
+      {
+        token_hash: tokenHash,
+        active: true,
+        revoked: false,
+        token_lane: tokenLane,
+      }
+    );
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const snapshotAge = nowSec - transparencySnapshot.generated_at;
+  if (snapshotAge > transparencyMaxAgeSeconds) {
+    return buildInvalidResponse(
+      now,
+      'Key transparency snapshot is stale',
+      {
+        code: 'TOKEN_CONTROL_TRANSPARENCY_STALE',
+        message: `Snapshot age ${snapshotAge}s exceeds max allowed ${transparencyMaxAgeSeconds}s`,
+      },
+      {
+        token_hash: tokenHash,
+        active: true,
+        revoked: false,
+        token_lane: tokenLane,
+        transparency_snapshot: {
+          snapshot_id: transparencySnapshot.snapshot_id,
+          generated_at: transparencySnapshot.generated_at,
+          generated_at_iso: transparencySnapshot.generated_at_iso,
+          active_kid: transparencySnapshot.active_kid,
+          accepted_kids: transparencySnapshot.accepted_kids,
+          kid_observed: introspection.kid,
+        },
+      },
+      [
+        hint(
+          'SYNC_REVOCATION_STREAM',
+          'Verification requires fresh key transparency snapshots',
+          'Regenerate key transparency snapshot in clawscope and retry'
+        ),
+      ]
+    );
+  }
+
+  const acceptedKids = Array.isArray(transparencySnapshot.accepted_kids)
+    ? uniqueStrings(transparencySnapshot.accepted_kids.filter((entry) => typeof entry === 'string'))
+    : [];
+
+  if (!introspection.kid || !acceptedKids.includes(introspection.kid)) {
+    return buildInvalidResponse(
+      now,
+      'Token kid is not included in accepted transparency snapshot window',
+      {
+        code: 'TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN',
+        message: 'Observed token kid is not in snapshot accepted_kids',
+      },
+      {
+        token_hash: tokenHash,
+        active: true,
+        revoked: false,
+        token_lane: tokenLane,
+        transparency_snapshot: {
+          snapshot_id: transparencySnapshot.snapshot_id,
+          generated_at: transparencySnapshot.generated_at,
+          generated_at_iso: transparencySnapshot.generated_at_iso,
+          active_kid: transparencySnapshot.active_kid,
+          accepted_kids: acceptedKids,
+          kid_observed: introspection.kid,
+        },
+      },
+      [
+        hint(
+          'REISSUE_TOKEN',
+          'Token kid is outside accepted overlap window',
+          'Reissue token against current active keyset'
+        ),
+      ]
+    );
+  }
+
+  const expiringEntry = (transparencySnapshot.expiring_kids ?? []).find(
+    (entry) => entry && entry.kid === introspection.kid
+  );
+  if (
+    expiringEntry &&
+    typeof expiringEntry.not_after_unix === 'number' &&
+    nowSec > expiringEntry.not_after_unix
+  ) {
+    return buildInvalidResponse(
+      now,
+      'Token kid overlap window has expired according to transparency snapshot',
+      {
+        code: 'TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED',
+        message: `kid ${introspection.kid} expired at ${expiringEntry.not_after_unix}`,
+      },
+      {
+        token_hash: tokenHash,
+        active: true,
+        revoked: false,
+        token_lane: tokenLane,
+        transparency_snapshot: {
+          snapshot_id: transparencySnapshot.snapshot_id,
+          generated_at: transparencySnapshot.generated_at,
+          generated_at_iso: transparencySnapshot.generated_at_iso,
+          active_kid: transparencySnapshot.active_kid,
+          accepted_kids: acceptedKids,
+          kid_observed: introspection.kid,
+        },
+      },
+      [
+        hint(
+          'REISSUE_TOKEN',
+          'Token kid overlap has expired',
+          'Reissue token with currently active kid and retry'
+        ),
+      ]
+    );
+  }
+
+  let transitionMatrix: VerifyTokenControlResponse['transition_matrix'] | undefined;
+  const requiredTransitions = normalizeScope(req.required_transitions ?? []);
+  if (requiredTransitions.length > 0) {
+    const transitionResult = await revalidateSensitiveTransitions({
+      scopeBaseUrl: baseUrl,
+      token: req.token,
+      requiredTransitions,
+      timeoutMs,
+      fetcher,
+    });
+
+    if (!transitionResult.ok) {
+      if (transitionResult.code === 'TOKEN_CONTROL_TRANSITION_FORBIDDEN') {
+        return buildInvalidResponse(
+          now,
+          transitionResult.message,
+          {
+            code: 'TOKEN_CONTROL_TRANSITION_FORBIDDEN',
+            message: transitionResult.message,
+            field: 'required_transitions',
+          },
+          {
+            token_hash: tokenHash,
+            active: true,
+            revoked: false,
+            token_lane: tokenLane,
+            owner_did: introspection.owner_did,
+            controller_did: introspection.controller_did,
+            agent_did: introspection.agent_did,
+            scope: introspection.scope,
+            aud: introspection.aud,
+            token_scope_hash_b64u: introspection.token_scope_hash_b64u,
+            transition_matrix: transitionResult.matrix,
+            transparency_snapshot: {
+              snapshot_id: transparencySnapshot.snapshot_id,
+              generated_at: transparencySnapshot.generated_at,
+              generated_at_iso: transparencySnapshot.generated_at_iso,
+              active_kid: transparencySnapshot.active_kid,
+              accepted_kids: acceptedKids,
+              kid_observed: introspection.kid,
+            },
+          },
+          [
+            hint(
+              'UPDATE_SENSITIVE_POLICY',
+              'Transition matrix denied one or more requested sensitive transitions',
+              'Update controller sensitive policy and reissue token'
+            ),
+            hint(
+              'USE_CANONICAL_CST_LANE',
+              'Sensitive transitions require canonical chain-bound CST lane',
+              'Use /v1/tokens/issue/canonical in clawscope'
+            ),
+          ]
+        );
+      }
+
       return buildInvalidResponse(
         now,
-        'clawscope transition matrix request failed',
+        'Failed to evaluate sensitive transition matrix',
         {
-          code: matrixResponse.status >= 500 ? 'DEPENDENCY_NOT_CONFIGURED' : 'PARSE_ERROR',
-          message:
-            getUpstreamErrorMessage(matrixResponse.json) ??
-            `clawscope transition matrix failed with status ${matrixResponse.status}`,
+          code: transitionResult.code === 'PARSE_ERROR' ? 'PARSE_ERROR' : 'DEPENDENCY_NOT_CONFIGURED',
+          message: transitionResult.message,
         },
         {
           token_hash: tokenHash,
@@ -826,6 +948,14 @@ export async function verifyTokenControl(
           owner_did: introspection.owner_did,
           controller_did: introspection.controller_did,
           agent_did: introspection.agent_did,
+          transparency_snapshot: {
+            snapshot_id: transparencySnapshot.snapshot_id,
+            generated_at: transparencySnapshot.generated_at,
+            generated_at_iso: transparencySnapshot.generated_at_iso,
+            active_kid: transparencySnapshot.active_kid,
+            accepted_kids: acceptedKids,
+            kid_observed: introspection.kid,
+          },
         },
         [
           hint(
@@ -837,56 +967,14 @@ export async function verifyTokenControl(
       );
     }
 
-    const matrixPayload = matrixResponse.json as MatrixResponse;
-    transitionMatrix = matrixPayload.matrix ?? {};
-
-    const deniedTransitions = requiredTransitions.filter((transition) => {
-      const entry = transitionMatrix?.[transition];
-      return !entry || entry.allowed !== true;
-    });
-
-    if (deniedTransitions.length > 0) {
-      return buildInvalidResponse(
-        now,
-        `Token is not authorized for transition(s): ${deniedTransitions.join(', ')}`,
-        {
-          code: 'TOKEN_CONTROL_TRANSITION_FORBIDDEN',
-          message: `Transition(s) denied by matrix: ${deniedTransitions.join(', ')}`,
-          field: 'required_transitions',
-        },
-        {
-          token_hash: tokenHash,
-          active: true,
-          revoked: false,
-          token_lane: tokenLane,
-          owner_did: introspection.owner_did,
-          controller_did: introspection.controller_did,
-          agent_did: introspection.agent_did,
-          scope: introspection.scope,
-          aud: introspection.aud,
-          token_scope_hash_b64u: introspection.token_scope_hash_b64u,
-          transition_matrix: transitionMatrix,
-        },
-        [
-          hint(
-            'UPDATE_SENSITIVE_POLICY',
-            'Transition matrix denied one or more requested sensitive transitions',
-            'Update controller sensitive policy and reissue token'
-          ),
-          hint(
-            'USE_CANONICAL_CST_LANE',
-            'Sensitive transitions require canonical chain-bound CST lane',
-            'Use /v1/tokens/issue/canonical in clawscope'
-          ),
-        ]
-      );
-    }
+    transitionMatrix = transitionResult.matrix;
   }
 
   return {
     result: {
       status: 'VALID',
-      reason: 'Token satisfies control-chain, audience, scope, and transition requirements',
+      reason:
+        'Token satisfies control-chain, audience, scope, transition requirements, and key transparency policy',
       verified_at: now,
     },
     token_hash: tokenHash,
@@ -900,6 +988,14 @@ export async function verifyTokenControl(
     scope: introspection.scope,
     token_scope_hash_b64u: introspection.token_scope_hash_b64u,
     transition_matrix: transitionMatrix,
+    transparency_snapshot: {
+      snapshot_id: transparencySnapshot.snapshot_id,
+      generated_at: transparencySnapshot.generated_at,
+      generated_at_iso: transparencySnapshot.generated_at_iso,
+      active_kid: transparencySnapshot.active_kid,
+      accepted_kids: acceptedKids,
+      kid_observed: introspection.kid,
+    },
     remediation_hints: [],
   };
 }

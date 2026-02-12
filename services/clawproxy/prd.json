@@ -183,7 +183,7 @@
       ],
       "priority": 13,
       "passes": true,
-      "notes": "Implemented platform-paid inference mode: when Authorization header is missing and PLATFORM_PAID_ENABLED=true, clawproxy routes using provider-specific platform API keys (PLATFORM_*_API_KEY). Receipts include payment attribution (mode user/platform, paid boolean) and a ledgerRef for platform-paid calls (clawledger:reserve:<nonce|uuid>). Platform-paid requests require X-Client-DID (and thus CST auth) to keep spend attributable." 
+      "notes": "Implemented platform-paid inference mode: when Authorization header is missing and PLATFORM_PAID_ENABLED=true, clawproxy routes using provider-specific platform API keys (PLATFORM_*_API_KEY). Receipts include payment attribution (mode user/platform, paid boolean) and a ledgerRef for platform-paid calls (clawledger:reserve:<nonce|uuid>). Platform-paid requests require X-Client-DID (and thus CST auth) to keep spend attributable."
     },
     {
       "id": "CPX-US-014",
@@ -261,6 +261,21 @@
       "priority": 18,
       "passes": true,
       "notes": "Shipped to staging + production: CST payment_account_did is now bound into deterministic token_scope_hash and enforced fail-closed on platform-paid path. Deterministic mismatch/required/invalid claim errors: PAYMENT_ACCOUNT_CLAIM_MISMATCH, PAYMENT_ACCOUNT_BINDING_REQUIRED, PAYMENT_ACCOUNT_CLAIM_INVALID."
+    },
+    {
+      "id": "CPX-US-017",
+      "title": "Universal canonical CST enforcement + chain-bound scope hash contract",
+      "description": "As platform security, we need clawproxy to require canonical CSTs and validate chain-bound scope-hash claims before proxy execution.",
+      "acceptanceCriteria": [
+        "Strict canonical CST requirement is configurable and enabled in deployed envs",
+        "Canonical lane validates owner/controller/agent claims and subject consistency",
+        "Recomputed token_scope_hash includes canonical chain + control-plane/payment bindings",
+        "Legacy/no-CST requests fail closed with deterministic errors",
+        "Typecheck and tests pass"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Implemented via shared helper adoption in `services/clawproxy/src/scoped-token.ts` and enforcement gates in `services/clawproxy/src/index.ts` (`STRICT_AUTH_HEADERS`, `PROXY_REQUIRE_CST`, `PROXY_REQUIRE_CANONICAL_CST`). Staging key alignment deploy: `e6d6aa64-983b-40ad-bf45-92db7b4ce975`; production enforcement deploy already active: `21044cf8-d891-45f4-a1ef-ba5f05164603`. Validated by M6 conformance matrices and hard-cutover reruns."
     }
   ]
 }

@@ -1,0 +1,106 @@
+{
+  "project": "clawbureau",
+  "branchName": "feat/economy/CINR-OPS-001-clawinsure-mvp",
+  "description": "clawinsure MVP for deterministic quotes, policy issuance, claim adjudication, and payouts.",
+  "userStories": [
+    {
+      "id": "CINR-US-001",
+      "title": "Coverage quotes",
+      "description": "As a requester, I can request deterministic coverage quotes based on risk.",
+      "acceptanceCriteria": [
+        "POST /v1/quotes implemented",
+        "Risk uses clawrep tier + dispute rate",
+        "Premium computed with minor-unit deterministic math",
+        "Quote hash and expiry returned"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Validated in staging+prod clawinsure smoke (quote create assertions)."
+    },
+    {
+      "id": "CINR-US-002",
+      "title": "Claims intake",
+      "description": "As a claimant, I can submit insurance claims with evidence refs.",
+      "acceptanceCriteria": [
+        "POST /v1/claims implemented",
+        "Strict evidence validation fails closed",
+        "Trial/escrow refs unresolved -> deterministic error",
+        "GET /v1/claims/:id ownership-gated"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Smoke validates unresolved trial ref path returns deterministic 422 and claimant-only read access path."
+    },
+    {
+      "id": "CINR-US-003",
+      "title": "Provider bonds",
+      "description": "As a provider, I can issue bond-backed policies.",
+      "acceptanceCriteria": [
+        "provider_bond coverage type supported",
+        "Bond id issued and persisted",
+        "Bond metadata exposed via policy read",
+        "Bond lifecycle tracked in D1"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Provider bond issuance persisted in provider_bonds table and returned through policy endpoints."
+    },
+    {
+      "id": "CINR-US-004",
+      "title": "Claims adjudication",
+      "description": "As an operator, I can approve/reject claims with deterministic state transitions.",
+      "acceptanceCriteria": [
+        "POST /v1/claims/:id/adjudicate implemented",
+        "Adjudication idempotency enforced",
+        "Approved amount bounded by request and coverage",
+        "Evidence references revalidated before decision"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Adjudication + replay assertions pass in staging/prod smoke with deterministic idempotent response behavior."
+    },
+    {
+      "id": "CINR-US-005",
+      "title": "Premium payouts",
+      "description": "As the insurer, I can payout approved claims through ledger transfers.",
+      "acceptanceCriteria": [
+        "POST /v1/claims/:id/payout implemented",
+        "Ledger transfer enforced with idempotency",
+        "Policy paid_out/status updated deterministically",
+        "Replay returns deterministic result"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": "Payout and replay assertions pass in both envs with ledger transfer refs persisted on claim/policy."
+    },
+    {
+      "id": "CINR-US-006",
+      "title": "Risk scoring",
+      "description": "As a system, I can expose deterministic risk scoring for quotes and ops.",
+      "acceptanceCriteria": [
+        "GET /v1/risk/:did implemented",
+        "Risk derives from clawrep tier + dispute signal",
+        "Risk output includes multiplier context",
+        "GET /v1/reports/claims exposes outcomes + latency"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": "Risk endpoint and claims report exercised in staging+prod smoke with totals and latency payload assertions."
+    },
+    {
+      "id": "CINR-US-007",
+      "title": "Loss-event auto-claim intake",
+      "description": "As risk ops, I want clawinsure to ingest canonical loss events via service-key auth and open deterministic claims without claimant-interactive flows.",
+      "acceptanceCriteria": [
+        "Implement POST /v1/claims/auto protected by INSURE_RISK_KEY",
+        "Idempotent auto-claim creation keyed by upstream loss-event idempotency",
+        "Policy resolution by explicit policy_id or claimant DID fallback",
+        "Coverage cap applied deterministically (requested capped to remaining coverage)",
+        "Auto-claim evidence bundle + revalidation persisted for auditability"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": "Shipped to staging+prod with INSURE_RISK_KEY-protected POST /v1/claims/auto, deterministic idempotency replay, policy DID fallback, and coverage-cap enforcement. Verified in ECON risk-loop smokes: artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json."
+    }
+  ]
+}
