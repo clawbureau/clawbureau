@@ -73,6 +73,7 @@ import {
   type PageMeta,
 } from "./seo";
 import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
+import { compareManualAuditPage, compareGuardrailsPage, compareLangfusePage, compareCustomWrappersPage, compareGovernanceLandscapePage } from "./pages/compare";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1749,6 +1750,41 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     title: "Enterprise AI Consulting | Agent Strategy & Deployment | Claw EA",
     description: "Consulting services for deployment and governance of AI agent programs.",
     category: "consulting",
+    kind: "static",
+  },
+  {
+    path: "/compare/claw-vs-manual-audit",
+    title: "Claw EA vs Manual Audit Evidence",
+    description: "Automated proof bundles vs manual evidence collection for compliance.",
+    category: "compare",
+    kind: "static",
+  },
+  {
+    path: "/compare/claw-vs-guardrails",
+    title: "Claw EA vs Guardrails (NeMo, Guardrails AI)",
+    description: "Protocol-level proof vs inference-time guardrails for agent governance.",
+    category: "compare",
+    kind: "static",
+  },
+  {
+    path: "/compare/claw-vs-langfuse",
+    title: "Claw EA vs Langfuse | Receipts vs Observability",
+    description: "Cryptographic receipts with offline verification vs observability dashboards.",
+    category: "compare",
+    kind: "static",
+  },
+  {
+    path: "/compare/claw-vs-custom-wrappers",
+    title: "Claw EA vs Custom Wrappers",
+    description: "Protocol-level receipts vs ad-hoc custom wrapper logging.",
+    category: "compare",
+    kind: "static",
+  },
+  {
+    path: "/compare/agent-governance-platforms",
+    title: "Agent Governance Platforms Landscape",
+    description: "How guardrails, observability, custom wrappers, and protocol-first proof compare.",
+    category: "compare",
     kind: "static",
   },
   {
@@ -8013,6 +8049,14 @@ export default {
     if (path === "/secure-workers") return await htmlWithExperiment(html(secureWorkersPage()), path);
     if (path === "/consulting") return await htmlWithExperiment(html(consultingPage()), path);
     if (path === "/about") return await htmlWithExperiment(html(aboutPage()), path);
+
+    // Compare pages
+    if (path === "/compare/claw-vs-manual-audit") return await htmlWithExperiment(html(compareManualAuditPage()), path);
+    if (path === "/compare/claw-vs-guardrails") return await htmlWithExperiment(html(compareGuardrailsPage()), path);
+    if (path === "/compare/claw-vs-langfuse") return await htmlWithExperiment(html(compareLangfusePage()), path);
+    if (path === "/compare/claw-vs-custom-wrappers") return await htmlWithExperiment(html(compareCustomWrappersPage()), path);
+    if (path === "/compare/agent-governance-platforms") return await htmlWithExperiment(html(compareGovernanceLandscapePage()), path);
+
     if (path === "/sources") {
       const manifest = await loadManifest(env);
       return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
@@ -8147,6 +8191,11 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "book", priority: "0.85" },
     { slug: "sources", priority: "0.7" },
     { slug: "about", priority: "0.6" },
+    { slug: "compare/claw-vs-manual-audit", priority: "0.7" },
+    { slug: "compare/claw-vs-guardrails", priority: "0.7" },
+    { slug: "compare/claw-vs-langfuse", priority: "0.7" },
+    { slug: "compare/claw-vs-custom-wrappers", priority: "0.7" },
+    { slug: "compare/agent-governance-platforms", priority: "0.7" },
   ];
 
   let entries = staticPages.map((p) => `  <url><loc>https://www.clawea.com/${p.slug}</loc><priority>${p.priority}</priority><changefreq>weekly</changefreq></url>`);
