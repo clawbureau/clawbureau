@@ -46,13 +46,13 @@
 ### Phase 2: Domain Consolidation (Agent D: Marketing)
 **Goal:** 31 domains down to 4 pillars.
 
-- [ ] P2-1: Register `clawprotocol.org` (or equivalent .org/.dev for open standard positioning)
-- [ ] P2-2: Rebuild `clawprotocol.org` — Clawsig specs, schemas, reason codes, CLI docs
+- [x] P2-1: `clawsig.com` IS the protocol standard site (already live, no .org needed)
+- [ ] P2-2: Enhance `clawsig.com` — Clawsig specs, schemas, reason codes, CLI docs
 - [ ] P2-3: Refocus `clawverify.com` — Trust Oracle landing + API docs
 - [ ] P2-4: Refocus `clawproxy.com` — Data Plane landing + developer quickstart
 - [ ] P2-5: Refocus `clawea.com` — Enterprise dashboard (absorb clawcontrols + clawscope UI)
 - [ ] P2-6: Park 27 killed domains with redirect/placeholder
-- [ ] P2-7: Update all npm package READMEs to point to new 4-domain structure
+- [ ] P2-7: Update all npm package READMEs to point to 5-domain structure (clawsig/verify/proxy/ea/bureau)
 
 ### Phase 3: Protocol Hardening (Agent A: Protocol)
 **Goal:** Make Clawsig the standard validation oracle for EIP-8004.

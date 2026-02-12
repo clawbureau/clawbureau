@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/delegation_receipt.v1.json",
+  "title": "Delegation Receipt v1",
+  "description": "A receipt linking an orchestrator (delegator) to a worker (delegate) agent's proof bundle via its hash, forming a Merkle DAG for multi-agent verification. Strict liability: if the delegate bundle is invalid, the delegator bundle is also invalid.",
+  "type": "object",
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "delegator_did",
+    "delegate_did",
+    "task_description_hash_b64u",
+    "delegate_bundle_hash_b64u",
+    "hash_algorithm",
+    "delegated_at"
+  ],
+  "properties": {
+    "receipt_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version. Always '1' for this schema."
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique receipt ID (UUID or similar)."
+    },
+    "delegator_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "DID of the orchestrator/manager agent that delegated work."
+    },
+    "delegate_did": {
+      "type": "string",
+      "pattern": "^did:",
+      "description": "DID of the worker agent that performed the delegated work."
+    },
+    "task_description_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash of the task description passed to the delegate, base64url (no padding)."
+    },
+    "delegate_bundle_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8,
+      "description": "SHA-256 hash of the delegate agent's proof_bundle. Creates the Merkle DAG link — the delegator's bundle references the delegate's bundle by hash."
+    },
+    "delegation_policy": {
+      "type": "string",
+      "description": "Policy constraints passed to the delegate (hash of WPC subset). The delegate must operate within these constraints."
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256", "BLAKE3"],
+      "description": "Hash algorithm used for all digests in this receipt."
+    },
+    "delegated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when delegation was issued."
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when the delegate completed work. Absent if still in progress."
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "run_id": { "type": "string" },
+        "event_hash_b64u": { "type": "string" },
+        "nonce": { "type": "string" },
+        "policy_hash": { "type": "string" }
+      },
+      "description": "Binding to the delegator's proof bundle run and event chain."
+    }
+  },
+  "additionalProperties": false
+}

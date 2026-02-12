@@ -281,6 +281,27 @@
         }
       }
     },
+    "delegation_receipts": {
+      "type": "array",
+      "description": "Delegation receipt payloads for multi-agent orchestration (Merkle DAG). Each receipt links to a delegate agent's proof bundle by hash, enabling strict liability cascade verification.",
+      "items": {
+        "type": "object",
+        "required": ["receipt_version", "receipt_id", "delegator_did", "delegate_did", "task_description_hash_b64u", "delegate_bundle_hash_b64u", "hash_algorithm", "delegated_at"],
+        "properties": {
+          "receipt_version": { "const": "1" },
+          "receipt_id": { "type": "string", "minLength": 1 },
+          "delegator_did": { "type": "string", "pattern": "^did:" },
+          "delegate_did": { "type": "string", "pattern": "^did:" },
+          "task_description_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8 },
+          "delegate_bundle_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 8, "description": "SHA-256 hash of the delegate agent's proof_bundle -- creates the Merkle DAG link." },
+          "delegation_policy": { "type": "string", "description": "Policy constraints passed to delegate (hash of WPC subset)." },
+          "hash_algorithm": { "type": "string", "enum": ["SHA-256", "BLAKE3"] },
+          "delegated_at": { "type": "string", "format": "date-time" },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "binding": { "type": "object" }
+        }
+      }
+    },
     "attestations": {
       "type": "array",
       "minItems": 1,
@@ -350,6 +371,7 @@
     { "required": ["tool_receipts"] },
     { "required": ["side_effect_receipts"] },
     { "required": ["human_approval_receipts"] },
+    { "required": ["delegation_receipts"] },
     { "required": ["attestations"] }
   ]
 }
