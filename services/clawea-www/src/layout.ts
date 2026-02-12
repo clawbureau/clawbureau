@@ -945,31 +945,19 @@ function footer(): string {
         </p>
       </div>
       <div>
-        <h4>Platform</h4>
+        <h4>Product</h4>
         <ul>
           <li><a href="/controls">Controls</a></li>
           <li><a href="/workflows">Workflows</a></li>
-          <li><a href="/tools">Tools</a></li>
+          <li><a href="/tools">Integrations</a></li>
           <li><a href="/channels">Channels</a></li>
-          <li><a href="/mcp">MCP</a></li>
-          <li><a href="/compliance">Compliance</a></li>
-          <li><a href="/trust">Trust</a></li>
-          <li><a href="/trust/security-review">Security Review Pack</a></li>
+          <li><a href="/trust">Trust Layer</a></li>
           <li><a href="/secure-workers">Secure Workers</a></li>
+          <li><a href="/pricing">Pricing</a></li>
         </ul>
       </div>
       <div>
-        <h4>Microsoft Integrations</h4>
-        <ul>
-          <li><a href="/tools/entra-id">Entra ID</a></li>
-          <li><a href="/tools/sharepoint">SharePoint</a></li>
-          <li><a href="/tools/outlook-exchange">Outlook / Exchange</a></li>
-          <li><a href="/tools/azure-devops">Azure DevOps</a></li>
-          <li><a href="/tools/microsoft-purview">Purview</a></li>
-        </ul>
-      </div>
-      <div>
-        <h4>Industries</h4>
+        <h4>Solutions</h4>
         <ul>
           <li><a href="/industries/financial-services">Financial Services</a></li>
           <li><a href="/industries/healthcare">Healthcare</a></li>
@@ -977,32 +965,32 @@ function footer(): string {
           <li><a href="/industries/insurance">Insurance</a></li>
           <li><a href="/industries/legal">Legal</a></li>
           <li><a href="/industries/technology">Technology</a></li>
+          <li><a href="/compare/agent-governance-platforms">Comparisons</a></li>
+          <li><a href="/case-studies">Case Studies</a></li>
         </ul>
       </div>
       <div>
         <h4>Resources</h4>
         <ul>
-          <li><a href="/guides/github-actions-proof-pipeline">GitHub Actions Guide</a></li>
-          <li><a href="/guides/okta-scoped-tokens">Okta Tokens Guide</a></li>
-          <li><a href="/guides/compliance-evidence-export">Evidence Export Guide</a></li>
-          <li><a href="/compare/agent-governance-platforms">Governance Comparison</a></li>
-          <li><a href="/proof-points">Proof Points</a></li>
+          <li><a href="/docs">Documentation</a></li>
+          <li><a href="/guides/github-actions-proof-pipeline">Guides</a></li>
           <li><a href="/resources/protocol-whitepaper">Protocol Spec</a></li>
           <li><a href="/resources/security-checklist">Security Checklist</a></li>
           <li><a href="/resources/compliance-mapping">Compliance Mapping</a></li>
+          <li><a href="/proof-points">Proof Points</a></li>
+          <li><a href="/changelog">Changelog</a></li>
           <li><a href="/glossary">Glossary</a></li>
-          <li><a href="/sources">Source Hub</a></li>
-          <li><a href="/about">About</a></li>
         </ul>
       </div>
       <div>
-        <h4>Get Started</h4>
+        <h4>Company</h4>
         <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/security">Security</a></li>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+          <li><a href="/status">Status</a></li>
           <li><a href="/assessment">Assessment</a></li>
-          <li><a href="/pricing">Pricing</a></li>
-          <li><a href="/pricing/starter">Starter Plan</a></li>
-          <li><a href="/pricing/team">Team Plan</a></li>
-          <li><a href="/pricing/enterprise">Enterprise Plan</a></li>
           <li><a href="/consulting">Consulting</a></li>
           <li><a href="/book">Book Session</a></li>
           <li><a href="/contact">Contact</a></li>
