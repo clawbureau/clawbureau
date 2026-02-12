@@ -120,6 +120,17 @@ export interface Env {
 
   /** Default max amount in minor units for models not in price table (default: 100000 = 0.10 USDC). */
   X402_DEFAULT_MAX_AMOUNT_MINOR?: string;
+
+  // --- Receipt Transparency (RT) ---
+
+  /** Enable Receipt Transparency log submission (default: false). When true, receipt hashes are POSTed to clawlogs RT. */
+  RT_ENABLED?: string;
+
+  /** Base URL for clawlogs RT endpoint (default: https://clawlogs.com). */
+  CLAWLOGS_RT_URL?: string;
+
+  /** Admin token for clawlogs RT submission (Authorization: Bearer). */
+  CLAWLOGS_RT_ADMIN_TOKEN?: string;
 }
 
 /**
