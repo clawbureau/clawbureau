@@ -19,6 +19,9 @@
 ## Implementation status (current)
 
 - **Service:** implemented at `services/clawdelegate`.
+- **Service trackers:**
+  - `services/clawdelegate/prd.json`
+  - `services/clawdelegate/progress.txt`
 - **Endpoints shipped:** create/get/list/approve/issue/revoke + spend reserve/consume/release/authorize + audit/export.
 - **Cross-service wiring shipped:**
   - `clawclaim` delegation bootstrap (`POST /v1/delegations/bootstrap`)
@@ -27,8 +30,8 @@
   - `ledger` delegation spend hook + replay contracts
 - **Rollout evidence:**
   - Deploy summary: `artifacts/ops/clawdelegate/2026-02-12T04-56-45-407Z-deploy/deploy-summary.json`
-  - Staging smoke: `artifacts/smoke/clawdelegate/2026-02-12T04-56-01-753Z-staging/result.json`
-  - Prod smoke: `artifacts/smoke/clawdelegate/2026-02-12T04-56-09-169Z-prod/result.json`
+  - Staging smoke: `artifacts/smoke/clawdelegate/2026-02-12T11-57-51-889Z-staging/result.json`
+  - Prod smoke: `artifacts/smoke/clawdelegate/2026-02-12T11-57-55-034Z-prod/result.json`
   - Routing check: `artifacts/ops/clawdelegate/2026-02-12T04-53-42-573Z-routing/routing-check.json`
 - **Tracker lane:** `CDL-MAX-001` in `docs/roadmaps/trust-vnext/prd.json`.
 
