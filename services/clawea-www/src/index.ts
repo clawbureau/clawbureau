@@ -74,6 +74,7 @@ import {
 } from "./seo";
 import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
 import { compareManualAuditPage, compareGuardrailsPage, compareLangfusePage, compareCustomWrappersPage, compareGovernanceLandscapePage } from "./pages/compare";
+import { guideGithubActionsProofPage, guideOktaScopedTokensPage, guideComplianceExportPage } from "./pages/guides";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1785,6 +1786,27 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     title: "Agent Governance Platforms Landscape",
     description: "How guardrails, observability, custom wrappers, and protocol-first proof compare.",
     category: "compare",
+    kind: "static",
+  },
+  {
+    path: "/guides/github-actions-proof-pipeline",
+    title: "GitHub Actions Proof Pipeline Guide",
+    description: "Step-by-step setup for Claw Verified PR pipeline with GitHub Actions.",
+    category: "guides",
+    kind: "static",
+  },
+  {
+    path: "/guides/okta-scoped-tokens",
+    title: "Okta Scoped Tokens Guide",
+    description: "Map Okta groups to CST scopes for policy-gated agent execution.",
+    category: "guides",
+    kind: "static",
+  },
+  {
+    path: "/guides/compliance-evidence-export",
+    title: "Compliance Evidence Export Guide",
+    description: "Generate export bundles, verify offline, deliver SOX/SOC 2 evidence.",
+    category: "guides",
     kind: "static",
   },
   {
@@ -8057,6 +8079,11 @@ export default {
     if (path === "/compare/claw-vs-custom-wrappers") return await htmlWithExperiment(html(compareCustomWrappersPage()), path);
     if (path === "/compare/agent-governance-platforms") return await htmlWithExperiment(html(compareGovernanceLandscapePage()), path);
 
+    // Implementation guides
+    if (path === "/guides/github-actions-proof-pipeline") return await htmlWithExperiment(html(guideGithubActionsProofPage()), path);
+    if (path === "/guides/okta-scoped-tokens") return await htmlWithExperiment(html(guideOktaScopedTokensPage()), path);
+    if (path === "/guides/compliance-evidence-export") return await htmlWithExperiment(html(guideComplianceExportPage()), path);
+
     if (path === "/sources") {
       const manifest = await loadManifest(env);
       return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
@@ -8196,6 +8223,9 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "compare/claw-vs-langfuse", priority: "0.7" },
     { slug: "compare/claw-vs-custom-wrappers", priority: "0.7" },
     { slug: "compare/agent-governance-platforms", priority: "0.7" },
+    { slug: "guides/github-actions-proof-pipeline", priority: "0.8" },
+    { slug: "guides/okta-scoped-tokens", priority: "0.7" },
+    { slug: "guides/compliance-evidence-export", priority: "0.7" },
   ];
 
   let entries = staticPages.map((p) => `  <url><loc>https://www.clawea.com/${p.slug}</loc><priority>${p.priority}</priority><changefreq>weekly</changefreq></url>`);
