@@ -1,0 +1,264 @@
+{
+  "generatedAt": "2026-02-12T00:40:55Z",
+  "environmentBases": {
+    "staging": "https://clawea-www-staging.generaite.workers.dev",
+    "productionWorkersDev": "https://clawea-www.generaite.workers.dev",
+    "productionCanonical": "https://www.clawea.com"
+  },
+  "staging": {
+    "health": {
+      "ok": true,
+      "service": "clawea-www",
+      "ts": "2026-02-12T00:40:20.314Z"
+    },
+    "leadSubmit": {
+      "ok": true,
+      "leadId": "lead_c6c8f18d0c5341febf3ec0c2",
+      "routeJobId": "route_job_c1b5183422104a6798b6533e",
+      "segment": "enterprise",
+      "scoreBand": "low",
+      "deduped": false,
+      "idempotentReplay": false,
+      "confidenceLabel": "early-intent",
+      "qualificationScore": 51,
+      "sourceIntent": "high-intent",
+      "scoreReasons": [
+        {
+          "code": "behavior_signals",
+          "points": 18,
+          "detail": "cta=2,intentViews=3"
+        },
+        {
+          "code": "team_size",
+          "points": 16,
+          "detail": "500+"
+        },
+        {
+          "code": "problem_urgency",
+          "points": 10,
+          "detail": "regulatory-or-incident-signal"
+        },
+        {
+          "code": "timeline_urgency",
+          "points": 8,
+          "detail": "30-days"
+        },
+        {
+          "code": "source_intent",
+          "points": 8,
+          "detail": "high-intent"
+        }
+      ],
+      "next": "standard_follow_up",
+      "bookPath": "/book?lead=lead_c6c8f18d0c5341febf3ec0c2"
+    },
+    "bookSubmit": {
+      "ok": true,
+      "bookingId": "booking_ca39897098b448199812e589",
+      "leadId": "lead_c6c8f18d0c5341febf3ec0c2",
+      "createdLead": false,
+      "status": "booked"
+    },
+    "bookComplete": {
+      "ok": true,
+      "bookingId": "booking_ca39897098b448199812e589",
+      "leadId": "lead_c6c8f18d0c5341febf3ec0c2",
+      "status": "completed"
+    },
+    "routingSummary": {
+      "byState": [
+        {
+          "key": "queued",
+          "count": 1
+        },
+        {
+          "key": "sent",
+          "count": 1
+        }
+      ],
+      "bySegment": [
+        {
+          "key": "enterprise",
+          "count": 2
+        }
+      ],
+      "deadLetter": {
+        "total": 0,
+        "pending": 0
+      },
+      "queueLagThresholdMinutes": 15,
+      "maxLagMinutes": 0,
+      "laggingJobs": []
+    },
+    "sla": {
+      "nowIso": "2026-02-12T00:40:27.190Z",
+      "slaMinutes": 30,
+      "totalLeads": 2,
+      "openLeads": 0,
+      "dueSoon": 0,
+      "breached": 0,
+      "breachRate": 0,
+      "openByStatus": [],
+      "breachedBySegment": [],
+      "topBreaches": []
+    },
+    "routingHealth": {
+      "queueLagThresholdMinutes": 15,
+      "maxLagMinutes": 0,
+      "deadLetter": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    "recommendGuardrails": {
+      "minImpressions": 20,
+      "minBooked": 1,
+      "minConfidence": 0.08,
+      "holdoutPercent": 8,
+      "autoApply": false
+    }
+  },
+  "production": {
+    "health": {
+      "ok": true,
+      "service": "clawea-www",
+      "ts": "2026-02-12T00:40:28.530Z"
+    },
+    "leadSubmit": {
+      "ok": true,
+      "leadId": "lead_1677a43ee0d64dda8a2aa8c2",
+      "routeJobId": "route_job_a8feafcb9bbc43efa6781a51",
+      "segment": "enterprise",
+      "scoreBand": "low",
+      "deduped": false,
+      "idempotentReplay": false,
+      "confidenceLabel": "early-intent",
+      "qualificationScore": 51,
+      "sourceIntent": "high-intent",
+      "scoreReasons": [
+        {
+          "code": "behavior_signals",
+          "points": 18,
+          "detail": "cta=2,intentViews=3"
+        },
+        {
+          "code": "team_size",
+          "points": 16,
+          "detail": "500+"
+        },
+        {
+          "code": "problem_urgency",
+          "points": 10,
+          "detail": "regulatory-or-incident-signal"
+        },
+        {
+          "code": "timeline_urgency",
+          "points": 8,
+          "detail": "30-days"
+        },
+        {
+          "code": "source_intent",
+          "points": 8,
+          "detail": "high-intent"
+        }
+      ],
+      "next": "standard_follow_up",
+      "bookPath": "/book?lead=lead_1677a43ee0d64dda8a2aa8c2"
+    },
+    "bookSubmit": {
+      "ok": true,
+      "bookingId": "booking_422cb7b79acd420dad8bf19d",
+      "leadId": "lead_1677a43ee0d64dda8a2aa8c2",
+      "createdLead": false,
+      "status": "booked"
+    },
+    "bookComplete": {
+      "ok": true,
+      "bookingId": "booking_422cb7b79acd420dad8bf19d",
+      "leadId": "lead_1677a43ee0d64dda8a2aa8c2",
+      "status": "completed"
+    },
+    "routingSummary": {
+      "byState": [
+        {
+          "key": "queued",
+          "count": 1
+        },
+        {
+          "key": "sent",
+          "count": 1
+        }
+      ],
+      "bySegment": [
+        {
+          "key": "enterprise",
+          "count": 2
+        }
+      ],
+      "deadLetter": {
+        "total": 0,
+        "pending": 0
+      },
+      "queueLagThresholdMinutes": 20,
+      "maxLagMinutes": 0,
+      "laggingJobs": []
+    },
+    "sla": {
+      "nowIso": "2026-02-12T00:40:32.776Z",
+      "slaMinutes": 45,
+      "totalLeads": 3,
+      "openLeads": 1,
+      "dueSoon": 0,
+      "breached": 1,
+      "breachRate": 1,
+      "openByStatus": [
+        {
+          "key": "new",
+          "count": 1
+        }
+      ],
+      "breachedBySegment": [
+        {
+          "key": "smb",
+          "count": 1
+        }
+      ],
+      "topBreaches": [
+        {
+          "leadId": "lead_8ba54cc5a3c94be2a7c5a8ed",
+          "status": "new",
+          "createdAt": "2026-02-11T23:03:38.317Z",
+          "dueAt": "2026-02-11T23:48:38.317Z",
+          "overdueMinutes": 51,
+          "source": "direct",
+          "sourceIntent": "direct",
+          "pageFamily": "contact",
+          "campaignId": "",
+          "segment": "smb",
+          "scoreBand": "low",
+          "qualificationScore": 8
+        }
+      ]
+    },
+    "routingHealth": {
+      "queueLagThresholdMinutes": 20,
+      "maxLagMinutes": 0,
+      "deadLetter": {
+        "total": 0,
+        "pending": 0
+      }
+    },
+    "recommendGuardrails": {
+      "minImpressions": 40,
+      "minBooked": 2,
+      "minConfidence": 0.12,
+      "holdoutPercent": 5,
+      "autoApply": false
+    }
+  },
+  "turnstileSiteKeyChecks": {
+    "stagingWorkersDev": "1x00000000000000000000AA",
+    "productionWorkersDev": "1x00000000000000000000AA",
+    "productionCanonical": "1x00000000000000000000AA"
+  }
+}

@@ -18,6 +18,9 @@ const getArg = (name: string) => {
 };
 
 const ENDPOINT = getArg("endpoint") ?? process.env.CLAWEA_EVENTS_SUMMARY_ENDPOINT ?? "https://clawea.com/api/events/summary";
+const ATTRIBUTION_ENDPOINT = getArg("attribution-endpoint")
+  ?? process.env.CLAWEA_ATTRIBUTION_REVENUE_ENDPOINT
+  ?? ENDPOINT.replace(/\/api\/events\/summary$/, "/api/attribution/revenue");
 const DAYS = Math.max(1, Math.min(56, Number(getArg("days") ?? process.env.CLAWEA_CONVERSION_DAYS ?? "7")));
 const TOKEN = process.env.LEADS_API_TOKEN
   ?? process.env.INDEX_AUTOMATION_TOKEN
@@ -78,9 +81,37 @@ async function main() {
     process.exit(1);
   }
 
-  writeJson(outJson, parsed);
+  let attributionRevenue: any = null;
+  try {
+    const attrRes = await fetch(`${ATTRIBUTION_ENDPOINT}?days=${DAYS}`, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+      },
+    });
+
+    const attrRaw = await attrRes.text();
+    attributionRevenue = attrRaw ? JSON.parse(attrRaw) : null;
+    if (!attrRes.ok || !attributionRevenue?.ok) {
+      attributionRevenue = {
+        ok: false,
+        error: `ATTRIBUTION_REVENUE_FAILED:${attrRes.status}`,
+        raw: attrRaw,
+      };
+    }
+  } catch (err: any) {
+    attributionRevenue = { ok: false, error: String(err?.message ?? err) };
+  }
+
+  const report = {
+    ...parsed,
+    attributionRevenue,
+  };
+
+  writeJson(outJson, report);
 
   const totals = parsed.totals ?? {};
+  const revenueTotals = attributionRevenue?.totals ?? {};
   const md = `# clawea.com Weekly Conversion Summary\n\n` +
     `- generatedAt: ${parsed.generatedAt ?? new Date().toISOString()}\n` +
     `- periodDays: ${parsed.days ?? DAYS}\n` +
@@ -92,10 +123,15 @@ async function main() {
     `- bookingCompletions: ${Number(totals.bookingCompletions ?? 0)}\n` +
     `- intentToActionRate: ${Number(totals.intentToActionRate ?? 0)}\n` +
     `- leadToBookingRate: ${Number(totals.leadToBookingRate ?? 0)}\n` +
-    `- bookingCompletionRate: ${Number(totals.bookingCompletionRate ?? 0)}\n\n` +
+    `- bookingCompletionRate: ${Number(totals.bookingCompletionRate ?? 0)}\n` +
+    `- leadToBookedRate(attribution): ${Number(revenueTotals.leadToBookedRate ?? 0)}\n` +
+    `- leadToCompletedRate(attribution): ${Number(revenueTotals.leadToCompletedRate ?? 0)}\n\n` +
     `## Top Sources\n${toBullet(pickTopRows(parsed.breakdown?.bySource))}\n\n` +
     `## Top Pages\n${toBullet(pickTopRows(parsed.breakdown?.topPages))}\n\n` +
-    `## Top CTAs\n${toBullet(pickTopRows(parsed.breakdown?.topCtas))}\n`;
+    `## Top CTAs\n${toBullet(pickTopRows(parsed.breakdown?.topCtas))}\n\n` +
+    `## Attribution Last-Touch (top)\n${Array.isArray(attributionRevenue?.attribution?.lastTouch)
+      ? attributionRevenue.attribution.lastTouch.slice(0, 8).map((r: any) => `- ${r.source}: leads=${r.leads}, booked=${r.booked}, completed=${r.completed}`).join("\n")
+      : "- none"}\n`;
 
   fs.mkdirSync(path.dirname(outMd), { recursive: true });
   fs.writeFileSync(outMd, md);

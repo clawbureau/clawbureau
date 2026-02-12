@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-02-12T00:41:30Z",
+  "phase1": {
+    "lane": "AEO-REV-006 closeout",
+    "prMerge": {
+      "number": 156,
+      "mergeCommitSha": "c6852925b1be6eed521458a612c492c9942d0dd5",
+      "status": "merged"
+    },
+    "remoteMigrations": {
+      "staging": {
+        "database": "clawea-www-staging",
+        "migration": "0002_intent_pipeline_os.sql",
+        "status": "applied"
+      },
+      "production": {
+        "database": "clawea-www",
+        "migration": "0002_intent_pipeline_os.sql",
+        "status": "applied"
+      }
+    },
+    "secretsUpdated": [
+      "LEADS_API_TOKEN (staging + production)",
+      "CRM_HANDOFF_SIGNING_SECRET (staging + production)"
+    ],
+    "turnstileKeyRotation": {
+      "status": "blocked",
+      "reason": "No Turnstile widget-management token/credentials with required scope available in automation context",
+      "observedSiteKey": "1x00000000000000000000AA",
+      "nextAction": "Create env-specific Turnstile widgets in Cloudflare dashboard and set TURNSTILE_SITE_KEY/TURNSTILE_SECRET_KEY for staging and production"
+    },
+    "infraFixes": [
+      "Created missing segmented routing queues (prod + staging)",
+      "Added env.staging durable object binding for LEAD_SUBMIT_LOCK",
+      "Enabled workers.dev URLs to unblock staging smoke while staging DNS remains unresolved"
+    ],
+    "deployments": {
+      "staging": {
+        "worker": "clawea-www-staging",
+        "versionId": "df3a6334-b5cf-44c7-8186-69ac0f82b4ee"
+      },
+      "production": {
+        "worker": "clawea-www",
+        "versionId": "9b5b08d5-cf25-4e1c-9654-ce91f7272a31"
+      }
+    }
+  },
+  "phase2": {
+    "lane": "AEO-REV-007 revenue execution loop",
+    "remoteMigration": {
+      "migration": "0003_revenue_execution_loop.sql",
+      "staging": "applied",
+      "production": "applied"
+    },
+    "deployments": {
+      "staging": {
+        "worker": "clawea-www-staging",
+        "versionId": "5744c8e1-d193-4ef5-8083-1cc5e088e41e",
+        "url": "https://clawea-www-staging.generaite.workers.dev"
+      },
+      "production": {
+        "worker": "clawea-www",
+        "versionId": "e904c97c-0ec3-46c8-9b5f-7312234315be",
+        "url": "https://clawea-www.generaite.workers.dev"
+      }
+    },
+    "deployNotes": [
+      "First production deploy attempt returned Cloudflare API error code 10013 while updating queue consumer; immediate retry succeeded",
+      "workers_dev=true now set for both prod/staging to keep smoke path available"
+    ]
+  },
+  "requiredArtifacts": {
+    "releaseSmoke": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T00-40-20Z-aeo-rev-007/release-smoke.json",
+    "leadSlaReport": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T00-40-20Z-aeo-rev-007/lead-sla-report.json",
+    "routingHealth": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T00-40-20Z-aeo-rev-007/routing-health.json",
+    "attributionRevenueSummary": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T00-40-20Z-aeo-rev-007/attribution-revenue-summary.json",
+    "experimentGuardrailReport": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T00-40-20Z-aeo-rev-007/experiment-guardrail-report.json",
+    "deploySummary": "services/clawea-www/artifacts/ops/clawea-www/2026-02-12T00-40-20Z-aeo-rev-007/deploy-summary.json"
+  }
+}
