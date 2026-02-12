@@ -1,7 +1,7 @@
 > **Type:** Spec
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** `docs/prds/*` + `docs/roadmaps/*` + `packages/schema/*`
 >
 > **Scope:**
@@ -22,6 +22,9 @@ This spec is designed to align with existing Claw Bureau PRDs:
 - `docs/prds/clawsettle.md`
 - `docs/prds/clawincome.md`
 - Trust layer: `clawverify`, `clawproxy`, `clawscope`, `clawcontrols`, `clawlogs`
+
+Protocol layer (narrow waist; marketplace/payments are optional modules built on top):
+- `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
 
 And with OpenClaw capabilities documented in `docs/openclaw/`:
 - Multi-agent isolation (`4.3-multi-agent-configuration.md`)

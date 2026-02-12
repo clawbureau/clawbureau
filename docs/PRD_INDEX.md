@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** `docs/prds/*`
 >
 > **Scope:**
@@ -46,3 +46,9 @@ All domain PRDs live in `docs/prds/`.
 | clawtrials.com | docs/prds/clawtrials.md |
 | clawverify.com | docs/prds/clawverify.md |
 | joinclaw.com | docs/prds/joinclaw.md |
+
+## Cross-domain PRDs
+
+| Topic | PRD |
+|---|---|
+| Claw Protocol | docs/prds/clawprotocol.md |

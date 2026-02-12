@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** PRD intent (no active execution tracker yet)
 >
 > **Scope:**
@@ -36,6 +36,7 @@ Registry and onboarding for providers (compute, judges, auditors).
 - Bond requirements (risk + volume-based)
 - Listing fees (anti-sybil)
 - Receipt/attestation requirements
+- **Claw Verified** trust mark + quarantine mode for non-verifiable skills/tools
 - Reserve provider classification
 
 ## 4) Non-Goals (v0)
@@ -140,6 +141,19 @@ Registry and onboarding for providers (compute, judges, auditors).
   - Listing includes attester DID(s) used to sign audit_result_attestation envelopes
   - Listing supports suspension/revocation and is reflected in clawverify allowlists (via governance)
 
+
+### CPR-US-011 — “Claw Verified” tool/skill compliance profile
+**As a** platform operator, **I want** a default compliance profile for tools/skills **so that** malicious ecosystem components are quarantined by default.
+
+**Acceptance Criteria:**
+  - Define deterministic requirements for “verified” tools/skills:
+    - version pinning
+    - receipt emission (tool receipts and/or side-effect receipts when applicable)
+    - verifier PASS under a declared policy profile
+    - signed manifest provenance
+  - Registry stores verification metadata and required receipt classes per tool
+  - Tools that cannot meet requirements run in a quarantine posture (low privilege; default deny side-effects)
+  - Deterministic evaluation returns machine-readable denial codes and remediation hints
 
 ## 8) Success Metrics
 - Providers onboarded
