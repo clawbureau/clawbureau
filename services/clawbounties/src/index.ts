@@ -39,6 +39,12 @@ export interface Env {
   /** Base URL for test harness service (required for closure_type=test auto-approval). */
   TEST_HARNESS_BASE_URL?: string;
 
+  /** Base URL for dispute arbitration service. */
+  TRIALS_BASE_URL?: string;
+
+  /** Service token for clawtrials arbitration APIs. */
+  TRIALS_SERVICE_KEY?: string;
+
   /** Test harness timeout override in milliseconds. */
   TEST_HARNESS_TIMEOUT_MS?: string;
 
@@ -290,6 +296,8 @@ interface BountyV2 {
   rejected_submission_id: string | null;
   reject_idempotency_key: string | null;
   rejected_at: string | null;
+  trial_case_id: string | null;
+  trial_opened_at: string | null;
 
   // recommended/common
   is_code_bounty: boolean;
@@ -602,6 +610,13 @@ interface EscrowDisputeResponse {
   dispute_window_ends_at: string;
 }
 
+interface TrialCaseSummary {
+  case_id: string;
+  status: 'open' | 'appealed' | 'decided';
+  judge_did: string;
+  opened_at: string;
+}
+
 interface ApproveBountyResponseV1 {
   bounty_id: string;
   submission_id: string;
@@ -615,6 +630,7 @@ interface RejectBountyResponseV1 {
   submission_id: string;
   status: 'disputed';
   escrow: EscrowDisputeResponse;
+  trial_case: TrialCaseSummary;
   decided_at: string;
 }
 
@@ -2142,6 +2158,16 @@ function resolveTestHarnessBaseUrl(env: Env): string | null {
   return null;
 }
 
+function resolveTrialsBaseUrl(env: Env): string | null {
+  const v = env.TRIALS_BASE_URL?.trim();
+  if (v && v.length > 0) return v;
+
+  const harness = resolveTestHarnessBaseUrl(env);
+  if (harness) return harness;
+
+  return null;
+}
+
 function resolveTestHarnessTimeoutMs(env: Env): number {
   const raw = env.TEST_HARNESS_TIMEOUT_MS?.trim();
   if (!raw) return 60000;
@@ -2986,6 +3012,137 @@ async function escrowGetDisputed(env: Env, escrow_id: string): Promise<EscrowDis
     escrow_id: escrowId.trim(),
     status: 'frozen',
     dispute_window_ends_at: disputeWindow.trim(),
+  };
+}
+
+async function trialsCreateCase(
+  env: Env,
+  params: {
+    idempotency_key: string;
+    source_system: string;
+    source_ref: string;
+    submission_id: string;
+    escrow_id: string;
+    requester_did: string;
+    worker_did: string;
+    opened_by: string;
+    reason?: string | null;
+    evidence: {
+      proof_bundle_hash_b64u: string;
+      receipt_refs: string[];
+      artifact_refs: string[];
+    };
+  }
+): Promise<TrialCaseSummary> {
+  const baseUrl = resolveTrialsBaseUrl(env);
+  if (!baseUrl) {
+    throw new Error('TRIALS_BASE_URL_NOT_CONFIGURED');
+  }
+
+  const serviceKey = env.TRIALS_SERVICE_KEY?.trim();
+  if (!serviceKey) {
+    throw new Error('TRIALS_SERVICE_KEY_NOT_CONFIGURED');
+  }
+
+  const response = await fetch(`${baseUrl}/v1/trials/cases`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${serviceKey}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      idempotency_key: params.idempotency_key,
+      source_system: params.source_system,
+      source_ref: params.source_ref,
+      submission_id: params.submission_id,
+      escrow_id: params.escrow_id,
+      requester_did: params.requester_did,
+      worker_did: params.worker_did,
+      opened_by: params.opened_by,
+      reason: params.reason,
+      evidence: params.evidence,
+    }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`TRIALS_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.case) || !isRecord(json.case.judge) || !isRecord(json.case.timestamps)) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  const caseId = json.case.case_id;
+  const status = json.case.status;
+  const judgeDid = json.case.judge.judge_did;
+  const openedAt = json.case.timestamps.opened_at;
+
+  if (!isNonEmptyString(caseId) || !caseId.trim().startsWith('trc_')) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  if (status !== 'open' && status !== 'appealed' && status !== 'decided') {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  if (!isNonEmptyString(judgeDid) || !judgeDid.trim().startsWith('did:')) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  if (!isNonEmptyString(openedAt)) {
+    throw new Error('TRIALS_INVALID_RESPONSE');
+  }
+
+  return {
+    case_id: caseId.trim(),
+    status,
+    judge_did: judgeDid.trim(),
+    opened_at: openedAt.trim(),
+  };
+}
+
+function buildSubmissionTrialEvidence(submission: SubmissionRecord): {
+  proof_bundle_hash_b64u: string;
+  receipt_refs: string[];
+  artifact_refs: string[];
+} {
+  const proofHash = submission.proof_bundle_hash_b64u?.trim() ?? '';
+  if (!proofHash) {
+    throw new Error('TRIALS_EVIDENCE_MISSING_PROOF_BUNDLE_HASH');
+  }
+
+  const receiptRefs = new Set<string>();
+  receiptRefs.add(`proof_bundle:${proofHash}`);
+  if (submission.commit_proof_hash_b64u && submission.commit_proof_hash_b64u.trim().length > 0) {
+    receiptRefs.add(`commit_proof:${submission.commit_proof_hash_b64u.trim()}`);
+  }
+
+  const artifactRefs = new Set<string>();
+  if (Array.isArray(submission.artifacts)) {
+    for (const artifact of submission.artifacts) {
+      if (!isRecord(artifact)) continue;
+      const uri = artifact.uri;
+      if (isNonEmptyString(uri)) {
+        artifactRefs.add(uri.trim());
+      }
+    }
+  }
+
+  artifactRefs.add(`clawbounties:submission:${submission.submission_id}`);
+
+  return {
+    proof_bundle_hash_b64u: proofHash,
+    receipt_refs: Array.from(receiptRefs),
+    artifact_refs: Array.from(artifactRefs),
   };
 }
 
@@ -4110,6 +4267,8 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const rejected_submission_id = d1String(row.rejected_submission_id);
   const reject_idempotency_key = d1String(row.reject_idempotency_key);
   const rejected_at = d1String(row.rejected_at);
+  const trial_case_id = d1String(row.trial_case_id);
+  const trial_opened_at = d1String(row.trial_opened_at);
 
   const is_code_bounty_num = d1Number(row.is_code_bounty);
   const tags_json = d1String(row.tags_json);
@@ -4240,6 +4399,8 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     rejected_submission_id: rejected_submission_id ? rejected_submission_id.trim() : null,
     reject_idempotency_key: reject_idempotency_key ? reject_idempotency_key.trim() : null,
     rejected_at: rejected_at ? rejected_at.trim() : null,
+    trial_case_id: trial_case_id ? trial_case_id.trim() : null,
+    trial_opened_at: trial_opened_at ? trial_opened_at.trim() : null,
 
     is_code_bounty: Boolean(is_code_bounty_num),
     tags,
@@ -4828,6 +4989,8 @@ async function updateBountyRejected(
     idempotency_key: string;
     rejected_at: string;
     now: string;
+    trial_case_id?: string | null;
+    trial_opened_at?: string | null;
   }
 ): Promise<void> {
   const result = await db
@@ -4837,6 +5000,8 @@ async function updateBountyRejected(
              rejected_submission_id = COALESCE(rejected_submission_id, ?),
              reject_idempotency_key = COALESCE(reject_idempotency_key, ?),
              rejected_at = COALESCE(rejected_at, ?),
+             trial_case_id = COALESCE(trial_case_id, ?),
+             trial_opened_at = COALESCE(trial_opened_at, ?),
              updated_at = ?
        WHERE bounty_id = ?
          AND status = 'pending_review'`
@@ -4845,6 +5010,8 @@ async function updateBountyRejected(
       params.submission_id,
       params.idempotency_key,
       params.rejected_at,
+      params.trial_case_id ?? null,
+      params.trial_opened_at ?? null,
       params.now,
       params.bounty_id
     )
@@ -4852,6 +5019,31 @@ async function updateBountyRejected(
 
   if (!result || !result.success || !result.meta || result.meta.changes === 0) {
     throw new Error('BOUNTY_DECISION_UPDATE_FAILED');
+  }
+}
+
+async function updateBountyTrialCase(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    trial_case_id: string;
+    trial_opened_at: string;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+         SET trial_case_id = COALESCE(trial_case_id, ?),
+             trial_opened_at = COALESCE(trial_opened_at, ?),
+             updated_at = ?
+       WHERE bounty_id = ?`
+    )
+    .bind(params.trial_case_id, params.trial_opened_at, params.now, params.bounty_id)
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_TRIAL_CASE_UPDATE_FAILED');
   }
 }
 
@@ -5626,6 +5818,32 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     };
   }
 
+  let trialCase: TrialCaseSummary;
+  try {
+    trialCase = await trialsCreateCase(env, {
+      idempotency_key: `trial:reject:${bounty.bounty_id}:${rejectKey}`,
+      source_system: 'clawbounties',
+      source_ref: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      escrow_id: bounty.escrow_id,
+      requester_did: bounty.requester_did,
+      worker_did: submission.worker_did,
+      opened_by: bounty.requester_did,
+      reason: 'Auto-rejected: test harness failed',
+      evidence: buildSubmissionTrialEvidence(submission),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return {
+      applied: false,
+      failure: {
+        code: 'AUTO_REJECTION_TRIALS_FAILED',
+        message,
+        status: 502,
+      },
+    };
+  }
+
   try {
     await updateBountyRejected(env.BOUNTIES_DB, {
       bounty_id: bounty.bounty_id,
@@ -5633,6 +5851,8 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       idempotency_key: rejectKey,
       rejected_at: now,
       now,
+      trial_case_id: trialCase.case_id,
+      trial_opened_at: trialCase.opened_at,
     });
   } catch (err) {
     try {
@@ -6205,7 +6425,7 @@ function docsPage(origin: string): string {
       <ul>
         <li><code>POST /v1/bounties</code> — post a bounty (schema v2; calls clawcuts + clawescrow)</li>
         <li><code>POST /v1/bounties/{bounty_id}/approve</code> — approve requester-closure bounty (release escrow)</li>
-        <li><code>POST /v1/bounties/{bounty_id}/reject</code> — reject requester-closure bounty (dispute escrow)</li>
+        <li><code>POST /v1/bounties/{bounty_id}/reject</code> — reject requester-closure bounty (freeze escrow + open clawtrials case)</li>
         <li><code>GET /v1/bounties/{bounty_id}/submissions</code> — list bounty submissions (requester read scope or admin)</li>
         <li><code>GET /v1/submissions/{submission_id}</code> — submission detail (requester read scope, owning worker, or admin)</li>
       </ul>
@@ -8749,6 +8969,57 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     const now = new Date().toISOString();
     const resolvedSubmissionId = bounty.rejected_submission_id ?? submission_id;
 
+    let resolvedSubmission: SubmissionRecord | null;
+    try {
+      resolvedSubmission = await getSubmissionById(env.BOUNTIES_DB, resolvedSubmissionId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+    }
+
+    if (!resolvedSubmission) {
+      return errorResponse('NOT_FOUND', 'Submission not found', 404, { submission_id: resolvedSubmissionId }, version);
+    }
+
+    if (resolvedSubmission.bounty_id !== bounty.bounty_id) {
+      return errorResponse('INVALID_REQUEST', 'submission_id does not belong to bounty', 400, undefined, version);
+    }
+
+    if (resolvedSubmission.worker_did !== bounty.worker_did) {
+      return errorResponse('INVALID_REQUEST', 'submission worker does not match bounty worker', 400, undefined, version);
+    }
+
+    let trialCase: TrialCaseSummary;
+    try {
+      trialCase = await trialsCreateCase(env, {
+        idempotency_key: `trial:reject:${bounty.bounty_id}:${idempotency_key}`,
+        source_system: 'clawbounties',
+        source_ref: bounty.bounty_id,
+        submission_id: resolvedSubmission.submission_id,
+        escrow_id: bounty.escrow_id,
+        requester_did: requesterAuth.requester_did,
+        worker_did: bounty.worker_did,
+        opened_by: requesterAuth.requester_did,
+        reason,
+        evidence: buildSubmissionTrialEvidence(resolvedSubmission),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('TRIALS_FAILED', message, 502, undefined, version);
+    }
+
+    try {
+      await updateBountyTrialCase(env.BOUNTIES_DB, {
+        bounty_id: bounty.bounty_id,
+        trial_case_id: trialCase.case_id,
+        trial_opened_at: trialCase.opened_at,
+        now,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+    }
+
     try {
       await updateSubmissionStatus(env.BOUNTIES_DB, resolvedSubmissionId, 'rejected', now, 'pending_review');
     } catch (err) {
@@ -8768,6 +9039,7 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       submission_id: resolvedSubmissionId,
       status: 'disputed',
       escrow: escrowResponse,
+      trial_case: trialCase,
       decided_at: bounty.rejected_at ?? bounty.updated_at,
     };
 
@@ -8848,6 +9120,25 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     return errorResponse('ESCROW_FAILED', message, 502, undefined, version);
   }
 
+  let trialCase: TrialCaseSummary;
+  try {
+    trialCase = await trialsCreateCase(env, {
+      idempotency_key: `trial:reject:${bounty.bounty_id}:${idempotency_key}`,
+      source_system: 'clawbounties',
+      source_ref: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      escrow_id: bounty.escrow_id,
+      requester_did: requesterAuth.requester_did,
+      worker_did: bounty.worker_did,
+      opened_by: requesterAuth.requester_did,
+      reason,
+      evidence: buildSubmissionTrialEvidence(submission),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('TRIALS_FAILED', message, 502, undefined, version);
+  }
+
   let decidedAt = now;
 
   try {
@@ -8857,6 +9148,8 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       idempotency_key,
       rejected_at: now,
       now,
+      trial_case_id: trialCase.case_id,
+      trial_opened_at: trialCase.opened_at,
     });
   } catch (err) {
     try {
@@ -8911,6 +9204,7 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     submission_id: submission.submission_id,
     status: 'disputed',
     escrow: escrowResponse,
+    trial_case: trialCase,
     decided_at: decidedAt,
   };
 
@@ -9306,6 +9600,8 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     rejected_submission_id: null,
     reject_idempotency_key: null,
     rejected_at: null,
+    trial_case_id: null,
+    trial_opened_at: null,
 
     is_code_bounty,
     tags,

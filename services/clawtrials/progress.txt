@@ -65,6 +65,31 @@
 - Status:
   - Harness dependency remained green while CBT-US-028..030 moved to `passes=true`.
 
+## 2026-02-12 — CTR-OPS-001 arbitration MVP (staging + production)
+- Implemented D1-backed arbitration APIs in `services/clawtrials/src/index.ts`:
+  - `POST /v1/trials/cases`
+  - `GET /v1/trials/cases/:id`
+  - `GET /v1/trials/cases` (filters + cursor)
+  - `POST /v1/trials/cases/:id/decision`
+  - `POST /v1/trials/cases/:id/appeal`
+  - `GET /v1/trials/reports/disputes`
+- Preserved harness compatibility endpoints (`/v1/harness/*`, `/health`).
+- Added strict evidence validation (fail-closed), deterministic judge assignment, and idempotent decision/appeal transitions.
+- Added escrow enforcement integration to `clawescrow /v1/escrows/:id/resolve` using `TRIALS_ESCROW_KEY`.
+- Added D1 migration `migrations/0001_init.sql` and applied remotely:
+  - staging DB `clawtrials-staging` (`334376c8-152a-4396-9fe9-103d981d3a91`)
+  - production DB `clawtrials` (`02a9c942-39b7-47cd-8d6a-701919385d89`)
+- Deploys:
+  - `clawtrials-staging` version `402d04df-f812-48f1-9835-da1d466bcd97`
+  - `clawtrials` version `82f7e2fe-698a-4b8b-b071-f7ebaed8580d`
+- Validation:
+  - typecheck: `pnpm --dir services/clawtrials typecheck` ✅
+  - tests: `pnpm --dir services/clawtrials test` ✅
+  - staging arbitration smoke: `artifacts/simulations/clawtrials/2026-02-12T02-02-05-716Z-staging/smoke.json` ✅
+  - production arbitration smoke: `artifacts/simulations/clawtrials/2026-02-12T02-03-12-873Z-prod/smoke.json` ✅
+- Story status:
+  - CTR-US-001..006 verified and flipped to `passes=true` in `services/clawtrials/prd.json`.
+
 ## 2026-02-12T03:00:00Z - TRUST-REP-002 glue
 - Added clawrep loop publication on harness outcomes when `output.worker_did` is provided.
   - pass -> recovery envelope

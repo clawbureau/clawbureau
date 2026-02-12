@@ -1,13 +1,13 @@
 {
   "lane": "TRUST-REP-002",
   "environment": "prod",
-  "generated_at": "2026-02-12T02:56:58.000Z",
+  "generated_at": "2026-02-12T03:11:58.000Z",
   "pass": true,
   "deploy_versions": {
-    "clawrep": "bfd887e6-fef2-43ca-870c-6b34a11d0ff3",
-    "clawbounties": "141ddf06-9057-4c54-9206-96f9aa574653",
-    "clawtrials": "c9edfd64-d714-4a19-84f8-055df5b1ac26",
-    "escrow": "bf34c736-fe2b-4f68-bbf4-60f62b5b0896"
+    "clawrep": "faec7ec3-0416-4939-9812-3eac37c0e00a",
+    "clawbounties": "a23e25b0-e763-428b-a583-72f69e553632",
+    "clawtrials": "ddc11d4c-b3bd-4ad7-a343-d7fdc7ae61fc",
+    "escrow": "520327ed-818a-49c6-8101-0b90d16994e5"
   },
   "migrations": {
     "clawrep": [
@@ -21,8 +21,8 @@
     "Drift reports are persisted in D1 (rep_drift_reports) and emitted via audit trail for deterministic ops forensics."
   ],
   "smoke_artifacts": {
-    "clawrep_service": "artifacts/smoke/clawrep/2026-02-12T02-54-33-994Z-prod/deploy-summary.json",
-    "clawrep_producer_loop": "artifacts/smoke/clawrep-producer-loop/2026-02-12T02-56-08-325Z-prod/result.json"
+    "clawrep_service": "artifacts/smoke/clawrep/2026-02-12T03-10-29-983Z-prod/deploy-summary.json",
+    "clawrep_producer_loop": "artifacts/smoke/clawrep-producer-loop/2026-02-12T03-11-14-975Z-prod/result.json"
   },
   "validation": {
     "typecheck": [

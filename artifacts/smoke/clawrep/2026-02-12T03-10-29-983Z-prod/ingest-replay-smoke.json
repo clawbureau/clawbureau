@@ -1,0 +1,58 @@
+{
+  "env": "prod",
+  "base_url": "https://clawrep.com",
+  "did": "did:key:z6MkrepA1770865829984",
+  "source_event_id": "rep_evt_1770865829984_a",
+  "first_ingest": {
+    "status": 202,
+    "body": {
+      "status": "accepted",
+      "duplicate": false,
+      "source_event_id": "rep_evt_1770865829984_a",
+      "did": "did:key:z6MkrepA1770865829984",
+      "score_delta": 128.57391,
+      "process_result": {
+        "processed": true
+      }
+    }
+  },
+  "replay_ingest": {
+    "status": 200,
+    "body": {
+      "status": "duplicate",
+      "duplicate": true,
+      "source_event_id": "rep_evt_1770865829984_a",
+      "event": {
+        "source_event_id": "rep_evt_1770865829984_a",
+        "did": "did:key:z6MkrepA1770865829984",
+        "status": "processed",
+        "score_delta": 128.57391,
+        "event_type": "closure",
+        "occurred_at": "2026-02-12T03:10:30.427Z"
+      }
+    }
+  },
+  "rep_after_replay": {
+    "did": "did:key:z6MkrepA1770865829984",
+    "reputation_score": 128.57391,
+    "events_count": 1,
+    "penalties_count": 0,
+    "dispute_penalties_count": 0,
+    "is_owner_verified": true,
+    "owner_attestation_ref": "att_1770865829984",
+    "tier": {
+      "tier": 2,
+      "tier_label": "trusted",
+      "capped_by_dispute_rate": false,
+      "dispute_rate": 0
+    },
+    "last_event_at": "2026-02-12T03:10:30.427Z",
+    "last_decay_at": null,
+    "updated_at": "2026-02-12T03:10:30.727Z",
+    "created_at": "2026-02-12T03:10:30.727Z"
+  },
+  "assertions": {
+    "replay_duplicate": true,
+    "event_count_stable": true
+  }
+}

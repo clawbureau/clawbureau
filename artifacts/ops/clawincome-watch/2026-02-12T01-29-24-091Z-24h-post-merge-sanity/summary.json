@@ -1,0 +1,13 @@
+{
+  "out_dir": "/Users/gfw/clawd/tmp/clawbureau-mpy011/artifacts/ops/clawincome-watch/2026-02-12T01-29-24-091Z-24h-post-merge-sanity",
+  "staging": {
+    "server_error_rate_percent": 0,
+    "total_requests": 72,
+    "server_errors": 0
+  },
+  "prod": {
+    "server_error_rate_percent": 0,
+    "total_requests": 72,
+    "server_errors": 0
+  }
+}

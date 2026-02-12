@@ -1,0 +1,135 @@
+{
+  "env": "staging",
+  "base_url": "https://clawrep-staging.generaite.workers.dev",
+  "request": {
+    "bounty_id": "bnty_1770865800077",
+    "difficulty_scalar": 2,
+    "quorum_size": 2,
+    "min_reputation_score": 10,
+    "require_owner_verified": false,
+    "exclude_dids": [
+      "did:key:z6MkrepA1770865800077"
+    ],
+    "submission_proof_tier": "gateway",
+    "requester_did": "did:key:z6MkrepA1770865800077",
+    "worker_did": "did:key:z6MkrepB1770865800077"
+  },
+  "first_selection": {
+    "bounty_id": "bnty_1770865800077",
+    "reviewers": [
+      {
+        "reviewer_did": "did:key:z6MkrepB1770864843078",
+        "reputation_score": 200.59333700000002,
+        "is_owner_verified": true
+      },
+      {
+        "reviewer_did": "did:key:z6MkrepA1770864843078",
+        "reputation_score": 164.30403900000002,
+        "is_owner_verified": true,
+        "owner_attestation_ref": "att_1770864843078"
+      }
+    ],
+    "selected_at": "2026-02-12T03:10:22.425Z",
+    "selection_metadata": {
+      "request_hash_seed": "bnty_1770865800077:2:2",
+      "candidate_pool_size": 18,
+      "eligible_candidate_count": 9,
+      "exclusion_buckets": {
+        "excluded_did": 2,
+        "owner_verification_required": 0,
+        "below_min_reputation": 1,
+        "cooldown_blocked": 6
+      },
+      "anti_collusion": {
+        "cooldown_hours": 12,
+        "history_window_days": 30
+      },
+      "selected_reasoning": [
+        {
+          "reviewer_did": "did:key:z6MkrepB1770864843078",
+          "base_score": 210.623004,
+          "owner_bonus": 2,
+          "recency_count": 0,
+          "recency_penalty": 0,
+          "pair_penalty": 0,
+          "attestation_penalty": 0,
+          "final_score": 212.623004
+        },
+        {
+          "reviewer_did": "did:key:z6MkrepA1770864843078",
+          "base_score": 172.519241,
+          "owner_bonus": 2,
+          "recency_count": 0,
+          "recency_penalty": 0,
+          "pair_penalty": 0,
+          "attestation_penalty": 0,
+          "final_score": 174.519241
+        }
+      ]
+    }
+  },
+  "second_selection": {
+    "bounty_id": "bnty_1770865800077",
+    "reviewers": [
+      {
+        "reviewer_did": "did:key:z6MkrepB1770864843078",
+        "reputation_score": 200.59333700000002,
+        "is_owner_verified": true
+      },
+      {
+        "reviewer_did": "did:key:z6MkrepA1770864843078",
+        "reputation_score": 164.30403900000002,
+        "is_owner_verified": true,
+        "owner_attestation_ref": "att_1770864843078"
+      }
+    ],
+    "selected_at": "2026-02-12T03:10:22.425Z",
+    "selection_metadata": {
+      "request_hash_seed": "bnty_1770865800077:2:2",
+      "candidate_pool_size": 18,
+      "eligible_candidate_count": 9,
+      "exclusion_buckets": {
+        "excluded_did": 2,
+        "owner_verification_required": 0,
+        "below_min_reputation": 1,
+        "cooldown_blocked": 6
+      },
+      "anti_collusion": {
+        "cooldown_hours": 12,
+        "history_window_days": 30
+      },
+      "selected_reasoning": [
+        {
+          "reviewer_did": "did:key:z6MkrepB1770864843078",
+          "base_score": 210.623004,
+          "owner_bonus": 2,
+          "recency_count": 0,
+          "recency_penalty": 0,
+          "pair_penalty": 0,
+          "attestation_penalty": 0,
+          "final_score": 212.623004
+        },
+        {
+          "reviewer_did": "did:key:z6MkrepA1770864843078",
+          "base_score": 172.519241,
+          "owner_bonus": 2,
+          "recency_count": 0,
+          "recency_penalty": 0,
+          "pair_penalty": 0,
+          "attestation_penalty": 0,
+          "final_score": 174.519241
+        }
+      ]
+    }
+  },
+  "reviewer_info": {
+    "reviewer_did": "did:key:z6MkrepB1770864843078",
+    "reputation_score": 200.59333700000002,
+    "is_owner_verified": true
+  },
+  "assertions": {
+    "deterministic_ordering": true,
+    "reviewer_info_found": true,
+    "selection_metadata_present": true
+  }
+}

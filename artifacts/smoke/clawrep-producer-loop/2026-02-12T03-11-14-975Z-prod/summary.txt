@@ -1,0 +1,4 @@
+clawrep producer-loop smoke (prod)
+generated_at=2026-02-12T03:11:28.142Z
+did=did:key:z6Mktrial1770865874976
+pass=true

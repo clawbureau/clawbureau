@@ -87,8 +87,8 @@ Started: 2026-02-12T02:32:00Z
   - migration `0002_trust_rep_closed_loop.sql` applied (staging/prod)
   - drift reports persisted in `rep_drift_reports`
 - Deploy versions
-  - staging: `e394cba6-4087-4267-80c0-7b0b3e0b925f`
-  - prod: `bfd887e6-fef2-43ca-870c-6b34a11d0ff3`
+  - staging: `f94065ad-7ac4-4a0c-8498-d51d13d54841`
+  - prod: `faec7ec3-0416-4939-9812-3eac37c0e00a`
 - Smoke evidence
-  - staging: `artifacts/smoke/clawrep/2026-02-12T02-54-03-077Z-staging/`
-  - prod: `artifacts/smoke/clawrep/2026-02-12T02-54-33-994Z-prod/`
+  - staging: `artifacts/smoke/clawrep/2026-02-12T03-10-00-076Z-staging/`
+  - prod: `artifacts/smoke/clawrep/2026-02-12T03-10-29-983Z-prod/`

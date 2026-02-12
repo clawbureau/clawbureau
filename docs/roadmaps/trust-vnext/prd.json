@@ -706,7 +706,7 @@
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Delivered closed-loop queue ingest across clawrep + producer glue in clawbounties/clawtrials/escrow using canonical loop envelopes and REP_EVENTS queue bindings. Smoke evidence: artifacts/smoke/clawrep/2026-02-12T02-54-03-077Z-staging and .../2026-02-12T02-54-33-994Z-prod."
+      "notes": "Delivered closed-loop queue ingest across clawrep + producer glue in clawbounties/clawtrials/escrow using canonical loop envelopes and REP_EVENTS queue bindings. Smoke evidence: artifacts/smoke/clawrep/2026-02-12T03-10-00-076Z-staging and .../2026-02-12T03-10-29-983Z-prod."
     },
     {
       "id": "CRP-US-009",
@@ -776,11 +776,11 @@
       ],
       "priority": 15,
       "passes": true,
-      "notes": "Closed-loop rollout completed. Deploy versions: clawrep staging e394cba6-4087-4267-80c0-7b0b3e0b925f / prod bfd887e6-fef2-43ca-870c-6b34a11d0ff3; clawbounties staging ac1dce64-100e-4608-a1a2-bd512c8d625c / prod 141ddf06-9057-4c54-9206-96f9aa574653; clawtrials staging b5707849-3eec-46d9-a5ae-ca1be0ab9d76 / prod c9edfd64-d714-4a19-84f8-055df5b1ac26; escrow staging d640faf3-2c0f-4f40-9076-54c59801f113 / prod bf34c736-fe2b-4f68-bbf4-60f62b5b0896. Ops summaries: artifacts/ops/clawrep/2026-02-12T02-56-40-000Z-staging/deploy-summary.json and .../2026-02-12T02-56-58-000Z-prod/deploy-summary.json."
+      "notes": "Closed-loop rollout completed. Deploy versions: clawrep staging f94065ad-7ac4-4a0c-8498-d51d13d54841 / prod faec7ec3-0416-4939-9812-3eac37c0e00a; clawbounties staging a102436e-d565-4705-879d-ac1b3032f36f / prod a23e25b0-e763-428b-a583-72f69e553632; clawtrials staging 067bef7e-d424-440c-9db4-5126a345f745 / prod ddc11d4c-b3bd-4ad7-a343-d7fdc7ae61fc; escrow staging 3aa5b2f9-c9e7-42e1-a9ef-bd985d94912e / prod 520327ed-818a-49c6-8101-0b90d16994e5. Ops summaries: artifacts/ops/clawrep/2026-02-12T02-56-40-000Z-staging/deploy-summary.json and .../2026-02-12T02-56-58-000Z-prod/deploy-summary.json."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-12T02:57:24.507Z",
+    "updatedAt": "2026-02-12T03:12:21.364Z",
     "seededFrom": "docs/roadmaps/proof-of-harness/oracle/2026-02-07/next-building-blocks-plan.gpt-5.2-pro.md"
   }
 }

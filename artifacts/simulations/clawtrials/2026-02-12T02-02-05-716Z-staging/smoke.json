@@ -1,0 +1,103 @@
+{
+  "ok": true,
+  "env": "staging",
+  "generated_at": "2026-02-12T02:02:05.717Z",
+  "base_urls": {
+    "clawbounties": "https://staging.clawbounties.com",
+    "clawtrials": "https://staging.clawtrials.com",
+    "clawclaim": "https://staging.clawclaim.com"
+  },
+  "requester": {
+    "did": "did:key:zsimrequesterbatch0001",
+    "token_hash": "d61bd318aed6a15840359b123d283690dbf22d9f539d9a9f3040ffa7250a42c1",
+    "token_kid": "66a63dae7bbf4bda"
+  },
+  "worker": {
+    "did": "did:key:z6MkjMv4n5AJsAHpC891fwKVkfq7WnF76w2bdpZo9UZSmZhN",
+    "token_hash": "651393ddd7c81e2574b698178631ad6dbad06956de04f95816623473dbc27c7c",
+    "token_kid": "66a63dae7bbf4bda"
+  },
+  "judge_did": "did:key:zjudge7955590d058f4994bd0c6378347cbecb",
+  "bounty_id": "bty_76310b9d-828c-4cc2-b0a0-62bf39fc20b7",
+  "submission_id": "sub_7bd64c38-0952-4be7-837b-db1d0a818b54",
+  "trial_case_id": "trc_f1608273-b7d8-4eb5-8364-9f384bc1e2f0",
+  "steps": [
+    {
+      "step": "register_worker",
+      "status": 200,
+      "elapsed_ms": 231
+    },
+    {
+      "step": "post_bounty",
+      "status": 201,
+      "bounty_id": "bty_76310b9d-828c-4cc2-b0a0-62bf39fc20b7",
+      "elapsed_ms": 961
+    },
+    {
+      "step": "accept_bounty",
+      "status": 201,
+      "elapsed_ms": 490
+    },
+    {
+      "step": "submit",
+      "status": 201,
+      "submission_id": "sub_7bd64c38-0952-4be7-837b-db1d0a818b54",
+      "elapsed_ms": 839
+    },
+    {
+      "step": "reject_and_intake_trial",
+      "status": 200,
+      "trial_case_id": "trc_f1608273-b7d8-4eb5-8364-9f384bc1e2f0",
+      "judge_did": "did:key:z6MkkkP7s9G4m2R1q8V3d6w9X2a5c8e1f4g7h0j3k6l9m2n5",
+      "elapsed_ms": 1258
+    },
+    {
+      "step": "get_trial_case",
+      "status": 200,
+      "elapsed_ms": 123
+    },
+    {
+      "step": "decision_enforced",
+      "status": 200,
+      "elapsed_ms": 1991
+    },
+    {
+      "step": "decision_replay",
+      "status": 200,
+      "elapsed_ms": 49
+    },
+    {
+      "step": "decision_conflict",
+      "status": 409,
+      "elapsed_ms": 46
+    },
+    {
+      "step": "appeal",
+      "status": 200,
+      "elapsed_ms": 157
+    },
+    {
+      "step": "appeal_decision",
+      "status": 200,
+      "elapsed_ms": 111
+    },
+    {
+      "step": "appeal_outcome_change_blocked",
+      "status": 409,
+      "elapsed_ms": 47
+    },
+    {
+      "step": "metrics",
+      "status": 200,
+      "elapsed_ms": 95
+    }
+  ],
+  "assertions": {
+    "dispute_intake": true,
+    "judge_assignment_present": true,
+    "decision_enforcement_released": true,
+    "replay_safe": true,
+    "appeal_supported": true,
+    "appeal_outcome_change_blocked": true
+  }
+}

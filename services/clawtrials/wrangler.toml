@@ -1,13 +1,21 @@
 name = "clawtrials"
 account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
-compatibility_date = "2026-02-11"
+compatibility_date = "2026-02-12"
 workers_dev = true
 
 routes = [
   { pattern = "clawtrials.com/v1/harness*", zone_name = "clawtrials.com" },
+  { pattern = "clawtrials.com/v1/trials*", zone_name = "clawtrials.com" },
+  { pattern = "clawtrials.com/v1/reports*", zone_name = "clawtrials.com" },
   { pattern = "clawtrials.com/health", zone_name = "clawtrials.com" }
 ]
+
+[[d1_databases]]
+binding = "TRIALS_DB"
+database_name = "clawtrials"
+database_id = "02a9c942-39b7-47cd-8d6a-701919385d89"
+migrations_dir = "migrations"
 
 [[queues.producers]]
 binding = "REP_EVENTS"
@@ -17,11 +25,20 @@ queue = "clawrep-events"
 ENVIRONMENT = "production"
 CLAWTRIALS_VERSION = "0.2.0"
 CLAWREP_BASE_URL = "https://clawrep.com"
+ESCROW_BASE_URL = "https://clawescrow.com"
+TRIALS_JUDGE_POOL = "did:key:z6MkfYf63u3j5YQk8R5dKAcNw3En4x4G3f3t6sCkqnVQ5Yw1,did:key:z6MkpvX5m6W8fQk2W7b9f7u5e9a2QdR6r3nP8mYc4uH2tAq9,did:key:z6MkqA1b2C3d4E5f6G7h8J9kLmNoPqRsTuVwXyZaBcDeFgHi"
 
 [env.staging]
+name = "clawtrials-staging"
 routes = [
   { pattern = "staging.clawtrials.com", custom_domain = true }
 ]
+
+[[env.staging.d1_databases]]
+binding = "TRIALS_DB"
+database_name = "clawtrials-staging"
+database_id = "334376c8-152a-4396-9fe9-103d981d3a91"
+migrations_dir = "migrations"
 
 [[env.staging.queues.producers]]
 binding = "REP_EVENTS"
@@ -31,3 +48,11 @@ queue = "clawrep-events-staging"
 ENVIRONMENT = "staging"
 CLAWTRIALS_VERSION = "0.2.0-staging"
 CLAWREP_BASE_URL = "https://staging.clawrep.com"
+ESCROW_BASE_URL = "https://staging.clawescrow.com"
+TRIALS_JUDGE_POOL = "did:key:z6MkkkP7s9G4m2R1q8V3d6w9X2a5c8e1f4g7h0j3k6l9m2n5,did:key:z6MknnR5w1Q7a3D9f6H2j8L4p0S5v1X7z3B9c5D1f7H3j9L5,did:key:z6MkttW3e9R5y1U7i3O9p5A1s7D3f9G5h1J7k3L9z5X1c7V3"
+
+# Secrets to set via wrangler secret put:
+# - TRIALS_ADMIN_KEY
+# - TRIALS_ESCROW_KEY
+# Optional fallback when REP_EVENTS queue binding is unavailable:
+# - CLAWREP_INGEST_KEY
