@@ -28,6 +28,16 @@ import {
 import {
   createPaymentIntent,
 } from './stripe-api';
+import {
+  captureHealthSnapshot,
+  queryHealthHistory,
+  queryHealthTrends,
+  queryWebhookSla,
+  queryWebhookFailures,
+  queryActiveAlerts,
+  evaluateAlertRules,
+  logWebhookDelivery,
+} from './ops-intelligence';
 import type { Env, ErrorResponse, PayoutLifecycleHookInput } from './types';
 
 function jsonResponse<T>(data: T, status = 200, version = '0.1.0'): Response {
@@ -129,7 +139,43 @@ async function handleStripeWebhook(request: Request, env: Env): Promise<Response
     // If parsing fails, processWebhook will handle the error.
   }
 
-  const response = await service.processWebhook(rawBody, signature);
+  const webhookReceivedAt = new Date().toISOString();
+  const webhookT0 = Date.now();
+  let webhookDeliveryStatus: 'success' | 'failed' | 'timeout' = 'success';
+  let webhookErrorCode: string | undefined;
+
+  let response: import('./types').StripeWebhookResponse;
+  try {
+    response = await service.processWebhook(rawBody, signature);
+  } catch (err) {
+    webhookDeliveryStatus = 'failed';
+    webhookErrorCode = err instanceof ClawSettleError ? err.code : 'UNKNOWN';
+    // Log delivery before re-throwing
+    try {
+      await logWebhookDelivery(env.DB, {
+        event_type: parsedEvent?.type ?? 'unknown',
+        source: 'stripe',
+        received_at: webhookReceivedAt,
+        processing_ms: Date.now() - webhookT0,
+        status: webhookDeliveryStatus,
+        error_code: webhookErrorCode,
+        idempotency_key: parsedEvent?.id ? `stripe:event:${parsedEvent.id}` : undefined,
+      });
+    } catch { /* best-effort logging */ }
+    throw err;
+  }
+
+  // Log successful delivery (best-effort, don't fail webhook on logging error)
+  try {
+    await logWebhookDelivery(env.DB, {
+      event_type: response.event_type ?? parsedEvent?.type ?? 'unknown',
+      source: 'stripe',
+      received_at: webhookReceivedAt,
+      processing_ms: Date.now() - webhookT0,
+      status: 'success',
+      idempotency_key: response.idempotency_key ?? (parsedEvent?.id ? `stripe:event:${parsedEvent.id}` : undefined),
+    });
+  } catch { /* best-effort */ }
 
   // After successful webhook processing, check if this is a dispute event
   // and bridge to the loss-event pipeline.
@@ -754,6 +800,48 @@ async function router(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ ok: true, ...result }, 201, resolveVersion(env));
   }
 
+  // ---------------------------------------------------------------------------
+  // ECON-OPS-002: Operational intelligence endpoints
+  // ---------------------------------------------------------------------------
+
+  if (request.method === 'GET' && path === '/v1/ops/health/history') {
+    assertSettleAdmin(request, env);
+    const url = new URL(request.url);
+    const hours = parseInt(url.searchParams.get('hours') ?? '24', 10);
+    const snapshots = await queryHealthHistory(env.DB, hours);
+    return jsonResponse({ ok: true, snapshots, count: snapshots.length }, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'GET' && path === '/v1/ops/health/trends') {
+    assertSettleAdmin(request, env);
+    const url = new URL(request.url);
+    const days = parseInt(url.searchParams.get('days') ?? '7', 10);
+    const trends = await queryHealthTrends(env.DB, days);
+    return jsonResponse({ ok: true, ...trends }, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'GET' && path === '/v1/ops/webhooks/sla') {
+    assertSettleAdmin(request, env);
+    const url = new URL(request.url);
+    const hours = parseInt(url.searchParams.get('hours') ?? '24', 10);
+    const sla = await queryWebhookSla(env.DB, hours);
+    return jsonResponse({ ok: true, ...sla }, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'GET' && path === '/v1/ops/webhooks/failures') {
+    assertSettleAdmin(request, env);
+    const url = new URL(request.url);
+    const since = url.searchParams.get('since') ?? new Date(Date.now() - 86400000).toISOString();
+    const failures = await queryWebhookFailures(env.DB, since);
+    return jsonResponse({ ok: true, failures, count: failures.length }, 200, resolveVersion(env));
+  }
+
+  if (request.method === 'GET' && path === '/v1/ops/alerts/active') {
+    assertSettleAdmin(request, env);
+    const active = await queryActiveAlerts(env.DB);
+    return jsonResponse({ ok: true, alerts: active, count: active.length }, 200, resolveVersion(env));
+  }
+
   return errorResponse('Not found', 'NOT_FOUND', 404, undefined, resolveVersion(env));
 }
 
@@ -840,6 +928,20 @@ export default {
     ctx.waitUntil(
       runOpsAlertChecks(env.DB).catch((err) => {
         console.error('scheduled-ops-alert-checks-failed', err);
+      })
+    );
+
+    // ECON-OPS-002: health snapshot capture (every cron tick = every 2 min)
+    ctx.waitUntil(
+      captureHealthSnapshot(env).catch((err) => {
+        console.error('scheduled-health-snapshot-failed', err);
+      })
+    );
+
+    // ECON-OPS-002: threshold-based alert evaluation
+    ctx.waitUntil(
+      evaluateAlertRules(env).catch((err) => {
+        console.error('scheduled-alert-rules-failed', err);
       })
     );
   },
