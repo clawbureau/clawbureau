@@ -361,6 +361,16 @@ const bundle = await run.finalize();</code></pre>
       <li><a href="https://github.com/clawbureau/clawbureau">GitHub repository</a></li>
     </ul>
 
+    <h2>Enterprise deployment</h2>
+    <p style="color:var(--dim);font-size:0.875rem;margin-bottom:1rem">Running agents in regulated environments? Claw EA wraps the Clawsig Protocol with enterprise controls.</p>
+    <ul class="links">
+      <li><a href="https://www.clawea.com/pricing/enterprise">Enterprise plans and pricing</a></li>
+      <li><a href="https://www.clawea.com/guides/github-actions-proof-pipeline">GitHub Actions proof pipeline guide</a></li>
+      <li><a href="https://www.clawea.com/trust/security-review">Security review pack</a></li>
+      <li><a href="https://www.clawea.com/case-studies/dogfood-claw-bureau">Case study: 3 agents, 190+ PRs, 12 services</a></li>
+      <li><a href="https://www.clawea.com/docs">Full documentation hub</a></li>
+    </ul>
+
     <h2>Design principles</h2>
     <div class="grid">
       <div class="card">

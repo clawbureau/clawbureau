@@ -62,6 +62,30 @@ Cryptographically signed proof bundles for AI agent actions. Every receipt is ha
 
 ---
 
+## For enterprise
+
+Running AI agents in regulated environments? **[Claw EA](https://www.clawea.com)** wraps the Clawsig Protocol with enterprise controls:
+
+- **Readiness assessment** — [assess your rollout readiness](https://www.clawea.com/assessment) in 2 minutes
+- **Approval gates, DLP, kill switches** — [see all controls](https://www.clawea.com/controls)
+- **SOX, HIPAA, FedRAMP mapping** — [compliance evidence](https://www.clawea.com/resources/compliance-mapping)
+- **Security review pack** — [architecture, threat model, proof artifacts](https://www.clawea.com/trust/security-review)
+- **Pricing** — [starter ($49/mo), team ($249/mo), enterprise (custom)](https://www.clawea.com/pricing)
+
+## Documentation
+
+Full docs, implementation guides, and API reference:
+
+- **[Documentation hub](https://www.clawea.com/docs)** — Quick Start, SDK, API, Protocol Spec, Security
+- **[GitHub Actions proof pipeline](https://www.clawea.com/guides/github-actions-proof-pipeline)** — CI integration in 30 minutes
+- **[Okta scoped tokens](https://www.clawea.com/guides/okta-scoped-tokens)** — identity-scoped agent permissions
+- **[Case study: dogfooding](https://www.clawea.com/case-studies/dogfood-claw-bureau)** — 3 agents, 190+ PRs, 12 services
+
+[![Claw EA](https://img.shields.io/badge/Claw_EA-docs-blue)](https://www.clawea.com/docs)
+[![deployment](https://img.shields.io/badge/status-operational-brightgreen)](https://www.clawea.com/status)
+
+---
+
 ## Monorepo structure
 
 ```
