@@ -34,6 +34,12 @@ export async function computeTokenScopeHashB64uV1(input: {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
 }): Promise<string> {
   const normalized = buildTokenScopeHashInput(input);
   return computeSharedTokenScopeHashB64u(normalized);

@@ -1,0 +1,165 @@
+{
+  "scenario": "CDL-MAX-001 delegation control-plane smoke",
+  "env": "prod",
+  "base_url": "https://clawdelegate.com",
+  "deploy_version": "b94daa3a-0362-4172-bbb5-17e0766afb27",
+  "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+  "delegator_did": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+  "delegate_did": "did:key:z6MkmQX3yePSYviVz1xfM3pyicVZMFiLeyxMSdYpWoQ8mX8x",
+  "checks": {
+    "create": 201,
+    "get": 200,
+    "approve": 200,
+    "issue": 201,
+    "spend_authorize": 200,
+    "spend_replay": 200,
+    "audit": 200,
+    "audit_export": 200,
+    "revoke": 200
+  },
+  "assertions": {
+    "spend_applied": true,
+    "spend_replay_idempotent": true,
+    "audit_has_created": true,
+    "audit_has_approved": true,
+    "audit_has_issued": true,
+    "audit_has_spend": true,
+    "export_hash_header_present": true
+  },
+  "responses": {
+    "create": {
+      "schema_version": "1",
+      "delegation": {
+        "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+        "delegator_did": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "delegate_did": "did:key:z6MkmQX3yePSYviVz1xfM3pyicVZMFiLeyxMSdYpWoQ8mX8x",
+        "aud": [
+          "clawproxy.com"
+        ],
+        "scope": [
+          "clawproxy:call",
+          "proxy:call"
+        ],
+        "ttl_seconds": 900,
+        "spend_cap_minor": "100",
+        "policy_hash_b64u": null,
+        "policy_pin_verified": false,
+        "state": "pending_approval",
+        "reserved_minor": "0",
+        "consumed_minor": "0",
+        "created_by": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "approved_by": null,
+        "revoked_by": null,
+        "created_at": "2026-02-12T04:56:09.386Z",
+        "approved_at": null,
+        "revoked_at": null,
+        "expires_at": "2026-02-12T05:11:09.386Z",
+        "updated_at": "2026-02-12T04:56:09.386Z"
+      },
+      "status": "created"
+    },
+    "approve": {
+      "schema_version": "1",
+      "delegation": {
+        "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+        "delegator_did": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "delegate_did": "did:key:z6MkmQX3yePSYviVz1xfM3pyicVZMFiLeyxMSdYpWoQ8mX8x",
+        "aud": [
+          "clawproxy.com"
+        ],
+        "scope": [
+          "clawproxy:call",
+          "proxy:call"
+        ],
+        "ttl_seconds": 900,
+        "spend_cap_minor": "100",
+        "policy_hash_b64u": null,
+        "policy_pin_verified": false,
+        "state": "approved",
+        "reserved_minor": "0",
+        "consumed_minor": "0",
+        "created_by": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "approved_by": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "revoked_by": null,
+        "created_at": "2026-02-12T04:56:09.386Z",
+        "approved_at": "2026-02-12T04:56:09.619Z",
+        "revoked_at": null,
+        "expires_at": "2026-02-12T05:11:09.386Z",
+        "updated_at": "2026-02-12T04:56:09.619Z"
+      },
+      "status": "approved"
+    },
+    "issue": {
+      "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+      "token_hash": "060da2ec60392549ee0ac1e519e07e9aab5096fae371e77eba6c77015095f311",
+      "token_scope_hash_b64u": "z8sE-R94FsacJ_aQcSeupfwigDlAOG6O_4Xwod_GEis",
+      "exp": 1770872469
+    },
+    "spend_authorize": {
+      "schema_version": "1",
+      "result": {
+        "status": "applied",
+        "operation": "authorize",
+        "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+        "idempotency_key": "dlg_smoke_spend_1770872169169",
+        "amount_minor": "5",
+        "reserved_minor": "0",
+        "consumed_minor": "5",
+        "spend_cap_minor": "100",
+        "ledger_event_id": "evt_mlizkg4s_c4ebhaxg",
+        "decided_at": "2026-02-12T04:56:10.938Z"
+      }
+    },
+    "spend_replay": {
+      "schema_version": "1",
+      "result": {
+        "status": "already_applied",
+        "operation": "authorize",
+        "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+        "idempotency_key": "dlg_smoke_spend_1770872169169",
+        "amount_minor": "5",
+        "reserved_minor": "0",
+        "consumed_minor": "5",
+        "spend_cap_minor": "100",
+        "ledger_event_id": "evt_mlizkg4s_c4ebhaxg",
+        "decided_at": "2026-02-12T04:56:10.938Z"
+      }
+    },
+    "revoke": {
+      "schema_version": "1",
+      "delegation": {
+        "delegation_id": "dlg_9b016854-ec2b-4bbf-8ab1-4000c18f4169",
+        "delegator_did": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "delegate_did": "did:key:z6MkmQX3yePSYviVz1xfM3pyicVZMFiLeyxMSdYpWoQ8mX8x",
+        "aud": [
+          "clawproxy.com"
+        ],
+        "scope": [
+          "clawproxy:call",
+          "proxy:call"
+        ],
+        "ttl_seconds": 900,
+        "spend_cap_minor": "100",
+        "policy_hash_b64u": null,
+        "policy_pin_verified": false,
+        "state": "revoked",
+        "reserved_minor": "0",
+        "consumed_minor": "5",
+        "created_by": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "approved_by": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "revoked_by": "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb",
+        "created_at": "2026-02-12T04:56:09.386Z",
+        "approved_at": "2026-02-12T04:56:09.619Z",
+        "revoked_at": "2026-02-12T04:56:11.246Z",
+        "expires_at": "2026-02-12T05:11:09.386Z",
+        "updated_at": "2026-02-12T04:56:11.246Z"
+      },
+      "status": "revoked",
+      "revoke_fanout": {
+        "queued": 1,
+        "queue_enabled": true
+      }
+    }
+  },
+  "generated_at": "2026-02-12T04:56:11.492Z"
+}

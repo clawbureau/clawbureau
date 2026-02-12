@@ -88,6 +88,18 @@ export interface Env {
    * Missing claim fails closed with PAYMENT_ACCOUNT_BINDING_REQUIRED.
    */
   PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM?: string;
+
+  /** Base URL for clawdelegate spend governance checks. */
+  CLAWDELEGATE_BASE_URL?: string;
+
+  /** Service key used by clawproxy when calling clawdelegate spend endpoints. */
+  CLAWDELEGATE_PROXY_KEY?: string;
+
+  /** Timeout in ms for clawdelegate spend checks (default: 5000). */
+  CLAWDELEGATE_TIMEOUT_MS?: string;
+
+  /** Default delegated spend amount in minor units when no override header is provided (default: "1"). */
+  CLAWDELEGATE_DEFAULT_SPEND_MINOR?: string;
 }
 
 /**
@@ -214,6 +226,17 @@ export interface PlatformFundingCheckContext {
   ledgerBaseUrl: string;
 }
 
+export interface DelegationSpendCheckContext {
+  status: 'authorized' | 'already_applied';
+  delegationId: string;
+  amountMinor: string;
+  idempotencyKey: string;
+  reservedMinor: string;
+  consumedMinor: string;
+  spendCapMinor: string;
+  checkedAt: string;
+}
+
 export interface ReceiptPayment {
   mode: ReceiptPaymentMode;
   /** True when platform reserve credits were spent */
@@ -224,6 +247,8 @@ export interface ReceiptPayment {
   accountBinding?: PlatformPaymentAccountBindingContext;
   /** Proof context for platform-paid precheck (present for funded platform calls). */
   fundingCheck?: PlatformFundingCheckContext;
+  /** Optional delegated spend authorization context when delegated CST checks are active. */
+  delegationSpend?: DelegationSpendCheckContext;
 }
 
 /**

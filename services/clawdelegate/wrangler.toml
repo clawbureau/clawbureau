@@ -1,0 +1,106 @@
+name = "clawdelegate"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-12"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+routes = [
+  { pattern = "clawdelegate.com/*", zone_name = "clawdelegate.com" },
+  { pattern = "www.clawdelegate.com/*", zone_name = "clawdelegate.com" }
+]
+
+[[d1_databases]]
+binding = "DELEGATE_DB"
+database_name = "clawdelegate"
+database_id = "9e09aa26-dd0b-4ec0-9c5a-2aac8f05a35e"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "DELEGATION_DO"
+class_name = "DelegationDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["DelegationDurableObject"]
+
+[[kv_namespaces]]
+binding = "DELEGATE_CACHE"
+id = "af09792ff80142ab86e6f291e536b5ac"
+
+[[queues.producers]]
+binding = "DELEGATE_EVENTS"
+queue = "clawdelegate-events"
+
+[[queues.consumers]]
+queue = "clawdelegate-events"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+dead_letter_queue = "clawdelegate-events-dlq"
+retry_delay = 30
+
+[vars]
+ENVIRONMENT = "production"
+DELEGATE_VERSION = "0.1.0"
+SCOPE_BASE_URL = "https://clawscope.com"
+LEDGER_BASE_URL = "https://clawledger.com"
+CLAIM_BASE_URL = "https://clawclaim.com"
+CONTROLS_BASE_URL = "https://clawcontrols.com"
+DELEGATE_SCOPE_OWNER_DID = "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb"
+DELEGATE_SCOPE_CONTROLLER_DID = "did:key:z6MkjPt4RAiu7chfmMccSe9jkQ8jDnxFcfTF8Je2cWMbnurb"
+DELEGATE_SCOPE_AGENT_DID = "did:key:z6MkmQX3yePSYviVz1xfM3pyicVZMFiLeyxMSdYpWoQ8mX8x"
+
+# Secrets to set via `wrangler secret put`:
+# - DELEGATE_ADMIN_KEY (admin ops + lifecycle approvals)
+# - DELEGATE_ISSUER_KEY (service token for clawscope /v1/tokens/issue/canonical)
+# - CLAIM_DELEGATE_KEY (service token for clawclaim /v1/delegations/bootstrap)
+# - LEDGER_VERIFY_TOKEN (read-only verify token for clawledger balance reads)
+# - LEDGER_ADMIN_KEY (optional; only if using ledger mutations directly)
+
+[env.staging]
+name = "clawdelegate-staging"
+routes = [
+  { pattern = "staging.clawdelegate.com/*", zone_name = "clawdelegate.com" }
+]
+
+[[env.staging.d1_databases]]
+binding = "DELEGATE_DB"
+database_name = "clawdelegate-staging"
+database_id = "c9b2d709-a1cf-4515-977c-ede255a35424"
+migrations_dir = "migrations"
+
+[[env.staging.durable_objects.bindings]]
+name = "DELEGATION_DO"
+class_name = "DelegationDurableObject"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_classes = ["DelegationDurableObject"]
+
+[[env.staging.kv_namespaces]]
+binding = "DELEGATE_CACHE"
+id = "5a3fece15bde458b864e81b1cc627e05"
+
+[[env.staging.queues.producers]]
+binding = "DELEGATE_EVENTS"
+queue = "clawdelegate-events-staging"
+
+[[env.staging.queues.consumers]]
+queue = "clawdelegate-events-staging"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+dead_letter_queue = "clawdelegate-events-dlq-staging"
+retry_delay = 30
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+DELEGATE_VERSION = "0.1.0-staging"
+SCOPE_BASE_URL = "https://staging.clawscope.com"
+LEDGER_BASE_URL = "https://staging.clawledger.com"
+CLAIM_BASE_URL = "https://staging.clawclaim.com"
+CONTROLS_BASE_URL = "https://staging.clawcontrols.com"
+DELEGATE_SCOPE_OWNER_DID = "did:key:z6Mkfhoj2Cb4HEw442mYwyUUD9ZWpVHakDJAJnn5BEAA2pNx"
+DELEGATE_SCOPE_CONTROLLER_DID = "did:key:z6Mkfhoj2Cb4HEw442mYwyUUD9ZWpVHakDJAJnn5BEAA2pNx"
+DELEGATE_SCOPE_AGENT_DID = "did:key:z6MkpQimMtacqJmRaJ4TMwcwfedP8BHq84NbUHmA8VfGhbhg"

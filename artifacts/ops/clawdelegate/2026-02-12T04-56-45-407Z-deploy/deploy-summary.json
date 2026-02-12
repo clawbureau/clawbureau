@@ -1,0 +1,97 @@
+{
+  "generated_at": "2026-02-12T04:56:22.678Z",
+  "services": {
+    "clawdelegate": {
+      "staging": {
+        "deployment_id": "e679080f-71e1-47d1-bb74-700b5419133a",
+        "version_id": "6ca14731-1ae9-4417-9d1d-42f706f4b92e",
+        "created_on": "2026-02-12T04:55:22.974895Z",
+        "source": "wrangler"
+      },
+      "prod": {
+        "deployment_id": "819db0c0-d1b3-4ea6-9ca2-a0376d480a0b",
+        "version_id": "b94daa3a-0362-4172-bbb5-17e0766afb27",
+        "created_on": "2026-02-12T04:52:14.421188Z",
+        "source": "wrangler"
+      }
+    },
+    "clawclaim": {
+      "staging": {
+        "deployment_id": "0c7e43c5-477a-4df8-b556-64d905c632c3",
+        "version_id": "7b6325ce-c95f-434e-b98f-454db0b9388f",
+        "created_on": "2026-02-12T04:34:16.721832Z",
+        "source": "wrangler"
+      },
+      "prod": {
+        "deployment_id": "ce61efcf-0ff9-4f78-b7ff-b415b62c1b1a",
+        "version_id": "43f7cfba-f465-44ac-a336-818a184a6f8a",
+        "created_on": "2026-02-12T04:48:54.327026Z",
+        "source": "wrangler"
+      }
+    },
+    "clawscope": {
+      "staging": {
+        "deployment_id": "2ac900d1-7b6b-48fd-8e9c-6a8364fb9bae",
+        "version_id": "fd43755e-8353-4cfa-9d2f-45dead2ee64a",
+        "created_on": "2026-02-12T04:37:15.66994Z",
+        "source": "wrangler"
+      },
+      "prod": {
+        "deployment_id": "9a483a6e-8e46-4270-bff1-d057ad867a38",
+        "version_id": "ccedb1e7-c811-4412-991f-09159e041c86",
+        "created_on": "2026-02-12T04:48:29.28354Z",
+        "source": "wrangler"
+      }
+    },
+    "clawproxy": {
+      "staging": {
+        "deployment_id": "2b506071-58f3-4a68-8f12-07d251d02999",
+        "version_id": "025fde6a-8ca5-4d73-8a57-8b5cfa6e0683",
+        "created_on": "2026-02-12T04:55:25.146207Z",
+        "source": "wrangler"
+      },
+      "prod": {
+        "deployment_id": "8f648e6e-282a-43bd-b515-5c82af85390e",
+        "version_id": "1a377d71-7ad9-4bcd-a305-b41122849abb",
+        "created_on": "2026-02-12T04:50:32.725782Z",
+        "source": "wrangler"
+      }
+    },
+    "clawbounties": {
+      "staging": {
+        "deployment_id": "fab86f37-25d9-497f-a594-5389b6e37b7a",
+        "version_id": "03bda33f-550d-48eb-8d75-1e9142910ebd",
+        "created_on": "2026-02-12T04:46:59.116021Z",
+        "source": "wrangler"
+      },
+      "prod": {
+        "deployment_id": "8170c161-7f73-42e5-9ca9-b5bd0e610cf7",
+        "version_id": "bd4bc8af-67bd-4ebe-a6fa-31296a453880",
+        "created_on": "2026-02-12T04:50:56.337389Z",
+        "source": "wrangler"
+      }
+    },
+    "ledger": {
+      "staging": {
+        "deployment_id": "b05a9267-6adb-4ef2-8811-7508a4f0b209",
+        "version_id": "24a25b8a-13d3-4768-b1bf-006e462d8608",
+        "created_on": "2026-02-12T04:55:21.033312Z",
+        "source": "wrangler"
+      },
+      "prod": {
+        "deployment_id": "ede4812d-09ee-4f0a-af8c-4aea2928fce9",
+        "version_id": "f748d63f-e13a-41ac-9ea3-b298ea57d1d4",
+        "created_on": "2026-02-12T04:54:03.805768Z",
+        "source": "wrangler"
+      }
+    },
+    "claw-domains": {
+      "prod": {
+        "deployment_id": "02650ce3-d555-4d9d-b9f9-f06c7ebb4b1b",
+        "version_id": "3309cae6-772c-41f7-a1ad-30bb8701db03",
+        "created_on": "2026-02-12T04:51:45.368506Z",
+        "source": "wrangler"
+      }
+    }
+  }
+}

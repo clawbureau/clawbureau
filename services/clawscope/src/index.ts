@@ -92,6 +92,12 @@ export interface ScopedTokenClaims {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   jti?: string;
   nonce?: string;
@@ -112,6 +118,12 @@ export interface IssueTokenRequest {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   tier?: string;
 }
@@ -185,6 +197,12 @@ interface IssuanceRecord {
   payment_account_did?: string;
   spend_cap?: number;
   mission_id?: string;
+  delegation_id?: string;
+  delegator_did?: string;
+  delegate_did?: string;
+  delegation_policy_hash_b64u?: string;
+  delegation_spend_cap_minor?: string;
+  delegation_expires_at?: number;
   token_lane?: 'legacy' | 'canonical';
   jti?: string;
 }
@@ -1057,6 +1075,99 @@ function validateIssueRequest(body: unknown, env: Env): { ok: true; req: IssueTo
   if (typeof b.spend_cap === 'number') req.spend_cap = b.spend_cap;
   if (typeof b.mission_id === 'string') req.mission_id = b.mission_id;
 
+  const delegationIdInput = typeof b.delegation_id === 'string' ? b.delegation_id.trim() : '';
+  if (delegationIdInput) {
+    req.delegation_id = delegationIdInput;
+  }
+
+  const delegatorDidInput = typeof b.delegator_did === 'string' ? b.delegator_did.trim() : '';
+  if (delegatorDidInput) {
+    if (!isDid(delegatorDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('DELEGATOR_DID_INVALID', 'delegator_did must be a valid DID string', 400),
+      };
+    }
+    req.delegator_did = delegatorDidInput;
+  }
+
+  const delegateDidInput = typeof b.delegate_did === 'string' ? b.delegate_did.trim() : '';
+  if (delegateDidInput) {
+    if (!isDid(delegateDidInput)) {
+      return {
+        ok: false,
+        res: errorResponse('DELEGATE_DID_INVALID', 'delegate_did must be a valid DID string', 400),
+      };
+    }
+    req.delegate_did = delegateDidInput;
+  }
+
+  const delegationPolicyHashInput =
+    typeof b.delegation_policy_hash_b64u === 'string' ? b.delegation_policy_hash_b64u.trim() : '';
+  if (delegationPolicyHashInput) {
+    if (!isSha256B64u(delegationPolicyHashInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'DELEGATION_POLICY_HASH_INVALID',
+          'delegation_policy_hash_b64u must be a SHA-256 base64url hash (length 43)',
+          400
+        ),
+      };
+    }
+    req.delegation_policy_hash_b64u = delegationPolicyHashInput;
+  }
+
+  const delegationSpendCapInput =
+    typeof b.delegation_spend_cap_minor === 'string' ? b.delegation_spend_cap_minor.trim() : '';
+  if (delegationSpendCapInput) {
+    if (!/^[0-9]+$/.test(delegationSpendCapInput)) {
+      return {
+        ok: false,
+        res: errorResponse(
+          'DELEGATION_SPEND_CAP_INVALID',
+          'delegation_spend_cap_minor must be an integer string',
+          400
+        ),
+      };
+    }
+    req.delegation_spend_cap_minor = delegationSpendCapInput;
+  }
+
+  if (typeof b.delegation_expires_at === 'number' && Number.isFinite(b.delegation_expires_at)) {
+    req.delegation_expires_at = Math.floor(b.delegation_expires_at);
+  }
+
+  if (req.delegate_did && req.delegate_did !== req.sub) {
+    return {
+      ok: false,
+      res: errorResponse('DELEGATE_DID_SUB_MISMATCH', 'delegate_did must match sub for delegated tokens', 400),
+    };
+  }
+
+  if (req.delegator_did && req.owner_did && req.delegator_did !== req.owner_did) {
+    return {
+      ok: false,
+      res: errorResponse('DELEGATOR_OWNER_MISMATCH', 'delegator_did must match owner_did when both are set', 400),
+    };
+  }
+
+  if (
+    req.delegation_id ||
+    req.delegator_did ||
+    req.delegate_did ||
+    req.delegation_policy_hash_b64u ||
+    req.delegation_spend_cap_minor ||
+    req.delegation_expires_at !== undefined
+  ) {
+    if (req.token_lane !== 'canonical') {
+      return {
+        ok: false,
+        res: errorResponse('DELEGATION_CANONICAL_REQUIRED', 'delegation claims require token_lane=canonical', 400),
+      };
+    }
+  }
+
   try {
     const policy = resolveScopePolicy(env, tier);
     const enforced = enforceScopePolicy(req.scope, policy);
@@ -1871,6 +1982,35 @@ function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
     if (!isSha256B64u(p.control_plane_policy_hash_b64u.trim())) return false;
   }
 
+  if (p.delegation_id !== undefined && !isNonEmptyString(p.delegation_id)) return false;
+
+  if (p.delegator_did !== undefined) {
+    if (!isNonEmptyString(p.delegator_did) || !isDid(p.delegator_did.trim())) return false;
+  }
+
+  if (p.delegate_did !== undefined) {
+    if (!isNonEmptyString(p.delegate_did) || !isDid(p.delegate_did.trim())) return false;
+  }
+
+  if (p.delegation_policy_hash_b64u !== undefined) {
+    if (!isNonEmptyString(p.delegation_policy_hash_b64u) || !isSha256B64u(p.delegation_policy_hash_b64u.trim())) {
+      return false;
+    }
+  }
+
+  if (p.delegation_spend_cap_minor !== undefined) {
+    if (
+      !isNonEmptyString(p.delegation_spend_cap_minor) ||
+      !/^[0-9]+$/.test(p.delegation_spend_cap_minor.trim())
+    ) {
+      return false;
+    }
+  }
+
+  if (p.delegation_expires_at !== undefined) {
+    if (typeof p.delegation_expires_at !== 'number' || !Number.isFinite(p.delegation_expires_at)) return false;
+  }
+
   if (p.token_lane !== undefined) {
     if (p.token_lane !== 'legacy' && p.token_lane !== 'canonical') return false;
   }
@@ -1925,6 +2065,12 @@ async function issueToken(
     payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
+    delegation_id: req.delegation_id,
+    delegator_did: req.delegator_did,
+    delegate_did: req.delegate_did,
+    delegation_policy_hash_b64u: req.delegation_policy_hash_b64u,
+    delegation_spend_cap_minor: req.delegation_spend_cap_minor,
+    delegation_expires_at: req.delegation_expires_at,
   });
 
   const claims: ScopedTokenClaims = {
@@ -1944,6 +2090,12 @@ async function issueToken(
     payment_account_did: req.payment_account_did,
     spend_cap: req.spend_cap,
     mission_id: req.mission_id,
+    delegation_id: req.delegation_id,
+    delegator_did: req.delegator_did,
+    delegate_did: req.delegate_did,
+    delegation_policy_hash_b64u: req.delegation_policy_hash_b64u,
+    delegation_spend_cap_minor: req.delegation_spend_cap_minor,
+    delegation_expires_at: req.delegation_expires_at,
     token_lane: req.token_lane,
     jti: crypto.randomUUID(),
     nonce: crypto.randomUUID(),
@@ -2182,6 +2334,12 @@ export default {
           payment_account_did: claims.payment_account_did,
           spend_cap: claims.spend_cap,
           mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           token_lane: claims.token_lane,
           jti: claims.jti,
         };
@@ -2199,11 +2357,19 @@ export default {
           policy_hash_b64u: claims.policy_hash_b64u,
           token_scope_hash_b64u: claims.token_scope_hash_b64u,
           payment_account_did: claims.payment_account_did,
+          mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           policy_version: policy.policy_version,
           policy_tier: policy.tier,
           kid,
           iat: claims.iat,
           exp: claims.exp,
+          claims,
         };
 
         const response = jsonResponse(responseBody);
@@ -2356,6 +2522,12 @@ export default {
           payment_account_did: claims.payment_account_did,
           spend_cap: claims.spend_cap,
           mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           token_lane: claims.token_lane,
           jti: claims.jti,
         };
@@ -2374,11 +2546,19 @@ export default {
           policy_hash_b64u: claims.policy_hash_b64u,
           token_scope_hash_b64u: claims.token_scope_hash_b64u,
           payment_account_did: claims.payment_account_did,
+          mission_id: claims.mission_id,
+          delegation_id: claims.delegation_id,
+          delegator_did: claims.delegator_did,
+          delegate_did: claims.delegate_did,
+          delegation_policy_hash_b64u: claims.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: claims.delegation_spend_cap_minor,
+          delegation_expires_at: claims.delegation_expires_at,
           policy_version: policy.policy_version,
           policy_tier: policy.tier,
           kid,
           iat: claims.iat,
           exp: claims.exp,
+          claims,
         };
 
         const response = jsonResponse(responseBody);
@@ -2967,6 +3147,12 @@ export default {
           payment_account_did: payload.payment_account_did,
           spend_cap: payload.spend_cap,
           mission_id: payload.mission_id,
+          delegation_id: payload.delegation_id,
+          delegator_did: payload.delegator_did,
+          delegate_did: payload.delegate_did,
+          delegation_policy_hash_b64u: payload.delegation_policy_hash_b64u,
+          delegation_spend_cap_minor: payload.delegation_spend_cap_minor,
+          delegation_expires_at: payload.delegation_expires_at,
           token_lane: payload.token_lane,
           iat: payload.iat,
           exp: payload.exp,
@@ -3016,6 +3202,12 @@ export default {
         payment_account_did: payload.payment_account_did,
         spend_cap: payload.spend_cap,
         mission_id: payload.mission_id,
+        delegation_id: payload.delegation_id,
+        delegator_did: payload.delegator_did,
+        delegate_did: payload.delegate_did,
+        delegation_policy_hash_b64u: payload.delegation_policy_hash_b64u,
+        delegation_spend_cap_minor: payload.delegation_spend_cap_minor,
+        delegation_expires_at: payload.delegation_expires_at,
         token_lane: payload.token_lane,
         iat: payload.iat,
         exp: payload.exp,

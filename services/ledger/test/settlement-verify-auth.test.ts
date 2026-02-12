@@ -108,6 +108,52 @@ describe('ledger settlement verification auth contract', () => {
     expect(decision).toEqual({ ok: true });
   });
 
+  it('accepts overlap admin keys from LEDGER_ADMIN_KEYS_JSON', () => {
+    const request = new Request('https://clawledger.com/v1/payments/settlements/ingest', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer overlap_admin_token',
+      },
+    });
+
+    const decision = evaluateLedgerAuth({
+      request,
+      env: {
+        DB: {} as D1Database,
+        LEDGER_ADMIN_KEY: 'primary_admin_token',
+        LEDGER_ADMIN_KEYS_JSON: JSON.stringify(['overlap_admin_token']),
+      },
+      method: 'POST',
+      path: '/v1/payments/settlements/ingest',
+    });
+
+    expect(decision).toEqual({ ok: true });
+  });
+
+  it('fails closed on invalid LEDGER_ADMIN_KEYS_JSON', () => {
+    const request = new Request('https://clawledger.com/v1/payments/settlements', {
+      headers: {
+        Authorization: 'Bearer admin_token',
+      },
+    });
+
+    const decision = evaluateLedgerAuth({
+      request,
+      env: {
+        DB: {} as D1Database,
+        LEDGER_ADMIN_KEYS_JSON: '{invalid json',
+      },
+      method: 'GET',
+      path: '/v1/payments/settlements',
+    });
+
+    expect(decision).toMatchObject({
+      ok: false,
+      status: 503,
+      code: 'LEDGER_ADMIN_KEY_CONFIG_INVALID',
+    });
+  });
+
   it('fails closed with unauthorized when keys are configured but mismatch', () => {
     const request = new Request('https://clawledger.com/v1/payments/settlements', {
       headers: {

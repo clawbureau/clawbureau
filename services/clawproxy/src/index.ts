@@ -16,6 +16,7 @@ import type {
   ReceiptPayment,
   PlatformFundingCheckContext,
   PlatformPaymentAccountBindingContext,
+  DelegationSpendCheckContext,
   PaymentAccountDidSource,
   VerifyReceiptRequest,
   VerifyReceiptResponse,
@@ -302,6 +303,210 @@ function parseBooleanFlag(raw: string | undefined): boolean {
   if (!raw) return false;
   const normalized = raw.trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'y';
+}
+
+type DelegatedSpendAuthorizeResult =
+  | {
+      ok: true;
+      context: DelegationSpendCheckContext;
+    }
+  | {
+      ok: false;
+      code:
+        | 'DELEGATION_BINDING_REQUIRED'
+        | 'DELEGATION_BINDING_INVALID'
+        | 'DELEGATION_SPEND_CHECK_UNAVAILABLE'
+        | 'DELEGATION_SPEND_CAP_EXCEEDED';
+      status: 401 | 402 | 503;
+      message: string;
+    };
+
+function parsePositiveMinor(value: string, label: string): bigint {
+  const trimmed = value.trim();
+  if (!/^[0-9]+$/.test(trimmed)) {
+    throw new Error(`${label} must be an integer string`);
+  }
+
+  const amount = BigInt(trimmed);
+  if (amount <= 0n) {
+    throw new Error(`${label} must be > 0`);
+  }
+
+  return amount;
+}
+
+function parseDefaultDelegatedSpendMinor(raw: string | undefined): bigint {
+  if (!raw || raw.trim().length === 0) return 1n;
+  return parsePositiveMinor(raw, 'CLAWDELEGATE_DEFAULT_SPEND_MINOR');
+}
+
+function parseDelegatedSpendMinorFromRequest(request: Request, fallback: bigint): bigint {
+  const header = request.headers.get('X-Delegation-Spend-Minor');
+  if (!header || header.trim().length === 0) return fallback;
+  return parsePositiveMinor(header, 'X-Delegation-Spend-Minor');
+}
+
+function parseDelegateTimeoutMs(raw: string | undefined): number {
+  const parsed = Number.parseInt(raw ?? '5000', 10);
+  if (!Number.isFinite(parsed) || parsed < 500) return 5000;
+  return parsed;
+}
+
+async function fetchWithAbort(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function runDelegatedSpendAuthorize(params: {
+  env: Env;
+  delegationId: string;
+  actorDid: string;
+  tokenHash: string;
+  tokenScopeHashB64u: string;
+  amountMinor: string;
+  idempotencyKey: string;
+  provider: string;
+  model?: string;
+}): Promise<DelegatedSpendAuthorizeResult> {
+  const baseUrlRaw = params.env.CLAWDELEGATE_BASE_URL?.trim();
+  const serviceKey = params.env.CLAWDELEGATE_PROXY_KEY?.trim();
+
+  if (!baseUrlRaw || !serviceKey) {
+    return {
+      ok: false,
+      code: 'DELEGATION_SPEND_CHECK_UNAVAILABLE',
+      status: 503,
+      message: 'clawdelegate spend checks are not configured',
+    };
+  }
+
+  const baseUrl = normalizeBaseUrl(baseUrlRaw);
+  const timeoutMs = parseDelegateTimeoutMs(params.env.CLAWDELEGATE_TIMEOUT_MS);
+
+  try {
+    const response = await fetchWithAbort(
+      `${baseUrl}/v1/delegations/${encodeURIComponent(params.delegationId)}/spend/authorize`,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          authorization: `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({
+          idempotency_key: params.idempotencyKey,
+          actor_did: params.actorDid,
+          token_hash: params.tokenHash,
+          token_scope_hash_b64u: params.tokenScopeHashB64u,
+          amount_minor: params.amountMinor,
+          reason: `proxy:${params.provider}:${params.model ?? 'unknown'}`,
+        }),
+      },
+      timeoutMs
+    );
+
+    const text = await response.text();
+    let payload: Record<string, unknown> | null = null;
+    try {
+      payload = text ? (JSON.parse(text) as Record<string, unknown>) : null;
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok || !payload) {
+      const upstreamCode =
+        payload && typeof payload.error === 'string' && payload.error.trim().length > 0
+          ? payload.error.trim()
+          : 'DELEGATION_SPEND_CHECK_UNAVAILABLE';
+
+      if (upstreamCode === 'DELEGATION_SPEND_CAP_EXCEEDED') {
+        return {
+          ok: false,
+          code: 'DELEGATION_SPEND_CAP_EXCEEDED',
+          status: 402,
+          message: 'Delegation spend cap exceeded',
+        };
+      }
+
+      const message =
+        payload && typeof payload.message === 'string' && payload.message.trim().length > 0
+          ? payload.message.trim()
+          : `delegation spend authorization failed with status ${response.status}`;
+
+      return {
+        ok: false,
+        code: 'DELEGATION_SPEND_CHECK_UNAVAILABLE',
+        status: response.status >= 500 ? 503 : 401,
+        message,
+      };
+    }
+
+    const result = payload.result;
+    if (!result || typeof result !== 'object') {
+      return {
+        ok: false,
+        code: 'DELEGATION_SPEND_CHECK_UNAVAILABLE',
+        status: 503,
+        message: 'delegation spend response is invalid',
+      };
+    }
+
+    const row = result as Record<string, unknown>;
+    const status = typeof row.status === 'string' ? row.status : null;
+    const reservedMinor = typeof row.reserved_minor === 'string' ? row.reserved_minor : null;
+    const consumedMinor = typeof row.consumed_minor === 'string' ? row.consumed_minor : null;
+    const spendCapMinor = typeof row.spend_cap_minor === 'string' ? row.spend_cap_minor : null;
+    const amountMinor = typeof row.amount_minor === 'string' ? row.amount_minor : null;
+    const idempotencyKey = typeof row.idempotency_key === 'string' ? row.idempotency_key : null;
+
+    if (
+      (status !== 'applied' && status !== 'already_applied') ||
+      !reservedMinor ||
+      !consumedMinor ||
+      !spendCapMinor ||
+      !amountMinor ||
+      !idempotencyKey
+    ) {
+      return {
+        ok: false,
+        code: 'DELEGATION_SPEND_CHECK_UNAVAILABLE',
+        status: 503,
+        message: 'delegation spend response is malformed',
+      };
+    }
+
+    const normalizedStatus: DelegationSpendCheckContext['status'] =
+      status === 'applied' ? 'authorized' : 'already_applied';
+
+    return {
+      ok: true,
+      context: {
+        status: normalizedStatus,
+        delegationId: params.delegationId,
+        amountMinor,
+        idempotencyKey,
+        reservedMinor,
+        consumedMinor,
+        spendCapMinor,
+        checkedAt: new Date().toISOString(),
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    return {
+      ok: false,
+      code: 'DELEGATION_SPEND_CHECK_UNAVAILABLE',
+      status: 503,
+      message,
+    };
+  }
 }
 
 const DID_RE = /^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$/;
@@ -1475,6 +1680,12 @@ async function handleProxy(
           control_plane_policy_hash_b64u?: string;
           spend_cap?: number;
           mission_id?: string;
+          delegation_id?: string;
+          delegator_did?: string;
+          delegate_did?: string;
+          delegation_policy_hash_b64u?: string;
+          delegation_spend_cap_minor?: string;
+          delegation_expires_at?: number;
           token_lane?: 'legacy' | 'canonical';
         };
       }
@@ -1609,6 +1820,108 @@ async function handleProxy(
     const spendCapFromToken =
       typeof tokenValidation.claims.spend_cap === 'number' ? tokenValidation.claims.spend_cap : undefined;
 
+    const delegationIdFromToken =
+      typeof tokenValidation.claims.delegation_id === 'string' &&
+      tokenValidation.claims.delegation_id.trim().length > 0
+        ? tokenValidation.claims.delegation_id.trim()
+        : undefined;
+
+    const delegatorDidFromToken =
+      typeof tokenValidation.claims.delegator_did === 'string' &&
+      tokenValidation.claims.delegator_did.trim().length > 0
+        ? tokenValidation.claims.delegator_did.trim()
+        : undefined;
+
+    const delegateDidFromToken =
+      typeof tokenValidation.claims.delegate_did === 'string' &&
+      tokenValidation.claims.delegate_did.trim().length > 0
+        ? tokenValidation.claims.delegate_did.trim()
+        : undefined;
+
+    const delegationPolicyHashFromToken =
+      typeof tokenValidation.claims.delegation_policy_hash_b64u === 'string' &&
+      tokenValidation.claims.delegation_policy_hash_b64u.trim().length > 0
+        ? tokenValidation.claims.delegation_policy_hash_b64u.trim()
+        : undefined;
+
+    const delegationSpendCapMinorFromToken =
+      typeof tokenValidation.claims.delegation_spend_cap_minor === 'string' &&
+      tokenValidation.claims.delegation_spend_cap_minor.trim().length > 0
+        ? tokenValidation.claims.delegation_spend_cap_minor.trim()
+        : undefined;
+
+    const delegationExpiresAtFromToken =
+      typeof tokenValidation.claims.delegation_expires_at === 'number' &&
+      Number.isFinite(tokenValidation.claims.delegation_expires_at)
+        ? Math.floor(tokenValidation.claims.delegation_expires_at)
+        : undefined;
+
+    if (
+      delegationIdFromToken ||
+      delegatorDidFromToken ||
+      delegateDidFromToken ||
+      delegationPolicyHashFromToken ||
+      delegationSpendCapMinorFromToken ||
+      delegationExpiresAtFromToken !== undefined
+    ) {
+      if (!delegationIdFromToken || !delegatorDidFromToken || !delegateDidFromToken) {
+        return errorResponseWithRateLimit(
+          'TOKEN_DELEGATION_BINDING_INVALID',
+          'Delegated CST requires delegation_id, delegator_did, and delegate_did claims',
+          401,
+          rateLimitInfo
+        );
+      }
+
+      if (delegateDidFromToken !== tokenValidation.claims.sub) {
+        return errorResponseWithRateLimit(
+          'TOKEN_DELEGATION_BINDING_INVALID',
+          'delegate_did claim must match token subject',
+          401,
+          rateLimitInfo
+        );
+      }
+
+      if (!ownerDidFromToken || ownerDidFromToken !== delegatorDidFromToken) {
+        return errorResponseWithRateLimit(
+          'TOKEN_DELEGATION_BINDING_INVALID',
+          'delegator_did must match owner_did claim for delegated CST',
+          401,
+          rateLimitInfo
+        );
+      }
+
+      if (delegationPolicyHashFromToken && policyHashFromToken && delegationPolicyHashFromToken !== policyHashFromToken) {
+        return errorResponseWithRateLimit(
+          'TOKEN_DELEGATION_BINDING_INVALID',
+          'delegation_policy_hash_b64u must match policy_hash_b64u when both are present',
+          401,
+          rateLimitInfo
+        );
+      }
+
+      if (delegationSpendCapMinorFromToken && !isNonNegativeIntegerString(delegationSpendCapMinorFromToken)) {
+        return errorResponseWithRateLimit(
+          'TOKEN_DELEGATION_BINDING_INVALID',
+          'delegation_spend_cap_minor claim is invalid',
+          401,
+          rateLimitInfo
+        );
+      }
+
+      if (
+        delegationExpiresAtFromToken !== undefined &&
+        delegationExpiresAtFromToken <= Math.floor(Date.now() / 1000)
+      ) {
+        return errorResponseWithRateLimit(
+          'TOKEN_DELEGATION_EXPIRED',
+          'delegation_expires_at claim is expired',
+          401,
+          rateLimitInfo
+        );
+      }
+    }
+
     const tokenScopeHashFromToken = tokenValidation.claims.token_scope_hash_b64u.trim();
 
     // CPX-US-035 + ICP-M6.1: Recompute token_scope_hash_b64u from canonical claims (fail-closed).
@@ -1627,6 +1940,12 @@ async function handleProxy(
         payment_account_did: paymentAccountDidFromToken,
         spend_cap: spendCapFromToken,
         mission_id: missionIdFromToken,
+        delegation_id: delegationIdFromToken,
+        delegator_did: delegatorDidFromToken,
+        delegate_did: delegateDidFromToken,
+        delegation_policy_hash_b64u: delegationPolicyHashFromToken,
+        delegation_spend_cap_minor: delegationSpendCapMinorFromToken,
+        delegation_expires_at: delegationExpiresAtFromToken,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -1663,6 +1982,12 @@ async function handleProxy(
         control_plane_policy_hash_b64u: controlPlanePolicyHashFromToken,
         spend_cap: spendCapFromToken,
         mission_id: missionIdFromToken,
+        delegation_id: delegationIdFromToken,
+        delegator_did: delegatorDidFromToken,
+        delegate_did: delegateDidFromToken,
+        delegation_policy_hash_b64u: delegationPolicyHashFromToken,
+        delegation_spend_cap_minor: delegationSpendCapMinorFromToken,
+        delegation_expires_at: delegationExpiresAtFromToken,
         token_lane: tokenLane,
       },
     };
@@ -1741,6 +2066,7 @@ async function handleProxy(
   let apiKey: string;
   let payment: ReceiptPayment;
   let platformFundingCheckMeta: Record<string, unknown> | undefined;
+  let delegatedSpendContext: DelegationSpendCheckContext | undefined;
 
   if (apiKeyCandidate) {
     apiKey = apiKeyCandidate;
@@ -2094,6 +2420,124 @@ async function handleProxy(
     }
 
     idempotency = { nonce, fingerprint };
+  }
+
+  if (validatedCst?.claims.delegation_id) {
+    if (!idempotency) {
+      return errorResponseWithRateLimit(
+        'DELEGATION_IDEMPOTENCY_REQUIRED',
+        'Delegated CST calls require X-Idempotency-Key (nonce) for spend governance replay safety',
+        400,
+        rateLimitInfo
+      );
+    }
+
+    const releaseDelegationIdempotency = async (): Promise<Response | null> => {
+      try {
+        await releaseIdempotency(env, idempotency.nonce, idempotency.fingerprint);
+        return null;
+      } catch (releaseErr) {
+        const msg = releaseErr instanceof Error ? releaseErr.message : 'unknown error';
+        return errorResponseWithRateLimit(
+          'IDEMPOTENCY_STORE_ERROR',
+          `Idempotency store release failed: ${msg}`,
+          503,
+          rateLimitInfo
+        );
+      }
+    };
+
+    if (!validatedCst.claims.delegator_did || !validatedCst.claims.delegate_did) {
+      const releaseErr = await releaseDelegationIdempotency();
+      if (releaseErr) return releaseErr;
+
+      return errorResponseWithRateLimit(
+        'DELEGATION_BINDING_INVALID',
+        'Delegated CST is missing required delegation binding claims',
+        401,
+        rateLimitInfo
+      );
+    }
+
+    if (validatedCst.claims.delegate_did !== validatedCst.claims.sub) {
+      const releaseErr = await releaseDelegationIdempotency();
+      if (releaseErr) return releaseErr;
+
+      return errorResponseWithRateLimit(
+        'DELEGATION_BINDING_INVALID',
+        'delegate_did must match token subject for delegated CST',
+        401,
+        rateLimitInfo
+      );
+    }
+
+    if (validatedCst.claims.delegation_policy_hash_b64u) {
+      if (!finalBinding.policyHash) {
+        const releaseErr = await releaseDelegationIdempotency();
+        if (releaseErr) return releaseErr;
+
+        return errorResponseWithRateLimit(
+          'DELEGATION_POLICY_REQUIRED',
+          'Delegated CST requires a resolved policy hash when delegation_policy_hash_b64u is set',
+          400,
+          rateLimitInfo
+        );
+      }
+
+      if (validatedCst.claims.delegation_policy_hash_b64u !== finalBinding.policyHash) {
+        const releaseErr = await releaseDelegationIdempotency();
+        if (releaseErr) return releaseErr;
+
+        return errorResponseWithRateLimit(
+          'DELEGATION_POLICY_MISMATCH',
+          'Delegated CST policy pin does not match resolved policy hash',
+          403,
+          rateLimitInfo
+        );
+      }
+    }
+
+    let amountMinor: bigint;
+    try {
+      const fallback = parseDefaultDelegatedSpendMinor(env.CLAWDELEGATE_DEFAULT_SPEND_MINOR);
+      amountMinor = parseDelegatedSpendMinorFromRequest(request, fallback);
+    } catch (err) {
+      const releaseErr = await releaseDelegationIdempotency();
+      if (releaseErr) return releaseErr;
+
+      const message = err instanceof Error ? err.message : 'invalid delegated spend amount';
+      return errorResponseWithRateLimit('DELEGATION_SPEND_AMOUNT_INVALID', message, 400, rateLimitInfo);
+    }
+
+    const spendCheck = await runDelegatedSpendAuthorize({
+      env,
+      delegationId: validatedCst.claims.delegation_id,
+      actorDid: validatedCst.claims.sub,
+      tokenHash: validatedCst.token_hash,
+      tokenScopeHashB64u: validatedCst.claims.token_scope_hash_b64u,
+      amountMinor: amountMinor.toString(),
+      idempotencyKey: `proxy:${idempotency.nonce}:${idempotency.fingerprint}`,
+      provider,
+      model: model ?? undefined,
+    });
+
+    if (!spendCheck.ok) {
+      const releaseErr = await releaseDelegationIdempotency();
+      if (releaseErr) return releaseErr;
+
+      return errorResponseWithRateLimit(
+        spendCheck.code,
+        spendCheck.message,
+        spendCheck.status,
+        rateLimitInfo
+      );
+    }
+
+    delegatedSpendContext = spendCheck.context;
+    payment = {
+      ...payment,
+      delegationSpend: spendCheck.context,
+    };
   }
 
   // Forward request to provider (with redacted body if policy requires)

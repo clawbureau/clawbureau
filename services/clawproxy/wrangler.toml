@@ -37,6 +37,11 @@ WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK"
 # clawledger integration (platform-paid funding precheck)
 LEDGER_BASE_URL = "https://clawledger.com"
 
+# clawdelegate integration (delegated spend governance precheck)
+CLAWDELEGATE_BASE_URL = "https://clawdelegate.com"
+CLAWDELEGATE_TIMEOUT_MS = "5000"
+CLAWDELEGATE_DEFAULT_SPEND_MINOR = "1"
+
 # Secrets/vars to be set via wrangler secret put (or via dashboard vars):
 # - PROXY_SIGNING_KEY (Ed25519 seed, base64url; required)
 # - PROXY_ENCRYPTION_KEY (AES-256 key, base64url; optional)
@@ -45,6 +50,7 @@ LEDGER_BASE_URL = "https://clawledger.com"
 # - LEDGER_ADMIN_KEY (required when PLATFORM_PAID_ENABLED=true)
 # - PLATFORM_PAID_MIN_AVAILABLE_MINOR (optional, default "1")
 # - PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM ("true" => require CST payment_account_did claim)
+# - CLAWDELEGATE_PROXY_KEY (required when delegated CST spend checks are enabled)
 # - STRICT_AUTH_HEADERS ("true" default/fail-closed; disable Authorization overload, require X-CST + X-Provider-API-Key)
 # - PROXY_REQUIRE_CST ("true" default/fail-closed; require CST on proxy routes)
 # - PROXY_REQUIRE_CANONICAL_CST ("true" default/fail-closed; require canonical owner/controller/agent claims)
@@ -76,3 +82,6 @@ WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
 WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK,did:key:z6Mkoy4MkeFsYo2VTuRRVZ6QoguECQgT1wRJkhfoAu2bHKZt"
 
 LEDGER_BASE_URL = "https://staging.clawledger.com"
+CLAWDELEGATE_BASE_URL = "https://staging.clawdelegate.com"
+CLAWDELEGATE_TIMEOUT_MS = "5000"
+CLAWDELEGATE_DEFAULT_SPEND_MINOR = "1"
