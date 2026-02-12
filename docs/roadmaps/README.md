@@ -12,25 +12,29 @@
 
 Roadmaps are the **execution layer** of planning: concrete stories + progress logs that can be run via `scripts/ralph/ralph.sh`.
 
-## Active roadmaps
+## Seed (not yet scheduled)
 
-- **Clawsig Protocol (narrow waist + explicit coverage + frictionless governance)**
-  - Folder: `docs/roadmaps/clawsig-protocol/`
-  - Status: active (see `prd.json` + `progress.txt`)
-
-- **Docs IA (docs information architecture + freshness cleanup)**
-  - Folder: `docs/roadmaps/docs-ia/`
-  - Status: active
+- **Clawsig Protocol v0.2** (rate limits, co-signing, TTL, selective disclosure, aggregate bundles)
+  - Folder: `docs/roadmaps/clawsig-protocol-v0.2/`
+  - Status: seed — waiting for v0.1 adoption data before scheduling
 
 ## Completed roadmaps
 
-- **Proof-of-Harness (adapters + registry + specs)**
-  - Folder: `docs/roadmaps/proof-of-harness/`
-  - Status: complete (see `prd.json` + `progress.txt`)
+- **Clawsig Protocol v0.1** (12/12 ✅ — Coverage MTS, offline verifier, conformance suite, capability negotiation)
+  - Folder: `docs/roadmaps/clawsig-protocol/`
+  - Status: complete
 
-- **Trust vNext (PoH hardening + prompt integrity + confidential consulting + subscription-web strategy)**
+- **Docs IA** (4/4 ✅ — classification, archiving, status blocks, reading paths)
+  - Folder: `docs/roadmaps/docs-ia/`
+  - Status: complete
+
+- **Proof-of-Harness** (20/20 ✅ — adapters, registry, specs)
+  - Folder: `docs/roadmaps/proof-of-harness/`
+  - Status: complete
+
+- **Trust vNext** (59/59 ✅ — PoH hardening, identity, delegation, reputation, economy)
   - Folder: `docs/roadmaps/trust-vnext/`
-  - Status: complete (see `prd.json` + `progress.txt`)
+  - Status: complete
 
 ## Roadmap folder contract (Ralph-compatible)
 

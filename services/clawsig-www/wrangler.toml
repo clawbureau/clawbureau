@@ -1,0 +1,15 @@
+name = "clawsig-www"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# Production: clawsig.com
+routes = [
+  { pattern = "clawsig.com", custom_domain = true },
+  { pattern = "www.clawsig.com", custom_domain = true }
+]
+
+[env.staging]
+name = "clawsig-www-staging"
+routes = [
+  { pattern = "staging.clawsig.com", custom_domain = true }
+]

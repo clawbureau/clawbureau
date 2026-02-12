@@ -21,8 +21,7 @@ routes = [
   # Coming-soon ecosystem domains
   { pattern = "clawrep.com/*",       zone_name = "clawrep.com" },
   { pattern = "www.clawrep.com/*",   zone_name = "clawrep.com" },
-  { pattern = "clawsig.com/*",       zone_name = "clawsig.com" },
-  { pattern = "www.clawsig.com/*",   zone_name = "clawsig.com" },
+  # clawsig.com moved to dedicated Worker: services/clawsig-www
   # clawea.com moved to dedicated Worker: services/clawea-www
   { pattern = "clawsilo.com/*",      zone_name = "clawsilo.com" },
   { pattern = "www.clawsilo.com/*",  zone_name = "clawsilo.com" },
