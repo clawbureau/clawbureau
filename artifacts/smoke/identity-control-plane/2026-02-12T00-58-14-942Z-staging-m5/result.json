@@ -1,0 +1,277 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T00:58:14.943Z",
+  "urls": {
+    "clawclaim": "https://staging.clawclaim.com",
+    "clawscope": "https://staging.clawscope.com",
+    "clawverify": "https://staging.clawverify.com"
+  },
+  "versions": {
+    "clawclaim": "2204a9ff-2376-4910-944c-8b517a526122",
+    "clawscope": "028de033-b1ac-45b5-82f5-904cd517e5b7",
+    "clawverify": "e21fce86-ca5c-4ac1-92c2-8f7794b80d6e"
+  },
+  "identities": {
+    "owner_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR",
+    "controller_did": "did:key:z6MkgyNGvjCKHyCDbkR13nsfJgNPQHLnaSGFAKGjLg1BuJEf",
+    "agent_did": "did:key:z6MkqihGJgBx34qUmaBMm5Ywd5n3FpnnKh7miSioBdDNuWKV",
+    "member_did": "did:key:z6MkgVY7Nbr6ZHPraffQoaVF7edScRGJRwtF2oneTUvLm5uL"
+  },
+  "steps": {
+    "health": {
+      "clawclaim": {
+        "status": 200,
+        "ok": true
+      },
+      "clawscope": {
+        "status": 200,
+        "ok": true
+      },
+      "clawverify": {
+        "status": 200,
+        "ok": true
+      }
+    },
+    "bindings": {
+      "owner": {
+        "challenge": {
+          "challenge_id": "37ba650e-360f-4972-a854-53fb02c493a5",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR",
+          "bound_at": 1770857895
+        }
+      },
+      "controller": {
+        "challenge": {
+          "challenge_id": "737168a2-6a13-4df0-9da7-b12887f1cec1",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MkgyNGvjCKHyCDbkR13nsfJgNPQHLnaSGFAKGjLg1BuJEf",
+          "bound_at": 1770857895
+        }
+      },
+      "agent": {
+        "challenge": {
+          "challenge_id": "ade17f51-a927-4686-a8a6-f6a0b4d15c75",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MkqihGJgBx34qUmaBMm5Ywd5n3FpnnKh7miSioBdDNuWKV",
+          "bound_at": 1770857896
+        }
+      },
+      "member": {
+        "challenge": {
+          "challenge_id": "51c59344-29fb-457e-979d-5e7e8407f7d2",
+          "expires_in_sec": 600
+        },
+        "bind": {
+          "status": "bound",
+          "did": "did:key:z6MkgVY7Nbr6ZHPraffQoaVF7edScRGJRwtF2oneTUvLm5uL",
+          "bound_at": 1770857896
+        }
+      }
+    },
+    "control_chain": {
+      "register_controller": {
+        "status": "registered"
+      },
+      "register_agent": {
+        "status": "registered"
+      }
+    },
+    "platform_claims": {
+      "register": {
+        "status": "registered",
+        "claim": {
+          "claim_id": "4ecfaa9297b06ab06a8aa117f2923aca3757c4d9200053cea0ecaae50602a5b3",
+          "owner_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR",
+          "platform": "github",
+          "handle": "smoke_mlir2ikp",
+          "proof_url": "https://github.com/smoke_mlir2ikp",
+          "verification_ref": "NTmQlcRt-mlqn5yv69ernCZiCW0OT8jvw-UdLD4AcUs",
+          "verifier_signer_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR"
+        }
+      },
+      "list_count": 1
+    },
+    "primary_did": {
+      "set": {
+        "status": "updated",
+        "account_id": "acct-m5-staging-1770857894943",
+        "primary_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR"
+      },
+      "profile": {
+        "status": 200,
+        "x_cache": "miss",
+        "platform_claims": 1
+      }
+    },
+    "binding_audit": {
+      "list_count": 39,
+      "export": {
+        "status": "exported",
+        "key": "binding-audit/2026-02-12T00-58-18-155Z.csv",
+        "format": "csv",
+        "rows": 39,
+        "sha256": "22534b675efeacb5cf1d216edf6e830a2d8b2e748f4fe781ac5b76618bfcc606"
+      }
+    },
+    "owner_attestations": {
+      "register": {
+        "status": "registered",
+        "attestation": {
+          "attestation_id": "att_1770857898403",
+          "owner_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR",
+          "owner_provider": "oauth",
+          "provider_ref": "provider-ref-m5-staging-1770857894943",
+          "verification_level": "high",
+          "expires_at": null,
+          "verifier_owner_status": "verified"
+        }
+      },
+      "list_count": 1,
+      "lookup_count": 1
+    },
+    "scope_exchange": {
+      "challenge": {
+        "challenge_id": "scope_chl_7496e17d-0677-40d4-9a36-c3064f8aaff5",
+        "owner_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR",
+        "expires_at": 1770858498,
+        "ttl_sec": 600
+      },
+      "exchange": {
+        "status": "issued",
+        "owner_did": "did:key:z6MktuQyHvW7RQG2ZgBQ4qj2nWyK8nHBVjXyrwtp1ccfr3hR",
+        "token_hash": "72a4bdb774f0c82f03b0d1c9312379b536c4be19554b19d838d5d5c65d7a7070",
+        "policy_version": "1",
+        "token_lane": "canonical",
+        "kid": "66a63dae7bbf4bda",
+        "clawlogs_status": "skipped"
+      },
+      "replay_denied": {
+        "status": 409,
+        "error": "TOKEN_EXCHANGE_CHALLENGE_USED"
+      }
+    },
+    "org_roster": {
+      "register": {
+        "status": "registered"
+      },
+      "latest": {
+        "status": 200,
+        "members": 1,
+        "manifest": {
+          "manifest_id": "e329c97fc324b8e088de9bebc6e02262529f02bd10b9d7ff0a7403d4df294000",
+          "manifest_hash_b64u": "bH9vpQZggl5yRyMCPXGj9GmRdTOwQKOmUhZV6YRHg20",
+          "member_count": 1
+        }
+      }
+    },
+    "observability": {
+      "alert_rule": {
+        "status": "created",
+        "rule": {
+          "rule_id": "rule_0f074851-8277-450b-99ab-15b2e01c2566",
+          "metric_name": "request_count",
+          "comparison": "gte",
+          "threshold": 1,
+          "window_minutes": 120,
+          "service": "clawscope",
+          "route": "/v1/tokens/introspect",
+          "mission_id": "mission-m5-staging-1770857894943"
+        }
+      },
+      "introspect_active": {
+        "active": true,
+        "token_hash": "72a4bdb774f0c82f03b0d1c9312379b536c4be19554b19d838d5d5c65d7a7070",
+        "kid": "66a63dae7bbf4bda",
+        "kid_source": "header",
+        "mission_id": "mission-m5-staging-1770857894943"
+      },
+      "matrix_allowed": {
+        "active": true,
+        "transition": "token.revoke",
+        "transition_result": {
+          "allowed": true,
+          "reason_code": "ALLOWED",
+          "reason": "Transition requirements satisfied"
+        }
+      },
+      "matrix_unknown_transition": {
+        "status": 400,
+        "error": "TRANSITION_UNKNOWN"
+      },
+      "revoke": {
+        "status": "revoked",
+        "token_hash": "72a4bdb774f0c82f03b0d1c9312379b536c4be19554b19d838d5d5c65d7a7070",
+        "revoked_at_iso": "2026-02-12T00:58:20.000Z"
+      },
+      "introspect_revoked": {
+        "active": false,
+        "revoked": true,
+        "token_hash": "72a4bdb774f0c82f03b0d1c9312379b536c4be19554b19d838d5d5c65d7a7070"
+      },
+      "rollups": {
+        "status": "ok",
+        "day": "2026-02-12",
+        "generated_at": 1770857913
+      },
+      "dashboard": {
+        "status": "ok",
+        "window_minutes": 60
+      },
+      "usage_json_rows": 10,
+      "usage_csv": {
+        "status": 200,
+        "report_key": "usage/usage-2026-02-12T00-58-34-736Z.csv",
+        "bytes": 839
+      },
+      "alert_events_count": 12,
+      "cost_totals": {
+        "requests": 92,
+        "compute_usd": 0.000111,
+        "storage_usd": 0.000019,
+        "total_usd": 0.00013
+      },
+      "trace_event_count": 1,
+      "traces_count": 1,
+      "sla_rows": 0,
+      "mission_rows": 14
+    }
+  },
+  "summary": {
+    "pass": true,
+    "stories": {
+      "clawclaim": [
+        "CCL-US-004",
+        "CCL-US-005",
+        "CCL-US-006",
+        "CCL-US-007",
+        "CCL-US-008",
+        "CCL-US-009"
+      ],
+      "clawscope": [
+        "CSC-US-007",
+        "CSC-US-008",
+        "CSC-US-009",
+        "CSC-US-010",
+        "CSC-US-011",
+        "CSC-US-012",
+        "CSC-US-013"
+      ]
+    },
+    "checks": {
+      "replay_denied": true,
+      "unknown_transition_denied": true,
+      "token_revoked_state": true,
+      "trace_present": true
+    }
+  }
+}

@@ -396,4 +396,29 @@ Compatibility note for Agent C:
 
 ---
 
+## 11) 2026-02-12 addendum — ICP-M6 transparency-aware token-control enforcement (CVF-US-034)
+
+`services/clawverify/src/verify-token-control.ts` now treats scope key transparency as a runtime verification contract:
+- fetches transparency state from `clawscope /v1/keys/transparency/latest`
+- enforces freshness via `CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS`
+- verifies token `kid` is accepted and not overlap-expired
+
+Deterministic fail-closed errors:
+- `TOKEN_CONTROL_TRANSPARENCY_STALE`
+- `TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN`
+- `TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED`
+
+Auditability contract:
+- token-control responses now include `transparency_snapshot` for downstream evidence trails.
+
+M6 evidence:
+- conformance + ops suite pass:
+  - staging: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`
+  - prod: `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`
+- baseline gate refresh:
+  - hard-cutover staging: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-11-396Z-staging/result.json`
+  - hard-cutover prod: `artifacts/smoke/identity-control-plane/2026-02-12T00-57-20-846Z-prod/result.json`
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*

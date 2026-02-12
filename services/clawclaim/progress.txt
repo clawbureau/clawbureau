@@ -161,3 +161,16 @@ Started: 2026-02-02T22:45:00Z
   - hard-cutover prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-22-079Z-prod/result.json`
   - kid interop: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-43-712Z-kid-interop/result.json`
 ---
+
+## 2026-02-12 - CCL-US-016 (M6 scoped-token exchange bootstrap reliability)
+- Updated release evidence path to use claim challenge/exchange as canonical CST bootstrap for M6 suite automation.
+- Verified deterministic dependency behavior remains fail-closed:
+  - `SCOPE_DEPENDENCY_NOT_CONFIGURED` when scope bridge vars/secrets are missing.
+- Runtime operations:
+  - synchronized scope exchange secret binding (name only): `CLAIM_SCOPE_ADMIN_KEY` in staging + prod.
+- Evidence:
+  - staging conformance: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`
+  - prod conformance: `artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`
+- Quality checks:
+  - `cd services/clawclaim && npm run typecheck && npm test`
+---

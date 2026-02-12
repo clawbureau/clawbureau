@@ -13,6 +13,7 @@ ENVIRONMENT = "production"
 CLAWCLAIM_BASE_URL = "https://clawclaim.com"
 CLAWSCOPE_BASE_URL = "https://clawscope.com"
 CONTROL_VERIFY_TIMEOUT_MS = "5000"
+CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS = "3600"
 
 # Comma-separated allowlist of trusted gateway receipt signer DIDs (did:key:...)
 # Required for fail-closed receipt verification.
@@ -64,6 +65,7 @@ ENVIRONMENT = "staging"
 CLAWCLAIM_BASE_URL = "https://staging.clawclaim.com"
 CLAWSCOPE_BASE_URL = "https://staging.clawscope.com"
 CONTROL_VERIFY_TIMEOUT_MS = "5000"
+CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS = "3600"
 
 [[env.staging.d1_databases]]
 binding = "AUDIT_LOG_DB"

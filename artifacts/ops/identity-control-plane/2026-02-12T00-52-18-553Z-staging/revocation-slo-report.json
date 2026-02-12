@@ -1,0 +1,29 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T00:52:22.771Z",
+  "status": 200,
+  "payload": {
+    "report_version": "1",
+    "generated_at": 1770857542,
+    "generated_at_iso": "2026-02-12T00:52:22.000Z",
+    "window_hours": 24,
+    "slo_target_seconds": 60,
+    "total_revocations": 6,
+    "observed_revocations": 0,
+    "pending_revocations": 6,
+    "compliance_ratio": 1,
+    "latency_seconds": {
+      "min": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "r2_object_key": "identity-control-plane/revocation-slo/2026-02-12T00:52:22.000Z.json"
+  },
+  "validations": {
+    "report_version": true,
+    "has_latency": true,
+    "has_total_revocations": true
+  }
+}

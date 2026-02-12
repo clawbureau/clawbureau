@@ -25,6 +25,9 @@ PROXY_VERSION = "0.1.0"
 CST_ISSUER_PUBLIC_KEY = "KhBwy4lBSKtd7M9eWyNnYfpIPl7sGnDWTSyJpmjYcjc"
 # Audience override (stabilizes staging usage)
 CST_AUDIENCE = "clawproxy.com"
+STRICT_AUTH_HEADERS = "true"
+PROXY_REQUIRE_CST = "true"
+PROXY_REQUIRE_CANONICAL_CST = "true"
 
 # WPC (Work Policy Contract) registry (clawcontrols)
 WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
@@ -42,7 +45,9 @@ LEDGER_BASE_URL = "https://clawledger.com"
 # - LEDGER_ADMIN_KEY (required when PLATFORM_PAID_ENABLED=true)
 # - PLATFORM_PAID_MIN_AVAILABLE_MINOR (optional, default "1")
 # - PLATFORM_PAID_REQUIRE_PAYMENT_ACCOUNT_CLAIM ("true" => require CST payment_account_did claim)
-# - STRICT_AUTH_HEADERS ("true" to disable Authorization overload; require X-CST + X-Provider-API-Key; optional)
+# - STRICT_AUTH_HEADERS ("true" default/fail-closed; disable Authorization overload, require X-CST + X-Provider-API-Key)
+# - PROXY_REQUIRE_CST ("true" default/fail-closed; require CST on proxy routes)
+# - PROXY_REQUIRE_CANONICAL_CST ("true" default/fail-closed; require canonical owner/controller/agent claims)
 
 [env.staging]
 name = "clawproxy-staging"
@@ -61,8 +66,11 @@ new_classes = ["IdempotencyDurableObject"]
 
 [env.staging.vars]
 PROXY_VERSION = "0.1.0"
-CST_ISSUER_PUBLIC_KEY = "pwdA3cDDu9BF7vmFGs7E5m_aT8qRtMHe0QOIi5-ci90"
+CST_ISSUER_PUBLIC_KEY = "KhBwy4lBSKtd7M9eWyNnYfpIPl7sGnDWTSyJpmjYcjc"
 CST_AUDIENCE = "clawproxy.com"
+STRICT_AUTH_HEADERS = "true"
+PROXY_REQUIRE_CST = "true"
+PROXY_REQUIRE_CANONICAL_CST = "true"
 
 WPC_REGISTRY_BASE_URL = "https://clawcontrols.com"
 WPC_SIGNER_DIDS = "did:key:z6MkiLhU8t66whw5mvDbva7a6trcWw1RQXGzE96mMmnKUWdK,did:key:z6Mkoy4MkeFsYo2VTuRRVZ6QoguECQgT1wRJkhfoAu2bHKZt"

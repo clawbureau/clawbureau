@@ -20,10 +20,13 @@ new_classes = ["WpcRegistryDurableObject"]
 
 [vars]
 SERVICE_VERSION = "0.1.0"
+CONTROL_REQUIRE_CANONICAL_CST = "true"
+CLAWVERIFY_BASE_URL = "https://clawverify.com"
+CONTROL_VERIFY_TIMEOUT_MS = "5000"
 
 # Secrets to be set via `wrangler secret put`:
 # - CONTROLS_SIGNING_KEY (Ed25519 seed, base64url; required)
-# - ADMIN_TOKEN (optional; required for POST /v1/wpc)
+# - ADMIN_TOKEN (legacy fallback only when CONTROL_REQUIRE_CANONICAL_CST=false)
 
 [env.staging]
 name = "clawcontrols-staging"
@@ -42,3 +45,6 @@ new_classes = ["WpcRegistryDurableObject"]
 
 [env.staging.vars]
 SERVICE_VERSION = "0.1.0"
+CONTROL_REQUIRE_CANONICAL_CST = "true"
+CLAWVERIFY_BASE_URL = "https://staging.clawverify.com"
+CONTROL_VERIFY_TIMEOUT_MS = "5000"

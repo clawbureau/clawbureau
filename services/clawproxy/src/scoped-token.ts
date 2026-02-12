@@ -5,25 +5,16 @@
  * Token claims follow packages/schema/auth/scoped_token_claims.v1.json.
  */
 
+import {
+  hasRequiredScope,
+  normalizeAudience,
+  type ScopedTokenClaimsV1,
+  validateScopedTokenClaimsShape,
+} from '../../../packages/identity-auth/src/index';
 import type { Env } from './types';
 import { sha256, base64urlDecode, importEd25519PublicKey, verifyEd25519 } from './crypto';
 
-export interface ScopedTokenClaims {
-  token_version: '1';
-  sub: string;
-  aud: string | string[];
-  scope: string[];
-  iat: number;
-  exp: number;
-  owner_ref?: string;
-  policy_hash_b64u?: string;
-  token_scope_hash_b64u?: string;
-  payment_account_did?: string;
-  spend_cap?: number;
-  mission_id?: string;
-  jti?: string;
-  nonce?: string;
-}
+export type ScopedTokenClaims = ScopedTokenClaimsV1;
 
 export interface ScopedTokenValidationOk {
   valid: true;
@@ -60,68 +51,9 @@ function decodeJsonSegment(segmentB64u: string): unknown {
   return JSON.parse(json) as unknown;
 }
 
-function isNonEmptyStringArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.length > 0 &&
-    value.every((s) => typeof s === 'string' && s.length > 0)
-  );
-}
-
-function normalizeAudience(value: unknown): string[] {
-  if (typeof value === 'string') return [value];
-  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
-    return value as string[];
-  }
-  return [];
-}
-
 function audMatches(aud: string | string[], expectedAudiences: string[]): boolean {
-  const audList = typeof aud === 'string' ? [aud] : aud;
-  return audList.some((a) => expectedAudiences.includes(a));
-}
-
-function hasRequiredScope(
-  scopes: string[],
-  provider: string,
-  requiredScopes: string[]
-): boolean {
-  // Global wildcards
-  if (scopes.includes('*') || scopes.includes('proxy:*') || scopes.includes('clawproxy:*')) {
-    return true;
-  }
-
-  // Explicit required scopes
-  for (const req of requiredScopes) {
-    if (scopes.includes(req)) return true;
-  }
-
-  // Provider-granular scopes (future-friendly)
-  if (scopes.includes(`proxy:provider:${provider}`)) return true;
-  if (scopes.includes(`proxy:call:${provider}`)) return true;
-  if (scopes.includes(`clawproxy:provider:${provider}`)) return true;
-  if (scopes.includes(`clawproxy:call:${provider}`)) return true;
-
-  return false;
-}
-
-function validateClaimsShape(payload: unknown): payload is ScopedTokenClaims {
-  if (typeof payload !== 'object' || payload === null) return false;
-  const p = payload as Record<string, unknown>;
-
-  if (p.token_version !== '1') return false;
-  if (typeof p.sub !== 'string') return false;
-  if (normalizeAudience(p.aud).length === 0) return false;
-  if (!isNonEmptyStringArray(p.scope)) return false;
-  if (typeof p.iat !== 'number' || !Number.isFinite(p.iat)) return false;
-  if (typeof p.exp !== 'number' || !Number.isFinite(p.exp)) return false;
-
-  if (p.payment_account_did !== undefined) {
-    if (typeof p.payment_account_did !== 'string') return false;
-    if (p.payment_account_did.trim().length === 0) return false;
-  }
-
-  return true;
+  const normalizedAud = normalizeAudience(aud);
+  return normalizedAud.some((value) => expectedAudiences.includes(value));
 }
 
 /**
@@ -200,7 +132,7 @@ export async function validateScopedToken(options: {
     };
   }
 
-  if (!validateClaimsShape(payload)) {
+  if (!validateScopedTokenClaimsShape(payload)) {
     return {
       valid: false,
       status: 401,
@@ -231,7 +163,7 @@ export async function validateScopedToken(options: {
   }
 
   // Validate scope
-  if (!hasRequiredScope(payload.scope, provider, requiredScopes)) {
+  if (!hasRequiredScope(payload.scope, requiredScopes, provider)) {
     return {
       valid: false,
       status: 403,

@@ -60,6 +60,7 @@ describe('verifyTokenControl', () => {
       policy_hash_b64u: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       control_plane_policy_hash_b64u: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       token_lane: 'canonical' as const,
+      kid: 'kid-test-1',
     };
 
     const tokenScopeHash = await computeScopeHash(introspection);
@@ -109,6 +110,23 @@ describe('verifyTokenControl', () => {
                     reason: 'Token satisfies canonical + scope requirements',
                   },
                 },
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              }
+            );
+          }
+
+          if (url.endsWith('/v1/keys/transparency/latest')) {
+            return new Response(
+              JSON.stringify({
+                snapshot_id: 'snap-1',
+                generated_at: Math.floor(Date.now() / 1000),
+                generated_at_iso: new Date().toISOString(),
+                active_kid: 'kid-test-1',
+                accepted_kids: ['kid-test-1'],
+                expiring_kids: [],
               }),
               {
                 status: 200,
@@ -171,6 +189,7 @@ describe('verifyTokenControl', () => {
       policy_hash_b64u: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       control_plane_policy_hash_b64u: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       token_lane: 'canonical' as const,
+      kid: 'kid-test-2',
     };
 
     const tokenScopeHash = await computeScopeHash(introspection);
@@ -210,6 +229,23 @@ describe('verifyTokenControl', () => {
                     reason: 'Token does not contain required scope control:key:rotate',
                   },
                 },
+              }),
+              {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              }
+            );
+          }
+
+          if (url.endsWith('/v1/keys/transparency/latest')) {
+            return new Response(
+              JSON.stringify({
+                snapshot_id: 'snap-2',
+                generated_at: Math.floor(Date.now() / 1000),
+                generated_at_iso: new Date().toISOString(),
+                active_kid: 'kid-test-2',
+                accepted_kids: ['kid-test-2'],
+                expiring_kids: [],
               }),
               {
                 status: 200,

@@ -198,11 +198,13 @@ async function main() {
           clawclaim: 'https://clawclaim.com',
           clawscope: 'https://clawscope.com',
           clawverify: 'https://clawverify.com',
+          clawproxy: 'https://clawproxy.com',
         }
       : {
           clawclaim: 'https://staging.clawclaim.com',
           clawscope: 'https://staging.clawscope.com',
           clawverify: 'https://staging.clawverify.com',
+          clawproxy: 'https://staging.clawproxy.com',
         };
 
   const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -225,6 +227,8 @@ async function main() {
       clawverify: args.clawverifyVersion || null,
     },
   };
+
+  const proxyAudienceHost = new URL(baseUrls.clawproxy).hostname;
 
   const owner = await createDidKeyPair();
   const ownerTransferTarget = await createDidKeyPair();
@@ -274,7 +278,12 @@ async function main() {
       controller_did: controller.did,
       challenge_id: controllerChallenge.json.challenge_id,
       signature_b64u: controllerSig,
-      allowed_sensitive_scopes: ['control:token:issue_sensitive', 'control:key:rotate'],
+      allowed_sensitive_scopes: [
+        'control:token:issue_sensitive',
+        'control:key:rotate',
+        'control:token:revoke',
+        'control:audit:read',
+      ],
     },
   });
   assertStatus('registerController', registerController, 200);
@@ -332,7 +341,12 @@ async function main() {
         owner_did: owner.did,
         challenge_id: policyChallenge.json.challenge_id,
         signature_b64u: policySig,
-        allowed_sensitive_scopes: ['control:token:issue_sensitive', 'control:key:rotate'],
+        allowed_sensitive_scopes: [
+          'control:token:issue_sensitive',
+          'control:key:rotate',
+          'control:token:revoke',
+          'control:audit:read',
+        ],
       },
     }
   );
@@ -627,7 +641,7 @@ async function main() {
       owner_did: activeOwner.did,
       controller_did: activeControllerDid,
       agent_did: agent.did,
-      aud: 'staging.clawproxy.com',
+      aud: proxyAudienceHost,
       scope: ['control:token:issue_sensitive'],
       ttl_sec: 600,
     },
@@ -647,6 +661,35 @@ async function main() {
     'control_plane_policy_hash_b64u',
     'policy_hash_b64u',
     'token_scope_hash_b64u',
+    'iat',
+    'exp',
+  ]);
+
+  const canonicalOpsIssue = await requestJson(`${baseUrls.clawscope}/v1/tokens/issue/canonical`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${args.scopeAdminKey}`,
+      'content-type': 'application/json',
+    },
+    body: {
+      sub: agent.did,
+      owner_did: activeOwner.did,
+      controller_did: activeControllerDid,
+      agent_did: agent.did,
+      aud: proxyAudienceHost,
+      scope: ['control:token:revoke', 'control:audit:read'],
+      ttl_sec: 600,
+    },
+  });
+  assertStatus('canonicalOpsIssue', canonicalOpsIssue, 200);
+
+  const canonicalOpsToken = canonicalOpsIssue.json.token;
+
+  result.steps.canonical_ops_issue = safePick(canonicalOpsIssue.json, [
+    'token_hash',
+    'token_lane',
+    'kid',
+    'scope',
     'iat',
     'exp',
   ]);
@@ -690,7 +733,7 @@ async function main() {
     },
     body: {
       sub: agent.did,
-      aud: 'staging.clawproxy.com',
+      aud: proxyAudienceHost,
       scope: ['control:token:issue_sensitive'],
       ttl_sec: 600,
     },
@@ -710,7 +753,7 @@ async function main() {
     },
     body: {
       sub: agent.did,
-      aud: 'staging.clawproxy.com',
+      aud: proxyAudienceHost,
       scope: ['clawproxy:call'],
       ttl_sec: 600,
     },
@@ -769,7 +812,7 @@ async function main() {
       expected_owner_did: activeOwner.did,
       expected_controller_did: activeControllerDid,
       expected_agent_did: agent.did,
-      required_audience: ['staging.clawproxy.com'],
+      required_audience: [proxyAudienceHost],
       required_scope: ['control:token:issue_sensitive'],
       required_transitions: ['token.issue.sensitive'],
     },
@@ -800,7 +843,7 @@ async function main() {
   const revokeCanonical = await requestJson(`${baseUrls.clawscope}/v1/tokens/revoke`, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${args.scopeAdminKey}`,
+      'x-cst': canonicalOpsToken,
       'content-type': 'application/json',
     },
     body: {
@@ -821,7 +864,7 @@ async function main() {
     `${baseUrls.clawscope}/v1/revocations/stream?limit=5`,
     {
       headers: {
-        authorization: `Bearer ${args.scopeAdminKey}`,
+        'x-cst': canonicalOpsToken,
       },
     }
   );
