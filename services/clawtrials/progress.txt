@@ -96,3 +96,20 @@
   - fail/error -> penalty envelope
 - Publication path is queue-first (`REP_EVENTS`) with optional HTTP fallback.
 - Added staging/prod queue producer bindings to `clawrep-events*`.
+
+## 2026-02-12 — CTR-OPS-002 reliability watch continuation
+- Added CLI-friendly watch tooling:
+  - `scripts/poh/watch-clawtrials-arbitration-ops.mjs`
+  - `scripts/poh/watch-clawtrials-ops.sh`
+- Captured daily watch artifact drops (staging + prod + deterministic error buckets):
+  - `artifacts/ops/clawtrials/2026-02-12T02-58-07-502Z-72h-watch-day1/`
+  - `artifacts/ops/clawtrials/2026-02-12T02-58-13-891Z-72h-watch-day2/`
+  - `artifacts/ops/clawtrials/2026-02-12T02-58-20-181Z-72h-watch-day3/`
+- Current watch signal:
+  - server error rate remains `0%` in both envs.
+  - follow-up probe + watch rerun confirmed `/v1/trials/*` contract restored (401 unauth / 200 auth as expected).
+  - post-fix artifact:
+    - `artifacts/ops/clawtrials/2026-02-12T03-23-55-629Z-72h-watch-post-fix/`
+  - deterministic error buckets now stable:
+    - `contract_drift=0`
+    - `server_error=0`

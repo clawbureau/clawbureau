@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-02-12T03:24:03.209Z",
+  "label": "72h-watch-post-fix",
+  "out_dir": "/Users/gfw/clawd/tmp/clawbureau-mpy011/artifacts/ops/clawtrials/2026-02-12T03-23-55-629Z-72h-watch-post-fix",
+  "staging": {
+    "total_requests": 60,
+    "server_errors": 0,
+    "contract_drift_count": 0,
+    "server_error_rate_percent": 0,
+    "error_buckets": {
+      "ok": 24,
+      "unauthorized_expected": 36,
+      "contract_drift": 0,
+      "server_error": 0,
+      "network_error": 0
+    }
+  },
+  "prod": {
+    "total_requests": 60,
+    "server_errors": 0,
+    "contract_drift_count": 0,
+    "server_error_rate_percent": 0,
+    "error_buckets": {
+      "ok": 24,
+      "unauthorized_expected": 36,
+      "contract_drift": 0,
+      "server_error": 0,
+      "network_error": 0
+    }
+  }
+}

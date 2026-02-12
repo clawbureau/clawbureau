@@ -1,0 +1,112 @@
+{
+  "ok": true,
+  "env": "prod",
+  "generated_at": "2026-02-12T03:20:56.105Z",
+  "base_urls": {
+    "clawinsure": "https://clawinsure.com",
+    "clawledger": "https://clawledger.com"
+  },
+  "claimant": {
+    "did": "did:key:zinsure-claimant9573f7a7876e49a0858dc8cedebaebb9",
+    "token_hash": "cef479e6906d25fce03a64249cbcfb65392a0ce2e7f4888b31df838ac00b7810",
+    "token_kid": "66a63dae7bbf4bda",
+    "scope": [
+      "clawbounties:bounty:create"
+    ],
+    "audience": "clawinsure.com"
+  },
+  "quote_id": "qte_c0e6dc85-adc8-4c84-a0e8-8758a0271049",
+  "policy_id": "pol_558949e4-3ce6-4c31-959d-bcda3f398358",
+  "claim_id": "clm_8af619ba-41c3-4841-b002-f6c374aae11a",
+  "steps": [
+    {
+      "step": "seed_funding",
+      "status": 201,
+      "account_id": "acc_2ab503b1",
+      "promo_event_id": "evt_mliw5uo4_shwv2uo5",
+      "fund_event_id": "evt_mliw5uvq_318fthf5"
+    },
+    {
+      "step": "quote",
+      "status": 201,
+      "quote_id": "qte_c0e6dc85-adc8-4c84-a0e8-8758a0271049",
+      "elapsed_ms": 894
+    },
+    {
+      "step": "policy_create",
+      "status": 201,
+      "policy_id": "pol_558949e4-3ce6-4c31-959d-bcda3f398358",
+      "elapsed_ms": 1005
+    },
+    {
+      "step": "policy_replay",
+      "status": 200,
+      "elapsed_ms": 307
+    },
+    {
+      "step": "policy_get",
+      "status": 200,
+      "elapsed_ms": 197
+    },
+    {
+      "step": "claim_unresolved_ref",
+      "status": 422,
+      "elapsed_ms": 489
+    },
+    {
+      "step": "claim_create",
+      "status": 201,
+      "claim_id": "clm_8af619ba-41c3-4841-b002-f6c374aae11a",
+      "elapsed_ms": 255
+    },
+    {
+      "step": "claim_replay",
+      "status": 200,
+      "elapsed_ms": 270
+    },
+    {
+      "step": "claim_get",
+      "status": 200,
+      "elapsed_ms": 180
+    },
+    {
+      "step": "adjudicate",
+      "status": 200,
+      "elapsed_ms": 121
+    },
+    {
+      "step": "adjudicate_replay",
+      "status": 200,
+      "elapsed_ms": 44
+    },
+    {
+      "step": "payout",
+      "status": 200,
+      "elapsed_ms": 800
+    },
+    {
+      "step": "payout_replay",
+      "status": 200,
+      "elapsed_ms": 44
+    },
+    {
+      "step": "risk",
+      "status": 200,
+      "elapsed_ms": 58
+    },
+    {
+      "step": "claims_report",
+      "status": 200,
+      "elapsed_ms": 48
+    }
+  ],
+  "assertions": {
+    "quote_created": true,
+    "policy_idempotent": true,
+    "unresolved_ref_fail_closed": true,
+    "claim_idempotent": true,
+    "adjudication_idempotent": true,
+    "payout_idempotent": true,
+    "payout_transfer_recorded": true
+  }
+}
