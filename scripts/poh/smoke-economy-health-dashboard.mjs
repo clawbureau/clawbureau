@@ -63,11 +63,11 @@ async function main() {
     const body = await res.json();
     healthReport = body;
     const pass = res.status === 200
-      && body.overall_status
+      && typeof body.overall_status === 'string'
       && Array.isArray(body.services)
       && body.services.length >= 6
-      && body.settlement
-      && body.alerts;
+      && body.settlement != null
+      && body.alerts != null;
     results.push({
       step: 'economy_health',
       status: res.status,
