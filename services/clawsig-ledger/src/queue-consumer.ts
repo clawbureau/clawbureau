@@ -1,5 +1,5 @@
 import type { Env, LedgerIngestMessage } from './types';
-import { computeHash } from '@clawbureau/clawverify-core';
+import { computeHash } from './utils';
 
 export async function handleQueue(batch: MessageBatch<LedgerIngestMessage>, env: Env): Promise<void> {
   for (const msg of batch.messages) {

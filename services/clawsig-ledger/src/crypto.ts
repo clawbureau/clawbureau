@@ -1,5 +1,5 @@
 import { getPublicKey, sign } from '@noble/ed25519';
-import { base64UrlDecode, base64UrlEncode } from '@clawbureau/clawverify-core';
+import { base64UrlDecode, base64UrlEncode } from './utils';
 
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 function b58enc(bytes: Uint8Array): string {
