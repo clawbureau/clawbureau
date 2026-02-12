@@ -19,7 +19,7 @@ function usageText(): string {
     'clawverify (offline verifier CLI)',
     '',
     'Usage:',
-    '  clawverify verify proof-bundle --input <path> [--config <path>]',
+    '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
     '  clawverify verify export-bundle --input <path> [--config <path>]',
     '',
     'Exit codes:',
@@ -45,6 +45,7 @@ function parseCliArgs(argv: string[]): {
   kind: CliKind;
   inputPath: string;
   configPath?: string;
+  urmPath?: string;
 } {
   if (argv.length === 0 || hasFlag(argv, '--help') || hasFlag(argv, '-h')) {
     throw new CliUsageError(usageText());
@@ -64,9 +65,10 @@ function parseCliArgs(argv: string[]): {
     throw new CliUsageError('Missing required flag: --input');
   }
 
+  const urmPath = readFlag(argv, '--urm');
   const configPath = readFlag(argv, '--config');
 
-  return { kind, inputPath, configPath };
+  return { kind, inputPath, configPath, urmPath };
 }
 
 function output(out: CliOutput): void {
@@ -74,13 +76,18 @@ function output(out: CliOutput): void {
 }
 
 async function main() {
-  const { kind, inputPath, configPath } = parseCliArgs(process.argv.slice(2));
+  const { kind, inputPath, configPath, urmPath } = parseCliArgs(process.argv.slice(2));
 
   const config = await resolveVerifierConfig({ configPath });
 
   const out =
     kind === 'proof_bundle'
-      ? await verifyProofBundleFromFile({ inputPath, configPath, config })
+      ? await verifyProofBundleFromFile({
+          inputPath,
+          configPath,
+          urmPath,
+          config,
+        })
       : await verifyExportBundleFromFile({ inputPath, configPath, config });
 
   output(out);

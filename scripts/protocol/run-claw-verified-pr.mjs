@@ -21,6 +21,44 @@ function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** RFC 8785 JSON Canonicalization Scheme (JCS) */
+function jcsCanonicalize(value) {
+  if (value === null) return 'null';
+
+  switch (typeof value) {
+    case 'boolean':
+      return value ? 'true' : 'false';
+
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Non-finite number not allowed in JCS');
+      }
+      return JSON.stringify(value);
+
+    case 'string':
+      return JSON.stringify(value);
+
+    case 'object': {
+      if (Array.isArray(value)) {
+        return `[${value.map(jcsCanonicalize).join(',')}]`;
+      }
+
+      const obj = value;
+      const keys = Object.keys(obj).sort();
+      const parts = [];
+
+      for (const k of keys) {
+        parts.push(`${JSON.stringify(k)}:${jcsCanonicalize(obj[k])}`);
+      }
+
+      return `{${parts.join(',')}}`;
+    }
+
+    default:
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
 async function readJson(p) {
   const raw = await fs.readFile(p, 'utf8');
   return JSON.parse(raw);
@@ -325,7 +363,23 @@ async function verifyCommitSigFile(relPath) {
     };
   }
 
-  const msgBytes = new TextEncoder().encode(String(message));
+  let canonical;
+  try {
+    // did-work Protocol M signs the canonicalized envelope, with signature field set to "".
+    const forSigning = { ...json, signature: '' };
+    canonical = jcsCanonicalize(forSigning);
+  } catch (err) {
+    return {
+      path: relPath,
+      ok: false,
+      reason_code: 'CANONICALIZATION_ERROR',
+      reason: err instanceof Error ? err.message : 'Unable to canonicalize envelope',
+      commit_sha: commitSha,
+      signer_did: did,
+    };
+  }
+
+  const msgBytes = new TextEncoder().encode(canonical);
 
   try {
     const publicKey = await crypto.subtle.importKey(
@@ -337,7 +391,7 @@ async function verifyCommitSigFile(relPath) {
     );
 
     const ok = await crypto.subtle.verify(
-      'Ed25519',
+      { name: 'Ed25519' },
       publicKey,
       toArrayBuffer(sigBytes),
       toArrayBuffer(msgBytes)
