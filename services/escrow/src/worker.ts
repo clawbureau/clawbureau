@@ -14,8 +14,14 @@ export interface Env {
   /** Used to call clawledger. Set via `wrangler secret put`. */
   LEDGER_ADMIN_KEY?: string;
 
+  /** Used to call clawcuts fee-apply control plane. Set via `wrangler secret put`. */
+  CLAWCUTS_APPLY_KEY?: string;
+
   /** Defaults to https://clawledger.com (set in wrangler vars). */
   LEDGER_BASE_URL?: string;
+
+  /** Defaults to https://clawcuts.com (set in wrangler vars). */
+  CLAWCUTS_BASE_URL?: string;
 
   /** Clearing account domain for fee pool transfers (defaults to clawcuts). */
   FEE_CLEARING_DOMAIN?: string;
@@ -27,6 +33,17 @@ export interface Env {
 type EscrowStatus = 'held' | 'released' | 'frozen' | 'cancelled';
 
 type FeePayer = 'buyer' | 'worker';
+type FeeSplitKind = 'platform' | 'referral';
+type LedgerBucket = 'A' | 'H' | 'B' | 'F' | 'P';
+
+interface FeeSplit {
+  kind: FeeSplitKind;
+  account: string;
+  bucket: 'A' | 'F';
+  amount_minor: string;
+  referrer_did?: string;
+  referral_code?: string;
+}
 
 interface FeeItem {
   kind: string;
@@ -35,6 +52,10 @@ interface FeeItem {
   rate_bps: number;
   min_fee_minor: string;
   floor_applied: boolean;
+  base_amount_minor?: string;
+  discount_bps_applied?: number;
+  discount_minor?: string;
+  splits?: FeeSplit[];
 }
 
 interface FeeQuoteSnapshot {
@@ -68,6 +89,7 @@ interface ReleaseEscrowResponseBody {
   ledger_refs: {
     worker_transfer: string;
     fee_transfers: string[];
+    referral_transfers: string[];
   };
 }
 
@@ -98,6 +120,7 @@ interface EscrowRecord {
   ledger_hold_event_id: string;
   ledger_worker_event_id: string | null;
   ledger_fee_event_ids: string[];
+  ledger_referral_event_ids: string[];
   assign_idempotency_key: string | null;
   release_idempotency_key: string | null;
   dispute_idempotency_key: string | null;
@@ -227,12 +250,212 @@ function resolveLedgerBaseUrl(env: Env): string {
   return 'https://clawledger.com';
 }
 
+function resolveClawcutsBaseUrl(env: Env): string {
+  const base = env.CLAWCUTS_BASE_URL?.trim();
+  if (base && base.length > 0) return base;
+  return 'https://clawcuts.com';
+}
+
+interface CutsApplyTransfer {
+  transfer_index: number;
+  fee_index: number;
+  fee_kind: string;
+  payer: FeePayer;
+  split_kind: FeeSplitKind;
+  to_account: string;
+  to_bucket: 'A' | 'F';
+  amount_minor: string;
+  referrer_did?: string;
+  referral_code?: string;
+}
+
+interface CutsApplyResponse {
+  apply_id: string;
+  idempotency_key: string;
+  fee_summary: {
+    total_fee_minor: string;
+    referral_payout_minor: string;
+    platform_retained_minor: string;
+    buyer_total_minor: string;
+    worker_net_minor: string;
+  };
+  transfer_plan: {
+    transfers: CutsApplyTransfer[];
+  };
+}
+
+async function clawcutsApplyFees(
+  env: Env,
+  params: {
+    idempotency_key: string;
+    product: string;
+    settlement_ref: string;
+    occurred_at: string;
+    snapshot: FeeQuoteSnapshot;
+    context: Record<string, unknown>;
+  }
+): Promise<CutsApplyResponse> {
+  if (!env.CLAWCUTS_APPLY_KEY || env.CLAWCUTS_APPLY_KEY.trim().length === 0) {
+    throw new Error('CLAWCUTS_APPLY_KEY_NOT_CONFIGURED');
+  }
+
+  const url = `${resolveClawcutsBaseUrl(env)}/v1/fees/apply`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${env.CLAWCUTS_APPLY_KEY.trim()}`,
+    },
+    body: JSON.stringify({
+      idempotency_key: params.idempotency_key,
+      product: params.product,
+      currency: 'USD',
+      settlement_ref: params.settlement_ref,
+      occurred_at: params.occurred_at,
+      snapshot: params.snapshot,
+      context: params.context,
+    }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`CUTS_APPLY_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !isRecord(json.fee_summary) || !isRecord(json.transfer_plan)) {
+    throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+  }
+
+  if (!isNonEmptyString(json.apply_id) || !isNonEmptyString(json.idempotency_key)) {
+    throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+  }
+
+  const summary = json.fee_summary;
+  if (
+    !isNonEmptyString(summary.total_fee_minor) ||
+    !isNonEmptyString(summary.referral_payout_minor) ||
+    !isNonEmptyString(summary.platform_retained_minor) ||
+    !isNonEmptyString(summary.buyer_total_minor) ||
+    !isNonEmptyString(summary.worker_net_minor)
+  ) {
+    throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+  }
+
+  const transferPlan = json.transfer_plan;
+  if (!Array.isArray(transferPlan.transfers)) {
+    throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+  }
+
+  const transfers: CutsApplyTransfer[] = [];
+  for (const transferRaw of transferPlan.transfers) {
+    if (!isRecord(transferRaw)) throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    if (typeof transferRaw.transfer_index !== 'number' || !Number.isInteger(transferRaw.transfer_index) || transferRaw.transfer_index < 0) {
+      throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    }
+    if (typeof transferRaw.fee_index !== 'number' || !Number.isInteger(transferRaw.fee_index) || transferRaw.fee_index < 0) {
+      throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    }
+    if (!isNonEmptyString(transferRaw.fee_kind)) throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    if (transferRaw.payer !== 'buyer' && transferRaw.payer !== 'worker') throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    if (transferRaw.split_kind !== 'platform' && transferRaw.split_kind !== 'referral') throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    if (!isNonEmptyString(transferRaw.to_account)) throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    if (transferRaw.to_bucket !== 'A' && transferRaw.to_bucket !== 'F') throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    if (!isNonEmptyString(transferRaw.amount_minor) || parseNonNegativeMinor(transferRaw.amount_minor.trim()) === null) {
+      throw new Error('CUTS_APPLY_INVALID_RESPONSE');
+    }
+
+    const normalized: CutsApplyTransfer = {
+      transfer_index: transferRaw.transfer_index,
+      fee_index: transferRaw.fee_index,
+      fee_kind: transferRaw.fee_kind.trim(),
+      payer: transferRaw.payer,
+      split_kind: transferRaw.split_kind,
+      to_account: transferRaw.to_account.trim(),
+      to_bucket: transferRaw.to_bucket,
+      amount_minor: transferRaw.amount_minor.trim(),
+    };
+
+    if (isNonEmptyString(transferRaw.referrer_did)) {
+      normalized.referrer_did = transferRaw.referrer_did.trim();
+    }
+
+    if (isNonEmptyString(transferRaw.referral_code)) {
+      normalized.referral_code = transferRaw.referral_code.trim();
+    }
+
+    transfers.push(normalized);
+  }
+
+  return {
+    apply_id: json.apply_id.trim(),
+    idempotency_key: json.idempotency_key.trim(),
+    fee_summary: {
+      total_fee_minor: summary.total_fee_minor.trim(),
+      referral_payout_minor: summary.referral_payout_minor.trim(),
+      platform_retained_minor: summary.platform_retained_minor.trim(),
+      buyer_total_minor: summary.buyer_total_minor.trim(),
+      worker_net_minor: summary.worker_net_minor.trim(),
+    },
+    transfer_plan: {
+      transfers,
+    },
+  };
+}
+
+async function clawcutsFinalizeFeeApply(
+  env: Env,
+  params: {
+    idempotency_key: string;
+    ledger_fee_event_ids: string[];
+    ledger_referral_event_ids: string[];
+  }
+): Promise<void> {
+  if (!env.CLAWCUTS_APPLY_KEY || env.CLAWCUTS_APPLY_KEY.trim().length === 0) {
+    throw new Error('CLAWCUTS_APPLY_KEY_NOT_CONFIGURED');
+  }
+
+  const url = `${resolveClawcutsBaseUrl(env)}/v1/fees/apply/finalize`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${env.CLAWCUTS_APPLY_KEY.trim()}`,
+    },
+    body: JSON.stringify({
+      idempotency_key: params.idempotency_key,
+      ledger_fee_event_ids: params.ledger_fee_event_ids,
+      ledger_referral_event_ids: params.ledger_referral_event_ids,
+    }),
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`CUTS_FINALIZE_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+}
+
 async function ledgerV1Transfer(
   env: Env,
   params: {
     idempotency_key: string;
-    from: { account: string; bucket: 'A' | 'H' | 'B' | 'F' | 'P' };
-    to: { account: string; bucket: 'A' | 'H' | 'B' | 'F' | 'P' };
+    from: { account: string; bucket: LedgerBucket };
+    to: { account: string; bucket: LedgerBucket };
     amount_minor: string;
     metadata?: Record<string, unknown>;
   }
@@ -335,6 +558,7 @@ function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
 
   const metadata = safeJsonParse<Record<string, unknown>>(d1String(row.metadata_json));
   const ledger_fee_event_ids = safeJsonParse<string[]>(d1String(row.ledger_fee_event_ids_json)) ?? [];
+  const ledger_referral_event_ids = safeJsonParse<string[]>(d1String(row.ledger_referral_event_ids_json)) ?? [];
   const verification = safeJsonParse<Record<string, unknown>>(d1String(row.verification_json));
   const dispute = safeJsonParse<Record<string, unknown>>(d1String(row.dispute_json));
 
@@ -364,6 +588,7 @@ function parseEscrowRow(row: Record<string, unknown>): EscrowRecord | null {
     ledger_hold_event_id,
     ledger_worker_event_id: d1String(row.ledger_worker_event_id),
     ledger_fee_event_ids,
+    ledger_referral_event_ids,
     assign_idempotency_key: d1String(row.assign_idempotency_key),
     release_idempotency_key: d1String(row.release_idempotency_key),
     dispute_idempotency_key: d1String(row.dispute_idempotency_key),
@@ -410,12 +635,13 @@ async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void>
         ledger_hold_event_id,
         ledger_worker_event_id,
         ledger_fee_event_ids_json,
+        ledger_referral_event_ids_json,
         assign_idempotency_key,
         release_idempotency_key,
         dispute_idempotency_key,
         verification_json,
         dispute_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       record.escrow_id,
@@ -438,6 +664,7 @@ async function insertEscrow(db: D1Database, record: EscrowRecord): Promise<void>
       record.ledger_hold_event_id,
       record.ledger_worker_event_id,
       JSON.stringify(record.ledger_fee_event_ids),
+      JSON.stringify(record.ledger_referral_event_ids),
       record.assign_idempotency_key,
       record.release_idempotency_key,
       record.dispute_idempotency_key,
@@ -477,12 +704,13 @@ async function updateEscrowReleased(
   releasedAt: string,
   workerEventId: string,
   feeEventIds: string[],
+  referralEventIds: string[],
   verification: Record<string, unknown> | null
 ): Promise<void> {
   await db
     .prepare(
       `UPDATE escrows
-       SET status = 'released', released_at = ?, updated_at = ?, ledger_worker_event_id = ?, ledger_fee_event_ids_json = ?, verification_json = ?
+       SET status = 'released', released_at = ?, updated_at = ?, ledger_worker_event_id = ?, ledger_fee_event_ids_json = ?, ledger_referral_event_ids_json = ?, verification_json = ?
        WHERE escrow_id = ?`
     )
     .bind(
@@ -490,6 +718,7 @@ async function updateEscrowReleased(
       releasedAt,
       workerEventId,
       JSON.stringify(feeEventIds),
+      JSON.stringify(referralEventIds),
       verification ? JSON.stringify(verification) : null,
       escrowId
     )
@@ -712,7 +941,8 @@ function validateFeeQuoteSnapshot(snapshot: unknown): FeeQuoteSnapshot | null {
 
     if (typeof amount_minor !== 'string') return null;
     const amount_minor_trimmed = amount_minor.trim();
-    if (parseNonNegativeMinor(amount_minor_trimmed) === null) return null;
+    const amountMinorParsed = parseNonNegativeMinor(amount_minor_trimmed);
+    if (amountMinorParsed === null) return null;
 
     if (typeof rate_bps !== 'number' || !Number.isFinite(rate_bps)) return null;
 
@@ -722,14 +952,86 @@ function validateFeeQuoteSnapshot(snapshot: unknown): FeeQuoteSnapshot | null {
 
     if (typeof floor_applied !== 'boolean') return null;
 
-    parsedFees.push({
+    const normalized: FeeItem = {
       kind: kind.trim(),
       payer,
       amount_minor: amount_minor_trimmed,
       rate_bps,
       min_fee_minor: min_fee_minor_trimmed,
       floor_applied,
-    });
+    };
+
+    if (isNonEmptyString(item.base_amount_minor)) {
+      const baseAmount = item.base_amount_minor.trim();
+      if (parseNonNegativeMinor(baseAmount) === null) return null;
+      normalized.base_amount_minor = baseAmount;
+    }
+
+    if (item.discount_bps_applied !== undefined) {
+      if (typeof item.discount_bps_applied !== 'number' || !Number.isInteger(item.discount_bps_applied)) return null;
+      if (item.discount_bps_applied < 0 || item.discount_bps_applied > 10_000) return null;
+      normalized.discount_bps_applied = item.discount_bps_applied;
+    }
+
+    if (item.discount_minor !== undefined) {
+      if (!isNonEmptyString(item.discount_minor)) return null;
+      const discountMinor = item.discount_minor.trim();
+      if (parseNonNegativeMinor(discountMinor) === null) return null;
+      normalized.discount_minor = discountMinor;
+    }
+
+    if (item.splits !== undefined) {
+      if (!Array.isArray(item.splits)) return null;
+      const splits: FeeSplit[] = [];
+      let splitTotal = 0n;
+
+      for (const splitRaw of item.splits) {
+        if (!isRecord(splitRaw)) return null;
+        const splitKind = splitRaw.kind;
+        const account = splitRaw.account;
+        const bucket = splitRaw.bucket;
+        const splitAmountRaw = splitRaw.amount_minor;
+
+        if (splitKind !== 'platform' && splitKind !== 'referral') return null;
+        if (!isNonEmptyString(account)) return null;
+        if (bucket !== 'A' && bucket !== 'F') return null;
+        if (splitKind === 'platform' && bucket !== 'F') return null;
+        if (splitKind === 'referral' && bucket !== 'A') return null;
+
+        if (!isNonEmptyString(splitAmountRaw)) return null;
+        const splitAmount = splitAmountRaw.trim();
+        const splitAmountMinor = parseNonNegativeMinor(splitAmount);
+        if (splitAmountMinor === null) return null;
+
+        const referrer_did = isNonEmptyString(splitRaw.referrer_did) ? splitRaw.referrer_did.trim() : undefined;
+        const referral_code = isNonEmptyString(splitRaw.referral_code) ? splitRaw.referral_code.trim() : undefined;
+
+        if (splitKind === 'referral') {
+          if (!referrer_did || !referrer_did.startsWith('did:')) return null;
+        }
+
+        splitTotal += splitAmountMinor;
+
+        const split: FeeSplit = {
+          kind: splitKind,
+          account: account.trim(),
+          bucket,
+          amount_minor: splitAmount,
+        };
+
+        if (referrer_did) split.referrer_did = referrer_did;
+        if (referral_code) split.referral_code = referral_code;
+
+        splits.push(split);
+      }
+
+      if (splits.length > 0) {
+        if (splitTotal !== amountMinorParsed) return null;
+        normalized.splits = splits;
+      }
+    }
+
+    parsedFees.push(normalized);
   }
 
   return {
@@ -895,6 +1197,7 @@ async function handleCreateEscrow(request: Request, env: Env, version: string): 
     ledger_hold_event_id: holdEventId,
     ledger_worker_event_id: null,
     ledger_fee_event_ids: [],
+    ledger_referral_event_ids: [],
     assign_idempotency_key: null,
     release_idempotency_key: null,
     dispute_idempotency_key: null,
@@ -965,6 +1268,7 @@ async function handleGetEscrow(escrowId: string, env: Env, version: string): Pro
         hold_transfer: escrow.ledger_hold_event_id,
         worker_transfer: escrow.ledger_worker_event_id,
         fee_transfers: escrow.ledger_fee_event_ids,
+        referral_transfers: escrow.ledger_referral_event_ids,
       },
       verification: escrow.verification,
       dispute: escrow.dispute,
@@ -1051,6 +1355,7 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
       ledger_refs: {
         worker_transfer: escrow.ledger_worker_event_id ?? '',
         fee_transfers: escrow.ledger_fee_event_ids,
+        referral_transfers: escrow.ledger_referral_event_ids,
       },
     };
     return jsonResponse(response, 200, version);
@@ -1115,17 +1420,71 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
   }
 
   const feeClearingDomain = env.FEE_CLEARING_DOMAIN?.trim().length ? env.FEE_CLEARING_DOMAIN!.trim() : 'clawcuts';
-  const clearingAccount = `clearing:${feeClearingDomain}`;
+  const fallbackClearingAccount = `clearing:${feeClearingDomain}`;
 
-  const ledgerBaseId = `escrow:${locked.escrow_id}:release:${idempotency_key.trim()}`;
+  const releaseBaseId = `escrow:${locked.escrow_id}:release:${idempotency_key.trim()}`;
+
+  let cutsApply: CutsApplyResponse;
+  try {
+    cutsApply = await clawcutsApplyFees(env, {
+      idempotency_key: releaseBaseId,
+      product: 'clawbounties',
+      settlement_ref: locked.escrow_id,
+      occurred_at: nowIso(),
+      snapshot: locked.fee_quote,
+      context: {
+        escrow_id: locked.escrow_id,
+        buyer_did: locked.buyer_did,
+        worker_did: locked.worker_did,
+        fallback_clearing_account: fallbackClearingAccount,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('FEE_APPLY_FAILED', message, 502, undefined, version);
+  }
+
+  const applyFeeTotal = parseNonNegativeMinor(cutsApply.fee_summary.total_fee_minor);
+  const applyReferralTotal = parseNonNegativeMinor(cutsApply.fee_summary.referral_payout_minor);
+  const applyRetainedTotal = parseNonNegativeMinor(cutsApply.fee_summary.platform_retained_minor);
+  const applyBuyerTotal = parsePositiveMinor(cutsApply.fee_summary.buyer_total_minor);
+  const applyWorkerNet = parseNonNegativeMinor(cutsApply.fee_summary.worker_net_minor);
+
+  if (
+    applyFeeTotal === null ||
+    applyReferralTotal === null ||
+    applyRetainedTotal === null ||
+    applyBuyerTotal === null ||
+    applyWorkerNet === null
+  ) {
+    return errorResponse('FEE_APPLY_MISMATCH', 'clawcuts apply summary is invalid', 502, undefined, version);
+  }
+
+  if (applyFeeTotal !== feeTotal || applyBuyerTotal !== buyerTotal || applyWorkerNet !== workerNet || applyRetainedTotal + applyReferralTotal !== applyFeeTotal) {
+    return errorResponse(
+      'FEE_APPLY_MISMATCH',
+      'clawcuts apply summary does not match stored escrow snapshot',
+      502,
+      {
+        expected_fee_total_minor: feeTotal.toString(),
+        received_fee_total_minor: applyFeeTotal.toString(),
+        expected_buyer_total_minor: buyerTotal.toString(),
+        received_buyer_total_minor: applyBuyerTotal.toString(),
+        expected_worker_net_minor: workerNet.toString(),
+        received_worker_net_minor: applyWorkerNet.toString(),
+      },
+      version
+    );
+  }
 
   let workerEventId: string;
   const feeEventIds: string[] = [];
+  const referralEventIds: string[] = [];
 
   try {
     // Worker payout
     const workerTransfer = await ledgerV1Transfer(env, {
-      idempotency_key: `${ledgerBaseId}:worker`,
+      idempotency_key: `${releaseBaseId}:worker`,
       from: { account: locked.buyer_did, bucket: 'H' },
       to: { account: locked.worker_did, bucket: 'A' },
       amount_minor: locked.worker_net_minor,
@@ -1134,39 +1493,58 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
         escrow_id: locked.escrow_id,
         policy_id: locked.fee_quote.policy_id,
         policy_version: locked.fee_quote.policy_version,
+        policy_hash_b64u: locked.fee_quote.policy_hash_b64u,
       },
     });
     workerEventId = workerTransfer.event_id;
 
-    // Fee transfers
-    for (let i = 0; i < locked.fee_quote.fees.length; i++) {
-      const fee = locked.fee_quote.fees[i];
-      const amount = parseNonNegativeMinor(fee.amount_minor);
+    for (const transfer of cutsApply.transfer_plan.transfers) {
+      const amount = parseNonNegativeMinor(transfer.amount_minor);
       if (amount === null || amount === 0n) continue;
 
-      const feeTransfer = await ledgerV1Transfer(env, {
-        idempotency_key: `${ledgerBaseId}:fee:${i}`,
+      const transferResult = await ledgerV1Transfer(env, {
+        idempotency_key: `${releaseBaseId}:fee:${transfer.transfer_index}`,
         from: { account: locked.buyer_did, bucket: 'H' },
-        to: { account: clearingAccount, bucket: 'F' },
-        amount_minor: fee.amount_minor,
+        to: { account: transfer.to_account, bucket: transfer.to_bucket },
+        amount_minor: transfer.amount_minor,
         metadata: {
-          kind: 'escrow_release_fee',
+          kind: transfer.split_kind === 'referral' ? 'escrow_release_referral' : 'escrow_release_fee',
           escrow_id: locked.escrow_id,
-          fee_kind: fee.kind,
-          fee_payer: fee.payer,
-          rate_bps: fee.rate_bps,
-          min_fee_minor: fee.min_fee_minor,
-          floor_applied: fee.floor_applied,
+          fee_transfer_index: transfer.transfer_index,
+          fee_index: transfer.fee_index,
+          fee_kind: transfer.fee_kind,
+          fee_payer: transfer.payer,
+          split_kind: transfer.split_kind,
+          to_account: transfer.to_account,
+          to_bucket: transfer.to_bucket,
+          referrer_did: transfer.referrer_did,
+          referral_code: transfer.referral_code,
           policy_id: locked.fee_quote.policy_id,
           policy_version: locked.fee_quote.policy_version,
           policy_hash_b64u: locked.fee_quote.policy_hash_b64u,
         },
       });
-      feeEventIds.push(feeTransfer.event_id);
+
+      if (transfer.split_kind === 'referral') {
+        referralEventIds.push(transferResult.event_id);
+      } else {
+        feeEventIds.push(transferResult.event_id);
+      }
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('LEDGER_RELEASE_FAILED', message, 502, undefined, version);
+  }
+
+  try {
+    await clawcutsFinalizeFeeApply(env, {
+      idempotency_key: cutsApply.idempotency_key,
+      ledger_fee_event_ids: feeEventIds,
+      ledger_referral_event_ids: referralEventIds,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('FEE_APPLY_FINALIZE_FAILED', message, 502, undefined, version);
   }
 
   let verification: Record<string, unknown> | null = null;
@@ -1178,14 +1556,15 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
   }
 
   const releasedAt = nowIso();
-  await updateEscrowReleased(env.ESCROW_DB, escrowId, releasedAt, workerEventId!, feeEventIds, verification);
+  await updateEscrowReleased(env.ESCROW_DB, escrowId, releasedAt, workerEventId, feeEventIds, referralEventIds, verification);
 
   const response: ReleaseEscrowResponseBody = {
     escrow_id: locked.escrow_id,
     status: 'released',
     ledger_refs: {
-      worker_transfer: workerEventId!,
+      worker_transfer: workerEventId,
       fee_transfers: feeEventIds,
+      referral_transfers: referralEventIds,
     },
   };
 

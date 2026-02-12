@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-11
 > **Source of truth:** `services/clawcuts/{prd.json,progress.txt}`
 >
 > **Scope:**
@@ -12,7 +12,7 @@
 
 **Domain:** clawcuts.com  
 **Pillar:** Capital & Incentives  
-**Status:** Draft  
+**Status:** ACTIVE (CCU-OPS-001 shipped)  
 
 ---
 
@@ -22,6 +22,19 @@
 - **Execution tracker:**
   - `services/clawcuts/prd.json`
   - `services/clawcuts/progress.txt`
+- **Shipped in CCU-OPS-001:**
+  - D1-backed policy control plane with immutable version rows + activate/deactivate lifecycle
+  - policy audit log (`policy_audit_events`) with actor/timestamp and history APIs (`/history`, `/history.csv`)
+  - deterministic settlement apply endpoints:
+    - `POST /v1/fees/apply` (idempotent snapshot apply)
+    - `POST /v1/fees/apply/finalize` (bind ledger event refs)
+  - referral split planning in simulation + apply transfer plans
+  - monthly revenue reporting with JSON + CSV exports:
+    - `GET /v1/reports/revenue/monthly?month=YYYY-MM[&product=...][&format=csv]`
+  - escrow integration updated to consume clawcuts apply plans fail-closed and emit separate fee/referral ledger refs
+  - production evidence:
+    - `artifacts/simulations/clawcuts/2026-02-12T00-10-13-377Z-staging/smoke.json`
+    - `artifacts/simulations/clawcuts/2026-02-12T00-11-08-054Z-prod/smoke.json`
 
 ---
 

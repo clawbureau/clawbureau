@@ -172,6 +172,16 @@ const WORKER_AUTH_SCOPE_BY_ACTION: Record<WorkerAuthAction, string> = {
 };
 
 type FeePayer = 'buyer' | 'worker';
+type FeeSplitKind = 'platform' | 'referral';
+
+interface FeeSplit {
+  kind: FeeSplitKind;
+  account: string;
+  bucket: 'A' | 'F';
+  amount_minor: string;
+  referrer_did?: string;
+  referral_code?: string;
+}
 
 interface FeeItem {
   kind: string;
@@ -180,6 +190,10 @@ interface FeeItem {
   rate_bps: number;
   min_fee_minor: string;
   floor_applied: boolean;
+  base_amount_minor?: string;
+  discount_bps_applied?: number;
+  discount_minor?: string;
+  splits?: FeeSplit[];
 }
 
 interface CutsPolicyInfo {
@@ -2581,14 +2595,61 @@ async function cutsSimulateFees(
     if (!isNonEmptyString(item.min_fee_minor)) throw new Error('CUTS_INVALID_RESPONSE');
     if (typeof item.floor_applied !== 'boolean') throw new Error('CUTS_INVALID_RESPONSE');
 
-    fees.push({
+    const normalized: FeeItem = {
       kind: item.kind.trim(),
       payer: item.payer,
       amount_minor: item.amount_minor.trim(),
       rate_bps: item.rate_bps,
       min_fee_minor: item.min_fee_minor.trim(),
       floor_applied: item.floor_applied,
-    });
+    };
+
+    if (isNonEmptyString(item.base_amount_minor)) {
+      normalized.base_amount_minor = item.base_amount_minor.trim();
+    }
+
+    if (typeof item.discount_bps_applied === 'number' && Number.isFinite(item.discount_bps_applied)) {
+      normalized.discount_bps_applied = item.discount_bps_applied;
+    }
+
+    if (isNonEmptyString(item.discount_minor)) {
+      normalized.discount_minor = item.discount_minor.trim();
+    }
+
+    if (item.splits !== undefined) {
+      if (!Array.isArray(item.splits)) throw new Error('CUTS_INVALID_RESPONSE');
+      const splits: FeeSplit[] = [];
+
+      for (const splitRaw of item.splits) {
+        if (!isRecord(splitRaw)) throw new Error('CUTS_INVALID_RESPONSE');
+        if (splitRaw.kind !== 'platform' && splitRaw.kind !== 'referral') throw new Error('CUTS_INVALID_RESPONSE');
+        if (!isNonEmptyString(splitRaw.account)) throw new Error('CUTS_INVALID_RESPONSE');
+        if (splitRaw.bucket !== 'A' && splitRaw.bucket !== 'F') throw new Error('CUTS_INVALID_RESPONSE');
+        if (!isNonEmptyString(splitRaw.amount_minor)) throw new Error('CUTS_INVALID_RESPONSE');
+
+        const split: FeeSplit = {
+          kind: splitRaw.kind,
+          account: splitRaw.account.trim(),
+          bucket: splitRaw.bucket,
+          amount_minor: splitRaw.amount_minor.trim(),
+        };
+
+        if (isNonEmptyString(splitRaw.referrer_did)) {
+          split.referrer_did = splitRaw.referrer_did.trim();
+        }
+        if (isNonEmptyString(splitRaw.referral_code)) {
+          split.referral_code = splitRaw.referral_code.trim();
+        }
+
+        splits.push(split);
+      }
+
+      if (splits.length > 0) {
+        normalized.splits = splits;
+      }
+    }
+
+    fees.push(normalized);
   }
 
   return {

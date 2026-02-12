@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "env": "prod",
+  "policy": {
+    "id": "bounties_v1",
+    "version": "1",
+    "hash_b64u": "LGZKObdVxQNpVs3YB4-veIW2daqwDu_ob3460w_zThQ"
+  },
+  "escrow": {
+    "escrow_id": "esc_d88cb812-7274-43b6-8bf6-9293802702d4",
+    "release_idempotency_key": "smoke:clawcuts:release:mlipdvi5iza70t",
+    "worker_transfer": "evt_mlipdxo7_x5tnz34q",
+    "fee_transfer_count": 1,
+    "referral_transfer_count": 1
+  },
+  "report": {
+    "month": "2026-02",
+    "matched_policy_version": "1",
+    "matched_policy_hash_b64u": "LGZKObdVxQNpVs3YB4-veIW2daqwDu_ob3460w_zThQ",
+    "platform_fee_minor": "675",
+    "referral_payout_minor": "202",
+    "platform_retained_minor": "473"
+  }
+}
