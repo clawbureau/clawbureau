@@ -409,6 +409,15 @@ footer .copyright span{color:var(--text)}
   font-weight:500;transition:border-color .15s}
 .related-grid a:hover{border-color:var(--accent)}
 
+/* ── Compare table ─────────────────────────────────────────────── */
+.compare-table-wrap{overflow-x:auto;margin:1.5rem 0}
+.compare-table{width:100%;border-collapse:collapse;font-size:.9rem}
+.compare-table th{text-align:left;padding:.75rem 1rem;background:var(--surface);
+  border-bottom:2px solid var(--border);font-weight:600;white-space:nowrap}
+.compare-table td{padding:.65rem 1rem;border-bottom:1px solid var(--border);vertical-align:top}
+.compare-table tr:last-child td{border-bottom:none}
+.compare-table tbody tr:hover{background:var(--surface-2)}
+
 /* ── Code block ────────────────────────────────────────────────── */
 code{font-family:var(--font-mono);font-size:.85em;background:var(--surface-2);
   padding:.08em .33em;border-radius:4px;line-height:1.45}

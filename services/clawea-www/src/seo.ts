@@ -236,6 +236,64 @@ export function techArticleSchema(opts: {
   });
 }
 
+export function softwareApplicationSchema(opts: {
+  name: string;
+  description: string;
+  url: string;
+  applicationCategory?: string;
+  operatingSystem?: string;
+  offersUrl?: string;
+}): string {
+  return jsonLd({
+    "@type": "SoftwareApplication",
+    name: opts.name,
+    description: opts.description,
+    url: opts.url,
+    applicationCategory: opts.applicationCategory ?? "SecurityApplication",
+    operatingSystem: opts.operatingSystem ?? "Cloud",
+    ...(opts.offersUrl
+      ? {
+          offers: {
+            "@type": "AggregateOffer",
+            url: opts.offersUrl,
+            priceCurrency: "USD",
+            lowPrice: "49",
+            highPrice: "499",
+            offerCount: 4,
+          },
+        }
+      : {}),
+    publisher: {
+      "@type": "Organization",
+      name: ORG_NAME,
+      url: SITE,
+    },
+  });
+}
+
+export function offerCatalogSchema(offers: Array<{ name: string; price: string; description: string }>): string {
+  return jsonLd({
+    "@type": "Product",
+    name: "Claw EA Enterprise AI Agent Platform",
+    description: "Deploy managed, verified AI agents for enterprise with cryptographic attestation and policy controls.",
+    url: `${SITE}/pricing`,
+    brand: { "@type": "Brand", name: ORG_NAME },
+    hasOfferCatalog: {
+      "@type": "OfferCatalog",
+      name: "Claw EA Pricing Plans",
+      itemListElement: offers.map((o) => ({
+        "@type": "Offer",
+        name: o.name,
+        price: o.price,
+        priceCurrency: "USD",
+        description: o.description,
+        availability: "https://schema.org/InStock",
+        url: `${SITE}/pricing`,
+      })),
+    },
+  });
+}
+
 function jsonLd(data: Record<string, unknown>): string {
   const obj = { "@context": "https://schema.org", ...data };
   return `<script type="application/ld+json">${JSON.stringify(obj)}</script>`;
