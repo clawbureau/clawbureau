@@ -1,0 +1,28 @@
+{
+  "policy_version": "2",
+  "policy_id": "open-source-permissive",
+  "issuer_did": "did:key:z6MkOpenSourceMaintainer",
+  "statements": [
+    {
+      "sid": "AllowAllModels",
+      "effect": "Allow",
+      "actions": ["model:invoke"],
+      "resources": ["*"]
+    },
+    {
+      "sid": "AllowAllTools",
+      "effect": "Allow",
+      "actions": ["tool:*"],
+      "resources": ["*"]
+    },
+    {
+      "sid": "AllowAllSideEffects",
+      "effect": "Allow",
+      "actions": ["side_effect:*"],
+      "resources": ["*"]
+    }
+  ],
+  "metadata": {
+    "description": "Open-source permissive policy: any model, any agent, any tool, any side effect. Self-reported proof tier is acceptable. No network restrictions. Suitable for open-source projects that prioritize contributor accessibility."
+  }
+}

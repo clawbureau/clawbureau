@@ -38,3 +38,38 @@ export {
 } from './crypto.js';
 
 export { jcsCanonicalize } from './jcs.js';
+
+export {
+  mapToSOC2,
+  mapToISO27001,
+  mapToEUAIAct,
+  generateComplianceReport,
+} from './compliance.js';
+export type {
+  ComplianceFramework,
+  ControlStatus,
+  EvidenceType,
+  ControlResult,
+  ComplianceGap,
+  ComplianceReport,
+  ComplianceBundleInput,
+  CompliancePolicyInput,
+} from './compliance.js';
+
+export {
+  evaluatePolicy,
+  evaluatePolicyBatch,
+  convertV1toV2,
+} from './policy-evaluator.js';
+export type {
+  WPCv1,
+  WPCv2,
+  WPC,
+  PolicyStatement,
+  PolicyConditions,
+  ConditionMap,
+  PolicyContext,
+  PolicyDecision,
+  PolicyDecisionEffect,
+  PolicyResolver,
+} from './policy-evaluator.js';

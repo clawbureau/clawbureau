@@ -1,0 +1,27 @@
+{
+  "policy_version": "2",
+  "policy_id": "minimal-allow-all",
+  "issuer_did": "did:key:z6MkExample",
+  "statements": [
+    {
+      "sid": "AllowAll",
+      "effect": "Allow",
+      "actions": ["*"],
+      "resources": ["*"]
+    },
+    {
+      "sid": "RequireGatewayTier",
+      "effect": "Deny",
+      "actions": ["*"],
+      "resources": ["*"],
+      "conditions": {
+        "StringEquals": {
+          "Receipt:ProofTier": "self"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "description": "Minimal policy: allow everything but require at least gateway proof tier. Self-reported proofs are denied."
+  }
+}
