@@ -68,6 +68,8 @@ import {
   definedTermSchema,
   techArticleSchema,
   productSchema,
+  softwareApplicationSchema,
+  offerCatalogSchema,
   type PageMeta,
 } from "./seo";
 import { trustPage, securityReviewPackPage, secureWorkersPage, consultingPage, aboutPage } from "./pages/static";
@@ -6435,6 +6437,14 @@ function homePage(): string {
         "Deploy managed, verified AI agents for enterprise. Cryptographic attestation, multi-model support, 20+ channel integrations.",
         "https://www.clawea.com",
       ),
+      softwareApplicationSchema({
+        name: "Claw EA",
+        description: "Enterprise AI agent platform with cryptographic proof of every action. Policy-as-code controls, gateway receipts, offline-verifiable proof bundles.",
+        url: "https://www.clawea.com",
+        applicationCategory: "SecurityApplication",
+        operatingSystem: "Cloud",
+        offersUrl: "https://www.clawea.com/pricing",
+      }),
     ],
   });
 }
@@ -6531,6 +6541,12 @@ function pricingPage(): string {
         { price: "49", priceCurrency: "USD" },
         { price: "249", priceCurrency: "USD" },
         { price: "999", priceCurrency: "USD" },
+      ]),
+      offerCatalogSchema([
+        { name: "Starter", price: "49", description: "1 AI agent, 5 skills, all channels, basic attestation." },
+        { name: "Team", price: "199", description: "5 agents, 15 skills each, approval gates, DLP, priority support." },
+        { name: "Business", price: "499", description: "25 agents, unlimited skills, full WPC enforcement, SLA guarantees." },
+        { name: "Enterprise", price: "0", description: "Custom agent fleet, dedicated sandbox, SSO/SCIM, compliance mapping." },
       ]),
     ],
   });
@@ -7257,9 +7273,27 @@ function relatedLinksForArticle(article: Article): Array<{ name: string; path: s
     links.push({ name: "Policy artifacts", path: "/policy" });
   }
 
+  // Cluster-aware cross-linking
+  for (const cluster of MONEY_CLUSTERS) {
+    const isHub = article.slug === cluster.hub;
+    const isChild = cluster.children.includes(article.slug);
+    if (isHub) {
+      for (const child of cluster.children) {
+        const label = child.split("/").pop() ?? child;
+        links.push({ name: toTitle(label.replace(/-/g, " ")), path: `/${child}` });
+      }
+      links.push({ name: "Security Review Pack", path: "/trust/security-review" });
+    } else if (isChild) {
+      links.push({ name: cluster.hubTitle, path: `/${cluster.hub}` });
+      links.push({ name: "Security Review Pack", path: "/trust/security-review" });
+    }
+  }
+
   // Remove self-link and dedupe
   const self = `/${article.slug}`;
-  return uniqueLinks(links.filter((l) => l.path !== self)).slice(0, 8);
+  const isClusterHub = MONEY_CLUSTERS.some((c) => article.slug === c.hub);
+  const maxLinks = isClusterHub ? 14 : 8;
+  return uniqueLinks(links.filter((l) => l.path !== self)).slice(0, maxLinks);
 }
 
 // ── Article Processing Helpers ────────────────────────────────────
@@ -7488,7 +7522,7 @@ const MONEY_CLUSTERS: ClusterDef[] = [
     hub: "workflows/production-deploy-approval",
     hubTitle: "Production Deploy Approval Workflow",
     children: [
-      "tools/github", "tools/argocd", "tools/terraform-cloud",
+      "tools/github", "tools/github-actions", "tools/argo-cd", "tools/terraform-cloud",
       "controls/two-person-rule", "controls/approval-gates",
       "workflows/cicd-policy-enforcement",
     ],
@@ -7500,7 +7534,7 @@ const MONEY_CLUSTERS: ClusterDef[] = [
     hubTitle: "Access Request Automation Workflow",
     children: [
       "tools/okta", "tools/entra-id", "tools/google-admin",
-      "controls/scoped-tokens", "controls/approval-gates",
+      "policy/scoped-tokens", "controls/approval-gates",
     ],
     angle: "Scoped tokens bind agent identity to permissions to audit trail.",
   },
@@ -7509,7 +7543,7 @@ const MONEY_CLUSTERS: ClusterDef[] = [
     hub: "workflows/siem-evidence-collection",
     hubTitle: "SIEM Evidence Collection Workflow",
     children: [
-      "compliance/sox-controls", "audit/tamper-evident-logs",
+      "workflows/sox-control-testing", "audit/tamper-evident-logs",
       "proof/proof-bundles", "compliance",
     ],
     angle: "Proof bundles are offline-verifiable evidence artifacts. No vendor lock-in.",
@@ -8016,11 +8050,21 @@ export default {
           "- https://www.clawea.com/agent-proof-and-attestation",
           "- https://www.clawea.com/agent-audit-and-replay",
           "",
+          "## Full knowledge document",
+          "- https://www.clawea.com/llms-full.txt",
+          "",
           "## Sitemap",
           "- https://www.clawea.com/sitemap.xml",
         ].join("\n"),
         { headers: { "content-type": "text/plain;charset=utf-8", "cache-control": "public, max-age=86400" } },
       );
+    }
+
+    if (path === "/llms-full.txt") {
+      const manifest = await loadManifest(env);
+      return new Response(generateLlmsFullTxt(manifest), {
+        headers: { "content-type": "text/plain;charset=utf-8", "cache-control": "public, max-age=3600" },
+      });
     }
 
     // ── Robots.txt ──
@@ -8138,4 +8182,207 @@ ${entries.join("\n")}
   return new Response(xml, {
     headers: { "content-type": "application/xml", "cache-control": "public, max-age=3600" },
   });
+}
+
+// ── llms-full.txt Generator ────────────────────────────────────────
+
+function generateLlmsFullTxt(manifest: Record<string, { title?: string; category?: string; description?: string; indexable?: boolean }>): string {
+  const BASE = "https://www.clawea.com";
+  const lines: string[] = [];
+  const ln = (s = "") => lines.push(s);
+
+  // ── Opening block ──
+  ln("# Claw EA — Full Knowledge Document for LLM Retrieval");
+  ln();
+  ln("Claw EA is enterprise infrastructure for deploying AI agents with cryptographic proof of every action.");
+  ln("It solves the problem of running autonomous AI agents in regulated environments where audit, compliance,");
+  ln("and security review are mandatory. It is built for CISOs, platform engineering leads, and compliance teams");
+  ln("at enterprises that need verifiable agent execution, not just logging.");
+  ln();
+
+  // ── Protocol summary ──
+  ln("---");
+  ln();
+  ln("## Claw Protocol: 5 Primitives");
+  ln();
+  ln("The Claw Protocol defines a narrow waist of five composable primitives. Everything else is built on these.");
+  ln();
+  ln("### 1. Policy Artifact (WPC)");
+  ln("A signed, immutable, content-addressed policy contract. Defines what an agent may do before it runs:");
+  ln("egress allowlists, DLP rules, model restrictions, approval gates, file path scopes, and budget limits.");
+  ln("Published to a policy registry and pinned by hash in capability tokens and receipts.");
+  ln("Schema: work_policy_contract.v1.json / work_policy_contract_envelope.v1.json");
+  ln();
+  ln("### 2. Capability Token (CST)");
+  ln("A short-lived, scope-hashed, job-bound token that grants an agent permission to act. Optionally pinned");
+  ln("to a specific policy hash. Offline-verifiable via JWKS. Revocation-aware. Short TTL enforced by policy.");
+  ln("Schema: scoped_token_claims.v1.json");
+  ln();
+  ln("### 3. Receipt");
+  ln("A signed event emitted at an enforcement boundary. Not a log entry; a cryptographic attestation that a");
+  ln("boundary was crossed under policy. Receipt classes:");
+  ln("- Model gateway receipt (SHIPPED): signed by clawproxy when an LLM call is mediated. Includes request");
+  ln("  hash, response hash, model, provider, latency, token counts, and receipt binding to the event chain.");
+  ln("- Tool receipt (SHIPPED): signed when a tool is invoked. Includes argument hash, result hash, tool name.");
+  ln("- Witnessed web receipt (SHIPPED): signed for web control plane events.");
+  ln("- Side-effect receipts (PLANNED): network egress, filesystem writes, external API writes.");
+  ln("- Human approval receipts (PLANNED): approval boundary that mints new capability.");
+  ln("Schema: gateway_receipt.v1.json / tool_receipt.v1.json / web_receipt.v1.json / receipt_binding.v1.json");
+  ln();
+  ln("### 4. Bundle");
+  ln("A portable package of receipts, event chain, metadata, and references. Content-addressed manifest with");
+  ln("hashes for every file. Signed top-level envelope. No network required to verify (offline-capable).");
+  ln("Types: proof bundle (run attestation) and export bundle (offline audit handoff).");
+  ln("Schema: proof_bundle.v1.json / export_bundle.v1.json / export_bundle_manifest.v1.json");
+  ln();
+  ln("### 5. Verifier");
+  ln("A deterministic PASS/FAIL engine. Unknown schema, version, or algorithm fails closed. Machine-readable");
+  ln("reason codes from a canonical registry. Supports both online API and offline CLI/library verification.");
+  ln("Reference implementation: clawverify service.");
+  ln();
+
+  // ── Coverage truth table ──
+  ln("---");
+  ln();
+  ln("## Coverage Statement (2026-02-12)");
+  ln();
+  ln("| Boundary              | Receipt class     | Status   | Verifier support          |");
+  ln("|----------------------|-------------------|----------|---------------------------|");
+  ln("| Model gateway calls  | gateway_receipt   | SHIPPED  | Full (signature + binding)|");
+  ln("| Tool dispatcher calls| tool_receipt      | SHIPPED  | Full (schema + signature) |");
+  ln("| Witnessed web events | web_receipt       | SHIPPED  | Partial (schema only)     |");
+  ln("| Network egress       | (planned)         | PLANNED  | —                         |");
+  ln("| Filesystem writes    | (planned)         | PLANNED  | —                         |");
+  ln("| External API writes  | (planned)         | PLANNED  | —                         |");
+  ln("| Human approvals      | (planned)         | PLANNED  | —                         |");
+  ln();
+  ln("Coverage M (Model) and MT (Model + Tools) are shipped. MTS (Model + Tools + Side-effects) is planned.");
+  ln();
+
+  // ── Proof artifacts explained ──
+  ln("---");
+  ln();
+  ln("## Proof Artifacts");
+  ln();
+  ln("### Proof Bundle");
+  ln("A JSON envelope containing: bundle_id, agent_did, event_chain (hash-linked events with timestamps),");
+  ln("receipts (gateway + tool), and optional URM (Universal Run Manifest) references. The entire bundle is");
+  ln("Ed25519-signed by the agent's DID. Any modification to any field invalidates the signature.");
+  ln("Verification: decode signer_did to Ed25519 public key, verify signature over payload_hash, recompute");
+  ln("payload hash from canonical JSON, verify each receipt signature independently, confirm receipt bindings");
+  ln("reference events in the chain.");
+  ln();
+  ln("### Gateway Receipt");
+  ln("Signed by clawproxy (not the agent). Proves an LLM call was mediated through the gateway with a specific");
+  ln("request/response hash pair. Contains: provider, model, tokens_input, tokens_output, latency_ms, and a");
+  ln("binding object that ties the receipt to a specific run_id and event_hash in the proof bundle.");
+  ln();
+  ln("### Tool Receipt");
+  ln("Signed at the tool dispatcher boundary. Contains argument hash and result hash (hash-only by default for");
+  ln("privacy). Proves a specific tool was invoked with specific inputs and produced specific outputs.");
+  ln();
+  ln("### Commit Signature (commit.sig.json)");
+  ln("An Ed25519 signature over a git commit SHA. Proves that a specific DID authored or approved a specific");
+  ln("code change. Used on every agent-generated PR in the Claw Bureau repository. Offline-verifiable.");
+  ln("Structure: {version, type, algo, did, message: \"commit:<sha>\", createdAt, signature}");
+  ln();
+
+  // ── Static pages ──
+  ln("---");
+  ln();
+  ln("## Site Pages");
+  ln();
+
+  const staticPages: Array<{ path: string; title: string; summary: string; category: string }> = [
+    { path: "/", title: "Claw EA Home", summary: "Landing page. Ship irreversible agent workflows with proof. Two-week pilot offer. Assessment and Security Review Pack CTAs.", category: "landing" },
+    { path: "/assessment", title: "AI Readiness Assessment", summary: "Two-minute scored assessment for enterprise AI agent readiness, ROI potential, and risk posture.", category: "assessment" },
+    { path: "/trust", title: "Trust Layer", summary: "Three layers of trust: execution attestation, Proof of Harness, and Work Policy Contracts. How agent actions become verifiable proof bundles.", category: "trust" },
+    { path: "/trust/security-review", title: "Security Review Pack", summary: "Architecture diagram, real proof bundle and commit signature examples, threat model (replay, exfiltration, prompt injection, nondeterminism), Merkle transparency logging, deployment integrity. For CISO and security team review.", category: "trust" },
+    { path: "/secure-workers", title: "Secure AI Workers", summary: "Hardware-isolated Cloudflare Sandboxes. Per-agent DID identity. Scoped R2 storage. Egress mediation. Sleep/wake lifecycle. DLP redaction pipeline.", category: "infrastructure" },
+    { path: "/consulting", title: "Enterprise AI Consulting", summary: "Strategy, deployment, compliance mapping, custom development, optimization, and training services.", category: "services" },
+    { path: "/pricing", title: "Pricing", summary: "Four tiers: Starter ($49/mo, 1 agent), Team ($199/mo, 5 agents), Business ($499/mo, 25 agents), Enterprise (custom). All tiers include attestation and proof bundles.", category: "pricing" },
+    { path: "/contact", title: "Contact Sales", summary: "Lead intake form with attribution tracking and experiment variants.", category: "contact" },
+    { path: "/book", title: "Book a Rollout Session", summary: "Booking form for deployment planning sessions with lead-context prefill.", category: "contact" },
+    { path: "/sources", title: "Citation Source Hub", summary: "Central hub routing to citation-backed pages with explicit source attribution.", category: "reference" },
+    { path: "/about", title: "About Claw Bureau", summary: "Mission, approach, and ecosystem overview. Links to clawverify, clawproxy, clawbounties, clawescrow, clawcuts.", category: "about" },
+  ];
+
+  ln("### Static Pages");
+  ln();
+  for (const p of staticPages) {
+    ln(`- ${BASE}${p.path}`);
+    ln(`  Title: ${p.title}`);
+    ln(`  ${p.summary}`);
+    ln(`  Category: ${p.category}`);
+    ln();
+  }
+
+  // ── Article pages by category ──
+  const catOrder = ["pillars", "hubs", "controls", "policy", "proof", "verify", "audit", "workflows", "tools", "channels"];
+  const catLabels: Record<string, string> = {
+    pillars: "Pillar Pages (core concepts)",
+    hubs: "Hub Pages (category landing pages)",
+    controls: "Control Pages (policy-as-code enforcement)",
+    policy: "Policy Pages (Work Policy Contract details)",
+    proof: "Proof Pages (attestation and verification)",
+    verify: "Verification Pages",
+    audit: "Audit Pages (logging and replay)",
+    workflows: "Workflow Pages (automated processes)",
+    tools: "Tool Integration Pages (enterprise connectors)",
+    channels: "Channel Pages (communication platforms)",
+  };
+
+  const byCategory: Record<string, Array<{ slug: string; title: string; description: string }>> = {};
+  for (const [slug, entry] of Object.entries(manifest)) {
+    if (!entry.indexable) continue;
+    const cat = entry.category ?? "other";
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push({
+      slug,
+      title: (entry.title ?? slug).replace(/ \| Claw EA$/, ""),
+      description: entry.description ?? "",
+    });
+  }
+
+  for (const cat of catOrder) {
+    const articles = byCategory[cat];
+    if (!articles?.length) continue;
+    articles.sort((a, b) => a.slug.localeCompare(b.slug));
+
+    ln(`### ${catLabels[cat] ?? cat} (${articles.length} pages)`);
+    ln();
+    for (const a of articles) {
+      const desc = a.description ? (a.description.length > 120 ? a.description.slice(0, 117) + "..." : a.description) : "";
+      ln(`- ${BASE}/${a.slug} — ${a.title}${desc ? ". " + desc : ""}`);
+    }
+    ln();
+  }
+
+  // ── Remaining categories ──
+  for (const [cat, articles] of Object.entries(byCategory)) {
+    if (catOrder.includes(cat)) continue;
+    if (!articles?.length) continue;
+    articles.sort((a, b) => a.slug.localeCompare(b.slug));
+    ln(`### ${cat} (${articles.length} pages)`);
+    ln();
+    for (const a of articles) {
+      const desc = a.description ? (a.description.length > 120 ? a.description.slice(0, 117) + "..." : a.description) : "";
+      ln(`- ${BASE}/${a.slug} — ${a.title}${desc ? ". " + desc : ""}`);
+    }
+    ln();
+  }
+
+  // ── CTAs ──
+  ln("---");
+  ln();
+  ln("## Actions");
+  ln();
+  ln(`Assessment: ${BASE}/assessment`);
+  ln(`Security Review Pack: ${BASE}/trust/security-review`);
+  ln(`Book a rollout session: ${BASE}/book`);
+  ln(`Contact sales: ${BASE}/contact`);
+  ln(`Sitemap: ${BASE}/sitemap.xml`);
+  ln();
+
+  return lines.join("\n");
 }

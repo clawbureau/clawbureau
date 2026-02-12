@@ -383,7 +383,7 @@ function trackingScript(): string {
   const LEAD_ENDPOINT = "/api/leads/submit";
   const BOOK_ENDPOINT = "/api/book/submit";
   const STORAGE_KEY = "clawea-attribution-v2";
-  const INTENT_PATHS = new Set(["/pricing", "/contact", "/assessment", "/assessment/result", "/book", "/trust", "/secure-workers", "/consulting"]);
+  const INTENT_PATHS = new Set(["/pricing", "/contact", "/assessment", "/assessment/result", "/book", "/trust", "/trust/security-review", "/secure-workers", "/consulting"]);
 
   const SAFE_KEYS = [
     "utm_source",
