@@ -1,0 +1,9 @@
+{
+  "version": "m1",
+  "type": "message_signature",
+  "algo": "ed25519",
+  "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+  "message": "feat(trust): reconcile TRUST-REP-002 with CTR-OPS-001 arbitration\ncommit:47f732524e7fa4e78d9a0b890eb83b8625de6a56",
+  "createdAt": "2026-02-12T03:17:53.904Z",
+  "signature": "6EOxVfs5M4y49HRl4JujlJyByFuNOcXUEcy5C75YzSg4tanTmX7eOP6WJaodC/N9TwFvz7WWsEc67N25vss+Aw=="
+}

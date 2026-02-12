@@ -27,6 +27,12 @@ export interface Env {
   /** Base URL for clawscope (defaults to https://clawscope.com). */
   SCOPE_BASE_URL?: string;
 
+  /** Base URL for clawrep (defaults to https://clawrep.com). */
+  CLAWREP_BASE_URL?: string;
+
+  /** Ingest key for clawrep loop endpoint (set via `wrangler secret put`). */
+  CLAWREP_INGEST_KEY?: string;
+
   /** Admin key for calling clawscope /v1/tokens/issue (set via `wrangler secret put`). */
   SCOPE_ADMIN_KEY?: string;
 
@@ -65,6 +71,9 @@ export interface Env {
 
   /** D1 database binding */
   BOUNTIES_DB: D1Database;
+
+  /** Optional direct queue producer binding to clawrep events. */
+  REP_EVENTS?: Queue;
 }
 
 type ClosureType = 'test' | 'requester' | 'quorum';
@@ -2137,6 +2146,12 @@ function resolveScopeBaseUrl(env: Env): string {
   return 'https://clawscope.com';
 }
 
+function resolveClawrepBaseUrl(env: Env): string {
+  const v = env.CLAWREP_BASE_URL?.trim();
+  if (v && v.length > 0) return v;
+  return 'https://clawrep.com';
+}
+
 function resolveTestHarnessBaseUrl(env: Env): string | null {
   const v = env.TEST_HARNESS_BASE_URL?.trim();
   if (v && v.length > 0) return v;
@@ -3685,6 +3700,99 @@ function parseNonNegativeMinor(input: unknown): bigint | null {
     return n;
   } catch {
     return null;
+  }
+}
+
+type ClawrepLoopEnvelope = {
+  schema_version: '1';
+  source_event_id: string;
+  source_service: 'clawbounties';
+  kind: 'closure' | 'penalty' | 'recovery';
+  did: string;
+  occurred_at: string;
+  closure?: {
+    value_usd: number;
+    closure_type: 'auto_approve' | 'quorum_approve' | 'manual_approve' | 'dispute_resolved';
+    proof_tier: 'unknown' | 'self' | 'gateway' | 'sandbox' | 'tee' | 'witnessed_web';
+    owner_verified?: boolean;
+    owner_attestation_ref?: string;
+  };
+  penalty?: {
+    penalty_type:
+      | 'dispute_upheld_against_reviewer'
+      | 'dispute_upheld_against_worker'
+      | 'fraud_confirmed'
+      | 'spam_review'
+      | 'policy_violation';
+    severity?: number;
+    reason?: string;
+  };
+  recovery?: {
+    recovery_type: 'appeal_upheld_for_reviewer' | 'appeal_upheld_for_worker';
+    severity?: number;
+    reason?: string;
+  };
+  metadata?: Record<string, unknown>;
+};
+
+function minorToUsd(minor: string): number {
+  const parsed = parseNonNegativeMinor(minor);
+  if (parsed === null) return 0;
+  const integer = Number(parsed / 100n);
+  const cents = Number(parsed % 100n);
+  return integer + cents / 100;
+}
+
+function toRepProofTier(value: string | null | undefined): 'unknown' | 'self' | 'gateway' | 'sandbox' | 'tee' | 'witnessed_web' {
+  if (value === 'self' || value === 'gateway' || value === 'sandbox') {
+    return value;
+  }
+  if (value === 'tee') return 'tee';
+  if (value === 'witnessed_web') return 'witnessed_web';
+  return 'unknown';
+}
+
+async function emitClawrepLoopEvent(env: Env, envelope: ClawrepLoopEnvelope): Promise<void> {
+  try {
+    if (env.REP_EVENTS) {
+      await env.REP_EVENTS.send(envelope, { contentType: 'json' });
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawbounties] clawrep queue send failed source_event_id=${envelope.source_event_id}: ${message}`);
+  }
+
+  if (!env.CLAWREP_INGEST_KEY || env.CLAWREP_INGEST_KEY.trim().length === 0) {
+    return;
+  }
+
+  const url = `${resolveClawrepBaseUrl(env)}/v1/events/ingest-loop`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${env.CLAWREP_INGEST_KEY}`,
+      },
+      body: JSON.stringify(envelope),
+      signal: controller.signal,
+    });
+
+    if (!response.ok && response.status !== 409) {
+      const text = await response.text();
+      console.error(
+        `[clawbounties] clawrep ingest-loop failed status=${response.status} source_event_id=${envelope.source_event_id} body=${text.slice(0, 240)}`
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawbounties] clawrep ingest-loop error source_event_id=${envelope.source_event_id}: ${message}`);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -5439,6 +5547,8 @@ function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, un
     commit_sha: submission.commit_sha ?? null,
     repo_url: submission.repo_url ?? null,
     repo_claim_id: submission.repo_claim_id ?? null,
+    worker_did: submission.worker_did,
+    proof_tier: submission.proof_tier ?? null,
   };
 }
 
@@ -5648,6 +5758,28 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       }
     }
 
+    await emitClawrepLoopEvent(env, {
+      schema_version: '1',
+      source_event_id: `clawbounties:auto-approve:${bounty.bounty_id}:${submission.submission_id}:${approveKey}`,
+      source_service: 'clawbounties',
+      kind: 'closure',
+      did: submission.worker_did,
+      occurred_at: now,
+      closure: {
+        value_usd: minorToUsd(bounty.reward.amount_minor),
+        closure_type: 'auto_approve',
+        proof_tier: toRepProofTier(submission.proof_tier),
+        owner_verified: false,
+      },
+      metadata: {
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        test_harness_id,
+        test_result_id: testResultId,
+        closure_type: bounty.closure_type,
+      },
+    });
+
     return { applied: true };
   }
 
@@ -5783,6 +5915,27 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       };
     }
   }
+
+  await emitClawrepLoopEvent(env, {
+    schema_version: '1',
+    source_event_id: `clawbounties:auto-reject:${bounty.bounty_id}:${submission.submission_id}:${rejectKey}`,
+    source_service: 'clawbounties',
+    kind: 'penalty',
+    did: submission.worker_did,
+    occurred_at: now,
+    penalty: {
+      penalty_type: 'dispute_upheld_against_worker',
+      severity: 2,
+      reason: 'Auto-rejected: test harness failed',
+    },
+    metadata: {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      test_harness_id,
+      test_result_id: testResultId,
+      closure_type: bounty.closure_type,
+    },
+  });
 
   return { applied: true };
 }
@@ -8501,6 +8654,29 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
       decided_at: bounty.approved_at ?? bounty.updated_at,
     };
 
+    const sourceId = `clawbounties:approve:${bounty.bounty_id}:${resolvedSubmissionId}:${
+      bounty.approve_idempotency_key ?? idempotency_key
+    }`;
+    await emitClawrepLoopEvent(env, {
+      schema_version: '1',
+      source_event_id: sourceId,
+      source_service: 'clawbounties',
+      kind: 'closure',
+      did: bounty.worker_did,
+      occurred_at: response.decided_at,
+      closure: {
+        value_usd: minorToUsd(bounty.reward.amount_minor),
+        closure_type: 'manual_approve',
+        proof_tier: 'unknown',
+        owner_verified: false,
+      },
+      metadata: {
+        bounty_id: bounty.bounty_id,
+        submission_id: resolvedSubmissionId,
+        closure_path: 'requester_already_approved',
+      },
+    });
+
     return jsonResponse(response, 200, version);
   }
 
@@ -8639,6 +8815,27 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
     escrow: escrowResponse,
     decided_at: decidedAt,
   };
+
+  await emitClawrepLoopEvent(env, {
+    schema_version: '1',
+    source_event_id: `clawbounties:approve:${bounty.bounty_id}:${submission.submission_id}:${idempotency_key}`,
+    source_service: 'clawbounties',
+    kind: 'closure',
+    did: submission.worker_did,
+    occurred_at: decidedAt,
+    closure: {
+      value_usd: minorToUsd(bounty.reward.amount_minor),
+      closure_type: 'manual_approve',
+      proof_tier: toRepProofTier(submission.proof_tier),
+      owner_verified: false,
+    },
+    metadata: {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      closure_type: bounty.closure_type,
+      requester_did: requesterAuth.requester_did,
+    },
+  });
 
   return jsonResponse(response, 200, version);
 }
@@ -8846,6 +9043,28 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       decided_at: bounty.rejected_at ?? bounty.updated_at,
     };
 
+    const sourceId = `clawbounties:reject:${bounty.bounty_id}:${resolvedSubmissionId}:${
+      bounty.reject_idempotency_key ?? idempotency_key
+    }`;
+    await emitClawrepLoopEvent(env, {
+      schema_version: '1',
+      source_event_id: sourceId,
+      source_service: 'clawbounties',
+      kind: 'penalty',
+      did: bounty.worker_did,
+      occurred_at: response.decided_at,
+      penalty: {
+        penalty_type: 'dispute_upheld_against_worker',
+        severity: 2,
+        reason: reason ?? 'Requester disputed submission',
+      },
+      metadata: {
+        bounty_id: bounty.bounty_id,
+        submission_id: resolvedSubmissionId,
+        dispute_path: 'requester_already_disputed',
+      },
+    });
+
     return jsonResponse(response, 200, version);
   }
 
@@ -8988,6 +9207,26 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
     trial_case: trialCase,
     decided_at: decidedAt,
   };
+
+  await emitClawrepLoopEvent(env, {
+    schema_version: '1',
+    source_event_id: `clawbounties:reject:${bounty.bounty_id}:${submission.submission_id}:${idempotency_key}`,
+    source_service: 'clawbounties',
+    kind: 'penalty',
+    did: submission.worker_did,
+    occurred_at: decidedAt,
+    penalty: {
+      penalty_type: 'dispute_upheld_against_worker',
+      severity: 2,
+      reason: reason ?? 'Requester disputed submission',
+    },
+    metadata: {
+      bounty_id: bounty.bounty_id,
+      submission_id: submission.submission_id,
+      closure_type: bounty.closure_type,
+      requester_did: requesterAuth.requester_did,
+    },
+  });
 
   return jsonResponse(response, 200, version);
 }

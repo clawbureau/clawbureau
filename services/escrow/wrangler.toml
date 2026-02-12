@@ -13,10 +13,15 @@ binding = "ESCROW_DB"
 database_name = "clawescrow"
 database_id = "12711de7-c1ac-415f-ae43-e74e6ec6abca"
 
+[[queues.producers]]
+binding = "REP_EVENTS"
+queue = "clawrep-events"
+
 [vars]
-ESCROW_VERSION = "0.2.2"
+ESCROW_VERSION = "0.3.0"
 LEDGER_BASE_URL = "https://clawledger.com"
 CLAWCUTS_BASE_URL = "https://clawcuts.com"
+CLAWREP_BASE_URL = "https://clawrep.com"
 FEE_CLEARING_DOMAIN = "clawcuts"
 
 [env.staging]
@@ -30,8 +35,13 @@ binding = "ESCROW_DB"
 database_name = "clawescrow-staging"
 database_id = "d126ce15-8016-46ab-bfb6-d6c2a9e467c8"
 
+[[env.staging.queues.producers]]
+binding = "REP_EVENTS"
+queue = "clawrep-events-staging"
+
 [env.staging.vars]
-ESCROW_VERSION = "0.2.2"
+ESCROW_VERSION = "0.3.0"
 LEDGER_BASE_URL = "https://staging.clawledger.com"
 CLAWCUTS_BASE_URL = "https://staging.clawcuts.com"
+CLAWREP_BASE_URL = "https://staging.clawrep.com"
 FEE_CLEARING_DOMAIN = "clawcuts"

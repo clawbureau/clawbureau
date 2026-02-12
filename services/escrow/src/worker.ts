@@ -26,11 +26,20 @@ export interface Env {
   /** Defaults to https://clawcuts.com (set in wrangler vars). */
   CLAWCUTS_BASE_URL?: string;
 
+  /** Defaults to https://clawrep.com (set in wrangler vars). */
+  CLAWREP_BASE_URL?: string;
+
+  /** Ingest key used for clawrep loop endpoint. */
+  CLAWREP_INGEST_KEY?: string;
+
   /** Clearing account domain for fee pool transfers (defaults to clawcuts). */
   FEE_CLEARING_DOMAIN?: string;
 
   /** D1 database binding */
   ESCROW_DB: D1Database;
+
+  /** Optional direct queue producer binding to clawrep events. */
+  REP_EVENTS?: Queue;
 }
 
 type EscrowStatus = 'held' | 'released' | 'frozen' | 'cancelled';
@@ -298,6 +307,87 @@ function resolveClawcutsBaseUrl(env: Env): string {
   const base = env.CLAWCUTS_BASE_URL?.trim();
   if (base && base.length > 0) return base;
   return 'https://clawcuts.com';
+}
+
+function resolveClawrepBaseUrl(env: Env): string {
+  const base = env.CLAWREP_BASE_URL?.trim();
+  if (base && base.length > 0) return base;
+  return 'https://clawrep.com';
+}
+
+type ClawrepLoopEnvelope = {
+  schema_version: '1';
+  source_event_id: string;
+  source_service: 'escrow';
+  kind: 'closure' | 'penalty';
+  did: string;
+  occurred_at: string;
+  closure?: {
+    value_usd: number;
+    closure_type: 'auto_approve' | 'quorum_approve' | 'manual_approve' | 'dispute_resolved';
+    proof_tier: 'unknown' | 'self' | 'gateway' | 'sandbox' | 'tee' | 'witnessed_web';
+    owner_verified?: boolean;
+  };
+  penalty?: {
+    penalty_type:
+      | 'dispute_upheld_against_reviewer'
+      | 'dispute_upheld_against_worker'
+      | 'fraud_confirmed'
+      | 'spam_review'
+      | 'policy_violation';
+    severity?: number;
+    reason?: string;
+  };
+  metadata?: Record<string, unknown>;
+};
+
+function minorToUsd(minor: string): number {
+  const parsed = parseNonNegativeMinor(minor);
+  if (parsed === null) return 0;
+  const major = Number(parsed / 100n);
+  const cents = Number(parsed % 100n);
+  return major + cents / 100;
+}
+
+async function emitEscrowOutcomeToClawrep(env: Env, envelope: ClawrepLoopEnvelope): Promise<void> {
+  try {
+    if (env.REP_EVENTS) {
+      await env.REP_EVENTS.send(envelope, { contentType: 'json' });
+      return;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawescrow] clawrep queue send failed source_event_id=${envelope.source_event_id}: ${message}`);
+  }
+
+  if (!env.CLAWREP_INGEST_KEY || env.CLAWREP_INGEST_KEY.trim().length === 0) return;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(`${resolveClawrepBaseUrl(env)}/v1/events/ingest-loop`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${env.CLAWREP_INGEST_KEY}`,
+      },
+      body: JSON.stringify(envelope),
+      signal: controller.signal,
+    });
+
+    if (!response.ok && response.status !== 409) {
+      const text = await response.text();
+      console.error(
+        `[clawescrow] clawrep ingest-loop failed status=${response.status} source_event_id=${envelope.source_event_id} body=${text.slice(0, 240)}`
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[clawescrow] clawrep ingest-loop error source_event_id=${envelope.source_event_id}: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 interface CutsApplyTransfer {
@@ -1737,6 +1827,29 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
         referral_transfers: escrow.ledger_referral_event_ids,
       },
     };
+
+    if (escrow.worker_did) {
+      await emitEscrowOutcomeToClawrep(env, {
+        schema_version: '1',
+        source_event_id: `escrow:release:${escrow.escrow_id}:${escrow.release_idempotency_key ?? idempotency_key.trim()}`,
+        source_service: 'escrow',
+        kind: 'closure',
+        did: escrow.worker_did,
+        occurred_at: escrow.released_at ?? escrow.updated_at,
+        closure: {
+          value_usd: minorToUsd(escrow.worker_net_minor),
+          closure_type: 'dispute_resolved',
+          proof_tier: 'unknown',
+          owner_verified: false,
+        },
+        metadata: {
+          escrow_id: escrow.escrow_id,
+          buyer_did: escrow.buyer_did,
+          ledger_worker_event_id: escrow.ledger_worker_event_id,
+        },
+      });
+    }
+
     return jsonResponse(response, 200, version);
   }
 
@@ -1947,6 +2060,30 @@ async function handleReleaseEscrow(escrowId: string, request: Request, env: Env,
     },
   };
 
+  await emitEscrowOutcomeToClawrep(env, {
+    schema_version: '1',
+    source_event_id: `escrow:release:${locked.escrow_id}:${idempotency_key.trim()}`,
+    source_service: 'escrow',
+    kind: 'closure',
+    did: locked.worker_did,
+    occurred_at: releasedAt,
+    closure: {
+      value_usd: minorToUsd(locked.worker_net_minor),
+      closure_type: 'manual_approve',
+      proof_tier: 'unknown',
+      owner_verified: false,
+    },
+    metadata: {
+      escrow_id: locked.escrow_id,
+      buyer_did: locked.buyer_did,
+      approved_by: approved_by.trim(),
+      ledger_worker_event_id: workerEventId,
+      fee_event_count: feeEventIds.length,
+      referral_event_count: referralEventIds.length,
+      verification,
+    },
+  });
+
   return jsonResponse(response, 200, version);
 }
 
@@ -1978,6 +2115,28 @@ async function handleDisputeEscrow(escrowId: string, request: Request, env: Env,
       status: 'frozen',
       dispute_window_ends_at: escrow.dispute_window_ends_at,
     };
+
+    if (escrow.worker_did) {
+      await emitEscrowOutcomeToClawrep(env, {
+        schema_version: '1',
+        source_event_id: `escrow:dispute:${escrow.escrow_id}:${escrow.dispute_idempotency_key ?? idempotency_key.trim()}`,
+        source_service: 'escrow',
+        kind: 'penalty',
+        did: escrow.worker_did,
+        occurred_at: escrow.updated_at,
+        penalty: {
+          penalty_type: 'dispute_upheld_against_worker',
+          severity: 2,
+          reason: 'Escrow disputed',
+        },
+        metadata: {
+          escrow_id: escrow.escrow_id,
+          disputed_by: disputed_by.trim(),
+          dispute: escrow.dispute,
+        },
+      });
+    }
+
     return jsonResponse(response, 200, version);
   }
 
@@ -2027,6 +2186,28 @@ async function handleDisputeEscrow(escrowId: string, request: Request, env: Env,
     status: 'frozen',
     dispute_window_ends_at: locked.dispute_window_ends_at,
   };
+
+  if (locked.worker_did) {
+    await emitEscrowOutcomeToClawrep(env, {
+      schema_version: '1',
+      source_event_id: `escrow:dispute:${locked.escrow_id}:${idempotency_key.trim()}`,
+      source_service: 'escrow',
+      kind: 'penalty',
+      did: locked.worker_did,
+      occurred_at: lockNow,
+      penalty: {
+        penalty_type: 'dispute_upheld_against_worker',
+        severity: 2,
+        reason: isNonEmptyString(bodyRaw.reason) ? bodyRaw.reason.trim() : 'Escrow disputed',
+      },
+      metadata: {
+        escrow_id: locked.escrow_id,
+        buyer_did: locked.buyer_did,
+        disputed_by: disputed_by.trim(),
+        dispute,
+      },
+    });
+  }
 
   return jsonResponse(response, 200, version);
 }

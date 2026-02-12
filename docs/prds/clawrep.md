@@ -34,12 +34,14 @@ Compute deterministic, non-transferable reputation and trust tiers from verified
 ## 3) MVP Scope
 
 - Reputation ingest (`source_event_id` idempotent)
+- Queue-backed canonical ingest-loop envelopes (`closure|penalty|recovery`)
 - Concave reputation scoring
 - Closure/proof/owner-verified weighted scoring
-- Deterministic dispute penalties
+- Deterministic dispute penalties + appeal recovery deltas
 - Tier calculation + dispute-rate capping
-- Deterministic reviewer selection/read APIs
+- Deterministic reviewer selection/read APIs with anti-collusion signals
 - Daily decay job + auditability
+- Ops controls: queue replay/status, ingest SLO reports, drift recompute reports
 
 ## 4) Non-Goals (v0)
 
@@ -84,9 +86,25 @@ Compute deterministic, non-transferable reputation and trust tiers from verified
 ### CRP-US-007 — Owner-verified weighting
 **As a** platform, **I want** owner verification weighting **so that** sybil risk is reduced without non-deterministic scoring.
 
+### CRP-US-008 — Closed-loop ingest
+**As a** trust platform, **I want** marketplace/trials/escrow outcomes to publish canonical ingest-loop envelopes **so that** reputation updates are automatic and auditable.
+
+### CRP-US-009 — Appeal recovery path
+**As a** trust governance layer, **I want** deterministic appeal recovery score deltas **so that** upheld appeals can partially recover trust without manual overrides.
+
+### CRP-US-010 — Reviewer anti-collusion hardening
+**As a** marketplace, **I want** reviewer selection to apply deterministic cooldown/history/pairing penalties **so that** collusion risk is reduced while API compatibility is preserved.
+
+### CRP-US-011 — Queue DLQ + replay operations
+**As ops**, **I want** replay controls for failed queue ingest events **so that** delivery gaps can be repaired deterministically.
+
+### CRP-US-012 — Drift + SLO observability
+**As reliability operations**, **I want** drift recompute and ingest SLO endpoints **so that** profile consistency and latency/error posture are continuously measurable.
+
 ## 8) Required API Surface (MVP)
 
 - `POST /v1/events/ingest`
+- `POST /v1/events/ingest-loop`
 - `GET /v1/rep/:did`
 - `GET /v1/tiers/:did`
 - `POST /v1/reviewers/select`
@@ -94,6 +112,11 @@ Compute deterministic, non-transferable reputation and trust tiers from verified
 - `POST /v1/penalties/apply`
 - `POST /v1/decay/run`
 - `GET /v1/audit/events`
+- `GET /v1/ops/queue/status`
+- `POST /v1/ops/queue/replay`
+- `GET /v1/ops/slo/ingest`
+- `POST /v1/ops/drift/recompute`
+- `GET /v1/ops/drift/latest`
 
 ## 9) Deterministic Rules
 
@@ -114,14 +137,23 @@ Implementation delivered in `services/clawrep`:
 
 New schemas:
 - `packages/schema/reputation/reputation_event_ingest.v1.json`
+- `packages/schema/reputation/reputation_event_loop_envelope.v1.json`
 - `packages/schema/reputation/reputation_profile.v1.json`
 - `packages/schema/reputation/reviewer_selection_request.v1.json`
 - `packages/schema/reputation/reviewer_selection_response.v1.json`
 
 Compatibility:
-- `POST /v1/reviewers/select` and `GET /v1/reviewers/:did` match existing `packages/bounties` reviewer client contract.
+- `POST /v1/reviewers/select` and `GET /v1/reviewers/:did` remain compatible with existing `packages/bounties` reviewer client contract.
 - Any optional contract notes are documented in:
   - `services/clawrep/COMPATIBILITY-NOTE-AGENT-C-reviewer-contract.md`
+
+## 11) 2026-02-12 addendum — TRUST-REP-002 closed-loop reputation controls
+
+- Added canonical loop ingest endpoint (`POST /v1/events/ingest-loop`) with queue-first processing and source-event idempotency.
+- Added deterministic recovery event lane (`appeal_upheld_for_reviewer|appeal_upheld_for_worker`).
+- Added anti-collusion reviewer selection metadata and deterministic signal scoring.
+- Added queue DLQ/replay operations + ingest SLO + drift recompute/latest endpoints.
+- Added producer glue in `clawbounties`, `clawtrials`, and `escrow` for automated event publication.
 
 ---
 

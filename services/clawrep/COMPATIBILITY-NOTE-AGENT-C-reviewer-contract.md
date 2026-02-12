@@ -7,23 +7,30 @@ Scope: `POST /v1/reviewers/select`, `GET /v1/reviewers/:did`
 
 No breaking request/response delta against existing `packages/bounties` reviewer client contract.
 
-## Request contract (unchanged)
+## Request contract (compatible additive extension)
 
 `POST /v1/reviewers/select`
-- `bounty_id: string`
-- `difficulty_scalar: number`
-- `quorum_size: number`
-- `min_reputation_score?: number`
-- `require_owner_verified?: boolean`
-- `exclude_dids?: string[]`
-- `submission_proof_tier?: "unknown"|"self"|"gateway"|"sandbox"|"tee"|"witnessed_web"`
+- Existing fields preserved:
+  - `bounty_id: string`
+  - `difficulty_scalar: number`
+  - `quorum_size: number`
+  - `min_reputation_score?: number`
+  - `require_owner_verified?: boolean`
+  - `exclude_dids?: string[]`
+  - `submission_proof_tier?: "unknown"|"self"|"gateway"|"sandbox"|"tee"|"witnessed_web"`
+- New optional fields (non-breaking):
+  - `requester_did?: string`
+  - `worker_did?: string`
 
-## Response contract (unchanged)
+## Response contract (compatible additive extension)
 
 `POST /v1/reviewers/select`
-- `bounty_id: string`
-- `reviewers: Array<{ reviewer_did: string; reputation_score: number; is_owner_verified: boolean; owner_attestation_ref?: string }>`
-- `selected_at: string (ISO datetime)`
+- Existing fields preserved:
+  - `bounty_id: string`
+  - `reviewers: Array<{ reviewer_did: string; reputation_score: number; is_owner_verified: boolean; owner_attestation_ref?: string }>`
+  - `selected_at: string (ISO datetime)`
+- New optional/additive field:
+  - `selection_metadata` (deterministic anti-collusion reasoning + exclusion counters)
 
 `GET /v1/reviewers/:did`
 - `404` for unknown reviewer DID

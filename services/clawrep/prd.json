@@ -100,6 +100,76 @@
       "priority": 7,
       "passes": true,
       "notes": "Delivered with owner_verified weighting and reviewer owner verification fields."
+    },
+    {
+      "id": "CRP-US-008",
+      "title": "Canonical ingest-loop envelopes",
+      "description": "As trust platform infrastructure, we need queue-backed canonical ingest-loop envelopes so external outcome producers feed clawrep deterministically.",
+      "acceptanceCriteria": [
+        "POST /v1/events/ingest-loop validates canonical envelope schema and enqueues event",
+        "Queue processing supports closure, penalty, and recovery envelopes",
+        "source_event_id idempotency remains authoritative",
+        "Typecheck and tests pass"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": "Delivered canonical queue-backed ingest-loop in clawrep (`POST /v1/events/ingest-loop`) with closure|penalty|recovery envelopes and idempotent source_event_id processing."
+    },
+    {
+      "id": "CRP-US-009",
+      "title": "Appeal recovery scoring",
+      "description": "As trust governance, we need deterministic appeal recovery score deltas to offset upheld-dispute penalties.",
+      "acceptanceCriteria": [
+        "Core supports recovery event type with bounded severity",
+        "Recovery event ingest is idempotent and auditable",
+        "Score deltas are deterministic and positive",
+        "Typecheck and tests pass"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": "Delivered deterministic recovery scoring lane (`computeRecoveryScoreDelta`) and recovery ingest path with bounded severity + audit trail."
+    },
+    {
+      "id": "CRP-US-010",
+      "title": "Reviewer anti-collusion deterministic signals",
+      "description": "As marketplaces, we need anti-collusion controls in reviewer selection without breaking existing API clients.",
+      "acceptanceCriteria": [
+        "Selection considers requester/worker exclusion, cooldown, and historical pairing",
+        "Selection metadata is deterministic and auditable",
+        "Existing reviewer payload compatibility is preserved",
+        "Typecheck and tests pass"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Delivered anti-collusion reviewer selection with requester/worker exclusion, cooldown/history/pair penalties, and additive selection_metadata response."
+    },
+    {
+      "id": "CRP-US-011",
+      "title": "DLQ + replay operations",
+      "description": "As ops, we need DLQ safety and replay tooling for failed ingest-loop events.",
+      "acceptanceCriteria": [
+        "Wrangler queue consumer binds dead_letter_queue for staging and prod",
+        "Replay endpoint can replay failed events by source_event_id or batch",
+        "Queue status endpoint surfaces failure/replay counters",
+        "Typecheck and tests pass"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Delivered DLQ + replay controls: dead_letter_queue config, queue failure audit events, `GET /v1/ops/queue/status`, and `POST /v1/ops/queue/replay`."
+    },
+    {
+      "id": "CRP-US-012",
+      "title": "Drift recompute + ingest SLO endpoints",
+      "description": "As reliability operations, we need deterministic drift reports and ingest SLO telemetry endpoints.",
+      "acceptanceCriteria": [
+        "POST /v1/ops/drift/recompute emits deterministic report and optional repairs",
+        "GET /v1/ops/drift/latest returns latest persisted drift report",
+        "GET /v1/ops/slo/ingest reports bounded success/error/latency metrics",
+        "Typecheck and tests pass"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Delivered drift + SLO contracts: `POST /v1/ops/drift/recompute`, `GET /v1/ops/drift/latest`, `GET /v1/ops/slo/ingest`, cron drift reporting, and D1 `rep_drift_reports` persistence."
     }
   ]
 }
