@@ -1,0 +1,49 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "bundle_a029a281-217f-4101-879a-150a2006ef52",
+    "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+    "urm": {
+      "urm_version": "1",
+      "urm_id": "urm_a288b13b-009c-46af-a5ff-8a6f199526a8",
+      "resource_type": "universal_run_manifest",
+      "resource_hash_b64u": "CLovDCGCoPxWAskJCBq-DqaQ_TqZo6BGg5HGFSuqvSA"
+    },
+    "event_chain": [
+      {
+        "event_id": "evt_85a12bd5-7f6e-4a3b-870c-2d13392b9721",
+        "run_id": "run_624263af-e96d-4372-b456-dff1d3d67e85",
+        "event_type": "run_start",
+        "timestamp": "2026-02-12T16:45:53.518Z",
+        "payload_hash_b64u": "Mo40F7RgruqB0H91Hd7MXAjhk9-hSqGyxGQyJXvomkY",
+        "prev_hash_b64u": null,
+        "event_hash_b64u": "6qM8fLgWojopdaLJkT2xrzj1s7Yy8_CXOY_T8GwJddA"
+      },
+      {
+        "event_id": "evt_1cb47dcb-c3cf-416d-8031-66468c97027b",
+        "run_id": "run_624263af-e96d-4372-b456-dff1d3d67e85",
+        "event_type": "run_end",
+        "timestamp": "2026-02-12T16:45:53.543Z",
+        "payload_hash_b64u": "sgGNpB_eUhbcX4NUuYvVrGj3Y-JQoJhmidZTnmlEPgk",
+        "prev_hash_b64u": "6qM8fLgWojopdaLJkT2xrzj1s7Yy8_CXOY_T8GwJddA",
+        "event_hash_b64u": "l_NQ7YdU35D-wjp66A5PCbDEyx_0-yiFQG3slusNwCU"
+      }
+    ],
+    "metadata": {
+      "harness": {
+        "id": "pi",
+        "version": "1.0.0",
+        "runtime": "host",
+        "config_hash_b64u": "EKeb0ViOiqlpPvvBLO1Xc3p-rbjcPf4lIl2m9TM414o"
+      }
+    }
+  },
+  "payload_hash_b64u": "GKGxhAy8o8EwEDnFqRU8um04_552-IrjT21jgsSSz38",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "iTzWeVX5SNlZ-Re5M4bEILmUr_0mPM-UjQRufsbgQb_MjSyi_tl-mN3wPfjQtDMDeUS2mz77ux-L9xs6cOAsCQ",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "issued_at": "2026-02-12T16:45:53.544Z"
+}
