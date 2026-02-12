@@ -1,0 +1,51 @@
+{
+  "urm_version": "1",
+  "urm_id": "urm_d4afe97b-cef3-4847-8ce7-30397ae6f58c",
+  "run_id": "run_475c15b0-8ceb-4d39-9316-6bf6c4cf4426",
+  "agent_did": "did:key:z6Mkh94VVvCWjth7HpMRdbJkQvt55tBxz53iSMBTaWKhSGDq",
+  "issued_at": "2026-02-12T14:16:40.699Z",
+  "harness": {
+    "id": "pi",
+    "version": "1.0.0",
+    "runtime": "host",
+    "config_hash_b64u": "EKeb0ViOiqlpPvvBLO1Xc3p-rbjcPf4lIl2m9TM414o"
+  },
+  "inputs": [
+    {
+      "type": "command",
+      "hash_b64u": "FGPLhrVvbR23eZHoxxcDFHRKZkzLbGfqWPgvrRSRCQI",
+      "metadata": {
+        "command": "node -e console.log('cpl-us-010 dogfood v3')"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "type": "exit_code",
+      "hash_b64u": "X-zrZv_IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V-k",
+      "metadata": {
+        "exitCode": 0
+      }
+    },
+    {
+      "type": "trust_pulse",
+      "hash_b64u": "kmTrTkQod8C0-YxoJv55vO6sif092XxdycPioYEc85Q",
+      "content_type": "application/json",
+      "metadata": {
+        "schema": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+        "artifact_hash_b64u": "kmTrTkQod8C0-YxoJv55vO6sif092XxdycPioYEc85Q",
+        "evidence_class": "self_reported",
+        "tier_uplift": false
+      }
+    }
+  ],
+  "event_chain_root_hash_b64u": "H2IohD8zGZoROPytMrpZ9fAPfXNpjlAkiyssmkTsQ34",
+  "metadata": {
+    "trust_pulse": {
+      "schema": "https://schemas.clawbureau.org/claw.poh.trust_pulse.v1.json",
+      "artifact_hash_b64u": "kmTrTkQod8C0-YxoJv55vO6sif092XxdycPioYEc85Q",
+      "evidence_class": "self_reported",
+      "tier_uplift": false
+    }
+  }
+}

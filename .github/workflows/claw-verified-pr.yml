@@ -1,0 +1,36 @@
+name: claw-verified-pr
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install + build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm ci
+          npm run build
+
+      - name: Install + build clawverify-cli
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+          npm run build
+
+      - name: Claw Verified PR (offline)
+        run: |
+          node scripts/protocol/run-claw-verified-pr.mjs

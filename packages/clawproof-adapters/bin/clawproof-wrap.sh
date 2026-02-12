@@ -16,8 +16,13 @@
 # Environment:
 #   CLAWPROOF_PROXY_URL    — clawproxy base URL (required)
 #   CLAWPROOF_PROXY_TOKEN  — bearer token for proxy auth (optional)
-#   CLAWPROOF_KEY_FILE     — path to JWK key file (default: .clawproof-key.json)
-#   CLAWPROOF_OUTPUT_DIR   — output dir for proof artifacts (default: .clawproof/)
+#   CLAWPROOF_KEY_FILE     — path to JWK key file (default: <repo>/.clawproof-key.json)
+#   CLAWPROOF_OUTPUT_DIR   — output dir for proof artifacts (default: <repo>/artifacts/poh/<branch>/)
+#
+# Optional post-run offline verification (CPL-US-010):
+#   CLAWPROOF_VERIFY        — set to 1 to verify the generated proof bundle offline
+#   CLAWPROOF_VERIFY_CONFIG — config path (default: packages/schema/fixtures/clawverify.config.clawbureau.v1.json)
+#   CLAWPROOF_VERIFY_STRICT — set to 1 to fail the wrapper when verification FAILs
 #
 # The wrapper:
 #   1. Injects provider base URL env vars (ANTHROPIC_BASE_URL, OPENAI_BASE_URL)
