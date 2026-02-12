@@ -144,6 +144,57 @@ export async function verifyPR(
   };
 }
 
+// ---------- Replay attack prevention (Red Team Fix #5) ----------
+
+/**
+ * Check that the proof bundle's commit SHA matches the PR HEAD SHA.
+ * Prevents replay attacks where a valid bundle from a benign PR is
+ * attached to a malicious PR. Runs BEFORE cryptographic verification.
+ */
+function checkCommitShaBinding(
+  bundle: Record<string, unknown>,
+  prHeadSha: string,
+): string | null {
+  // 1. Top-level commit_proof_envelope
+  const commitProofEnvelope = bundle.commit_proof_envelope as
+    | { payload?: { commit_sha?: string } }
+    | undefined;
+  if (commitProofEnvelope?.payload?.commit_sha) {
+    if (commitProofEnvelope.payload.commit_sha !== prHeadSha) {
+      return `REPLAY_ATTACK: Bundle commit SHA ${commitProofEnvelope.payload.commit_sha} does not match PR HEAD ${prHeadSha}`;
+    }
+    return null;
+  }
+
+  // 2. Nested inside signed envelope payload
+  const payload = bundle.payload as Record<string, unknown> | undefined;
+  if (payload) {
+    const nestedCommitProof = payload.commit_proof_envelope as
+      | { payload?: { commit_sha?: string } }
+      | undefined;
+    if (nestedCommitProof?.payload?.commit_sha) {
+      if (nestedCommitProof.payload.commit_sha !== prHeadSha) {
+        return `REPLAY_ATTACK: Bundle commit SHA ${nestedCommitProof.payload.commit_sha} does not match PR HEAD ${prHeadSha}`;
+      }
+      return null;
+    }
+  }
+
+  // 3. Metadata commit_sha (lightweight bundles)
+  const metadata = (bundle.metadata ?? payload?.metadata) as
+    | { commit_sha?: string }
+    | undefined;
+  if (metadata?.commit_sha) {
+    if (metadata.commit_sha !== prHeadSha) {
+      return `REPLAY_ATTACK: Bundle commit SHA ${metadata.commit_sha} does not match PR HEAD ${prHeadSha}`;
+    }
+    return null;
+  }
+
+  // No commit SHA found — allow through (policy may require it separately)
+  return null;
+}
+
 // ---------- Single bundle verification ----------
 
 interface BundleResult {

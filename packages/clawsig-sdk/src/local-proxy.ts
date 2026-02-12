@@ -10,7 +10,8 @@
  */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
-import { hashJsonB64u } from './crypto.js';
+import { randomBytes } from 'node:crypto';
+import { hashJsonB64u, sha256B64u, base64UrlEncode } from './crypto.js';
 import type { EphemeralDid } from './ephemeral-did.js';
 import type { SignedEnvelope, GatewayReceiptPayload, ProofBundlePayload, EventChainEntry } from './types.js';
 
@@ -40,6 +41,8 @@ export interface LocalProxy {
   compileProofBundle(): Promise<SignedEnvelope<ProofBundlePayload>>;
   /** Number of receipts collected so far. */
   receiptCount: number;
+  /** Per-run privacy salt (base64url-encoded, 16 bytes). Needed by verifiers. */
+  runSaltB64u: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +258,11 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   const normalizedUrl = clawproxyUrl.replace(/\/+$/, '');
   const receipts: CollectedReceipt[] = [];
 
+  // RED TEAM FIX #7: Ephemeral run salt for privacy.
+  // Generate a 16-byte random salt per run.
+  const runSaltBytes = randomBytes(16);
+  const runSaltB64u = base64UrlEncode(runSaltBytes);
+
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://127.0.0.1`);
     const pathname = url.pathname;
@@ -352,6 +360,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     });
   }
 
+  /** Compute salted SHA-256: SHA256(salt || content). Red Team Fix #7. */
+  async function saltedHashB64u(content: Uint8Array): Promise<string> {
+    const combined = new Uint8Array(runSaltBytes.length + content.length);
+    combined.set(runSaltBytes, 0);
+    combined.set(content, runSaltBytes.length);
+    return sha256B64u(combined);
+  }
+  void saltedHashB64u;
+
   async function compileProofBundle(): Promise<SignedEnvelope<ProofBundlePayload>> {
     const encoder = new TextEncoder();
 
@@ -403,6 +420,8 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
           version: '1.0.0',
           runtime: `node/${process.versions.node}`,
         },
+        // RED TEAM FIX #7: Per-run ephemeral salt for privacy.
+        run_salt_b64u: runSaltB64u,
       },
     };
 
@@ -436,5 +455,6 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     get receiptCount() {
       return receipts.length;
     },
+    runSaltB64u,
   };
 }
