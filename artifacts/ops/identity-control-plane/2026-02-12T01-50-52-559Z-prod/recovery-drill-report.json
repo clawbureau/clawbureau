@@ -1,0 +1,32 @@
+{
+  "env": "prod",
+  "generated_at": "2026-02-12T01:50:57.100Z",
+  "export": {
+    "status": "exported",
+    "event_key": "events:control-plane:8229138942:identity-export:did:key:z6MkgKQqDXwrNGcMaNLx1M5tKix89pqKKW3P7xLoCd6Xhmki:4aDW5oy6FXROM3B3b4hlQuCQTl7u2jS5Xw1_lH-64B8"
+  },
+  "tampered_import": {
+    "status": 409,
+    "error": "IMPORT_BUNDLE_TAMPERED",
+    "message": "bundle_hash_b64u does not match payload hash",
+    "pass": true
+  },
+  "import_valid": {
+    "status": 200,
+    "body": {
+      "status": "imported",
+      "bundle_hash_b64u": "4aDW5oy6FXROM3B3b4hlQuCQTl7u2jS5Xw1_lH-64B8",
+      "controller_did": "did:key:z6MkkrzSDEi6VAcxby2WpVBUKan3rMyZE8L6Ec9GtYum1CPX",
+      "event_key": "events:control-plane:8229138941:identity-import:did:key:z6MkgKQqDXwrNGcMaNLx1M5tKix89pqKKW3P7xLoCd6Xhmki:4aDW5oy6FXROM3B3b4hlQuCQTl7u2jS5Xw1_lH-64B8"
+    },
+    "pass": true
+  },
+  "import_replay": {
+    "status": 200,
+    "body": {
+      "status": "already_imported",
+      "bundle_hash_b64u": "4aDW5oy6FXROM3B3b4hlQuCQTl7u2jS5Xw1_lH-64B8"
+    },
+    "pass": true
+  }
+}

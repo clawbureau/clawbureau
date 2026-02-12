@@ -10,6 +10,7 @@ Shared JSON schemas for Claw Bureau services.
 - `policy/` — policy contracts (Work Policy Contracts / WPC).
 - `poh/` — proof-of-harness schemas.
 - `payments/` — machine-payment settlement schemas.
+- `reputation/` — deterministic reputation/selection schemas.
 - `fixtures/` — non-schema fixtures/test vectors (used by verifiers/tests).
 
 ## Money conventions
@@ -45,6 +46,12 @@ Shared JSON schemas for Claw Bureau services.
 ### `payments/`
 - `machine_payment_settlement.v1.json`
 - `machine_payment_settlement_envelope.v1.json`
+
+### `reputation/`
+- `reputation_event_ingest.v1.json`
+- `reputation_profile.v1.json`
+- `reviewer_selection_request.v1.json`
+- `reviewer_selection_response.v1.json`
 
 ### `poh/`
 - `commit_proof.v1.json`

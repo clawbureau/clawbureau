@@ -1,0 +1,23 @@
+{
+  "env": "staging",
+  "generated_at": "2026-02-12T01:50:33.722Z",
+  "deployment_versions": {
+    "clawclaim": null,
+    "clawscope": null,
+    "clawverify": null,
+    "clawcontrols": null,
+    "clawproxy": null
+  },
+  "outputs": {
+    "conformance_matrix": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/smoke/identity-control-plane/2026-02-12T01-50-25-165Z-staging/conformance-matrix.json",
+    "key_transparency_report": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/ops/identity-control-plane/2026-02-12T01-50-25-165Z-staging/key-transparency-report.json",
+    "revocation_slo_report": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/ops/identity-control-plane/2026-02-12T01-50-25-165Z-staging/revocation-slo-report.json",
+    "recovery_drill_report": "/Users/gfw/clawd/tmp/clawbureau-identity-control-plane/artifacts/ops/identity-control-plane/2026-02-12T01-50-25-165Z-staging/recovery-drill-report.json"
+  },
+  "pass": {
+    "conformance": true,
+    "key_transparency": true,
+    "revocation_slo": true,
+    "recovery_drill": true
+  }
+}

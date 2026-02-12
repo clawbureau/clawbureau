@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/claw.reputation.reputation_profile.v1.json",
+  "title": "Reputation Profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "did",
+    "reputation_score",
+    "events_count",
+    "penalties_count",
+    "dispute_penalties_count",
+    "is_owner_verified",
+    "tier"
+  ],
+  "properties": {
+    "did": { "type": "string", "minLength": 16, "pattern": "^did:" },
+    "reputation_score": { "type": "number", "minimum": 0 },
+    "events_count": { "type": "integer", "minimum": 0 },
+    "penalties_count": { "type": "integer", "minimum": 0 },
+    "dispute_penalties_count": { "type": "integer", "minimum": 0 },
+    "is_owner_verified": { "type": "boolean" },
+    "owner_attestation_ref": { "type": ["string", "null"] },
+    "tier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier", "tier_label", "capped_by_dispute_rate", "dispute_rate"],
+      "properties": {
+        "tier": { "type": "integer", "enum": [0, 1, 2, 3] },
+        "tier_label": { "type": "string", "enum": ["new", "emerging", "trusted", "elite"] },
+        "capped_by_dispute_rate": { "type": "boolean" },
+        "dispute_rate": { "type": "number", "minimum": 0 }
+      }
+    },
+    "last_event_at": { "type": ["string", "null"], "format": "date-time" },
+    "last_decay_at": { "type": ["string", "null"], "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

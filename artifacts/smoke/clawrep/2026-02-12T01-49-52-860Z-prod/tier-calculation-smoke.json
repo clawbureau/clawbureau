@@ -1,0 +1,26 @@
+{
+  "env": "prod",
+  "base_url": "https://clawrep.com",
+  "didA": {
+    "did": "did:key:z6MkrepA1770860992861",
+    "reputation_score": 108.36243200000001,
+    "tier": 1,
+    "tier_label": "emerging",
+    "capped_by_dispute_rate": true,
+    "dispute_rate": 0.333333,
+    "evaluated_at": "2026-02-12T01:49:59.149Z"
+  },
+  "didB": {
+    "did": "did:key:z6MkrepB1770860992861",
+    "reputation_score": 200.59333700000002,
+    "tier": 2,
+    "tier_label": "trusted",
+    "capped_by_dispute_rate": false,
+    "dispute_rate": 0,
+    "evaluated_at": "2026-02-12T01:49:59.199Z"
+  },
+  "assertions": {
+    "didA_tier_range": true,
+    "didB_tier_range": true
+  }
+}

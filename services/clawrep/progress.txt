@@ -1,0 +1,52 @@
+## Codebase Patterns
+- clawrep is a Cloudflare Worker reputation service with D1 as authoritative state.
+- Reputation ingest is idempotent by `source_event_id`.
+- Reviewer selection must stay contract-compatible with `packages/bounties` reviewer client types.
+- Scoring/tiers are deterministic and fail-closed.
+
+# Ralph Progress Log
+Started: 2026-02-12T02:32:00Z
+---
+
+## 2026-02-12T01:53:00Z - CRP-OPS-001 clawrep MVP shipped
+- What was implemented
+  - Bootstrapped new service `services/clawrep` with deterministic core + Worker API.
+  - Added D1 foundation migration:
+    - `migrations/0001_reputation_foundation.sql`
+  - Implemented deterministic core logic in `src/core.ts`:
+    - concave scoring + closure/proof/owner weighting
+    - deterministic penalty schedule
+    - deterministic tier derivation with dispute-rate cap
+    - deterministic reviewer selection
+  - Implemented fail-closed API/auth in `src/index.ts`:
+    - `REP_INGEST_KEY` required for ingest
+    - `REP_ADMIN_KEY` required for penalty/decay/audit
+  - Added reviewer compatibility note:
+    - `COMPATIBILITY-NOTE-AGENT-C-reviewer-contract.md`
+  - Added smoke harness:
+    - `scripts/clawrep/smoke-clawrep-mvp.mjs`
+  - Added schema package entries:
+    - `packages/schema/reputation/*.json`
+- Quality checks
+  - `cd services/clawrep && npm run typecheck`
+  - `cd services/clawrep && npm test`
+- Cloudflare operations
+  - Created D1 databases:
+    - `clawrep-staging` (`ad8ea2ef-721c-4349-aa86-08840502c03e`)
+    - `clawrep` (`0b20f710-429e-470d-8af1-31907c62e5b7`)
+  - Created queues:
+    - `clawrep-events-staging`
+    - `clawrep-events`
+  - Created KV namespaces for `REP_CACHE`:
+    - staging `f8a137574fc54522a241ba6b5d7bf260`
+    - prod `d949e219f2704be79474853a560d7710`
+  - Applied remote D1 migrations (staging + prod)
+  - Deployed workers:
+    - staging version `e41c2e88-9c81-4673-b99d-322e007e3aba`
+    - prod version `b54e2e0d-9062-4782-9a4b-87a84129f249`
+- Smoke artifacts
+  - staging: `artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/`
+  - prod: `artifacts/smoke/clawrep/2026-02-12T01-49-52-860Z-prod/`
+- Ops summaries
+  - staging: `artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json`
+  - prod: `artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json`

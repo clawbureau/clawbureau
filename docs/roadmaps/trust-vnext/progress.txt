@@ -929,3 +929,69 @@ Started: 2026-02-07T19:53:07Z
   - key transparency/token-control deterministic outcomes (`TOKEN_CONTROL_TRANSPARENCY_*`)
   - transition contract enforcement (`TOKEN_CONTROL_TRANSITION_FORBIDDEN`)
   - revocation fail-closed behavior (`TOKEN_REVOKED` path after canonical revoke)
+
+## 2026-02-12T01:52:00Z - TRUST-REP-001 M6 stabilization watch (post-deploy interval)
+- What was implemented
+  - Re-ran M6 conformance suite for staging and prod:
+    - staging: `artifacts/smoke/identity-control-plane/2026-02-12T01-50-25-165Z-staging/conformance-matrix.json`
+    - prod: `artifacts/smoke/identity-control-plane/2026-02-12T01-50-52-559Z-prod/conformance-matrix.json`
+  - Produced post-deploy watch reports with baseline delta analysis:
+    - staging: `artifacts/ops/identity-control-plane/2026-02-12T01-50-25-165Z-staging/watch-report.json`
+    - prod: `artifacts/ops/identity-control-plane/2026-02-12T01-50-52-559Z-prod/watch-report.json`
+- Watch outcomes
+  - Error-bucket deltas: unchanged (`LEGACY_AUTH_FORBIDDEN`, `TOKEN_REQUIRED`, `PLATFORM_PAID_REQUIRES_DID`, `NONE` all delta=0)
+  - Auth drift evidence: none detected across canonical/legacy control cases
+  - Conformance remained green (`failed=0`) for staging and prod
+
+## 2026-02-12T01:53:00Z - CRP-OPS-001 clawrep MVP productionization (CRP-US-001..007)
+- What was implemented
+  - Added canonical service `services/clawrep` with deterministic/fail-closed API surface:
+    - `POST /v1/events/ingest`
+    - `GET /v1/rep/:did`
+    - `GET /v1/tiers/:did`
+    - `POST /v1/reviewers/select`
+    - `GET /v1/reviewers/:did`
+    - `POST /v1/penalties/apply`
+    - `POST /v1/decay/run`
+    - `GET /v1/audit/events`
+  - Added D1 schema migration:
+    - `services/clawrep/migrations/0001_reputation_foundation.sql`
+  - Added deterministic scoring/tier/reviewer core module:
+    - `services/clawrep/src/core.ts`
+  - Added contract-compatible reviewer note:
+    - `services/clawrep/COMPATIBILITY-NOTE-AGENT-C-reviewer-contract.md`
+  - Added new schemas:
+    - `packages/schema/reputation/reputation_event_ingest.v1.json`
+    - `packages/schema/reputation/reputation_profile.v1.json`
+    - `packages/schema/reputation/reviewer_selection_request.v1.json`
+    - `packages/schema/reputation/reviewer_selection_response.v1.json`
+- Cloudflare stack decisions
+  - Runtime: Workers (`clawrep`, `clawrep-staging`)
+  - Authoritative store: D1 (`clawrep`, `clawrep-staging`)
+  - Async processing: Queues (`clawrep-events`, `clawrep-events-staging`)
+  - Scheduled decay: Cron (`7 0 * * *`)
+  - Optional cache: KV (`REP_CACHE` prod+staging)
+  - Wrangler hygiene:
+    - `wrangler types src/env.d.ts`
+    - `wrangler deploy --dry-run --env staging`
+    - `wrangler deploy --dry-run`
+    - `wrangler d1 migrations apply ... --remote` (staging/prod)
+- Quality checks
+  - `cd services/clawrep && npm run typecheck && npm test`
+- Deployment status
+  - staging: `clawrep-staging` -> `e41c2e88-9c81-4673-b99d-322e007e3aba`
+  - prod: `clawrep` -> `b54e2e0d-9062-4782-9a4b-87a84129f249`
+- Smoke artifacts
+  - staging: `artifacts/smoke/clawrep/2026-02-12T01-49-42-526Z-staging/`
+    - `ingest-replay-smoke.json`
+    - `reviewer-selection-smoke.json`
+    - `decay-penalty-smoke.json`
+    - `tier-calculation-smoke.json`
+  - prod: `artifacts/smoke/clawrep/2026-02-12T01-49-52-860Z-prod/`
+    - `ingest-replay-smoke.json`
+    - `reviewer-selection-smoke.json`
+    - `decay-penalty-smoke.json`
+    - `tier-calculation-smoke.json`
+  - ops summaries:
+    - `artifacts/ops/clawrep/2026-02-12T01-49-42-526Z-staging/deploy-summary.json`
+    - `artifacts/ops/clawrep/2026-02-12T01-49-52-860Z-prod/deploy-summary.json`

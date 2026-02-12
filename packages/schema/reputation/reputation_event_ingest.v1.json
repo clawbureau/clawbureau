@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/claw.reputation.reputation_event_ingest.v1.json",
+  "title": "Reputation Event Ingest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_event_id",
+    "did",
+    "event_type",
+    "value_usd",
+    "closure_type",
+    "proof_tier"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "source_event_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "did": { "type": "string", "minLength": 16, "pattern": "^did:" },
+    "event_type": { "const": "closure" },
+    "value_usd": { "type": "number", "minimum": 0, "maximum": 1000000 },
+    "closure_type": {
+      "type": "string",
+      "enum": ["auto_approve", "quorum_approve", "manual_approve", "dispute_resolved"]
+    },
+    "proof_tier": {
+      "type": "string",
+      "enum": ["unknown", "self", "gateway", "sandbox", "tee", "witnessed_web"]
+    },
+    "owner_verified": { "type": "boolean" },
+    "owner_attestation_ref": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object", "additionalProperties": true }
+  }
+}
