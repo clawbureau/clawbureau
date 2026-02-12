@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/delegation_receipt_envelope.v1.json",
+  "title": "Delegation Receipt Envelope v1",
+  "description": "A signed envelope wrapping a delegation receipt. Uses the same signed envelope pattern as other receipt envelopes.",
+  "type": "object",
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "payload",
+    "payload_hash_b64u",
+    "hash_algorithm",
+    "signature_b64u",
+    "algorithm",
+    "signer_did",
+    "issued_at"
+  ],
+  "properties": {
+    "envelope_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "envelope_type": {
+      "type": "string",
+      "const": "delegation_receipt"
+    },
+    "payload": {
+      "$ref": "delegation_receipt.v1.json"
+    },
+    "payload_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded SHA-256 hash of JCS-canonicalized payload."
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256"]
+    },
+    "signature_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded Ed25519 signature over JCS-canonicalized envelope (with signature_b64u set to empty string)."
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": ["Ed25519"]
+    },
+    "signer_did": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID of the envelope signer (typically the delegator agent)."
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
