@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/human_approval_receipt.v1.json",
+  "title": "Human Approval Receipt v1",
+  "description": "A receipt emitted when a human operator approves a capability request. The approval mints a new CST bound to an explicit scope and optionally pinned to a WPC hash. This is the core 'governance feels like autocomplete' primitive.",
+  "type": "object",
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "approval_type",
+    "approver_subject",
+    "agent_did",
+    "scope_hash_b64u",
+    "hash_algorithm",
+    "timestamp"
+  ],
+  "properties": {
+    "receipt_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique receipt ID."
+    },
+    "approval_type": {
+      "type": "string",
+      "enum": ["explicit_approve", "explicit_deny", "auto_approve", "timeout_deny"],
+      "description": "Type of approval decision."
+    },
+    "approver_subject": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identity of the approver. May be a DID, OIDC subject, email, or service account ID. Protocol-agnostic."
+    },
+    "approver_method": {
+      "type": "string",
+      "enum": ["ui_click", "cli_confirm", "api_call", "policy_auto", "timeout"],
+      "description": "How the approval was given."
+    },
+    "agent_did": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID of the agent that requested the capability."
+    },
+    "scope_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded hash of the approved scope (JCS-canonicalized scope claims)."
+    },
+    "scope_summary": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Human-readable summary of what was approved (e.g. 'deploy to staging', 'write to /etc/config')."
+    },
+    "policy_hash_b64u": {
+      "type": "string",
+      "description": "Optional WPC hash pin — if present, the minted capability is bound to this specific policy."
+    },
+    "minted_capability_id": {
+      "type": "string",
+      "description": "ID of the CST minted as a result of this approval. Absent if approval_type is a deny."
+    },
+    "minted_capability_ttl_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "TTL of the minted capability in seconds."
+    },
+    "plan_hash_b64u": {
+      "type": "string",
+      "description": "Optional hash of the plan/diff that was reviewed before approval. Links the approval to a specific proposed action set."
+    },
+    "evidence_required": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Evidence types required to exercise the minted capability (e.g. ['proof_bundle', 'tool_receipts'])."
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "run_id": { "type": "string" },
+        "event_hash_b64u": { "type": "string" },
+        "nonce": { "type": "string" },
+        "policy_hash": { "type": "string" },
+        "token_scope_hash_b64u": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

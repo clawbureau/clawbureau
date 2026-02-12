@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/human_approval_receipt_envelope.v1.json",
+  "title": "Human Approval Receipt Envelope v1",
+  "description": "A signed envelope wrapping a human approval receipt.",
+  "type": "object",
+  "required": [
+    "envelope_version",
+    "envelope_type",
+    "payload",
+    "payload_hash_b64u",
+    "hash_algorithm",
+    "signature_b64u",
+    "algorithm",
+    "signer_did",
+    "issued_at"
+  ],
+  "properties": {
+    "envelope_version": { "type": "string", "const": "1" },
+    "envelope_type": { "type": "string", "const": "human_approval_receipt" },
+    "payload": { "$ref": "human_approval_receipt.v1.json" },
+    "payload_hash_b64u": { "type": "string", "minLength": 1 },
+    "hash_algorithm": { "type": "string", "enum": ["SHA-256"] },
+    "signature_b64u": { "type": "string", "minLength": 1 },
+    "algorithm": { "type": "string", "enum": ["Ed25519"] },
+    "signer_did": { "type": "string", "minLength": 1 },
+    "issued_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

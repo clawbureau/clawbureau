@@ -113,6 +113,30 @@
       "kind": "proof_bundle",
       "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_empty_chain.v1.json",
       "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.side_effect_bad_class",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_side_effect_bad_class.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.side_effect_missing_field",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_side_effect_missing_field.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.human_approval_bad_type",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_human_approval_bad_type.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.human_approval_agent_mismatch",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_human_approval_agent_mismatch.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
     }
   ]
 }

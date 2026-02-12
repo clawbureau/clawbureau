@@ -1797,6 +1797,156 @@ export async function verifyProofBundle(
     componentResults.tool_receipts_valid = true;
   }
 
+  // Validate side-effect receipts when present (CPL-US-007: fail-closed on unknown schema)
+  if ((payload as unknown as Record<string, unknown>).side_effect_receipts !== undefined) {
+    const sideEffectReceipts = (payload as unknown as Record<string, unknown>).side_effect_receipts;
+    if (!Array.isArray(sideEffectReceipts)) {
+      return {
+        result: { status: 'INVALID', reason: 'side_effect_receipts must be an array', verified_at: now },
+        error: { code: 'SCHEMA_VALIDATION_FAILED', message: 'payload.side_effect_receipts must be an array', field: 'payload.side_effect_receipts' },
+      };
+    }
+
+    const REQUIRED_SE_FIELDS = [
+      'receipt_version', 'receipt_id', 'effect_class', 'target_hash_b64u',
+      'request_hash_b64u', 'response_hash_b64u', 'hash_algorithm', 'agent_did', 'timestamp', 'latency_ms',
+    ] as const;
+    const VALID_EFFECT_CLASSES = ['network_egress', 'filesystem_write', 'external_api_write'];
+
+    for (let i = 0; i < sideEffectReceipts.length; i++) {
+      const se = sideEffectReceipts[i];
+      if (typeof se !== 'object' || se === null || Array.isArray(se)) {
+        return {
+          result: { status: 'INVALID', reason: `side_effect_receipts[${i}] must be an object`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `side_effect_receipts[${i}] must be an object`, field: `payload.side_effect_receipts[${i}]` },
+        };
+      }
+      const rec = se as Record<string, unknown>;
+
+      if (rec.receipt_version !== '1') {
+        return {
+          result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: unknown receipt_version`, verified_at: now },
+          error: { code: 'UNKNOWN_VERSION', message: `side_effect_receipts[${i}].receipt_version must be "1"`, field: `payload.side_effect_receipts[${i}].receipt_version` },
+        };
+      }
+      if (rec.hash_algorithm !== 'SHA-256') {
+        return {
+          result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: unknown hash_algorithm`, verified_at: now },
+          error: { code: 'UNKNOWN_HASH_ALGORITHM', message: `side_effect_receipts[${i}].hash_algorithm must be "SHA-256"`, field: `payload.side_effect_receipts[${i}].hash_algorithm` },
+        };
+      }
+      if (!VALID_EFFECT_CLASSES.includes(rec.effect_class as string)) {
+        return {
+          result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: unknown effect_class`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `side_effect_receipts[${i}].effect_class must be one of: ${VALID_EFFECT_CLASSES.join(', ')}`, field: `payload.side_effect_receipts[${i}].effect_class` },
+        };
+      }
+      for (const field of REQUIRED_SE_FIELDS) {
+        if (rec[field] === undefined || rec[field] === null) {
+          return {
+            result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: missing ${field}`, verified_at: now },
+            error: { code: 'MISSING_REQUIRED_FIELD', message: `side_effect_receipts[${i}].${field} is required`, field: `payload.side_effect_receipts[${i}].${field}` },
+          };
+        }
+      }
+      for (const f of ['receipt_id', 'target_hash_b64u', 'request_hash_b64u', 'response_hash_b64u', 'agent_did', 'timestamp'] as const) {
+        if (typeof rec[f] !== 'string' || (rec[f] as string).length === 0) {
+          return {
+            result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: invalid ${f}`, verified_at: now },
+            error: { code: 'SCHEMA_VALIDATION_FAILED', message: `side_effect_receipts[${i}].${f} must be a non-empty string`, field: `payload.side_effect_receipts[${i}].${f}` },
+          };
+        }
+      }
+      if (typeof rec.latency_ms !== 'number' || rec.latency_ms < 0) {
+        return {
+          result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: invalid latency_ms`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `side_effect_receipts[${i}].latency_ms must be >= 0`, field: `payload.side_effect_receipts[${i}].latency_ms` },
+        };
+      }
+      if (rec.agent_did !== payload.agent_did) {
+        return {
+          result: { status: 'INVALID', reason: `side_effect_receipts[${i}]: agent_did mismatch`, verified_at: now },
+          error: { code: 'PROOF_BUNDLE_AGENT_MISMATCH', message: `side_effect_receipts[${i}].agent_did must equal payload.agent_did`, field: `payload.side_effect_receipts[${i}].agent_did` },
+        };
+      }
+    }
+
+    componentResults.side_effect_receipts_count = sideEffectReceipts.length;
+    componentResults.side_effect_receipts_valid = true;
+  }
+
+  // Validate human approval receipts when present (CPL-US-008: fail-closed on unknown schema)
+  if ((payload as unknown as Record<string, unknown>).human_approval_receipts !== undefined) {
+    const approvalReceipts = (payload as unknown as Record<string, unknown>).human_approval_receipts;
+    if (!Array.isArray(approvalReceipts)) {
+      return {
+        result: { status: 'INVALID', reason: 'human_approval_receipts must be an array', verified_at: now },
+        error: { code: 'SCHEMA_VALIDATION_FAILED', message: 'payload.human_approval_receipts must be an array', field: 'payload.human_approval_receipts' },
+      };
+    }
+
+    const REQUIRED_HA_FIELDS = [
+      'receipt_version', 'receipt_id', 'approval_type', 'approver_subject',
+      'agent_did', 'scope_hash_b64u', 'hash_algorithm', 'timestamp',
+    ] as const;
+    const VALID_APPROVAL_TYPES = ['explicit_approve', 'explicit_deny', 'auto_approve', 'timeout_deny'];
+
+    for (let i = 0; i < approvalReceipts.length; i++) {
+      const ha = approvalReceipts[i];
+      if (typeof ha !== 'object' || ha === null || Array.isArray(ha)) {
+        return {
+          result: { status: 'INVALID', reason: `human_approval_receipts[${i}] must be an object`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `human_approval_receipts[${i}] must be an object`, field: `payload.human_approval_receipts[${i}]` },
+        };
+      }
+      const rec = ha as Record<string, unknown>;
+
+      if (rec.receipt_version !== '1') {
+        return {
+          result: { status: 'INVALID', reason: `human_approval_receipts[${i}]: unknown receipt_version`, verified_at: now },
+          error: { code: 'UNKNOWN_VERSION', message: `human_approval_receipts[${i}].receipt_version must be "1"`, field: `payload.human_approval_receipts[${i}].receipt_version` },
+        };
+      }
+      if (rec.hash_algorithm !== 'SHA-256') {
+        return {
+          result: { status: 'INVALID', reason: `human_approval_receipts[${i}]: unknown hash_algorithm`, verified_at: now },
+          error: { code: 'UNKNOWN_HASH_ALGORITHM', message: `human_approval_receipts[${i}].hash_algorithm must be "SHA-256"`, field: `payload.human_approval_receipts[${i}].hash_algorithm` },
+        };
+      }
+      if (!VALID_APPROVAL_TYPES.includes(rec.approval_type as string)) {
+        return {
+          result: { status: 'INVALID', reason: `human_approval_receipts[${i}]: unknown approval_type`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `human_approval_receipts[${i}].approval_type must be one of: ${VALID_APPROVAL_TYPES.join(', ')}`, field: `payload.human_approval_receipts[${i}].approval_type` },
+        };
+      }
+      for (const field of REQUIRED_HA_FIELDS) {
+        if (rec[field] === undefined || rec[field] === null) {
+          return {
+            result: { status: 'INVALID', reason: `human_approval_receipts[${i}]: missing ${field}`, verified_at: now },
+            error: { code: 'MISSING_REQUIRED_FIELD', message: `human_approval_receipts[${i}].${field} is required`, field: `payload.human_approval_receipts[${i}].${field}` },
+          };
+        }
+      }
+      for (const f of ['receipt_id', 'approver_subject', 'agent_did', 'scope_hash_b64u', 'timestamp'] as const) {
+        if (typeof rec[f] !== 'string' || (rec[f] as string).length === 0) {
+          return {
+            result: { status: 'INVALID', reason: `human_approval_receipts[${i}]: invalid ${f}`, verified_at: now },
+            error: { code: 'SCHEMA_VALIDATION_FAILED', message: `human_approval_receipts[${i}].${f} must be a non-empty string`, field: `payload.human_approval_receipts[${i}].${f}` },
+          };
+        }
+      }
+      if (rec.agent_did !== payload.agent_did) {
+        return {
+          result: { status: 'INVALID', reason: `human_approval_receipts[${i}]: agent_did mismatch`, verified_at: now },
+          error: { code: 'PROOF_BUNDLE_AGENT_MISMATCH', message: `human_approval_receipts[${i}].agent_did must equal payload.agent_did`, field: `payload.human_approval_receipts[${i}].agent_did` },
+        };
+      }
+    }
+
+    componentResults.human_approval_receipts_count = approvalReceipts.length;
+    componentResults.human_approval_receipts_valid = true;
+  }
+
   // Validate + verify attestations if present
   // CVF-US-023: Attestations MUST be signature-verified AND attester_did allowlisted
   //             before they can uplift trust tier.

@@ -144,6 +144,30 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `URM_MISSING` | URM file required but not found |
 | `URM_MISMATCH` | URM content does not match bundle reference |
 
+### SIDE_EFFECT_*
+
+| Code | Meaning |
+|------|---------|
+| `SIDE_EFFECT_UNKNOWN_CLASS` | Side-effect receipt effect_class not recognized |
+| `SIDE_EFFECT_AGENT_MISMATCH` | Side-effect receipt agent_did does not match bundle |
+
+### HUMAN_APPROVAL_*
+
+| Code | Meaning |
+|------|---------|
+| `HUMAN_APPROVAL_UNKNOWN_TYPE` | Approval type not recognized |
+| `HUMAN_APPROVAL_AGENT_MISMATCH` | Approval receipt agent_did does not match bundle |
+| `HUMAN_APPROVAL_EXPIRED` | Minted capability has expired |
+
+### CAPABILITY_*
+
+| Code | Meaning |
+|------|---------|
+| `CAPABILITY_DENIED` | Capability request denied by policy |
+| `CAPABILITY_REQUIRES_APPROVAL` | Capability requires human approval |
+| `CAPABILITY_SCOPE_EXCEEDED` | Requested scope exceeds policy limits |
+| `CAPABILITY_PREFLIGHT_FAIL` | Preflight check failed |
+
 ### COMMIT_*
 
 | Code | Meaning |

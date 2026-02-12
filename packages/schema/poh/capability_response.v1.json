@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/capability_response.v1.json",
+  "title": "Capability Response v1",
+  "description": "Response to a capability request. Either grants a scoped capability (CST), denies with a deterministic reason code, or reports preflight compliance status.",
+  "type": "object",
+  "required": [
+    "response_version",
+    "response_id",
+    "request_id",
+    "decision",
+    "timestamp"
+  ],
+  "properties": {
+    "response_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "response_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ID of the capability request this responds to."
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["granted", "denied", "requires_approval", "preflight_pass", "preflight_fail"],
+      "description": "The capability decision."
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Deterministic reason code from the protocol registry. Required for denials and preflight failures."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 2048,
+      "description": "Human-readable explanation."
+    },
+    "granted_capability": {
+      "type": "object",
+      "properties": {
+        "capability_id": { "type": "string", "minLength": 1 },
+        "scope_hash_b64u": { "type": "string", "minLength": 1 },
+        "policy_hash_b64u": { "type": "string" },
+        "ttl_seconds": { "type": "number", "minimum": 1 },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "evidence_required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Evidence types required when exercising this capability."
+        }
+      },
+      "description": "Present when decision is 'granted'. The minted capability details."
+    },
+    "denied_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action", "reason_code"],
+        "properties": {
+          "action": { "type": "string" },
+          "reason_code": { "type": "string" },
+          "rule": { "type": "string", "description": "Policy rule that caused the denial." },
+          "suggestion": { "type": "string", "description": "Optional: what the agent could do to get approval." }
+        },
+        "additionalProperties": false
+      },
+      "description": "Present when decision is 'denied' or 'preflight_fail'. Per-action denial details."
+    },
+    "approval_channel": {
+      "type": "string",
+      "description": "Present when decision is 'requires_approval'. Where to request approval (e.g. 'slack:#approvals', 'github:pr-comment', 'ui:dashboard')."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

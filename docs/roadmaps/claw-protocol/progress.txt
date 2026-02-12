@@ -74,3 +74,50 @@
   - proof bundles: wrong signer DID, missing envelope field, unknown hash algorithm, empty event chain
 - All vectors declare expected reason_code and PASS/FAIL
 - conformance runner updated to handle commit_sig vectors
+
+## 2026-02-12 — CPL-MAX-002: Side-Effect Receipts + Human Approval (Coverage MTS)
+
+### CPL-US-007 — Side-effect receipt classes
+- packages/schema/poh/side_effect_receipt.v1.json + envelope
+- 3 effect classes: network_egress, filesystem_write, external_api_write
+- Includes target digest, request/response digests, vendor_id, bytes_written
+- SDK recordSideEffect() in clawproof-sdk
+- clawverify-core validates in bundles (fail-closed on unknown class/version/algo)
+- 2 conformance vectors: bad effect class, missing required field
+
+### CPL-US-008 — Human approval receipts + capability minting
+- packages/schema/poh/human_approval_receipt.v1.json + envelope
+- 4 approval types: explicit_approve, explicit_deny, auto_approve, timeout_deny
+- Approval mints CST bound to scope_hash_b64u + optional policy_hash_b64u pin
+- SDK recordHumanApproval() in clawproof-sdk
+- clawverify-core validates in bundles (fail-closed on unknown type/version)
+- 2 conformance vectors: bad approval type, agent DID mismatch
+- Two-phase execution posture documented in spec §2.5
+
+### CPL-US-009 — Capability negotiation protocol
+- packages/schema/poh/capability_request.v1.json
+- packages/schema/poh/capability_response.v1.json
+- 5 decision types: granted, denied, requires_approval, preflight_pass, preflight_fail
+- Preflight mode for agent self-check compliance
+- Per-action denied_actions with deterministic reason_code + rule references
+- Documented in spec §2.6
+
+### CPL-US-011 — Bring-your-own identity (stretch)
+- Spec §4 expanded: canonical subject representation table
+- Formats: DID, OIDC, service account, email, GitHub
+- Mapping rules for receipts/envelopes/CSTs
+- Fail-closed: unknown formats treated as opaque; signature verification requires did:key
+
+### CPL-US-012 — Claw Verified supply-chain wedge (stretch)
+- Spec §5: Claw Verified tool requirements (version pin + receipt emission + verification)
+- Tool manifest signing flow (Ed25519 + JCS)
+- Quarantine mode: low privilege, default deny side-effects, observe-only
+- Integration guidance for skill/provider registries
+
+### Coverage update
+- M → MT → **MTS** (model + tools + side-effects + human approvals)
+- Conformance suite: 22 vectors (4 new for side-effect + human approval)
+
+### Tracker flips
+- CPL-US-007, CPL-US-008, CPL-US-009, CPL-US-011, CPL-US-012 → passes=true
+- **All 12 CPL stories now pass. Claw Protocol v0.1 roadmap: COMPLETE.**

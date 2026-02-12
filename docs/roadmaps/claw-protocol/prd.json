@@ -100,8 +100,8 @@
         "Verifier can validate these receipts when present"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "This story should keep sensitive payloads hash-only by default; selective disclosure is optional and policy-gated."
+      "passes": true,
+      "notes": "Shipped: side_effect_receipt.v1.json + envelope schema; 3 effect classes (network_egress, filesystem_write, external_api_write); SDK recordSideEffect(); clawverify-core validates in bundles (fail-closed); 2 conformance vectors. Sensitive payloads hash-only by default."
     },
     {
       "id": "CPL-US-008",
@@ -114,8 +114,8 @@
         "Verifier can validate approval receipts when present"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": "This is the core 'human love' UX primitive and should integrate cleanly with existing CST issuance."
+      "passes": true,
+      "notes": "Shipped: human_approval_receipt.v1.json + envelope schema; 4 approval types (explicit_approve/deny, auto_approve, timeout_deny); approval mints CST bound to scope + optional WPC pin; SDK recordHumanApproval(); clawverify-core validates in bundles; 2 conformance vectors. Two-phase posture documented in spec §2.5."
     },
     {
       "id": "CPL-US-009",
@@ -128,8 +128,8 @@
         "Document negotiation semantics in the protocol spec"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "This is explicitly protocol-level; individual products can present it via Slack/Teams/GitHub UI."
+      "passes": true,
+      "notes": "Shipped: capability_request.v1.json + capability_response.v1.json schemas; 5 decision types (granted, denied, requires_approval, preflight_pass, preflight_fail); per-action denied_actions with rule references; preflight mode for agent self-check. Documented in spec §2.6."
     },
     {
       "id": "CPL-US-010",
@@ -156,8 +156,8 @@
         "Fail-closed rules remain deterministic regardless of identity provider"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": "DIDs remain supported and recommended for cross-org verification, but must not be mandated at the protocol layer."
+      "passes": true,
+      "notes": "Shipped: spec §4 expanded with canonical subject representation table (DID, OIDC, service account, email, GitHub), mapping rules for receipts/envelopes/CSTs, and fail-closed behavior for unknown formats. Non-DID subjects bind via approver_subject and CST sub claims."
     },
     {
       "id": "CPL-US-012",
@@ -170,8 +170,8 @@
         "Integrate the requirements into provider/skill registry PRDs"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": "This is the distribution wedge: make compliance easier than non-compliance."
+      "passes": true,
+      "notes": "Shipped: spec §5 defines Claw Verified requirements (version pinning + receipt emission + verification), tool manifest signing flow (Ed25519 + JCS), quarantine mode (low privilege, default deny, observe-only), and integration guidance for skill/provider registries."
     }
   ]
 }

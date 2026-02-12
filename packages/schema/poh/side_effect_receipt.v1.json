@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.clawbureau.com/poh/side_effect_receipt.v1.json",
+  "title": "Side-Effect Receipt v1",
+  "description": "A receipt emitted at a side-effect boundary (network egress, filesystem write, external API write). Hash-only by default: captures effect class, target digest, request/response digests, and agent DID — without leaking sensitive payloads.",
+  "type": "object",
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "effect_class",
+    "target_hash_b64u",
+    "request_hash_b64u",
+    "response_hash_b64u",
+    "hash_algorithm",
+    "agent_did",
+    "timestamp",
+    "latency_ms"
+  ],
+  "properties": {
+    "receipt_version": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version. Always '1' for this schema."
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique receipt ID (UUID or similar)."
+    },
+    "effect_class": {
+      "type": "string",
+      "enum": ["network_egress", "filesystem_write", "external_api_write"],
+      "description": "Class of side effect. Determines what target/request/response represent."
+    },
+    "target_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded hash of the effect target (URL for network, path for filesystem, endpoint for API)."
+    },
+    "vendor_id": {
+      "type": "string",
+      "description": "Optional vendor/service identifier (e.g. 'github', 'slack', 's3'). Aids auditing without exposing credentials."
+    },
+    "request_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded hash of JCS-canonicalized request payload."
+    },
+    "response_hash_b64u": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url-encoded hash of JCS-canonicalized response payload."
+    },
+    "response_status": {
+      "type": "string",
+      "enum": ["success", "error", "timeout", "denied"],
+      "description": "High-level outcome of the side effect."
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256"],
+      "description": "Hash algorithm used for all digests."
+    },
+    "agent_did": {
+      "type": "string",
+      "minLength": 1,
+      "description": "DID of the agent that caused the side effect."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of the side effect."
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Side-effect execution latency in milliseconds."
+    },
+    "bytes_written": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Optional: bytes written/transferred (for filesystem/network effects)."
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "run_id": { "type": "string" },
+        "event_hash_b64u": { "type": "string" },
+        "nonce": { "type": "string" },
+        "policy_hash": { "type": "string" },
+        "token_scope_hash_b64u": { "type": "string" },
+        "capability_id": { "type": "string", "description": "ID of the CST/capability that authorized this side effect." }
+      },
+      "description": "Binding to a proof bundle run, event chain, and authorizing capability."
+    }
+  },
+  "additionalProperties": false
+}
