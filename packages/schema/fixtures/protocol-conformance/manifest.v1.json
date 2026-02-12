@@ -10,55 +10,109 @@
       "name": "export_bundle.golden",
       "kind": "export_bundle",
       "path": "packages/schema/fixtures/export_bundle_golden.v1.json",
-      "expected": {
-        "valid": true,
-        "reason_code": "OK"
-      }
+      "expected": { "valid": true, "reason_code": "OK" }
     },
     {
       "name": "proof_bundle.pass",
       "kind": "proof_bundle",
       "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_pass.v1.json",
-      "expected": {
-        "valid": true,
-        "reason_code": "OK"
-      }
+      "expected": { "valid": true, "reason_code": "OK" }
     },
     {
       "name": "proof_bundle.fail.invalid_signature",
       "kind": "proof_bundle",
       "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_invalid_signature.v1.json",
-      "expected": {
-        "valid": false,
-        "reason_code": ["SIGNATURE_INVALID"]
-      }
+      "expected": { "valid": false, "reason_code": ["SIGNATURE_INVALID"] }
     },
     {
       "name": "export_bundle.fail.manifest_hash_mismatch",
       "kind": "export_bundle",
       "path": "packages/schema/fixtures/protocol-conformance/export_bundle_fail_manifest_hash_mismatch.v1.json",
-      "expected": {
-        "valid": false,
-        "reason_code": ["HASH_MISMATCH"]
-      }
+      "expected": { "valid": false, "reason_code": ["HASH_MISMATCH"] }
     },
     {
       "name": "proof_bundle.fail.receipt_binding_mismatch",
       "kind": "proof_bundle",
       "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_receipt_binding_mismatch.v1.json",
-      "expected": {
-        "valid": false,
-        "reason_code": ["RECEIPT_BINDING_MISMATCH"]
-      }
+      "expected": { "valid": false, "reason_code": ["RECEIPT_BINDING_MISMATCH"] }
     },
     {
       "name": "proof_bundle.fail.unknown_envelope_version",
       "kind": "proof_bundle",
       "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_unknown_envelope_version.v1.json",
-      "expected": {
-        "valid": false,
-        "reason_code": ["UNKNOWN_ENVELOPE_VERSION"]
-      }
+      "expected": { "valid": false, "reason_code": ["UNKNOWN_ENVELOPE_VERSION"] }
+    },
+    {
+      "name": "commit_sig.pass",
+      "kind": "commit_sig",
+      "path": "packages/schema/fixtures/protocol-conformance/commit_sig_pass.v1.json",
+      "expected": { "valid": true, "reason_code": "OK" }
+    },
+    {
+      "name": "commit_sig.fail.tampered_message",
+      "kind": "commit_sig",
+      "path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_tampered.v1.json",
+      "expected": { "valid": false, "reason_code": ["SIGNATURE_INVALID"] }
+    },
+    {
+      "name": "commit_sig.fail.bad_did_format",
+      "kind": "commit_sig",
+      "path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_bad_did.v1.json",
+      "expected": { "valid": false, "reason_code": ["INVALID_DID_FORMAT"] }
+    },
+    {
+      "name": "commit_sig.fail.unknown_version",
+      "kind": "commit_sig",
+      "path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_bad_version.v1.json",
+      "expected": { "valid": false, "reason_code": ["UNKNOWN_VERSION"] }
+    },
+    {
+      "name": "commit_sig.fail.invalid_message",
+      "kind": "commit_sig",
+      "path": "packages/schema/fixtures/protocol-conformance/commit_sig_fail_bad_message.v1.json",
+      "expected": { "valid": false, "reason_code": ["COMMIT_MESSAGE_INVALID"] }
+    },
+    {
+      "name": "proof_bundle.fail.tool_receipt_bad_version",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_tool_receipt_bad_version.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.tool_receipt_missing_field",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_tool_receipt_missing_field.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.tool_receipt_agent_mismatch",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_tool_receipt_agent_mismatch.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
+    },
+    {
+      "name": "proof_bundle.fail.wrong_signer_did",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_wrong_signer.v1.json",
+      "expected": { "valid": false, "reason_code": ["HASH_MISMATCH"] }
+    },
+    {
+      "name": "proof_bundle.fail.missing_envelope_field",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_missing_envelope_field.v1.json",
+      "expected": { "valid": false, "reason_code": ["MALFORMED_ENVELOPE"] }
+    },
+    {
+      "name": "proof_bundle.fail.unknown_hash_algorithm",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_unknown_hash_algo.v1.json",
+      "expected": { "valid": false, "reason_code": ["UNKNOWN_HASH_ALGORITHM"] }
+    },
+    {
+      "name": "proof_bundle.fail.empty_event_chain",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_fail_empty_chain.v1.json",
+      "expected": { "valid": false, "reason_code": ["SCHEMA_VALIDATION_FAILED"] }
     }
   ]
 }

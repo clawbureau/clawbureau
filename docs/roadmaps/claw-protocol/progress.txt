@@ -28,3 +28,49 @@
   - Runner: scripts/protocol/run-claw-verified-pr.mjs
   - Dogfood evidence pack:
     - artifacts/poh/feat/protocol/CPL-US-010-claw-verified-pr-pipeline/run_475c15b0-8ceb-4d39-9316-6bf6c4cf4426-verify.json
+
+## 2026-02-12 — CPL-MAX-001: Protocol Coverage Expansion + Adoption Hardening
+
+### CPL-US-010a — CI workflow hardening
+- Added actions/setup-node cache: npm to claw-verified-pr.yml (eliminates cold npm ci)
+- Added actions/upload-artifact for verify summary JSON (90-day retention)
+- Documented branch protection recommendation in CLAW_VERIFIED_PR_PIPELINE.md §7-8
+
+### CPL-US-010b — clawverify verify commit-sig CLI subcommand
+- Extracted commit-sig verification from runner into packages/clawverify-cli
+- CLI: `clawverify verify commit-sig --input <path>` returns PASS/FAIL + reason_code + commit_sha + signer_did
+- Runner updated to use CLI (fallback to inline for missing CLI)
+- 5 conformance vectors: pass, tampered, bad DID, unknown version, invalid message
+
+### CPL-US-003 — Reason code registry
+- Published docs/specs/claw-protocol/REASON_CODE_REGISTRY.md
+- Mined 400+ codes from all services
+- Organized by category (SIGNATURE_*, SCHEMA_*, UNKNOWN_*, HASH_*, DEPENDENCY_*, REPLAY_*, etc.)
+- Defined required response shape for deny semantics
+- Conformance suite validates registered codes only
+
+### CPL-US-001 — Spec closure
+- CLAW_PROTOCOL_v0.1.md confirmed complete: 5 primitives, coverage matrix, fail-closed, identity pluggable, "what is proven / what is not" section added
+- passes=true
+
+### CPL-US-002 — Coverage matrix closure
+- Coverage matrix added to spec §2.3 (M/MT/MTS rows)
+- Current truth updated: Coverage MT shipped
+- passes=true
+
+### CPL-US-006 — Tool receipt schema + minimal SDK
+- packages/schema/poh/tool_receipt.v1.json (hash-only: tool name + args digest + result digest + timing + agent DID)
+- packages/schema/poh/tool_receipt_envelope.v1.json (signed)
+- packages/clawproof-sdk recordToolCall() implementation
+- packages/clawverify-core validates tool_receipts in proof bundles (fail-closed on unknown version/algo)
+- 3 conformance vectors: bad version, missing field, agent mismatch
+- Coverage statement updated from "M shipped; MT planned" to "MT shipped"
+- passes=true
+
+### CPL-US-005b — Conformance suite expansion
+- Added 12 new vectors (total: 18) covering:
+  - commit-sig: pass, tampered, bad DID, unknown version, invalid message
+  - tool receipts: bad version, missing field, agent mismatch
+  - proof bundles: wrong signer DID, missing envelope field, unknown hash algorithm, empty event chain
+- All vectors declare expected reason_code and PASS/FAIL
+- conformance runner updated to handle commit_sig vectors

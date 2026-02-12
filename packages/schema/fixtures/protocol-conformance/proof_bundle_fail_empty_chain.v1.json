@@ -1,0 +1,16 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "bundle_conformance_001",
+    "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "event_chain": []
+  },
+  "payload_hash_b64u": "HZYtCYB_iGtYBqnwGdf6Dts41qMLYil_AjLKHLJ7Lyk",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "9FS8CmJ7b1aE7YT-wdL8tZxnml-eDJ4XB5q-dE3uId8_BlgKEqUSVAdveKTKner99EjcoN3wKSxaj9k83b5ZDw",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "issued_at": "2026-02-12T00:00:02.000Z"
+}

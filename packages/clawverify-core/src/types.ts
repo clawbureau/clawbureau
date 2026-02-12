@@ -247,7 +247,9 @@ export type VerificationErrorCode =
   | 'TOKEN_CONTROL_KEY_EXPIRED'
   | 'TOKEN_CONTROL_TRANSPARENCY_STALE'
   | 'TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN'
-  | 'TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED';
+  | 'TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED'
+  | 'UNKNOWN_VERSION'
+  | 'PROOF_BUNDLE_AGENT_MISMATCH';
 
 /**
  * Structured error for verification failures
@@ -953,6 +955,10 @@ export interface ProofBundleVerificationResult {
     attestations_signature_verified_count?: number;
     /** Number of attestations that counted for tier uplift (signature + allowlist + subject binding). */
     attestations_verified_count?: number;
+
+    /** CPL-US-006: tool receipt validation results. */
+    tool_receipts_valid?: boolean;
+    tool_receipts_count?: number;
 
     /** CEA-US-010: optional execution attestation evidence (outside the proof bundle). */
     execution_attestations_valid?: boolean;

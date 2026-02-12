@@ -464,6 +464,53 @@ async function verifyBundleWithCli(relPath, cliPath, configPath) {
   };
 }
 
+async function verifyCommitSigWithCli(relPath, cliPath) {
+  const full = path.join(ROOT, relPath);
+
+  const args = [cliPath, 'verify', 'commit-sig', '--input', full];
+  const run = await execFileText(process.execPath, args, { cwd: ROOT });
+
+  let parsed = null;
+  let parseError = null;
+  try { parsed = JSON.parse(run.stdout); } catch (err) {
+    parseError = err instanceof Error ? err.message : String(err);
+  }
+
+  const status = parsed?.status;
+  const reasonCode = parsed?.reason_code;
+  const reason = parsed?.reason;
+  const commitSha = parsed?.verification?.commit_sha;
+  const signerDid = parsed?.verification?.signer_did;
+  const message = parsed?.verification?.message;
+
+  const ok = parseError === null && run.exitCode === 0 && status === 'PASS';
+
+  // Also check commit exists in this checkout
+  let commitExists = true;
+  if (commitSha) {
+    try {
+      execFileSync('git', ['cat-file', '-e', `${commitSha}^{commit}`], { cwd: ROOT, stdio: 'ignore' });
+    } catch { commitExists = false; }
+  }
+
+  if (ok && !commitExists) {
+    return {
+      path: relPath, ok: false,
+      reason_code: 'COMMIT_NOT_FOUND',
+      reason: `Signed commit not found in this checkout: ${commitSha}`,
+      commit_sha: commitSha, signer_did: signerDid, message,
+    };
+  }
+
+  return {
+    path: relPath, ok,
+    reason_code: parseError ? 'PARSE_ERROR' : (typeof reasonCode === 'string' ? reasonCode : 'PARSE_ERROR'),
+    reason: typeof reason === 'string' ? reason : (parseError ?? 'cli parse error'),
+    commit_sha: commitSha, signer_did: signerDid, message,
+    stderr: run.stderr ? run.stderr.slice(0, 2000) : undefined,
+  };
+}
+
 function mdRow(cols) {
   return `| ${cols.map((c) => String(c).replace(/\|/g, '\\|')).join(' | ')} |`;
 }
@@ -530,7 +577,12 @@ async function main() {
   }
 
   for (const p of commitSigPaths) {
-    commitSigResults.push(await verifyCommitSigFile(p));
+    if (cliExists) {
+      commitSigResults.push(await verifyCommitSigWithCli(p, cliPath));
+    } else {
+      // Fallback to inline verification when CLI is unavailable
+      commitSigResults.push(await verifyCommitSigFile(p));
+    }
   }
 
   const missingEvidence = {

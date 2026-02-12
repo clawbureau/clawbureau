@@ -108,3 +108,21 @@ node scripts/did-work/sign-message.mjs "commit:<sha>" \
 ```
 
 Commit the proof in a follow-up commit.
+
+## 7) Branch protection recommendation
+
+For repositories that adopt the Claw Verified PR pipeline, consider adding `verify` as a **required status check** on the default branch.
+
+This makes enforce mode mandatory for all PRs and ensures:
+- every merge includes a verified PoH evidence pack or is explicitly observed
+- DID commit proofs are cryptographically checked before merge
+
+To enable: Settings → Branches → Branch protection rules → Require status checks → add `verify`.
+
+> **Note:** Do not enable this until the team is comfortable with the pipeline. Start with observe mode (no label, no commit proofs) and promote to enforce once agents routinely produce evidence packs.
+
+## 8) CI caching + artifact persistence
+
+The `claw-verified-pr` workflow uses `actions/setup-node` with `cache: npm` to avoid cold `npm ci` on every push.
+
+Verify summaries are uploaded as GitHub artifacts (`claw-verified-pr-summary`) with 90-day retention, so evidence persists beyond ephemeral job logs.

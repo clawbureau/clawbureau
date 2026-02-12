@@ -35,6 +35,9 @@ import type {
   ResourceDescriptor,
   ResourceItem,
   SignedEnvelope,
+  ToolCallParams,
+  ToolReceiptArtifact,
+  ToolReceiptPayload,
   URMDocument,
   URMReference,
 } from './types.js';
@@ -180,6 +183,7 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
   const agentDid = config.agentDid ?? await didFromPublicKey(config.keyPair.publicKey);
   const events: RecorderEvent[] = [];
   const receipts: ReceiptArtifact[] = [];
+  const toolReceipts: ToolReceiptArtifact[] = [];
 
   // Use closure-based methods to avoid `this` binding issues in object literals.
 
@@ -224,6 +228,45 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
 
   function addReceipt(artifact: ReceiptArtifact) {
     receipts.push(artifact);
+  }
+
+  async function recordToolCall(params: ToolCallParams): Promise<ToolReceiptArtifact> {
+    const { binding } = await recordEvent({
+      eventType: 'tool_call',
+      payload: { tool_name: params.toolName, tool_version: params.toolVersion },
+    });
+
+    const argsHashB64u = await hashJsonB64u(params.args);
+    const resultHashB64u = await hashJsonB64u(params.result);
+
+    const receipt: ToolReceiptPayload = {
+      receipt_version: '1',
+      receipt_id: `tr_${randomUUID()}`,
+      tool_name: params.toolName,
+      tool_version: params.toolVersion,
+      args_hash_b64u: argsHashB64u,
+      result_hash_b64u: resultHashB64u,
+      result_status: params.resultStatus,
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: new Date().toISOString(),
+      latency_ms: params.latencyMs,
+      binding: {
+        run_id: binding.runId,
+        event_hash_b64u: binding.eventHash,
+        nonce: binding.nonce,
+      },
+    };
+
+    const artifact: ToolReceiptArtifact = {
+      type: 'tool_receipt',
+      collectedAt: new Date().toISOString(),
+      toolName: params.toolName,
+      receipt,
+    };
+
+    toolReceipts.push(artifact);
+    return artifact;
   }
 
   async function callLLM(params: LLMCallParams): Promise<LLMCallResult> {
@@ -411,6 +454,9 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     if (bridgedReceipts.length > 0) {
       payload.receipts = bridgedReceipts;
     }
+    if (toolReceipts.length > 0) {
+      payload.tool_receipts = toolReceipts.map((a) => a.receipt);
+    }
 
     // 9. Compute payload hash + sign
     const payloadHashB64u = await hashJsonB64u(payload);
@@ -441,6 +487,7 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     get agentDid() { return agentDid; },
     recordEvent,
     addReceipt,
+    recordToolCall,
     callLLM,
     finalize,
   };
