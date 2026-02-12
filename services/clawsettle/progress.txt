@@ -461,3 +461,43 @@ Started: 2026-02-12
   - prod: `artifacts/ops/econ-risk/2026-02-12T17-02-27-122Z-prod-loss-event-watch/summary.json`
     - deterministic error buckets: event_failed=0, outbox_apply_failed=0, outbox_resolve_failed=0
 - Conclusion: apply+resolve pipelines stable post-merge. No regressions.
+
+## 2026-02-12 - ECON-RISK-MAX-003 implementation + rollout (staging + prod)
+- What was implemented:
+  - Stripe dispute lifecycle → loss-event automation bridge (`services/clawsettle/src/disputes.ts`):
+    - `charge.dispute.created` → creates loss event (apply freeze)
+    - `charge.dispute.closed` (status=won) → resolves loss event (unfreeze)
+    - `charge.dispute.closed` (status=lost) → marks permanent loss (stays frozen)
+    - `charge.dispute.updated` → updates bridge metadata (no state change)
+  - New `dispute_loss_event_bridge` table (`migrations/0007_create_dispute_loss_event_bridge.sql`):
+    - Maps Stripe dispute IDs to loss event IDs for deterministic resolution lookups
+    - UNIQUE on dispute_id, indexed by loss_event_id and status
+  - Integrated bridge into webhook handler (`services/clawsettle/src/index.ts`):
+    - After processWebhook, classifies dispute events and bridges to loss-event pipeline
+    - Triggers inline forwarding for new loss events and resolve operations
+  - Tests (`services/clawsettle/test/disputes.test.ts`):
+    - 9 tests covering all action classifications, expanded charge objects,
+      missing account_id fail-closed, invalid amounts
+  - Smoke script (`scripts/poh/smoke-stripe-dispute-lifecycle.mjs`):
+    - Full lifecycle: create dispute → verify → idempotency replay → forwarding → resolve gating → permanent loss
+- Quality checks:
+  - `npx tsc --noEmit` ✅
+  - `npx vitest run` ✅ (32 tests, 5 suites, 0 failures)
+  - `node scripts/docs/lint-prds.mjs` ✅
+- Migration/deploy evidence:
+  - Staging: migration 0007 applied, deployed version `28d87f92`
+  - Prod: migration 0007 applied, deployed version `787c390d`
+- Staging smoke evidence:
+  - `artifacts/simulations/stripe-dispute-lifecycle/2026-02-12T17-13-31-299Z-staging/smoke.json`
+  - All 8 steps passed: create (201), verify (200), idempotency replay (200 deduped),
+    forwarding (1/3 forwarded, 2/3 failed for synthetic accounts),
+    resolve gating (409 LOSS_EVENT_NOT_READY — correct MAX-002 behavior),
+    permanent loss (201, stays recorded/not-resolved)
+- Prod smoke evidence:
+  - `artifacts/simulations/stripe-dispute-lifecycle/2026-02-12T17-14-25-050Z-prod/smoke.json`
+  - Identical behavior: all 8 steps passed
+- Post-deploy watch:
+  - staging: `artifacts/ops/econ-risk/2026-02-12T17-14-29-625Z-staging-loss-event-watch/summary.json`
+    - event_failed=1 (pre-existing), outbox_resolve_failed=0
+  - prod: `artifacts/ops/econ-risk/2026-02-12T17-15-27-456Z-prod-loss-event-watch/summary.json`
+    - event_failed=0, outbox_resolve_failed=0

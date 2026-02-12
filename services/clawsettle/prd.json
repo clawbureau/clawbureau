@@ -141,6 +141,25 @@
       "priority": 9,
       "passes": true,
       "notes": "Shipped to staging+prod with migration 0006 loss_event_resolutions + loss_event_resolution_outbox and operation-aware outbox/retry controls. Evidence: deploy summary artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json; smokes artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json; watches artifacts/ops/econ-risk/2026-02-12T14-25-43-531Z-staging-loss-event-watch/summary.json (limit=5) and artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json (failed buckets apply=0 resolve=0)."
+    },
+    {
+      "id": "MPY-US-014",
+      "title": "Stripe dispute lifecycle → loss-event automation bridge",
+      "description": "As economy ops, I want Stripe dispute webhooks to automatically create/resolve loss events so chargebacks trigger deterministic risk holds and dispute wins release them without manual intervention.",
+      "acceptanceCriteria": [
+        "Wire charge.dispute.created to create loss event with dispute metadata (dispute_id, charge_id, reason, severity)",
+        "Wire charge.dispute.closed (status=won) to resolve the corresponding loss event",
+        "Wire charge.dispute.closed (status=lost) to mark permanent loss (leave frozen, no resolve call)",
+        "Wire charge.dispute.updated to update bridge metadata without state changes",
+        "Persist dispute_loss_event_bridge table for deterministic resolution lookups",
+        "Fail-closed when dispute metadata is missing account_id",
+        "Idempotent replay-safe on all paths (bridge UNIQUE + loss-event idempotency keys)",
+        "Inline forwarding for new loss events and resolve operations when enabled",
+        "Capture staging + production deploy + smoke evidence"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Shipped to staging+prod with migration 0007 dispute_loss_event_bridge. Evidence: staging smoke artifacts/simulations/stripe-dispute-lifecycle/2026-02-12T17-13-31-299Z-staging/smoke.json; prod smoke artifacts/simulations/stripe-dispute-lifecycle/2026-02-12T17-14-25-050Z-prod/smoke.json; post-deploy watches artifacts/ops/econ-risk/2026-02-12T17-14-29-625Z-staging-loss-event-watch/summary.json and artifacts/ops/econ-risk/2026-02-12T17-15-27-456Z-prod-loss-event-watch/summary.json."
     }
   ]
 }
