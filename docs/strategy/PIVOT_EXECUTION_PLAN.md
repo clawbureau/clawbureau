@@ -68,12 +68,12 @@
 ### Phase 4: x402 Integration (Agent A: Protocol)
 **Goal:** Make clawproxy a native x402 Resource Server.
 
-- [ ] P4-1: x402 integration design — `402 Payment Required` flow on clawproxy
-- [ ] P4-2: Add `@x402/core` and `@x402/evm` to clawproxy dependencies
-- [ ] P4-3: Implement x402 payment verification middleware in clawproxy
-- [ ] P4-4: Emit Clawsig Gateway Receipt that includes x402 payment reference
-- [ ] P4-5: Test with Base testnet (x402's primary network)
-- [ ] P4-6: Document x402 + Clawsig flow for developers
+- [x] P4-1: x402 integration design — PR #200 (`docs/specs/x402/CLAWPROXY_X402_INTEGRATION_v1.md`)
+- [x] P4-2: x402 module + types added to clawproxy — PR #200 (`services/clawproxy/src/x402.ts`)
+- [x] P4-3: x402 payment verification middleware (fail-closed) — PR #200
+- [x] P4-4: Gateway Receipt with x402 payment ref + hash cross-commitment — PR #200
+- [ ] P4-5: Test with Base testnet (needs wallet + facilitator setup)
+- [x] P4-6: Document x402 + Clawsig flow — PR #200
 
 ### Phase 5: The MVP Wedge — Claw Verified GitHub App (Agent A + D)
 **Goal:** First external users via CI/CD integration.
