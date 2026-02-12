@@ -1,0 +1,1071 @@
+{
+  "generatedAt": "2026-02-12T00:42:18.504Z",
+  "period": {
+    "from": "2026-02-05T00:42:16.061Z",
+    "to": "2026-02-12T00:42:16.061Z",
+    "days": 7
+  },
+  "events": {
+    "ok": true,
+    "range": {
+      "from": "2026-02-05T00:42:16.061Z",
+      "to": "2026-02-12T00:42:16.061Z",
+      "days": 7
+    },
+    "generatedAt": "2026-02-12T00:42:16.710Z",
+    "totals": {
+      "events": 7,
+      "contactIntentViews": 0,
+      "contactIntentActions": 4,
+      "leadSubmits": 2,
+      "bookingSubmits": 2,
+      "bookingCompletions": 2,
+      "intentToActionRate": 0,
+      "leadToBookingRate": 1,
+      "bookingCompletionRate": 1,
+      "searchQueries": 0,
+      "searchResultClicks": 0,
+      "searchToClickRate": 0
+    },
+    "breakdown": {
+      "byType": [
+        {
+          "key": "booking_complete",
+          "count": 2
+        },
+        {
+          "key": "booking_submit",
+          "count": 2
+        },
+        {
+          "key": "lead_submit",
+          "count": 2
+        },
+        {
+          "key": "cta_click",
+          "count": 1
+        }
+      ],
+      "bySource": [
+        {
+          "key": "book-api",
+          "count": 2
+        },
+        {
+          "key": "book-form",
+          "count": 2
+        },
+        {
+          "key": "direct",
+          "count": 2
+        },
+        {
+          "key": "utm:rev007-smoke",
+          "count": 1
+        }
+      ],
+      "topPages": [
+        {
+          "key": "/book",
+          "count": 4
+        },
+        {
+          "key": "/contact",
+          "count": 2
+        },
+        {
+          "key": "/pricing",
+          "count": 1
+        }
+      ],
+      "byPageFamily": [
+        {
+          "key": "book",
+          "count": 4
+        },
+        {
+          "key": "contact",
+          "count": 2
+        },
+        {
+          "key": "pricing",
+          "count": 1
+        }
+      ],
+      "topCtas": [
+        {
+          "key": "smoke",
+          "count": 1
+        }
+      ],
+      "byCtaVariant": [
+        {
+          "key": "submit",
+          "count": 6
+        }
+      ],
+      "byVariantId": [
+        {
+          "key": "book:proof:submit",
+          "count": 4
+        },
+        {
+          "key": "contact:proof:submit",
+          "count": 2
+        }
+      ],
+      "byHeroVariant": [
+        {
+          "key": "proof",
+          "count": 6
+        }
+      ],
+      "byOutcome": [
+        {
+          "key": "submitted",
+          "count": 4
+        },
+        {
+          "key": "completed",
+          "count": 2
+        }
+      ]
+    },
+    "funnel": {
+      "search": {
+        "queries": 0,
+        "clicks": 0,
+        "searchToClickRate": 0,
+        "topQueries": []
+      },
+      "ctaByPageFamily": [
+        {
+          "pageFamily": "book",
+          "views": 0,
+          "clicks": 0,
+          "actions": 2,
+          "actionRate": 0
+        },
+        {
+          "pageFamily": "contact",
+          "views": 0,
+          "clicks": 0,
+          "actions": 2,
+          "actionRate": 0
+        },
+        {
+          "pageFamily": "pricing",
+          "views": 0,
+          "clicks": 1,
+          "actions": 0,
+          "actionRate": 0
+        }
+      ],
+      "variants": [
+        {
+          "variantId": "book:proof:submit",
+          "impressions": 0,
+          "clicks": 0,
+          "submits": 2,
+          "clickRate": 0,
+          "submitRate": 0
+        },
+        {
+          "variantId": "contact:proof:submit",
+          "impressions": 0,
+          "clicks": 0,
+          "submits": 2,
+          "clickRate": 0,
+          "submitRate": 0
+        }
+      ],
+      "booking": {
+        "leadSubmits": 2,
+        "bookingSubmits": 2,
+        "bookingCompletions": 2,
+        "leadToBookingRate": 1,
+        "bookingCompletionRate": 1
+      }
+    },
+    "indexing": {
+      "queue": {
+        "totalEntries": 0,
+        "byEngine": {
+          "indexnow": {
+            "queued": 0,
+            "retry": 0,
+            "done": 0,
+            "failed": 0
+          },
+          "google": {
+            "queued": 0,
+            "retry": 0,
+            "done": 0,
+            "failed": 0
+          }
+        }
+      },
+      "lastRun": {
+        "runId": "2026-02-12T00-40-40-946Z",
+        "source": "scheduled",
+        "startedAt": "2026-02-12T00:40:40.946Z",
+        "finishedAt": "2026-02-12T00:40:41.093Z",
+        "processedEntries": 0,
+        "processedEngines": 0,
+        "succeeded": 0,
+        "scheduledRetry": 0,
+        "failed": 0,
+        "clearedEntries": 0,
+        "simulate429": false,
+        "items": [],
+        "queueAfter": {
+          "totalEntries": 0,
+          "byEngine": {
+            "indexnow": {
+              "queued": 0,
+              "retry": 0,
+              "done": 0,
+              "failed": 0
+            },
+            "google": {
+              "queued": 0,
+              "retry": 0,
+              "done": 0,
+              "failed": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "queue": {
+    "ok": false,
+    "error": "Request failed (401) https://clawea-www.generaite.workers.dev/api/index-queue/status: {\"ok\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Missing or invalid bearer token\"}}"
+  },
+  "leads": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:17.025Z",
+    "totals": {
+      "leads": 3,
+      "recentWindow": 3
+    },
+    "breakdown": {
+      "byStatus": [
+        {
+          "key": "booked",
+          "count": 2
+        },
+        {
+          "key": "new",
+          "count": 1
+        }
+      ],
+      "bySource": [
+        {
+          "key": "direct",
+          "count": 2
+        },
+        {
+          "key": "utm:rev007-smoke",
+          "count": 1
+        }
+      ],
+      "byPageFamily": [
+        {
+          "key": "contact",
+          "count": 3
+        }
+      ],
+      "byTransition": [
+        {
+          "key": "booked",
+          "count": 2
+        },
+        {
+          "key": "contacted",
+          "count": 2
+        },
+        {
+          "key": "qualified",
+          "count": 2
+        },
+        {
+          "key": "routed",
+          "count": 2
+        },
+        {
+          "key": "scored",
+          "count": 2
+        },
+        {
+          "key": "validated",
+          "count": 2
+        }
+      ]
+    },
+    "recent": [
+      {
+        "leadId": "lead_1677a43ee0d64dda8a2aa8c2",
+        "status": "booked",
+        "qualificationScore": 51,
+        "intentScore": 60,
+        "readinessScore": 43,
+        "roiScore": 41,
+        "riskScore": 40,
+        "dedupeCount": 0,
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "page": "/contact",
+        "pageFamily": "contact",
+        "company": "Rev007Smoke",
+        "role": "Security Lead",
+        "teamSize": "500+",
+        "timeline": "30-days",
+        "scoreBand": "low",
+        "segment": "enterprise",
+        "campaignId": "aeo-rev-007-smoke",
+        "variantId": "",
+        "heroVariant": "",
+        "ctaVariant": "",
+        "routeStatus": "sent",
+        "routedProviderId": "internal-r2",
+        "bookedAt": "2026-02-12T00:40:30.524Z",
+        "completedAt": "2026-02-12T00:40:31.428Z",
+        "emailHint": "pr***@example.com",
+        "createdAt": "2026-02-12T00:40:29.090Z",
+        "updatedAt": "2026-02-12T00:40:42.858Z",
+        "lastSeenAt": "2026-02-12T00:40:31.428Z"
+      },
+      {
+        "leadId": "lead_22a6f5f3d3524ec59f4541d2",
+        "status": "booked",
+        "qualificationScore": 33,
+        "intentScore": 35,
+        "readinessScore": 25,
+        "roiScore": 24,
+        "riskScore": 40,
+        "dedupeCount": 0,
+        "source": "direct",
+        "sourceIntent": "direct",
+        "page": "/contact",
+        "pageFamily": "contact",
+        "company": "ProdCo",
+        "role": "",
+        "teamSize": "500+",
+        "timeline": "30-days",
+        "scoreBand": "low",
+        "segment": "enterprise",
+        "campaignId": "",
+        "variantId": "",
+        "heroVariant": "",
+        "ctaVariant": "",
+        "routeStatus": "sent",
+        "routedProviderId": "internal-r2",
+        "bookedAt": "2026-02-12T00:20:12.725Z",
+        "completedAt": "2026-02-12T00:20:14.843Z",
+        "emailHint": "pr***@example.com",
+        "createdAt": "2026-02-12T00:20:11.058Z",
+        "updatedAt": "2026-02-12T00:20:23.588Z",
+        "lastSeenAt": "2026-02-12T00:20:14.843Z"
+      },
+      {
+        "leadId": "lead_8ba54cc5a3c94be2a7c5a8ed",
+        "status": "new",
+        "qualificationScore": 8,
+        "intentScore": 3,
+        "readinessScore": 2,
+        "roiScore": 2,
+        "riskScore": 40,
+        "dedupeCount": 0,
+        "source": "direct",
+        "sourceIntent": "direct",
+        "page": "/contact",
+        "pageFamily": "contact",
+        "company": "Smoke Inc",
+        "role": "",
+        "teamSize": "",
+        "timeline": "",
+        "scoreBand": "low",
+        "segment": "smb",
+        "campaignId": "",
+        "variantId": "",
+        "heroVariant": "",
+        "ctaVariant": "",
+        "routeStatus": "pending",
+        "routedProviderId": "",
+        "bookedAt": null,
+        "completedAt": null,
+        "emailHint": "sm***@example.com",
+        "createdAt": "2026-02-11T23:03:38.317Z",
+        "updatedAt": "2026-02-11T23:03:49.684Z",
+        "lastSeenAt": "2026-02-11T23:03:38.317Z"
+      }
+    ]
+  },
+  "winners": {
+    "ok": false,
+    "error": "Request failed (404) https://clawea-www.generaite.workers.dev/api/experiments/winners: {\"ok\":false,\"error\":{\"code\":\"REPORT_NOT_FOUND\",\"message\":\"No variant report found\"}}"
+  },
+  "routing": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:17.297Z",
+    "summary": {
+      "byState": [
+        {
+          "key": "sent",
+          "count": 2
+        }
+      ],
+      "bySegment": [
+        {
+          "key": "enterprise",
+          "count": 2
+        }
+      ],
+      "deadLetter": {
+        "total": 0,
+        "pending": 0
+      },
+      "queueLagThresholdMinutes": 20,
+      "maxLagMinutes": 0,
+      "laggingJobs": []
+    },
+    "recentJobs": [
+      {
+        "job_id": "route_job_a8feafcb9bbc43efa6781a51",
+        "lead_id": "lead_1677a43ee0d64dda8a2aa8c2",
+        "segment": "enterprise",
+        "provider_id": "internal-r2",
+        "state": "sent",
+        "attempts": 1,
+        "max_attempts": 5,
+        "next_attempt_at": null,
+        "last_error_code": "",
+        "updated_at": "2026-02-12T00:40:42.858Z",
+        "sent_at": "2026-02-12T00:40:42.858Z",
+        "dead_lettered_at": null
+      },
+      {
+        "job_id": "route_job_8fdc90b3f72a4800a56f1747",
+        "lead_id": "lead_22a6f5f3d3524ec59f4541d2",
+        "segment": "enterprise",
+        "provider_id": "internal-r2",
+        "state": "sent",
+        "attempts": 1,
+        "max_attempts": 5,
+        "next_attempt_at": null,
+        "last_error_code": "",
+        "updated_at": "2026-02-12T00:20:23.588Z",
+        "sent_at": "2026-02-12T00:20:23.588Z",
+        "dead_lettered_at": null
+      }
+    ]
+  },
+  "attribution": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:17.430Z",
+    "range": {
+      "from": "2026-02-05T00:42:17.408Z",
+      "to": "2026-02-12T00:42:17.408Z",
+      "days": 7
+    },
+    "totals": {
+      "leads": 3,
+      "booked": 2,
+      "completed": 2,
+      "bookedRate": 0.6667,
+      "completedRate": 0.6667
+    },
+    "rows": [
+      {
+        "source": "direct",
+        "sourceIntent": "direct",
+        "campaignId": "",
+        "pageFamily": "contact",
+        "variant": "",
+        "scoreBand": "low",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "bookedRate": 0.5,
+        "completedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "campaignId": "aeo-rev-007-smoke",
+        "pageFamily": "contact",
+        "variant": "",
+        "scoreBand": "low",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "bookedRate": 1,
+        "completedRate": 1
+      }
+    ]
+  },
+  "recommendations": {
+    "ok": true,
+    "key": "reports/growth/experiment-winner-recommendation-2026-02-12.json",
+    "guardrails": {
+      "minImpressions": 40,
+      "minBooked": 2,
+      "minConfidence": 0.12,
+      "holdoutPercent": 5,
+      "autoApply": false
+    },
+    "recommendations": [
+      {
+        "pageFamily": "book",
+        "recommendedVariant": null,
+        "winner": {
+          "pageFamily": "book",
+          "variant": "submit",
+          "impressions": 0,
+          "submits": 2,
+          "booked": 0,
+          "submitRate": 0,
+          "bookedRate": 0,
+          "confidenceFloor": 0,
+          "confidenceUpper": 0.7935
+        },
+        "runnerUp": null,
+        "candidates": [
+          {
+            "pageFamily": "book",
+            "variant": "submit",
+            "impressions": 0,
+            "submits": 2,
+            "booked": 0,
+            "submitRate": 0,
+            "bookedRate": 0,
+            "confidenceFloor": 0,
+            "confidenceUpper": 0.7935
+          }
+        ],
+        "holdoutPercent": 5,
+        "guardrailNotes": [
+          "insufficient_impressions",
+          "insufficient_bookings",
+          "insufficient_confidence"
+        ]
+      },
+      {
+        "pageFamily": "contact",
+        "recommendedVariant": null,
+        "winner": {
+          "pageFamily": "contact",
+          "variant": "submit",
+          "impressions": 0,
+          "submits": 2,
+          "booked": 0,
+          "submitRate": 0,
+          "bookedRate": 0,
+          "confidenceFloor": 0,
+          "confidenceUpper": 0.7935
+        },
+        "runnerUp": null,
+        "candidates": [
+          {
+            "pageFamily": "contact",
+            "variant": "submit",
+            "impressions": 0,
+            "submits": 2,
+            "booked": 0,
+            "submitRate": 0,
+            "bookedRate": 0,
+            "confidenceFloor": 0,
+            "confidenceUpper": 0.7935
+          }
+        ],
+        "holdoutPercent": 5,
+        "guardrailNotes": [
+          "insufficient_impressions",
+          "insufficient_bookings",
+          "insufficient_confidence"
+        ]
+      }
+    ]
+  },
+  "attributionRevenue": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:17.973Z",
+    "range": {
+      "from": "2026-02-05T00:42:17.930Z",
+      "to": "2026-02-12T00:42:17.930Z",
+      "days": 7
+    },
+    "totals": {
+      "leads": 3,
+      "booked": 2,
+      "completed": 2,
+      "leadToBookedRate": 0.6667,
+      "leadToCompletedRate": 0.6667
+    },
+    "attribution": {
+      "firstTouch": [
+        {
+          "source": "direct",
+          "leads": 2,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 0.5,
+          "leadToCompletedRate": 0.5
+        },
+        {
+          "source": "utm:rev007-smoke",
+          "leads": 1,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 1,
+          "leadToCompletedRate": 1
+        }
+      ],
+      "lastTouch": [
+        {
+          "source": "direct",
+          "leads": 2,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 0.5,
+          "leadToCompletedRate": 0.5
+        },
+        {
+          "source": "utm:rev007-smoke",
+          "leads": 1,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 1,
+          "leadToCompletedRate": 1
+        }
+      ],
+      "assists": []
+    },
+    "conversionByDimension": [
+      {
+        "source": "direct",
+        "sourceIntent": "direct",
+        "campaignId": "",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 0.5,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "campaignId": "aeo-rev-007-smoke",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 1,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 1
+      }
+    ]
+  },
+  "opsLeadHealth": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:18.145Z",
+    "sla": {
+      "nowIso": "2026-02-12T00:42:18.005Z",
+      "slaMinutes": 45,
+      "totalLeads": 3,
+      "openLeads": 1,
+      "dueSoon": 0,
+      "breached": 1,
+      "breachRate": 1,
+      "openByStatus": [
+        {
+          "key": "new",
+          "count": 1
+        }
+      ],
+      "breachedBySegment": [
+        {
+          "key": "smb",
+          "count": 1
+        }
+      ],
+      "topBreaches": [
+        {
+          "leadId": "lead_8ba54cc5a3c94be2a7c5a8ed",
+          "status": "new",
+          "createdAt": "2026-02-11T23:03:38.317Z",
+          "dueAt": "2026-02-11T23:48:38.317Z",
+          "overdueMinutes": 53,
+          "source": "direct",
+          "sourceIntent": "direct",
+          "pageFamily": "contact",
+          "campaignId": "",
+          "segment": "smb",
+          "scoreBand": "low",
+          "qualificationScore": 8
+        }
+      ]
+    },
+    "totals": {
+      "byStatus": [
+        {
+          "key": "booked",
+          "count": 2
+        },
+        {
+          "key": "new",
+          "count": 1
+        }
+      ]
+    },
+    "failingSteps": {
+      "leadSubmit": [],
+      "routing": [],
+      "top": []
+    }
+  },
+  "opsRoutingHealth": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:18.313Z",
+    "queueLagThresholdMinutes": 20,
+    "maxLagMinutes": 0,
+    "laggingJobs": [],
+    "stateCounts": [
+      {
+        "key": "sent",
+        "count": 2
+      }
+    ],
+    "segmentCounts": [
+      {
+        "key": "enterprise",
+        "count": 2
+      }
+    ],
+    "deadLetter": {
+      "total": 0,
+      "pending": 0
+    }
+  },
+  "opsConversionHeatmap": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:18.368Z",
+    "range": {
+      "from": "2026-02-05T00:42:18.346Z",
+      "to": "2026-02-12T00:42:18.346Z",
+      "days": 7
+    },
+    "totals": {
+      "leads": 3,
+      "booked": 2,
+      "completed": 2,
+      "leadToBookedRate": 0.6667,
+      "leadToCompletedRate": 0.6667
+    },
+    "rows": [
+      {
+        "source": "direct",
+        "sourceIntent": "direct",
+        "campaignId": "",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 0.5,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "campaignId": "aeo-rev-007-smoke",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 1,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 1
+      }
+    ]
+  },
+  "opsFailingSteps": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:18.501Z",
+    "range": {
+      "from": "2026-02-05T00:42:18.456Z",
+      "to": "2026-02-12T00:42:18.456Z",
+      "days": 7
+    },
+    "buckets": {
+      "leadSubmit": [],
+      "routing": [],
+      "top": []
+    }
+  },
+  "highlights": {
+    "topLandingPages": [
+      {
+        "key": "/book",
+        "count": 4
+      },
+      {
+        "key": "/contact",
+        "count": 2
+      },
+      {
+        "key": "/pricing",
+        "count": 1
+      }
+    ],
+    "searchToClick": {
+      "queries": 0,
+      "clicks": 0,
+      "rate": 0,
+      "topQueries": []
+    },
+    "ctaByPageFamily": [
+      {
+        "pageFamily": "book",
+        "views": 0,
+        "clicks": 0,
+        "actions": 2,
+        "actionRate": 0
+      },
+      {
+        "pageFamily": "contact",
+        "views": 0,
+        "clicks": 0,
+        "actions": 2,
+        "actionRate": 0
+      },
+      {
+        "pageFamily": "pricing",
+        "views": 0,
+        "clicks": 1,
+        "actions": 0,
+        "actionRate": 0
+      }
+    ],
+    "variantPerformance": [
+      {
+        "variantId": "book:proof:submit",
+        "impressions": 0,
+        "clicks": 0,
+        "submits": 2,
+        "clickRate": 0,
+        "submitRate": 0
+      },
+      {
+        "variantId": "contact:proof:submit",
+        "impressions": 0,
+        "clicks": 0,
+        "submits": 2,
+        "clickRate": 0,
+        "submitRate": 0
+      }
+    ],
+    "winnerByFamily": [],
+    "leadStatus": [
+      {
+        "key": "booked",
+        "count": 2
+      },
+      {
+        "key": "new",
+        "count": 1
+      }
+    ],
+    "routingState": [
+      {
+        "key": "sent",
+        "count": 2
+      }
+    ],
+    "routingSegment": [
+      {
+        "key": "enterprise",
+        "count": 2
+      }
+    ],
+    "attributionRows": [
+      {
+        "source": "direct",
+        "sourceIntent": "direct",
+        "campaignId": "",
+        "pageFamily": "contact",
+        "variant": "",
+        "scoreBand": "low",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "bookedRate": 0.5,
+        "completedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "campaignId": "aeo-rev-007-smoke",
+        "pageFamily": "contact",
+        "variant": "",
+        "scoreBand": "low",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "bookedRate": 1,
+        "completedRate": 1
+      }
+    ],
+    "winnerRecommendations": [
+      {
+        "pageFamily": "book",
+        "recommendedVariant": null,
+        "winner": {
+          "pageFamily": "book",
+          "variant": "submit",
+          "impressions": 0,
+          "submits": 2,
+          "booked": 0,
+          "submitRate": 0,
+          "bookedRate": 0,
+          "confidenceFloor": 0,
+          "confidenceUpper": 0.7935
+        },
+        "runnerUp": null,
+        "candidates": [
+          {
+            "pageFamily": "book",
+            "variant": "submit",
+            "impressions": 0,
+            "submits": 2,
+            "booked": 0,
+            "submitRate": 0,
+            "bookedRate": 0,
+            "confidenceFloor": 0,
+            "confidenceUpper": 0.7935
+          }
+        ],
+        "holdoutPercent": 5,
+        "guardrailNotes": [
+          "insufficient_impressions",
+          "insufficient_bookings",
+          "insufficient_confidence"
+        ]
+      },
+      {
+        "pageFamily": "contact",
+        "recommendedVariant": null,
+        "winner": {
+          "pageFamily": "contact",
+          "variant": "submit",
+          "impressions": 0,
+          "submits": 2,
+          "booked": 0,
+          "submitRate": 0,
+          "bookedRate": 0,
+          "confidenceFloor": 0,
+          "confidenceUpper": 0.7935
+        },
+        "runnerUp": null,
+        "candidates": [
+          {
+            "pageFamily": "contact",
+            "variant": "submit",
+            "impressions": 0,
+            "submits": 2,
+            "booked": 0,
+            "submitRate": 0,
+            "bookedRate": 0,
+            "confidenceFloor": 0,
+            "confidenceUpper": 0.7935
+          }
+        ],
+        "holdoutPercent": 5,
+        "guardrailNotes": [
+          "insufficient_impressions",
+          "insufficient_bookings",
+          "insufficient_confidence"
+        ]
+      }
+    ],
+    "slaTopBreaches": [
+      {
+        "leadId": "lead_8ba54cc5a3c94be2a7c5a8ed",
+        "status": "new",
+        "createdAt": "2026-02-11T23:03:38.317Z",
+        "dueAt": "2026-02-11T23:48:38.317Z",
+        "overdueMinutes": 53,
+        "source": "direct",
+        "sourceIntent": "direct",
+        "pageFamily": "contact",
+        "campaignId": "",
+        "segment": "smb",
+        "scoreBand": "low",
+        "qualificationScore": 8
+      }
+    ],
+    "conversionHeatmap": [
+      {
+        "source": "direct",
+        "sourceIntent": "direct",
+        "campaignId": "",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 0.5,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "campaignId": "aeo-rev-007-smoke",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 1,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 1
+      }
+    ],
+    "attributionRevenueLastTouch": [
+      {
+        "source": "direct",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "assists": 0,
+        "leadToBookedRate": 0.5,
+        "leadToCompletedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "assists": 0,
+        "leadToBookedRate": 1,
+        "leadToCompletedRate": 1
+      }
+    ],
+    "failingSteps": [],
+    "routingLaggingJobs": [],
+    "indexingBacklog": null,
+    "indexingLastRun": null
+  }
+}

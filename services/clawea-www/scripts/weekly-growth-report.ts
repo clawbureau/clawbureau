@@ -37,6 +37,11 @@ const winnersEndpoint = getArg("winners-endpoint") ?? `${baseUrl.replace(/\/+$/,
 const routingEndpoint = getArg("routing-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/routing/status`;
 const attributionEndpoint = getArg("attribution-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/attribution/summary`;
 const recommendationEndpoint = getArg("recommendation-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/experiments/recommend`;
+const attributionRevenueEndpoint = getArg("attribution-revenue-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/attribution/revenue`;
+const opsLeadHealthEndpoint = getArg("ops-lead-health-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/ops/lead-funnel-health`;
+const opsRoutingHealthEndpoint = getArg("ops-routing-health-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/ops/routing-health`;
+const opsConversionHeatmapEndpoint = getArg("ops-conversion-heatmap-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/ops/conversion-heatmap`;
+const opsFailingStepsEndpoint = getArg("ops-failing-steps-endpoint") ?? `${baseUrl.replace(/\/+$/, "")}/api/ops/failing-steps`;
 const days = Math.max(1, Math.min(90, Number(getArg("days") ?? process.env.CLAWEA_GROWTH_DAYS ?? "7")));
 
 const now = new Date();
@@ -127,8 +132,37 @@ function bulletsRecommendations(rows: any[] | undefined, fallback = "- none"): s
       if (!r?.recommendedVariant) {
         return `- ${r?.pageFamily ?? "unknown"}: no recommendation (${Array.isArray(r?.guardrailNotes) ? r.guardrailNotes.join(",") : "guardrail"})`;
       }
-      return `- ${r.pageFamily}: recommend ${r.recommendedVariant} (bookedRate=${r?.winner?.bookedRate ?? 0}, impressions=${r?.winner?.impressions ?? 0})`;
+      return `- ${r.pageFamily}: recommend ${r.recommendedVariant} (bookedRate=${r?.winner?.bookedRate ?? 0}, impressions=${r?.winner?.impressions ?? 0}, confidence=${r?.winner?.confidenceFloor ?? 0})`;
     })
+    .join("\n");
+}
+
+function bulletsSlaBreaches(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 12)
+    .map((r) => `- ${r.leadId}: overdue=${r.overdueMinutes}m status=${r.status} source=${r.sourceIntent ?? r.source}`)
+    .join("\n");
+}
+
+function bulletsHeatmap(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 12)
+    .map((r) => {
+      const family = r.pageFamily ?? "all";
+      const variant = r.variant ?? "na";
+      const rate = r.leadToCompletedRate ?? r.leadToBookedRate ?? 0;
+      return `- ${r.source}/${family}/${variant}: leads=${r.leads}, booked=${r.booked}, completed=${r.completed}, L→C=${rate}`;
+    })
+    .join("\n");
+}
+
+function bulletsFailing(rows: any[] | undefined, fallback = "- none"): string {
+  if (!Array.isArray(rows) || rows.length === 0) return fallback;
+  return rows
+    .slice(0, 12)
+    .map((r) => `- ${r.key}: ${r.count}`)
     .join("\n");
 }
 
@@ -170,7 +204,12 @@ async function main() {
     }),
   }, AUTOMATION_TOKEN ?? OPS_TOKEN!);
 
-  const queue = await authedJson(queueEndpoint, { method: "GET" }, AUTOMATION_TOKEN ?? OPS_TOKEN!);
+  let queue: any = null;
+  try {
+    queue = await authedJson(queueEndpoint, { method: "GET" }, AUTOMATION_TOKEN ?? OPS_TOKEN!);
+  } catch (err: any) {
+    queue = { ok: false, error: String(err?.message ?? "QUEUE_STATUS_UNAVAILABLE") };
+  }
 
   let leads: any = null;
   try {
@@ -210,6 +249,41 @@ async function main() {
     recommendations = { ok: false, error: String(err?.message ?? "RECOMMENDATIONS_UNAVAILABLE") };
   }
 
+  let attributionRevenue: any = null;
+  try {
+    attributionRevenue = await authedJson(`${attributionRevenueEndpoint}?days=${days}`, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    attributionRevenue = { ok: false, error: String(err?.message ?? "ATTRIBUTION_REVENUE_UNAVAILABLE") };
+  }
+
+  let opsLeadHealth: any = null;
+  try {
+    opsLeadHealth = await authedJson(`${opsLeadHealthEndpoint}?days=${days}`, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    opsLeadHealth = { ok: false, error: String(err?.message ?? "OPS_LEAD_HEALTH_UNAVAILABLE") };
+  }
+
+  let opsRoutingHealth: any = null;
+  try {
+    opsRoutingHealth = await authedJson(opsRoutingHealthEndpoint, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    opsRoutingHealth = { ok: false, error: String(err?.message ?? "OPS_ROUTING_HEALTH_UNAVAILABLE") };
+  }
+
+  let opsConversionHeatmap: any = null;
+  try {
+    opsConversionHeatmap = await authedJson(`${opsConversionHeatmapEndpoint}?days=${days}`, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    opsConversionHeatmap = { ok: false, error: String(err?.message ?? "OPS_CONVERSION_HEATMAP_UNAVAILABLE") };
+  }
+
+  let opsFailingSteps: any = null;
+  try {
+    opsFailingSteps = await authedJson(`${opsFailingStepsEndpoint}?days=${days}`, { method: "GET" }, OPS_TOKEN ?? AUTOMATION_TOKEN!);
+  } catch (err: any) {
+    opsFailingSteps = { ok: false, error: String(err?.message ?? "OPS_FAILING_STEPS_UNAVAILABLE") };
+  }
+
   const report = {
     generatedAt: new Date().toISOString(),
     period: {
@@ -224,6 +298,11 @@ async function main() {
     routing,
     attribution,
     recommendations,
+    attributionRevenue,
+    opsLeadHealth,
+    opsRoutingHealth,
+    opsConversionHeatmap,
+    opsFailingSteps,
     highlights: {
       topLandingPages: topRows(events?.breakdown?.topPages, 10),
       searchToClick: {
@@ -258,6 +337,21 @@ async function main() {
       winnerRecommendations: Array.isArray(recommendations?.recommendations)
         ? recommendations.recommendations.slice(0, 16)
         : [],
+      slaTopBreaches: Array.isArray(opsLeadHealth?.sla?.topBreaches)
+        ? opsLeadHealth.sla.topBreaches.slice(0, 20)
+        : [],
+      conversionHeatmap: Array.isArray(opsConversionHeatmap?.rows)
+        ? opsConversionHeatmap.rows.slice(0, 20)
+        : [],
+      attributionRevenueLastTouch: Array.isArray(attributionRevenue?.attribution?.lastTouch)
+        ? attributionRevenue.attribution.lastTouch.slice(0, 20)
+        : [],
+      failingSteps: Array.isArray(opsFailingSteps?.buckets?.top)
+        ? opsFailingSteps.buckets.top.slice(0, 20)
+        : [],
+      routingLaggingJobs: Array.isArray(opsRoutingHealth?.laggingJobs)
+        ? opsRoutingHealth.laggingJobs.slice(0, 20)
+        : [],
       indexingBacklog: queue?.summary ?? null,
       indexingLastRun: queue?.lastRun ?? null,
     },
@@ -287,6 +381,19 @@ async function main() {
     + `- pending: ${Number(routing?.summary?.deadLetter?.pending ?? 0)}\n\n`
     + `## Attribution summary (lead → booked)\n${bulletsAttribution(report.highlights.attributionRows)}\n\n`
     + `## Experiment recommendations (guardrailed)\n${bulletsRecommendations(report.highlights.winnerRecommendations)}\n\n`
+    + `## Lead response SLA\n`
+    + `- slaMinutes: ${Number(opsLeadHealth?.sla?.slaMinutes ?? 0)}\n`
+    + `- openLeads: ${Number(opsLeadHealth?.sla?.openLeads ?? 0)}\n`
+    + `- breached: ${Number(opsLeadHealth?.sla?.breached ?? 0)}\n`
+    + `- breachRate: ${Number(opsLeadHealth?.sla?.breachRate ?? 0)}\n`
+    + `${bulletsSlaBreaches(report.highlights.slaTopBreaches)}\n\n`
+    + `## Routing lag health\n`
+    + `- lagThresholdMinutes: ${Number(opsRoutingHealth?.queueLagThresholdMinutes ?? 0)}\n`
+    + `- maxLagMinutes: ${Number(opsRoutingHealth?.maxLagMinutes ?? 0)}\n`
+    + `- laggingJobs: ${Array.isArray(report.highlights.routingLaggingJobs) ? report.highlights.routingLaggingJobs.length : 0}\n\n`
+    + `## Conversion heatmap (source/campaign/page family)\n${bulletsHeatmap(report.highlights.conversionHeatmap)}\n\n`
+    + `## Attribution revenue (last touch)\n${bulletsHeatmap(report.highlights.attributionRevenueLastTouch)}\n\n`
+    + `## Top failing steps\n${bulletsFailing(report.highlights.failingSteps)}\n\n`
     + `## Indexing backlog\n`
     + `- totalEntries: ${Number(queue?.summary?.totalEntries ?? 0)}\n`
     + `- nextAttemptAt: ${queue?.summary?.nextAttemptAt ?? "none"}\n`

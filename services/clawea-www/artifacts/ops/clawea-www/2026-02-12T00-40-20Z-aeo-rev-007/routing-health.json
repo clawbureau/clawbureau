@@ -1,0 +1,1 @@
+{"ok":true,"generatedAt":"2026-02-12T00:40:33.210Z","queueLagThresholdMinutes":20,"maxLagMinutes":0,"laggingJobs":[],"stateCounts":[{"key":"queued","count":1},{"key":"sent","count":1}],"segmentCounts":[{"key":"enterprise","count":2}],"deadLetter":{"total":0,"pending":0}}
