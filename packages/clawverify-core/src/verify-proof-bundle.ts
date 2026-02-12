@@ -1698,6 +1698,105 @@ export async function verifyProofBundle(
     }
   }
 
+  // Validate tool receipts when present (CPL-US-006: fail-closed on unknown schema)
+  if ((payload as unknown as Record<string, unknown>).tool_receipts !== undefined) {
+    const toolReceipts = (payload as unknown as Record<string, unknown>).tool_receipts;
+    if (!Array.isArray(toolReceipts)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'tool_receipts must be an array',
+          verified_at: now,
+        },
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'payload.tool_receipts must be an array',
+          field: 'payload.tool_receipts',
+        },
+      };
+    }
+
+    const REQUIRED_TOOL_RECEIPT_FIELDS = [
+      'receipt_version', 'receipt_id', 'tool_name', 'args_hash_b64u',
+      'result_hash_b64u', 'hash_algorithm', 'agent_did', 'timestamp', 'latency_ms',
+    ] as const;
+
+    for (let i = 0; i < toolReceipts.length; i++) {
+      const tr = toolReceipts[i];
+      if (typeof tr !== 'object' || tr === null || Array.isArray(tr)) {
+        return {
+          result: { status: 'INVALID', reason: `tool_receipts[${i}] must be an object`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}] must be an object`, field: `payload.tool_receipts[${i}]` },
+        };
+      }
+
+      const rec = tr as Record<string, unknown>;
+
+      // Fail-closed: unknown receipt_version
+      if (rec.receipt_version !== '1') {
+        return {
+          result: { status: 'INVALID', reason: `tool_receipts[${i}]: unknown receipt_version`, verified_at: now },
+          error: { code: 'UNKNOWN_VERSION', message: `tool_receipts[${i}].receipt_version must be "1"`, field: `payload.tool_receipts[${i}].receipt_version` },
+        };
+      }
+
+      // Fail-closed: unknown hash algorithm
+      if (rec.hash_algorithm !== 'SHA-256') {
+        return {
+          result: { status: 'INVALID', reason: `tool_receipts[${i}]: unknown hash_algorithm`, verified_at: now },
+          error: { code: 'UNKNOWN_HASH_ALGORITHM', message: `tool_receipts[${i}].hash_algorithm must be "SHA-256"`, field: `payload.tool_receipts[${i}].hash_algorithm` },
+        };
+      }
+
+      for (const field of REQUIRED_TOOL_RECEIPT_FIELDS) {
+        if (rec[field] === undefined || rec[field] === null) {
+          return {
+            result: { status: 'INVALID', reason: `tool_receipts[${i}]: missing ${field}`, verified_at: now },
+            error: { code: 'MISSING_REQUIRED_FIELD', message: `tool_receipts[${i}].${field} is required`, field: `payload.tool_receipts[${i}].${field}` },
+          };
+        }
+      }
+
+      // Validate string fields
+      for (const f of ['receipt_id', 'tool_name', 'args_hash_b64u', 'result_hash_b64u', 'agent_did', 'timestamp'] as const) {
+        if (typeof rec[f] !== 'string' || (rec[f] as string).length === 0) {
+          return {
+            result: { status: 'INVALID', reason: `tool_receipts[${i}]: invalid ${f}`, verified_at: now },
+            error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}].${f} must be a non-empty string`, field: `payload.tool_receipts[${i}].${f}` },
+          };
+        }
+      }
+
+      if (typeof rec.latency_ms !== 'number' || rec.latency_ms < 0) {
+        return {
+          result: { status: 'INVALID', reason: `tool_receipts[${i}]: invalid latency_ms`, verified_at: now },
+          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}].latency_ms must be a non-negative number`, field: `payload.tool_receipts[${i}].latency_ms` },
+        };
+      }
+
+      // Validate base64url hashes
+      for (const f of ['args_hash_b64u', 'result_hash_b64u'] as const) {
+        if (!isValidBase64Url(rec[f])) {
+          return {
+            result: { status: 'INVALID', reason: `tool_receipts[${i}]: invalid ${f} format`, verified_at: now },
+            error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}].${f} must be valid base64url`, field: `payload.tool_receipts[${i}].${f}` },
+          };
+        }
+      }
+
+      // Agent DID must match bundle agent
+      if (rec.agent_did !== payload.agent_did) {
+        return {
+          result: { status: 'INVALID', reason: `tool_receipts[${i}]: agent_did mismatch`, verified_at: now },
+          error: { code: 'PROOF_BUNDLE_AGENT_MISMATCH', message: `tool_receipts[${i}].agent_did must equal payload.agent_did`, field: `payload.tool_receipts[${i}].agent_did` },
+        };
+      }
+    }
+
+    componentResults.tool_receipts_count = toolReceipts.length;
+    componentResults.tool_receipts_valid = true;
+  }
+
   // Validate + verify attestations if present
   // CVF-US-023: Attestations MUST be signature-verified AND attester_did allowlisted
   //             before they can uplift trust tier.

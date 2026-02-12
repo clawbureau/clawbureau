@@ -18,6 +18,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            packages/clawverify-core/package-lock.json
+            packages/clawverify-cli/package-lock.json
 
       - name: Install + build clawverify-core
         run: |
@@ -34,3 +38,12 @@ jobs:
       - name: Claw Verified PR (offline)
         run: |
           node scripts/protocol/run-claw-verified-pr.mjs
+
+      - name: Upload verify summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claw-verified-pr-summary
+          path: artifacts/ops/claw-verified-pr/
+          if-no-files-found: ignore
+          retention-days: 90

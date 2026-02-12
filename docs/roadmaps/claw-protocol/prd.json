@@ -1,7 +1,7 @@
 {
   "name": "clawbureau",
   "project": "clawbureau",
-  "description": "Claw Protocol v0.1 — publish an open narrow waist (policy/capability/receipts/bundles/verifier), make coverage explicit, and ship frictionless governance UX patterns.",
+  "description": "Claw Protocol v0.1 - publish an open narrow waist (policy/capability/receipts/bundles/verifier), make coverage explicit, and ship frictionless governance UX patterns.",
   "branchName": "ralph/claw-protocol-v0.1",
   "userStories": [
     {
@@ -13,25 +13,25 @@
         "Define the 5 primitives: Policy Artifact (WPC), Capability Token (CST), Receipt, Bundle, Verifier",
         "Document versioning + canonicalization requirements and fail-closed rules",
         "Explicitly define receipt binding requirements and replay safety expectations",
-        "Include clear ‘what is proven / what is not proven’ language"
+        "Include clear 'what is proven / what is not proven' language"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": "Protocol spec must not require Claw’s marketplace/payments modules."
+      "passes": true,
+      "notes": "Spec published at docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md. Defines 5 primitives, coverage matrix, fail-closed semantics, identity pluggability, and explicit 'what is proven / what is not' language."
     },
     {
       "id": "CPL-US-002",
-      "title": "Publish an explicit coverage matrix (no ambiguous ‘every action attested’)",
+      "title": "Publish an explicit coverage matrix (no ambiguous 'every action attested')",
       "description": "As a buyer/enterprise, I want exact coverage claims so I can understand what is and is not attested, without marketing ambiguity.",
       "acceptanceCriteria": [
-        "Add a ‘Coverage’ section to CLAW_PROTOCOL_v0.1 defining ‘action’ as side-effect boundaries",
+        "Add a 'Coverage' section to CLAW_PROTOCOL_v0.1 defining 'action' as side-effect boundaries",
         "Publish a coverage matrix that distinguishes: model receipts vs tool receipts vs side-effect receipts vs human approval receipts",
         "Update relevant PRDs to reference the coverage matrix and avoid over-claiming",
         "Document current shipped coverage level as-of the roadmap start date"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "This is an explicit credibility gate: ‘action attestation’ requires side-effect boundaries or must be reworded."
+      "passes": true,
+      "notes": "Coverage matrix published in CLAW_PROTOCOL_v0.1.md §2.3. Distinguishes Coverage M (model), MT (model+tools), MTS (model+tools+side-effects). Current truth: MT shipped. PRDs updated to reference coverage matrix."
     },
     {
       "id": "CPL-US-003",
@@ -44,8 +44,8 @@
         "Update verifier docs to surface reason codes consistently"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "This should converge existing service error codes into a small, stable protocol surface (without breaking existing APIs)."
+      "passes": true,
+      "notes": "Reason code registry published at docs/specs/claw-protocol/REASON_CODE_REGISTRY.md. Mined 400+ codes from all services; organized by category (SIGNATURE_*, SCHEMA_*, UNKNOWN_*, HASH_*, DEPENDENCY_*, REPLAY_*, TOKEN_*, POLICY_*). Defines required response shape for deny semantics. Conformance vectors assert registered codes only."
     },
     {
       "id": "CPL-US-004",
@@ -66,7 +66,7 @@
       "title": "Conformance suite + test vectors (PASS/FAIL fixtures)",
       "description": "As a third-party implementer, I want conformance vectors so I can prove my implementation matches the protocol.",
       "acceptanceCriteria": [
-        "Publish ‘golden’ bundles that MUST PASS",
+        "Publish 'golden' bundles that MUST PASS",
         "Publish tampered variants that MUST FAIL with specific reason codes",
         "Add CI that runs the verifier against the vectors",
         "Document versioning policy for vectors (additive; never mutate)"
@@ -78,7 +78,7 @@
     {
       "id": "CPL-US-006",
       "title": "Tool receipt schema + minimal SDK (tool dispatcher boundary)",
-      "description": "As a tool author/runtime integrator, I want a standard way to receipt tool calls so ‘action attestation’ can include tool execution.",
+      "description": "As a tool author/runtime integrator, I want a standard way to receipt tool calls so 'action attestation' can include tool execution.",
       "acceptanceCriteria": [
         "Define a versioned tool_receipt schema (hash-only by default)",
         "Document canonicalization and signing requirements",
@@ -86,8 +86,8 @@
         "Extend verifier to validate tool receipts when present (fail-closed on unknown schema)"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "This can start as ‘optional receipts’ (observe mode) but must be verifiable and portable."
+      "passes": true,
+      "notes": "Shipped: tool_receipt.v1.json + tool_receipt_envelope.v1.json schemas; SDK recordToolCall() in clawproof-sdk; clawverify-core validates tool receipts in proof bundles (fail-closed on unknown version/algo); conformance vectors for valid/tampered/missing-field/agent-mismatch. Coverage statement updated to MT."
     },
     {
       "id": "CPL-US-007",
@@ -115,7 +115,7 @@
       ],
       "priority": 8,
       "passes": false,
-      "notes": "This is the core ‘human love’ UX primitive and should integrate cleanly with existing CST issuance."
+      "notes": "This is the core 'human love' UX primitive and should integrate cleanly with existing CST issuance."
     },
     {
       "id": "CPL-US-009",
@@ -148,10 +148,10 @@
     {
       "id": "CPL-US-011",
       "title": "Bring-your-own identity profile (OIDC/service accounts; DID optional)",
-      "description": "As an enterprise, I want identity to be pluggable so protocol adoption doesn’t require a DID migration.",
+      "description": "As an enterprise, I want identity to be pluggable so protocol adoption doesn't require a DID migration.",
       "acceptanceCriteria": [
         "Protocol spec documents identity as pluggable (OIDC/service accounts/DIDs)",
-        "Document a canonical ‘subject’ representation and mapping rules",
+        "Document a canonical 'subject' representation and mapping rules",
         "Ensure capability tokens and receipts can carry non-DID identities where appropriate",
         "Fail-closed rules remain deterministic regardless of identity provider"
       ],
@@ -161,10 +161,10 @@
     },
     {
       "id": "CPL-US-012",
-      "title": "‘Claw Verified’ supply-chain wedge for skills/tools",
+      "title": "'Claw Verified' supply-chain wedge for skills/tools",
       "description": "As a platform operator, I want a default trust mark for skills/tools so malicious ecosystem components are quarantined by default.",
       "acceptanceCriteria": [
-        "Define requirements for ‘verified’ tools (version pinning + receipt emission + verification)",
+        "Define requirements for 'verified' tools (version pinning + receipt emission + verification)",
         "Document a quarantine mode for tools that cannot emit verifiable receipts (low privilege; default deny side-effects)",
         "Publish a reference signing/verifying flow for tool manifests",
         "Integrate the requirements into provider/skill registry PRDs"

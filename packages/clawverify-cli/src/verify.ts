@@ -288,8 +288,209 @@ export function exitCodeForOutput(out: { status: string }): number {
   return 2;
 }
 
+// ---------------------------------------------------------------------------
+// commit-sig verification (did-work Protocol M)
+// ---------------------------------------------------------------------------
+
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58Decode(str: string): Uint8Array {
+  const bytes: number[] = [0];
+  for (const char of str) {
+    const value = BASE58_ALPHABET.indexOf(char);
+    if (value === -1) throw new Error(`Invalid base58 character: ${char}`);
+    for (let i = 0; i < bytes.length; i++) bytes[i] *= 58;
+    bytes[0] += value;
+    let carry = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] += carry;
+      carry = bytes[i] >> 8;
+      bytes[i] &= 0xff;
+    }
+    while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (const char of str) { if (char !== '1') break; bytes.push(0); }
+  return new Uint8Array(bytes.reverse());
+}
+
+function extractEd25519PublicKeyFromDidKey(did: string): Uint8Array | null {
+  if (!did.startsWith('did:key:z')) return null;
+  try {
+    const decoded = base58Decode(did.slice(9));
+    if (decoded[0] === 0xed && decoded[1] === 0x01) return decoded.slice(2);
+    return null;
+  } catch { return null; }
+}
+
+/** RFC 8785 JSON Canonicalization Scheme (JCS) */
+function jcsCanonicalize(value: unknown): string {
+  if (value === null) return 'null';
+  switch (typeof value) {
+    case 'boolean': return value ? 'true' : 'false';
+    case 'number': {
+      if (!Number.isFinite(value)) throw new Error('Non-finite number not allowed in JCS');
+      return JSON.stringify(value);
+    }
+    case 'string': return JSON.stringify(value);
+    case 'object': {
+      if (Array.isArray(value)) return `[${value.map(jcsCanonicalize).join(',')}]`;
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      const parts: string[] = [];
+      for (const k of keys) parts.push(`${JSON.stringify(k)}:${jcsCanonicalize(obj[k])}`);
+      return `{${parts.join(',')}}`;
+    }
+    default: throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buf = bytes.buffer;
+  if (buf instanceof ArrayBuffer) return buf.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+export async function verifyCommitSigFromFile(opts: {
+  inputPath: string;
+}): Promise<CliVerifyOutput> {
+  const verifiedAt = nowIso();
+
+  const raw = await readJsonFile(opts.inputPath);
+  if (!isRecord(raw)) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'MALFORMED_ENVELOPE', reason: 'commit.sig.json must be a JSON object',
+      input: { path: opts.inputPath },
+    };
+  }
+
+  const { version, type, algo, did, message, signature } = raw as Record<string, unknown>;
+
+  if (version !== 'm1') {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'UNKNOWN_VERSION', reason: `Unsupported version: ${String(version)}`,
+      input: { path: opts.inputPath },
+    };
+  }
+  if (type !== 'message_signature') {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'UNKNOWN_TYPE', reason: `Unsupported type: ${String(type)}`,
+      input: { path: opts.inputPath },
+    };
+  }
+  if (algo !== 'ed25519') {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'UNKNOWN_ALGO', reason: `Unsupported algo: ${String(algo)}`,
+      input: { path: opts.inputPath },
+    };
+  }
+
+  const commitMatch = String(message ?? '').match(/^commit:([a-f0-9]{7,64})$/i);
+  if (!commitMatch) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'COMMIT_MESSAGE_INVALID',
+      reason: 'Invalid message format (expected "commit:<sha>")',
+      input: { path: opts.inputPath },
+      verification: { signer_did: typeof did === 'string' ? did : undefined },
+    };
+  }
+  const commitSha = commitMatch[1];
+
+  const publicKeyBytes = typeof did === 'string' ? extractEd25519PublicKeyFromDidKey(did) : null;
+  if (!publicKeyBytes) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'INVALID_DID_FORMAT',
+      reason: 'Unsupported DID format (expected did:key with Ed25519 multicodec)',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: typeof did === 'string' ? did : undefined },
+    };
+  }
+
+  if (typeof signature !== 'string' || signature.length === 0) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'MALFORMED_ENVELOPE', reason: 'Missing signature field',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: did as string },
+    };
+  }
+
+  let sigBytes: Uint8Array;
+  try {
+    const binary = atob(signature);
+    sigBytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) sigBytes[i] = binary.charCodeAt(i);
+  } catch {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'MALFORMED_ENVELOPE', reason: 'Invalid base64 signature',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: did as string },
+    };
+  }
+  if (sigBytes.length !== 64) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'MALFORMED_ENVELOPE', reason: 'Signature must be 64 bytes',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: did as string },
+    };
+  }
+
+  // Protocol M: sign JCS-canonicalized envelope with signature=""
+  let canonical: string;
+  try {
+    canonical = jcsCanonicalize({ ...raw, signature: '' });
+  } catch (err) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'CANONICALIZATION_ERROR',
+      reason: err instanceof Error ? err.message : 'Canonicalization failed',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: did as string },
+    };
+  }
+
+  const msgBytes = new TextEncoder().encode(canonical);
+
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      'raw', toArrayBuffer(publicKeyBytes), { name: 'Ed25519' }, false, ['verify'],
+    );
+    const ok = await crypto.subtle.verify(
+      { name: 'Ed25519' }, publicKey, toArrayBuffer(sigBytes), toArrayBuffer(msgBytes),
+    );
+
+    return {
+      kind: 'commit_sig',
+      status: ok ? 'PASS' : 'FAIL',
+      verified_at: verifiedAt,
+      reason_code: ok ? 'OK' : 'SIGNATURE_INVALID',
+      reason: ok ? 'Commit signature verified' : 'Signature verification failed',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: did as string, message: String(message) },
+    };
+  } catch (err) {
+    return {
+      kind: 'commit_sig', status: 'FAIL', verified_at: verifiedAt,
+      reason_code: 'CRYPTO_ERROR',
+      reason: err instanceof Error ? err.message : 'Crypto verification error',
+      input: { path: opts.inputPath },
+      verification: { commit_sha: commitSha, signer_did: did as string },
+    };
+  }
+}
+
 export function kindForSubcommand(cmd: string): CliKind | null {
   if (cmd === 'proof-bundle' || cmd === 'proof_bundle') return 'proof_bundle';
   if (cmd === 'export-bundle' || cmd === 'export_bundle') return 'export_bundle';
+  if (cmd === 'commit-sig' || cmd === 'commit_sig') return 'commit_sig';
   return null;
 }

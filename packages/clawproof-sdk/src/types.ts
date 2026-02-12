@@ -218,6 +218,7 @@ export interface ProofBundlePayload {
   urm?: URMReference;
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
+  tool_receipts?: ToolReceiptPayload[];
   metadata?: {
     harness?: {
       id: string;
@@ -227,6 +228,57 @@ export interface ProofBundlePayload {
     };
     [key: string]: unknown;
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tool receipt types (matches poh/tool_receipt.v1.json)
+// ---------------------------------------------------------------------------
+
+/** Tool receipt payload. Hash-only by default. */
+export interface ToolReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  tool_name: string;
+  tool_version?: string;
+  args_hash_b64u: string;
+  result_hash_b64u: string;
+  result_status?: 'success' | 'error' | 'timeout';
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  latency_ms: number;
+  binding?: {
+    run_id?: string;
+    event_hash_b64u?: string;
+    nonce?: string;
+    policy_hash?: string;
+    token_scope_hash_b64u?: string;
+  };
+}
+
+/** Tool receipt artifact collected during a run. */
+export interface ToolReceiptArtifact {
+  type: 'tool_receipt';
+  collectedAt: string;
+  toolName: string;
+  receipt: ToolReceiptPayload;
+  receiptEnvelope?: SignedEnvelope<ToolReceiptPayload>;
+}
+
+/** Parameters for recording a tool call. */
+export interface ToolCallParams {
+  /** Canonical tool name (e.g. 'bash', 'read_file'). */
+  toolName: string;
+  /** Tool version (optional). */
+  toolVersion?: string;
+  /** Raw tool arguments (will be hashed). */
+  args: unknown;
+  /** Raw tool result (will be hashed). */
+  result: unknown;
+  /** High-level outcome. */
+  resultStatus?: 'success' | 'error' | 'timeout';
+  /** Latency in ms. */
+  latencyMs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +355,9 @@ export interface ClawproofRun {
 
   /** Add a receipt collected from a proxied LLM call. */
   addReceipt(artifact: ReceiptArtifact): void;
+
+  /** Record a tool call, producing a hash-only tool receipt and event chain entry. */
+  recordToolCall(params: ToolCallParams): Promise<ToolReceiptArtifact>;
 
   /** Proxy an LLM call through clawproxy, automatically recording event + collecting receipt. */
   callLLM(params: LLMCallParams): Promise<LLMCallResult>;
