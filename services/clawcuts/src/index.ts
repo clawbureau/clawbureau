@@ -897,6 +897,41 @@ function defaultPolicySeeds(): Array<{
       ],
       notes: 'System bootstrap policy (legacy tips_v1 defaults)',
     },
+    {
+      product: 'bounty',
+      policy_id: 'standard',
+      discount: { enabled: true, max_bps: 1_500 },
+      rules: [
+        {
+          is_code_bounty: 'true',
+          closure_type: 'test',
+          buyer_fee_bps: 500,
+          worker_fee_bps: 250,
+          min_fee_minor: '25',
+          referral_bps: 0,
+          referral_min_minor: '0',
+        },
+        {
+          is_code_bounty: '*',
+          closure_type: 'requester',
+          buyer_fee_bps: 1000,
+          worker_fee_bps: 500,
+          min_fee_minor: '50',
+          referral_bps: 100,
+          referral_min_minor: '10',
+        },
+        {
+          is_code_bounty: '*',
+          closure_type: '*',
+          buyer_fee_bps: 750,
+          worker_fee_bps: 250,
+          min_fee_minor: '25',
+          referral_bps: 0,
+          referral_min_minor: '0',
+        },
+      ],
+      notes: 'Standard bounty fee policy (ECON-SETTLE-002)',
+    },
   ];
 }
 

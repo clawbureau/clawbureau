@@ -1,0 +1,31 @@
+{
+  "kind": "proof_bundle",
+  "status": "PASS",
+  "verified_at": "2026-02-12T19:31:00.646Z",
+  "reason_code": "OK",
+  "reason": "Proof bundle verified successfully",
+  "input": {
+    "path": "artifacts/simulations/econ-risk-loss-resolve-receipted/2026-02-12T18-39-43-173Z-prod/proof-bundle.json",
+    "urm_path": "artifacts/simulations/econ-risk-loss-resolve-receipted/2026-02-12T18-39-43-173Z-prod/urm.json"
+  },
+  "verification": {
+    "result": {
+      "status": "VALID",
+      "reason": "Proof bundle verified successfully",
+      "verified_at": "2026-02-12T19:31:00.648Z",
+      "bundle_id": "bundle_1e2ab587-3141-49ff-b422-c03c9f004711",
+      "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+      "trust_tier": "verified",
+      "proof_tier": "self",
+      "model_identity_tier": "unknown",
+      "component_results": {
+        "envelope_valid": true,
+        "event_chain_valid": true,
+        "chain_root_hash": "88j_uMMk7FkOzqrHmq4aKa7k1jv9sLiEsZyw4QvosLM",
+        "urm_valid": true,
+        "tool_receipts_count": 4,
+        "tool_receipts_valid": true
+      }
+    }
+  }
+}

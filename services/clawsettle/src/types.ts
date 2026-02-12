@@ -35,6 +35,9 @@ export interface Env {
   /** Optional base URL used to build Stripe Connect onboarding links. */
   STRIPE_CONNECT_ONBOARD_BASE_URL?: string;
 
+  /** Stripe secret API key for PaymentIntent creation and Connect transfers. */
+  STRIPE_SECRET_KEY?: string;
+
   /** Clearing domain used for payout finalization drains. */
   PAYOUTS_CLEARING_DOMAIN?: string;
 

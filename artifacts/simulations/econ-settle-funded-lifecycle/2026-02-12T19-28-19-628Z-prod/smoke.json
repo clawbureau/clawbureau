@@ -1,0 +1,57 @@
+{
+  "epic": "ECON-SETTLE-002",
+  "task": "Task 4: Funded lifecycle e2e",
+  "env": "prod",
+  "nonce": "smoke-funded-1770924499628-wuf9a6",
+  "timestamp": "2026-02-12T19:28:21.240Z",
+  "passed": 6,
+  "total": 8,
+  "results": [
+    {
+      "step": "Fee simulation returns policy",
+      "pass": true,
+      "detail": "status=200 policy=standard"
+    },
+    {
+      "step": "Fee quote buyer_total > principal",
+      "pass": true,
+      "detail": "buyer_total=5250 principal=5000"
+    },
+    {
+      "step": "PaymentIntent creation",
+      "pass": false,
+      "detail": "unexpected: 503 {\"error\":\"STRIPE_SECRET_KEY not configured\",\"code\":\"STRIPE_NOT_CONFIGURED\",\"details\":{\"field\":\"STRIPE_SECRET_KEY\"}}"
+    },
+    {
+      "step": "Escrow: correct fail-closed (INSUFFICIENT_FUNDS)",
+      "pass": true,
+      "detail": "Synthetic DIDs have no balance — fee_quote accepted, hold failed"
+    },
+    {
+      "step": "Payout contract validation",
+      "pass": false,
+      "detail": "422: {\"error\":\"Payout destination not configured for account\",\"code\":\"PAYOUT_DESTINATION_NOT_CONFIGURED\",\"details\":{\"account_id\":\"did:key:zSmokeWorker99628-wuf9a6\"}}"
+    },
+    {
+      "step": "Economy health: services reachable",
+      "pass": true,
+      "detail": "7/7 services up"
+    },
+    {
+      "step": "PaymentIntent idempotency: consistent fail-closed",
+      "pass": true,
+      "detail": "Both 503"
+    },
+    {
+      "step": "Escrow idempotency: consistent behavior",
+      "pass": true,
+      "detail": "first=502 replay=502"
+    }
+  ],
+  "endpoints": {
+    "settle": "https://clawsettle.com",
+    "cuts": "https://clawcuts.com",
+    "escrow": "https://clawescrow.com",
+    "ledger": "https://clawledger.com"
+  }
+}

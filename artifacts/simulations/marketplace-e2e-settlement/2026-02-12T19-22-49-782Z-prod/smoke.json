@@ -1,0 +1,129 @@
+{
+  "ok": true,
+  "env": "prod",
+  "run_id": "run_28fd3928-9877-46d7-82ad-b62adcad7e4c",
+  "agent_did": "did:key:z6MkgD6VkigpM5oZRqh8DjhYBqZnMWsxKYH1CAHkVy7d1YXA",
+  "requester_did": "did:key:z6Mkreqc9e91169mljuiypn",
+  "worker_did": "did:key:z6Mkwkrc9e91169mljuiypn",
+  "sdk": {
+    "tool_receipts": 4,
+    "events": 6,
+    "bundle_id": "bundle_de327fde-af1c-4b1f-a8d9-334bd3a66579"
+  },
+  "steps": [
+    {
+      "step": "simulate_fees",
+      "status": 200,
+      "pass": {
+        "principal_minor": "2500",
+        "buyer_total_minor": "2625",
+        "worker_net_minor": "2437",
+        "total_fee_minor": "188",
+        "referral_payout_minor": "0",
+        "platform_retained_minor": "188",
+        "fees": [
+          {
+            "kind": "platform",
+            "payer": "buyer",
+            "amount_minor": "125",
+            "rate_bps": 500,
+            "min_fee_minor": "25",
+            "floor_applied": false,
+            "splits": [
+              {
+                "kind": "platform",
+                "account": "clearing:clawcuts",
+                "bucket": "F",
+                "amount_minor": "125"
+              }
+            ]
+          },
+          {
+            "kind": "platform",
+            "payer": "worker",
+            "amount_minor": "63",
+            "rate_bps": 250,
+            "min_fee_minor": "0",
+            "floor_applied": false,
+            "splits": [
+              {
+                "kind": "platform",
+                "account": "clearing:clawcuts",
+                "bucket": "F",
+                "amount_minor": "63"
+              }
+            ]
+          }
+        ]
+      },
+      "policy_active": {
+        "principal_minor": "2500",
+        "buyer_total_minor": "2625",
+        "worker_net_minor": "2437",
+        "total_fee_minor": "188",
+        "referral_payout_minor": "0",
+        "platform_retained_minor": "188",
+        "fees": [
+          {
+            "kind": "platform",
+            "payer": "buyer",
+            "amount_minor": "125",
+            "rate_bps": 500,
+            "min_fee_minor": "25",
+            "floor_applied": false,
+            "splits": [
+              {
+                "kind": "platform",
+                "account": "clearing:clawcuts",
+                "bucket": "F",
+                "amount_minor": "125"
+              }
+            ]
+          },
+          {
+            "kind": "platform",
+            "payer": "worker",
+            "amount_minor": "63",
+            "rate_bps": 250,
+            "min_fee_minor": "0",
+            "floor_applied": false,
+            "splits": [
+              {
+                "kind": "platform",
+                "account": "clearing:clawcuts",
+                "bucket": "F",
+                "amount_minor": "63"
+              }
+            ]
+          }
+        ]
+      },
+      "elapsed_ms": 124
+    },
+    {
+      "step": "create_escrow",
+      "status": 502,
+      "pass": true,
+      "contract_valid": true,
+      "fully_funded": false,
+      "elapsed_ms": 581
+    },
+    {
+      "step": "ledger_risk_holds",
+      "status": 200,
+      "pass": true,
+      "holds_returned": 3,
+      "elapsed_ms": 101
+    },
+    {
+      "step": "economy_health",
+      "status": 200,
+      "pass": "degraded",
+      "overall_status": "degraded",
+      "services_up": 7,
+      "services_total": 7,
+      "elapsed_ms": 301
+    }
+  ],
+  "generated_at": "2026-02-12T19:22:50.895Z"
+}

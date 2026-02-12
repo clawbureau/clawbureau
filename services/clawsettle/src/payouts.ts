@@ -1301,6 +1301,24 @@ export class PayoutService {
   }
 
   private async submitExternalPayout(payout: PayoutRecord): Promise<string> {
+    // ECON-SETTLE-002: Real Stripe Connect transfer when STRIPE_SECRET_KEY is configured.
+    if (this.env.STRIPE_SECRET_KEY?.trim()) {
+      const { createConnectTransfer } = await import('./stripe-api.js');
+      const result = await createConnectTransfer(this.env, {
+        amount_minor: payout.amount_minor,
+        currency: payout.currency,
+        destination_account_id: payout.connect_account_id,
+        payout_id: payout.id,
+        idempotency_key: `payout:transfer:${payout.id}`,
+        metadata: {
+          account_id: payout.account_id,
+          account_did: payout.account_did ?? '',
+        },
+      });
+      return result.transfer_id;
+    }
+
+    // Fallback: deterministic synthetic ID (test/staging without Stripe key)
     return this.deriveDeterministicId('po', `${payout.id}:${payout.connect_account_id}`);
   }
 

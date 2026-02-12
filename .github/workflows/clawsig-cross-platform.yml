@@ -1,0 +1,63 @@
+name: clawsig cross-platform
+
+on:
+  push:
+    paths:
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/clawsig-sdk/**'
+      - 'packages/schema/poh/**'
+      - 'packages/schema/fixtures/**'
+  pull_request:
+    paths:
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/clawsig-sdk/**'
+      - 'packages/schema/poh/**'
+      - 'packages/schema/fixtures/**'
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - runtime: node
+            os: ubuntu-latest
+            node-version: '22'
+          - runtime: node
+            os: macos-latest
+            node-version: '22'
+          - runtime: bun
+            os: ubuntu-latest
+            node-version: '22'
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.runtime }} / ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - if: matrix.runtime == 'bun'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install + build clawverify-core
+        working-directory: packages/clawverify-core
+        run: npm install && npm run build
+
+      - name: Install + build clawverify-cli
+        working-directory: packages/clawverify-cli
+        run: npm install && npm run build
+
+      - name: Install + build clawsig-sdk
+        working-directory: packages/clawsig-sdk
+        run: npm install && npm run build
+
+      - name: Run cross-platform tests
+        run: node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts
