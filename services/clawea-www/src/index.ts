@@ -6673,7 +6673,7 @@ function pricingPage(): string {
       <div class="wrap">
         <div class="sh">
           <span class="kicker">Pricing</span>
-          <h2>Start Small, Scale Without Limits</h2>
+          <h1 class="h2">Start Small, Scale Without Limits</h1>
           <p>Every tier includes full execution attestation, proof bundles, and audit logs.</p>
         </div>
         <ul class="trust-proof-list" style="margin:-.5rem 0 1.5rem" aria-label="Compliance highlights">
@@ -7118,6 +7118,53 @@ function assessmentResultPage(result: AssessmentResult, turnstile: TurnstilePost
           <a href="/contact?from=assessment-result&confidence=${encodeURIComponent(result.confidenceLabel)}" class="cta-btn cta-btn-outline cta-btn-lg" style="margin-left:.75rem" data-cta="assessment-result-contact" data-cta-copy>Talk to Sales</a>
           <p style="margin-top:.9rem;font-size:.9rem"><a href="/trust/security-review" style="color:var(--text);text-decoration:underline" data-cta="assessment-result-security-review">Review the Security Review Pack first</a></p>
         </div>
+
+        <div class="card" style="margin-top:1.5rem">
+          <h3 style="margin-bottom:.5rem">Implementation guides for your profile</h3>
+          <p style="font-size:.9rem;color:var(--text-secondary);margin-bottom:.75rem">Start with the guide that matches your highest-priority control.</p>
+          <div class="grid-2">
+            ${result.riskScore >= 50 ? `
+            <a href="/guides/github-actions-proof-pipeline" class="card card-link" data-cta="result-guide-github"><h4>GitHub Actions Proof Pipeline</h4><p>Set up verified PR checks in 30 minutes.</p></a>
+            ` : ""}
+            <a href="/guides/okta-scoped-tokens" class="card card-link" data-cta="result-guide-okta"><h4>Okta Scoped Tokens</h4><p>Map identity groups to agent permissions.</p></a>
+            <a href="/guides/compliance-evidence-export" class="card card-link" data-cta="result-guide-compliance"><h4>Compliance Evidence Export</h4><p>Generate audit-ready proof bundles.</p></a>
+            ${result.riskScore >= 50 ? `
+            <a href="/industries/${result.roiScore >= 60 ? "financial-services" : "technology"}" class="card card-link" data-cta="result-industry"><h4>Industry Guide</h4><p>See controls mapped to your regulatory requirements.</p></a>
+            ` : ""}
+          </div>
+        </div>
+
+        <div style="margin-top:1.5rem;display:flex;gap:.75rem;flex-wrap:wrap">
+          <button onclick="window.print()" class="cta-btn cta-btn-outline" data-cta="result-print">
+            Download as PDF
+          </button>
+          <button id="share-results-btn" class="cta-btn cta-btn-outline" data-cta="result-share">
+            Share results
+          </button>
+        </div>
+        <div id="share-url-box" style="display:none;margin-top:.75rem;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)">
+          <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:.25rem">Share this link with your team:</label>
+          <input id="share-url-input" type="text" readonly style="width:100%;padding:.5rem;font-family:var(--font-mono);font-size:.8rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)" value="">
+          <button id="copy-share-url" style="margin-top:.5rem;cursor:pointer;background:var(--accent);color:#fff;border:none;padding:.4rem 1rem;border-radius:4px;font-size:.85rem">Copy link</button>
+        </div>
+        <script>
+        (function(){
+          var btn=document.getElementById("share-results-btn");
+          var box=document.getElementById("share-url-box");
+          var inp=document.getElementById("share-url-input");
+          var copyBtn=document.getElementById("copy-share-url");
+          if(!btn||!box||!inp)return;
+          btn.addEventListener("click",function(){
+            inp.value=window.location.href;
+            box.style.display="block";
+            inp.select();
+          });
+          if(copyBtn){copyBtn.addEventListener("click",function(){
+            inp.select();
+            navigator.clipboard.writeText(inp.value).then(function(){copyBtn.textContent="Copied!";setTimeout(function(){copyBtn.textContent="Copy link"},2000)});
+          });}
+        })();
+        </script>
 
         <div style="margin-top:1.25rem">${renderLeadIntakeTrustRail(turnstile)}</div>
       </div>
@@ -7806,6 +7853,24 @@ export default {
       const assignment = assignVariant(config, visitor.visitorId, pageFamilyFromPath(routePath));
       const expectedExp = `${assignment.pageFamily}:${assignment.heroVariant}:${assignment.ctaVariant}`;
       const shouldSetExpCookie = existingExpCookie !== expectedExp;
+
+      // ── Lightweight page-view analytics (Analytics Engine) ──
+      // No JS, no cookies, no third-party — just server-side writeDataPoint.
+      try {
+        const utmSource = url.searchParams.get("utm_source") ?? "";
+        const utmMedium = url.searchParams.get("utm_medium") ?? "";
+        const utmCampaign = url.searchParams.get("utm_campaign") ?? "";
+        const referer = request.headers.get("referer") ?? "";
+        const country = (request as any).cf?.country ?? "";
+        const device = /Mobile|Android|iPhone|iPad/i.test(request.headers.get("user-agent") ?? "") ? "mobile" : "desktop";
+
+        env.ANALYTICS?.writeDataPoint({
+          indexes: ["pageview", pageFamilyFromPath(routePath), device, country],
+          blobs: [routePath, referer, utmSource, utmMedium, utmCampaign, visitor.visitorId],
+          doubles: [1],
+        });
+      } catch { /* analytics must never block rendering */ }
+
       return applyExperimentCookies(response, visitor.visitorId, assignment, visitor.cookieNeeded, shouldSetExpCookie);
     };
 
@@ -8264,7 +8329,10 @@ export default {
     if (path === "/privacy") return await htmlWithExperiment(html(privacyPage()), path);
     if (path === "/terms") return await htmlWithExperiment(html(termsPage()), path);
     if (path === "/docs") return await htmlWithExperiment(html(docsPage()), path);
-    if (path === "/changelog") return await htmlWithExperiment(html(changelogPage()), path);
+    if (path === "/changelog") {
+      const prs = await fetchMergedPrs();
+      return await htmlWithExperiment(html(changelogPage(prs)), path);
+    }
     if (path === "/status") return await htmlWithExperiment(html(statusPage()), path);
 
     // Case studies
@@ -8477,6 +8545,58 @@ ${entries.join("\n")}
 }
 
 // ── llms-full.txt Generator ────────────────────────────────────────
+
+// ── GitHub PR fetcher for changelog ──────────────────────────────────────
+
+interface MergedPr {
+  number: number;
+  title: string;
+  mergedAt: string;
+  url: string;
+}
+
+async function fetchMergedPrs(): Promise<MergedPr[]> {
+  try {
+    const cacheUrl = "https://api.github.com/repos/clawbureau/clawbureau/pulls?state=closed&sort=updated&direction=desc&per_page=30";
+    const cached = await caches.default.match(cacheUrl);
+    if (cached) {
+      return (await cached.json()) as MergedPr[];
+    }
+
+    const resp = await fetch(cacheUrl, {
+      headers: {
+        "accept": "application/vnd.github+json",
+        "user-agent": "clawea-www/1.0",
+      },
+    });
+    if (!resp.ok) return [];
+
+    const raw: any[] = await resp.json();
+    const prs: MergedPr[] = raw
+      .filter((pr: any) => pr.merged_at)
+      .filter((pr: any) => {
+        const title = (pr.title ?? "").toLowerCase();
+        // Exclude internal-only PRs
+        return !title.startsWith("chore(proofs)") && !title.startsWith("chore: bump");
+      })
+      .map((pr: any) => ({
+        number: pr.number,
+        title: pr.title,
+        mergedAt: pr.merged_at,
+        url: pr.html_url,
+      }));
+
+    // Cache for 1 hour
+    const cacheResp = new Response(JSON.stringify(prs), {
+      headers: { "content-type": "application/json", "cache-control": "public, max-age=3600" },
+    });
+    await caches.default.put(cacheUrl, cacheResp);
+
+    return prs;
+  } catch {
+    return [];
+  }
+}
 
 function generateLlmsFullTxt(manifest: Record<string, { title?: string; category?: string; description?: string; indexable?: boolean }>): string {
   const BASE = "https://www.clawea.com";
