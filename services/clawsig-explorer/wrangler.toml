@@ -1,0 +1,30 @@
+# clawsig-explorer -- Public Explorer for the Clawsig Protocol
+#
+# Serves HTML pages for run detail, agent profiles, and global stats.
+# Client-side verification: fetches proof bundles from R2 and verifies
+# Ed25519 signatures + hash chains in the browser via WebCrypto.
+
+name = "clawsig-explorer"
+account_id = "b8f2c66f1848dff476faa874282d781e"
+main = "src/index.ts"
+compatibility_date = "2026-02-01"
+workers_dev = true
+
+routes = [
+  { pattern = "explorer.clawsig.com/*", zone_name = "clawsig.com" }
+]
+
+[vars]
+ENVIRONMENT = "production"
+VAAS_API_BASE = "https://api.clawverify.com"
+
+[env.staging]
+name = "clawsig-explorer-staging"
+routes = [
+  { pattern = "staging-explorer.clawsig.com/*", zone_name = "clawsig.com" }
+]
+workers_dev = true
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+VAAS_API_BASE = "https://staging.api.clawverify.com"
