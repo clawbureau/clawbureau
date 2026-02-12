@@ -79,6 +79,8 @@ import { industryFinancialServicesPage, industryHealthcarePage, industryGovernme
 import { pricingStarterPage, pricingTeamPage, pricingEnterprisePage } from "./pages/pricing-tiers";
 import { proofPointsPage } from "./pages/proof-points";
 import { resourceProtocolWhitepaperPage, resourceSecurityChecklistPage, resourceComplianceMappingPage } from "./pages/resources";
+import { securityPage, privacyPage, termsPage, docsPage, changelogPage, statusPage } from "./pages/trust-infra";
+import { caseStudiesIndexPage, caseStudyDogfoodPage } from "./pages/case-studies";
 
 interface Env {
   ARTICLES: R2Bucket;
@@ -1909,6 +1911,62 @@ const STATIC_SEARCH_DOCS: SearchDocument[] = [
     title: "AI Agent DevOps Governance for Technology",
     description: "Deploy approvals, GitHub Actions integration, credential rotation for engineering teams.",
     category: "industries",
+    kind: "static",
+  },
+  {
+    path: "/security",
+    title: "Security | Claw EA",
+    description: "Data handling, encryption, access controls, and infrastructure security.",
+    category: "trust",
+    kind: "static",
+  },
+  {
+    path: "/privacy",
+    title: "Privacy Policy | Claw EA",
+    description: "How Claw EA handles personal data. Hash-only protocol, no PII in receipts, GDPR-compatible.",
+    category: "legal",
+    kind: "static",
+  },
+  {
+    path: "/terms",
+    title: "Terms of Service | Claw EA",
+    description: "Terms of service for the Claw EA platform and website.",
+    category: "legal",
+    kind: "static",
+  },
+  {
+    path: "/docs",
+    title: "Documentation | Claw EA",
+    description: "Developer, security team, and compliance team documentation hub.",
+    category: "docs",
+    kind: "static",
+  },
+  {
+    path: "/changelog",
+    title: "Changelog | Claw EA",
+    description: "Product changelog with shipped features, dates, and PR numbers.",
+    category: "docs",
+    kind: "static",
+  },
+  {
+    path: "/status",
+    title: "System Status | Claw EA",
+    description: "Live service health for Claw EA infrastructure.",
+    category: "status",
+    kind: "static",
+  },
+  {
+    path: "/case-studies",
+    title: "Case Studies | Claw EA",
+    description: "How organizations use Claw EA for verifiable AI agent governance.",
+    category: "case-studies",
+    kind: "static",
+  },
+  {
+    path: "/case-studies/dogfood-claw-bureau",
+    title: "Dogfooding the Clawsig Protocol | Case Study",
+    description: "3 autonomous agents, 190+ PRs with proof chains, 12 services in production.",
+    category: "case-studies",
     kind: "static",
   },
   {
@@ -8201,6 +8259,18 @@ export default {
     if (path === "/resources/security-checklist") return await htmlWithExperiment(html(resourceSecurityChecklistPage(tsHtml)), path);
     if (path === "/resources/compliance-mapping") return await htmlWithExperiment(html(resourceComplianceMappingPage(tsHtml)), path);
 
+    // Trust infrastructure pages
+    if (path === "/security") return await htmlWithExperiment(html(securityPage()), path);
+    if (path === "/privacy") return await htmlWithExperiment(html(privacyPage()), path);
+    if (path === "/terms") return await htmlWithExperiment(html(termsPage()), path);
+    if (path === "/docs") return await htmlWithExperiment(html(docsPage()), path);
+    if (path === "/changelog") return await htmlWithExperiment(html(changelogPage()), path);
+    if (path === "/status") return await htmlWithExperiment(html(statusPage()), path);
+
+    // Case studies
+    if (path === "/case-studies") return await htmlWithExperiment(html(caseStudiesIndexPage()), path);
+    if (path === "/case-studies/dogfood-claw-bureau") return await htmlWithExperiment(html(caseStudyDogfoodPage()), path);
+
     if (path === "/sources") {
       const manifest = await loadManifest(env);
       return await htmlWithExperiment(html(sourcesHubPage(manifest), 200, 1800), path);
@@ -8232,6 +8302,9 @@ export default {
           "- https://www.clawea.com/trust/security-review",
           "- https://www.clawea.com/proof-points",
           "- https://www.clawea.com/pricing",
+          "- https://www.clawea.com/docs",
+          "- https://www.clawea.com/security",
+          "- https://www.clawea.com/case-studies/dogfood-claw-bureau",
           "- https://www.clawea.com/sources",
           "",
           "## Core references",
@@ -8358,6 +8431,14 @@ async function serveSitemap(env: Env): Promise<Response> {
     { slug: "industries/insurance", priority: "0.7" },
     { slug: "industries/legal", priority: "0.7" },
     { slug: "industries/technology", priority: "0.8" },
+    { slug: "security", priority: "0.8" },
+    { slug: "privacy", priority: "0.5" },
+    { slug: "terms", priority: "0.4" },
+    { slug: "docs", priority: "0.8" },
+    { slug: "changelog", priority: "0.6" },
+    { slug: "status", priority: "0.6" },
+    { slug: "case-studies", priority: "0.7" },
+    { slug: "case-studies/dogfood-claw-bureau", priority: "0.8" },
   ];
 
   let entries = staticPages.map((p) => `  <url><loc>https://www.clawea.com/${p.slug}</loc><priority>${p.priority}</priority><changefreq>weekly</changefreq></url>`);
@@ -8537,6 +8618,14 @@ function generateLlmsFullTxt(manifest: Record<string, { title?: string; category
     { path: "/resources/protocol-whitepaper", title: "Clawsig Protocol v0.1 Spec (Download)", summary: "Full protocol specification with five primitives, JSON schemas, and verification algorithm.", category: "resources" },
     { path: "/resources/security-checklist", title: "Agent Security Checklist (Download)", summary: "15 controls every enterprise needs: policy, identity, data protection, monitoring.", category: "resources" },
     { path: "/resources/compliance-mapping", title: "Regulatory Mapping (Download)", summary: "SOX, HIPAA, FedRAMP, SOC 2, EU AI Act mapped to specific agent controls and evidence.", category: "resources" },
+    { path: "/security", title: "Security", summary: "Hash-only protocol design. Ed25519 signatures. SHA-256 hashing. TLS 1.3. DID-based identity. Cloudflare Workers isolation. Offline verification independence.", category: "trust" },
+    { path: "/privacy", title: "Privacy Policy", summary: "Proof bundles contain hashes not content. No PII in receipts. GDPR-compatible. No third-party tracking cookies.", category: "legal" },
+    { path: "/terms", title: "Terms of Service", summary: "SaaS terms with pilot engagement scope, liability limits, data ownership, proof artifact disclaimers.", category: "legal" },
+    { path: "/docs", title: "Documentation Hub", summary: "Organized by audience: developers (SDK, CLI, protocol spec), security teams (review pack, controls), compliance teams (regulatory mapping, audit).", category: "docs" },
+    { path: "/changelog", title: "Product Changelog", summary: "Shipped features by date with PR numbers. AEO-MKT series, UX remediation, REV pipeline, content factory, indexing automation.", category: "docs" },
+    { path: "/status", title: "System Status", summary: "Live health dashboard for clawverify, clawproxy, clawbounties, clawescrow, clawcuts, clawscope. Auto-refresh every 60s.", category: "status" },
+    { path: "/case-studies", title: "Case Studies", summary: "Pilot engagements and deployment patterns. Dogfooding case study available, enterprise pilots in progress.", category: "case-studies" },
+    { path: "/case-studies/dogfood-claw-bureau", title: "Dogfooding Case Study", summary: "3 autonomous agents, 190+ PRs with DID-signed commit proofs, 12 services, 22 conformance vectors. Real, verifiable, public.", category: "case-studies" },
   ];
 
   ln("### Static Pages");
