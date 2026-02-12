@@ -1,0 +1,53 @@
+{
+  "env": "staging",
+  "base_url": "https://staging.clawsettle.com",
+  "generated_at": "2026-02-12T18:15:50.895Z",
+  "all_pass": true,
+  "steps": [
+    {
+      "step": "economy_health",
+      "status": 200,
+      "pass": {
+        "outbox_stale_failures": true,
+        "disputes_aging_critical": false,
+        "recon_mismatches": false
+      },
+      "overall_status": "degraded",
+      "service_count": 7,
+      "services_up": 5,
+      "services_down": 2,
+      "disputes_open": 0,
+      "outbox_apply_failed": 13,
+      "outbox_resolve_failed": 0,
+      "recon_mismatches": 0,
+      "alerts": {
+        "outbox_stale_failures": true,
+        "disputes_aging_critical": false,
+        "recon_mismatches": false
+      }
+    },
+    {
+      "step": "ops_alerts_check",
+      "status": 200,
+      "pass": true,
+      "alerts_written": 0
+    },
+    {
+      "step": "ops_alerts_query",
+      "status": 200,
+      "pass": true,
+      "alert_count": 0
+    },
+    {
+      "step": "ops_alerts_filtered",
+      "status": 200,
+      "pass": true,
+      "alert_count": 0
+    },
+    {
+      "step": "auth_enforcement",
+      "status": 401,
+      "pass": true
+    }
+  ]
+}

@@ -522,3 +522,27 @@ Started: 2026-02-12
 - Watch evidence (no new failures):
   - Staging: artifacts/ops/econ-risk/2026-02-12T17-57-22-366Z-staging-loss-event-watch/summary.json
   - Prod: artifacts/ops/econ-risk/2026-02-12T17-57-32-569Z-prod-loss-event-watch/summary.json
+
+## 2026-02-12 - ECON-OPS-001 economy health dashboard + ops alerting (staging + prod)
+- What was implemented:
+  - Economy health aggregator (GET /v1/economy/health):
+    - Parallel fan-out to 7 services: clawsettle, ledger, escrow, clawbounties, clawcuts, clawincome, clawinsure
+    - Per-service health (up/down/degraded) with latency_ms
+    - Local D1 queries: loss events by status, outbox depths, dispute aging, fees pending, recon mismatches
+    - Overall status: healthy|degraded|unhealthy
+  - Ops alerting:
+    - Migration 0009: ops_alerts table with type/severity/details indexes
+    - Cron checks (every 2 min): stale outbox failures, 60+ day disputes, recon mismatches
+    - POST /v1/ops/alerts/check — manual trigger
+    - GET /v1/ops/alerts?since=&severity=&limit= — query history
+  - Fixed staging base URLs: clawinsure, clawincome, clawcuts (were using old workers.dev URLs)
+- Deploy evidence:
+  - Staging: migration 0009 (DB 9edcb398), versions ace9091e/eb22a656
+  - Prod: migration 0009 (DB 1f2be28f), version bba95e15
+- Smoke evidence (5/5 both envs):
+  - Staging: artifacts/simulations/economy-health-dashboard/2026-02-12T18-15-50-266Z-staging/smoke.json
+  - Prod: artifacts/simulations/economy-health-dashboard/2026-02-12T18-16-42-526Z-prod/smoke.json
+  - Prod: all 7 services up (<70ms latency), 0 disputes, 0 recon mismatches
+
+## 2026-02-12 - PR #35 closed (stale clawproviders fix)
+- Closed as superseded — SEO/accessibility fixes from Feb 4 need fresh branch after 150+ commits of drift.

@@ -86,6 +86,9 @@ export interface Env {
   /** Clawbounties risk service key for bounty risk fanout. */
   BOUNTIES_RISK_KEY?: string;
 
+  /** Clawcuts base URL for health probing. */
+  CLAWCUTS_BASE_URL?: string;
+
   /** Optional queue used for loss-event forwarding fanout. */
   LOSS_EVENTS?: Queue<unknown>;
 }
