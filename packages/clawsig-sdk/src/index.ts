@@ -9,6 +9,8 @@
  *   - Proxied LLM calls through clawproxy with receipt collection
  *   - URM (Universal Run Manifest) generation
  *   - Ed25519-signed proof bundle output
+ *   - Ephemeral DID generation for single-use agent identities
+ *   - Local interceptor proxy for transparent `clawsig wrap` integration
  *
  * Usage:
  *   import { createRun, generateKeyPair, didFromPublicKey, hashJsonB64u } from '@clawbureau/clawsig-sdk';
@@ -18,11 +20,26 @@
  *   await run.recordEvent({ eventType: 'run_start', payload: { task: '...' } });
  *   const { response } = await run.callLLM({ provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', body: { ... } });
  *   const result = await run.finalize({ inputs: [...], outputs: [...] });
+ *
+ * Wrap (one-line integration):
+ *   import { generateEphemeralDid, startLocalProxy } from '@clawbureau/clawsig-sdk';
+ *
+ *   const did = await generateEphemeralDid();
+ *   const proxy = await startLocalProxy({ agentDid: did, runId: 'run_123' });
+ *   // ... spawn agent process with OPENAI_BASE_URL=http://127.0.0.1:${proxy.port}/v1/proxy/openai
+ *   const bundle = await proxy.compileProofBundle();
+ *   await proxy.stop();
  */
 
 // Core SDK
 // NOTE: Use explicit `.js` extensions so the built SDK works under plain Node ESM.
 export { createRun } from './run.js';
+
+// Ephemeral DID
+export { generateEphemeralDid } from './ephemeral-did.js';
+
+// Local interceptor proxy
+export { startLocalProxy } from './local-proxy.js';
 
 // Crypto utilities
 export {
@@ -58,3 +75,7 @@ export type {
   EventChainEntry,
   GatewayReceiptPayload,
 } from './types.js';
+
+// Wrap types
+export type { EphemeralDid } from './ephemeral-did.js';
+export type { LocalProxy, ProxyOptions } from './local-proxy.js';
