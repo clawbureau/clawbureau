@@ -97,3 +97,35 @@ Status: active operational reference for clawclaim + clawscope + clawverify
   2. reissue token,
   3. retry verification with new token.
 - Do not loop retries against the same rejected token.
+
+## 6) M5 identity + observability operations (clawclaim/clawscope)
+
+### New smoke gate (must run for M5-touching releases)
+- `node scripts/identity/smoke-identity-control-plane-m5.mjs --env staging --scope-admin-key "$SCOPE_ADMIN_KEY"`
+- `node scripts/identity/smoke-identity-control-plane-m5.mjs --env prod --scope-admin-key "$SCOPE_ADMIN_KEY"`
+- Note: claim exchange endpoint prefers internal `CLAIM_SCOPE_ADMIN_KEY`; for controlled smoke/integration runs it also accepts `x-scope-admin-key` override header.
+
+### Required claim resources
+- D1 identity registry (`CLAIM_DB`) with migration `services/clawclaim/migrations/0001_identity_registry.sql`
+- KV bindings:
+  - `CLAIM_STORE` (binding/challenge/compat events)
+  - `CLAIM_CACHE` (profile read cache)
+- R2 export bucket (`CLAIM_AUDIT_EXPORTS`) for compliance exports
+
+### Required scope observability resources
+- D1 observability DB (`SCOPE_OBSERVABILITY_DB`) with migration `services/clawscope/migrations/0001_observability_stack.sql`
+- Queue producer+consumer (`SCOPE_OBS_EVENTS`)
+- Durable Object coordinator (`ScopeObservabilityCoordinator`) for alert dedupe
+- Analytics Engine dataset (`SCOPE_METRICS`)
+- R2 reports bucket (`SCOPE_REPORTS_BUCKET`)
+- cron trigger (`5 * * * *`) for rollup materialization
+
+### Admin token overlap (safe rotation/testing)
+- Primary token: `SCOPE_ADMIN_KEY`
+- Optional overlap tokens: `SCOPE_ADMIN_KEYS_JSON` (JSON array)
+- Use overlap array for controlled rotation/testing without immediate breakage of existing admin clients.
+
+### Deterministic failure contracts validated in M5
+- claim exchange replay: `TOKEN_EXCHANGE_CHALLENGE_USED`
+- scope matrix unknown transition: `TRANSITION_UNKNOWN`
+- revoked-token introspection: `active=false`, `revoked=true`

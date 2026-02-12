@@ -13,13 +13,36 @@ routes = [
 binding = "CLAIM_STORE"
 id = "9e29c82bf0694272ac00d8affad48a45"
 
+[[kv_namespaces]]
+binding = "CLAIM_CACHE"
+id = "445a1222c14f43a19ab9f0cacc3b869a"
+
+[[d1_databases]]
+binding = "CLAIM_DB"
+database_name = "clawclaim-identity-registry"
+database_id = "c9071497-0a01-40f6-a389-30c046e06a44"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "CLAIM_AUDIT_EXPORTS"
+bucket_name = "clawclaim-identity-audit-exports"
+
 [vars]
 CLAIM_VERSION = "0.1.0"
 CLAIM_CHALLENGE_TTL_SECONDS = "600"
 CLAIM_EXPORT_MAX_AGE_SECONDS = "86400"
+CLAIM_SCOPE_BASE_URL = "https://clawscope.com"
+CLAIM_SCOPE_TIMEOUT_MS = "5000"
+CLAWVERIFY_BASE_URL = "https://clawverify.com"
+CLAWVERIFY_TIMEOUT_MS = "5000"
+CLAIM_CLAWLOGS_BASE_URL = "https://clawlogs.com"
+CLAIM_CLAWLOGS_MODE = "best_effort"
+CLAIM_SCOPE_EXCHANGE_TTL_SECONDS = "300"
 
 # Secrets to set via wrangler secret put:
 # - CLAIM_EXPORT_SIGNING_KEY (required for identity export/import bundle signing)
+# - CLAIM_SCOPE_ADMIN_KEY (preferred for challenge->CST exchange flow; optional x-scope-admin-key request header override supported for controlled integration tests)
+# - CLAIM_CLAWLOGS_ADMIN_KEY (optional unless CLAIM_CLAWLOGS_MODE=required)
 
 [env.staging]
 name = "clawclaim-staging"
@@ -31,7 +54,28 @@ routes = [
 CLAIM_VERSION = "0.1.0"
 CLAIM_CHALLENGE_TTL_SECONDS = "600"
 CLAIM_EXPORT_MAX_AGE_SECONDS = "86400"
+CLAIM_SCOPE_BASE_URL = "https://staging.clawscope.com"
+CLAIM_SCOPE_TIMEOUT_MS = "5000"
+CLAWVERIFY_BASE_URL = "https://staging.clawverify.com"
+CLAWVERIFY_TIMEOUT_MS = "5000"
+CLAIM_CLAWLOGS_BASE_URL = "https://staging.clawlogs.com"
+CLAIM_CLAWLOGS_MODE = "best_effort"
+CLAIM_SCOPE_EXCHANGE_TTL_SECONDS = "300"
 
 [[env.staging.kv_namespaces]]
 binding = "CLAIM_STORE"
 id = "6764ff7a83754112a7efb00d5a47101d"
+
+[[env.staging.kv_namespaces]]
+binding = "CLAIM_CACHE"
+id = "7763a017f90646d9b3493677c0a3bb33"
+
+[[env.staging.d1_databases]]
+binding = "CLAIM_DB"
+database_name = "clawclaim-identity-registry-staging"
+database_id = "9076b868-bca5-4cad-998d-704fb09348fb"
+migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "CLAIM_AUDIT_EXPORTS"
+bucket_name = "clawclaim-identity-audit-exports-staging"

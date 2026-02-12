@@ -56,8 +56,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented `POST /v1/platform-claims/register` + `GET /v1/platform-claims/{owner_did}` in `services/clawclaim/src/m5-identity.ts`. Supports GitHub/X/Moltbook, stores proof URLs, and verifies message-signature envelopes via `clawverify /v1/verify/message` before persistence. Validated in staging/prod M5 smoke artifacts (`artifacts/smoke/identity-control-plane/2026-02-11T23-49-28-476Z-staging-m5/result.json`, `.../2026-02-11T23-49-48-765Z-prod-m5/result.json`)."
     },
     {
       "id": "CCL-US-005",
@@ -70,8 +70,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented account primary DID upsert + profile read APIs: `POST /v1/accounts/{account_id}/primary-did` and `GET /v1/accounts/{account_id}/profile`. Enforces active-binding prerequisite and single-primary semantics per account (`ON CONFLICT(account_id)` upsert). Profile API is cache-backed and includes linked platform claims. Validated in M5 smoke artifacts for staging/prod (`2026-02-11T23-49-28-476Z-staging-m5`, `2026-02-11T23-49-48-765Z-prod-m5`)."
     },
     {
       "id": "CCL-US-006",
@@ -84,8 +84,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Shipped D1-backed append-only binding audit registry (`binding_audit_events`) plus export API: `GET /v1/bindings/audit` and `GET /v1/bindings/audit/export?format=csv|jsonl` with R2 export persistence (`CLAIM_AUDIT_EXPORTS`). Includes sequence ordering + timestamps and compatibility readout of legacy KV events. Validated in staging/prod M5 smoke (export key + sha256 evidence recorded in artifacts)."
     },
     {
       "id": "CCL-US-007",
@@ -98,8 +98,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented owner attestation registry APIs: `POST /v1/owner-attestations/register`, `GET /v1/owner-attestations/{owner_did}`, and `GET /v1/owner-attestations/lookup?owner_provider=&provider_ref=`. Stores full attestation envelope + verification metadata in D1 and validates envelopes via `clawverify /v1/verify/owner-attestation` fail-closed. Lookup path ordering bug was fixed to keep deterministic provider-ref resolution. Proven in staging/prod M5 smoke (`lookup_count=1`)."
     },
     {
       "id": "CCL-US-008",
@@ -113,8 +113,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added challenge/exchange CST bootstrap endpoints: `POST /v1/scoped-tokens/challenges` and `POST /v1/scoped-tokens/exchange`. Exchange verifies owner DID signature over deterministic challenge context, enforces single-use challenge replay denial (`TOKEN_EXCHANGE_CHALLENGE_USED`), supports optional owner_attestation_id + mission_id, and calls clawscope canonical issuance. Added clawlogs append integration (`best_effort|required|disabled`) with deterministic failure contracts. M5 smoke validates issuance + replay denial in staging/prod artifacts (`...23-49-28-476Z-staging-m5`, `...23-49-48-765Z-prod-m5`)."
     },
     {
       "id": "CCL-US-009",
@@ -127,8 +127,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implemented team roster claim APIs: `POST /v1/orgs/{org_id}/roster-manifests` and `GET /v1/orgs/{org_id}/roster/latest`. Manifest signing message is deterministic (`clawclaim:org_roster_manifest:v1:<hash>` over canonical payload hash), member bindings are required fail-closed, and latest roster read exposes active manifest + members for verification. Covered by staging/prod M5 smoke evidence with registered manifests and latest roster retrieval."
     },
     {
       "id": "CCL-US-011",

@@ -1,0 +1,42 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.identity.platform_claim.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Platform Claim v1",
+  "description": "Owner-signed external platform identity claim record (GitHub/X/Moltbook).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claim_version",
+    "claim_id",
+    "owner_did",
+    "platform",
+    "handle",
+    "proof_url",
+    "issued_at"
+  ],
+  "properties": {
+    "claim_version": { "const": "1" },
+    "claim_id": { "type": "string", "minLength": 1 },
+    "owner_did": {
+      "type": "string",
+      "pattern": "^did:[a-z0-9]+:[a-zA-Z0-9._%-]+$"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["github", "x", "moltbook"]
+    },
+    "handle": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "proof_url": { "type": "string", "format": "uri" },
+    "verification_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "sha256_b64u reference hash for the verifier envelope payload."
+    },
+    "issued_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix epoch seconds."
+    },
+    "metadata": { "type": "object" }
+  }
+}

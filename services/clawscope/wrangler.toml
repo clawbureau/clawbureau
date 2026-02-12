@@ -9,9 +9,51 @@ routes = [
   { pattern = "www.clawscope.com/*", zone_name = "clawscope.com" }
 ]
 
+[[durable_objects.bindings]]
+name = "SCOPE_OBS_COORDINATOR"
+class_name = "ScopeObservabilityCoordinator"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["ScopeObservabilityCoordinator"]
+
 [[kv_namespaces]]
 binding = "SCOPE_REVOCATIONS"
 id = "30f94e9e07fe426cb295b3efc9936836"
+
+[[kv_namespaces]]
+binding = "SCOPE_OBS_CACHE"
+id = "4eacda0ae98d447ca940f14af7e88448"
+
+[[d1_databases]]
+binding = "SCOPE_OBSERVABILITY_DB"
+database_name = "clawscope-observability"
+database_id = "9a5aa18a-4f62-4e3f-a640-4daa9c9db820"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "SCOPE_REPORTS_BUCKET"
+bucket_name = "clawscope-obs-reports"
+
+[[analytics_engine_datasets]]
+binding = "SCOPE_METRICS"
+dataset = "clawscope_observability"
+
+[[queues.producers]]
+binding = "SCOPE_OBS_EVENTS"
+queue = "clawscope-obs-events"
+
+[[queues.consumers]]
+queue = "clawscope-obs-events"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8
+
+[triggers]
+crons = ["5 * * * *"]
+
+[placement]
+mode = "smart"
 
 [vars]
 SCOPE_VERSION = "0.1.0"
@@ -34,25 +76,37 @@ SCOPE_MAX_SCOPE_LENGTH = "128"
 
 SCOPE_REVOCATION_TTL_SECONDS = "2592000" # 30 days
 
+# Observability defaults
+SCOPE_ALERT_DEFAULT_ERROR_RATE_PERCENT = "5"
+SCOPE_ALERT_DEFAULT_P95_MS = "1200"
+SCOPE_ALERT_DEFAULT_REQUEST_COUNT = "200"
+
 # Optional: structured policy config (overrides knobs above)
 # SCOPE_POLICY_JSON = "{\"version\":\"1\",\"tiers\":{\"default\":{\"max_ttl_seconds\":3600,\"allow_wildcards\":false,\"allowed_scope_prefixes\":[\"proxy:\",\"clawproxy:\"]}}}"
-
-# Optional KV binding (needed for revocation + event feed + audit trail):
-# [[kv_namespaces]]
-# binding = "SCOPE_REVOCATIONS"
-# id = "<create via wrangler kv:namespace create clawscope-revocations>"
 
 # Secrets to be set via wrangler secret put:
 # - SCOPE_SIGNING_KEY (Ed25519 seed, base64url; required unless using SCOPE_SIGNING_KEYS_JSON)
 # - SCOPE_SIGNING_KEYS_JSON (JSON array of Ed25519 seeds; base64url; first key is active; optional)
 # - SCOPE_VERIFY_PUBLIC_KEYS_JSON (JSON array of verify-only Ed25519 public keys for overlap/interoperability)
-# - SCOPE_ADMIN_KEY (string; required for token issuance/revocation)
+# - SCOPE_ADMIN_KEY (string; required for token issuance/revocation + observability admin endpoints)
+# - SCOPE_ADMIN_KEYS_JSON (optional JSON array of additional admin tokens for overlap/rotation)
 
 [env.staging]
 name = "clawscope-staging"
 routes = [
   { pattern = "staging.clawscope.com/*", zone_name = "clawscope.com" }
 ]
+
+[[env.staging.durable_objects.bindings]]
+name = "SCOPE_OBS_COORDINATOR"
+class_name = "ScopeObservabilityCoordinator"
+
+[[env.staging.migrations]]
+tag = "v1"
+new_classes = ["ScopeObservabilityCoordinator"]
+
+[env.staging.triggers]
+crons = ["5 * * * *"]
 
 [env.staging.vars]
 SCOPE_VERSION = "0.1.0"
@@ -69,7 +123,38 @@ SCOPE_MAX_TTL_SECONDS = "3600"
 SCOPE_MAX_SCOPE_ITEMS = "64"
 SCOPE_MAX_SCOPE_LENGTH = "128"
 SCOPE_REVOCATION_TTL_SECONDS = "2592000"
+SCOPE_ALERT_DEFAULT_ERROR_RATE_PERCENT = "5"
+SCOPE_ALERT_DEFAULT_P95_MS = "1200"
+SCOPE_ALERT_DEFAULT_REQUEST_COUNT = "200"
 
 [[env.staging.kv_namespaces]]
 binding = "SCOPE_REVOCATIONS"
 id = "0eabaa70badf4983b5f20d671d1d943d"
+
+[[env.staging.kv_namespaces]]
+binding = "SCOPE_OBS_CACHE"
+id = "50870656c74b4ca59e880e95346b19ae"
+
+[[env.staging.d1_databases]]
+binding = "SCOPE_OBSERVABILITY_DB"
+database_name = "clawscope-observability-staging"
+database_id = "9121a7d7-4ef5-4abf-bc91-50d213afacc4"
+migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "SCOPE_REPORTS_BUCKET"
+bucket_name = "clawscope-obs-reports-staging"
+
+[[env.staging.analytics_engine_datasets]]
+binding = "SCOPE_METRICS"
+dataset = "clawscope_observability_staging"
+
+[[env.staging.queues.producers]]
+binding = "SCOPE_OBS_EVENTS"
+queue = "clawscope-obs-events-staging"
+
+[[env.staging.queues.consumers]]
+queue = "clawscope-obs-events-staging"
+max_batch_size = 50
+max_batch_timeout = 10
+max_retries = 8

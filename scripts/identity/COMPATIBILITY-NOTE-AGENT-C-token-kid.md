@@ -20,6 +20,19 @@ When receiving `TOKEN_CONTROL_KEY_UNKNOWN` or `TOKEN_CONTROL_KEY_EXPIRED`:
 
 Do **not** perform blind retries with the same rejected token.
 
+## M5 addendum (identity + observability lane)
+- New smoke-gated evidence path for cross-service compatibility:
+  - `scripts/identity/smoke-identity-control-plane-m5.mjs`
+- Additional deterministic outcomes now expected in downstream automation:
+  - claim challenge replay: `TOKEN_EXCHANGE_CHALLENGE_USED`
+  - scope unknown transition request: `TRANSITION_UNKNOWN`
+- Admin token rotation/testing can now use overlap keys without forcing immediate client cutover:
+  - primary: `SCOPE_ADMIN_KEY`
+  - overlap: `SCOPE_ADMIN_KEYS_JSON`
+
 ## Evidence
-- Interop smoke artifact:
+- Kid interop smoke artifact:
   - `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`
+- M5 smoke artifacts:
+  - staging: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-28-476Z-staging-m5/result.json`
+  - prod: `artifacts/smoke/identity-control-plane/2026-02-11T23-49-48-765Z-prod-m5/result.json`

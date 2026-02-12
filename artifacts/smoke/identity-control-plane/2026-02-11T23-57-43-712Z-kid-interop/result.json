@@ -1,0 +1,83 @@
+{
+  "generated_at": "2026-02-11T23:57:43.713Z",
+  "scope_urls": {
+    "staging": "https://staging.clawscope.com",
+    "prod": "https://clawscope.com"
+  },
+  "steps": {
+    "staging_issue": {
+      "token_hash": "f4cf333afb761fa0c7d895ffe0f7621a3283cee728ddc02044ebba89309a9310",
+      "token_lane": "legacy",
+      "legacy_exchange_mode": "migration",
+      "kid": "66a63dae7bbf4bda",
+      "iat": 1770854263,
+      "exp": 1770855163
+    },
+    "staging_introspect_local": {
+      "active": true,
+      "token_hash": "f4cf333afb761fa0c7d895ffe0f7621a3283cee728ddc02044ebba89309a9310",
+      "kid": "66a63dae7bbf4bda",
+      "kid_source": "header"
+    },
+    "staging_introspect_prod": {
+      "active": true,
+      "token_hash": "f4cf333afb761fa0c7d895ffe0f7621a3283cee728ddc02044ebba89309a9310",
+      "kid": "66a63dae7bbf4bda",
+      "kid_source": "header"
+    },
+    "prod_issue": {
+      "token_hash": "e2abb8db764b4a5238796f6167907a1fd9be68171f596413ae487fd9e9fd14b3",
+      "token_lane": "legacy",
+      "legacy_exchange_mode": "migration",
+      "kid": "66a63dae7bbf4bda",
+      "iat": 1770854264,
+      "exp": 1770855164
+    },
+    "prod_introspect_local": {
+      "active": true,
+      "token_hash": "e2abb8db764b4a5238796f6167907a1fd9be68171f596413ae487fd9e9fd14b3",
+      "kid": "66a63dae7bbf4bda",
+      "kid_source": "header"
+    },
+    "prod_introspect_staging": {
+      "active": true,
+      "token_hash": "e2abb8db764b4a5238796f6167907a1fd9be68171f596413ae487fd9e9fd14b3",
+      "kid": "66a63dae7bbf4bda",
+      "kid_source": "header"
+    },
+    "staging_rotation_contract": {
+      "contract_version": "2",
+      "active_kid": "66a63dae7bbf4bda",
+      "accepted_kids": [
+        "66a63dae7bbf4bda",
+        "65b60673d6ed884b"
+      ],
+      "verify_only_kids": [
+        "65b60673d6ed884b"
+      ],
+      "expiring_kids": [
+        {
+          "kid": "65b60673d6ed884b",
+          "not_after_unix": 1771108817
+        }
+      ]
+    },
+    "prod_rotation_contract": {
+      "contract_version": "2",
+      "active_kid": "66a63dae7bbf4bda",
+      "accepted_kids": [
+        "66a63dae7bbf4bda",
+        "65b60673d6ed884b"
+      ],
+      "verify_only_kids": [
+        "65b60673d6ed884b"
+      ],
+      "expiring_kids": [
+        {
+          "kid": "65b60673d6ed884b",
+          "not_after_unix": 1771108817
+        }
+      ]
+    }
+  }
+}

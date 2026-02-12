@@ -8,9 +8,19 @@ import {
   signEd25519,
   verifyEd25519,
 } from './crypto';
+import {
+  ScopeObservabilityCoordinator,
+  emitScopeObservabilityEvent,
+  handleScopeObservabilityRoutes,
+  makeScopeEventFromResponse,
+  processScopeObservabilityQueueBatch,
+  runScopeObservabilityScheduled,
+} from './observability';
 import { computeTokenScopeHashB64u } from './token-scope-hash';
 
 const SCOPE_DID = 'did:web:clawscope.com';
+
+export { ScopeObservabilityCoordinator };
 
 export interface Env {
   SCOPE_VERSION: string;
@@ -40,12 +50,24 @@ export interface Env {
 
   // storage (optional bindings)
   SCOPE_REVOCATIONS?: KVNamespace;
+  SCOPE_OBS_CACHE?: KVNamespace;
+  SCOPE_REPORTS_BUCKET?: R2Bucket;
+
+  // observability / reporting stack
+  SCOPE_OBSERVABILITY_DB?: D1Database;
+  SCOPE_OBS_EVENTS?: Queue<any>;
+  SCOPE_METRICS?: AnalyticsEngineDataset;
+  SCOPE_OBS_COORDINATOR?: DurableObjectNamespace;
+  SCOPE_ALERT_DEFAULT_ERROR_RATE_PERCENT?: string;
+  SCOPE_ALERT_DEFAULT_P95_MS?: string;
+  SCOPE_ALERT_DEFAULT_REQUEST_COUNT?: string;
 
   // secrets
   SCOPE_SIGNING_KEY?: string;
   SCOPE_SIGNING_KEYS_JSON?: string;
   SCOPE_VERIFY_PUBLIC_KEYS_JSON?: string;
   SCOPE_ADMIN_KEY?: string;
+  SCOPE_ADMIN_KEYS_JSON?: string;
 }
 
 export interface ScopedTokenClaims {
@@ -292,6 +314,17 @@ function errorResponse(code: string, message: string, status = 400): Response {
   return jsonResponse({ error: code, message }, status);
 }
 
+async function emitScopeObservabilityBestEffort(
+  env: Env,
+  event: Parameters<typeof emitScopeObservabilityEvent>[1]
+): Promise<void> {
+  try {
+    await emitScopeObservabilityEvent(env, event);
+  } catch (err) {
+    console.error('SCOPE_OBSERVABILITY_EMIT_FAILED', err);
+  }
+}
+
 function getBearerToken(header: string | null): string | null {
   if (!header) return null;
   const trimmed = header.trim();
@@ -300,17 +333,69 @@ function getBearerToken(header: string | null): string | null {
   return trimmed;
 }
 
-function requireAdmin(request: Request, env: Env): Response | null {
-  if (!env.SCOPE_ADMIN_KEY || env.SCOPE_ADMIN_KEY.trim().length === 0) {
-    return errorResponse('ADMIN_KEY_NOT_CONFIGURED', 'SCOPE_ADMIN_KEY is not configured', 503);
+function resolveAdminKeys(env: Env): { ok: true; keys: string[] } | { ok: false; error: Response } {
+  const keys = new Set<string>();
+
+  if (isNonEmptyString(env.SCOPE_ADMIN_KEY)) {
+    keys.add(env.SCOPE_ADMIN_KEY.trim());
   }
+
+  const additionalRaw = env.SCOPE_ADMIN_KEYS_JSON?.trim();
+  if (additionalRaw) {
+    try {
+      const parsed = JSON.parse(additionalRaw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return {
+          ok: false,
+          error: errorResponse('ADMIN_KEY_CONFIG_INVALID', 'SCOPE_ADMIN_KEYS_JSON must be a JSON array', 503),
+        };
+      }
+
+      for (const raw of parsed) {
+        if (!isNonEmptyString(raw)) {
+          return {
+            ok: false,
+            error: errorResponse(
+              'ADMIN_KEY_CONFIG_INVALID',
+              'SCOPE_ADMIN_KEYS_JSON entries must be non-empty strings',
+              503
+            ),
+          };
+        }
+        keys.add(raw.trim());
+      }
+    } catch {
+      return {
+        ok: false,
+        error: errorResponse('ADMIN_KEY_CONFIG_INVALID', 'SCOPE_ADMIN_KEYS_JSON must be valid JSON', 503),
+      };
+    }
+  }
+
+  if (keys.size === 0) {
+    return {
+      ok: false,
+      error: errorResponse(
+        'ADMIN_KEY_NOT_CONFIGURED',
+        'SCOPE_ADMIN_KEY or SCOPE_ADMIN_KEYS_JSON is required',
+        503
+      ),
+    };
+  }
+
+  return { ok: true, keys: Array.from(keys) };
+}
+
+function requireAdmin(request: Request, env: Env): Response | null {
+  const resolved = resolveAdminKeys(env);
+  if (!resolved.ok) return resolved.error;
 
   const token = getBearerToken(request.headers.get('Authorization'));
   if (!token) {
     return errorResponse('UNAUTHORIZED', 'Missing Authorization header', 401);
   }
 
-  if (token !== env.SCOPE_ADMIN_KEY) {
+  if (!resolved.keys.includes(token)) {
     return errorResponse('UNAUTHORIZED', 'Invalid admin token', 401);
   }
 
@@ -1383,12 +1468,16 @@ export default {
 
     // Skill doc (minimal)
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawscope (canonical CST control lane)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- GET /v1/keys/rotation-contract\n- POST /v1/tokens/issue/canonical (admin)\n- POST /v1/tokens/issue (admin, legacy migration lane)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/revocations/stream (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n- POST /v1/tokens/introspect/matrix\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
+      const md = `# clawscope (canonical CST control lane)\n\nEndpoints:\n- GET /health\n- GET /v1/did\n- GET /v1/jwks\n- GET /v1/keys/rotation-contract\n- POST /v1/tokens/issue/canonical (admin)\n- POST /v1/tokens/issue (admin, legacy migration lane)\n- POST /v1/tokens/revoke (admin)\n- GET /v1/revocations/events (admin)\n- GET /v1/revocations/stream (admin)\n- GET /v1/audit/issuance (admin)\n- GET /v1/audit/bundle (admin)\n- POST /v1/tokens/introspect\n- POST /v1/tokens/introspect/matrix\n\nObservability endpoints:\n- GET /v1/metrics/dashboard (admin)\n- POST /v1/reports/rollups/run (admin)\n- GET /v1/reports/usage (admin)\n- POST /v1/alerts/rules (admin)\n- GET /v1/alerts/events (admin)\n- GET /v1/analytics/cost (admin)\n- GET /v1/traces/:trace_id (admin)\n- GET /v1/reports/sla (admin)\n- GET /v1/missions/aggregate (admin)\n\nToken format: JWT (JWS compact) signed with Ed25519 (alg=EdDSA).\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.SCOPE_VERSION);
     }
 
+    const observabilityResponse = await handleScopeObservabilityRoutes(request, env);
+    if (observabilityResponse) return observabilityResponse;
+
     // Token issuance (CSC-US-014) — Canonical lane
     if (request.method === 'POST' && url.pathname === '/v1/tokens/issue/canonical') {
+      const canonicalStartedAtMs = Date.now();
       const adminErr = requireAdmin(request, env);
       if (adminErr) return adminErr;
 
@@ -1511,7 +1600,7 @@ export default {
 
         await persistIssuanceAuditRecord(env, record);
 
-        return jsonResponse({
+        const responseBody = {
           token,
           token_hash,
           token_lane: 'canonical',
@@ -1527,7 +1616,28 @@ export default {
           kid,
           iat: claims.iat,
           exp: claims.exp,
-        });
+        };
+
+        const response = jsonResponse(responseBody);
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/issue/canonical',
+            started_at_ms: canonicalStartedAtMs,
+            status_code: response.status,
+            event_type: 'token_issue',
+            token_hash,
+            mission_id: claims.mission_id,
+            scope_count: claims.scope.length,
+            details: {
+              token_lane: 'canonical',
+              policy_tier: policy.tier,
+            },
+          })
+        );
+
+        return response;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
 
@@ -1558,6 +1668,7 @@ export default {
 
     // Token issuance (legacy exchange; migration gate)
     if (request.method === 'POST' && url.pathname === '/v1/tokens/issue') {
+      const legacyStartedAtMs = Date.now();
       const adminErr = requireAdmin(request, env);
       if (adminErr) return adminErr;
 
@@ -1573,7 +1684,24 @@ export default {
 
       const mode = parseLegacyExchangeMode(env);
       if (mode === 'disabled') {
-        return errorResponse('LEGACY_EXCHANGE_DISABLED', 'Legacy token issuance is disabled; use /v1/tokens/issue/canonical', 403);
+        const response = errorResponse(
+          'LEGACY_EXCHANGE_DISABLED',
+          'Legacy token issuance is disabled; use /v1/tokens/issue/canonical',
+          403
+        );
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/issue',
+            started_at_ms: legacyStartedAtMs,
+            status_code: response.status,
+            event_type: 'token_issue_denied',
+            scope_count: 0,
+            details: { reason: 'LEGACY_EXCHANGE_DISABLED' },
+          })
+        );
+        return response;
       }
 
       const req = validated.req;
@@ -1582,11 +1710,27 @@ export default {
       const sensitivePrefixes = parseSensitiveScopePrefixes(env);
       const sensitiveScopes = collectSensitiveScopes(req.scope, sensitivePrefixes);
       if (mode === 'migration' && sensitiveScopes.length > 0) {
-        return errorResponse(
+        const response = errorResponse(
           'LEGACY_SENSITIVE_SCOPE_FORBIDDEN',
           `Legacy issuance cannot mint sensitive scope(s) during migration: ${sensitiveScopes.join(', ')}`,
           403
         );
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/issue',
+            started_at_ms: legacyStartedAtMs,
+            status_code: response.status,
+            event_type: 'token_issue_denied',
+            scope_count: req.scope.length,
+            details: {
+              reason: 'LEGACY_SENSITIVE_SCOPE_FORBIDDEN',
+              sensitive_scopes: sensitiveScopes,
+            },
+          })
+        );
+        return response;
       }
 
       const tier = req.tier ?? env.SCOPE_POLICY_TIER ?? 'default';
@@ -1630,7 +1774,7 @@ export default {
 
         await persistIssuanceAuditRecord(env, record);
 
-        return jsonResponse({
+        const responseBody = {
           token,
           token_hash,
           token_lane: 'legacy',
@@ -1647,7 +1791,29 @@ export default {
           kid,
           iat: claims.iat,
           exp: claims.exp,
-        });
+        };
+
+        const response = jsonResponse(responseBody);
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/issue',
+            started_at_ms: legacyStartedAtMs,
+            status_code: response.status,
+            event_type: 'token_issue',
+            token_hash,
+            mission_id: claims.mission_id,
+            scope_count: claims.scope.length,
+            details: {
+              token_lane: 'legacy',
+              policy_tier: policy.tier,
+              legacy_exchange_mode: mode,
+            },
+          })
+        );
+
+        return response;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
 
@@ -1678,6 +1844,7 @@ export default {
 
     // Token revocation (CSC-US-003)
     if (request.method === 'POST' && url.pathname === '/v1/tokens/revoke') {
+      const revokeStartedAtMs = Date.now();
       const adminErr = requireAdmin(request, env);
       if (adminErr) return adminErr;
 
@@ -1751,13 +1918,32 @@ export default {
       const eventKey = revocationEventKey(revokedAtSec, token_hash);
       await kv.put(eventKey, JSON.stringify(record), { expirationTtl: ttl });
 
-      return jsonResponse({
+      const responseBody = {
         status: 'revoked',
         token_hash,
         revoked_at: record.revoked_at,
         revoked_at_iso: record.revoked_at_iso,
         event_key: eventKey,
-      });
+      };
+
+      const response = jsonResponse(responseBody);
+      await emitScopeObservabilityBestEffort(
+        env,
+        makeScopeEventFromResponse({
+          request,
+          route: '/v1/tokens/revoke',
+          started_at_ms: revokeStartedAtMs,
+          status_code: response.status,
+          event_type: 'token_revoke',
+          token_hash,
+          scope_count: 0,
+          details: {
+            reason: reason ?? null,
+          },
+        })
+      );
+
+      return response;
     }
 
     // Revocation events (CSC-US-003)
@@ -2015,6 +2201,7 @@ export default {
 
     // Token introspection (CSC-US-002)
     if (request.method === 'POST' && url.pathname === '/v1/tokens/introspect') {
+      const introspectStartedAtMs = Date.now();
       let body: unknown;
       try {
         body = await request.json();
@@ -2032,11 +2219,25 @@ export default {
       }
 
       const introspection = await getIntrospectionResult(token, env);
-      if (!introspection.ok) return introspection.res;
+      if (!introspection.ok) {
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/introspect',
+            started_at_ms: introspectStartedAtMs,
+            status_code: introspection.res.status,
+            event_type: 'token_introspect_denied',
+            scope_count: 0,
+            details: { reason: 'INTROSPECTION_FAILED' },
+          })
+        );
+        return introspection.res;
+      }
 
       const payload = introspection.claims;
       if (introspection.revoked) {
-        return jsonResponse({
+        const revokedBody = {
           active: false,
           revoked: true,
           token_hash: introspection.token_hash,
@@ -2060,10 +2261,31 @@ export default {
           kid_source: introspection.kid_source,
           revoked_at: introspection.revoked_at,
           revoked_at_iso: introspection.revoked_at_iso,
-        });
+        };
+
+        const response = jsonResponse(revokedBody);
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/introspect',
+            started_at_ms: introspectStartedAtMs,
+            status_code: response.status,
+            event_type: 'token_introspect',
+            token_hash: introspection.token_hash,
+            mission_id: payload.mission_id,
+            scope_count: Array.isArray(payload.scope) ? payload.scope.length : 0,
+            details: {
+              active: false,
+              revoked: true,
+            },
+          })
+        );
+
+        return response;
       }
 
-      return jsonResponse({
+      const activeBody = {
         active: true,
         token_hash: introspection.token_hash,
         sub: payload.sub,
@@ -2084,11 +2306,33 @@ export default {
         exp: payload.exp,
         kid: introspection.kid,
         kid_source: introspection.kid_source,
-      });
+      };
+
+      const response = jsonResponse(activeBody);
+      await emitScopeObservabilityBestEffort(
+        env,
+        makeScopeEventFromResponse({
+          request,
+          route: '/v1/tokens/introspect',
+          started_at_ms: introspectStartedAtMs,
+          status_code: response.status,
+          event_type: 'token_introspect',
+          token_hash: introspection.token_hash,
+          mission_id: payload.mission_id,
+          scope_count: Array.isArray(payload.scope) ? payload.scope.length : 0,
+          details: {
+            active: true,
+            revoked: false,
+          },
+        })
+      );
+
+      return response;
     }
 
     // Sensitive-transition introspection matrix (CSC-US-014)
     if (request.method === 'POST' && url.pathname === '/v1/tokens/introspect/matrix') {
+      const matrixStartedAtMs = Date.now();
       let body: unknown;
       try {
         body = await request.json();
@@ -2111,13 +2355,30 @@ export default {
       }
 
       const introspection = await getIntrospectionResult(token, env);
-      if (!introspection.ok) return introspection.res;
+      if (!introspection.ok) {
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/introspect/matrix',
+            started_at_ms: matrixStartedAtMs,
+            status_code: introspection.res.status,
+            event_type: 'token_introspect_denied',
+            scope_count: 0,
+            details: {
+              reason: 'MATRIX_INTROSPECTION_FAILED',
+              transition: transition ?? null,
+            },
+          })
+        );
+        return introspection.res;
+      }
 
       const payload = introspection.claims;
       const matrix = evaluateTransitionMatrix(payload);
 
       if (introspection.revoked) {
-        return jsonResponse({
+        const revokedBody = {
           active: false,
           revoked: true,
           token_hash: introspection.token_hash,
@@ -2127,14 +2388,36 @@ export default {
           kid_source: introspection.kid_source,
           error: 'TOKEN_REVOKED',
           message: 'Token is revoked and cannot authorize sensitive transitions',
-        });
+        };
+
+        const response = jsonResponse(revokedBody);
+        await emitScopeObservabilityBestEffort(
+          env,
+          makeScopeEventFromResponse({
+            request,
+            route: '/v1/tokens/introspect/matrix',
+            started_at_ms: matrixStartedAtMs,
+            status_code: response.status,
+            event_type: 'token_matrix',
+            token_hash: introspection.token_hash,
+            mission_id: payload.mission_id,
+            scope_count: Array.isArray(payload.scope) ? payload.scope.length : 0,
+            details: {
+              active: false,
+              revoked: true,
+              transition: transition ?? null,
+            },
+          })
+        );
+
+        return response;
       }
 
       if (transition && !(transition in matrix)) {
         return errorResponse('TRANSITION_UNKNOWN', `Unknown transition '${transition}'`, 400);
       }
 
-      return jsonResponse({
+      const responseBody = {
         active: true,
         revoked: false,
         token_hash: introspection.token_hash,
@@ -2143,9 +2426,39 @@ export default {
         matrix,
         kid: introspection.kid,
         kid_source: introspection.kid_source,
-      });
+      };
+
+      const response = jsonResponse(responseBody);
+      await emitScopeObservabilityBestEffort(
+        env,
+        makeScopeEventFromResponse({
+          request,
+          route: '/v1/tokens/introspect/matrix',
+          started_at_ms: matrixStartedAtMs,
+          status_code: response.status,
+          event_type: 'token_matrix',
+          token_hash: introspection.token_hash,
+          mission_id: payload.mission_id,
+          scope_count: Array.isArray(payload.scope) ? payload.scope.length : 0,
+          details: {
+            active: true,
+            revoked: false,
+            transition: transition ?? null,
+          },
+        })
+      );
+
+      return response;
     }
 
     return errorResponse('NOT_FOUND', 'Not found', 404);
+  },
+
+  async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await runScopeObservabilityScheduled(env, controller.cron, controller.scheduledTime);
+  },
+
+  async queue(batch: MessageBatch<any>, env: Env): Promise<void> {
+    await processScopeObservabilityQueueBatch(batch as MessageBatch<any>, env);
   },
 };

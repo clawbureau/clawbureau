@@ -3,6 +3,7 @@ import {
   importEd25519PublicKeyFromBytes,
   verifyEd25519,
 } from './crypto';
+import { handleClaimM5Routes } from './m5-identity';
 
 export interface Env {
   CLAIM_VERSION: string;
@@ -10,8 +11,24 @@ export interface Env {
   CLAIM_EXPORT_SIGNING_KEY?: string;
   CLAIM_EXPORT_MAX_AGE_SECONDS?: string;
 
+  // identity productization + scoped exchange dependencies
+  CLAIM_SCOPE_BASE_URL?: string;
+  CLAIM_SCOPE_ADMIN_KEY?: string;
+  CLAIM_SCOPE_TIMEOUT_MS?: string;
+  CLAIM_SCOPE_EXCHANGE_TTL_SECONDS?: string;
+  CLAWVERIFY_BASE_URL?: string;
+  CLAWVERIFY_TIMEOUT_MS?: string;
+  CLAIM_CLAWLOGS_BASE_URL?: string;
+  CLAIM_CLAWLOGS_ADMIN_KEY?: string;
+  CLAIM_CLAWLOGS_MODE?: string;
+
   // storage (optional bindings)
   CLAIM_STORE?: KVNamespace;
+  CLAIM_CACHE?: KVNamespace;
+
+  // relational + export storage
+  CLAIM_DB?: D1Database;
+  CLAIM_AUDIT_EXPORTS?: R2Bucket;
 }
 
 type ChallengePurpose =
@@ -515,9 +532,12 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/skill.md') {
-      const md = `# clawclaim (identity control plane)\n\nEndpoints:\n- GET /health\n- POST /v1/challenges (purpose: bind|revoke)\n- POST /v1/bind\n- POST /v1/bindings/revoke\n- POST /v1/control-plane/challenges\n- POST /v1/control-plane/controllers/register\n- POST /v1/control-plane/controllers/{controller_did}/agents/register\n- POST /v1/control-plane/controllers/{controller_did}/sensitive-policy\n- POST /v1/control-plane/rotations/confirm\n- POST /v1/control-plane/controllers/{controller_did}/transfer/request\n- POST /v1/control-plane/controllers/{controller_did}/transfer/confirm\n- POST /v1/control-plane/identity/export\n- POST /v1/control-plane/identity/import\n- GET /v1/control-plane/controllers/{controller_did}\n- GET /v1/control-plane/controllers/{controller_did}/agents\n- GET /v1/control-plane/controllers/{controller_did}/agents/{agent_did}\n\nBind flow:\n1) POST /v1/challenges { did } to get a message.\n2) Sign the message with your DID key.\n3) POST /v1/bind.\n\nControl-plane flow:\n1) Owner DID + controller/agent DIDs must be active bindings.\n2) POST /v1/control-plane/challenges for controller action messages.\n3) Owner signs challenge message, then submit registration/policy mutation endpoint.\n\nPortability flow:\n1) issue purpose-scoped challenge for rotation/transfer/export/import.\n2) sign challenge with owner DID key.\n3) call corresponding lifecycle endpoint (rotation confirm, transfer request/confirm, export/import).\n\n`;
+      const md = `# clawclaim (identity control plane)\n\nEndpoints:\n- GET /health\n- POST /v1/challenges (purpose: bind|revoke)\n- POST /v1/bind\n- POST /v1/bindings/revoke\n- POST /v1/control-plane/challenges\n- POST /v1/control-plane/controllers/register\n- POST /v1/control-plane/controllers/{controller_did}/agents/register\n- POST /v1/control-plane/controllers/{controller_did}/sensitive-policy\n- POST /v1/control-plane/rotations/confirm\n- POST /v1/control-plane/controllers/{controller_did}/transfer/request\n- POST /v1/control-plane/controllers/{controller_did}/transfer/confirm\n- POST /v1/control-plane/identity/export\n- POST /v1/control-plane/identity/import\n- GET /v1/control-plane/controllers/{controller_did}\n- GET /v1/control-plane/controllers/{controller_did}/agents\n- GET /v1/control-plane/controllers/{controller_did}/agents/{agent_did}\n\nM5 productization endpoints:\n- POST /v1/platform-claims/register\n- GET /v1/platform-claims/{owner_did}\n- POST /v1/accounts/{account_id}/primary-did\n- GET /v1/accounts/{account_id}/profile\n- GET /v1/bindings/audit\n- GET /v1/bindings/audit/export\n- POST /v1/owner-attestations/register\n- GET /v1/owner-attestations/{owner_did}\n- GET /v1/owner-attestations/lookup\n- POST /v1/scoped-tokens/challenges\n- POST /v1/scoped-tokens/exchange\n- POST /v1/orgs/{org_id}/roster-manifests\n- GET /v1/orgs/{org_id}/roster/latest\n\nBind flow:\n1) POST /v1/challenges { did } to get a message.\n2) Sign the message with your DID key.\n3) POST /v1/bind.\n\nControl-plane flow:\n1) Owner DID + controller/agent DIDs must be active bindings.\n2) POST /v1/control-plane/challenges for controller action messages.\n3) Owner signs challenge message, then submit registration/policy mutation endpoint.\n\nPortability flow:\n1) issue purpose-scoped challenge for rotation/transfer/export/import.\n2) sign challenge with owner DID key.\n3) call corresponding lifecycle endpoint (rotation confirm, transfer request/confirm, export/import).\n\n`;
       return textResponse(md, 'text/markdown; charset=utf-8', 200, env.CLAIM_VERSION);
     }
+
+    const m5Response = await handleClaimM5Routes(request, env);
+    if (m5Response) return m5Response;
 
     // ICP-US-001 — Control-plane challenge issuance (owner signed)
     if (request.method === 'POST' && url.pathname === '/v1/control-plane/challenges') {
