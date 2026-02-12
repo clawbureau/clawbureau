@@ -8414,9 +8414,9 @@ function generateLlmsFullTxt(manifest: Record<string, { title?: string; category
   // ── Protocol summary ──
   ln("---");
   ln();
-  ln("## Claw Protocol: 5 Primitives");
+  ln("## Clawsig Protocol: 5 Primitives");
   ln();
-  ln("The Claw Protocol defines a narrow waist of five composable primitives. Everything else is built on these.");
+  ln("The Clawsig Protocol defines a narrow waist of five composable primitives. Everything else is built on these.");
   ln();
   ln("### 1. Policy Artifact (WPC)");
   ln("A signed, immutable, content-addressed policy contract. Defines what an agent may do before it runs:");

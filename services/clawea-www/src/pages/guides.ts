@@ -34,7 +34,7 @@ export function guideGithubActionsProofPage(): string {
   return layout({
     meta: {
       title: "GitHub Actions Proof Pipeline Guide | Claw EA",
-      description: "Step-by-step guide to setting up a Claw Verified PR pipeline with GitHub Actions: install clawproof-wrap, configure clawverify, add the workflow, verify your first PR.",
+      description: "Step-by-step guide to setting up a Claw Verified PR pipeline with GitHub Actions: install clawsig-wrap, configure clawverify, add the workflow, verify your first PR.",
       path: "/guides/github-actions-proof-pipeline",
     },
     breadcrumbs: [
@@ -48,7 +48,7 @@ export function guideGithubActionsProofPage(): string {
         {
           title: "Set up a Claw Verified PR pipeline with GitHub Actions",
           steps: [
-            { name: "Install clawproof-wrap", text: "Add the clawproof SDK to your project as a dev dependency." },
+            { name: "Install clawsig-wrap", text: "Add the clawsig SDK to your project as a dev dependency." },
             { name: "Configure the clawverify allowlist", text: "Create a clawverify config JSON with your receipt signer DIDs and allowed algorithms." },
             { name: "Generate your first commit proof", text: "Run the sign-message script to create a commit.sig.json for your latest commit." },
             { name: "Add the GitHub Actions workflow", text: "Copy the claw-verified-pr.yml workflow into .github/workflows/." },
@@ -66,10 +66,10 @@ export function guideGithubActionsProofPage(): string {
         <p class="lead">This guide walks you through setting up a Claw Verified PR pipeline on your own repository. Every agent-generated PR will carry a verifiable evidence pack, and a GitHub Actions check will validate it before merge.</p>
         <p><strong>Working example:</strong> The Claw Bureau monorepo uses this exact pipeline. The workflow file and verification runner are live in our repository.</p>
 
-        <h2 id="step-1">Step 1: Install clawproof-wrap</h2>
-        <p>The <code>clawproof-wrap</code> CLI generates proof artifacts (commit signatures and proof bundles) for your agent runs.</p>
-        <pre><code>npm install --save-dev @clawbureau/clawproof-sdk</code></pre>
-        <p>This gives you access to <code>ClawproofRun</code> for recording tool calls and generating proof bundles, and the <code>sign-message</code> utility for commit proofs.</p>
+        <h2 id="step-1">Step 1: Install clawsig-wrap</h2>
+        <p>The <code>clawsig-wrap</code> CLI generates proof artifacts (commit signatures and proof bundles) for your agent runs.</p>
+        <pre><code>npm install --save-dev @clawbureau/clawsig-sdk</code></pre>
+        <p>This gives you access to <code>ClawsigRun</code> for recording tool calls and generating proof bundles, and the <code>sign-message</code> utility for commit proofs.</p>
 
         <h2 id="step-2">Step 2: Configure the clawverify allowlist</h2>
         <p>Create a configuration file that tells the verifier which DID keys are trusted receipt signers.</p>
@@ -305,7 +305,7 @@ export function guideComplianceExportPage(): string {
         <h2 id="export">Step 1: Generate the export bundle</h2>
         <p>An export bundle is a self-contained package of proof bundles, receipts, and a content-addressed manifest. It covers a specific audit window.</p>
         <pre><code># Export all runs for a specific agent in a date range
-clawproof export \\
+clawsig export \\
   --agent-did "did:key:z6Mkn...E7c7" \\
   --from "2026-01-01" \\
   --to "2026-03-31" \\
