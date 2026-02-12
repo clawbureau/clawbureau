@@ -1,0 +1,62 @@
+{
+  "epic": "ECON-SETTLE-002",
+  "task": "Task 4: Funded lifecycle e2e",
+  "env": "prod",
+  "nonce": "smoke-funded-1770924522584-8kiwpk",
+  "timestamp": "2026-02-12T19:28:43.848Z",
+  "passed": 9,
+  "total": 9,
+  "results": [
+    {
+      "step": "Fee simulation returns policy",
+      "pass": true,
+      "detail": "status=200 policy=standard"
+    },
+    {
+      "step": "Fee quote buyer_total > principal",
+      "pass": true,
+      "detail": "buyer_total=5250 principal=5000"
+    },
+    {
+      "step": "PaymentIntent: correct fail-closed (no Stripe key)",
+      "pass": true,
+      "detail": "STRIPE_NOT_CONFIGURED 503"
+    },
+    {
+      "step": "PaymentIntent: fail-closed shape",
+      "pass": true,
+      "detail": "code=STRIPE_NOT_CONFIGURED"
+    },
+    {
+      "step": "Escrow: correct fail-closed (INSUFFICIENT_FUNDS)",
+      "pass": true,
+      "detail": "Synthetic DIDs have no balance — fee_quote accepted, hold failed"
+    },
+    {
+      "step": "Payout: correct rejection (no Connect account)",
+      "pass": true,
+      "detail": "PAYOUT_DESTINATION_NOT_CONFIGURED 422 — worker has no Stripe Connect"
+    },
+    {
+      "step": "Economy health: services reachable",
+      "pass": true,
+      "detail": "7/7 services up"
+    },
+    {
+      "step": "PaymentIntent idempotency: consistent fail-closed",
+      "pass": true,
+      "detail": "Both 503"
+    },
+    {
+      "step": "Escrow idempotency: consistent behavior",
+      "pass": true,
+      "detail": "first=502 replay=502"
+    }
+  ],
+  "endpoints": {
+    "settle": "https://clawsettle.com",
+    "cuts": "https://clawcuts.com",
+    "escrow": "https://clawescrow.com",
+    "ledger": "https://clawledger.com"
+  }
+}
