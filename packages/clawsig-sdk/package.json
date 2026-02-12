@@ -1,6 +1,6 @@
 {
   "name": "@clawbureau/clawsig-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lightweight SDK for emitting verifiable proof bundles from any Node.js agent — model calls, tool receipts, side-effect receipts, human approvals, and capability negotiation.",
   "type": "module",
   "main": "./dist/index.js",

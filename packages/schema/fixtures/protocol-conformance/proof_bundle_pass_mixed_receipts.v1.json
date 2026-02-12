@@ -1,0 +1,96 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "pb_conformance_mixed_001",
+    "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "event_chain": [
+      {
+        "event_id": "evt_001",
+        "run_id": "run_conformance_mixed_001",
+        "event_type": "llm_call",
+        "timestamp": "2026-02-12T18:00:00.000Z",
+        "payload_hash_b64u": "mo72_ab1UHvxY2DERZG2Tn12KNl2e_NSUrVDEQ5-Jds",
+        "prev_hash_b64u": null,
+        "event_hash_b64u": "hFp6W3e7RQjxYWxKR3qZ3r7V4TdZvXKpXYLdH8SZZP0"
+      }
+    ],
+    "receipts": [
+      {
+        "envelope_version": "1",
+        "envelope_type": "gateway_receipt",
+        "payload": {
+          "receipt_version": "1",
+          "receipt_id": "gr_mixed_001",
+          "gateway_id": "gw_test",
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-20250514",
+          "request_hash_b64u": "mo72_ab1UHvxY2DERZG2Tn12KNl2e_NSUrVDEQ5-Jds",
+          "response_hash_b64u": "hFp6W3e7RQjxYWxKR3qZ3r7V4TdZvXKpXYLdH8SZZP0",
+          "tokens_input": 100,
+          "tokens_output": 200,
+          "latency_ms": 500,
+          "timestamp": "2026-02-12T18:00:01.000Z"
+        },
+        "payload_hash_b64u": "kM9R_x4Z3y5r6t7u8v9w0a1b2c3d4e5f6g7h8i9j0kL",
+        "hash_algorithm": "SHA-256",
+        "signature_b64u": "dGVzdC1zaWduYXR1cmUtZm9yLWNvbmZvcm1hbmNlLXZlY3Rvci1taXhlZA",
+        "algorithm": "Ed25519",
+        "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "issued_at": "2026-02-12T18:00:01.000Z"
+      }
+    ],
+    "tool_receipts": [
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_mixed_001",
+        "tool_name": "file_read",
+        "args_hash_b64u": "dGVzdC1hcmdzLWhhc2g",
+        "result_hash_b64u": "dGVzdC1yZXN1bHQtaGFzaA",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "timestamp": "2026-02-12T18:00:02.000Z",
+        "latency_ms": 5,
+        "binding": {
+          "run_id": "run_conformance_mixed_001",
+          "event_hash_b64u": "hFp6W3e7RQjxYWxKR3qZ3r7V4TdZvXKpXYLdH8SZZP0"
+        }
+      }
+    ],
+    "side_effect_receipts": [
+      {
+        "receipt_version": "1",
+        "receipt_id": "ser_mixed_001",
+        "effect_class": "filesystem_write",
+        "target_digest": "sha256:abc123",
+        "request_digest": "sha256:def456",
+        "response_digest": "sha256:ghi789",
+        "hash_algorithm": "SHA-256",
+        "bytes_written": 1024,
+        "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "timestamp": "2026-02-12T18:00:03.000Z"
+      }
+    ],
+    "human_approval_receipts": [
+      {
+        "receipt_version": "1",
+        "receipt_id": "har_mixed_001",
+        "approval_type": "explicit_approve",
+        "scope_hash_b64u": "d3JpdGU6c3JjL2F1dGgudHM",
+        "plan_hash_b64u": "sha256:plan123",
+        "approver_subject": "user@example.com",
+        "capability_minted": true,
+        "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "timestamp": "2026-02-12T18:00:04.000Z"
+      }
+    ]
+  },
+  "payload_hash_b64u": "xY7Z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6sT",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "bWl4ZWQtcmVjZWlwdC1jb25mb3JtYW5jZS1zaWduYXR1cmUtdGVzdA",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "issued_at": "2026-02-12T18:00:05.000Z"
+}
