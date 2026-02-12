@@ -6636,7 +6636,7 @@ function pricingPage(): string {
               <li>Execution attestation</li>
               <li>90-day audit log retention</li>
             </ul>
-            <a href="/contact" class="cta-btn cta-btn-outline">Get Started</a>
+            <a href="/pricing/starter" class="cta-btn cta-btn-outline">See details</a>
           </div>
           <div class="price-card">
             <div class="tier">Team</div>
@@ -6651,7 +6651,7 @@ function pricingPage(): string {
               <li>1-year audit log retention</li>
               <li>Budget controls</li>
             </ul>
-            <a href="/contact" class="cta-btn cta-btn-outline">Get Started</a>
+            <a href="/pricing/team" class="cta-btn cta-btn-outline">See details</a>
           </div>
           <div class="price-card featured">
             <div class="tier" style="color:var(--accent)">Business</div>
@@ -6684,7 +6684,7 @@ function pricingPage(): string {
               <li>BAA / DPA available</li>
               <li>On-prem option</li>
             </ul>
-            <a href="/contact" class="cta-btn cta-btn-outline">Talk to Sales</a>
+            <a href="/pricing/enterprise" class="cta-btn cta-btn-outline">See details</a>
           </div>
         </div>
       </div>
