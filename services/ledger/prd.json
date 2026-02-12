@@ -247,6 +247,22 @@
       "priority": 17,
       "passes": true,
       "notes": "Shipped to staging+prod with migration 0008 risk_holds schema and deterministic apply/release/list routes. End-to-end evidence captured via ECON risk-loop smokes artifacts/simulations/econ-risk-loss-loop/2026-02-12T04-56-17-530Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-loop/2026-02-12T05-00-54-595Z-prod/smoke.json."
+    },
+    {
+      "id": "CLD-US-018",
+      "title": "Risk-hold release-by-source primitive",
+      "description": "As risk ops, I want a canonical release primitive keyed by source_loss_event_id so upstream loss-event resolution can deterministically unfreeze ledger funds without needing hold ids.",
+      "acceptanceCriteria": [
+        "Implement POST /v1/risk/holds/release-by-source (release by source_loss_event_id)",
+        "Return 404 NOT_FOUND when no hold exists for the source",
+        "Replay-safe idempotency behavior: same idempotency_key => 200 replay; mismatch => 409 IDEMPOTENCY_CONFLICT",
+        "Authorize via LEDGER_RISK_KEY (risk service allowlist) or LEDGER_ADMIN_KEY",
+        "Add unit tests for 404, replay, and idempotency conflict",
+        "Deploy to staging + production and validate via ECON-RISK-MAX-002 smoke/watch evidence"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Shipped to staging+prod. Evidence: deploy summary artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json; end-to-end apply+resolve smokes artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json and artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json (resolve outbox forwarded ledger release-by-source)."
     }
   ]
 }

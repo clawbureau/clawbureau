@@ -434,3 +434,21 @@ Started: 2026-02-12
   - `artifacts/ops/econ-risk/2026-02-12T05-01-27-688Z-prod-loss-event-watch/summary.json`
 - Consolidated rollout summary:
   - `artifacts/ops/econ-risk/2026-02-12T05-02-40Z-econ-risk-max-rollout/deploy-summary.json`
+
+## 2026-02-12 - MPY-US-013 rollout complete (staging + prod)
+- Applied migration `migrations/0006_loss_event_resolution.sql` remotely in staging+prod.
+- Deployed clawsettle versions:
+  - staging `0884e281-ef21-46e2-81e5-805082d22aee`
+  - prod `738f89fc-774a-4ed5-b292-31151e6d7fb9`
+- Added deterministic resolve/unfreeze lifecycle:
+  - `POST /v1/loss-events/:id/resolve`
+  - operation-aware outbox/retry (`operation=apply|resolve`)
+  - resolve outbox targets: ledger release-by-source, escrow risk-hold release, clawbounties risk clear
+- ECON apply→resolve smoke evidence:
+  - `artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-23-31-632Z-staging/smoke.json`
+  - `artifacts/simulations/econ-risk-loss-resolve-loop/2026-02-12T14-28-29-206Z-prod/smoke.json`
+- Watch evidence (deterministic failed buckets apply=0 resolve=0):
+  - `artifacts/ops/econ-risk/2026-02-12T14-25-43-531Z-staging-loss-event-watch/summary.json` (limit=5)
+  - `artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json`
+- Consolidated rollout summary:
+  - `artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json`
