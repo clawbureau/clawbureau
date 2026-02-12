@@ -10,28 +10,28 @@
 ### Phase 0: Document & Archive (Agent: Coordinator)
 **Goal:** Preserve institutional knowledge before teardown.
 
-- [ ] P0-1: Save Gemini review as canonical strategy (`docs/strategy/`)
-- [ ] P0-2: Create this execution plan
-- [ ] P0-3: Archive current service inventory with final health status
-- [ ] P0-4: Tag git with `v0-nation-state` before any destructive changes
-- [ ] P0-5: Update MEMORY.md with strategic pivot decision
+- [x] P0-1: Save Gemini review as canonical strategy (`docs/strategy/`) — PR #196
+- [x] P0-2: Create this execution plan — PR #196
+- [x] P0-3: Archive current service inventory with final health status — PR #196
+- [x] P0-4: Tag git with `v0-nation-state` — tag pushed to origin
+- [x] P0-5: Update MEMORY.md with strategic pivot decision
 
 ### Phase 1: The Purge — Service Teardown (Agent A: Protocol)
 **Goal:** Remove dead weight services from deployment. Code stays in git history.
 
 **Undeploy (remove Workers, keep code in repo as `services/_archived/`):**
-- [ ] P1-1: `clawbounties` — marketplace (10,809 lines)
-- [ ] P1-2: `clawescrow` / `escrow` — payment holds
-- [ ] P1-3: `clawledger` / `ledger` — double-entry ledger
-- [ ] P1-4: `clawsettle` — Stripe settlement
-- [ ] P1-5: `clawcuts` — fee engine
-- [ ] P1-6: `clawclaim` — identity binding
-- [ ] P1-7: `clawrep` — reputation
-- [ ] P1-8: `clawtrials` — arbitration
-- [ ] P1-9: `clawincome` — revenue aggregation
-- [ ] P1-10: `clawinsure` — SLA insurance
-- [ ] P1-11: `clawdelegate` — identity delegation
-- [ ] P1-12: `claw-domains` — landing pages
+- [x] P1-1: `clawbounties` — marketplace — PR #197
+- [x] P1-2: `clawescrow` / `escrow` — payment holds — PR #197
+- [x] P1-3: `clawledger` / `ledger` — double-entry ledger — PR #197
+- [x] P1-4: `clawsettle` — Stripe settlement — PR #197
+- [x] P1-5: `clawcuts` — fee engine — PR #197
+- [x] P1-6: `clawclaim` — identity binding — PR #197
+- [x] P1-7: `clawrep` — reputation — PR #197
+- [x] P1-8: `clawtrials` — arbitration — PR #197
+- [x] P1-9: `clawincome` — revenue aggregation — PR #197
+- [x] P1-10: `clawinsure` — SLA insurance — PR #197
+- [x] P1-11: `clawdelegate` — identity delegation — PR #197
+- [x] P1-12: `claw-domains` — landing pages — PR #197
 
 **Keep deployed (the Diamond):**
 - `clawverify` — Trust Oracle (enhance)
@@ -57,13 +57,13 @@
 ### Phase 3: Protocol Hardening (Agent A: Protocol)
 **Goal:** Make Clawsig the standard validation oracle for EIP-8004.
 
-- [ ] P3-1: EIP-8004 integration design — how clawverify posts PASS/FAIL to Validation Registry
-- [ ] P3-2: Add `supportedTrust: ["clawsig"]` to agent registration file spec
-- [ ] P3-3: Define `.well-known/clawsig.json` standard for any agent domain
-- [ ] P3-4: Publish clawverify as EIP-8004 Validation Oracle contract adapter
-- [ ] P3-5: Update proof_bundle schema with EIP-8004 `agentId` (ERC-721 tokenId) field
-- [ ] P3-6: Publish `@clawbureau/clawsig-adapters` to npm (blocked from before)
-- [ ] P3-7: Publish `@openclaw/provider-clawproxy` to npm (blocked from before)
+- [x] P3-1: EIP-8004 integration design — PR #198
+- [x] P3-2: Add `supportedTrust: ["clawsig"]` to agent registration file spec — PR #198
+- [x] P3-3: Define `.well-known/clawsig.json` standard — PR #198
+- [ ] P3-4: Publish clawverify as EIP-8004 Validation Oracle contract adapter (deferred — needs Solidity)
+- [x] P3-5: Update proof_bundle schema with EIP-8004 `agentId` field — PR #198
+- [x] P3-6: `@clawbureau/clawsig-adapters` npm prep (private:true removed) — PR #198, needs `npm publish`
+- [x] P3-7: `@openclaw/provider-clawproxy` npm prep (private:true removed) — PR #198, needs `npm publish`
 
 ### Phase 4: x402 Integration (Agent A: Protocol)
 **Goal:** Make clawproxy a native x402 Resource Server.
