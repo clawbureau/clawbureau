@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-11
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** `services/clawverify/{prd.json,progress.txt}` + `packages/schema/**`
 >
 > **Scope:**
@@ -71,6 +71,12 @@ See also (PoH vNext):
 Universal signature verifier for artifacts, messages, receipts, and attestations.
 
 **Hard rule:** fail-closed on unknown `schema_id` / `version` / `envelope_type` / `algorithm`.
+
+## Protocol alignment (Claw Protocol v0.1)
+
+- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- `clawverify` is the reference **Verifier** primitive: deterministic PASS/FAIL + reason codes.
+- Offline-capable verification is a protocol requirement; hosted verification APIs and hosted viewers are optional modules.
 
 ## 2) Target Users
 - OpenClaw gateway operators
@@ -331,6 +337,48 @@ Universal signature verifier for artifacts, messages, receipts, and attestations
 - Export bundle hash + signature are verified (Ed25519 over `bundle_hash_b64u`)
 - Included proof bundle / execution / derivation / audit envelopes are verified via existing verifiers
 - Optional inclusion proofs inside included attestations are fail-closed validated when present
+
+### CVF-US-024 — Offline verifier CLI (local-first)
+**As an** auditor, **I want** a local CLI verifier **so that** hosted services are optional and verification works offline.
+
+**Acceptance Criteria:**
+- Provide a CLI that can verify `proof_bundle.v1` and `export_bundle.v1` offline
+- CLI outputs deterministic PASS/FAIL plus reason codes (JSON)
+- CLI has stable exit codes (`0=PASS`, `1=FAIL`, `2=USAGE/CONFIG`)
+- Document parity expectations vs `POST /v1/verify/*` APIs
+
+### CVF-US-025 — Protocol conformance vectors (PASS/FAIL fixtures)
+**As a** third-party implementer, **I want** conformance fixtures **so that** I can prove my verifier matches the protocol.
+
+**Acceptance Criteria:**
+- Publish at least one golden bundle that MUST PASS
+- Publish tampered variants that MUST FAIL with specific reason codes
+- CI runs the CLI verifier against the fixtures
+- Fixtures are additive and never mutated (versioned by path)
+
+### CVF-US-026 — Verify tool receipts (protocol receipt class)
+**As a** platform, **I want** clawverify to validate tool receipts **so that** action attestation can include tool execution.
+
+**Acceptance Criteria:**
+- Add verification support for a versioned `tool_receipt` schema when supplied in bundles
+- Fail closed on unknown schema/version/algo
+- Return deterministic invalid codes for missing bindings, invalid signatures, or digest mismatches
+
+### CVF-US-027 — Verify side-effect receipts (egress/filesystem/external writes)
+**As an** enterprise auditor, **I want** verification for side-effect receipts **so that** attestations represent real-world impact boundaries.
+
+**Acceptance Criteria:**
+- Add verification support for side-effect receipt classes when present
+- Preserve hash-only semantics by default (no plaintext payload requirement)
+- Return deterministic invalid codes for incomplete/invalid receipt bodies
+
+### CVF-US-028 — Verify human approval receipts (capability minting evidence)
+**As an** enterprise, **I want** approval receipts to be verifiable **so that** approvals are auditable and job-bound capabilities are provable.
+
+**Acceptance Criteria:**
+- Support verifying a `human_approval_receipt` class when supplied
+- Approval receipts bind to the run/job scope and (optionally) policy hash pin
+- Deterministic error codes exist for missing/invalid approval linkage
 
 ## 8) Success Metrics
 - Verification success rate

@@ -1,7 +1,7 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/infra
-> **Last reviewed:** 2026-02-11
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** `services/clawscope/{prd.json,progress.txt}` + `packages/schema/auth/scoped_token_claims.v1.json`
 >
 > **Scope:**
@@ -37,6 +37,13 @@ See: `docs/integration/OPENCLAW_INTEGRATION.md`.
 
 ## 1) Purpose
 Define and enforce scoped token access (CST), issue/introspect/revoke tokens, and provide auditability suitable for OpenClaw multi-agent + multi-session operation.
+
+## Protocol alignment (Claw Protocol v0.1)
+
+- Canonical narrow-waist spec: `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md`
+- `clawscope` is the reference **Capability Token (CST)** primitive.
+- Protocol requirements: short TTL, deterministic scope hashing, optional policy hash pinning, and deterministic denial semantics.
+- Protocol identity is bring-your-own; DID is supported but must not be the only viable subject model.
 
 ---
 
@@ -205,6 +212,33 @@ Define and enforce scoped token access (CST), issue/introspect/revoke tokens, an
   - Group spend and receipts by mission_id
   - Show per-role and per-agent breakdowns
   - Export mission summary reports
+
+### CSC-US-019 — Job-bound CSTs + WPC policy-hash pinning
+**As a** security owner, **I want** CSTs to be job-bound and optionally policy-pinned **so that** capabilities cannot be replayed across unrelated runs.
+
+**Acceptance Criteria:**
+  - Token claims support an explicit job/run binding field (e.g. `run_id` or `job_id`) when required by policy
+  - Token claims support optional `policy_hash_b64u` pinning
+  - Downstream services can deterministically enforce binding and return stable mismatch codes
+  - Acceptance tests: replay across jobs denied; policy pin mismatch denied; correct binding passes
+
+### CSC-US-020 — Capability negotiation / preflight API
+**As an** agent, **I want** to request capabilities and get deterministic denials **so that** I can adapt automatically.
+
+**Acceptance Criteria:**
+  - Provide a standard request shape: `{ scope, reason, evidence_required }`
+  - Denials include machine-readable reason codes (e.g., `DENIED_POLICY`, `DENIED_SCOPE`)
+  - Provide a verify-lite / preflight mode that answers “would this scope be allowed?” without minting a token
+  - Acceptance tests: same request yields same denial code under same policy
+
+### CSC-US-021 — Approval-minted capabilities (human approval receipts)
+**As a** human operator, **I want** one approval moment to mint a new CST **so that** governance is low-friction and auditable.
+
+**Acceptance Criteria:**
+  - Support exchanging a verifiable approval receipt into a short-lived CST
+  - Approval receipt binds to the minted token via deterministic scope + optional policy pin
+  - Emit deterministic audit records for approvals and minted tokens
+  - Acceptance tests: invalid approval receipt denied; valid approval receipt mints token; replay is idempotent or denied deterministically
 
 ---
 

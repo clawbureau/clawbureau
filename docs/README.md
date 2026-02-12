@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-07
+> **Last reviewed:** 2026-02-12
 > **Source of truth:** this repository (`main`) + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
@@ -34,6 +34,7 @@ These are the docs most likely to matter when making code changes:
 
 - `docs/foundations/INTERCONNECTION.md` — cross-service contracts + schema policy
 - `docs/foundations/GIT_STRATEGY.md` — branch naming + proof requirements
+- `docs/specs/claw-protocol/CLAW_PROTOCOL_v0.1.md` — protocol narrow waist (policy/capability/receipts/bundles/verifier)
 - `docs/specs/agent-economy/MVP.md` — marketplace trust/economy spec (implementation-grade, but still evolves)
 - `docs/integration/OPENCLAW_INTEGRATION.md` — OpenClaw-first integration constraints
 
@@ -41,9 +42,13 @@ These are the docs most likely to matter when making code changes:
 
 ## Roadmaps (active)
 
-- `docs/roadmaps/proof-of-harness/` — PoH v1 (spec + registry + tracking)
-- `docs/roadmaps/trust-vnext/` — next building blocks (hardening + consulting + subscription-web strategy)
+- `docs/roadmaps/claw-protocol/` — Claw Protocol v0.1 (narrow waist + explicit coverage + approvals UX)
 - `docs/roadmaps/docs-ia/` — docs information architecture / freshness cleanup
+
+## Roadmaps (completed)
+
+- `docs/roadmaps/proof-of-harness/` — PoH (adapters + registry + proof bundle contracts)
+- `docs/roadmaps/trust-vnext/` — Trust vNext hardening tranche
 
 ## Conventions
 
