@@ -11,6 +11,7 @@ name = "clawea-www"
 account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
 compatibility_date = "2026-02-01"
+workers_dev = true
 
 routes = [
   { pattern = "clawea.com/*", zone_name = "clawea.com" },
@@ -43,10 +44,14 @@ LEAD_SUBMIT_EMAIL_WINDOW_LIMIT = "8"
 LEAD_SUBMIT_WINDOW_MINUTES = "10"
 ROUTING_MAX_ATTEMPTS = "5"
 CRM_PROVIDER_CONFIG_KEY = "crm-provider-config-v1"
-EXPERIMENT_SEED = "aeo-rev-006-default"
+LEAD_RESPONSE_SLA_MINUTES = "45"
+ROUTING_QUEUE_LAG_ALERT_MINUTES = "20"
+EXPERIMENT_SEED = "aeo-rev-007-default"
 EXPERIMENT_CONFIG_KEY = "experiment-config-v1"
 EXPERIMENT_WINNER_MIN_IMPRESSIONS = "40"
 EXPERIMENT_WINNER_MIN_BOOKED = "2"
+EXPERIMENT_WINNER_MIN_CONFIDENCE = "0.12"
+EXPERIMENT_HOLDOUT_PERCENT = "5"
 
 # Secrets (set with `wrangler secret put <NAME>`):
 # - INDEX_AUTOMATION_TOKEN
@@ -133,6 +138,7 @@ preview_bucket_name = "clawea-www-staging"
 # ---------- Staging ----------
 [env.staging]
 name = "clawea-www-staging"
+workers_dev = true
 routes = [
   { pattern = "staging-www.clawea.com/*", zone_name = "clawea.com" }
 ]
@@ -162,10 +168,14 @@ LEAD_SUBMIT_EMAIL_WINDOW_LIMIT = "10"
 LEAD_SUBMIT_WINDOW_MINUTES = "10"
 ROUTING_MAX_ATTEMPTS = "5"
 CRM_PROVIDER_CONFIG_KEY = "crm-provider-config-v1"
-EXPERIMENT_SEED = "aeo-rev-006-staging"
+LEAD_RESPONSE_SLA_MINUTES = "30"
+ROUTING_QUEUE_LAG_ALERT_MINUTES = "15"
+EXPERIMENT_SEED = "aeo-rev-007-staging"
 EXPERIMENT_CONFIG_KEY = "experiment-config-v1"
 EXPERIMENT_WINNER_MIN_IMPRESSIONS = "20"
 EXPERIMENT_WINNER_MIN_BOOKED = "1"
+EXPERIMENT_WINNER_MIN_CONFIDENCE = "0.08"
+EXPERIMENT_HOLDOUT_PERCENT = "8"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -178,6 +188,10 @@ migrations_dir = "migrations"
 binding = "VARIANT_CONFIG"
 id = "1051001c69364031be8fc0f79324fefc"
 preview_id = "fff86d64d9b442e180daecbb2e09fdcc"
+
+[[env.staging.durable_objects.bindings]]
+name = "LEAD_SUBMIT_LOCK"
+class_name = "LeadSubmitLockDO"
 
 [[env.staging.analytics_engine_datasets]]
 binding = "ANALYTICS"

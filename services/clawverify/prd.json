@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawverify-phase1-trust",
-  "description": "clawverify.com (Verification API) \u2014 PRD \u2014 Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
+  "description": "clawverify.com (Verification API) — PRD — Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
   "userStories": [
     {
       "id": "CVF-US-001",
@@ -244,7 +244,7 @@
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old\u2192new rotation is proven. Added vitest coverage for rotated owner attestations."
+      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old→new rotation is proven. Added vitest coverage for rotated owner attestations."
     },
     {
       "id": "CVF-US-018",
@@ -299,6 +299,20 @@
       "priority": 21,
       "passes": true,
       "notes": "Published compatibility guidance in `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md` and identity runbook `scripts/identity/RUNBOOK-identity-control-plane-operations.md`; validated cross-environment interop via `scripts/identity/smoke-scope-kid-interop.mjs` artifact `artifacts/smoke/identity-control-plane/2026-02-11T22-43-00-300Z-kid-interop/result.json`."
+    },
+    {
+      "id": "CVF-US-034",
+      "title": "Token-control transparency freshness and kid governance checks",
+      "description": "As downstream policy gates, we need token-control verification to enforce key transparency freshness and accepted-kid membership deterministically.",
+      "acceptanceCriteria": [
+        "Token-control verification validates transparency snapshot age against configured max age",
+        "Unknown/expired transparency kid outcomes map to deterministic fail-closed errors",
+        "Verification responses include transparency snapshot context for auditability",
+        "Typecheck and tests pass"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Implemented in `services/clawverify/src/verify-token-control.ts` with deterministic errors `TOKEN_CONTROL_TRANSPARENCY_STALE`, `TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN`, `TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED` and `transparency_snapshot` response field. Config gate: `CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS`. Validated by M6 suite staging/prod deploy summaries under `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/` and `.../2026-02-12T00-52-32-525Z-prod/`."
     }
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "name": "@clawbureau/identity-auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared canonical identity/CST validation helpers for Claw Bureau control-plane services"
+}

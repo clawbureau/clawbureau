@@ -46,7 +46,8 @@
  *   POST /api/leads/submit
  *   GET /api/leads/status, /api/leads/export (token-protected)
  *   GET /api/routing/status, POST /api/routing/replay (token-protected)
- *   GET /api/attribution/summary (token-protected)
+ *   GET /api/attribution/summary, /api/attribution/revenue (token-protected)
+ *   GET /api/ops/lead-funnel-health, /api/ops/routing-health, /api/ops/conversion-heatmap, /api/ops/failing-steps (token-protected)
  *   POST /api/book/submit, POST /api/book/complete (complete is token-protected)
  *   POST /api/indexnow, /api/google-index, /api/index-urls
  *   GET /api/index-queue/status
@@ -127,6 +128,12 @@ interface Env {
   EXPERIMENT_CONFIG_KEY?: string;
   EXPERIMENT_WINNER_MIN_IMPRESSIONS?: string;
   EXPERIMENT_WINNER_MIN_BOOKED?: string;
+  EXPERIMENT_WINNER_MIN_CONFIDENCE?: string;
+  EXPERIMENT_HOLDOUT_PERCENT?: string;
+
+  // Rev-007 operator thresholds
+  LEAD_RESPONSE_SLA_MINUTES?: string;
+  ROUTING_QUEUE_LAG_ALERT_MINUTES?: string;
 }
 
 interface Article {
@@ -183,6 +190,7 @@ type LeadLifecycleStatus =
 
 type LeadSegment = "enterprise" | "smb" | "partner";
 type LeadScoreBand = "high" | "medium" | "low";
+type LeadSourceIntent = "partner" | "paid-intent" | "high-intent" | "organic" | "direct";
 
 interface LeadBehaviorSignals {
   sessionEvents?: number;
@@ -238,6 +246,7 @@ interface LeadRow {
   roi_score: number;
   dedupe_count: number;
   source: string;
+  source_intent: LeadSourceIntent;
   page: string;
   page_family: string;
   full_name: string;
@@ -259,27 +268,38 @@ interface LeadRow {
   completed_at: string | null;
 }
 
+interface ExperimentFamilyConfig {
+  hero: string[];
+  cta: string[];
+  holdoutPercent?: number;
+}
+
 interface ExperimentVariantConfig {
   seed: string;
-  families: Record<string, {
-    hero: string[];
-    cta: string[];
-  }>;
+  holdoutPercent?: number;
+  families: Record<string, ExperimentFamilyConfig>;
 }
 
 const DEFAULT_EXPERIMENT_CONFIG: ExperimentVariantConfig = {
-  seed: "aeo-rev-006-default",
+  seed: "aeo-rev-007-default",
+  holdoutPercent: 5,
   families: {
-    home: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"] },
-    assessment: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"] },
-    tools: { hero: ["proof", "risk"], cta: ["assessment", "sales"] },
-    workflows: { hero: ["proof", "automation"], cta: ["assessment", "sales"] },
-    contact: { hero: ["fast-path", "proof"], cta: ["submit", "assessment"] },
-    book: { hero: ["proof", "speed"], cta: ["submit", "assessment"] },
-    pricing: { hero: ["roi", "proof"], cta: ["proof", "roi", "sales"] },
-    sources: { hero: ["proof", "citation"], cta: ["assessment", "sales"] },
-    root: { hero: ["proof", "roi"], cta: ["proof", "roi"] },
+    home: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"], holdoutPercent: 5 },
+    assessment: { hero: ["proof", "roi", "speed"], cta: ["proof", "roi", "speed"], holdoutPercent: 5 },
+    tools: { hero: ["proof", "risk"], cta: ["assessment", "sales"], holdoutPercent: 4 },
+    workflows: { hero: ["proof", "automation"], cta: ["assessment", "sales"], holdoutPercent: 4 },
+    contact: { hero: ["fast-path", "proof"], cta: ["submit", "assessment"], holdoutPercent: 8 },
+    book: { hero: ["proof", "speed"], cta: ["submit", "assessment"], holdoutPercent: 10 },
+    pricing: { hero: ["roi", "proof"], cta: ["proof", "roi", "sales"], holdoutPercent: 6 },
+    sources: { hero: ["proof", "citation"], cta: ["assessment", "sales"], holdoutPercent: 5 },
+    root: { hero: ["proof", "roi"], cta: ["proof", "roi"], holdoutPercent: 4 },
   },
+};
+
+type LeadScoreReason = {
+  code: string;
+  points: number;
+  detail?: string;
 };
 
 type LeadScoreResult = {
@@ -291,6 +311,8 @@ type LeadScoreResult = {
   confidenceLabel: string;
   scoreBand: LeadScoreBand;
   segment: LeadSegment;
+  sourceIntent: LeadSourceIntent;
+  scoreReasons: LeadScoreReason[];
   denyCode?: string;
 };
 
@@ -301,9 +323,17 @@ type CrmProvider = {
   authHeader?: string;
 };
 
+type CrmRoutingRule = {
+  providerId: string;
+  segment?: LeadSegment;
+  scoreBand?: LeadScoreBand;
+  sourceIntent?: LeadSourceIntent;
+};
+
 type CrmRoutingConfig = {
   defaultProviderBySegment: Record<LeadSegment, string>;
   providers: CrmProvider[];
+  providerRules: CrmRoutingRule[];
 };
 
 type LeadHandoffEnvelope = {
@@ -320,6 +350,8 @@ type LeadHandoffEnvelope = {
     readiness: number;
     roi: number;
     risk: number;
+    sourceIntent: LeadSourceIntent;
+    reasons: LeadScoreReason[];
   };
   attribution: {
     source: string;
@@ -348,6 +380,12 @@ const DEFAULT_CRM_ROUTING_CONFIG: CrmRoutingConfig = {
   providers: [
     { id: "internal-r2", authType: "none" },
   ],
+  providerRules: [
+    { providerId: "internal-r2", segment: "partner", sourceIntent: "partner" },
+    { providerId: "internal-r2", segment: "enterprise", scoreBand: "high" },
+    { providerId: "internal-r2", segment: "enterprise", scoreBand: "medium" },
+    { providerId: "internal-r2", segment: "smb" },
+  ],
 };
 
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
@@ -368,6 +406,9 @@ const LEAD_STATE_TRANSITIONS: Record<string, ReadonlyArray<LeadLifecycleStatus>>
   disqualified: ["booked"],
   booked: [],
 };
+
+const RESPONSE_SLA_OPEN_STATES = new Set<LeadLifecycleStatus>(["new", "validated", "scored", "routed"]);
+const RESPONSE_SLA_CLOSED_STATES = new Set<LeadLifecycleStatus>(["contacted", "qualified", "disqualified", "booked"]);
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -2444,6 +2485,49 @@ function routingMaxAttempts(env: Env): number {
   return Math.max(1, Math.min(12, Number(env.ROUTING_MAX_ATTEMPTS ?? "5")));
 }
 
+function leadResponseSlaMinutes(env: Env): number {
+  return Math.max(5, Math.min(24 * 60, Number(env.LEAD_RESPONSE_SLA_MINUTES ?? "45")));
+}
+
+function routingQueueLagAlertMinutes(env: Env): number {
+  return Math.max(5, Math.min(24 * 60, Number(env.ROUTING_QUEUE_LAG_ALERT_MINUTES ?? "20")));
+}
+
+function inferSourceIntent(payload: LeadSubmissionPayload): LeadSourceIntent {
+  const source = String(payload.attribution?.source ?? payload.firstTouch?.source ?? "direct").toLowerCase();
+  const campaign = String(payload.attribution?.utm_campaign ?? "").toLowerCase();
+  const intentText = [payload.primaryUseCase, payload.intentNote, payload.role, payload.timeline]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (source.includes("partner") || campaign.includes("partner") || intentText.includes("reseller")) {
+    return "partner";
+  }
+
+  if (/(buyer|book|demo|assessment|enterprise|security|audit|compliance|sox|hipaa|incident|migration|approval|pilot|procurement)/.test(`${campaign} ${intentText}`)) {
+    return "high-intent";
+  }
+
+  if (source.startsWith("utm:") || /(google|linkedin|bing|paid|ads)/.test(source) || /(ppc|paid|cpc)/.test(campaign)) {
+    return "paid-intent";
+  }
+
+  if (source.startsWith("ref:") || /(organic|seo|blog|newsletter)/.test(source)) {
+    return "organic";
+  }
+
+  return "direct";
+}
+
+function normalizeSourceIntent(input: string | undefined): LeadSourceIntent {
+  const v = (input ?? "").trim().toLowerCase();
+  if (v === "partner" || v === "paid-intent" || v === "high-intent" || v === "organic" || v === "direct") {
+    return v;
+  }
+  return "direct";
+}
+
 async function leadSubmitLockAcquire(env: Env, idempotencyKey: string): Promise<{
   ok: boolean;
   replay: boolean;
@@ -2557,6 +2641,9 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
   const baseReadiness = Math.min(100, Math.max(0, Number(payload.assessment?.readinessScore ?? 0)));
   const baseRoi = Math.min(100, Math.max(0, Number(payload.assessment?.roiScore ?? 0)));
   const baseRisk = Math.min(100, Math.max(0, Number(payload.assessment?.riskScore ?? 40)));
+  const sourceIntent = inferSourceIntent(payload);
+
+  const scoreReasons: LeadScoreReason[] = [];
 
   const teamBoost = (() => {
     const t = (payload.teamSize ?? "").toLowerCase();
@@ -2565,6 +2652,9 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
     if (/(50|75)/.test(t)) return 6;
     return 2;
   })();
+  if (teamBoost > 0) {
+    scoreReasons.push({ code: "team_size", points: teamBoost, detail: payload.teamSize ?? "unknown" });
+  }
 
   const timelineBoost = (() => {
     const t = (payload.timeline ?? "").toLowerCase();
@@ -2573,19 +2663,28 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
     if (/(quarter|90)/.test(t)) return 4;
     return 1;
   })();
+  if (timelineBoost > 0) {
+    scoreReasons.push({ code: "timeline_urgency", points: timelineBoost, detail: payload.timeline ?? "unknown" });
+  }
 
-  const source = String(payload.attribution?.source ?? "direct").toLowerCase();
-  const campaign = String(payload.attribution?.utm_campaign ?? "").toLowerCase();
-
-  const sourceBoost = source.startsWith("utm:") || source.includes("linkedin") || source.includes("google")
-    ? 5
-    : source.includes("partner")
+  const sourceBoost = sourceIntent === "partner"
+    ? 10
+    : sourceIntent === "high-intent"
       ? 8
-      : 1;
+      : sourceIntent === "paid-intent"
+        ? 6
+        : sourceIntent === "organic"
+          ? 3
+          : 1;
+  scoreReasons.push({ code: "source_intent", points: sourceBoost, detail: sourceIntent });
 
-  const campaignBoost = /(enterprise|security|audit|compliance|pilot|buyer|intent)/.test(campaign)
+  const campaign = String(payload.attribution?.utm_campaign ?? "").toLowerCase();
+  const campaignBoost = /(enterprise|security|audit|compliance|pilot|buyer|intent|book|demo)/.test(campaign)
     ? 6
     : 0;
+  if (campaignBoost > 0) {
+    scoreReasons.push({ code: "campaign_match", points: campaignBoost, detail: campaign });
+  }
 
   const behavior = payload.behavior ?? {};
   const behaviorBoost = Math.min(
@@ -2598,6 +2697,13 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
       + Math.min(5, Number(behavior.secondsOnSite ?? 0) / 120),
     ),
   );
+  if (behaviorBoost > 0) {
+    scoreReasons.push({
+      code: "behavior_signals",
+      points: behaviorBoost,
+      detail: `cta=${Number(behavior.ctaClicks ?? 0)},intentViews=${Number(behavior.intentViews ?? 0)}`,
+    });
+  }
 
   const intentSignals = [
     payload.primaryUseCase,
@@ -2608,6 +2714,9 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
   const urgencyBoost = /(approval|security|audit|compliance|risk|incident|production|rollout|migration|sox|hipaa|soc 2)/.test(intentSignals)
     ? 10
     : 0;
+  if (urgencyBoost > 0) {
+    scoreReasons.push({ code: "problem_urgency", points: urgencyBoost, detail: "regulatory-or-incident-signal" });
+  }
 
   const intentScore = Math.min(100, baseReadiness + teamBoost + timelineBoost + urgencyBoost + sourceBoost + campaignBoost + behaviorBoost);
   const readinessScore = Math.min(100, Math.max(0, baseReadiness || Math.round(intentScore * 0.72)));
@@ -2640,6 +2749,8 @@ function scoreLeadIntent(payload: LeadSubmissionPayload): LeadScoreResult {
     confidenceLabel,
     scoreBand,
     segment,
+    sourceIntent,
+    scoreReasons: scoreReasons.sort((a, b) => b.points - a.points),
   };
 }
 
@@ -2735,6 +2846,100 @@ async function transitionLeadState(
       nowIso,
     )
     .run();
+
+  if (RESPONSE_SLA_CLOSED_STATES.has(nextState)) {
+    await env.DB.prepare(
+      `UPDATE lead_alerts
+       SET status = 'resolved', resolved_at = ?2, updated_at = ?2
+       WHERE alert_type = 'lead_response_sla_miss'
+         AND lead_id = ?1
+         AND status = 'open'`,
+    ).bind(leadId, nowIso).run().catch(() => {});
+  }
+}
+
+function addMinutesIso(iso: string, minutes: number): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return new Date().toISOString();
+  return new Date(ms + minutes * 60_000).toISOString();
+}
+
+function diffMinutes(fromIso: string, toIso: string): number {
+  const fromMs = Date.parse(fromIso);
+  const toMs = Date.parse(toIso);
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return 0;
+  return Math.max(0, Math.floor((toMs - fromMs) / 60_000));
+}
+
+async function upsertLeadAlert(env: Env, params: {
+  alertKey: string;
+  alertType: string;
+  severity: "info" | "warning" | "critical";
+  leadId?: string;
+  jobId?: string;
+  summary: string;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  const nowIso = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO lead_alerts (
+      alert_id,
+      alert_key,
+      alert_type,
+      severity,
+      lead_id,
+      job_id,
+      status,
+      summary,
+      metadata_json,
+      first_seen_at,
+      last_seen_at,
+      created_at,
+      updated_at
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open', ?7, ?8, ?9, ?9, ?9, ?9)
+    ON CONFLICT(alert_key)
+    DO UPDATE SET
+      status = 'open',
+      severity = excluded.severity,
+      summary = excluded.summary,
+      metadata_json = excluded.metadata_json,
+      last_seen_at = excluded.last_seen_at,
+      updated_at = excluded.updated_at,
+      resolved_at = NULL`,
+  )
+    .bind(
+      randomId("alert"),
+      params.alertKey,
+      params.alertType,
+      params.severity,
+      params.leadId ?? null,
+      params.jobId ?? null,
+      params.summary.slice(0, 280),
+      JSON.stringify(params.metadata ?? {}),
+      nowIso,
+    )
+    .run();
+}
+
+async function resolveLeadAlertsByType(env: Env, alertType: string, keepKeys: string[] = []): Promise<void> {
+  const nowIso = new Date().toISOString();
+  if (keepKeys.length === 0) {
+    await env.DB.prepare(
+      `UPDATE lead_alerts
+       SET status = 'resolved', resolved_at = ?2, updated_at = ?2
+       WHERE alert_type = ?1 AND status = 'open'`,
+    ).bind(alertType, nowIso).run();
+    return;
+  }
+
+  const placeholders = keepKeys.map((_, i) => `?${i + 3}`).join(",");
+  await env.DB.prepare(
+    `UPDATE lead_alerts
+     SET status = 'resolved', resolved_at = ?2, updated_at = ?2
+     WHERE alert_type = ?1
+       AND status = 'open'
+       AND alert_key NOT IN (${placeholders})`,
+  ).bind(alertType, nowIso, ...keepKeys).run();
 }
 
 async function hashIpForAbuse(request: Request, env: Env): Promise<string> {
@@ -2863,6 +3068,37 @@ async function loadCrmRoutingConfig(env: Env): Promise<CrmRoutingConfig> {
     : DEFAULT_CRM_ROUTING_CONFIG.providers;
 
   const defaults = (parsed?.defaultProviderBySegment ?? {}) as Partial<Record<LeadSegment, string>>;
+  const parsedRules = Array.isArray(parsed?.providerRules)
+    ? parsed.providerRules as Array<Record<string, unknown>>
+    : [];
+
+  const providerRules: CrmRoutingRule[] = [];
+  for (const rule of parsedRules) {
+    const providerId = clipString(rule?.providerId, 80);
+    if (!providerId) continue;
+
+    const segmentRaw = clipString(rule?.segment, 24);
+    const segment = segmentRaw === "enterprise" || segmentRaw === "smb" || segmentRaw === "partner"
+      ? segmentRaw
+      : undefined;
+
+    const scoreBandRaw = clipString(rule?.scoreBand, 24);
+    const scoreBand = scoreBandRaw === "high" || scoreBandRaw === "medium" || scoreBandRaw === "low"
+      ? scoreBandRaw
+      : undefined;
+
+    const sourceIntentRaw = clipString(rule?.sourceIntent, 24);
+    const sourceIntent = sourceIntentRaw
+      ? normalizeSourceIntent(sourceIntentRaw)
+      : undefined;
+
+    providerRules.push({
+      providerId,
+      segment,
+      scoreBand,
+      sourceIntent,
+    });
+  }
 
   const config: CrmRoutingConfig = {
     defaultProviderBySegment: {
@@ -2871,6 +3107,7 @@ async function loadCrmRoutingConfig(env: Env): Promise<CrmRoutingConfig> {
       partner: typeof defaults.partner === "string" ? defaults.partner : DEFAULT_CRM_ROUTING_CONFIG.defaultProviderBySegment.partner,
     },
     providers,
+    providerRules: providerRules.length > 0 ? providerRules : DEFAULT_CRM_ROUTING_CONFIG.providerRules,
   };
 
   return config;
@@ -2878,6 +3115,32 @@ async function loadCrmRoutingConfig(env: Env): Promise<CrmRoutingConfig> {
 
 function crmAuthTokenMap(env: Env): Record<string, string> {
   return safeJsonParse<Record<string, string>>(env.CRM_PROVIDER_AUTH_JSON ?? null, {});
+}
+
+function selectProviderForLead(
+  config: CrmRoutingConfig,
+  segment: LeadSegment,
+  scoreBand: LeadScoreBand,
+  sourceIntent: LeadSourceIntent,
+): string {
+  const providers = new Set(config.providers.map((p) => p.id));
+
+  const matchedRule = config.providerRules.find((rule) => {
+    if (rule.segment && rule.segment !== segment) return false;
+    if (rule.scoreBand && rule.scoreBand !== scoreBand) return false;
+    if (rule.sourceIntent && rule.sourceIntent !== sourceIntent) return false;
+    return true;
+  });
+
+  const ruleProvider = matchedRule?.providerId;
+  if (ruleProvider && providers.has(ruleProvider)) {
+    return ruleProvider;
+  }
+
+  const fallback = config.defaultProviderBySegment[segment] ?? "internal-r2";
+  if (providers.has(fallback)) return fallback;
+
+  return providers.values().next().value ?? "internal-r2";
 }
 
 function queueForSegment(env: Env, segment: LeadSegment): Queue {
@@ -2983,13 +3246,14 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
   }
 
   if (lock.replay && lock.leadId) {
+    const replayScores = scoreLeadIntent(payload);
     return {
       leadId: lock.leadId,
       deduped: true,
       idempotentReplay: true,
-      scores: scoreLeadIntent(payload),
+      scores: replayScores,
       idempotencyKey,
-      segment: segmentFromPayload(payload, scoreLeadIntent(payload).qualificationScore),
+      segment: replayScores.segment,
       routeJobId: null,
     };
   }
@@ -3033,6 +3297,7 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           primary_use_case,
           intent_note,
           source,
+          source_intent,
           page,
           page_family,
           attribution_json,
@@ -3058,10 +3323,10 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           last_seen_at,
           lifecycle_updated_at
         ) VALUES (
-          ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-          ?12, ?13, ?14, ?15, ?16, ?17, ?18,
-          ?19, ?20, ?21, ?22, ?23, ?24, ?25,
-          ?26, ?27, ?28, ?29, 'new', 'pending', 0, ?30, ?30, ?30, ?30
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, 'new', 'pending', 0, ?, ?, ?, ?
         )`,
       )
         .bind(
@@ -3077,6 +3342,7 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           payload.primaryUseCase ?? "",
           payload.intentNote ?? "",
           source,
+          scores.sourceIntent,
           page,
           pageFamily,
           JSON.stringify(payload.attribution ?? {}),
@@ -3095,44 +3361,47 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           payload.heroVariant ?? "",
           payload.ctaVariant ?? "",
           nowIso,
+          nowIso,
+          nowIso,
+          nowIso,
         )
         .run();
     } else {
       await env.DB.prepare(
         `UPDATE leads
           SET
-            full_name = COALESCE(NULLIF(?2,''), full_name),
-            company = COALESCE(NULLIF(?3,''), company),
-            role = COALESCE(NULLIF(?4,''), role),
-            team_size = COALESCE(NULLIF(?5,''), team_size),
-            timeline = COALESCE(NULLIF(?6,''), timeline),
-            primary_use_case = COALESCE(NULLIF(?7,''), primary_use_case),
-            intent_note = COALESCE(NULLIF(?8,''), intent_note),
-            source = COALESCE(NULLIF(?9,''), source),
-            page = COALESCE(NULLIF(?10,''), page),
-            page_family = COALESCE(NULLIF(?11,''), page_family),
-            campaign_id = COALESCE(NULLIF(?12,''), campaign_id),
-            variant_id = COALESCE(NULLIF(?13,''), variant_id),
-            hero_variant = COALESCE(NULLIF(?14,''), hero_variant),
-            cta_variant = COALESCE(NULLIF(?15,''), cta_variant),
-            attribution_json = CASE WHEN ?16 <> '{}' THEN ?16 ELSE attribution_json END,
-            first_touch_json = CASE WHEN ?17 <> '{}' THEN ?17 ELSE first_touch_json END,
-            assessment_json = CASE WHEN ?18 <> '{}' THEN ?18 ELSE assessment_json END,
-            behavior_json = CASE WHEN ?19 <> '{}' THEN ?19 ELSE behavior_json END,
-            readiness_score = MAX(readiness_score, ?20),
-            roi_score = MAX(roi_score, ?21),
-            risk_score = MIN(risk_score, ?22),
-            intent_score = MAX(intent_score, ?23),
-            qualification_score = MAX(qualification_score, ?24),
-            score_band = CASE WHEN MAX(qualification_score, ?24) >= 80 THEN 'high' WHEN MAX(qualification_score, ?24) >= 55 THEN 'medium' ELSE 'low' END,
-            segment = CASE WHEN ?25 = 'partner' THEN 'partner' WHEN ?25 = 'enterprise' THEN 'enterprise' ELSE segment END,
+            full_name = COALESCE(NULLIF(?,''), full_name),
+            company = COALESCE(NULLIF(?,''), company),
+            role = COALESCE(NULLIF(?,''), role),
+            team_size = COALESCE(NULLIF(?,''), team_size),
+            timeline = COALESCE(NULLIF(?,''), timeline),
+            primary_use_case = COALESCE(NULLIF(?,''), primary_use_case),
+            intent_note = COALESCE(NULLIF(?,''), intent_note),
+            source = COALESCE(NULLIF(?,''), source),
+            source_intent = COALESCE(NULLIF(?,''), source_intent),
+            page = COALESCE(NULLIF(?,''), page),
+            page_family = COALESCE(NULLIF(?,''), page_family),
+            campaign_id = COALESCE(NULLIF(?,''), campaign_id),
+            variant_id = COALESCE(NULLIF(?,''), variant_id),
+            hero_variant = COALESCE(NULLIF(?,''), hero_variant),
+            cta_variant = COALESCE(NULLIF(?,''), cta_variant),
+            attribution_json = CASE WHEN ? <> '{}' THEN ? ELSE attribution_json END,
+            first_touch_json = CASE WHEN ? <> '{}' THEN ? ELSE first_touch_json END,
+            assessment_json = CASE WHEN ? <> '{}' THEN ? ELSE assessment_json END,
+            behavior_json = CASE WHEN ? <> '{}' THEN ? ELSE behavior_json END,
+            readiness_score = MAX(readiness_score, ?),
+            roi_score = MAX(roi_score, ?),
+            risk_score = MIN(risk_score, ?),
+            intent_score = MAX(intent_score, ?),
+            qualification_score = MAX(qualification_score, ?),
+            score_band = CASE WHEN MAX(qualification_score, ?) >= 80 THEN 'high' WHEN MAX(qualification_score, ?) >= 55 THEN 'medium' ELSE 'low' END,
+            segment = CASE WHEN ? = 'partner' THEN 'partner' WHEN ? = 'enterprise' THEN 'enterprise' ELSE segment END,
             dedupe_count = dedupe_count + 1,
-            updated_at = ?26,
-            last_seen_at = ?26
-          WHERE lead_id = ?1`,
+            updated_at = ?,
+            last_seen_at = ?
+          WHERE lead_id = ?`,
       )
         .bind(
-          leadId,
           payload.fullName ?? "",
           payload.company ?? "",
           payload.role ?? "",
@@ -3141,6 +3410,7 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           payload.primaryUseCase ?? "",
           payload.intentNote ?? "",
           source,
+          scores.sourceIntent,
           page,
           pageFamily,
           campaignId,
@@ -3148,16 +3418,25 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           payload.heroVariant ?? "",
           payload.ctaVariant ?? "",
           JSON.stringify(payload.attribution ?? {}),
+          JSON.stringify(payload.attribution ?? {}),
+          JSON.stringify(payload.firstTouch ?? {}),
           JSON.stringify(payload.firstTouch ?? {}),
           JSON.stringify(payload.assessment ?? {}),
+          JSON.stringify(payload.assessment ?? {}),
+          JSON.stringify(payload.behavior ?? {}),
           JSON.stringify(payload.behavior ?? {}),
           scores.readinessScore,
           scores.roiScore,
           scores.riskScore,
           scores.intentScore,
           scores.qualificationScore,
+          scores.qualificationScore,
+          scores.qualificationScore,
+          scores.segment,
           scores.segment,
           nowIso,
+          nowIso,
+          leadId,
         )
         .run();
     }
@@ -3204,17 +3483,26 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
       source,
       pageFamily,
     });
-    await transitionLeadState(env, leadId, "scored", "score_v2", {
+    await transitionLeadState(env, leadId, "scored", "score_v3", {
       qualificationScore: scores.qualificationScore,
       scoreBand: scores.scoreBand,
       segment: scores.segment,
+      sourceIntent: scores.sourceIntent,
+      scoreReasons: scores.scoreReasons,
     });
 
     const routingConfig = await loadCrmRoutingConfig(env);
-    const providerId = routingConfig.defaultProviderBySegment[scores.segment] ?? "internal-r2";
+    const providerId = selectProviderForLead(
+      routingConfig,
+      scores.segment,
+      scores.scoreBand,
+      scores.sourceIntent,
+    );
 
     await transitionLeadState(env, leadId, "routed", "routing_enqueued", {
       segment: scores.segment,
+      sourceIntent: scores.sourceIntent,
+      scoreBand: scores.scoreBand,
       providerId,
     });
 
@@ -3252,8 +3540,10 @@ async function upsertLeadFromPayload(payload: LeadSubmissionPayload, request: Re
           routingMaxAttempts(env),
           JSON.stringify({
             source,
+            sourceIntent: scores.sourceIntent,
             campaignId,
             scoreBand: scores.scoreBand,
+            scoreReasons: scores.scoreReasons,
             variantId: payload.variantId ?? null,
           }),
           idempotencyKey,
@@ -3391,6 +3681,8 @@ async function submitLead(request: Request, env: Env): Promise<Response> {
       idempotentReplay: saved.idempotentReplay,
       confidenceLabel: saved.scores.confidenceLabel,
       qualificationScore: saved.scores.qualificationScore,
+      sourceIntent: saved.scores.sourceIntent,
+      scoreReasons: saved.scores.scoreReasons.slice(0, 8),
       next: saved.scores.qualificationScore >= 78 ? "priority_follow_up" : "standard_follow_up",
       bookPath: `/book?lead=${encodeURIComponent(saved.leadId)}`,
     });
@@ -3489,6 +3781,7 @@ async function leadsStatus(request: Request, env: Env): Promise<Response> {
       roi_score,
       dedupe_count,
       source,
+      source_intent,
       page,
       page_family,
       full_name,
@@ -3536,6 +3829,7 @@ async function leadsStatus(request: Request, env: Env): Promise<Response> {
       riskScore: row.risk_score,
       dedupeCount: row.dedupe_count,
       source: row.source,
+      sourceIntent: normalizeSourceIntent(row.source_intent),
       page: row.page,
       pageFamily: row.page_family,
       company: row.company,
@@ -3585,6 +3879,7 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
     risk_score,
     dedupe_count,
     source,
+    source_intent,
     page,
     page_family,
     company,
@@ -3656,6 +3951,7 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
       "routed_provider_id",
       "dedupe_count",
       "source",
+      "source_intent",
       "page",
       "page_family",
       "company",
@@ -3693,6 +3989,575 @@ async function leadsExport(request: Request, env: Env): Promise<Response> {
   });
 }
 
+async function computeLeadResponseSla(env: Env): Promise<{
+  nowIso: string;
+  slaMinutes: number;
+  totalLeads: number;
+  openLeads: number;
+  dueSoon: number;
+  breached: number;
+  breachRate: number;
+  openByStatus: Array<{ key: string; count: number }>;
+  breachedBySegment: Array<{ key: string; count: number }>;
+  topBreaches: Array<Record<string, unknown>>;
+}> {
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.parse(nowIso);
+  const slaMinutes = leadResponseSlaMinutes(env);
+  const recentCutoff = new Date(nowMs - (30 * 24 * 60 * 60 * 1000)).toISOString();
+
+  const rows = await env.DB.prepare(
+    `SELECT
+      lead_id,
+      status,
+      created_at,
+      source,
+      source_intent,
+      page_family,
+      campaign_id,
+      segment,
+      score_band,
+      qualification_score
+     FROM leads
+     WHERE created_at >= ?1
+     ORDER BY created_at DESC
+     LIMIT 4000`,
+  ).bind(recentCutoff).all<Record<string, unknown>>();
+
+  const openByStatus = new Map<string, number>();
+  const breachedBySegment = new Map<string, number>();
+  const topBreaches: Array<Record<string, unknown>> = [];
+  const activeAlertKeys: string[] = [];
+
+  let totalLeads = 0;
+  let openLeads = 0;
+  let dueSoon = 0;
+  let breached = 0;
+
+  for (const row of rows.results ?? []) {
+    totalLeads += 1;
+    const leadId = String(row.lead_id ?? "");
+    const status = normalizeLeadStatus(clipString(row.status, 24));
+    if (!RESPONSE_SLA_OPEN_STATES.has(status)) {
+      continue;
+    }
+
+    openLeads += 1;
+    openByStatus.set(status, (openByStatus.get(status) ?? 0) + 1);
+
+    const createdAt = String(row.created_at ?? nowIso);
+    const dueAt = addMinutesIso(createdAt, slaMinutes);
+    const dueMs = Date.parse(dueAt);
+    if (Number.isNaN(dueMs)) continue;
+
+    const minutesToDue = Math.floor((dueMs - nowMs) / 60_000);
+    const overdueMinutes = Math.max(0, Math.floor((nowMs - dueMs) / 60_000));
+
+    if (minutesToDue <= 15 && minutesToDue >= 0) {
+      dueSoon += 1;
+    }
+
+    if (nowMs <= dueMs) continue;
+
+    breached += 1;
+    const segment = clipString(row.segment, 24) ?? "smb";
+    breachedBySegment.set(segment, (breachedBySegment.get(segment) ?? 0) + 1);
+
+    const alertKey = `lead_response_sla_miss:${leadId}`;
+    activeAlertKeys.push(alertKey);
+
+    await upsertLeadAlert(env, {
+      alertKey,
+      alertType: "lead_response_sla_miss",
+      severity: overdueMinutes >= 120 ? "critical" : "warning",
+      leadId,
+      summary: `Lead ${leadId} missed first-response SLA by ${overdueMinutes}m`,
+      metadata: {
+        status,
+        createdAt,
+        dueAt,
+        overdueMinutes,
+        source: String(row.source ?? "direct"),
+        sourceIntent: String(row.source_intent ?? "direct"),
+        pageFamily: String(row.page_family ?? "contact"),
+        campaignId: String(row.campaign_id ?? ""),
+        scoreBand: String(row.score_band ?? "low"),
+        qualificationScore: Number(row.qualification_score ?? 0),
+      },
+    });
+
+    topBreaches.push({
+      leadId,
+      status,
+      createdAt,
+      dueAt,
+      overdueMinutes,
+      source: String(row.source ?? "direct"),
+      sourceIntent: String(row.source_intent ?? "direct"),
+      pageFamily: String(row.page_family ?? "contact"),
+      campaignId: String(row.campaign_id ?? ""),
+      segment,
+      scoreBand: String(row.score_band ?? "low"),
+      qualificationScore: Number(row.qualification_score ?? 0),
+    });
+  }
+
+  await resolveLeadAlertsByType(env, "lead_response_sla_miss", activeAlertKeys);
+
+  topBreaches.sort((a, b) => Number(b.overdueMinutes ?? 0) - Number(a.overdueMinutes ?? 0));
+
+  const openByStatusRows = [...openByStatus.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const breachedBySegmentRows = [...breachedBySegment.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    nowIso,
+    slaMinutes,
+    totalLeads,
+    openLeads,
+    dueSoon,
+    breached,
+    breachRate: openLeads > 0 ? Number((breached / openLeads).toFixed(4)) : 0,
+    openByStatus: openByStatusRows,
+    breachedBySegment: breachedBySegmentRows,
+    topBreaches: topBreaches.slice(0, 40),
+  };
+}
+
+async function collectFailingStepBuckets(env: Env, fromIso: string, toIso: string): Promise<{
+  leadSubmit: Array<{ key: string; count: number }>;
+  routing: Array<{ key: string; count: number }>;
+  top: Array<{ key: string; count: number }>;
+}> {
+  const submitRows = await env.DB.prepare(
+    `SELECT outcome_code AS key, COUNT(*) AS count
+     FROM lead_submit_attempts
+     WHERE created_at >= ?1 AND created_at <= ?2
+       AND outcome_code NOT IN ('ACCEPTED', 'DEDUPED', 'IDEMPOTENT_REPLAY')
+     GROUP BY outcome_code
+     ORDER BY count DESC
+     LIMIT 50`,
+  ).bind(fromIso, toIso).all<{ key: string; count: number }>();
+
+  const routingRows = await env.DB.prepare(
+    `SELECT COALESCE(NULLIF(last_error_code,''), state) AS key, COUNT(*) AS count
+     FROM lead_routing_jobs
+     WHERE updated_at >= ?1 AND updated_at <= ?2
+       AND (state IN ('failed', 'dead_letter') OR last_error_code <> '')
+     GROUP BY COALESCE(NULLIF(last_error_code,''), state)
+     ORDER BY count DESC
+     LIMIT 50`,
+  ).bind(fromIso, toIso).all<{ key: string; count: number }>();
+
+  const aggregate = new Map<string, number>();
+  for (const row of submitRows.results ?? []) {
+    aggregate.set(`submit:${row.key}`, (aggregate.get(`submit:${row.key}`) ?? 0) + Number(row.count ?? 0));
+  }
+  for (const row of routingRows.results ?? []) {
+    aggregate.set(`routing:${row.key}`, (aggregate.get(`routing:${row.key}`) ?? 0) + Number(row.count ?? 0));
+  }
+
+  const top = [...aggregate.entries()]
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30);
+
+  return {
+    leadSubmit: submitRows.results ?? [],
+    routing: routingRows.results ?? [],
+    top,
+  };
+}
+
+async function computeRoutingHealth(env: Env): Promise<{
+  queueLagThresholdMinutes: number;
+  maxLagMinutes: number;
+  laggingJobs: Array<Record<string, unknown>>;
+  stateCounts: Array<{ key: string; count: number }>;
+  segmentCounts: Array<{ key: string; count: number }>;
+  deadLetter: { total: number; pending: number };
+}> {
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.parse(nowIso);
+  const lagThreshold = routingQueueLagAlertMinutes(env);
+
+  const stateCountsRows = await env.DB.prepare(
+    `SELECT state AS key, COUNT(*) AS count
+     FROM lead_routing_jobs
+     GROUP BY state
+     ORDER BY count DESC`,
+  ).all<{ key: string; count: number }>();
+
+  const segmentCountsRows = await env.DB.prepare(
+    `SELECT segment AS key, COUNT(*) AS count
+     FROM lead_routing_jobs
+     GROUP BY segment
+     ORDER BY count DESC`,
+  ).all<{ key: string; count: number }>();
+
+  const jobsRows = await env.DB.prepare(
+    `SELECT
+      job_id,
+      lead_id,
+      segment,
+      state,
+      attempts,
+      max_attempts,
+      created_at,
+      updated_at,
+      next_attempt_at,
+      last_error_code
+     FROM lead_routing_jobs
+     WHERE state IN ('queued', 'processing', 'failed')
+     ORDER BY updated_at ASC
+     LIMIT 500`,
+  ).all<Record<string, unknown>>();
+
+  const deadLetterRow = await env.DB.prepare(
+    `SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN replayed_at IS NULL THEN 1 ELSE 0 END) AS pending
+     FROM lead_handoff_dead_letter`,
+  ).first<{ total: number; pending: number }>();
+
+  const laggingJobs: Array<Record<string, unknown>> = [];
+  const activeLagAlerts: string[] = [];
+  let maxLagMinutes = 0;
+
+  for (const row of jobsRows.results ?? []) {
+    const referenceIso = String(row.updated_at ?? row.created_at ?? nowIso);
+    const lagMinutes = diffMinutes(referenceIso, nowIso);
+    if (lagMinutes > maxLagMinutes) maxLagMinutes = lagMinutes;
+
+    if (lagMinutes < lagThreshold) continue;
+
+    const jobId = String(row.job_id ?? "");
+    const leadId = String(row.lead_id ?? "");
+    const alertKey = `routing_queue_lag:${jobId}`;
+    activeLagAlerts.push(alertKey);
+
+    await upsertLeadAlert(env, {
+      alertKey,
+      alertType: "routing_queue_lag",
+      severity: lagMinutes >= lagThreshold * 3 ? "critical" : "warning",
+      leadId,
+      jobId,
+      summary: `Routing job ${jobId} lagging ${lagMinutes}m in ${String(row.state ?? 'queued')}`,
+      metadata: {
+        lagMinutes,
+        thresholdMinutes: lagThreshold,
+        segment: String(row.segment ?? "smb"),
+        state: String(row.state ?? "queued"),
+        attempts: Number(row.attempts ?? 0),
+        maxAttempts: Number(row.max_attempts ?? 0),
+        lastErrorCode: String(row.last_error_code ?? ""),
+      },
+    });
+
+    laggingJobs.push({
+      jobId,
+      leadId,
+      segment: String(row.segment ?? "smb"),
+      state: String(row.state ?? "queued"),
+      attempts: Number(row.attempts ?? 0),
+      maxAttempts: Number(row.max_attempts ?? 0),
+      lagMinutes,
+      lastErrorCode: String(row.last_error_code ?? ""),
+      updatedAt: String(row.updated_at ?? ""),
+      nextAttemptAt: String(row.next_attempt_at ?? ""),
+    });
+  }
+
+  await resolveLeadAlertsByType(env, "routing_queue_lag", activeLagAlerts);
+
+  const deadPending = Number(deadLetterRow?.pending ?? 0);
+  if (deadPending > 0) {
+    await upsertLeadAlert(env, {
+      alertKey: "routing_dead_letter_pending",
+      alertType: "routing_dead_letter_pending",
+      severity: deadPending >= 10 ? "critical" : "warning",
+      summary: `${deadPending} dead-letter routing jobs pending replay`,
+      metadata: {
+        pending: deadPending,
+        total: Number(deadLetterRow?.total ?? 0),
+      },
+    });
+  } else {
+    await resolveLeadAlertsByType(env, "routing_dead_letter_pending", []);
+  }
+
+  laggingJobs.sort((a, b) => Number(b.lagMinutes ?? 0) - Number(a.lagMinutes ?? 0));
+
+  return {
+    queueLagThresholdMinutes: lagThreshold,
+    maxLagMinutes,
+    laggingJobs: laggingJobs.slice(0, 50),
+    stateCounts: stateCountsRows.results ?? [],
+    segmentCounts: segmentCountsRows.results ?? [],
+    deadLetter: {
+      total: Number(deadLetterRow?.total ?? 0),
+      pending: deadPending,
+    },
+  };
+}
+
+async function conversionHeatmap(env: Env, days: number): Promise<{
+  fromIso: string;
+  toIso: string;
+  rows: Array<Record<string, unknown>>;
+  totals: { leads: number; booked: number; completed: number };
+}> {
+  const toIso = new Date().toISOString();
+  const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const rows = await env.DB.prepare(
+    `SELECT
+      source,
+      source_intent,
+      campaign_id,
+      page_family,
+      cta_variant,
+      COUNT(*) AS leads,
+      SUM(CASE WHEN booked_at IS NOT NULL THEN 1 ELSE 0 END) AS booked,
+      SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed
+     FROM leads
+     WHERE created_at >= ?1 AND created_at <= ?2
+     GROUP BY source, source_intent, campaign_id, page_family, cta_variant
+     ORDER BY leads DESC
+     LIMIT 1000`,
+  ).bind(fromIso, toIso).all<Record<string, unknown>>();
+
+  const normalized = (rows.results ?? []).map((row) => {
+    const leads = Number(row.leads ?? 0);
+    const booked = Number(row.booked ?? 0);
+    const completed = Number(row.completed ?? 0);
+    return {
+      source: String(row.source ?? "direct"),
+      sourceIntent: normalizeSourceIntent(clipString(row.source_intent, 24)),
+      campaignId: String(row.campaign_id ?? ""),
+      pageFamily: String(row.page_family ?? "root"),
+      variant: String(row.cta_variant ?? ""),
+      leads,
+      booked,
+      completed,
+      leadToBookedRate: leads > 0 ? Number((booked / leads).toFixed(4)) : 0,
+      bookedToCompletedRate: booked > 0 ? Number((completed / booked).toFixed(4)) : 0,
+      leadToCompletedRate: leads > 0 ? Number((completed / leads).toFixed(4)) : 0,
+    };
+  });
+
+  const totals = normalized.reduce(
+    (acc, row) => {
+      acc.leads += Number(row.leads ?? 0);
+      acc.booked += Number(row.booked ?? 0);
+      acc.completed += Number(row.completed ?? 0);
+      return acc;
+    },
+    { leads: 0, booked: 0, completed: 0 },
+  );
+
+  return { fromIso, toIso, rows: normalized, totals };
+}
+
+async function opsLeadFunnelHealth(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const sla = await computeLeadResponseSla(env);
+  const url = new URL(request.url);
+  const days = Math.max(1, Math.min(30, Number(url.searchParams.get("days") ?? "7")));
+  const toIso = new Date().toISOString();
+  const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const failing = await collectFailingStepBuckets(env, fromIso, toIso);
+
+  const statusRows = await env.DB.prepare(
+    `SELECT status AS key, COUNT(*) AS count FROM leads GROUP BY status ORDER BY count DESC`,
+  ).all<{ key: string; count: number }>();
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    sla,
+    totals: {
+      byStatus: statusRows.results ?? [],
+    },
+    failingSteps: failing,
+  });
+}
+
+async function opsRoutingHealth(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const health = await computeRoutingHealth(env);
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    ...health,
+  });
+}
+
+async function opsConversionHeatmap(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const url = new URL(request.url);
+  const days = Math.max(1, Math.min(90, Number(url.searchParams.get("days") ?? "14")));
+  const heatmap = await conversionHeatmap(env, days);
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    range: {
+      from: heatmap.fromIso,
+      to: heatmap.toIso,
+      days,
+    },
+    totals: {
+      ...heatmap.totals,
+      leadToBookedRate: heatmap.totals.leads > 0 ? Number((heatmap.totals.booked / heatmap.totals.leads).toFixed(4)) : 0,
+      leadToCompletedRate: heatmap.totals.leads > 0 ? Number((heatmap.totals.completed / heatmap.totals.leads).toFixed(4)) : 0,
+    },
+    rows: heatmap.rows,
+  });
+}
+
+async function opsFailingSteps(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const url = new URL(request.url);
+  const days = Math.max(1, Math.min(30, Number(url.searchParams.get("days") ?? "7")));
+  const toIso = new Date().toISOString();
+  const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const buckets = await collectFailingStepBuckets(env, fromIso, toIso);
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    range: { from: fromIso, to: toIso, days },
+    buckets,
+  });
+}
+
+async function attributionRevenueSummary(request: Request, env: Env): Promise<Response> {
+  if (request.method !== "GET") {
+    return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
+  }
+
+  const authError = checkOpsAuth(request, env);
+  if (authError) return authError;
+
+  const url = new URL(request.url);
+  const days = Math.max(1, Math.min(90, Number(url.searchParams.get("days") ?? "14")));
+  const toIso = new Date().toISOString();
+  const fromIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const rows = await env.DB.prepare(
+    `SELECT
+      lead_id,
+      source,
+      source_intent,
+      campaign_id,
+      page_family,
+      cta_variant,
+      first_touch_json,
+      booked_at,
+      completed_at
+     FROM leads
+     WHERE created_at >= ?1 AND created_at <= ?2
+     ORDER BY created_at DESC
+     LIMIT 8000`,
+  ).bind(fromIso, toIso).all<Record<string, unknown>>();
+
+  type Rollup = { leads: number; booked: number; completed: number; assists: number };
+  const firstTouch = new Map<string, Rollup>();
+  const lastTouch = new Map<string, Rollup>();
+  const assists = new Map<string, Rollup>();
+
+  const bump = (map: Map<string, Rollup>, key: string, booked: number, completed: number, assist = 0) => {
+    const current = map.get(key) ?? { leads: 0, booked: 0, completed: 0, assists: 0 };
+    current.leads += 1;
+    current.booked += booked;
+    current.completed += completed;
+    current.assists += assist;
+    map.set(key, current);
+  };
+
+  for (const row of rows.results ?? []) {
+    const booked = row.booked_at ? 1 : 0;
+    const completed = row.completed_at ? 1 : 0;
+
+    const firstTouchJson = safeJsonParse<Record<string, string>>(String(row.first_touch_json ?? "{}"), {});
+    const first = clipString(firstTouchJson.source, 120)
+      ?? clipString(firstTouchJson.utm_source, 120)
+      ?? String(row.source ?? "direct");
+    const last = String(row.source ?? "direct");
+
+    bump(firstTouch, first, booked, completed);
+    bump(lastTouch, last, booked, completed);
+
+    if (first !== last) {
+      bump(assists, first, booked, completed, 1);
+      bump(assists, last, booked, completed, 1);
+    }
+  }
+
+  const toRows = (map: Map<string, Rollup>) => [...map.entries()]
+    .map(([source, m]) => ({
+      source,
+      leads: m.leads,
+      booked: m.booked,
+      completed: m.completed,
+      assists: m.assists,
+      leadToBookedRate: m.leads > 0 ? Number((m.booked / m.leads).toFixed(4)) : 0,
+      leadToCompletedRate: m.leads > 0 ? Number((m.completed / m.leads).toFixed(4)) : 0,
+    }))
+    .sort((a, b) => (b.completed - a.completed) || (b.booked - a.booked) || (b.leads - a.leads));
+
+  const heatmap = await conversionHeatmap(env, days);
+
+  return apiJson({
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    range: { from: fromIso, to: toIso, days },
+    totals: {
+      leads: heatmap.totals.leads,
+      booked: heatmap.totals.booked,
+      completed: heatmap.totals.completed,
+      leadToBookedRate: heatmap.totals.leads > 0 ? Number((heatmap.totals.booked / heatmap.totals.leads).toFixed(4)) : 0,
+      leadToCompletedRate: heatmap.totals.leads > 0 ? Number((heatmap.totals.completed / heatmap.totals.leads).toFixed(4)) : 0,
+    },
+    attribution: {
+      firstTouch: toRows(firstTouch).slice(0, 50),
+      lastTouch: toRows(lastTouch).slice(0, 50),
+      assists: toRows(assists).slice(0, 50),
+    },
+    conversionByDimension: heatmap.rows,
+  });
+}
+
 async function routingStatus(request: Request, env: Env): Promise<Response> {
   if (request.method !== "GET") {
     return apiError("METHOD_NOT_ALLOWED", "Use GET for this endpoint", 405);
@@ -3701,20 +4566,7 @@ async function routingStatus(request: Request, env: Env): Promise<Response> {
   const authError = checkOpsAuth(request, env);
   if (authError) return authError;
 
-  const byState = await env.DB.prepare(
-    `SELECT state AS key, COUNT(*) AS count FROM lead_routing_jobs GROUP BY state ORDER BY count DESC`,
-  ).all<{ key: string; count: number }>();
-
-  const bySegment = await env.DB.prepare(
-    `SELECT segment AS key, COUNT(*) AS count FROM lead_routing_jobs GROUP BY segment ORDER BY count DESC`,
-  ).all<{ key: string; count: number }>();
-
-  const deadLetter = await env.DB.prepare(
-    `SELECT
-      COUNT(*) AS total,
-      SUM(CASE WHEN replayed_at IS NULL THEN 1 ELSE 0 END) AS pending
-    FROM lead_handoff_dead_letter`,
-  ).first<{ total: number; pending: number }>();
+  const health = await computeRoutingHealth(env);
 
   const recentJobs = await env.DB.prepare(
     `SELECT
@@ -3725,6 +4577,7 @@ async function routingStatus(request: Request, env: Env): Promise<Response> {
       state,
       attempts,
       max_attempts,
+      next_attempt_at,
       last_error_code,
       updated_at,
       sent_at,
@@ -3738,12 +4591,12 @@ async function routingStatus(request: Request, env: Env): Promise<Response> {
     ok: true,
     generatedAt: new Date().toISOString(),
     summary: {
-      byState: byState.results ?? [],
-      bySegment: bySegment.results ?? [],
-      deadLetter: {
-        total: Number(deadLetter?.total ?? 0),
-        pending: Number(deadLetter?.pending ?? 0),
-      },
+      byState: health.stateCounts,
+      bySegment: health.segmentCounts,
+      deadLetter: health.deadLetter,
+      queueLagThresholdMinutes: health.queueLagThresholdMinutes,
+      maxLagMinutes: health.maxLagMinutes,
+      laggingJobs: health.laggingJobs.slice(0, 20),
     },
     recentJobs: recentJobs.results ?? [],
   });
@@ -3764,26 +4617,62 @@ async function routingReplay(request: Request, env: Env): Promise<Response> {
     .map((x) => clipString(x, 80))
     .filter((x): x is string => Boolean(x));
 
-  let rows: Array<{ job_id: string; segment: string }> = [];
+  const dryRun = body?.dryRun !== false;
+  const force = body?.force === true;
+  const includeReplayed = body?.includeReplayed === true;
+  const confirm = clipString(body?.confirm, 32);
+  const maxAgeHours = Math.max(1, Math.min(24 * 30, Number(body?.maxAgeHours ?? 24 * 14)));
+  const cutoffIso = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
+
+  if (!dryRun && confirm !== "replay") {
+    return apiError("REPLAY_CONFIRM_REQUIRED", "Set confirm=replay to execute replay", 400);
+  }
+
+  let rows: Array<{ job_id: string; segment: string; reason_code: string; created_at: string; replay_count: number }> = [];
 
   if (ids.length > 0) {
     const placeholders = ids.map((_: string, i: number) => `?${i + 1}`).join(",");
     const out = await env.DB.prepare(
-      `SELECT DISTINCT job_id, segment
+      `SELECT DISTINCT job_id, segment, reason_code, created_at, replay_count
        FROM lead_handoff_dead_letter
        WHERE job_id IN (${placeholders})
-       LIMIT ${limit}`,
-    ).bind(...ids).all<{ job_id: string; segment: string }>();
-    rows = out.results ?? [];
-  } else {
-    const out = await env.DB.prepare(
-      `SELECT DISTINCT job_id, segment
-       FROM lead_handoff_dead_letter
-       WHERE replayed_at IS NULL
+         AND created_at >= ?${ids.length + 1}
        ORDER BY created_at DESC
        LIMIT ${limit}`,
-    ).all<{ job_id: string; segment: string }>();
+    ).bind(...ids, cutoffIso).all<{ job_id: string; segment: string; reason_code: string; created_at: string; replay_count: number }>();
     rows = out.results ?? [];
+  } else {
+    const whereReplayed = includeReplayed ? "" : "AND replayed_at IS NULL";
+    const out = await env.DB.prepare(
+      `SELECT DISTINCT job_id, segment, reason_code, created_at, replay_count
+       FROM lead_handoff_dead_letter
+       WHERE created_at >= ?1
+       ${whereReplayed}
+       ORDER BY created_at DESC
+       LIMIT ${limit}`,
+    ).bind(cutoffIso).all<{ job_id: string; segment: string; reason_code: string; created_at: string; replay_count: number }>();
+    rows = out.results ?? [];
+  }
+
+  if (!dryRun && !force && rows.length > 20) {
+    return apiError("REPLAY_FORCE_REQUIRED", `Refusing to replay ${rows.length} jobs without force=true`, 400);
+  }
+
+  const preview = rows.map((row) => ({
+    jobId: row.job_id,
+    segment: row.segment,
+    reasonCode: row.reason_code,
+    createdAt: row.created_at,
+    replayCount: Number(row.replay_count ?? 0),
+  }));
+
+  if (dryRun) {
+    return apiJson({
+      ok: true,
+      dryRun: true,
+      requested: preview.length,
+      selected: preview,
+    });
   }
 
   let requeued = 0;
@@ -3826,6 +4715,7 @@ async function routingReplay(request: Request, env: Env): Promise<Response> {
 
   return apiJson({
     ok: failures.length === 0,
+    dryRun: false,
     requested: rows.length,
     requeued,
     failures,
@@ -3850,15 +4740,17 @@ async function attributionSummary(request: Request, env: Env): Promise<Response>
   const rows = await env.DB.prepare(
     `SELECT
       source,
+      source_intent,
       campaign_id,
       page_family,
       cta_variant,
       score_band,
       COUNT(*) AS leads,
-      SUM(CASE WHEN status = 'booked' OR completed_at IS NOT NULL THEN 1 ELSE 0 END) AS booked
+      SUM(CASE WHEN booked_at IS NOT NULL THEN 1 ELSE 0 END) AS booked,
+      SUM(CASE WHEN completed_at IS NOT NULL THEN 1 ELSE 0 END) AS completed
     FROM leads
     WHERE created_at >= ?1 AND created_at <= ?2
-    GROUP BY source, campaign_id, page_family, cta_variant, score_band
+    GROUP BY source, source_intent, campaign_id, page_family, cta_variant, score_band
     ORDER BY leads DESC
     LIMIT 500`,
   ).bind(fromIso, toIso).all<any>();
@@ -3866,15 +4758,19 @@ async function attributionSummary(request: Request, env: Env): Promise<Response>
   const normalized = (rows.results ?? []).map((row) => {
     const leads = Number(row.leads ?? 0);
     const booked = Number(row.booked ?? 0);
+    const completed = Number(row.completed ?? 0);
     return {
       source: String(row.source ?? "direct"),
+      sourceIntent: normalizeSourceIntent(clipString(row.source_intent, 24)),
       campaignId: String(row.campaign_id ?? ""),
       pageFamily: String(row.page_family ?? "root"),
       variant: String(row.cta_variant ?? ""),
       scoreBand: String(row.score_band ?? "low"),
       leads,
       booked,
+      completed,
       bookedRate: leads > 0 ? Number((booked / leads).toFixed(4)) : 0,
+      completedRate: leads > 0 ? Number((completed / leads).toFixed(4)) : 0,
     };
   });
 
@@ -3882,9 +4778,10 @@ async function attributionSummary(request: Request, env: Env): Promise<Response>
     (acc, row) => {
       acc.leads += row.leads;
       acc.booked += row.booked;
+      acc.completed += row.completed;
       return acc;
     },
-    { leads: 0, booked: 0 },
+    { leads: 0, booked: 0, completed: 0 },
   );
 
   return apiJson({
@@ -3894,10 +4791,32 @@ async function attributionSummary(request: Request, env: Env): Promise<Response>
     totals: {
       leads: totals.leads,
       booked: totals.booked,
+      completed: totals.completed,
       bookedRate: totals.leads > 0 ? Number((totals.booked / totals.leads).toFixed(4)) : 0,
+      completedRate: totals.leads > 0 ? Number((totals.completed / totals.leads).toFixed(4)) : 0,
     },
     rows: normalized,
   });
+}
+
+function wilsonLowerBound(successes: number, trials: number, z = 1.96): number {
+  if (trials <= 0) return 0;
+  const p = successes / trials;
+  const z2 = z * z;
+  const denom = 1 + z2 / trials;
+  const center = p + z2 / (2 * trials);
+  const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * trials)) / trials);
+  return Math.max(0, (center - margin) / denom);
+}
+
+function wilsonUpperBound(successes: number, trials: number, z = 1.96): number {
+  if (trials <= 0) return 0;
+  const p = successes / trials;
+  const z2 = z * z;
+  const denom = 1 + z2 / trials;
+  const center = p + z2 / (2 * trials);
+  const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * trials)) / trials);
+  return Math.min(1, (center + margin) / denom);
 }
 
 async function recommendExperimentWinners(request: Request, env: Env): Promise<Response> {
@@ -3984,15 +4903,25 @@ async function recommendExperimentWinners(request: Request, env: Env): Promise<R
 
   const minImpressions = Math.max(1, Number(env.EXPERIMENT_WINNER_MIN_IMPRESSIONS ?? "40"));
   const minBooked = Math.max(0, Number(env.EXPERIMENT_WINNER_MIN_BOOKED ?? "2"));
+  const minConfidence = Math.max(0, Math.min(1, Number(env.EXPERIMENT_WINNER_MIN_CONFIDENCE ?? "0.12")));
+  const holdoutPercent = Math.max(0, Math.min(30, Number(env.EXPERIMENT_HOLDOUT_PERCENT ?? String(DEFAULT_EXPERIMENT_CONFIG.holdoutPercent ?? 0))));
   const nowIso = new Date().toISOString();
 
   const recommendations = [...grouped.entries()].map(([pageFamily, variants]) => {
     const sorted = [...variants]
-      .map((v) => ({
-        ...v,
-        submitRate: v.impressions > 0 ? Number((v.submits / v.impressions).toFixed(4)) : 0,
-        bookedRate: v.impressions > 0 ? Number((v.booked / v.impressions).toFixed(4)) : 0,
-      }))
+      .map((v) => {
+        const submitRate = v.impressions > 0 ? Number((v.submits / v.impressions).toFixed(4)) : 0;
+        const bookedRate = v.impressions > 0 ? Number((v.booked / v.impressions).toFixed(4)) : 0;
+        const confidenceFloor = Number(wilsonLowerBound(v.booked, Math.max(1, v.impressions)).toFixed(4));
+        const confidenceUpper = Number(wilsonUpperBound(v.booked, Math.max(1, v.impressions)).toFixed(4));
+        return {
+          ...v,
+          submitRate,
+          bookedRate,
+          confidenceFloor,
+          confidenceUpper,
+        };
+      })
       .sort((a, b) => (b.bookedRate - a.bookedRate) || (b.submitRate - a.submitRate) || (b.impressions - a.impressions));
 
     const winner = sorted[0] ?? null;
@@ -4005,9 +4934,12 @@ async function recommendExperimentWinners(request: Request, env: Env): Promise<R
       guardrailNotes.push("no_variants");
       recommendedVariant = null;
     } else {
+      if (winner.variant === "holdout") guardrailNotes.push("holdout_variant_not_promotable");
       if (winner.impressions < minImpressions) guardrailNotes.push("insufficient_impressions");
       if (winner.booked < minBooked) guardrailNotes.push("insufficient_bookings");
+      if (winner.confidenceFloor < minConfidence) guardrailNotes.push("insufficient_confidence");
       if (runnerUp && winner.bookedRate - runnerUp.bookedRate < 0.01) guardrailNotes.push("margin_too_small");
+      if (runnerUp && winner.confidenceFloor <= runnerUp.confidenceUpper) guardrailNotes.push("confidence_overlap_runner_up");
     }
 
     if (guardrailNotes.length > 0) {
@@ -4020,6 +4952,7 @@ async function recommendExperimentWinners(request: Request, env: Env): Promise<R
       winner,
       runnerUp,
       candidates: sorted,
+      holdoutPercent,
       guardrailNotes,
     };
   });
@@ -4050,7 +4983,7 @@ async function recommendExperimentWinners(request: Request, env: Env): Promise<R
         Number(rec.winner?.impressions ?? 0),
         Number(rec.winner?.submits ?? 0),
         Number(rec.winner?.booked ?? 0),
-        Number(rec.winner?.bookedRate ?? 0),
+        Number(rec.winner?.confidenceFloor ?? 0),
         rec.guardrailNotes.join(","),
         JSON.stringify({
           winner: rec.winner,
@@ -4066,7 +4999,13 @@ async function recommendExperimentWinners(request: Request, env: Env): Promise<R
   const artifact = {
     generatedAt: nowIso,
     range: { from: fromIso, to: toIso, days },
-    guardrails: { minImpressions, minBooked, autoApply: false },
+    guardrails: {
+      minImpressions,
+      minBooked,
+      minConfidence,
+      holdoutPercent,
+      autoApply: false,
+    },
     recommendations,
   };
 
@@ -4078,7 +5017,13 @@ async function recommendExperimentWinners(request: Request, env: Env): Promise<R
   return apiJson({
     ok: true,
     key,
-    guardrails: { minImpressions, minBooked, autoApply: false },
+    guardrails: {
+      minImpressions,
+      minBooked,
+      minConfidence,
+      holdoutPercent,
+      autoApply: false,
+    },
     recommendations,
   });
 }
@@ -4120,6 +5065,7 @@ async function findLeadForBooking(env: Env, leadId: string | undefined, email: s
         email_hash,
         email_hint,
         source,
+        source_intent,
         page,
         page_family,
         readiness_score,
@@ -4135,7 +5081,7 @@ async function findLeadForBooking(env: Env, leadId: string | undefined, email: s
         updated_at,
         last_seen_at,
         lifecycle_updated_at
-      ) VALUES (?1, ?2, ?3, ?4, 'book-form', '/book', 'book', 50, 50, 30, 55, 60, 'medium', 'enterprise', 'new', 'booking_direct', ?5, ?5, ?5, ?5)`,
+      ) VALUES (?1, ?2, ?3, ?4, 'book-form', 'high-intent', '/book', 'book', 50, 50, 30, 55, 60, 'medium', 'enterprise', 'new', 'booking_direct', ?5, ?5, ?5, ?5)`,
     )
       .bind(leadIdNew, identityHash, emailHash, emailHint, nowIso)
       .run();
@@ -4424,27 +5370,47 @@ function stableHash(input: string): number {
 async function loadExperimentConfig(env: Env): Promise<ExperimentVariantConfig> {
   const key = env.EXPERIMENT_CONFIG_KEY?.trim() || "experiment-config-v1";
 
+  const fallback = {
+    ...DEFAULT_EXPERIMENT_CONFIG,
+    seed: env.EXPERIMENT_SEED?.trim() || DEFAULT_EXPERIMENT_CONFIG.seed,
+    holdoutPercent: Math.max(0, Math.min(30, Number(env.EXPERIMENT_HOLDOUT_PERCENT ?? String(DEFAULT_EXPERIMENT_CONFIG.holdoutPercent ?? 0)))),
+  } satisfies ExperimentVariantConfig;
+
   try {
     const raw = await env.VARIANT_CONFIG.get(key, "text");
     if (!raw) {
-      return {
-        ...DEFAULT_EXPERIMENT_CONFIG,
-        seed: env.EXPERIMENT_SEED?.trim() || DEFAULT_EXPERIMENT_CONFIG.seed,
+      return fallback;
+    }
+
+    const parsed = safeJsonParse<ExperimentVariantConfig>(raw, fallback);
+    const seed = clipString(parsed?.seed, 120) ?? fallback.seed;
+    const holdoutPercent = Math.max(
+      0,
+      Math.min(
+        30,
+        Number(parsed?.holdoutPercent ?? env.EXPERIMENT_HOLDOUT_PERCENT ?? fallback.holdoutPercent ?? 0),
+      ),
+    );
+
+    const rawFamilies = parsed?.families && typeof parsed.families === "object"
+      ? parsed.families
+      : fallback.families;
+
+    const families: Record<string, ExperimentFamilyConfig> = {};
+    for (const [family, cfg] of Object.entries(rawFamilies)) {
+      const hero = Array.isArray(cfg?.hero) ? cfg.hero.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+      const cta = Array.isArray(cfg?.cta) ? cfg.cta.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+      const holdout = Number((cfg as ExperimentFamilyConfig)?.holdoutPercent ?? holdoutPercent);
+      families[family] = {
+        hero: hero.length > 0 ? hero : ["proof"],
+        cta: cta.length > 0 ? cta : ["sales"],
+        holdoutPercent: Math.max(0, Math.min(30, holdout)),
       };
     }
 
-    const parsed = safeJsonParse<ExperimentVariantConfig>(raw, DEFAULT_EXPERIMENT_CONFIG);
-    const seed = clipString(parsed?.seed, 120) ?? env.EXPERIMENT_SEED?.trim() ?? DEFAULT_EXPERIMENT_CONFIG.seed;
-    const families = parsed?.families && typeof parsed.families === "object"
-      ? parsed.families
-      : DEFAULT_EXPERIMENT_CONFIG.families;
-
-    return { seed, families };
+    return { seed, holdoutPercent, families };
   } catch {
-    return {
-      ...DEFAULT_EXPERIMENT_CONFIG,
-      seed: env.EXPERIMENT_SEED?.trim() || DEFAULT_EXPERIMENT_CONFIG.seed,
-    };
+    return fallback;
   }
 }
 
@@ -4454,10 +5420,27 @@ function assignVariant(config: ExperimentVariantConfig, visitorId: string, pageF
   ctaVariant: string;
 } {
   const family = pageFamily || "root";
-  const familyConfig = config.families[family] ?? config.families.root ?? { hero: ["proof"], cta: ["sales"] };
+  const familyConfig = config.families[family] ?? config.families.root ?? { hero: ["proof"], cta: ["sales"], holdoutPercent: 0 };
 
   const heroOptions = familyConfig.hero.length > 0 ? familyConfig.hero : ["proof"];
   const ctaOptions = familyConfig.cta.length > 0 ? familyConfig.cta : ["sales"];
+
+  const holdoutPercent = Math.max(
+    0,
+    Math.min(
+      30,
+      Number(familyConfig.holdoutPercent ?? config.holdoutPercent ?? 0),
+    ),
+  );
+
+  const holdoutHash = stableHash(`${config.seed}|holdout|${family}|${visitorId}`) % 100;
+  if (holdoutPercent > 0 && holdoutHash < holdoutPercent) {
+    return {
+      pageFamily: family,
+      heroVariant: "holdout",
+      ctaVariant: "holdout",
+    };
+  }
 
   const heroHash = stableHash(`${config.seed}|hero|${family}|${visitorId}`);
   const ctaHash = stableHash(`${config.seed}|cta|${family}|${visitorId}`);
@@ -4539,6 +5522,7 @@ async function experimentAssignmentEndpoint(request: Request, env: Env): Promise
     ok: true,
     visitorId,
     seed: config.seed,
+    holdoutPercent: config.holdoutPercent ?? 0,
     assignment,
   });
 }
@@ -4589,7 +5573,8 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
             state,
             attempts,
             max_attempts,
-            idempotency_key
+            idempotency_key,
+            payload_json
           FROM lead_routing_jobs
           WHERE job_id = ?1
           LIMIT 1`,
@@ -4621,6 +5606,7 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
             primary_use_case,
             email_hint,
             source,
+            source_intent,
             campaign_id,
             page_family,
             variant_id,
@@ -4660,6 +5646,17 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
           throw new Error("ROUTING_PROVIDER_NOT_CONFIGURED");
         }
 
+        const jobPayload = safeJsonParse<Record<string, unknown>>(String(job.payload_json ?? "{}"), {});
+        const sourceIntent = normalizeSourceIntent(clipString(lead.source_intent, 24) ?? clipString(jobPayload.sourceIntent, 24));
+        const scoreReasons = Array.isArray(jobPayload.scoreReasons)
+          ? (jobPayload.scoreReasons as Array<Record<string, unknown>>)
+            .map((r) => ({
+              code: clipString(r.code, 80) ?? "unknown",
+              points: Number(r.points ?? 0),
+              detail: clipString(r.detail, 240),
+            }))
+          : [];
+
         const envelope: LeadHandoffEnvelope = {
           version: "1.0",
           handoffId: String(job.job_id),
@@ -4674,6 +5671,8 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
             readiness: Number(lead.readiness_score ?? 0),
             roi: Number(lead.roi_score ?? 0),
             risk: Number(lead.risk_score ?? 0),
+            sourceIntent,
+            reasons: scoreReasons,
           },
           attribution: {
             source: String(lead.source ?? "direct"),
@@ -4825,6 +5824,8 @@ async function leadJobsQueue(batch: MessageBatch<any>, env: Env): Promise<void> 
               providerId: job.provider_id,
               attempt: attempts,
               responseSnippet,
+              sourceIntent,
+              scoreBand: clipString(lead.score_band, 24) ?? "low",
             }),
             String(lead.source ?? "direct"),
             String(lead.page ?? "/contact"),
@@ -6313,6 +7314,26 @@ export default {
         return await attributionSummary(request, env);
       }
 
+      if (path === "/api/attribution/revenue") {
+        return await attributionRevenueSummary(request, env);
+      }
+
+      if (path === "/api/ops/lead-funnel-health") {
+        return await opsLeadFunnelHealth(request, env);
+      }
+
+      if (path === "/api/ops/routing-health") {
+        return await opsRoutingHealth(request, env);
+      }
+
+      if (path === "/api/ops/conversion-heatmap") {
+        return await opsConversionHeatmap(request, env);
+      }
+
+      if (path === "/api/ops/failing-steps") {
+        return await opsFailingSteps(request, env);
+      }
+
       if (path === "/api/experiments/recommend") {
         return await recommendExperimentWinners(request, env);
       }
@@ -6689,6 +7710,15 @@ export default {
         await enqueueWeeklyVariantReportIfDue(env);
       } catch (err) {
         console.error("VARIANT_REPORT_ENQUEUE_FAILED", err);
+      }
+    })());
+
+    ctx.waitUntil((async () => {
+      try {
+        await computeLeadResponseSla(env);
+        await computeRoutingHealth(env);
+      } catch (err) {
+        console.error("OPS_HEALTH_SWEEP_FAILED", err);
       }
     })());
   },

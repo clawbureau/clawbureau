@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawclaim-phase2",
-  "description": "clawclaim.com (DID Binding) \u2014 PRD \u2014 Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response.",
+  "description": "clawclaim.com (DID Binding) — PRD — Bind DIDs to accounts and external platforms (GitHub, X, Moltbook) via challenge-response.",
   "userStories": [
     {
       "id": "CCL-US-001",
@@ -200,6 +200,20 @@
       "priority": 14,
       "passes": true,
       "notes": "Added `POST /v1/control-plane/identity/export` and `/identity/import` with HMAC signing (`CLAIM_EXPORT_SIGNING_KEY`), deterministic bundle hash checks, stale bundle rejection (`IMPORT_BUNDLE_STALE`), tamper rejection (`IMPORT_BUNDLE_TAMPERED`), and idempotent import operation keys. Covered in `services/clawclaim/test/claim-lifecycle-portability.test.ts`; deployed in `clawclaim-staging` (`ace3a741-85e3-4fcb-b582-aac6993d974f`) + `clawclaim` (`2b45efe3-7bfd-48b2-a9c2-df5250f51488`) with staging/prod smoke evidence under `artifacts/smoke/identity-control-plane/2026-02-11T22-10-50-682Z-staging/` and `.../2026-02-11T22-11-02-225Z-prod/`."
+    },
+    {
+      "id": "CCL-US-016",
+      "title": "Scoped-token exchange as canonical issuance bootstrap",
+      "description": "As identity operations, we need challenge/exchange issuance to bootstrap canonical CST flows without direct downstream admin issuance dependencies.",
+      "acceptanceCriteria": [
+        "Challenge/exchange path can mint canonical CSTs for control-plane audiences used by clawproxy/clawcontrols/clawscope gates",
+        "Scope dependency misconfiguration remains deterministic (`SCOPE_DEPENDENCY_NOT_CONFIGURED`) and fail-closed",
+        "Staging/prod exchange configuration supports automated M6 conformance runs",
+        "Typecheck and tests pass"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Validated via `scripts/identity/run-identity-control-plane-m6-suite.mjs` using challenge/exchange issuance path (no direct canonical issue dependency in suite bootstrap). Runtime dependency behavior remains deterministic (`SCOPE_DEPENDENCY_NOT_CONFIGURED`). M6 suite artifacts: staging `artifacts/smoke/identity-control-plane/2026-02-12T00-52-18-553Z-staging/conformance-matrix.json`, prod `artifacts/smoke/identity-control-plane/2026-02-12T00-52-32-525Z-prod/conformance-matrix.json`."
     }
   ]
 }

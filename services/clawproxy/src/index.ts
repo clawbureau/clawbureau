@@ -748,9 +748,10 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
 ### Proxy auth (CST)
 - \`X-CST: <CST>\` (recommended)
 - \`X-Scoped-Token: <CST>\` (alternate)
-- \`Authorization: Bearer <CST>\` (legacy; disabled when \`STRICT_AUTH_HEADERS=true\`)
-- When \`X-Client-DID\` is set, a valid CST token is required (fail-closed).
-- The gateway recomputes and verifies \`token_scope_hash_b64u\` from canonical token claims (including \`payment_account_did\` when present) (fail-closed).
+- \`Authorization: Bearer <CST>\` (legacy fallback; only when \`STRICT_AUTH_HEADERS=false\`)
+- A valid CST token is required for proxy calls when \`PROXY_REQUIRE_CST=true\` (default fail-closed).
+- Canonical chain claims are required when \`PROXY_REQUIRE_CANONICAL_CST=true\` (default fail-closed): \`owner_did\`, \`controller_did\`, \`agent_did\`, \`token_lane=canonical\`.
+- The gateway recomputes and verifies \`token_scope_hash_b64u\` from canonical token claims (including chain claims + \`payment_account_did\` when present) (fail-closed).
 
 ### BYOK provider keys
 - Recommended (all providers): \`X-Provider-API-Key: <provider api key>\` (raw or \`Bearer <key>\`)
@@ -761,7 +762,7 @@ Proxy requests to supported LLM providers and receive a signed receipt for each 
   - \`Authorization: Bearer <provider api key>\` (only when Authorization is not used for CST)
 
 ### Strict auth headers mode
-When \`STRICT_AUTH_HEADERS=true\`:
+When \`STRICT_AUTH_HEADERS=true\` (default):
 - Rejects \`Authorization\` header entirely
 - Rejects provider-compatible BYOK headers (\`x-api-key\`, \`anthropic-api-key\`, \`x-goog-api-key\`)
 - Requires CST via \`X-CST\`/\`X-Scoped-Token\` and provider keys via \`X-Provider-API-Key\`
@@ -1390,9 +1391,13 @@ async function handleProxy(
   const binding = extractBindingFromHeaders(request);
 
   // Scoped token (CST) authentication
-  // "Authenticated" calls are those that provide X-Client-DID (used for rate limiting)
-  // Fail closed: if X-Client-DID is present, a valid CST must also be present.
-  const strictAuthHeaders = env.STRICT_AUTH_HEADERS === 'true';
+  // M6 enforcement defaults are fail-closed:
+  // - STRICT_AUTH_HEADERS defaults to true
+  // - PROXY_REQUIRE_CST defaults to true
+  // - PROXY_REQUIRE_CANONICAL_CST defaults to true
+  const strictAuthHeaders = parseBooleanFlag(env.STRICT_AUTH_HEADERS);
+  const requireCst = parseBooleanFlag(env.PROXY_REQUIRE_CST);
+  const requireCanonicalCst = parseBooleanFlag(env.PROXY_REQUIRE_CANONICAL_CST);
 
   const clientDidHeader = request.headers.get('X-Client-DID');
   const authorizationHeader = request.headers.get('Authorization');
@@ -1463,16 +1468,25 @@ async function handleProxy(
           token_scope_hash_b64u: string;
           policy_hash_b64u?: string;
           payment_account_did?: string;
+          owner_ref?: string;
+          owner_did?: string;
+          controller_did?: string;
+          agent_did?: string;
+          control_plane_policy_hash_b64u?: string;
+          spend_cap?: number;
+          mission_id?: string;
+          token_lane?: 'legacy' | 'canonical';
         };
       }
     | undefined;
 
-  if (clientDidHeader && !cstToken) {
+  const cstRequired = requireCst || Boolean(clientDidHeader);
+  if (cstRequired && !cstToken) {
     return errorResponseWithRateLimit(
       'TOKEN_REQUIRED',
       strictAuthHeaders
-        ? 'CST token required for authenticated requests (when X-Client-DID is set). Provide X-CST (or X-Scoped-Token).'
-        : 'CST token required for authenticated requests (when X-Client-DID is set). Provide Authorization: Bearer <CST> or X-CST.',
+        ? 'Canonical CST token is required. Provide X-CST (or X-Scoped-Token).'
+        : 'Canonical CST token is required. Provide X-CST (or X-Scoped-Token).',
       401,
       rateLimitInfo
     );
@@ -1517,6 +1531,44 @@ async function handleProxy(
       }
     }
 
+    const ownerDidFromToken =
+      typeof tokenValidation.claims.owner_did === 'string' && tokenValidation.claims.owner_did.trim().length > 0
+        ? tokenValidation.claims.owner_did.trim()
+        : undefined;
+
+    const controllerDidFromToken =
+      typeof tokenValidation.claims.controller_did === 'string' &&
+      tokenValidation.claims.controller_did.trim().length > 0
+        ? tokenValidation.claims.controller_did.trim()
+        : undefined;
+
+    const agentDidFromToken =
+      typeof tokenValidation.claims.agent_did === 'string' && tokenValidation.claims.agent_did.trim().length > 0
+        ? tokenValidation.claims.agent_did.trim()
+        : undefined;
+
+    const tokenLane = tokenValidation.claims.token_lane;
+
+    if (requireCanonicalCst) {
+      if (!ownerDidFromToken || !controllerDidFromToken || !agentDidFromToken || tokenLane !== 'canonical') {
+        return errorResponseWithRateLimit(
+          'TOKEN_CONTROL_CHAIN_MISSING',
+          'Canonical chain claims are required: owner_did, controller_did, agent_did, token_lane=canonical',
+          401,
+          rateLimitInfo
+        );
+      }
+
+      if (normalizeDid(agentDidFromToken) !== normalizeDid(tokenValidation.claims.sub)) {
+        return errorResponseWithRateLimit(
+          'TOKEN_CONTROL_SUBJECT_MISMATCH',
+          'agent_did claim must match token subject (sub)',
+          401,
+          rateLimitInfo
+        );
+      }
+    }
+
     if (typeof tokenValidation.claims.token_scope_hash_b64u !== 'string' || tokenValidation.claims.token_scope_hash_b64u.length === 0) {
       return errorResponseWithRateLimit(
         'TOKEN_SCOPE_HASH_REQUIRED',
@@ -1526,10 +1578,21 @@ async function handleProxy(
       );
     }
 
+    const ownerRefFromToken =
+      typeof tokenValidation.claims.owner_ref === 'string' && tokenValidation.claims.owner_ref.trim().length > 0
+        ? tokenValidation.claims.owner_ref.trim()
+        : undefined;
+
     const policyHashFromToken =
       typeof tokenValidation.claims.policy_hash_b64u === 'string' &&
       tokenValidation.claims.policy_hash_b64u.trim().length > 0
         ? tokenValidation.claims.policy_hash_b64u.trim()
+        : undefined;
+
+    const controlPlanePolicyHashFromToken =
+      typeof tokenValidation.claims.control_plane_policy_hash_b64u === 'string' &&
+      tokenValidation.claims.control_plane_policy_hash_b64u.trim().length > 0
+        ? tokenValidation.claims.control_plane_policy_hash_b64u.trim()
         : undefined;
 
     const paymentAccountDidFromToken =
@@ -1538,20 +1601,32 @@ async function handleProxy(
         ? tokenValidation.claims.payment_account_did.trim()
         : undefined;
 
+    const missionIdFromToken =
+      typeof tokenValidation.claims.mission_id === 'string' && tokenValidation.claims.mission_id.trim().length > 0
+        ? tokenValidation.claims.mission_id.trim()
+        : undefined;
+
+    const spendCapFromToken =
+      typeof tokenValidation.claims.spend_cap === 'number' ? tokenValidation.claims.spend_cap : undefined;
+
     const tokenScopeHashFromToken = tokenValidation.claims.token_scope_hash_b64u.trim();
 
-    // CPX-US-035: Recompute token_scope_hash_b64u from canonical claims (fail-closed).
+    // CPX-US-035 + ICP-M6.1: Recompute token_scope_hash_b64u from canonical claims (fail-closed).
     let expectedTokenScopeHash: string;
     try {
       expectedTokenScopeHash = await computeTokenScopeHashB64uV1({
         sub: tokenValidation.claims.sub,
         aud: tokenValidation.claims.aud,
         scope: tokenValidation.claims.scope,
-        owner_ref: typeof tokenValidation.claims.owner_ref === 'string' ? tokenValidation.claims.owner_ref : undefined,
+        owner_ref: ownerRefFromToken,
+        owner_did: ownerDidFromToken,
+        controller_did: controllerDidFromToken,
+        agent_did: agentDidFromToken,
         policy_hash_b64u: policyHashFromToken,
+        control_plane_policy_hash_b64u: controlPlanePolicyHashFromToken,
         payment_account_did: paymentAccountDidFromToken,
-        spend_cap: typeof tokenValidation.claims.spend_cap === 'number' ? tokenValidation.claims.spend_cap : undefined,
-        mission_id: typeof tokenValidation.claims.mission_id === 'string' ? tokenValidation.claims.mission_id : undefined,
+        spend_cap: spendCapFromToken,
+        mission_id: missionIdFromToken,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown error';
@@ -1581,6 +1656,14 @@ async function handleProxy(
         token_scope_hash_b64u: tokenScopeHashFromToken,
         policy_hash_b64u: policyHashFromToken,
         payment_account_did: paymentAccountDidFromToken,
+        owner_ref: ownerRefFromToken,
+        owner_did: ownerDidFromToken,
+        controller_did: controllerDidFromToken,
+        agent_did: agentDidFromToken,
+        control_plane_policy_hash_b64u: controlPlanePolicyHashFromToken,
+        spend_cap: spendCapFromToken,
+        mission_id: missionIdFromToken,
+        token_lane: tokenLane,
       },
     };
   }

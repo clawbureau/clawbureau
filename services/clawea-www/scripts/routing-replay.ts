@@ -4,7 +4,7 @@
  *
  * Usage:
  *   LEADS_API_TOKEN=... npx tsx scripts/routing-replay.ts --base https://www.clawea.com --limit 10
- *   LEADS_API_TOKEN=... npx tsx scripts/routing-replay.ts --job-id route_job_abc --job-id route_job_def
+ *   LEADS_API_TOKEN=... npx tsx scripts/routing-replay.ts --job-id route_job_abc --job-id route_job_def --execute --force
  */
 
 import * as fs from "node:fs";
@@ -28,6 +28,8 @@ const getArgs = (name: string): string[] => {
   return out;
 };
 
+const hasFlag = (name: string): boolean => args.includes(`--${name}`);
+
 const TOKEN = process.env.LEADS_API_TOKEN
   ?? process.env.INDEX_AUTOMATION_TOKEN
   ?? process.env.CLAWEA_INDEX_AUTOMATION_TOKEN;
@@ -40,7 +42,11 @@ if (!TOKEN) {
 const base = (getArg("base") ?? process.env.CLAWEA_BASE_URL ?? "https://www.clawea.com").replace(/\/+$/, "");
 const endpoint = getArg("endpoint") ?? `${base}/api/routing/replay`;
 const limit = Math.max(1, Math.min(100, Number(getArg("limit") ?? "10")));
+const maxAgeHours = Math.max(1, Math.min(24 * 30, Number(getArg("max-age-hours") ?? "336")));
 const jobIds = getArgs("job-id").map((v) => v.trim()).filter(Boolean);
+const execute = hasFlag("execute");
+const force = hasFlag("force");
+const includeReplayed = hasFlag("include-replayed");
 
 const outFile = path.resolve(
   getArg("output")
@@ -48,7 +54,14 @@ const outFile = path.resolve(
 );
 
 async function main(): Promise<void> {
-  const body: Record<string, unknown> = { limit };
+  const body: Record<string, unknown> = {
+    limit,
+    maxAgeHours,
+    dryRun: !execute,
+    includeReplayed,
+  };
+  if (execute) body.confirm = "replay";
+  if (force) body.force = true;
   if (jobIds.length > 0) body.jobIds = jobIds;
 
   const res = await fetch(endpoint, {

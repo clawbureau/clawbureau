@@ -142,6 +142,12 @@ export interface Env {
    * Defaults to 5000 when unset.
    */
   CONTROL_VERIFY_TIMEOUT_MS?: string;
+
+  /**
+   * Maximum allowed age (seconds) for clawscope key transparency snapshots.
+   * Defaults to 3600 when unset.
+   */
+  CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS?: string;
 }
 
 /**
@@ -738,6 +744,13 @@ function parseControlVerifyTimeoutMs(raw: string | undefined): number {
   return Math.min(Math.max(n, 500), 15000);
 }
 
+function parseTransparencyMaxAgeSeconds(raw: string | undefined): number {
+  if (!raw) return 3600;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 3600;
+  return Math.min(Math.max(n, 60), 60 * 24);
+}
+
 function verificationHttpStatus(
   response: { result: { status: 'VALID' | 'INVALID' }; error?: { code?: string } }
 ): number {
@@ -789,6 +802,9 @@ async function handleVerifyTokenControl(request: Request, env: Env): Promise<Res
   const verification = await verifyTokenControl(body, {
     clawscopeBaseUrl: env.CLAWSCOPE_BASE_URL,
     timeoutMs: parseControlVerifyTimeoutMs(env.CONTROL_VERIFY_TIMEOUT_MS),
+    transparencyMaxAgeSeconds: parseTransparencyMaxAgeSeconds(
+      env.CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS
+    ),
   });
 
   const status = verificationHttpStatus(verification);

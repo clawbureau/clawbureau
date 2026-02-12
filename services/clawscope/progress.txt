@@ -235,6 +235,28 @@ Started: 2026-02-02T22:30:00Z
   - kid interop: `artifacts/smoke/identity-control-plane/2026-02-11T23-57-43-712Z-kid-interop/result.json`
 ---
 
+## 2026-02-12 - CSC-US-019 (canonical protected auth + governance transparency/SLO)
+- Implemented/finalized governance control-plane behavior in `services/clawscope/src/index.ts`:
+  - protected route auth mode default stays canonical (`SCOPE_PROTECTED_AUTH_MODE=canonical_cst`)
+  - key transparency endpoints operational:
+    - `GET /v1/keys/transparency/latest`
+    - `GET /v1/keys/transparency/history`
+    - `POST /v1/keys/transparency/snapshot`
+  - revocation governance endpoint operational:
+    - `GET /v1/reports/revocation-slo`
+- Route hardening fixes:
+  - bypassed observability admin router for `/v1/reports/revocation-slo` so canonical protected auth path is reached
+  - fixed transparency snapshot transition contract (`key.rotate`)
+- Deploy versions:
+  - staging: `clawscope-staging` -> `028de033-b1ac-45b5-82f5-904cd517e5b7`
+  - prod: `clawscope` -> `89b90fad-84da-4920-aceb-27d46c45256a`
+- Evidence:
+  - staging ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`
+  - prod ops summary: `artifacts/ops/identity-control-plane/2026-02-12T00-52-32-525Z-prod/deploy-summary.json`
+- Quality checks:
+  - `cd services/clawscope && npm run typecheck && npm test`
+---
+
 ## 2026-02-12 - CIN-OPS-001 scope policy extension
 - Added `clawincome:` to allowed scope prefixes for default policy tier:
   - `SCOPE_ALLOWED_SCOPE_PREFIXES = "proxy:,clawproxy:,clawbounties:,clawincome:,control:"`

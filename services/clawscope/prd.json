@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawscope-phase2",
-  "description": "clawscope.com (Scope + Observability) \u2014 PRD \u2014 Define and enforce scoped token access, issue/introspect CSTs, and provide mission + usage analytics across services.",
+  "description": "clawscope.com (Scope + Observability) — PRD — Define and enforce scoped token access, issue/introspect CSTs, and provide mission + usage analytics across services.",
   "userStories": [
     {
       "id": "CSC-US-001",
@@ -141,7 +141,7 @@
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Implemented cost rollups (`scope_daily_cost_rollups`) and API `GET /v1/analytics/cost` providing service-level request and estimated compute/storage cost totals. Rollups run through scheduled/manual aggregation and are persisted/exportable for finance tracking. Validated in M5 smoke with populated cost totals for both staging and prod." 
+      "notes": "Implemented cost rollups (`scope_daily_cost_rollups`) and API `GET /v1/analytics/cost` providing service-level request and estimated compute/storage cost totals. Rollups run through scheduled/manual aggregation and are persisted/exportable for finance tracking. Validated in M5 smoke with populated cost totals for both staging and prod."
     },
     {
       "id": "CSC-US-011",
@@ -155,7 +155,7 @@
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Implemented trace index + viewer APIs: `GET /v1/traces/{trace_id}` and `GET /v1/traces?correlation_id=...`. Request trace IDs/correlation IDs are persisted from emitted scope events into `scope_trace_index` with event timelines for root-cause workflows. M5 smoke validates deterministic trace retrieval (`trace_present=true`) across staging/prod." 
+      "notes": "Implemented trace index + viewer APIs: `GET /v1/traces/{trace_id}` and `GET /v1/traces?correlation_id=...`. Request trace IDs/correlation IDs are persisted from emitted scope events into `scope_trace_index` with event timelines for root-cause workflows. M5 smoke validates deterministic trace retrieval (`trace_present=true`) across staging/prod."
     },
     {
       "id": "CSC-US-012",
@@ -169,7 +169,7 @@
       ],
       "priority": 12,
       "passes": true,
-      "notes": "Implemented SLA rollup/report pipeline (`scope_sla_reports`) with endpoint `GET /v1/reports/sla`, built from daily event error/latency aggregates. Scheduled/manual rollup execution exports report artifacts to R2 for compliance retention. Verified endpoint behavior in staging/prod M5 smoke runs." 
+      "notes": "Implemented SLA rollup/report pipeline (`scope_sla_reports`) with endpoint `GET /v1/reports/sla`, built from daily event error/latency aggregates. Scheduled/manual rollup execution exports report artifacts to R2 for compliance retention. Verified endpoint behavior in staging/prod M5 smoke runs."
     },
     {
       "id": "CSC-US-013",
@@ -183,7 +183,7 @@
       ],
       "priority": 13,
       "passes": true,
-      "notes": "Implemented mission rollups (`scope_daily_mission_rollups`) and API `GET /v1/missions/aggregate?mission_id=...` aggregating request/error/token issuance activity per mission. Mission IDs are propagated from CST flows into observability events, then materialized through rollups for export/reporting. Staging/prod M5 smoke artifacts show non-zero mission rows after end-to-end issuance/introspection/revocation flows." 
+      "notes": "Implemented mission rollups (`scope_daily_mission_rollups`) and API `GET /v1/missions/aggregate?mission_id=...` aggregating request/error/token issuance activity per mission. Mission IDs are propagated from CST flows into observability events, then materialized through rollups for export/reporting. Staging/prod M5 smoke artifacts show non-zero mission rows after end-to-end issuance/introspection/revocation flows."
     },
     {
       "id": "CSC-US-014",
@@ -241,6 +241,21 @@
       "priority": 17,
       "passes": true,
       "notes": "Added deterministic introspection error `TOKEN_KID_EXPIRED` while preserving `TOKEN_UNKNOWN_KID`. Downstream compatibility validated through interop smoke and documented for Agent C in `scripts/identity/COMPATIBILITY-NOTE-AGENT-C-token-kid.md`."
+    },
+    {
+      "id": "CSC-US-019",
+      "title": "Canonical protected auth + governance transparency/SLO reports",
+      "description": "As platform security, we need protected control endpoints to require canonical CST plus transparent key-state and revocation propagation SLO reporting.",
+      "acceptanceCriteria": [
+        "Protected routes enforce canonical CST mode by default (`SCOPE_PROTECTED_AUTH_MODE=canonical_cst`)",
+        "Key transparency endpoints expose latest/history and signed snapshot generation",
+        "Revocation SLO reports are queryable and persistable with deterministic schema",
+        "Scheduled governance job refreshes transparency snapshots + revocation SLO materialization",
+        "Typecheck and tests pass"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Shipped with governance migration `services/clawscope/migrations/0002_governance_transparency_revocation_slo.sql`, protected auth routing in `services/clawscope/src/index.ts`, and new endpoints `/v1/keys/transparency/{latest,history}`, `/v1/keys/transparency/snapshot`, `/v1/reports/revocation-slo`. Deploys: staging `028de033-b1ac-45b5-82f5-904cd517e5b7`, prod `89b90fad-84da-4920-aceb-27d46c45256a`. M6 ops evidence: `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/deploy-summary.json`, `.../2026-02-12T00-52-32-525Z-prod/deploy-summary.json`."
     }
   ]
 }

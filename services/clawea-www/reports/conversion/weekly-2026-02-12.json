@@ -1,0 +1,320 @@
+{
+  "ok": true,
+  "range": {
+    "from": "2026-02-05T00:42:23.585Z",
+    "to": "2026-02-12T00:42:23.585Z",
+    "days": 7
+  },
+  "generatedAt": "2026-02-12T00:42:24.123Z",
+  "totals": {
+    "events": 7,
+    "contactIntentViews": 0,
+    "contactIntentActions": 4,
+    "leadSubmits": 2,
+    "bookingSubmits": 2,
+    "bookingCompletions": 2,
+    "intentToActionRate": 0,
+    "leadToBookingRate": 1,
+    "bookingCompletionRate": 1,
+    "searchQueries": 0,
+    "searchResultClicks": 0,
+    "searchToClickRate": 0
+  },
+  "breakdown": {
+    "byType": [
+      {
+        "key": "booking_complete",
+        "count": 2
+      },
+      {
+        "key": "booking_submit",
+        "count": 2
+      },
+      {
+        "key": "lead_submit",
+        "count": 2
+      },
+      {
+        "key": "cta_click",
+        "count": 1
+      }
+    ],
+    "bySource": [
+      {
+        "key": "book-api",
+        "count": 2
+      },
+      {
+        "key": "book-form",
+        "count": 2
+      },
+      {
+        "key": "direct",
+        "count": 2
+      },
+      {
+        "key": "utm:rev007-smoke",
+        "count": 1
+      }
+    ],
+    "topPages": [
+      {
+        "key": "/book",
+        "count": 4
+      },
+      {
+        "key": "/contact",
+        "count": 2
+      },
+      {
+        "key": "/pricing",
+        "count": 1
+      }
+    ],
+    "byPageFamily": [
+      {
+        "key": "book",
+        "count": 4
+      },
+      {
+        "key": "contact",
+        "count": 2
+      },
+      {
+        "key": "pricing",
+        "count": 1
+      }
+    ],
+    "topCtas": [
+      {
+        "key": "smoke",
+        "count": 1
+      }
+    ],
+    "byCtaVariant": [
+      {
+        "key": "submit",
+        "count": 6
+      }
+    ],
+    "byVariantId": [
+      {
+        "key": "book:proof:submit",
+        "count": 4
+      },
+      {
+        "key": "contact:proof:submit",
+        "count": 2
+      }
+    ],
+    "byHeroVariant": [
+      {
+        "key": "proof",
+        "count": 6
+      }
+    ],
+    "byOutcome": [
+      {
+        "key": "submitted",
+        "count": 4
+      },
+      {
+        "key": "completed",
+        "count": 2
+      }
+    ]
+  },
+  "funnel": {
+    "search": {
+      "queries": 0,
+      "clicks": 0,
+      "searchToClickRate": 0,
+      "topQueries": []
+    },
+    "ctaByPageFamily": [
+      {
+        "pageFamily": "book",
+        "views": 0,
+        "clicks": 0,
+        "actions": 2,
+        "actionRate": 0
+      },
+      {
+        "pageFamily": "contact",
+        "views": 0,
+        "clicks": 0,
+        "actions": 2,
+        "actionRate": 0
+      },
+      {
+        "pageFamily": "pricing",
+        "views": 0,
+        "clicks": 1,
+        "actions": 0,
+        "actionRate": 0
+      }
+    ],
+    "variants": [
+      {
+        "variantId": "book:proof:submit",
+        "impressions": 0,
+        "clicks": 0,
+        "submits": 2,
+        "clickRate": 0,
+        "submitRate": 0
+      },
+      {
+        "variantId": "contact:proof:submit",
+        "impressions": 0,
+        "clicks": 0,
+        "submits": 2,
+        "clickRate": 0,
+        "submitRate": 0
+      }
+    ],
+    "booking": {
+      "leadSubmits": 2,
+      "bookingSubmits": 2,
+      "bookingCompletions": 2,
+      "leadToBookingRate": 1,
+      "bookingCompletionRate": 1
+    }
+  },
+  "indexing": {
+    "queue": {
+      "totalEntries": 0,
+      "byEngine": {
+        "indexnow": {
+          "queued": 0,
+          "retry": 0,
+          "done": 0,
+          "failed": 0
+        },
+        "google": {
+          "queued": 0,
+          "retry": 0,
+          "done": 0,
+          "failed": 0
+        }
+      }
+    },
+    "lastRun": {
+      "runId": "2026-02-12T00-40-40-946Z",
+      "source": "scheduled",
+      "startedAt": "2026-02-12T00:40:40.946Z",
+      "finishedAt": "2026-02-12T00:40:41.093Z",
+      "processedEntries": 0,
+      "processedEngines": 0,
+      "succeeded": 0,
+      "scheduledRetry": 0,
+      "failed": 0,
+      "clearedEntries": 0,
+      "simulate429": false,
+      "items": [],
+      "queueAfter": {
+        "totalEntries": 0,
+        "byEngine": {
+          "indexnow": {
+            "queued": 0,
+            "retry": 0,
+            "done": 0,
+            "failed": 0
+          },
+          "google": {
+            "queued": 0,
+            "retry": 0,
+            "done": 0,
+            "failed": 0
+          }
+        }
+      }
+    }
+  },
+  "attributionRevenue": {
+    "ok": true,
+    "generatedAt": "2026-02-12T00:42:24.267Z",
+    "range": {
+      "from": "2026-02-05T00:42:24.223Z",
+      "to": "2026-02-12T00:42:24.223Z",
+      "days": 7
+    },
+    "totals": {
+      "leads": 3,
+      "booked": 2,
+      "completed": 2,
+      "leadToBookedRate": 0.6667,
+      "leadToCompletedRate": 0.6667
+    },
+    "attribution": {
+      "firstTouch": [
+        {
+          "source": "direct",
+          "leads": 2,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 0.5,
+          "leadToCompletedRate": 0.5
+        },
+        {
+          "source": "utm:rev007-smoke",
+          "leads": 1,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 1,
+          "leadToCompletedRate": 1
+        }
+      ],
+      "lastTouch": [
+        {
+          "source": "direct",
+          "leads": 2,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 0.5,
+          "leadToCompletedRate": 0.5
+        },
+        {
+          "source": "utm:rev007-smoke",
+          "leads": 1,
+          "booked": 1,
+          "completed": 1,
+          "assists": 0,
+          "leadToBookedRate": 1,
+          "leadToCompletedRate": 1
+        }
+      ],
+      "assists": []
+    },
+    "conversionByDimension": [
+      {
+        "source": "direct",
+        "sourceIntent": "direct",
+        "campaignId": "",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 2,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 0.5,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 0.5
+      },
+      {
+        "source": "utm:rev007-smoke",
+        "sourceIntent": "high-intent",
+        "campaignId": "aeo-rev-007-smoke",
+        "pageFamily": "contact",
+        "variant": "",
+        "leads": 1,
+        "booked": 1,
+        "completed": 1,
+        "leadToBookedRate": 1,
+        "bookedToCompletedRate": 1,
+        "leadToCompletedRate": 1
+      }
+    ]
+  }
+}

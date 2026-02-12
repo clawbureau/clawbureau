@@ -44,7 +44,20 @@ export interface Env {
   CST_AUDIENCE?: string;
 
   /**
-   * CPX-US-032: strict auth header mode
+   * ICP-M6.2: require CST on all proxy routes.
+   * Defaults to true (fail-closed) when unset.
+   */
+  PROXY_REQUIRE_CST?: string;
+
+  /**
+   * ICP-M6.2: require canonical chain claims on CST tokens.
+   * Defaults to true (fail-closed) when unset.
+   */
+  PROXY_REQUIRE_CANONICAL_CST?: string;
+
+  /**
+   * CPX-US-032 + ICP-M6.2: strict auth header mode.
+   * Defaults to true (fail-closed) when unset.
    * When enabled, CST must be provided via X-CST/X-Scoped-Token and provider keys via X-Provider-API-Key.
    * Authorization header overloading is rejected.
    */
