@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { hashJsonB64u, sha256B64u, base64UrlEncode } from './crypto.js';
 import type { EphemeralDid } from './ephemeral-did.js';
 import type { SignedEnvelope, GatewayReceiptPayload, ProofBundlePayload, EventChainEntry } from './types.js';
+import { CausalSieve, type LocalPolicy, type PolicyViolation } from './causal-sieve.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -29,6 +30,12 @@ export interface ProxyOptions {
   clawproxyUrl?: string;
   /** Provider API key for OpenAI (passed through to clawproxy). */
   providerApiKey?: string;
+  /** Local WPC policy for the TCP Guillotine. */
+  policy?: LocalPolicy | null;
+  /** Working directory for git diff operations. */
+  cwd?: string;
+  /** Callback when a policy violation is detected in the stream. */
+  onViolation?: (violation: PolicyViolation) => void;
 }
 
 /** A running local proxy instance. */
@@ -41,6 +48,12 @@ export interface LocalProxy {
   compileProofBundle(): Promise<SignedEnvelope<ProofBundlePayload>>;
   /** Number of receipts collected so far. */
   receiptCount: number;
+  /** Number of tool receipts synthesized by the Causal Sieve. */
+  toolReceiptCount: number;
+  /** Number of side-effect receipts synthesized by the Causal Sieve. */
+  sideEffectReceiptCount: number;
+  /** Number of policy violations detected by the TCP Guillotine. */
+  violationCount: number;
   /** Per-run privacy salt (base64url-encoded, 16 bytes). Needed by verifiers. */
   runSaltB64u: string;
 }
@@ -253,6 +266,9 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     runId,
     clawproxyUrl = 'https://clawproxy.com',
     providerApiKey,
+    policy = null,
+    cwd,
+    onViolation,
   } = options;
 
   const normalizedUrl = clawproxyUrl.replace(/\/+$/, '');
@@ -262,6 +278,18 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   // Generate a 16-byte random salt per run.
   const runSaltBytes = randomBytes(16);
   const runSaltB64u = base64UrlEncode(runSaltBytes);
+
+  // CAUSAL SIEVE: Initialize tool observability.
+  // Parses LLM HTTP traffic to extract tool_calls/tool_results,
+  // runs git diff between tool boundaries to detect file mutations.
+  const sieve = new CausalSieve({
+    agentDid,
+    runId,
+    cwd,
+    policy,
+    onViolation,
+  });
+  await sieve.initialize();
 
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://127.0.0.1`);
@@ -296,6 +324,17 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
       const incomingKey = extractProviderKey(reqHeaders) ?? providerApiKey;
 
+      // CAUSAL SIEVE: Process outgoing request for tool_results.
+      // This detects when the agent sends tool execution results back
+      // to the LLM, which means a tool just finished executing.
+      // We run git diff to capture file mutations from that tool.
+      const providerType = (provider === 'anthropic' ? 'anthropic' : 'openai') as 'openai' | 'anthropic';
+      try {
+        await sieve.processAgentRequest(providerType, bodyBuffer.toString('utf-8'));
+      } catch {
+        // Sieve errors must not break the proxy pipeline
+      }
+
       const upstream = await forwardToClawproxy(
         provider,
         bodyBuffer,
@@ -318,6 +357,32 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
           provider: receiptInfo.provider,
           model: receiptInfo.model,
         });
+      }
+
+      // CAUSAL SIEVE: Process LLM response for tool_calls.
+      // This detects what tools the LLM is requesting the agent to execute.
+      // The TCP Guillotine evaluates these against the local WPC policy.
+      let guillotineViolations: PolicyViolation[] = [];
+      try {
+        guillotineViolations = sieve.processLLMResponse(
+          providerType,
+          upstream.body.toString('utf-8'),
+        );
+      } catch {
+        // Sieve errors must not break the proxy pipeline
+      }
+
+      // TCP GUILLOTINE: If the LLM requested a blocked tool,
+      // log the violation. We still forward the response because
+      // the proxy can't reliably sever mid-stream for all clients.
+      // The violation is recorded in the proof bundle for the GitHub
+      // App to enforce at PR time.
+      if (guillotineViolations.length > 0) {
+        for (const v of guillotineViolations) {
+          process.stderr.write(
+            `\x1b[31m[clawsig:guillotine]\x1b[0m BLOCKED: ${v.reason}\n`,
+          );
+        }
       }
 
       // Forward response back to the caller
@@ -352,6 +417,13 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
   });
 
   async function stop(): Promise<void> {
+    // Finalize the Causal Sieve: sweep for remaining file mutations
+    try {
+      await sieve.finalize();
+    } catch {
+      // Finalization errors must not prevent shutdown
+    }
+
     return new Promise((resolve, reject) => {
       server.close((err) => {
         if (err) reject(err);
@@ -429,6 +501,16 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       payload.receipts = envelopes;
     }
 
+    // CAUSAL SIEVE: Include synthesized tool and side-effect receipts.
+    // These are auto-generated from parsing the LLM HTTP stream
+    // and running git diff between tool execution boundaries.
+    if (sieve.toolReceipts.length > 0) {
+      payload.tool_receipts = sieve.toolReceipts.map(e => e.payload);
+    }
+    if (sieve.sideEffectReceipts.length > 0) {
+      payload.side_effect_receipts = sieve.sideEffectReceipts.map(e => e.payload);
+    }
+
     // Sign the bundle
     const payloadHashB64u = await hashJsonB64u(payload);
     const signatureB64u = await agentDid.sign(encoder.encode(payloadHashB64u));
@@ -454,6 +536,15 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     compileProofBundle,
     get receiptCount() {
       return receipts.length;
+    },
+    get toolReceiptCount() {
+      return sieve.toolReceipts.length;
+    },
+    get sideEffectReceiptCount() {
+      return sieve.sideEffectReceipts.length;
+    },
+    get violationCount() {
+      return sieve.violations.length;
     },
     runSaltB64u,
   };
