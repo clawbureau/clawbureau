@@ -1,6 +1,6 @@
 {
   "name": "@clawbureau/clawsig-conformance",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Conformance test runner and GitHub Action for the Clawsig Inside program.",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,7 +41,7 @@
   "homepage": "https://clawsig.com/directory",
   "bugs": "https://github.com/clawbureau/clawbureau/issues",
   "dependencies": {
-    "@clawbureau/clawverify-core": "^0.1.1"
+    "@clawbureau/clawverify-core": "^0.2.0"
   },
   "devDependencies": {
     "@actions/core": "^1.11.1",
