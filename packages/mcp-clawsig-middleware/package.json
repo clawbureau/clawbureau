@@ -1,0 +1,30 @@
+{
+  "name": "@clawbureau/mcp-clawsig-middleware",
+  "version": "0.1.0",
+  "description": "Clawsig middleware for MCP — automatically generate tool_receipts from MCP tool invocations",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "clawsig-mcp-wrap": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["mcp", "clawsig", "verification", "provenance", "tool-receipts"],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@clawbureau/clawsig-sdk": "file:../clawsig-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
