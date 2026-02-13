@@ -36,6 +36,21 @@ export interface ProxyOptions {
   cwd?: string;
   /** Callback when a policy violation is detected in the stream. */
   onViolation?: (violation: PolicyViolation) => void;
+  /**
+   * Passthrough mode: forward directly to upstream provider APIs
+   * instead of routing through clawproxy.com.
+   *
+   * In passthrough mode:
+   * - Requests go straight to api.anthropic.com / api.openai.com
+   * - Original auth headers are preserved
+   * - No gateway receipts are generated (no clawproxy)
+   * - The Causal Sieve still parses tool_calls/tool_results
+   * - Git diff still detects file mutations
+   *
+   * Use this when the agent has its own API auth (OAuth, API keys)
+   * that clawproxy doesn't support.
+   */
+  passthrough?: boolean;
 }
 
 /** A running local proxy instance. */
@@ -172,6 +187,69 @@ async function forwardToClawproxy(
   };
 }
 
+/** Map provider name to upstream API base URL. */
+const UPSTREAM_URLS: Record<string, string> = {
+  openai: 'https://api.openai.com',
+  anthropic: 'https://api.anthropic.com',
+  google: 'https://generativelanguage.googleapis.com',
+};
+
+/** Map provider to the expected API path. */
+const UPSTREAM_PATHS: Record<string, string> = {
+  openai: '/v1/chat/completions',
+  anthropic: '/v1/messages',
+};
+
+/**
+ * Forward a request directly to the upstream provider (passthrough mode).
+ * Preserves the original auth headers from the incoming request.
+ */
+async function forwardToUpstream(
+  provider: string,
+  bodyBuffer: Buffer,
+  incomingHeaders: Record<string, string | string[] | undefined>,
+): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean }> {
+  const baseUrl = UPSTREAM_URLS[provider] ?? `https://api.${provider}.com`;
+  const path = UPSTREAM_PATHS[provider] ?? '/v1/chat/completions';
+  const targetUrl = `${baseUrl}${path}`;
+
+  // Forward relevant headers (auth, content-type, provider-specific)
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Preserve auth headers
+  const authHeader = incomingHeaders['authorization'];
+  if (typeof authHeader === 'string') headers['Authorization'] = authHeader;
+
+  const apiKey = incomingHeaders['x-api-key'];
+  if (typeof apiKey === 'string') headers['x-api-key'] = apiKey;
+
+  // Preserve Anthropic-specific headers
+  const anthropicVersion = incomingHeaders['anthropic-version'];
+  if (typeof anthropicVersion === 'string') headers['anthropic-version'] = anthropicVersion;
+
+  const anthropicBeta = incomingHeaders['anthropic-beta'];
+  if (typeof anthropicBeta === 'string') headers['anthropic-beta'] = anthropicBeta;
+
+  const res = await fetch(targetUrl, {
+    method: 'POST',
+    headers,
+    body: new Uint8Array(bodyBuffer),
+  });
+
+  const contentType = res.headers.get('content-type') ?? '';
+  const isStream = contentType.includes('text/event-stream');
+  const responseBuffer = Buffer.from(await res.arrayBuffer());
+
+  const responseHeaders: Record<string, string> = {};
+  res.headers.forEach((value, key) => {
+    responseHeaders[key] = value;
+  });
+
+  return { status: res.status, headers: responseHeaders, body: responseBuffer, isStream };
+}
+
 /**
  * Extract receipt envelope from a clawproxy JSON response.
  */
@@ -269,6 +347,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
     policy = null,
     cwd,
     onViolation,
+    passthrough = false,
   } = options;
 
   const normalizedUrl = clawproxyUrl.replace(/\/+$/, '');
@@ -335,15 +414,18 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         // Sieve errors must not break the proxy pipeline
       }
 
-      const upstream = await forwardToClawproxy(
-        provider,
-        bodyBuffer,
-        incomingKey,
-        normalizedUrl,
-        runId,
-        agentDid.did,
-        idempotencyKey,
-      );
+      // Forward request: passthrough goes direct to provider, otherwise through clawproxy
+      const upstream = passthrough
+        ? await forwardToUpstream(provider, bodyBuffer, reqHeaders)
+        : await forwardToClawproxy(
+            provider,
+            bodyBuffer,
+            incomingKey,
+            normalizedUrl,
+            runId,
+            agentDid.did,
+            idempotencyKey,
+          );
 
       // Collect receipt from response
       const receiptInfo = upstream.isStream
