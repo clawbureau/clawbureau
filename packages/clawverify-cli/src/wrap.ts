@@ -9,16 +9,24 @@
  */
 
 import { spawn, execFile } from 'node:child_process';
-import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, copyFile, chmod } from 'node:fs/promises';
+import { openSync, readSync, closeSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtemp } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import {
   generateEphemeralDid,
   startLocalProxy,
+  FsSentinel,
+  NetSentinel,
 } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
   ProofBundlePayload,
+  ExecutionReceiptPayload,
+  NetworkReceiptPayload,
   LocalPolicy,
 } from '@clawbureau/clawsig-sdk';
 
@@ -89,7 +97,38 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements\n`);
   }
 
-  // 3. Start local proxy with Causal Sieve
+  // 3. Set up deep execution sentinels
+  const tmpDir = await mkdtemp(join(tmpdir(), 'clawsig-'));
+  const traceFile = join(tmpDir, 'shell-trace.jsonl');
+  await writeFile(traceFile, '', 'utf-8'); // Create empty trace file
+
+  // Copy sentinel-shell.sh to temp dir
+  let sentinelShellPath: string | null = null;
+  try {
+    // Resolve from the SDK package
+    const sdkSentinelPath = resolveSentinelShellPath();
+    sentinelShellPath = join(tmpDir, 'sentinel-shell.sh');
+    await copyFile(sdkSentinelPath, sentinelShellPath);
+    await chmod(sentinelShellPath, 0o755);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG)\n`);
+  } catch {
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (could not locate sentinel-shell.sh)\n`);
+  }
+
+  // Start FS Sentinel
+  const fsSentinel = new FsSentinel({
+    watchDirs: [process.cwd()],
+  });
+  fsSentinel.start();
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ACTIVE (fs.watch recursive)\n`);
+
+  // Start Network Sentinel
+  const netSentinel = new NetSentinel({
+    pollIntervalMs: 500,
+  });
+  // PID set after spawn
+
+  // 4. Start local proxy with Causal Sieve
   // Use passthrough mode by default (forward directly to upstream provider).
   // This preserves the agent's native auth (OAuth, API keys) without requiring
   // clawproxy CST tokens. Gateway receipts are only available when an explicit
@@ -113,7 +152,7 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
   }
 
-  // 3. Spawn child process with env overrides
+  // 5. Spawn child process with env overrides
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
     OPENAI_BASE_URL: `http://127.0.0.1:${proxy.port}/v1/proxy/openai`,
@@ -122,8 +161,6 @@ export async function wrap(
     CLAWSIG_AGENT_DID: agentDid.did,
 
     // RED TEAM FIX #6: Socket-level interception preload.
-    // Inject Node.js --import flag to monkey-patch http/https at socket level.
-    // Use absolute file:// URL so the preload resolves regardless of CWD.
     CLAWSIG_PROXY_PORT: String(proxy.port),
     CLAWSIG_PROXY_URL: `http://127.0.0.1:${proxy.port}`,
     NODE_OPTIONS: [
@@ -131,14 +168,22 @@ export async function wrap(
       `--import ${resolvePreloadPath()}`,
     ].filter(Boolean).join(' '),
 
-    // Polyglot proxy env vars: Python (requests/httpx), Go (net/http),
-    // curl, and other runtimes that respect standard proxy environment.
+    // Polyglot proxy env vars
     HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
     HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
     http_proxy: `http://127.0.0.1:${proxy.port}`,
     https_proxy: `http://127.0.0.1:${proxy.port}`,
     NO_PROXY: 'localhost,127.0.0.1',
     no_proxy: 'localhost,127.0.0.1',
+
+    // Deep Execution Sentinels
+    // BASH_ENV: auto-sourced by every bash subshell (trap DEBUG)
+    // ENV: sourced by POSIX sh in some configurations
+    ...(sentinelShellPath ? {
+      BASH_ENV: sentinelShellPath,
+      ENV: sentinelShellPath,
+    } : {}),
+    CLAWSIG_TRACE_FILE: traceFile,
   };
 
   // Pass through existing API keys from parent env
@@ -159,6 +204,13 @@ export async function wrap(
       shell: false,
     });
 
+    // Track child PID for network sentinel
+    if (child.pid) {
+      netSentinel.setTargetPid(child.pid);
+    }
+    netSentinel.start();
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ACTIVE (${child.pid ? `PID ${child.pid}` : 'all connections'})\n`);
+
     child.on('error', (err) => {
       process.stderr.write(`\n\x1b[31m[clawsig]\x1b[0m Failed to spawn: ${err.message}\n`);
       resolve(1);
@@ -169,12 +221,53 @@ export async function wrap(
     });
   });
 
-  // 4. Compile proof bundle
+  // 6. Stop sentinels, harvest data, compile proof bundle
+  fsSentinel.stop();
+  netSentinel.stop();
+
   process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Child exited with code ${exitCode}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Receipts collected: ${proxy.receiptCount}\n`);
 
+  // Harvest Sentinel Shell trace
+  const shellEvents = await harvestShellTrace(traceFile);
+  const executionReceipts = await synthesizeExecutionReceipts(shellEvents, agentDid.did, runId);
+
+  // Harvest Network Sentinel events
+  const netEvents = netSentinel.getEvents();
+  const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
+
+  // Sentinel summary
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ${shellEvents.length} commands captured\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ${fsSentinel.eventCount} file events\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
+
+  if (netSentinel.suspiciousCount > 0) {
+    process.stderr.write(`\x1b[31m[clawsig]\x1b[0m WARNING: Suspicious network connections detected!\n`);
+    for (const e of netSentinel.getSuspiciousEvents().slice(0, 5)) {
+      process.stderr.write(`\x1b[31m[clawsig]\x1b[0m   ${e.remoteAddress} (${e.processName ?? 'unknown'} PID:${e.pid ?? '?'})\n`);
+    }
+  }
+
   const bundle = await proxy.compileProofBundle();
   await proxy.stop();
+
+  // Inject sentinel receipts into the bundle
+  if (executionReceipts.length > 0) {
+    bundle.payload.execution_receipts = executionReceipts;
+  }
+  if (networkReceipts.length > 0) {
+    bundle.payload.network_receipts = networkReceipts;
+  }
+  // Add sentinel metadata
+  bundle.payload.metadata = {
+    ...bundle.payload.metadata,
+    sentinels: {
+      shell_events: shellEvents.length,
+      fs_events: fsSentinel.eventCount,
+      net_events: netSentinel.eventCount,
+      net_suspicious: netSentinel.suspiciousCount,
+    },
+  };
 
   // Print summary
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
@@ -182,9 +275,17 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${bundle.payload.receipts?.length ?? 0}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts (Shell): ${executionReceipts.length}\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Network receipts: ${networkReceipts.length}\n`);
   if (proxy.violationCount > 0) {
     process.stderr.write(`\x1b[31m[clawsig]\x1b[0m Policy violations: ${proxy.violationCount}\n`);
   }
+
+  // Clean up temp dir
+  try {
+    const { rm } = await import('node:fs/promises');
+    await rm(tmpDir, { recursive: true, force: true });
+  } catch { /* ignore cleanup errors */ }
 
   // 5. Always write bundle to .clawsig/proof_bundle.json
   await writeBundleToDisk(bundle);
@@ -404,4 +505,141 @@ async function tryAttachBadgeToPR(badgeUrl: string, ledgerUrl: string): Promise<
       `  [![Clawsig Verified](${badgeUrl})](${ledgerUrl})\n`,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Deep Execution Sentinel Helpers
+// ---------------------------------------------------------------------------
+
+interface ShellTraceEvent {
+  layer: string;
+  ts: string;
+  pid: number;
+  ppid: number;
+  cwd: string;
+  cmd: string;
+  type: string;
+  target: string;
+  exit: number;
+}
+
+/**
+ * Resolve the sentinel-shell.sh path from the SDK package.
+ */
+function resolveSentinelShellPath(): string {
+  // Try resolving from the SDK package
+  try {
+    const { createRequire } = require('node:module') as { createRequire: (url: string | URL) => NodeRequire };
+    const localRequire = createRequire(import.meta.url);
+    const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
+    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    return join(sdkDir, 'src', 'sentinel-shell.sh');
+  } catch {
+    // Fallback: relative to this file
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+    return join(thisDir, '..', '..', 'clawsig-sdk', 'src', 'sentinel-shell.sh');
+  }
+}
+
+/**
+ * Read and parse the Sentinel Shell trace file (JSONL).
+ * Returns parsed events, discarding unparseable lines.
+ */
+async function harvestShellTrace(traceFile: string): Promise<ShellTraceEvent[]> {
+  const events: ShellTraceEvent[] = [];
+
+  try {
+    const content = await readFile(traceFile, 'utf-8');
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line) as ShellTraceEvent;
+        if (event.layer === 'shell' && event.cmd) {
+          events.push(event);
+        }
+      } catch {
+        // Skip unparseable lines
+      }
+    }
+  } catch {
+    // Trace file doesn't exist or can't be read
+  }
+
+  return events;
+}
+
+/**
+ * Synthesize ExecutionReceiptPayload entries from shell trace events.
+ * Hashes command strings and targets for privacy.
+ */
+async function synthesizeExecutionReceipts(
+  events: ShellTraceEvent[],
+  agentDid: string,
+  runId: string,
+): Promise<ExecutionReceiptPayload[]> {
+  const receipts: ExecutionReceiptPayload[] = [];
+  const encoder = new TextEncoder();
+
+  // Import hash function
+  const { sha256B64u } = await import('@clawbureau/clawsig-sdk');
+
+  for (const event of events) {
+    const commandHash = await sha256B64u(encoder.encode(event.cmd));
+    const cwdHash = await sha256B64u(encoder.encode(event.cwd));
+    const targetHash = event.target
+      ? await sha256B64u(encoder.encode(event.target))
+      : undefined;
+
+    receipts.push({
+      receipt_version: '1',
+      receipt_id: `ex_${crypto.randomUUID()}`,
+      command_hash_b64u: commandHash,
+      command_type: event.type,
+      target_hash_b64u: targetHash,
+      pid: event.pid,
+      ppid: event.ppid,
+      cwd_hash_b64u: cwdHash,
+      exit_code: event.exit,
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: event.ts,
+      binding: { run_id: runId },
+    });
+  }
+
+  return receipts;
+}
+
+/**
+ * Synthesize NetworkReceiptPayload entries from network sentinel events.
+ */
+async function synthesizeNetworkReceipts(
+  events: Array<{ layer: string; ts: string; protocol: string; remoteAddress: string; state: string; pid: number | null; processName: string | null; classification: string }>,
+  agentDid: string,
+  runId: string,
+): Promise<NetworkReceiptPayload[]> {
+  const receipts: NetworkReceiptPayload[] = [];
+  const encoder = new TextEncoder();
+  const { sha256B64u } = await import('@clawbureau/clawsig-sdk');
+
+  for (const event of events) {
+    const remoteHash = await sha256B64u(encoder.encode(event.remoteAddress));
+
+    receipts.push({
+      receipt_version: '1',
+      receipt_id: `net_${crypto.randomUUID()}`,
+      protocol: event.protocol,
+      remote_address_hash_b64u: remoteHash,
+      state: event.state,
+      classification: event.classification,
+      pid: event.pid,
+      process_name: event.processName,
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: event.ts,
+      binding: { run_id: runId },
+    });
+  }
+
+  return receipts;
 }

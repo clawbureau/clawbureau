@@ -220,6 +220,10 @@ export interface ProofBundlePayload {
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
   tool_receipts?: ToolReceiptPayload[];
   side_effect_receipts?: SideEffectReceiptPayload[];
+  /** Execution receipts from the Sentinel Shell (bash commands). */
+  execution_receipts?: ExecutionReceiptPayload[];
+  /** Network receipts from the Network Sentinel (TCP connections). */
+  network_receipts?: NetworkReceiptPayload[];
   human_approval_receipts?: HumanApprovalReceiptPayload[];
   metadata?: {
     harness?: {
@@ -228,7 +232,71 @@ export interface ProofBundlePayload {
       runtime?: string;
       config_hash_b64u?: string;
     };
+    sentinels?: {
+      shell_events?: number;
+      fs_events?: number;
+      net_events?: number;
+      net_suspicious?: number;
+    };
     [key: string]: unknown;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Execution receipt types (Sentinel Shell observations)
+// ---------------------------------------------------------------------------
+
+/** Execution receipt: a shell command observed by the Sentinel Shell. */
+export interface ExecutionReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  /** The command string that was executed. */
+  command_hash_b64u: string;
+  /** Classification: command, network_egress, secret_access, env_manipulation. */
+  command_type: string;
+  /** Extracted target (URL, file path, env var). */
+  target_hash_b64u?: string;
+  /** PID that executed the command. */
+  pid: number;
+  /** Parent PID. */
+  ppid: number;
+  /** Working directory at execution time. */
+  cwd_hash_b64u: string;
+  /** Exit code of the previous command. */
+  exit_code: number;
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  binding?: {
+    run_id?: string;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Network receipt types (Network Sentinel observations)
+// ---------------------------------------------------------------------------
+
+/** Network receipt: a TCP connection observed by the Network Sentinel. */
+export interface NetworkReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  /** Protocol (tcp, tcp6). */
+  protocol: string;
+  /** Remote address hash (IP:port). */
+  remote_address_hash_b64u: string;
+  /** Connection state. */
+  state: string;
+  /** Classification: llm_provider, authorized, suspicious, local. */
+  classification: string;
+  /** PID that owns the connection (if resolved). */
+  pid: number | null;
+  /** Process name (if resolved). */
+  process_name: string | null;
+  hash_algorithm: 'SHA-256';
+  agent_did: string;
+  timestamp: string;
+  binding?: {
+    run_id?: string;
   };
 }
 
