@@ -9,7 +9,7 @@
  */
 
 import { spawn, execFile } from 'node:child_process';
-import { writeFile, mkdir, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import {
@@ -19,6 +19,7 @@ import {
 import type {
   SignedEnvelope,
   ProofBundlePayload,
+  LocalPolicy,
 } from '@clawbureau/clawsig-sdk';
 
 const execFileAsync = promisify(execFile);
@@ -82,9 +83,26 @@ export async function wrap(
   process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
 
-  // 2. Start local proxy
-  const proxy = await startLocalProxy({ agentDid, runId });
+  // 2. Load local WPC policy (if present)
+  const policy = await loadLocalPolicy();
+  if (policy) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements\n`);
+  }
+
+  // 3. Start local proxy with Causal Sieve
+  const proxy = await startLocalProxy({
+    agentDid,
+    runId,
+    policy,
+    cwd: process.cwd(),
+    onViolation: (v) => {
+      process.stderr.write(
+        `\x1b[31m[clawsig:guillotine]\x1b[0m VIOLATION: ${v.reason}\n`,
+      );
+    },
+  });
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Local proxy listening on 127.0.0.1:${proxy.port}\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Causal Sieve: ACTIVE (tool observability enabled)\n`);
 
   // 3. Spawn child process with env overrides
   const childEnv: Record<string, string | undefined> = {
@@ -121,7 +139,8 @@ export async function wrap(
     childEnv['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
   }
 
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n`);
+  process.stderr.write(`\n`);
 
   const exitCode = await new Promise<number>((resolve) => {
     const child = spawn(command, args, {
@@ -150,7 +169,12 @@ export async function wrap(
   // Print summary
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Receipts: ${bundle.payload.receipts?.length ?? 0} gateway receipts\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${bundle.payload.receipts?.length ?? 0}\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
+  if (proxy.violationCount > 0) {
+    process.stderr.write(`\x1b[31m[clawsig]\x1b[0m Policy violations: ${proxy.violationCount}\n`);
+  }
 
   // 5. Always write bundle to .clawsig/proof_bundle.json
   await writeBundleToDisk(bundle);
@@ -253,6 +277,24 @@ async function writeBundleToDisk(bundle: SignedEnvelope<ProofBundlePayload>): Pr
     process.stderr.write(
       `\x1b[33m[clawsig]\x1b[0m Could not write bundle to .clawsig/proof_bundle.json: ${message}\n`,
     );
+  }
+}
+
+/**
+ * Load local WPC policy from .clawsig/policy.json (if present).
+ * Returns null if no policy file exists.
+ */
+async function loadLocalPolicy(): Promise<LocalPolicy | null> {
+  try {
+    const policyPath = join(process.cwd(), '.clawsig', 'policy.json');
+    const raw = await readFile(policyPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed?.statements && Array.isArray(parsed.statements)) {
+      return { statements: parsed.statements };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

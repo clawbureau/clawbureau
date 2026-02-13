@@ -51,6 +51,9 @@ export {
   importKeyPairJWK,
 } from './crypto.js';
 
+// Causal Sieve — tool observability without agent cooperation
+export { CausalSieve } from './causal-sieve.js';
+
 // Types
 export type {
   ClawproofConfig,
@@ -74,8 +77,22 @@ export type {
   URMDocument,
   EventChainEntry,
   GatewayReceiptPayload,
+  ToolReceiptPayload,
+  SideEffectReceiptPayload,
 } from './types.js';
 
 // Wrap types
 export type { EphemeralDid } from './ephemeral-did.js';
 export type { LocalProxy, ProxyOptions } from './local-proxy.js';
+
+// Causal Sieve types
+export type {
+  ExtractedToolCall,
+  ExtractedToolResult,
+  DetectedMutation,
+  CausalToolInvocation,
+  PolicyViolation,
+  LocalPolicy,
+  LocalPolicyStatement,
+  CausalSieveOptions,
+} from './causal-sieve.js';
