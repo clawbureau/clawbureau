@@ -10,7 +10,7 @@ import type { PolicyConfig, VerificationSummary } from './types';
 import { isGatewayTrusted, meetsTierRequirement } from './trust';
 import { isAgentAllowed, hasRequiredReceipts } from './policy';
 import { getFileContent, getPRFiles, getPRBody } from './github';
-import { reconcileDiffWithBundle } from './reconcile';
+import { reconcileDiffWithBundle, formatReconciliationSummary } from './reconcile';
 import type { ReconciliationResult } from './reconcile';
 
 // ---------- VaaS URL patterns ----------
@@ -392,18 +392,18 @@ function buildNormalResult(
   const lines: string[] = [];
 
   if (allValid) {
-    lines.push('All proof bundles passed verification and diff reconciliation.');
+    // Differential Provenance: show breakdown of agent vs human authorship
+    const { summary: provSummary } = reconciliation;
+    if (provSummary.mixed_files > 0 || provSummary.human_files > 0) {
+      lines.push(`**Provenance Verified** (Agent: ${provSummary.agent_files} files, ` +
+        `Mixed: ${provSummary.mixed_files}, Human: ${provSummary.human_files})`);
+    } else {
+      lines.push('All proof bundles passed verification and diff reconciliation.');
+    }
   } else if (!reconciliation.reconciled) {
     lines.push('**UNATTESTED FILE MUTATION DETECTED.**');
     lines.push('');
-    lines.push('The following files were changed in this PR but are NOT attested');
-    lines.push('by any `filesystem_write` side-effect receipt in the proof bundle:');
-    lines.push('');
-    for (const f of reconciliation.unattested_files) {
-      lines.push(`- \`${f}\``);
-    }
-    lines.push('');
-    lines.push('This may indicate files were added after the agent run completed.');
+    lines.push(formatReconciliationSummary(reconciliation));
   } else {
     lines.push('One or more proof bundles failed verification.');
   }
@@ -435,11 +435,15 @@ function buildNormalResult(
   let summary: string;
 
   if (allValid) {
+    const { summary: provSummary } = reconciliation;
+    const provDetail = provSummary.mixed_files > 0
+      ? ` Agent: ${provSummary.agent_files}, Mixed: ${provSummary.mixed_files}, Human: ${provSummary.human_files}`
+      : ` ${totalReceipts} receipts. All files attested.`;
     title = `Claw Verified: PASS (${bundleCount} bundle${bundleCount > 1 ? 's' : ''})`;
-    summary = `${bundleCount} proof bundle(s) verified. ${totalReceipts} receipts. All files attested. Policy compliant.`;
+    summary = `${bundleCount} proof bundle(s) verified.${provDetail} Policy compliant.`;
   } else if (!reconciliation.reconciled) {
     title = 'Claw Verified: FAIL \u2014 UNATTESTED FILE MUTATION';
-    summary = `${reconciliation.unattested_files.length} file(s) changed in this PR are not attested by proof bundle receipts.`;
+    summary = `${reconciliation.unattested_files.length} file(s) changed in this PR have no provenance link to agent activity.`;
   } else {
     title = 'Claw Verified: FAIL';
     summary = `Verification failed: ${reasonCodes.join(', ')}`;
