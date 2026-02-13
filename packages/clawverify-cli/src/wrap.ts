@@ -90,11 +90,17 @@ export async function wrap(
   }
 
   // 3. Start local proxy with Causal Sieve
+  // Use passthrough mode by default (forward directly to upstream provider).
+  // This preserves the agent's native auth (OAuth, API keys) without requiring
+  // clawproxy CST tokens. Gateway receipts are only available when an explicit
+  // provider API key is configured for clawproxy routing.
+  const usePassthrough = !process.env['CLAWSIG_USE_CLAWPROXY'];
   const proxy = await startLocalProxy({
     agentDid,
     runId,
     policy,
     cwd: process.cwd(),
+    passthrough: usePassthrough,
     onViolation: (v) => {
       process.stderr.write(
         `\x1b[31m[clawsig:guillotine]\x1b[0m VIOLATION: ${v.reason}\n`,
@@ -103,6 +109,9 @@ export async function wrap(
   });
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Local proxy listening on 127.0.0.1:${proxy.port}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Causal Sieve: ACTIVE (tool observability enabled)\n`);
+  if (usePassthrough) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
+  }
 
   // 3. Spawn child process with env overrides
   const childEnv: Record<string, string | undefined> = {
@@ -114,11 +123,12 @@ export async function wrap(
 
     // RED TEAM FIX #6: Socket-level interception preload.
     // Inject Node.js --import flag to monkey-patch http/https at socket level.
+    // Use absolute file:// URL so the preload resolves regardless of CWD.
     CLAWSIG_PROXY_PORT: String(proxy.port),
     CLAWSIG_PROXY_URL: `http://127.0.0.1:${proxy.port}`,
     NODE_OPTIONS: [
       process.env['NODE_OPTIONS'],
-      '--import @clawbureau/clawsig-sdk/preload',
+      `--import ${resolvePreloadPath()}`,
     ].filter(Boolean).join(' '),
 
     // Polyglot proxy env vars: Python (requests/httpx), Go (net/http),
@@ -277,6 +287,34 @@ async function writeBundleToDisk(bundle: SignedEnvelope<ProofBundlePayload>): Pr
     process.stderr.write(
       `\x1b[33m[clawsig]\x1b[0m Could not write bundle to .clawsig/proof_bundle.json: ${message}\n`,
     );
+  }
+}
+
+/**
+ * Resolve the absolute path to the clawsig SDK preload script.
+ * Uses import.meta.resolve (Node 20.6+), falls back to createRequire.
+ * Returns a file:// URL or bare specifier suitable for --import.
+ */
+function resolvePreloadPath(): string {
+  // Try import.meta.resolve (Node 20.6+, synchronous in Node 22+)
+  try {
+    const resolved: string = import.meta.resolve('@clawbureau/clawsig-sdk/preload');
+    if (resolved) return resolved;
+  } catch {
+    // Not available or can't resolve from this context
+  }
+
+  // Fallback: resolve relative to this CLI package via createRequire
+  try {
+    const { createRequire } = require('node:module');
+    const localRequire = createRequire(import.meta.url);
+    const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
+    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    const preloadPath = join(sdkDir, 'src', 'preload.mjs');
+    return `file://${preloadPath}`;
+  } catch {
+    // Last resort: bare specifier, child must resolve it
+    return '@clawbureau/clawsig-sdk/preload';
   }
 }
 
