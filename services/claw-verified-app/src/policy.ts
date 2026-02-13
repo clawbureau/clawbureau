@@ -27,26 +27,33 @@ export const DEFAULT_POLICY: PolicyConfig = {
 
 /**
  * Load the WPC policy from the repo's default branch.
- * Returns default policy if not found or invalid.
+ *
+ * Returns:
+ *  - source 'repo'      when a valid .clawsig/policy.json is found
+ *  - source 'no_policy'  when the file does not exist (triggers Observe Mode)
+ *  - source 'default'    when the file exists but is invalid (fallback policy)
  */
 export async function loadPolicy(
   token: string,
   repo: string,
   defaultBranch: string,
-): Promise<{ policy: PolicyConfig; source: 'repo' | 'default' }> {
+): Promise<{ policy: PolicyConfig; source: 'repo' | 'default' | 'no_policy' }> {
   try {
     const content = await getFileContent(token, repo, POLICY_PATH, defaultBranch);
     if (!content) {
-      return { policy: DEFAULT_POLICY, source: 'default' };
+      // No policy file on the default branch -> Observe Mode
+      return { policy: DEFAULT_POLICY, source: 'no_policy' };
     }
 
     const parsed = JSON.parse(content) as PolicyConfig;
     if (!parsed.version) {
+      // File exists but is malformed — use default policy, not observe mode
       return { policy: DEFAULT_POLICY, source: 'default' };
     }
 
     return { policy: parsed, source: 'repo' };
   } catch {
+    // Parse error on an existing file — use default policy
     return { policy: DEFAULT_POLICY, source: 'default' };
   }
 }

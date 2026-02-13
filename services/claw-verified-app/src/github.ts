@@ -158,15 +158,60 @@ export async function getFileContent(
 // ---------- PR Files ----------
 
 /**
- * List files changed in a PR.
+ * List files changed in a PR with full pagination.
+ * Throws on API failure (fail-closed — reconciliation requires the full file list).
  */
 export async function getPRFiles(
   token: string,
   repo: string,
   prNumber: number,
-): Promise<Array<{ filename: string; sha: string; status: string }>> {
+): Promise<Array<{ filename: string; sha: string; status: string; previous_filename?: string }>> {
+  const allFiles: Array<{ filename: string; sha: string; status: string; previous_filename?: string }> = [];
+  let page = 1;
+
+  while (true) {
+    const resp = await fetch(
+      `${GITHUB_API}/repos/${repo}/pulls/${prNumber}/files?per_page=100&page=${page}`,
+      {
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'claw-verified-app',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      },
+    );
+
+    if (!resp.ok) {
+      throw new Error(`Failed to fetch PR files (page ${page}): ${resp.status}`);
+    }
+
+    const files = await resp.json() as Array<{
+      filename: string; sha: string; status: string; previous_filename?: string;
+    }>;
+    allFiles.push(...files);
+
+    // Fewer than per_page results means last page
+    if (files.length < 100) break;
+    page++;
+  }
+
+  return allFiles;
+}
+
+// ---------- PR Body ----------
+
+/**
+ * Fetch the PR body text (description).
+ * Used for VaaS badge URL discovery. Returns empty string on failure.
+ */
+export async function getPRBody(
+  token: string,
+  repo: string,
+  prNumber: number,
+): Promise<string> {
   const resp = await fetch(
-    `${GITHUB_API}/repos/${repo}/pulls/${prNumber}/files?per_page=100`,
+    `${GITHUB_API}/repos/${repo}/pulls/${prNumber}`,
     {
       headers: {
         Authorization: `token ${token}`,
@@ -177,6 +222,7 @@ export async function getPRFiles(
     },
   );
 
-  if (!resp.ok) return [];
-  return resp.json() as Promise<Array<{ filename: string; sha: string; status: string }>>;
+  if (!resp.ok) return '';
+  const data = await resp.json() as { body: string | null };
+  return data.body || '';
 }
