@@ -54,6 +54,10 @@ export {
 // Causal Sieve — tool observability without agent cooperation
 export { CausalSieve } from './causal-sieve.js';
 
+// Deep Execution Sentinels
+export { FsSentinel } from './fs-sentinel.js';
+export { NetSentinel } from './net-sentinel.js';
+
 // Types
 export type {
   ClawproofConfig,
@@ -79,11 +83,17 @@ export type {
   GatewayReceiptPayload,
   ToolReceiptPayload,
   SideEffectReceiptPayload,
+  ExecutionReceiptPayload,
+  NetworkReceiptPayload,
 } from './types.js';
 
 // Wrap types
 export type { EphemeralDid } from './ephemeral-did.js';
 export type { LocalProxy, ProxyOptions } from './local-proxy.js';
+
+// Sentinel types
+export type { FsEvent, FsSentinelOptions } from './fs-sentinel.js';
+export type { NetEvent, NetSentinelOptions } from './net-sentinel.js';
 
 // Causal Sieve types
 export type {
