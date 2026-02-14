@@ -15,7 +15,9 @@ import { promisify } from 'node:util';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const isWindows = process.platform === 'win32';
 import {
   generateEphemeralDid,
   startLocalProxy,
@@ -109,24 +111,26 @@ export async function wrap(
   const traceFile = join(tmpDir, 'shell-trace.jsonl');
   await writeFile(traceFile, '', 'utf-8'); // Create empty trace file
 
-  // Copy sentinel-shell.sh and sentinel-shell-policy.sh to temp dir
+  // Copy sentinel-shell.sh and sentinel-shell-policy.sh to temp dir (Unix only)
   let sentinelShellPath: string | null = null;
-  try {
-    // Resolve from the SDK package
-    const sdkSentinelPath = resolveSentinelShellPath();
-    sentinelShellPath = join(tmpDir, 'sentinel-shell.sh');
-    await copyFile(sdkSentinelPath, sentinelShellPath);
-    await chmod(sentinelShellPath, 0o755);
+  if (!isWindows) {
+    try {
+      const sdkSentinelPath = resolveSentinelShellPath();
+      sentinelShellPath = join(tmpDir, 'sentinel-shell.sh');
+      await copyFile(sdkSentinelPath, sentinelShellPath);
+      await chmod(sentinelShellPath, 0o755).catch(() => {});
 
-    // Copy the policy evaluator alongside it
-    const sdkPolicyPath = sdkSentinelPath.replace('sentinel-shell.sh', 'sentinel-shell-policy.sh');
-    const destPolicyPath = join(tmpDir, 'sentinel-shell-policy.sh');
-    await copyFile(sdkPolicyPath, destPolicyPath).catch(() => {});
-    await chmod(destPolicyPath, 0o755).catch(() => {});
+      const sdkPolicyPath = sdkSentinelPath.replace('sentinel-shell.sh', 'sentinel-shell-policy.sh');
+      const destPolicyPath = join(tmpDir, 'sentinel-shell-policy.sh');
+      await copyFile(sdkPolicyPath, destPolicyPath).catch(() => {});
+      await chmod(destPolicyPath, 0o755).catch(() => {});
 
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG + policy evaluator)\n`);
-  } catch {
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (could not locate sentinel-shell.sh)\n`);
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG + policy evaluator)\n`);
+    } catch {
+      process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (could not locate sentinel-shell.sh)\n`);
+    }
+  } else {
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (Windows — BASH_ENV not available)\n`);
   }
 
   // Start FS Sentinel — pass traceFile explicitly (child writes to it, parent reads)
@@ -230,7 +234,7 @@ export async function wrap(
     const child = spawn(command, args, {
       env: childEnv,
       stdio: 'inherit',
-      shell: false,
+      shell: isWindows, // Windows needs shell:true to resolve .cmd/.bat aliases (npm, npx, etc.)
     });
 
     childPid = child.pid ?? 0;
@@ -543,9 +547,9 @@ function resolvePreloadPath(): string {
     const { createRequire } = require('node:module');
     const localRequire = createRequire(import.meta.url);
     const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
-    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    const sdkDir = sdkPkg.replace(/[\\/]package\.json$/, '');
     const preloadPath = join(sdkDir, 'src', 'preload.mjs');
-    return `file://${preloadPath}`;
+    return pathToFileURL(preloadPath).href;
   } catch {
     // Last resort: bare specifier, child must resolve it
     return '@clawbureau/clawsig-sdk/preload';
@@ -565,9 +569,9 @@ function resolveNodePreloadSentinelPath(): string {
     const { createRequire } = require('node:module');
     const localRequire = createRequire(import.meta.url);
     const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
-    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    const sdkDir = sdkPkg.replace(/[\\/]package\.json$/, '');
     const sentinelPath = join(sdkDir, 'src', 'node-preload-sentinel.mjs');
-    return `file://${sentinelPath}`;
+    return pathToFileURL(sentinelPath).href;
   } catch {
     return '@clawbureau/clawsig-sdk/node-preload-sentinel';
   }
@@ -601,7 +605,7 @@ async function tryAttachBadgeToPR(badgeUrl: string, ledgerUrl: string): Promise<
   try {
     // Check if gh CLI is available
     try {
-      await execFileAsync('which', ['gh']);
+      await execFileAsync(isWindows ? 'where' : 'which', ['gh']);
     } catch {
       return; // gh not installed, skip silently
     }
@@ -686,7 +690,7 @@ function resolveSentinelShellPath(): string {
     const { createRequire } = require('node:module') as { createRequire: (url: string | URL) => NodeRequire };
     const localRequire = createRequire(import.meta.url);
     const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
-    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    const sdkDir = sdkPkg.replace(/[\\/]package\.json$/, '');
     return join(sdkDir, 'src', 'sentinel-shell.sh');
   } catch {
     // Fallback: relative to this file
@@ -871,7 +875,7 @@ async function resolveInterposeLibrary(tmpDir: string): Promise<InterposeLibResu
     const { createRequire } = require('node:module') as { createRequire: (url: string | URL) => NodeRequire };
     const localRequire = createRequire(import.meta.url);
     const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
-    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    const sdkDir = sdkPkg.replace(/[\\/]package\.json$/, '');
     sourceDir = join(sdkDir, 'src', 'sentinels', 'interpose');
   } catch {
     const thisDir = dirname(fileURLToPath(import.meta.url));

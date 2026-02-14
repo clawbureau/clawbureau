@@ -176,8 +176,17 @@ async function forwardToClawproxy(
 
   const responseHeaders: Record<string, string> = {};
   res.headers.forEach((value, key) => {
+    // Strip compression/framing headers: res.arrayBuffer() already
+    // decompressed the body. If we forward "Content-Encoding: br" with
+    // decompressed bytes, Bun/Node consumers double-decompress → ZlibError.
+    const lower = key.toLowerCase();
+    if (lower === 'content-encoding' || lower === 'content-length' ||
+        lower === 'transfer-encoding' || lower === 'connection') return;
     responseHeaders[key] = value;
   });
+
+  // Set correct content-length for the decompressed payload
+  responseHeaders['content-length'] = String(responseBuffer.length);
 
   return {
     status: res.status,
@@ -244,8 +253,13 @@ async function forwardToUpstream(
 
   const responseHeaders: Record<string, string> = {};
   res.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (lower === 'content-encoding' || lower === 'content-length' ||
+        lower === 'transfer-encoding' || lower === 'connection') return;
     responseHeaders[key] = value;
   });
+
+  responseHeaders['content-length'] = String(responseBuffer.length);
 
   return { status: res.status, headers: responseHeaders, body: responseBuffer, isStream };
 }

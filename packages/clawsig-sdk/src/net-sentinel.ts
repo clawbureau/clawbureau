@@ -30,7 +30,7 @@ const DEDUP_WINDOW_MS = 10_000;
 /**
  * Shells that inherit parent FDs — exclude from lsof queries entirely.
  */
-const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'fish', 'dash']);
+const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'cmd.exe', 'powershell.exe', 'pwsh.exe']);
 
 export class NetSentinel {
   private timer?: ReturnType<typeof setInterval>;
@@ -40,6 +40,7 @@ export class NetSentinel {
   private running = false;
   private pollIntervalMs: number;
   private isMac = process.platform === 'darwin';
+  private isWin = process.platform === 'win32';
 
   constructor(options: NetSentinelOptions = {}) {
     this.pollIntervalMs = options.pollIntervalMs ?? 500;
@@ -109,7 +110,9 @@ export class NetSentinel {
 
     if (queryPids.length === 0) return;
 
-    if (this.isMac) {
+    if (this.isWin) {
+      await this.pollNetstatWindows(queryPids, tree);
+    } else if (this.isMac) {
       await this.pollLsof(queryPids, tree);
     } else {
       await this.pollProcNetTcp(queryPids, tree);
@@ -139,7 +142,33 @@ export class NetSentinel {
 
     for (const p of this.targetPids) isAgentMap.set(p, true);
 
-    if (this.isMac) {
+    if (this.isWin) {
+      // Windows: wmic process tree
+      try {
+        const { stdout } = await execFileAsync('wmic', ['process', 'get', 'Name,ParentProcessId,ProcessId'], { timeout: 3000 });
+        const ppidMap = new Map<number, number[]>();
+        for (const line of stdout.split('\n').slice(1)) {
+          const trimmed = line.trim(); if (!trimmed) continue;
+          const parts = trimmed.split(/\s+/);
+          if (parts.length >= 3) {
+            const pidStr = parts.pop()!, ppidStr = parts.pop()!, name = parts.join(' ');
+            const pid = parseInt(pidStr, 10), ppid = parseInt(ppidStr, 10);
+            if (!isNaN(pid) && !isNaN(ppid)) {
+              processNames.set(pid, name);
+              if (!ppidMap.has(ppid)) ppidMap.set(ppid, []);
+              ppidMap.get(ppid)!.push(pid);
+            }
+          }
+        }
+        const queue = Array.from(this.targetPids);
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          for (const child of ppidMap.get(current) || []) {
+            if (!allPids.has(child)) { allPids.add(child); isAgentMap.set(child, true); queue.push(child); }
+          }
+        }
+      } catch { /* degrade gracefully */ }
+    } else if (this.isMac) {
       // Batched pgrep: comma-separated parent PIDs in one call
       let currentLevel = Array.from(this.targetPids);
       while (currentLevel.length > 0) {
@@ -219,6 +248,67 @@ export class NetSentinel {
     }
 
     return { pids: Array.from(allPids), isAgentMap, processNames };
+  }
+
+  // -------------------------------------------------------------------------
+  // Windows: netstat -ano polling
+  // -------------------------------------------------------------------------
+
+  private async pollNetstatWindows(
+    queryPids: number[],
+    tree: { isAgentMap: Map<number, boolean>; processNames: Map<number, string> },
+  ): Promise<void> {
+    try {
+      const { stdout } = await execFileAsync('netstat', ['-ano'], { timeout: 3000 });
+      const ts = new Date().toISOString();
+      const nowMs = Date.now();
+
+      for (const line of stdout.split('\n')) {
+        const parts = line.trim().split(/\s+/).filter(Boolean);
+        if (parts.length < 5) continue;
+
+        const protoStr = parts[0]!.toLowerCase();
+        if (!protoStr.startsWith('tcp')) continue;
+
+        const localPart = parts[1]!;
+        const remotePart = parts[2]!;
+        const stateCode = parts[3]!;
+        const pidStr = parts[4]!;
+
+        if (stateCode !== 'ESTABLISHED' && stateCode !== 'SYN_SENT') continue;
+
+        const pid = parseInt(pidStr, 10);
+        if (isNaN(pid) || !queryPids.includes(pid)) continue;
+
+        const lastColon = remotePart.lastIndexOf(':');
+        if (lastColon === -1) continue;
+
+        const ip = remotePart.slice(0, lastColon).replace(/^\[|\]$/g, '');
+        const port = parseInt(remotePart.slice(lastColon + 1) || '0', 10);
+        if (!ip || isNaN(port)) continue;
+
+        const proto = protoStr.includes('6') ? 'tcp6' : 'tcp';
+        const connKey = `${pid}:${proto}:${localPart}:${remotePart}`;
+
+        const lastSeen = this.knownConnections.get(connKey);
+        if (lastSeen && (nowMs - lastSeen < DEDUP_WINDOW_MS)) {
+          this.knownConnections.set(connKey, nowMs);
+          continue;
+        }
+        this.knownConnections.set(connKey, nowMs);
+
+        const resolvedCmd = tree.processNames.get(pid) || null;
+        const isAgent = tree.isAgentMap.get(pid) ?? false;
+        const classification = await classifyConnection(ip, port, resolvedCmd, pid, isAgent);
+        if (classification === 'local' || classification === 'system_noise' || classification === 'fd_inheritance') continue;
+
+        this.events.push({
+          layer: 'net', ts, protocol: proto, localAddress: localPart,
+          remoteAddress: remotePart, state: stateCode, pid,
+          processName: resolvedCmd, classification,
+        });
+      }
+    } catch { /* skip */ }
   }
 
   // -------------------------------------------------------------------------
