@@ -23,6 +23,7 @@ import {
   NetSentinel,
   analyzeCommand,
   compilePolicyToBash,
+  InterposeState,
 } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
@@ -224,12 +225,15 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n`);
   process.stderr.write(`\n`);
 
+  let childPid = 0;
   const exitCode = await new Promise<number>((resolve) => {
     const child = spawn(command, args, {
       env: childEnv,
       stdio: 'inherit',
       shell: false,
     });
+
+    childPid = child.pid ?? 0;
 
     // Track child PID for network sentinel
     if (child.pid) {
@@ -263,6 +267,10 @@ export async function wrap(
   const interposeEvents = await harvestInterposeTrace(traceFile);
   const interposeReceipts = await synthesizeInterposeReceipts(interposeEvents, agentDid.did, runId);
 
+  // Build InterposeState oracle — ground truth PID tree + bound ports from C library
+  const interposeOracle = new InterposeState(childPid);
+  await interposeOracle.ingestTrace(traceFile);
+
   // Harvest Preload trace (same JSONL file, layer="preload") → gateway receipts
   const preloadEvents = await harvestPreloadTrace(traceFile);
   const preloadGatewayReceipts = await synthesizePreloadGatewayReceipts(preloadEvents, agentDid.did, runId);
@@ -292,6 +300,10 @@ export async function wrap(
   if (sniGatewayReceipts.length > 0) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m TLS SNI intercepts: ${sniEvents.length} connections → ${sniGatewayReceipts.length} LLM domains\n`);
   }
+  if (interposeOracle.totalEvents > 0) {
+    const oState = interposeOracle.getSummary();
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${oState.pid_tree_size} PIDs, ${oState.bound_ports.length} server ports${oState.bound_ports.length > 0 ? ` (${oState.bound_ports.join(',')})` : ''}, ${oState.env_audits} credentials, ${oState.cred_leaks} leaks\n`);
+  }
 
   if (netSentinel.suspiciousCount > 0) {
     process.stderr.write(`\x1b[31m[clawsig]\x1b[0m WARNING: Suspicious network connections detected!\n`);
@@ -310,6 +322,43 @@ export async function wrap(
   if (allNetworkReceipts.length > 0) {
     bundle.payload.network_receipts = allNetworkReceipts;
   }
+  // Inject env audit + cred leak as security receipts
+  if (interposeOracle.envAudits.length > 0 || interposeOracle.credLeaks.length > 0) {
+    const securityReceipts: Record<string, unknown>[] = [];
+    if (interposeOracle.envAudits.length > 0) {
+      securityReceipts.push({
+        receipt_version: '1',
+        receipt_id: `sec_env_${crypto.randomUUID()}`,
+        receipt_type: 'env_audit',
+        credentials: interposeOracle.envAudits.map(e => ({
+          key: e.key,
+          value_sha256: e.value_sha256,
+          pid: e.pid,
+        })),
+        agent_did: agentDid.did,
+        timestamp: interposeOracle.envAudits[0]?.ts,
+        binding: { run_id: runId },
+      });
+    }
+    for (const leak of interposeOracle.credLeaks) {
+      securityReceipts.push({
+        receipt_version: '1',
+        receipt_id: `sec_leak_${crypto.randomUUID()}`,
+        receipt_type: 'cred_leak_alert',
+        pattern: leak.pattern,
+        fd: leak.fd,
+        pid: leak.pid,
+        severity: 'CRITICAL',
+        agent_did: agentDid.did,
+        timestamp: leak.ts,
+        binding: { run_id: runId },
+      });
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = (bundle.payload.receipts ?? []) as any[];
+    bundle.payload.receipts = [...existing, ...securityReceipts] as typeof bundle.payload.receipts;
+  }
+
   // Inject preload gateway receipts (LLM calls captured via diagnostics_channel)
   if (preloadGatewayReceipts.length > 0 || sniGatewayReceipts.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -329,6 +378,7 @@ export async function wrap(
       preload_llm_events: preloadGatewayReceipts.length,
       tls_sni_events: sniEvents.length,
       tls_sni_receipts: sniGatewayReceipts.length,
+      interpose_state: interposeOracle.getSummary(),
     },
   };
 
