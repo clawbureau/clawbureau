@@ -3,11 +3,12 @@
  *
  * Implements: Perfect Process Genealogy, Server Socket Awareness,
  * Full IPC Lifecycle, Nanosecond Kinematics, Causal Sequence Numbers,
- * Causal DAG (cause_t/cause_f), Merkle Transcript Commitment,
+ * Causal DAG (cause_t/cause_f), Merkle Transcript Commitment (per-event),
  * Stack-only SHA-256 Env Auditing, Credential DLP, LLM recv() Sampling,
  * Semantic Harness/MCP Fingerprinting, TLS/HTTPS Decryption via
  * SSL_CTX_set_keylog_callback Chaining, SSLKEYLOGFILE Injection,
- * and Trace FD Hardening.
+ * Trace FD Hardening, LLM Timing Fingerprints (TTFT/P50/P99/burst),
+ * and Post-Mortem Memory Forensics.
  */
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -42,6 +43,8 @@
 
 #ifdef __APPLE__
 #include <crt_externs.h>
+#include <mach/mach.h>
+#include <mach/vm_map.h>
 #endif
 
 #ifndef O_TMPFILE
@@ -87,15 +90,96 @@ static __thread uint64_t tl_last_seq = 0;          /* thread-local: previous eve
 static volatile uint64_t fd_last_seq[MAX_TRACKED_FDS]; /* per-fd: previous event seq    */
 static __thread int tl_event_fd = -1;               /* set by hooks before emit        */
 
-/* --- Merkle transcript commitment (from C-Naked stealable idea #2) --- */
-static char merkle_hash[65] = "0000000000000000000000000000000000000000000000000000000000000000";
+/* --- Merkle transcript commitment (incremental SHA-256 from E-Synthesis) --- */
 static volatile uint64_t merkle_count = 0;
 static volatile int merkle_lock = 0;
+static char current_merkle_hex[65] = "0000000000000000000000000000000000000000000000000000000000000000";
 static inline void merkle_acquire(void) { while (__sync_lock_test_and_set(&merkle_lock, 1)) {} }
 static inline void merkle_release(void) { __sync_lock_release(&merkle_lock); }
 
 /* --- SSLKEYLOGFILE injection path (from B-Debate stealable idea #9) --- */
 static char sslkeylog_path[512] = {0};
+
+/* ================================================================== */
+/*              LLM Timing Fingerprints (from E-Synthesis)            */
+/* ================================================================== */
+
+typedef struct {
+    uint64_t req_start_ns;
+    uint64_t first_token_ns;
+    uint64_t last_token_ns;
+    uint32_t latencies[128];    /* inter-token intervals in microseconds */
+    uint32_t token_bytes[128];  /* per-token byte counts (burst pattern) */
+    uint32_t count;
+    int active;
+    volatile int lock;
+} llm_timing_t;
+
+static llm_timing_t llm_timings[MAX_TRACKED_FDS];
+
+/* Forward declaration — emit_log_event defined below */
+static void emit_log_event(const char *syscall_name, int pid, int rc, const char *fmt, ...);
+
+static void emit_timing_fingerprint(int fd) {
+    if (fd < 0 || fd >= MAX_TRACKED_FDS) return;
+    while (__sync_lock_test_and_set(&llm_timings[fd].lock, 1)) {}
+    if (llm_timings[fd].active && llm_timings[fd].count > 0) {
+        uint64_t ttft = llm_timings[fd].first_token_ns > llm_timings[fd].req_start_ns ?
+                        llm_timings[fd].first_token_ns - llm_timings[fd].req_start_ns : 0;
+        uint32_t sorted[128]; uint32_t count = llm_timings[fd].count;
+        if (count > 128) count = 128;
+        for (uint32_t i = 0; i < count; i++) sorted[i] = llm_timings[fd].latencies[i];
+        /* Insertion sort — O(n^2) but n<=128, fires once per LLM request */
+        for (uint32_t i = 0; i < count; i++)
+            for (uint32_t j = i + 1; j < count; j++)
+                if (sorted[i] > sorted[j]) { uint32_t t = sorted[i]; sorted[i] = sorted[j]; sorted[j] = t; }
+        uint32_t p50 = sorted[count / 2];
+        uint32_t p99 = sorted[(count * 99) / 100];
+
+        char burst[512] = "[";
+        for (uint32_t i = 0; i < count && i < 32; i++) {
+            char tmp[32]; snprintf(tmp, sizeof(tmp), "%s%u", i == 0 ? "" : ",", llm_timings[fd].token_bytes[i]);
+            if (strlen(burst) + strlen(tmp) < sizeof(burst) - 2) strcat(burst, tmp);
+        }
+        strcat(burst, "]");
+
+        tl_event_fd = fd;
+        emit_log_event("model_timing_fingerprint", getpid(), -999,
+            ",\"fd\":%d,\"ttft_ns\":%llu,\"p50_us\":%u,\"p99_us\":%u,\"tokens\":%u,\"burst\":%s",
+            fd, (unsigned long long)ttft, p50, p99, count, burst);
+    }
+    llm_timings[fd].active = 0;
+    __sync_lock_release(&llm_timings[fd].lock);
+}
+
+static void timing_start_req(int fd) {
+    if (fd < 0 || fd >= MAX_TRACKED_FDS) return;
+    emit_timing_fingerprint(fd); /* flush previous request's timing */
+    while (__sync_lock_test_and_set(&llm_timings[fd].lock, 1)) {}
+    llm_timings[fd].active = 1;
+    llm_timings[fd].req_start_ns = get_mono_ns();
+    llm_timings[fd].first_token_ns = 0;
+    llm_timings[fd].last_token_ns = 0;
+    llm_timings[fd].count = 0;
+    __sync_lock_release(&llm_timings[fd].lock);
+}
+
+static void timing_add_token(int fd, size_t bytes) {
+    if (fd < 0 || fd >= MAX_TRACKED_FDS) return;
+    while (__sync_lock_test_and_set(&llm_timings[fd].lock, 1)) {}
+    if (!llm_timings[fd].active) { __sync_lock_release(&llm_timings[fd].lock); return; }
+    uint64_t now = get_mono_ns();
+    if (llm_timings[fd].first_token_ns == 0)
+        llm_timings[fd].first_token_ns = now;
+    if (llm_timings[fd].last_token_ns > 0 && llm_timings[fd].count < 128) {
+        uint64_t delta_us = (now - llm_timings[fd].last_token_ns) / 1000;
+        llm_timings[fd].latencies[llm_timings[fd].count] = (uint32_t)(delta_us > UINT32_MAX ? UINT32_MAX : delta_us);
+        llm_timings[fd].token_bytes[llm_timings[fd].count] = (uint32_t)(bytes > UINT32_MAX ? UINT32_MAX : bytes);
+        llm_timings[fd].count++;
+    }
+    llm_timings[fd].last_token_ns = now;
+    __sync_lock_release(&llm_timings[fd].lock);
+}
 
 /* ================================================================== */
 /*                      Function Pointers                             */
@@ -185,7 +269,8 @@ extern void SSL_CTX_set_keylog_callback(void*, void (*)(const void*, const char*
 #endif
 
 /* ================================================================== */
-/*                 Stack-only SHA-256 (env auditing + Merkle)         */
+/*       Incremental SHA-256 (env auditing + Merkle chain)            */
+/*       Ported from E-Synthesis: proper init/update/final API        */
 /* ================================================================== */
 
 #define ROTR(a,b) (((a)>>(b))|((a)<<(32-(b))))
@@ -222,48 +307,56 @@ static void sha256_transform(uint32_t state[8], const uint8_t data[64]) {
     state[0]+=a; state[1]+=b; state[2]+=c; state[3]+=d; state[4]+=e; state[5]+=f; state[6]+=g; state[7]+=h;
 }
 
-static void sha256_hash_string(const char *str, char out_hex[65]) {
-    uint32_t state[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
-    uint8_t datalen = 0, data[64]; uint64_t bitlen = 0; size_t len = strlen(str);
-    for (size_t i = 0; i < len; ++i) {
-        data[datalen++] = (uint8_t)str[i];
-        if (datalen == 64) { sha256_transform(state, data); bitlen += 512; datalen = 0; }
-    }
-    bitlen += datalen * 8; data[datalen++] = 0x80;
-    if (datalen > 56) { while (datalen < 64) data[datalen++] = 0x00; sha256_transform(state, data); datalen = 0; }
-    while (datalen < 56) data[datalen++] = 0x00;
-    for (int i = 7; i >= 0; i--) data[56 + (7 - i)] = (uint8_t)((bitlen >> (i * 8)) & 0xFF);
-    sha256_transform(state, data);
-    for (int i = 0; i < 8; ++i) snprintf(out_hex + i * 8, 9, "%08x", state[i]);
+/** Incremental SHA-256 context — supports streaming updates. */
+typedef struct {
+    uint32_t state[8];
+    uint32_t count[2];
+    uint8_t buffer[64];
+} sha256_ctx_t;
+
+static void sha256_init(sha256_ctx_t *ctx) {
+    ctx->state[0] = 0x6a09e667; ctx->state[1] = 0xbb67ae85;
+    ctx->state[2] = 0x3c6ef372; ctx->state[3] = 0xa54ff53a;
+    ctx->state[4] = 0x510e527f; ctx->state[5] = 0x9b05688c;
+    ctx->state[6] = 0x1f83d9ab; ctx->state[7] = 0x5be0cd19;
+    ctx->count[0] = ctx->count[1] = 0;
 }
 
-/**
- * Incremental SHA-256 over (prev_hex[64] || data[data_len]).
- * Used for Merkle chain: H_n = SHA256(H_{n-1} || event_bytes).
- */
-static void sha256_hash_chain(const char prev_hex[64], const char *data, size_t data_len, char out_hex[65]) {
-    uint32_t state[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
-    uint8_t block[64]; size_t block_pos = 0; uint64_t bitlen = 0;
-    size_t total = 64 + data_len;
-    /* Feed prev_hex (always 64 bytes = exactly 1 block) */
-    for (size_t i = 0; i < 64; i++) {
-        block[block_pos++] = (uint8_t)prev_hex[i];
-        if (block_pos == 64) { sha256_transform(state, block); bitlen += 512; block_pos = 0; }
+static void sha256_update(sha256_ctx_t *ctx, const uint8_t *data, size_t len) {
+    size_t i = 0;
+    uint32_t j = (ctx->count[0] >> 3) & 63;
+    if ((ctx->count[0] += (uint32_t)(len << 3)) < (len << 3)) ctx->count[1]++;
+    ctx->count[1] += (uint32_t)(len >> 29);
+    if ((j + len) > 63) {
+        memcpy(&ctx->buffer[j], data, (i = 64 - j));
+        sha256_transform(ctx->state, ctx->buffer);
+        for (; i + 63 < len; i += 64) sha256_transform(ctx->state, &data[i]);
+        j = 0;
     }
-    /* Feed event data */
-    for (size_t i = 0; i < data_len; i++) {
-        block[block_pos++] = (uint8_t)data[i];
-        if (block_pos == 64) { sha256_transform(state, block); bitlen += 512; block_pos = 0; }
-    }
-    /* Pad */
-    bitlen += block_pos * 8; block[block_pos++] = 0x80;
-    if (block_pos > 56) { while (block_pos < 64) block[block_pos++] = 0x00; sha256_transform(state, block); block_pos = 0; }
-    while (block_pos < 56) block[block_pos++] = 0x00;
-    for (int i = 7; i >= 0; i--) block[56 + (7 - i)] = (uint8_t)((bitlen >> (i * 8)) & 0xFF);
-    sha256_transform(state, block);
-    for (int i = 0; i < 8; i++) snprintf(out_hex + i * 8, 9, "%08x", state[i]);
-    (void)total;
+    memcpy(&ctx->buffer[j], &data[i], len - i);
 }
+
+static void sha256_final(sha256_ctx_t *ctx, uint8_t hash[32]) {
+    uint8_t finalcount[8];
+    for (int i = 0; i < 8; i++)
+        finalcount[i] = (uint8_t)((ctx->count[(i >= 4 ? 0 : 1)] >> ((3 - (i & 3)) * 8)) & 255);
+    uint8_t c = 0x80; sha256_update(ctx, &c, 1);
+    while ((ctx->count[0] & 504) != 448) { c = 0x00; sha256_update(ctx, &c, 1); }
+    sha256_update(ctx, finalcount, 8);
+    for (int i = 0; i < 32; i++)
+        hash[i] = (uint8_t)((ctx->state[i >> 2] >> (((3 - i) & 3) * 8)) & 255);
+}
+
+static void sha256_hash_string(const char *str, char out_hex[65]) {
+    sha256_ctx_t ctx; sha256_init(&ctx);
+    sha256_update(&ctx, (const uint8_t*)str, strlen(str));
+    uint8_t hash[32]; sha256_final(&ctx, hash);
+    for (int i = 0; i < 32; i++) snprintf(&out_hex[i * 2], 3, "%02x", hash[i]);
+    out_hex[64] = '\0';
+}
+
+/** Global Merkle chain context — feeds event bytes incrementally. */
+static sha256_ctx_t global_merkle_ctx;
 
 /* ================================================================== */
 /*                        Unified Event Emitter                       */
@@ -301,9 +394,26 @@ static void emit_log_event(const char *syscall_name, int pid, int rc, const char
         va_list args; va_start(args, fmt);
         len += vsnprintf(buf + len, sizeof(buf) - (size_t)len, fmt, args); va_end(args);
     }
-    if (len > 0 && len < (int)sizeof(buf) - 20) {
-        if (rc != -999) len += snprintf(buf + len, sizeof(buf) - (size_t)len, ",\"rc\":%d}\n", rc);
-        else len += snprintf(buf + len, sizeof(buf) - (size_t)len, "}\n");
+    if (len > 0 && len < (int)sizeof(buf) - 100) {
+        if (rc != -999) len += snprintf(buf + len, sizeof(buf) - (size_t)len, ",\"rc\":%d", rc);
+
+        /* Merkle chain: feed event bytes (before chain_hash) into running context,
+         * then embed the intermediate hash in the event itself.
+         * This makes every single event independently verifiable. */
+        merkle_acquire();
+        sha256_update(&global_merkle_ctx, (const uint8_t*)buf, (size_t)len);
+        merkle_count++;
+        /* Snapshot the running hash without destroying the context */
+        sha256_ctx_t snap = global_merkle_ctx;
+        uint8_t intermediate[32];
+        sha256_final(&snap, intermediate);
+        for (int i = 0; i < 32; i++)
+            snprintf(&current_merkle_hex[i * 2], 3, "%02x", intermediate[i]);
+        int is_checkpoint = (merkle_count % 256 == 0);
+        merkle_release();
+
+        len += snprintf(buf + len, sizeof(buf) - (size_t)len,
+            ",\"chain_hash\":\"%s\"}\n", current_merkle_hex);
         write_trace(buf, (size_t)len);
 
         /* Update causal DAG state */
@@ -311,22 +421,29 @@ static void emit_log_event(const char *syscall_name, int pid, int rc, const char
         if (efd >= 0 && efd < MAX_TRACKED_FDS) fd_last_seq[efd] = seq;
         tl_event_fd = -1;
 
-        /* Merkle chain: H_n = SHA256(H_{n-1} || event_line) */
-        merkle_acquire();
-        sha256_hash_chain(merkle_hash, buf, (size_t)len, merkle_hash);
-        uint64_t mc = ++merkle_count;
-        if ((mc & 255) == 0) {
-            char ckpt[256];
+        /* Emit checkpoint every 256 events (hashed into chain too) */
+        if (is_checkpoint) {
+            char ckpt[384];
             int ckpt_len = snprintf(ckpt, sizeof(ckpt),
                 "{\"layer\":\"interpose\",\"syscall\":\"merkle_checkpoint\","
-                "\"pid\":%d,\"count\":%llu,\"hash\":\"%s\"}\n",
-                pid, (unsigned long long)mc, merkle_hash);
-            write_trace(ckpt, (size_t)ckpt_len);
-            /* Hash the checkpoint event itself into the chain */
-            sha256_hash_chain(merkle_hash, ckpt, (size_t)ckpt_len, merkle_hash);
+                "\"pid\":%d,\"count\":%llu,\"hash\":\"%s\"",
+                pid, (unsigned long long)merkle_count, current_merkle_hex);
+
+            merkle_acquire();
+            sha256_update(&global_merkle_ctx, (const uint8_t*)ckpt, (size_t)ckpt_len);
             merkle_count++;
+            sha256_ctx_t cp_snap = global_merkle_ctx;
+            uint8_t cp_hash[32];
+            sha256_final(&cp_snap, cp_hash);
+            char cp_hex[65];
+            for (int i = 0; i < 32; i++) snprintf(&cp_hex[i * 2], 3, "%02x", cp_hash[i]);
+            memcpy(current_merkle_hex, cp_hex, 65);
+            merkle_release();
+
+            ckpt_len += snprintf(ckpt + ckpt_len, sizeof(ckpt) - (size_t)ckpt_len,
+                ",\"chain_hash\":\"%s\"}\n", cp_hex);
+            write_trace(ckpt, (size_t)ckpt_len);
         }
-        merkle_release();
     }
 }
 
@@ -751,7 +868,9 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
     if (!REAL_FUNC(SSL_write)) return -1;
     if (!in_hook && trace_fd >= 0 && buf && num > 0) {
         in_hook = 1;
-        parse_http(get_ssl_fd(ssl), "https_request", buf, num);
+        int fd = get_ssl_fd(ssl);
+        if (is_llm_fd(fd)) timing_start_req(fd);
+        parse_http(fd, "https_request", buf, num);
         in_hook = 0;
     }
     return CALL_REAL(SSL_write, ssl, buf, num);
@@ -763,7 +882,9 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
     int rc = CALL_REAL(SSL_read, ssl, buf, num);
     if (!in_hook && trace_fd >= 0 && rc > 0 && buf) {
         in_hook = 1;
-        parse_http(get_ssl_fd(ssl), "https_response", buf, rc);
+        int fd = get_ssl_fd(ssl);
+        if (is_llm_fd(fd)) timing_add_token(fd, (size_t)rc);
+        parse_http(fd, "https_response", buf, rc);
         in_hook = 0;
     }
     return rc;
@@ -777,6 +898,8 @@ __attribute__((constructor))
 static void clawsig_init(void) {
     in_hook = 1;
     for (int i = 0; i < MAX_TRACKED_FDS; i++) { tracked_fds[i].fd = -1; fd_last_seq[i] = 0; }
+    sha256_init(&global_merkle_ctx);
+    memset(current_merkle_hex, '0', 64); current_merkle_hex[64] = '\0';
 
     RESOLVE(open); RESOLVE(openat); RESOLVE(connect); RESOLVE(bind);
     RESOLVE(listen); RESOLVE(accept); RESOLVE(socket); RESOLVE(socketpair);
@@ -841,21 +964,112 @@ static void clawsig_init(void) {
     in_hook = 0;
 }
 
+/* ================================================================== */
+/*            Post-Mortem Memory Forensics (from E-Synthesis)         */
+/* ================================================================== */
+
+static void scan_memory_block(const unsigned char *p, size_t len) {
+    if (len < 15) return;
+    for (size_t i = 0; i <= len - 10; i++) {
+        if (p[i] == 's' && p[i+1] == 'k' && p[i+2] == '-') {
+            if (i + 15 <= len) {
+                if (memcmp(p+i, "sk-ant-", 7) == 0) {
+                    emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"sk-ant-*\"");
+                    i += 30;
+                } else if (memcmp(p+i, "sk-proj-", 8) == 0) {
+                    emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"sk-proj-*\"");
+                    i += 30;
+                }
+            }
+        } else if (p[i] == 'B' && i + 15 <= len && memcmp(p+i, "Bearer sk-", 10) == 0) {
+            emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"Bearer sk-*\"");
+            i += 30;
+        }
+    }
+}
+
+static void safe_scan_memory(void) {
+    int null_fd = open("/dev/null", O_WRONLY);
+    if (null_fd < 0) return;
+#ifdef __linux__
+    int maps_fd = real_open ? real_open("/proc/self/maps", O_RDONLY) : open("/proc/self/maps", O_RDONLY);
+    if (maps_fd >= 0) {
+        char line[256]; int line_pos = 0; char rbuf[4096]; ssize_t n;
+        while ((n = read(maps_fd, rbuf, sizeof(rbuf))) > 0) {
+            for (ssize_t i = 0; i < n; i++) {
+                if (rbuf[i] == '\n' || line_pos == (int)sizeof(line) - 1) {
+                    line[line_pos] = '\0';
+                    unsigned long start = 0, end = 0; char perms[8] = "";
+                    if (sscanf(line, "%lx-%lx %7s", &start, &end, perms) == 3) {
+                        if (perms[0] == 'r' && perms[1] == 'w' && perms[3] == 'p') {
+                            size_t sz = end - start;
+                            if (sz <= 100 * 1024 * 1024) {
+                                for (size_t off = 0; off < sz; off += 4096) {
+                                    size_t c = (sz - off < 4096) ? sz - off : 4096;
+                                    if (real_write ? (real_write(null_fd, (void*)(start + off), 1) == 1)
+                                                   : (write(null_fd, (void*)(start + off), 1) == 1))
+                                        scan_memory_block((const unsigned char*)(start + off), c);
+                                }
+                            }
+                        }
+                    }
+                    line_pos = 0;
+                } else { line[line_pos++] = rbuf[i]; }
+            }
+        }
+        if (real_close) real_close(maps_fd); else close(maps_fd);
+    }
+#elif defined(__APPLE__)
+    vm_address_t addr = 0; vm_size_t size = 0;
+    while (1) {
+        mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+        vm_region_basic_info_data_64_t info; mach_port_t object_name;
+        kern_return_t kr = vm_region_64(mach_task_self(), &addr, &size,
+            VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &count, &object_name);
+        if (kr != KERN_SUCCESS) break;
+        if ((info.protection & VM_PROT_READ) && (info.protection & VM_PROT_WRITE)) {
+            if (size <= 100 * 1024 * 1024) {
+                for (size_t off = 0; off < size; off += 4096) {
+                    size_t c = (size - off < 4096) ? size - off : 4096;
+                    if (write(null_fd, (void*)(addr + off), 1) == 1)
+                        scan_memory_block((const unsigned char*)(addr + off), c);
+                }
+            }
+        }
+        addr += size;
+    }
+#endif
+    close(null_fd);
+}
+
 __attribute__((destructor))
 static void clawsig_fini(void) {
     if (trace_fd < 0) return;
     in_hook = 1;
-    /* Emit final Merkle commitment hash — the single 32-byte value
-     * that proves the exact sequence of every event in the trace.
-     * Tampering with any event invalidates this hash. */
+
+    /* Flush any pending timing fingerprints */
+    for (int i = 0; i < MAX_TRACKED_FDS; i++)
+        if (is_llm_fd(i)) emit_timing_fingerprint(i);
+
+    /* Post-mortem memory forensics: scan RW pages for leaked credentials */
+    safe_scan_memory();
+
+    /* Emit final Merkle commitment — the chain_hash that commits to
+     * the exact sequence of every event. Tamper one byte, hash breaks. */
     merkle_acquire();
-    char final_buf[256];
+    sha256_ctx_t final_snap = global_merkle_ctx;
+    uint8_t final_hash[32];
+    sha256_final(&final_snap, final_hash);
+    char final_hex[65];
+    for (int i = 0; i < 32; i++) snprintf(&final_hex[i * 2], 3, "%02x", final_hash[i]);
+    merkle_release();
+
+    char final_buf[384];
     int final_len = snprintf(final_buf, sizeof(final_buf),
         "{\"layer\":\"interpose\",\"syscall\":\"merkle_final\","
         "\"pid\":%d,\"count\":%llu,\"hash\":\"%s\"}\n",
-        getpid(), (unsigned long long)merkle_count, merkle_hash);
+        getpid(), (unsigned long long)merkle_count, final_hex);
     write_trace(final_buf, (size_t)final_len);
-    merkle_release();
     in_hook = 0;
 }
 
@@ -1242,6 +1456,7 @@ ssize_t HOOK_NAME(recv)(int sockfd, void *buf, size_t len, int flags) {
     RESOLVE(recv); ssize_t rc = CALL_REAL(recv, sockfd, buf, len, flags);
     if (!in_hook && trace_fd >= 0 && rc > 0 && is_llm_fd(sockfd)) {
         in_hook = 1;
+        timing_add_token(sockfd, (size_t)rc);
         int is_sse = (rc >= 6 && memcmp(buf, "data: ", 6) == 0) ? 1 : 0;
         tl_event_fd = sockfd;
         emit_log_event("recv_llm", getpid(), -999,
