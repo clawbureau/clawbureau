@@ -13,7 +13,7 @@ ifeq ($(UNAME_S),Darwin)
   CC = clang
   TARGET = libclawsig_interpose.dylib
   SHARED_FLAGS = -dynamiclib
-  LDFLAGS =
+  LDFLAGS = -Wl,-undefined,dynamic_lookup
 endif
 
 all: $(TARGET)
