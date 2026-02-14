@@ -361,7 +361,8 @@ if (typeof globalThis.fetch === 'function') {
         // try to decompress the already-decompressed body → ZlibError.
         const safeHeaders = new Headers(res.headers);
         safeHeaders.delete('content-encoding');
-        safeHeaders.delete('content-length'); // length changed after decompression
+        safeHeaders.delete('content-length');
+        safeHeaders.delete('transfer-encoding');
 
         return new Response(stream1, {
           status: res.status,
