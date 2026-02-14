@@ -237,6 +237,8 @@ export interface ProofBundlePayload {
       fs_events?: number;
       net_events?: number;
       net_suspicious?: number;
+      interpose_events?: number;
+      interpose_active?: boolean;
     };
     [key: string]: unknown;
   };

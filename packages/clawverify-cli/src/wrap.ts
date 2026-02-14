@@ -9,7 +9,7 @@
  */
 
 import { spawn, execFile } from 'node:child_process';
-import { readFile, writeFile, mkdir, unlink, copyFile, chmod } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, copyFile, chmod, stat } from 'node:fs/promises';
 import { openSync, readSync, closeSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { join, dirname } from 'node:path';
@@ -152,6 +152,14 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
   }
 
+  // 4b. Build and resolve the interposition library (Layer 6)
+  const interposeLib = await resolveInterposeLibrary(tmpDir);
+  if (interposeLib) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ACTIVE (${interposeLib.mechanism})\n`);
+  } else {
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (no C compiler or cached lib)\n`);
+  }
+
   // 5. Spawn child process with env overrides
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
@@ -184,6 +192,10 @@ export async function wrap(
       ENV: sentinelShellPath,
     } : {}),
     CLAWSIG_TRACE_FILE: traceFile,
+
+    // Layer 6: Syscall interposition via LD_PRELOAD / DYLD_INSERT_LIBRARIES
+    // Hooks connect(), open(), openat(), execve(), posix_spawn(), sendto()
+    ...(interposeLib ? interposeLib.env : {}),
   };
 
   // Pass through existing API keys from parent env
@@ -232,14 +244,25 @@ export async function wrap(
   const shellEvents = await harvestShellTrace(traceFile);
   const executionReceipts = await synthesizeExecutionReceipts(shellEvents, agentDid.did, runId);
 
+  // Harvest Interpose Sentinel trace (same JSONL file, layer="interpose")
+  const interposeEvents = await harvestInterposeTrace(traceFile);
+  const interposeReceipts = await synthesizeInterposeReceipts(interposeEvents, agentDid.did, runId);
+
   // Harvest Network Sentinel events
   const netEvents = netSentinel.getEvents();
   const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
+
+  // Merge interpose network receipts into network receipts
+  const allNetworkReceipts = [...networkReceipts, ...interposeReceipts.network];
+  const allExecutionReceipts = [...executionReceipts, ...interposeReceipts.execution];
 
   // Sentinel summary
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ${shellEvents.length} commands captured\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ${fsSentinel.eventCount} file events\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
+  if (interposeEvents.length > 0) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ${interposeEvents.length} syscalls (${interposeReceipts.network.length} net, ${interposeReceipts.execution.length} exec)\n`);
+  }
 
   if (netSentinel.suspiciousCount > 0) {
     process.stderr.write(`\x1b[31m[clawsig]\x1b[0m WARNING: Suspicious network connections detected!\n`);
@@ -252,11 +275,11 @@ export async function wrap(
   await proxy.stop();
 
   // Inject sentinel receipts into the bundle
-  if (executionReceipts.length > 0) {
-    bundle.payload.execution_receipts = executionReceipts;
+  if (allExecutionReceipts.length > 0) {
+    bundle.payload.execution_receipts = allExecutionReceipts;
   }
-  if (networkReceipts.length > 0) {
-    bundle.payload.network_receipts = networkReceipts;
+  if (allNetworkReceipts.length > 0) {
+    bundle.payload.network_receipts = allNetworkReceipts;
   }
   // Add sentinel metadata
   bundle.payload.metadata = {
@@ -266,6 +289,8 @@ export async function wrap(
       fs_events: fsSentinel.eventCount,
       net_events: netSentinel.eventCount,
       net_suspicious: netSentinel.suspiciousCount,
+      interpose_events: interposeEvents.length,
+      interpose_active: !!interposeLib,
     },
   };
 
@@ -275,8 +300,8 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${bundle.payload.receipts?.length ?? 0}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts (Shell): ${executionReceipts.length}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Network receipts: ${networkReceipts.length}\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts: ${allExecutionReceipts.length} (shell: ${executionReceipts.length}, interpose: ${interposeReceipts.execution.length})\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Network receipts: ${allNetworkReceipts.length} (polling: ${networkReceipts.length}, interpose: ${interposeReceipts.network.length})\n`);
   if (proxy.violationCount > 0) {
     process.stderr.write(`\x1b[31m[clawsig]\x1b[0m Policy violations: ${proxy.violationCount}\n`);
   }
@@ -643,3 +668,286 @@ async function synthesizeNetworkReceipts(
 
   return receipts;
 }
+
+// ---------------------------------------------------------------------------
+// Layer 6: Syscall Interposition (LD_PRELOAD / DYLD_INSERT_LIBRARIES)
+// ---------------------------------------------------------------------------
+
+interface InterposeLibResult {
+  /** Absolute path to the compiled .so/.dylib */
+  path: string;
+  /** "LD_PRELOAD" or "DYLD_INSERT_LIBRARIES" */
+  mechanism: string;
+  /** Env vars to inject into child process */
+  env: Record<string, string>;
+}
+
+interface InterposeTraceEvent {
+  layer: 'interpose';
+  ts: string;
+  syscall: string;
+  pid: number;
+  // connect/sendto fields
+  fd?: number;
+  addr?: string;
+  port?: number;
+  family?: string;
+  // open/openat fields
+  path?: string;
+  flags?: string;
+  dirfd?: number;
+  // execve/posix_spawn fields
+  argv?: string[];
+  child_pid?: number;
+  // sendto
+  len?: number;
+  rc: number;
+}
+
+interface InterposeSynthesized {
+  network: NetworkReceiptPayload[];
+  execution: ExecutionReceiptPayload[];
+}
+
+/**
+ * Resolve or build the interposition shared library.
+ *
+ * Strategy:
+ * 1. Look for a cached build in the SDK package directory
+ * 2. If not found, try to compile from source using cc/gcc/clang
+ * 3. Return null if no compiler available (graceful degradation)
+ *
+ * The built library is cached next to the source so subsequent runs
+ * skip the compile step.
+ */
+async function resolveInterposeLibrary(tmpDir: string): Promise<InterposeLibResult | null> {
+  const isDarwin = process.platform === 'darwin';
+  const isLinux = process.platform === 'linux';
+  if (!isDarwin && !isLinux) return null;
+
+  const ext = isDarwin ? 'dylib' : 'so';
+  const libName = `libclawsig_interpose.${ext}`;
+
+  // Resolve source directory from the SDK package
+  let sourceDir: string;
+  try {
+    const { createRequire } = require('node:module') as { createRequire: (url: string | URL) => NodeRequire };
+    const localRequire = createRequire(import.meta.url);
+    const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
+    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    sourceDir = join(sdkDir, 'src', 'sentinels', 'interpose');
+  } catch {
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+    sourceDir = join(thisDir, '..', '..', 'clawsig-sdk', 'src', 'sentinels', 'interpose');
+  }
+
+  const sourcePath = join(sourceDir, 'libclawsig_interpose.c');
+  const cachedLib = join(sourceDir, libName);
+
+  // 1. Check for cached build
+  try {
+    const [srcStat, libStat] = await Promise.all([
+      stat(sourcePath).catch(() => null),
+      stat(cachedLib).catch(() => null),
+    ]);
+
+    if (libStat && srcStat && libStat.mtimeMs >= srcStat.mtimeMs) {
+      // Cached lib is newer than source — use it
+      return makeInterposeResult(cachedLib, isDarwin);
+    }
+  } catch {
+    // Fall through to compilation
+  }
+
+  // 2. Try to compile
+  try {
+    const srcExists = await stat(sourcePath).catch(() => null);
+    if (!srcExists) return null;
+
+    const cc = isDarwin ? 'clang' : (process.env['CC'] || 'gcc');
+    const sharedFlag = isDarwin ? '-dynamiclib' : '-shared';
+    const ldflags = isLinux ? '-ldl' : '';
+
+    // Build into the source directory (cached for next run)
+    const buildCmd = `${cc} -Wall -O3 -fPIC -std=gnu99 ${sharedFlag} -o ${cachedLib} ${sourcePath} ${ldflags}`;
+
+    await execFileAsync('sh', ['-c', buildCmd], { timeout: 15000 });
+
+    const built = await stat(cachedLib).catch(() => null);
+    if (built) return makeInterposeResult(cachedLib, isDarwin);
+  } catch {
+    // No compiler or compile failed — degrade gracefully
+  }
+
+  return null;
+}
+
+function makeInterposeResult(libPath: string, isDarwin: boolean): InterposeLibResult {
+  if (isDarwin) {
+    return {
+      path: libPath,
+      mechanism: 'DYLD_INSERT_LIBRARIES',
+      env: {
+        DYLD_INSERT_LIBRARIES: libPath,
+        // Note: we use DYLD_INTERPOSE section in the library itself,
+        // NOT DYLD_FORCE_FLAT_NAMESPACE (broken on ARM64 macOS)
+      },
+    };
+  }
+  return {
+    path: libPath,
+    mechanism: 'LD_PRELOAD',
+    env: {
+      LD_PRELOAD: libPath,
+    },
+  };
+}
+
+/**
+ * Parse interpose trace events from the shared JSONL trace file.
+ * The C library writes {"layer":"interpose",...} lines to the same
+ * CLAWSIG_TRACE_FILE that the Sentinel Shell uses.
+ */
+async function harvestInterposeTrace(traceFile: string): Promise<InterposeTraceEvent[]> {
+  const events: InterposeTraceEvent[] = [];
+  try {
+    const content = await readFile(traceFile, 'utf-8');
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event.layer === 'interpose' && event.syscall) {
+          events.push(event as InterposeTraceEvent);
+        }
+      } catch {
+        // Skip unparseable lines
+      }
+    }
+  } catch {
+    // File doesn't exist or can't be read
+  }
+  return events;
+}
+
+/**
+ * Convert raw interpose trace events into typed receipts:
+ * - connect/sendto -> NetworkReceiptPayload
+ * - open/openat/execve/posix_spawn -> ExecutionReceiptPayload
+ */
+async function synthesizeInterposeReceipts(
+  events: InterposeTraceEvent[],
+  agentDid: string,
+  runId: string,
+): Promise<InterposeSynthesized> {
+  const network: NetworkReceiptPayload[] = [];
+  const execution: ExecutionReceiptPayload[] = [];
+  const encoder = new TextEncoder();
+  const { sha256B64u } = await import('@clawbureau/clawsig-sdk');
+
+  for (const event of events) {
+    const syscall = event.syscall;
+
+    if (syscall === 'connect' || syscall === 'sendto') {
+      const addr = event.addr ?? 'unknown';
+      const remoteHash = await sha256B64u(encoder.encode(`${addr}:${event.port ?? 0}`));
+      network.push({
+        receipt_version: '1',
+        receipt_id: `ipc_${crypto.randomUUID()}`,
+        protocol: event.family === 'AF_INET6' ? 'tcp6' : 'tcp',
+        remote_address_hash_b64u: remoteHash,
+        state: event.rc === 0 ? 'ESTABLISHED' : 'SYN_SENT',
+        classification: classifyInterposeAddress(addr, event.port ?? 0),
+        pid: event.pid,
+        process_name: null,
+        hash_algorithm: 'SHA-256',
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
+    } else if (
+      syscall === 'open' || syscall === 'openat' ||
+      syscall === 'open64' || syscall === 'openat64'
+    ) {
+      const path = event.path ?? '';
+      // Skip noisy system paths that are just runtime loading
+      if (isNoisyPath(path)) continue;
+
+      const pathHash = await sha256B64u(encoder.encode(path));
+      execution.push({
+        receipt_version: '1',
+        receipt_id: `ipf_${crypto.randomUUID()}`,
+        command_hash_b64u: pathHash,
+        command_type: 'file_access',
+        target_hash_b64u: pathHash,
+        pid: event.pid,
+        ppid: 0,
+        cwd_hash_b64u: '',
+        exit_code: event.rc >= 0 ? 0 : -1,
+        hash_algorithm: 'SHA-256',
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
+    } else if (
+      syscall === 'execve' || syscall === 'posix_spawn' || syscall === 'posix_spawnp'
+    ) {
+      const path = event.path ?? '';
+      const argvStr = event.argv ? event.argv.join(' ') : path;
+      const cmdHash = await sha256B64u(encoder.encode(argvStr));
+      const pathHash = await sha256B64u(encoder.encode(path));
+
+      execution.push({
+        receipt_version: '1',
+        receipt_id: `ipe_${crypto.randomUUID()}`,
+        command_hash_b64u: cmdHash,
+        command_type: 'subprocess_spawn',
+        target_hash_b64u: pathHash,
+        pid: event.pid,
+        ppid: 0,
+        cwd_hash_b64u: '',
+        exit_code: event.rc,
+        hash_algorithm: 'SHA-256',
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
+    }
+  }
+
+  return { network, execution };
+}
+
+/**
+ * Classify an interpose-captured network address.
+ * Known LLM API endpoints get 'expected', everything else gets 'unknown'.
+ */
+function classifyInterposeAddress(addr: string, port: number): string {
+  // Known LLM provider IP ranges are impractical to maintain.
+  // Instead: HTTPS (443) to any IP is likely an API call; other ports are suspicious.
+  if (port === 443 || port === 80) return 'expected';
+  if (port === 53) return 'dns';
+  return 'suspicious';
+}
+
+/**
+ * Filter out high-volume system paths that are just runtime/loader noise.
+ * These are not agent actions and would bloat the receipt log.
+ */
+function isNoisyPath(path: string): boolean {
+  if (!path) return true;
+  // Python bytecache, Node modules, system frameworks
+  if (path.includes('__pycache__')) return true;
+  if (path.includes('node_modules')) return true;
+  if (path.includes('.cpython-')) return true;
+  if (path.startsWith('/usr/lib/')) return true;
+  if (path.startsWith('/usr/share/')) return true;
+  if (path.startsWith('/System/Library/')) return true;
+  if (path.startsWith('/Library/Frameworks/Python.framework/')) return true;
+  if (path.includes('/Logging/') && path.endsWith('.plist')) return true;
+  if (path.includes('Info.plist')) return true;
+  if (path.includes('/Preferences/com.apple.')) return true;
+  // dyld/loader paths
+  if (path.startsWith('/dev/')) return true;
+  return false;
+}
+
