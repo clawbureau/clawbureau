@@ -239,6 +239,7 @@ export interface ProofBundlePayload {
       net_suspicious?: number;
       interpose_events?: number;
       interpose_active?: boolean;
+      preload_llm_events?: number;
     };
     [key: string]: unknown;
   };

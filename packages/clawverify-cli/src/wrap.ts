@@ -263,6 +263,10 @@ export async function wrap(
   const interposeEvents = await harvestInterposeTrace(traceFile);
   const interposeReceipts = await synthesizeInterposeReceipts(interposeEvents, agentDid.did, runId);
 
+  // Harvest Preload trace (same JSONL file, layer="preload") → gateway receipts
+  const preloadEvents = await harvestPreloadTrace(traceFile);
+  const preloadGatewayReceipts = await synthesizePreloadGatewayReceipts(preloadEvents, agentDid.did, runId);
+
   // Harvest Network Sentinel events
   const netEvents = netSentinel.getEvents();
   const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
@@ -277,6 +281,9 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
   if (interposeEvents.length > 0) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ${interposeEvents.length} syscalls (${interposeReceipts.network.length} net, ${interposeReceipts.execution.length} exec)\n`);
+  }
+  if (preloadGatewayReceipts.length > 0) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Preload LLM intercepts: ${preloadGatewayReceipts.length} (via diagnostics_channel + fetch)\n`);
   }
 
   if (netSentinel.suspiciousCount > 0) {
@@ -296,6 +303,12 @@ export async function wrap(
   if (allNetworkReceipts.length > 0) {
     bundle.payload.network_receipts = allNetworkReceipts;
   }
+  // Inject preload gateway receipts (LLM calls captured via diagnostics_channel)
+  if (preloadGatewayReceipts.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = (bundle.payload.receipts ?? []) as any[];
+    bundle.payload.receipts = [...existing, ...preloadGatewayReceipts] as typeof bundle.payload.receipts;
+  }
   // Add sentinel metadata
   bundle.payload.metadata = {
     ...bundle.payload.metadata,
@@ -306,13 +319,15 @@ export async function wrap(
       net_suspicious: netSentinel.suspiciousCount,
       interpose_events: interposeEvents.length,
       interpose_active: !!interposeLib,
+      preload_llm_events: preloadGatewayReceipts.length,
     },
   };
 
   // Print summary
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${bundle.payload.receipts?.length ?? 0}\n`);
+  const proxyGateway = (bundle.payload.receipts?.length ?? 0) - preloadGatewayReceipts.length;
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${bundle.payload.receipts?.length ?? 0} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length})\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts: ${allExecutionReceipts.length} (shell: ${executionReceipts.length}, interpose: ${interposeReceipts.execution.length})\n`);
@@ -971,6 +986,122 @@ function classifyInterposeAddress(addr: string, port: number): string {
   if (port === 443 || port === 80) return 'expected';
   if (port === 53) return 'dns';
   return 'suspicious';
+}
+
+// ---------------------------------------------------------------------------
+// Preload trace harvesting (LLM call interception via diagnostics_channel)
+// ---------------------------------------------------------------------------
+
+interface PreloadTraceEvent {
+  layer: 'preload';
+  ts: string;
+  type: string; // 'llm_request', 'tool_call', 'llm_request_error'
+  source?: string; // 'diagnostics_channel', 'fetch', 'fetch_supplement', 'http'
+  url?: string;
+  method?: string;
+  status?: number;
+  model?: string;
+  messages_hash?: string;
+  headers?: Record<string, string>;
+  // tool_call fields
+  tool_name?: string;
+  args_hash?: string;
+  // error fields
+  error?: string;
+}
+
+/**
+ * Harvest preload events from the JSONL trace file.
+ * These are LLM API calls captured by preload.mjs via diagnostics_channel,
+ * globalThis.fetch patches, or http/https patches.
+ */
+async function harvestPreloadTrace(traceFile: string): Promise<PreloadTraceEvent[]> {
+  const events: PreloadTraceEvent[] = [];
+  try {
+    const content = await readFile(traceFile, 'utf-8');
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event.layer === 'preload') {
+          events.push(event as PreloadTraceEvent);
+        }
+      } catch { /* skip */ }
+    }
+  } catch { /* file doesn't exist */ }
+  return events;
+}
+
+/**
+ * Synthesize gateway-style receipts from preload LLM intercepts.
+ * Deduplicates: if both diagnostics_channel and fetch captured the same request,
+ * prefer the fetch version (has model + messages_hash) and skip the DC-only one.
+ */
+async function synthesizePreloadGatewayReceipts(
+  events: PreloadTraceEvent[],
+  agentDid: string,
+  runId: string,
+): Promise<Record<string, unknown>[]> {
+  const receipts: Record<string, unknown>[] = [];
+  const encoder = new TextEncoder();
+  const { sha256B64u } = await import('@clawbureau/clawsig-sdk');
+
+  // Separate llm_request events by source
+  const llmRequests = events.filter(e => e.type === 'llm_request');
+  const toolCalls = events.filter(e => e.type === 'tool_call');
+
+  // Dedup: group by URL + method, prefer fetch/fetch_supplement over diagnostics_channel
+  const deduped = new Map<string, PreloadTraceEvent>();
+  for (const event of llmRequests) {
+    const key = `${event.method}:${event.url}`;
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, event);
+    } else if (event.source !== 'diagnostics_channel' && existing.source === 'diagnostics_channel') {
+      // Prefer fetch over DC (has body details)
+      deduped.set(key, event);
+    } else if (event.source === 'fetch_supplement') {
+      // Supplement enriches the DC entry
+      deduped.set(key, { ...existing, ...event, source: 'fetch_supplement' });
+    }
+  }
+
+  for (const event of deduped.values()) {
+    const urlHash = event.url ? await sha256B64u(encoder.encode(event.url)) : '';
+
+    receipts.push({
+      receipt_version: '1',
+      receipt_id: `gw_preload_${crypto.randomUUID()}`,
+      receipt_type: 'gateway',
+      source: event.source || 'preload',
+      url_hash_b64u: urlHash,
+      method: event.method || 'GET',
+      status: event.status ?? 0,
+      model: event.model || 'unknown',
+      messages_hash_b64u: event.messages_hash || '',
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: event.ts,
+      binding: { run_id: runId },
+    });
+  }
+
+  // Add tool call receipts
+  for (const tc of toolCalls) {
+    receipts.push({
+      receipt_version: '1',
+      receipt_id: `tc_preload_${crypto.randomUUID()}`,
+      receipt_type: 'tool_call',
+      tool_name: tc.tool_name || 'unknown',
+      args_hash_b64u: tc.args_hash || '',
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: tc.ts,
+      binding: { run_id: runId },
+    });
+  }
+
+  return receipts;
 }
 
 /**
