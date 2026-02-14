@@ -1,6 +1,6 @@
 {
   "name": "@clawbureau/clawverify-cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Offline verifier CLI for the Clawsig Protocol — verify proof bundles, export bundles, and commit signatures without network access.",
   "type": "module",
   "bin": {
@@ -48,7 +48,7 @@
   "homepage": "https://www.clawea.com/docs#sdk",
   "bugs": "https://github.com/clawbureau/clawbureau/issues",
   "dependencies": {
-    "@clawbureau/clawsig-sdk": "^0.4.0",
+    "@clawbureau/clawsig-sdk": "^0.4.1",
     "@clawbureau/clawverify-core": "^0.3.0"
   },
   "devDependencies": {
