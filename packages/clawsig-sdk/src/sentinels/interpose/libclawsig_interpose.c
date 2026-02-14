@@ -970,21 +970,29 @@ static void clawsig_init(void) {
 
 static void scan_memory_block(const unsigned char *p, size_t len) {
     if (len < 15) return;
-    for (size_t i = 0; i <= len - 10; i++) {
-        if (p[i] == 's' && p[i+1] == 'k' && p[i+2] == '-') {
-            if (i + 15 <= len) {
-                if (memcmp(p+i, "sk-ant-", 7) == 0) {
-                    emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"sk-ant-*\"");
-                    i += 30;
-                } else if (memcmp(p+i, "sk-proj-", 8) == 0) {
-                    emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"sk-proj-*\"");
-                    i += 30;
-                }
-            }
-        } else if (p[i] == 'B' && i + 15 <= len && memcmp(p+i, "Bearer sk-", 10) == 0) {
-            emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"Bearer sk-*\"");
-            i += 30;
+    const unsigned char *end = p + len - 10;
+    /* memchr-based scanning: use SIMD-accelerated memchr to jump to
+     * candidate 's' and 'B' positions. From D-Architect stealable idea #32.
+     * 4-8x faster than linear byte-by-byte on large memory regions. */
+    while (p <= end) {
+        const unsigned char *s = (const unsigned char *)memchr(p, 's', (size_t)(end - p + 1));
+        const unsigned char *b = (const unsigned char *)memchr(p, 'B', (size_t)(end - p + 1));
+        if (!s && !b) break;
+        /* Pick whichever candidate comes first */
+        const unsigned char *next = s ? (b ? (s < b ? s : b) : s) : b;
+        if (*next == 's' && next + 7 <= end + 10 && memcmp(next, "sk-ant-", 7) == 0) {
+            emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"sk-ant-*\"");
+            p = next + 30; continue;
         }
+        if (*next == 's' && next + 8 <= end + 10 && memcmp(next, "sk-proj-", 8) == 0) {
+            emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"sk-proj-*\"");
+            p = next + 30; continue;
+        }
+        if (*next == 'B' && next + 10 <= end + 10 && memcmp(next, "Bearer sk-", 10) == 0) {
+            emit_log_event("mem_forensics", getpid(), -999, ",\"pattern\":\"Bearer sk-*\"");
+            p = next + 30; continue;
+        }
+        p = next + 1;
     }
 }
 
@@ -1224,7 +1232,12 @@ int HOOK_NAME(listen)(int sockfd, int backlog) {
 int HOOK_NAME(accept)(int sockfd, struct sockaddr *restrict addr, socklen_t *restrict addrlen) {
     RESOLVE(accept); if (in_hook || trace_fd < 0) return CALL_REAL(accept, sockfd, addr, addrlen);
     in_hook = 1; int rc = CALL_REAL(accept, sockfd, addr, addrlen); int saved_errno = errno;
-    if (rc >= 0) untrack_fd(rc);
+    if (rc >= 0) {
+        untrack_fd(rc);
+        /* Causal lineage: client FD inherits server socket's causal sequence */
+        if (sockfd >= 0 && sockfd < MAX_TRACKED_FDS && rc < MAX_TRACKED_FDS)
+            fd_last_seq[rc] = fd_last_seq[sockfd];
+    }
     char ip[INET6_ADDRSTRLEN] = ""; int port = 0; const char *family = "UNKNOWN";
     if (addr) format_addr(addr, ip, sizeof(ip), &port, &family);
     tl_event_fd = sockfd;
@@ -1248,8 +1261,14 @@ int HOOK_NAME(socket)(int domain, int type, int protocol) {
 int HOOK_NAME(pipe)(int pipefd[2]) {
     RESOLVE(pipe); if (in_hook || trace_fd < 0) return CALL_REAL(pipe, pipefd);
     in_hook = 1; int rc = CALL_REAL(pipe, pipefd); int saved_errno = errno;
-    if (rc == 0) emit_log_event("pipe", getpid(), rc,
-        ",\"read_fd\":%d,\"write_fd\":%d", pipefd[0], pipefd[1]);
+    if (rc == 0) {
+        /* Causal lineage: write end inherits read end's causal sequence */
+        if (pipefd[0] >= 0 && pipefd[0] < MAX_TRACKED_FDS &&
+            pipefd[1] >= 0 && pipefd[1] < MAX_TRACKED_FDS)
+            fd_last_seq[pipefd[1]] = fd_last_seq[pipefd[0]];
+        emit_log_event("pipe", getpid(), rc,
+            ",\"read_fd\":%d,\"write_fd\":%d", pipefd[0], pipefd[1]);
+    }
     in_hook = 0; errno = saved_errno; return rc;
 }
 
@@ -1258,8 +1277,14 @@ int HOOK_NAME(socketpair)(int domain, int type, int protocol, int sv[2]) {
         return CALL_REAL(socketpair, domain, type, protocol, sv);
     in_hook = 1; int rc = CALL_REAL(socketpair, domain, type, protocol, sv);
     int saved_errno = errno;
-    if (rc == 0) emit_log_event("socketpair", getpid(), rc,
-        ",\"domain\":%d,\"type\":%d,\"fd0\":%d,\"fd1\":%d", domain, type, sv[0], sv[1]);
+    if (rc == 0) {
+        /* Causal lineage: link both ends of socketpair */
+        if (sv[0] >= 0 && sv[0] < MAX_TRACKED_FDS &&
+            sv[1] >= 0 && sv[1] < MAX_TRACKED_FDS)
+            fd_last_seq[sv[1]] = fd_last_seq[sv[0]];
+        emit_log_event("socketpair", getpid(), rc,
+            ",\"domain\":%d,\"type\":%d,\"fd0\":%d,\"fd1\":%d", domain, type, sv[0], sv[1]);
+    }
     in_hook = 0; errno = saved_errno; return rc;
 }
 
@@ -1267,6 +1292,9 @@ int HOOK_NAME(dup)(int oldfd) {
     RESOLVE(dup); if (in_hook || trace_fd < 0) return CALL_REAL(dup, oldfd);
     in_hook = 1; int rc = CALL_REAL(dup, oldfd); int saved_errno = errno;
     if (rc >= 0) {
+        /* Causal lineage: new FD inherits old FD's causal sequence */
+        if (oldfd >= 0 && oldfd < MAX_TRACKED_FDS && rc < MAX_TRACKED_FDS)
+            fd_last_seq[rc] = fd_last_seq[oldfd];
         tl_event_fd = oldfd;
         emit_log_event("dup", getpid(), rc, ",\"oldfd\":%d", oldfd);
     }
@@ -1275,21 +1303,46 @@ int HOOK_NAME(dup)(int oldfd) {
 
 int HOOK_NAME(dup2)(int oldfd, int newfd) {
     RESOLVE(dup2);
-    /* Trace FD protection: reject dup2 targeting our elevated trace fd.
-     * From C-YOLO stealable idea #5. */
+    /* Trace FD protection: migrate trace_fd upward if dup2 targets it.
+     * From D-Architect: resilient migration + tamper alert.
+     * Survives hostile dup2 without losing trace capability. */
     if (newfd == trace_fd && trace_fd >= 0) {
-        errno = EBADF;
-        if (!in_hook && trace_fd >= 0) {
-            in_hook = 1;
-            emit_log_event("trace_tamper", getpid(), -1,
-                ",\"action\":\"dup2_blocked\",\"oldfd\":%d,\"target_fd\":%d", oldfd, newfd);
-            in_hook = 0;
+        int moved_fd = fcntl(trace_fd, F_DUPFD_CLOEXEC, trace_fd + 1);
+        if (moved_fd >= 0) {
+            int old_trace = trace_fd;
+            trace_fd = moved_fd;
+#ifdef __linux__
+            if (real_close) real_close(old_trace); else close(old_trace);
+#else
+            close(old_trace);
+#endif
+            if (!in_hook) {
+                in_hook = 1;
+                emit_log_event("trace_tamper", getpid(), -1,
+                    ",\"action\":\"dup2_migrated\",\"oldfd\":%d,\"target_fd\":%d,\"new_trace_fd\":%d",
+                    oldfd, newfd, moved_fd);
+                in_hook = 0;
+            }
+        } else {
+            /* Migration failed — fall back to blocking */
+            errno = EBADF;
+            if (!in_hook) {
+                in_hook = 1;
+                emit_log_event("trace_tamper", getpid(), -1,
+                    ",\"action\":\"dup2_blocked\",\"oldfd\":%d,\"target_fd\":%d", oldfd, newfd);
+                in_hook = 0;
+            }
+            return -1;
         }
-        return -1;
     }
     if (in_hook || trace_fd < 0) return CALL_REAL(dup2, oldfd, newfd);
     in_hook = 1; int rc = CALL_REAL(dup2, oldfd, newfd); int saved_errno = errno;
-    if (rc >= 0) untrack_fd(newfd);
+    if (rc >= 0) {
+        untrack_fd(newfd);
+        /* Causal lineage: new FD inherits old FD's causal sequence */
+        if (oldfd >= 0 && oldfd < MAX_TRACKED_FDS && newfd >= 0 && newfd < MAX_TRACKED_FDS)
+            fd_last_seq[newfd] = fd_last_seq[oldfd];
+    }
     tl_event_fd = oldfd;
     emit_log_event("dup2", getpid(), rc,
         ",\"oldfd\":%d,\"newfd\":%d", oldfd, newfd);
