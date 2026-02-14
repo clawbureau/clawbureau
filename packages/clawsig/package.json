@@ -1,6 +1,6 @@
 {
   "name": "clawsig",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Verify what your AI agents actually did. Cryptographic proof bundles for every agent action — tool calls, file changes, network connections, subprocess spawns.",
   "bin": {
     "clawsig": "./bin/clawsig.js"
@@ -10,7 +10,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@clawbureau/clawverify-cli": "^0.3.3"
+    "@clawbureau/clawverify-cli": "^0.3.4"
   },
   "keywords": [
     "ai-agent",
