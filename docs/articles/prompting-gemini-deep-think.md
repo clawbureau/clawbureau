@@ -10,7 +10,7 @@ Google just shipped Gemini 3.0 Pro Deep Think to AI Ultra subscribers. It's a re
 
 I used it as a design oracle: fire a prompt, receive architecture, implement the architecture, test it in production, measure what broke, then fire the next prompt with the failure data. 19 rounds. Each round's output became the next round's input. The feedback loop was tight enough to see exactly which prompting patterns produced shippable code versus architecture astronautics.
 
-These findings are specific to Gemini 3.0 Pro Deep Think, but most patterns transfer to any reasoning model (o3, Claude with extended thinking, DeepSeek R1).
+These findings are specific to Gemini 3.0 Pro Deep Think, but most patterns transfer to any reasoning model (GPT-5.2 Pro Extended, Claude with extended thinking, DeepSeek R1).
 
 ---
 
