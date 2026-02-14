@@ -242,6 +242,16 @@ export interface ProofBundlePayload {
       preload_llm_events?: number;
       tls_sni_events?: number;
       tls_sni_receipts?: number;
+      interpose_state?: {
+        pid_tree_size?: number;
+        bound_ports?: number[];
+        dns_entries?: number;
+        env_audits?: number;
+        cred_leaks?: number;
+        recv_samples?: number;
+        total_events?: number;
+        max_seq?: number;
+      };
     };
     [key: string]: unknown;
   };
