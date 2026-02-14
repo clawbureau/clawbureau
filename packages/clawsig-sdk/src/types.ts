@@ -266,6 +266,12 @@ export interface ExecutionReceiptPayload {
   cwd_hash_b64u: string;
   /** Exit code of the previous command. */
   exit_code: number;
+  /** Semantic command analysis metadata. */
+  metadata?: {
+    risk?: 'safe' | 'caution' | 'dangerous' | 'critical';
+    data_flow?: 'inbound' | 'outbound' | 'bidirectional' | 'local' | 'unknown';
+    patterns?: string[];
+  };
   hash_algorithm: 'SHA-256';
   agent_did: string;
   timestamp: string;

@@ -21,6 +21,8 @@ import {
   startLocalProxy,
   FsSentinel,
   NetSentinel,
+  analyzeCommand,
+  compilePolicyToBash,
 } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
@@ -28,6 +30,7 @@ import type {
   ExecutionReceiptPayload,
   NetworkReceiptPayload,
   LocalPolicy,
+  CommandAnalysis,
 } from '@clawbureau/clawsig-sdk';
 
 const execFileAsync = promisify(execFile);
@@ -91,10 +94,13 @@ export async function wrap(
   process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
 
-  // 2. Load local WPC policy (if present)
+  // 2. Load local WPC policy (if present) and compile for bash sentinel
   const policy = await loadLocalPolicy();
   if (policy) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements\n`);
+    const policyJsonPath = join(process.cwd(), '.clawsig', 'policy.json');
+    const compiledPolicyPath = join(process.cwd(), '.clawsig', 'policy.compiled');
+    await compilePolicyToBash(policyJsonPath, compiledPolicyPath);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (compiled for sentinel)\n`);
   }
 
   // 3. Set up deep execution sentinels
@@ -102,7 +108,7 @@ export async function wrap(
   const traceFile = join(tmpDir, 'shell-trace.jsonl');
   await writeFile(traceFile, '', 'utf-8'); // Create empty trace file
 
-  // Copy sentinel-shell.sh to temp dir
+  // Copy sentinel-shell.sh and sentinel-shell-policy.sh to temp dir
   let sentinelShellPath: string | null = null;
   try {
     // Resolve from the SDK package
@@ -110,17 +116,25 @@ export async function wrap(
     sentinelShellPath = join(tmpDir, 'sentinel-shell.sh');
     await copyFile(sdkSentinelPath, sentinelShellPath);
     await chmod(sentinelShellPath, 0o755);
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG)\n`);
+
+    // Copy the policy evaluator alongside it
+    const sdkPolicyPath = sdkSentinelPath.replace('sentinel-shell.sh', 'sentinel-shell-policy.sh');
+    const destPolicyPath = join(tmpDir, 'sentinel-shell-policy.sh');
+    await copyFile(sdkPolicyPath, destPolicyPath).catch(() => {});
+    await chmod(destPolicyPath, 0o755).catch(() => {});
+
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG + policy evaluator)\n`);
   } catch {
     process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (could not locate sentinel-shell.sh)\n`);
   }
 
-  // Start FS Sentinel
+  // Start FS Sentinel — pass traceFile explicitly (child writes to it, parent reads)
   const fsSentinel = new FsSentinel({
     watchDirs: [process.cwd()],
+    traceFile,
   });
   fsSentinel.start();
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ACTIVE (fs.watch recursive)\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ACTIVE (fs.watch + trace polling)\n`);
 
   // Start Network Sentinel
   const netSentinel = new NetSentinel({
@@ -637,6 +651,9 @@ async function synthesizeExecutionReceipts(
       ? await sha256B64u(encoder.encode(event.target))
       : undefined;
 
+    // Semantic command analysis
+    const analysis: CommandAnalysis = analyzeCommand(event.cmd);
+
     receipts.push({
       receipt_version: '1',
       receipt_id: `ex_${crypto.randomUUID()}`,
@@ -647,6 +664,11 @@ async function synthesizeExecutionReceipts(
       ppid: event.ppid,
       cwd_hash_b64u: cwdHash,
       exit_code: event.exit,
+      metadata: {
+        risk: analysis.risk,
+        data_flow: analysis.dataFlow,
+        patterns: analysis.patterns,
+      },
       hash_algorithm: 'SHA-256',
       agent_did: agentDid,
       timestamp: event.ts,

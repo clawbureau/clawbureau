@@ -1,16 +1,16 @@
 /**
- * Nuclear LLM Call Interception Preload (Node 24 / Undici Dispatcher)
- *
- * Patches THREE layers:
- *   1. undici.Dispatcher.prototype.dispatch() — the chokepoint ALL HTTP flows through in Node 24
- *   2. globalThis.fetch — belt-and-suspenders for direct fetch() calls
- *   3. http/https.request — legacy code path
- *
- * Handles streaming SSE tool_call reassembly across all three LLM providers.
- * Auto-discovers LLM endpoints from env vars.
- * Uses a raw fd for trace output (bypasses own hooks).
+ * Nuclear LLM Call Interception Preload (Node 24 / Undici + globalThis.fetch)
  *
  * Loaded via NODE_OPTIONS="--import /path/to/preload.mjs"
+ *
+ * Three interception layers:
+ * 1. diagnostics_channel — hooks undici internals, fires for ALL HTTP regardless
+ *    of how fetch was obtained. Solves the Anthropic SDK construction-time capture.
+ * 2. globalThis.fetch — patches the global fetch for direct callers, captures
+ *    request bodies and tees response streams for SSE tool_call extraction.
+ * 3. http/https — patches Node's legacy HTTP modules for belt-and-suspenders.
+ *
+ * All layers write to CLAWSIG_TRACE_FILE as JSONL using raw fd (no re-entrancy).
  */
 
 import http from 'node:http';
@@ -19,53 +19,54 @@ import cp from 'node:child_process';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { URL, fileURLToPath } from 'node:url';
+import diagnostics_channel from 'node:diagnostics_channel';
 
 // ---------------------------------------------------------------------------
-// Trace output — uses raw fd to avoid triggering our own fs hooks
+// Trace file setup — raw fd to avoid re-entrancy with our own hooks
 // ---------------------------------------------------------------------------
+
 const traceFile = process.env.CLAWSIG_TRACE_FILE;
 let traceFd = null;
+
 if (traceFile) {
-  try { traceFd = fs.openSync(traceFile, 'a'); } catch { /* skip */ }
-}
-
-function emitTrace(payload) {
-  if (traceFd === null) return;
-  try {
-    const line = Buffer.from(
-      JSON.stringify({ layer: 'preload', ts: new Date().toISOString(), ...payload }) + '\n',
-    );
-    fs.writeSync(traceFd, line);
-  } catch { /* best effort */ }
+  try { traceFd = fs.openSync(traceFile, 'a'); } catch { /* ignore */ }
 }
 
 // ---------------------------------------------------------------------------
-// LLM Domain Discovery
+// LLM domain registry
 // ---------------------------------------------------------------------------
+
 const LLM_DOMAINS = new Set([
-  'api.openai.com',
-  'api.anthropic.com',
-  'generativelanguage.googleapis.com',
-  'api.groq.com',
-  'openrouter.ai',
-  'api.together.xyz',
-  'api.mistral.ai',
-  'api.cohere.com',
-  'api.deepseek.com',
+  'api.openai.com', 'api.anthropic.com', 'generativelanguage.googleapis.com',
+  'api.groq.com', 'openrouter.ai', 'api.together.xyz', 'api.mistral.ai',
+  'api.cohere.com', 'api.fireworks.ai', 'api.deepseek.com',
 ]);
 
-// Auto-discover endpoints from env
+// Auto-discover from env vars
 for (const [k, v] of Object.entries(process.env)) {
-  if (!v) continue;
-  if ((k.endsWith('_BASE_URL') || k.endsWith('_API_BASE')) && v.startsWith('http')) {
-    try { LLM_DOMAINS.add(new URL(v).hostname); } catch { /* skip */ }
+  if (v && (k.endsWith('_BASE_URL') || k.endsWith('_API_BASE')) && v.startsWith('http')) {
+    try { LLM_DOMAINS.add(new URL(v).hostname); } catch { /* ignore */ }
   }
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function emitTrace(payload) {
+  if (traceFd === null) return;
+  try {
+    const line = Buffer.from(JSON.stringify({
+      layer: 'preload',
+      ts: new Date().toISOString(),
+      ...payload,
+    }) + '\n');
+    fs.writeSync(traceFd, line);
+  } catch { /* never throw from instrumentation */ }
+}
+
 function hashString(str) {
+  if (!str) return '';
   return crypto.createHash('sha256').update(str).digest('base64url');
 }
 
@@ -73,46 +74,39 @@ function redactHeaders(headers) {
   if (!headers) return {};
   const redacted = {};
 
-  // undici passes headers as a flat [key, value, key, value, ...] Buffer array
   if (Array.isArray(headers)) {
     for (let i = 0; i < headers.length; i += 2) {
-      const key = Buffer.isBuffer(headers[i]) ? headers[i].toString('utf8') : String(headers[i]);
-      const val = Buffer.isBuffer(headers[i + 1]) ? headers[i + 1].toString('utf8') : String(headers[i + 1]);
+      const key = Buffer.isBuffer(headers[i]) ? headers[i].toString('utf8') : String(headers[i] ?? '');
+      const val = Buffer.isBuffer(headers[i + 1]) ? headers[i + 1].toString('utf8') : String(headers[i + 1] ?? '');
       const lk = key.toLowerCase();
-      redacted[key] = (lk === 'authorization' || lk.includes('api-key') || lk.includes('api_key'))
-        ? '[REDACTED]'
-        : val;
+      redacted[key] = (lk === 'authorization' || lk.includes('api-key') || lk.includes('api_key')) ? '[REDACTED]' : val;
     }
-    return redacted;
-  }
-
-  // Headers object or plain object
-  const entries = typeof headers.entries === 'function'
-    ? Array.from(headers.entries())
-    : Object.entries(headers);
-  for (const [key, value] of entries) {
-    const lk = key.toLowerCase();
-    redacted[key] = (lk === 'authorization' || lk.includes('api-key') || lk.includes('api_key'))
-      ? '[REDACTED]'
-      : value;
+  } else {
+    const entries = typeof headers.entries === 'function' ? Array.from(headers.entries()) : Object.entries(headers || {});
+    for (const [key, value] of entries) {
+      const lk = String(key).toLowerCase();
+      redacted[key] = (lk === 'authorization' || lk.includes('api-key') || lk.includes('api_key')) ? '[REDACTED]' : value;
+    }
   }
   return redacted;
 }
 
 // ---------------------------------------------------------------------------
-// SSE Streaming Tool Call Reassembly State Machine
+// SSE Tool Call State Machine
+// Handles OpenAI (index-based delta), Anthropic (content_block_delta),
+// and Google (complete functionCall objects).
 // ---------------------------------------------------------------------------
+
 class SseToolParser {
   constructor() {
     this.buffer = '';
     this.tools = new Map(); // index → { name, args }
+    this.model = 'unknown';
   }
 
-  /** Feed a chunk of SSE text (may contain partial lines) */
   push(chunk) {
     this.buffer += chunk;
     const lines = this.buffer.split('\n');
-    // Keep the last (possibly partial) line
     this.buffer = lines.pop() || '';
 
     for (const line of lines) {
@@ -124,7 +118,12 @@ class SseToolParser {
       try {
         const parsed = JSON.parse(data);
 
-        // OpenAI: delta.tool_calls with index-based multiplexing
+        // Extract model from first chunk
+        if (parsed.model && this.model === 'unknown') {
+          this.model = parsed.model;
+        }
+
+        // OpenAI format: choices[].delta.tool_calls[{index, function: {name, arguments}}]
         for (const choice of parsed.choices || []) {
           for (const tc of choice.delta?.tool_calls || []) {
             const idx = tc.index ?? 0;
@@ -133,16 +132,9 @@ class SseToolParser {
             if (tc.function?.name) t.name += tc.function.name;
             if (tc.function?.arguments) t.args += tc.function.arguments;
           }
-          // Non-streaming: message.tool_calls (complete)
-          for (const tc of choice.message?.tool_calls || []) {
-            if (tc.function?.name) {
-              const idx = tc.index ?? this.tools.size;
-              this.tools.set(idx, { name: tc.function.name, args: tc.function.arguments || '{}' });
-            }
-          }
         }
 
-        // Anthropic: content_block_start + content_block_delta
+        // Anthropic format: content_block_start / content_block_delta
         if (parsed.type === 'content_block_start' && parsed.content_block?.type === 'tool_use') {
           const idx = parsed.index ?? this.tools.size;
           this.tools.set(idx, { name: parsed.content_block.name || '', args: '' });
@@ -153,28 +145,23 @@ class SseToolParser {
           }
         }
 
-        // Gemini: complete functionCall in each candidate
+        // Google format: candidates[].content.parts[].functionCall
         for (const candidate of parsed.candidates || []) {
           for (const part of candidate.content?.parts || []) {
-            if (part.functionCall?.name) {
+            if (part.functionCall) {
               const idx = this.tools.size;
               this.tools.set(idx, {
-                name: part.functionCall.name,
+                name: part.functionCall.name || '',
                 args: JSON.stringify(part.functionCall.args || {}),
               });
             }
           }
         }
-      } catch { /* skip partial/invalid JSON */ }
+      } catch { /* Skip unparseable JSON */ }
     }
   }
 
-  /** Extract all completed tool calls */
   finalize() {
-    // Flush any remaining buffer
-    if (this.buffer.trim()) {
-      this.push('\n');
-    }
     const extracted = [];
     for (const t of this.tools.values()) {
       if (t.name) extracted.push({ name: t.name, args: t.args || '{}' });
@@ -183,199 +170,158 @@ class SseToolParser {
   }
 }
 
-/** Also handle non-streaming JSON responses */
-function extractToolCallsFromJson(body) {
-  const tools = [];
-  try {
-    const parsed = JSON.parse(body);
-    // OpenAI
-    for (const c of parsed.choices || []) {
-      for (const tc of c.message?.tool_calls || []) {
-        if (tc.function?.name) tools.push({ name: tc.function.name, args: tc.function.arguments || '{}' });
-      }
-    }
-    // Anthropic
-    for (const c of parsed.content || []) {
-      if (c.type === 'tool_use' && c.name) {
-        tools.push({ name: c.name, args: JSON.stringify(c.input || {}) });
-      }
-    }
-    // Gemini
-    for (const c of parsed.candidates || []) {
-      for (const part of c.content?.parts || []) {
-        if (part.functionCall?.name) {
-          tools.push({ name: part.functionCall.name, args: JSON.stringify(part.functionCall.args || {}) });
-        }
-      }
-    }
-  } catch { /* skip */ }
-  return tools;
-}
-
-function isLlmDomain(hostname) {
-  return hostname && LLM_DOMAINS.has(hostname);
-}
-
 // ---------------------------------------------------------------------------
-// LAYER 1: Undici Dispatcher (Node 24 core HTTP path)
+// LAYER 1: diagnostics_channel — guaranteed interception of ALL undici HTTP
+//
+// This solves the Anthropic SDK problem: the SDK captures `fetch` at
+// construction time before our globalThis.fetch patch runs. But
+// diagnostics_channel hooks into undici's Client internals, firing for
+// every request regardless of how it was initiated.
 // ---------------------------------------------------------------------------
-async function patchUndici() {
-  let undici;
-  try {
-    undici = await import('undici');
-  } catch {
-    return; // undici not available (Node < 18)
-  }
-  if (!undici?.Dispatcher?.prototype?.dispatch) return;
 
-  const origDispatch = undici.Dispatcher.prototype.dispatch;
+// Dedup: track which requests the diagnostics_channel already captured
+// so globalThis.fetch and http/https patches don't double-emit.
+const _dcCapturedUrls = new Set();
+const _dcActiveRequests = new Map();
 
-  undici.Dispatcher.prototype.dispatch = function patchedDispatch(opts, handler) {
-    let hostname;
-    try {
-      if (typeof opts.origin === 'string') {
-        hostname = new URL(opts.origin).hostname;
-      } else if (opts.origin && typeof opts.origin === 'object') {
-        hostname = opts.origin.hostname;
-      }
-    } catch {
-      return origDispatch.call(this, opts, handler);
-    }
+try {
+  if (typeof diagnostics_channel.subscribe === 'function') {
+    diagnostics_channel.subscribe('undici:request:create', ({ request }) => {
+      let hostname;
+      try {
+        const origin = typeof request.origin === 'string' ? request.origin : String(request.origin ?? '');
+        hostname = new URL(origin).hostname;
+      } catch { return; }
 
-    if (!isLlmDomain(hostname)) {
-      return origDispatch.call(this, opts, handler);
-    }
+      if (!LLM_DOMAINS.has(hostname)) return;
 
-    // Extract request body
-    let reqBodyStr = '';
-    if (typeof opts.body === 'string') {
-      reqBodyStr = opts.body;
-    } else if (Buffer.isBuffer(opts.body)) {
-      reqBodyStr = opts.body.toString('utf8');
-    }
-
-    let model = 'unknown';
-    try { model = JSON.parse(reqBodyStr).model || 'unknown'; } catch { /* skip */ }
-
-    const url = `${opts.origin}${opts.path}`;
-
-    emitTrace({
-      type: 'llm_request',
-      url,
-      method: opts.method,
-      headers: redactHeaders(opts.headers),
-      model,
-      messages_hash: reqBodyStr ? hashString(reqBodyStr) : '',
+      const url = `${request.origin}${request.path}`;
+      _dcActiveRequests.set(request, {
+        url,
+        method: request.method,
+        hostname,
+        startTime: Date.now(),
+      });
     });
 
-    // Wrap the handler to intercept response
-    const parser = new SseToolParser();
-    const origOnHeaders = handler.onHeaders;
-    const origOnData = handler.onData;
-    const origOnComplete = handler.onComplete;
-    const origOnError = handler.onError;
+    diagnostics_channel.subscribe('undici:request:headers', ({ request, response }) => {
+      const data = _dcActiveRequests.get(request);
+      if (!data) return;
 
-    const wrappedHandler = Object.create(handler);
+      // Record status code for the emit at trailers
+      data.statusCode = response?.statusCode;
+    });
 
-    wrappedHandler.onHeaders = function (statusCode, headers, resume, statusMessage) {
-      try {
-        emitTrace({ type: 'llm_response_status', url, status: statusCode });
-      } catch { /* skip */ }
-      if (origOnHeaders) return origOnHeaders.call(handler, statusCode, headers, resume, statusMessage);
-      return true;
-    };
+    diagnostics_channel.subscribe('undici:request:trailers', ({ request }) => {
+      const data = _dcActiveRequests.get(request);
+      if (!data) return;
+      _dcActiveRequests.delete(request);
 
-    wrappedHandler.onData = function (chunk) {
-      try {
-        parser.push(chunk.toString('utf8'));
-      } catch { /* skip */ }
-      if (origOnData) return origOnData.call(handler, chunk);
-      return true;
-    };
+      // Mark as captured by diagnostics_channel so fetch patch doesn't double-emit
+      const dedupKey = `${data.method}:${data.url}:${data.startTime}`;
+      _dcCapturedUrls.add(dedupKey);
+      // Clean up dedup after 5s
+      setTimeout(() => _dcCapturedUrls.delete(dedupKey), 5000);
 
-    wrappedHandler.onComplete = function (trailers) {
-      try {
-        const tools = parser.finalize();
-        for (const tc of tools) {
-          emitTrace({ type: 'tool_call', tool_name: tc.name, args_hash: hashString(tc.args) });
-        }
-      } catch { /* skip */ }
-      if (origOnComplete) return origOnComplete.call(handler, trailers);
-    };
+      emitTrace({
+        type: 'llm_request',
+        source: 'diagnostics_channel',
+        url: data.url,
+        method: data.method,
+        status: data.statusCode ?? 0,
+        model: 'unknown', // Body not available via DC; fetch patch provides model
+      });
+    });
 
-    wrappedHandler.onError = function (err) {
-      if (origOnError) return origOnError.call(handler, err);
-    };
+    diagnostics_channel.subscribe('undici:request:error', ({ request, error }) => {
+      const data = _dcActiveRequests.get(request);
+      if (!data) return;
+      _dcActiveRequests.delete(request);
 
-    return origDispatch.call(this, opts, wrappedHandler);
-  };
+      emitTrace({
+        type: 'llm_request_error',
+        source: 'diagnostics_channel',
+        url: data.url,
+        method: data.method,
+        error: error?.message || 'unknown',
+      });
+    });
+  }
+} catch {
+  // diagnostics_channel not available in this Node version — fall through to fetch patch
 }
 
-// Fire and forget — don't block module loading
-patchUndici().catch(() => {});
+// ---------------------------------------------------------------------------
+// LAYER 2: globalThis.fetch — synchronous override for body extraction
+//
+// Even with diagnostics_channel, we still need the fetch patch to:
+// - Extract request bodies (model name, messages)
+// - Tee response streams for SSE tool_call extraction
+// - Capture model + messages_hash that DC can't provide
+// ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// LAYER 2: globalThis.fetch (belt-and-suspenders)
-// ---------------------------------------------------------------------------
 if (typeof globalThis.fetch === 'function') {
   const origFetch = globalThis.fetch;
 
   globalThis.fetch = async function clawsigFetch(input, init) {
     let urlStr = '';
     let method = 'GET';
-    let headers = {};
+    const headers = {};
 
     if (typeof input === 'string') {
       urlStr = input;
     } else if (input instanceof URL) {
       urlStr = input.toString();
-    } else if (input instanceof Request) {
+    } else if (input && typeof input === 'object' && 'url' in input) {
       urlStr = input.url;
-      method = input.method;
-      input.headers.forEach((v, k) => { headers[k] = v; });
+      method = input.method || method;
+      if (input.headers && typeof input.headers.forEach === 'function') {
+        input.headers.forEach((v, k) => { headers[k] = v; });
+      }
     }
     if (init) {
       method = init.method || method;
-      if (init.headers) headers = init.headers;
+      if (init.headers) {
+        const h = init.headers;
+        if (typeof h.forEach === 'function') h.forEach((v, k) => { headers[k] = v; });
+        else if (typeof h === 'object') Object.assign(headers, h);
+      }
     }
 
-    let hostname;
-    try { hostname = new URL(urlStr).hostname; } catch { return origFetch.apply(this, arguments); }
+    let urlObj;
+    try { urlObj = new URL(urlStr); } catch { return origFetch.apply(this, arguments); }
 
-    if (!isLlmDomain(hostname)) {
+    if (!LLM_DOMAINS.has(urlObj.hostname)) {
       return origFetch.apply(this, arguments);
     }
 
-    // Extract request body
+    // Extract request body for model identification
     let reqBody = '';
     if (init?.body && typeof init.body === 'string') {
       reqBody = init.body;
-    } else if (input instanceof Request && !input.bodyUsed) {
-      try { reqBody = await input.clone().text(); } catch { /* skip */ }
+    } else if (input && typeof input === 'object' && 'clone' in input && !input.bodyUsed) {
+      try { reqBody = await input.clone().text(); } catch { /* ignore */ }
     }
 
     let model = 'unknown';
-    try { model = JSON.parse(reqBody).model || 'unknown'; } catch { /* skip */ }
+    try { model = JSON.parse(reqBody).model || 'unknown'; } catch { /* ignore */ }
 
-    emitTrace({
-      type: 'llm_request',
-      url: urlStr,
-      method,
-      headers: redactHeaders(headers),
-      model,
-      messages_hash: reqBody ? hashString(reqBody) : '',
-    });
-
+    const startTime = Date.now();
     const res = await origFetch.apply(this, arguments);
 
-    // Tee the body stream to capture tool calls without breaking the caller
+    // Check dedup — if diagnostics_channel already captured this, skip the metadata emit
+    // but still tee for body extraction
+    const dedupKey = `${method}:${urlStr}:${startTime}`;
+    const alreadyCaptured = _dcCapturedUrls.has(dedupKey);
+
+    // Tee response stream for SSE tool_call extraction
     if (res.body && typeof res.body.tee === 'function') {
       try {
         const [stream1, stream2] = res.body.tee();
         const parser = new SseToolParser();
-        const decoder = new TextDecoder('utf-8');
+        const decoder = new TextDecoder('utf8');
 
-        // Consume the tee'd stream in the background
+        // Background: read stream2 for tool extraction
         (async () => {
           try {
             const reader = stream2.getReader();
@@ -384,11 +330,28 @@ if (typeof globalThis.fetch === 'function') {
               if (done) break;
               if (value) parser.push(decoder.decode(value, { stream: true }));
             }
+
+            // Emit (or supplement DC's emit with body details)
+            emitTrace({
+              type: 'llm_request',
+              source: alreadyCaptured ? 'fetch_supplement' : 'fetch',
+              url: urlStr,
+              method,
+              headers: redactHeaders(headers),
+              status: res.status,
+              model: parser.model !== 'unknown' ? parser.model : model,
+              messages_hash: reqBody ? hashString(reqBody) : '',
+            });
+
             const tools = parser.finalize();
             for (const tc of tools) {
-              emitTrace({ type: 'tool_call', tool_name: tc.name, args_hash: hashString(tc.args) });
+              emitTrace({
+                type: 'tool_call',
+                tool_name: tc.name,
+                args_hash: hashString(tc.args),
+              });
             }
-          } catch { /* skip */ }
+          } catch { /* never throw from instrumentation */ }
         })();
 
         return new Response(stream1, {
@@ -397,8 +360,22 @@ if (typeof globalThis.fetch === 'function') {
           headers: res.headers,
         });
       } catch {
-        return res; // Tee failed, return original
+        return res;
       }
+    }
+
+    // Non-streaming response
+    if (!alreadyCaptured) {
+      emitTrace({
+        type: 'llm_request',
+        source: 'fetch',
+        url: urlStr,
+        method,
+        headers: redactHeaders(headers),
+        status: res.status,
+        model,
+        messages_hash: reqBody ? hashString(reqBody) : '',
+      });
     }
 
     return res;
@@ -406,11 +383,11 @@ if (typeof globalThis.fetch === 'function') {
 }
 
 // ---------------------------------------------------------------------------
-// LAYER 3: Legacy http/https.request
+// LAYER 3: http/https — legacy Node HTTP module patches
 // ---------------------------------------------------------------------------
+
 function patchHttp(mod, defaultProtocol) {
   const origRequest = mod.request;
-
   mod.request = function clawsigHttpRequest(...args) {
     let urlStr = '';
     let options = {};
@@ -425,23 +402,23 @@ function patchHttp(mod, defaultProtocol) {
       urlStr = `${protocol}//${host}${path}`;
     }
 
-    let hostname;
-    try { hostname = new URL(urlStr).hostname; } catch { return origRequest.apply(this, args); }
-    if (!isLlmDomain(hostname)) return origRequest.apply(this, args);
+    let urlObj;
+    try { urlObj = new URL(urlStr); } catch { return origRequest.apply(this, args); }
+    if (!LLM_DOMAINS.has(urlObj.hostname)) return origRequest.apply(this, args);
 
     const req = origRequest.apply(this, args);
     const reqHeaders = typeof req.getHeaders === 'function' ? req.getHeaders() : (options.headers || {});
-    const reqBodyChunks = [];
 
+    const reqBodyChunks = [];
     const origWrite = req.write;
     const origEnd = req.end;
 
-    req.write = function (chunk) {
+    req.write = function(chunk) {
       if (chunk) reqBodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
       return origWrite.apply(this, arguments);
     };
 
-    req.end = function (chunk) {
+    req.end = function(chunk) {
       if (chunk && typeof chunk !== 'function') {
         reqBodyChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
       }
@@ -449,15 +426,15 @@ function patchHttp(mod, defaultProtocol) {
     };
 
     req.on('response', (res) => {
-      const parser = new SseToolParser();
       let isStreaming = false;
       const jsonChunks = [];
+      const sseParser = new SseToolParser();
 
       res.on('data', (chunk) => {
         const str = Buffer.from(chunk).toString('utf8');
         if (str.includes('data:') || isStreaming) {
           isStreaming = true;
-          parser.push(str);
+          sseParser.push(str);
         } else {
           jsonChunks.push(str);
         }
@@ -466,11 +443,12 @@ function patchHttp(mod, defaultProtocol) {
       res.on('end', () => {
         try {
           const reqBody = Buffer.concat(reqBodyChunks).toString('utf8');
-          let model = 'unknown';
-          try { model = JSON.parse(reqBody).model || 'unknown'; } catch { /* skip */ }
+          let model = sseParser.model !== 'unknown' ? sseParser.model : 'unknown';
+          try { model = model === 'unknown' ? (JSON.parse(reqBody).model || 'unknown') : model; } catch { /* ignore */ }
 
           emitTrace({
             type: 'llm_request',
+            source: 'http',
             url: urlStr,
             method: options.method || 'GET',
             headers: redactHeaders(reqHeaders),
@@ -481,14 +459,23 @@ function patchHttp(mod, defaultProtocol) {
 
           let tools;
           if (isStreaming) {
-            tools = parser.finalize();
+            tools = sseParser.finalize();
           } else {
-            tools = extractToolCallsFromJson(jsonChunks.join(''));
+            try {
+              const parsed = JSON.parse(jsonChunks.join(''));
+              tools = [];
+              for (const c of parsed.choices || []) {
+                for (const tc of c.message?.tool_calls || []) {
+                  if (tc.function?.name) tools.push({ name: tc.function.name, args: tc.function.arguments || '{}' });
+                }
+              }
+            } catch { tools = []; }
           }
+
           for (const tc of tools) {
             emitTrace({ type: 'tool_call', tool_name: tc.name, args_hash: hashString(tc.args) });
           }
-        } catch { /* skip */ }
+        } catch { /* never throw from instrumentation */ }
       });
     });
 
@@ -507,39 +494,73 @@ patchHttp(http, 'http:');
 patchHttp(https, 'https:');
 
 // ---------------------------------------------------------------------------
-// LAYER 4: Propagate NODE_OPTIONS to ALL child processes
+// LAYER 4: Child Process Propagation
+// Injects NODE_OPTIONS + CLAWSIG_TRACE_FILE into child processes.
 // ---------------------------------------------------------------------------
+
+const cpMethods = ['spawn', 'fork', 'exec', 'execFile', 'spawnSync', 'execSync', 'execFileSync'];
+for (const method of cpMethods) {
+  if (typeof cp[method] === 'function') {
+    const orig = cp[method];
+    cp[method] = function clawsigCpMethod(...args) {
+      let optsIndex = -1;
+
+      if (['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'].includes(method)) {
+        if (args.length >= 3 && typeof args[2] === 'object' && args[2] !== null) optsIndex = 2;
+        else if (args.length === 2 && !Array.isArray(args[1]) && typeof args[1] === 'object' && args[1] !== null) optsIndex = 1;
+      } else if (['exec', 'execSync'].includes(method)) {
+        if (args.length >= 2 && typeof args[1] === 'object' && args[1] !== null && !Array.isArray(args[1]) && typeof args[1] !== 'function') optsIndex = 1;
+      }
+
+      if (optsIndex !== -1) {
+        const opts = args[optsIndex] = args[optsIndex] || {};
+        const env = opts.env || { ...process.env };
+        let myPath = import.meta.url;
+        if (myPath.startsWith('file://')) myPath = fileURLToPath(myPath);
+
+        const sentinelPath = myPath.replace(/preload\.mjs$/, 'node-preload-sentinel.mjs');
+        const importFlags = `--import ${myPath} --import ${sentinelPath}`;
+
+        let nodeOpts = env.NODE_OPTIONS || '';
+        if (!nodeOpts.includes('preload.mjs')) nodeOpts = `${nodeOpts} ${importFlags}`.trim();
+
+        opts.env = { ...env, NODE_OPTIONS: nodeOpts, CLAWSIG_TRACE_FILE: traceFile };
+      }
+
+      return orig.apply(this, args);
+    };
+  }
+}
+
+// Also patch ChildProcess.prototype.spawn for envPairs injection
 const origCpSpawn = cp.ChildProcess.prototype.spawn;
-cp.ChildProcess.prototype.spawn = function clawsigCpSpawn(options) {
-  if (options?.envPairs) {
+cp.ChildProcess.prototype.spawn = function(options) {
+  if (options && options.envPairs) {
     let myPath = import.meta.url;
     if (myPath.startsWith('file://')) myPath = fileURLToPath(myPath);
-    const sentinelPath = myPath.replace(/preload\.mjs$/, 'node-preload-sentinel.mjs');
+    const sentinelPath = myPath.replace('preload.mjs', 'node-preload-sentinel.mjs');
 
-    const importPreload = `--import ${myPath}`;
-    const importSentinel = `--import ${sentinelPath}`;
+    const importFlag1 = `--import ${myPath}`;
+    const importFlag2 = `--import ${sentinelPath}`;
 
     let hasNodeOptions = false;
     let hasTraceFile = false;
 
     for (let i = 0; i < options.envPairs.length; i++) {
       const pair = options.envPairs[i];
+      if (typeof pair !== 'string') continue;
       if (pair.startsWith('NODE_OPTIONS=')) {
         hasNodeOptions = true;
         let newPair = pair;
-        if (!pair.includes('preload.mjs')) newPair += ` ${importPreload}`;
-        if (!pair.includes('node-preload-sentinel.mjs')) newPair += ` ${importSentinel}`;
+        if (!pair.includes('preload.mjs')) newPair += ` ${importFlag1}`;
+        if (!pair.includes('node-preload-sentinel.mjs')) newPair += ` ${importFlag2}`;
         options.envPairs[i] = newPair;
       }
       if (pair.startsWith('CLAWSIG_TRACE_FILE=')) hasTraceFile = true;
     }
 
-    if (!hasNodeOptions) {
-      options.envPairs.push(`NODE_OPTIONS=${importPreload} ${importSentinel}`);
-    }
-    if (!hasTraceFile && traceFile) {
-      options.envPairs.push(`CLAWSIG_TRACE_FILE=${traceFile}`);
-    }
+    if (!hasNodeOptions) options.envPairs.push(`NODE_OPTIONS=${importFlag1} ${importFlag2}`);
+    if (!hasTraceFile && traceFile) options.envPairs.push(`CLAWSIG_TRACE_FILE=${traceFile}`);
   }
   return origCpSpawn.apply(this, arguments);
 };

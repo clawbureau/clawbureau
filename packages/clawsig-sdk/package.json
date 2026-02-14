@@ -29,6 +29,7 @@
     "src/preload.mjs",
     "src/node-preload-sentinel.mjs",
     "src/sentinel-shell.sh",
+    "src/sentinel-shell-policy.sh",
     "src/sentinels/interpose/libclawsig_interpose.c",
     "src/sentinels/interpose/Makefile",
     "README.md",
