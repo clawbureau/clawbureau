@@ -1,0 +1,38 @@
+{
+  "name": "clawsig",
+  "version": "0.3.0",
+  "description": "Verify what your AI agents actually did. Cryptographic proof bundles for every agent action — tool calls, file changes, network connections, subprocess spawns.",
+  "bin": {
+    "clawsig": "./bin/clawsig.js"
+  },
+  "files": [
+    "bin/clawsig.js",
+    "README.md"
+  ],
+  "dependencies": {
+    "@clawbureau/clawverify-cli": "^0.3.0"
+  },
+  "keywords": [
+    "ai-agent",
+    "verification",
+    "proof-of-work",
+    "observability",
+    "security",
+    "devops",
+    "github-actions",
+    "Ed25519",
+    "DID",
+    "clawsig"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawbureau/clawbureau",
+    "directory": "packages/clawsig"
+  },
+  "homepage": "https://clawprotocol.org",
+  "bugs": "https://github.com/clawbureau/clawbureau/issues",
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
