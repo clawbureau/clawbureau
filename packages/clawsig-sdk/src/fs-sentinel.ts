@@ -1,6 +1,19 @@
-import { watch, createReadStream, type FSWatcher } from 'node:fs';
+/**
+ * File System Sentinel — Hybrid fs.watch + trace file observer.
+ *
+ * Two complementary layers:
+ * A) fs.watch (recursive) — captures file writes/renames in watched directories.
+ * B) Trace file polling — reads events emitted by node-preload-sentinel.mjs,
+ *    which patches the entire Node fs API to capture reads, writes, deletes, etc.
+ *
+ * The trace file path MUST be passed via constructor options (not env var),
+ * because this sentinel runs in the parent wrap.ts process while the env var
+ * is set on the child process only.
+ */
+
+import { watch, type FSWatcher } from 'node:fs';
 import { stat, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, createReadStream } from 'node:fs';
 import { join, resolve, isAbsolute, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline';
@@ -20,6 +33,8 @@ export interface FsEvent {
 export interface FsSentinelOptions {
   watchDirs?: string[];
   ignorePatterns?: RegExp[];
+  /** Explicit path to the CLAWSIG_TRACE_FILE. Required for trace polling. */
+  traceFile?: string;
 }
 
 const DEFAULT_IGNORE: RegExp[] = [
@@ -47,8 +62,8 @@ export class FsSentinel {
   private pendingCaptures = new Set<Promise<void>>();
   private watchDirs: string[];
 
-  // Trace file polling — harvests reads/writes from node-preload-sentinel
-  private traceFile = process.env['CLAWSIG_TRACE_FILE'];
+  // Trace file polling
+  private traceFile: string | undefined;
   private traceCursor = 0;
   private tracePollTimer?: ReturnType<typeof setInterval>;
 
@@ -61,6 +76,9 @@ export class FsSentinel {
     const tmp = os.tmpdir();
     this.watchDirs = options.watchDirs ?? [process.cwd(), tmp, '/tmp'];
     this.watchDirs = Array.from(new Set(this.watchDirs.map(d => resolve(d))));
+
+    // Accept trace file path explicitly (NOT from env)
+    this.traceFile = options.traceFile;
   }
 
   start(): void {
@@ -84,7 +102,7 @@ export class FsSentinel {
 
             const dedupKey = `watch:${eventType}:${fullPath}`;
             if (this.dedupCache.has(dedupKey)) {
-              clearTimeout(this.dedupCache.get(dedupKey));
+              clearTimeout(this.dedupCache.get(dedupKey)!);
             }
 
             const timer = setTimeout(() => {
@@ -114,7 +132,7 @@ export class FsSentinel {
   }
 
   // -------------------------------------------------------------------------
-  // Trace file polling — reads interpose events for file I/O
+  // Trace file polling
   // -------------------------------------------------------------------------
 
   private async pollTraceFile(): Promise<void> {
@@ -135,6 +153,7 @@ export class FsSentinel {
         if (!line.trim()) continue;
         try {
           const event = JSON.parse(line);
+          // Accept events from node-preload-sentinel (layer: 'interpose')
           if (event.layer !== 'interpose' || !event.syscall || !event.path) continue;
 
           const fullPath = isAbsolute(event.path) ? event.path : join(process.cwd(), event.path);
@@ -147,7 +166,7 @@ export class FsSentinel {
             op = 'read';
           } else if (syscall.includes('writeFile') || syscall.includes('appendFile') ||
                      syscall.includes('createWriteStream') || syscall === 'write' ||
-                     (syscall === 'copyFile' && event.flags === 'write')) {
+                     (syscall === 'copyFile')) {
             op = 'write';
           } else if (syscall.includes('unlink') || syscall.includes('rm')) {
             op = 'delete';
@@ -159,10 +178,9 @@ export class FsSentinel {
 
           if (!op) continue;
 
-          // Dedup against already-seen events
+          // Dedup within a 2s window
           const dedupKey = `trace:${op}:${fullPath}`;
           if (this.dedupCache.has(dedupKey)) continue;
-          // Set a short dedup window
           const timer = setTimeout(() => this.dedupCache.delete(dedupKey), 2000);
           this.dedupCache.set(dedupKey, timer);
 
@@ -179,7 +197,7 @@ export class FsSentinel {
       }
 
       this.traceCursor = stats.size;
-    } catch { /* skip */ }
+    } catch { /* skip errors */ }
   }
 
   // -------------------------------------------------------------------------
@@ -187,9 +205,7 @@ export class FsSentinel {
   // -------------------------------------------------------------------------
 
   async flush(): Promise<void> {
-    // Catch up on trace file
-    await this.pollTraceFile();
-    // Wait for debounced fs.watch events
+    await this.pollTraceFile().catch(() => {});
     await new Promise(r => setTimeout(r, 100));
     await Promise.allSettled(Array.from(this.pendingCaptures));
   }
@@ -197,28 +213,24 @@ export class FsSentinel {
   async stop(): Promise<void> {
     this.running = false;
 
-    // Stop fs.watch watchers
     for (const watcher of this.watchers.values()) {
       try { watcher.close(); } catch { /* ignore */ }
     }
     this.watchers.clear();
 
-    // Stop trace polling
     if (this.tracePollTimer) {
       clearInterval(this.tracePollTimer);
       this.tracePollTimer = undefined;
     }
 
-    // Clear debounce timers
     for (const timer of this.dedupCache.values()) {
       clearTimeout(timer);
     }
     this.dedupCache.clear();
 
-    // Final flush
     await this.flush();
 
-    // Deduplicate: same (operation, path) keeps first occurrence only
+    // Deduplicate: same (operation, path) keeps first occurrence
     const seen = new Set<string>();
     this.events = this.events.filter(e => {
       const key = `${e.operation}:${e.path}`;
@@ -257,7 +269,6 @@ export class FsSentinel {
     return this.ignorePatterns.some(p => p.test(path));
   }
 
-  /** Capture a fs.watch notification (writes/renames) */
   private async captureWatchEvent(
     eventType: 'change' | 'rename',
     fullPath: string,

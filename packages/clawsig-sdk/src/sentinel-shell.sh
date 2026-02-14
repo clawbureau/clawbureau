@@ -26,6 +26,13 @@ export __CLAWSIG_SENTINEL_LOADED="1"
 # ---- Fallback trace destination ----
 : "${CLAWSIG_TRACE_FILE:=/tmp/clawsig-shell-trace-$$.jsonl}"
 
+# ---- Source policy evaluator if present ----
+_CLAWSIG_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_CLAWSIG_SCRIPT_DIR/sentinel-shell-policy.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "$_CLAWSIG_SCRIPT_DIR/sentinel-shell-policy.sh"
+fi
+
 # ---- Pattern lists for classification ----
 # Network egress patterns (commands that make network connections)
 _CLAWSIG_NET_PAT='curl |wget |nc |ncat |socat |ssh |scp |rsync |fetch |httpie '
@@ -58,6 +65,22 @@ _clawsig_debug_trap() {
      [[ "$_cs_cmd" == "return "* ]] || \
      [[ "$_cs_cmd" == "true" ]]; then
     return "$_cs_exit"
+  fi
+
+  # ---- Policy enforcement (real-time blocking) ----
+  if type evaluate_command >/dev/null 2>&1; then
+    evaluate_command "$_cs_cmd"
+    if [[ "$_CLAWSIG_EVAL_RESULT" == "BLOCK" ]]; then
+      echo "[clawsig:policy] BLOCKED: $_cs_cmd" >&2
+      # Log the blocked command to trace file
+      local _cs_block_ts
+      _cs_block_ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+      local _cs_block_esc="$_cs_cmd"
+      _cs_block_esc="${_cs_block_esc//\\/\\\\}"
+      _cs_block_esc="${_cs_block_esc//\"/\\\"}"
+      echo "{\"layer\":\"shell\",\"ts\":\"$_cs_block_ts\",\"pid\":$$,\"ppid\":$PPID,\"cwd\":\"${PWD//\\/\\\\}\",\"cmd\":\"$_cs_block_esc\",\"type\":\"policy_blocked\",\"target\":\"\",\"exit\":1}" >> "$CLAWSIG_TRACE_FILE"
+      return 1
+    fi
   fi
 
   # Timestamp: portable across macOS + Linux

@@ -61,6 +61,12 @@ export { NetSentinel } from './net-sentinel.js';
 // Connection Classification
 export { classifyConnection } from './classify-connection.js';
 
+// Command Analyzer — semantic shell command security analysis
+export { analyzeCommand } from './command-analyzer.js';
+
+// Policy Compiler — WPC JSON → bash patterns
+export { compilePolicyToBash } from './compile-policy.js';
+
 // Types
 export type {
   ClawproofConfig,
@@ -96,6 +102,9 @@ export type { LocalProxy, ProxyOptions } from './local-proxy.js';
 
 // Sentinel types
 export type { FsEvent, FsSentinelOptions } from './fs-sentinel.js';
+
+// Command Analyzer types
+export type { CommandAnalysis } from './command-analyzer.js';
 export type { NetEvent, NetSentinelOptions } from './net-sentinel.js';
 
 // Causal Sieve types
