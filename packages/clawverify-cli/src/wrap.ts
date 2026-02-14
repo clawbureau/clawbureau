@@ -174,6 +174,7 @@ export async function wrap(
     NODE_OPTIONS: [
       process.env['NODE_OPTIONS'],
       `--import ${resolvePreloadPath()}`,
+      `--import ${resolveNodePreloadSentinelPath()}`,
     ].filter(Boolean).join(' '),
 
     // NOTE: We intentionally DO NOT set HTTP_PROXY/HTTPS_PROXY.
@@ -234,7 +235,7 @@ export async function wrap(
   });
 
   // 6. Stop sentinels, harvest data, compile proof bundle
-  fsSentinel.stop();
+  await fsSentinel.stop();
   netSentinel.stop();
 
   process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Child exited with code ${exitCode}\n`);
@@ -441,6 +442,27 @@ function resolvePreloadPath(): string {
   } catch {
     // Last resort: bare specifier, child must resolve it
     return '@clawbureau/clawsig-sdk/preload';
+  }
+}
+
+/**
+ * Resolve the node-preload-sentinel.mjs path (JS-level fallback for DYLD_INSERT).
+ */
+function resolveNodePreloadSentinelPath(): string {
+  try {
+    const resolved: string = import.meta.resolve('@clawbureau/clawsig-sdk/node-preload-sentinel');
+    if (resolved) return resolved;
+  } catch { /* fallback */ }
+
+  try {
+    const { createRequire } = require('node:module');
+    const localRequire = createRequire(import.meta.url);
+    const sdkPkg: string = localRequire.resolve('@clawbureau/clawsig-sdk/package.json');
+    const sdkDir = sdkPkg.replace(/\/package\.json$/, '');
+    const sentinelPath = join(sdkDir, 'src', 'node-preload-sentinel.mjs');
+    return `file://${sentinelPath}`;
+  } catch {
+    return '@clawbureau/clawsig-sdk/node-preload-sentinel';
   }
 }
 

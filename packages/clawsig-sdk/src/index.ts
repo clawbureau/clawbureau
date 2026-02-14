@@ -58,6 +58,9 @@ export { CausalSieve } from './causal-sieve.js';
 export { FsSentinel } from './fs-sentinel.js';
 export { NetSentinel } from './net-sentinel.js';
 
+// Connection Classification
+export { classifyConnection } from './classify-connection.js';
+
 // Types
 export type {
   ClawproofConfig,
