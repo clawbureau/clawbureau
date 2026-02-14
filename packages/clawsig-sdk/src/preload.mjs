@@ -354,10 +354,19 @@ if (typeof globalThis.fetch === 'function') {
           } catch { /* never throw from instrumentation */ }
         })();
 
+        // Strip content-encoding from the wrapped Response.
+        // Bun (and some Node versions) auto-decompress the body but keep
+        // the original Content-Encoding header. If we create a new Response
+        // with the same headers, consumers see "Content-Encoding: br" and
+        // try to decompress the already-decompressed body → ZlibError.
+        const safeHeaders = new Headers(res.headers);
+        safeHeaders.delete('content-encoding');
+        safeHeaders.delete('content-length'); // length changed after decompression
+
         return new Response(stream1, {
           status: res.status,
           statusText: res.statusText,
-          headers: res.headers,
+          headers: safeHeaders,
         });
       } catch {
         return res;
