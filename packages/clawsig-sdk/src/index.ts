@@ -107,9 +107,12 @@ export type { FsEvent, FsSentinelOptions } from './fs-sentinel.js';
 export type { CommandAnalysis } from './command-analyzer.js';
 export type { NetEvent, NetSentinelOptions } from './net-sentinel.js';
 
-// Interpose State (ground truth oracle from C library)
+// Interpose State (graph attribution oracle from C library)
 export { InterposeState } from './interpose-state.js';
-export type { EnvAuditEvent, CredLeakEvent, RecvLlmEvent } from './interpose-state.js';
+export type {
+  AgentRole, EnvAuditEvent, CredLeakEvent, RecvLlmEvent,
+  AgentNode, GenealogyReceiptNode,
+} from './interpose-state.js';
 
 // Causal Sieve types
 export type {
