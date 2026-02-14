@@ -19,12 +19,22 @@ export interface NetEvent {
 
 export interface NetSentinelOptions {
   pollIntervalMs?: number;
-  allowedHosts?: string[];
 }
+
+/**
+ * Time-windowed dedup: same (pid, proto, local, remote) within this window → skip.
+ * After the window expires, emit a fresh receipt (connection still alive = useful signal).
+ */
+const DEDUP_WINDOW_MS = 10_000;
+
+/**
+ * Shells that inherit parent FDs — exclude from lsof queries entirely.
+ */
+const SHELL_NAMES = new Set(['bash', 'sh', 'zsh', 'fish', 'dash']);
 
 export class NetSentinel {
   private timer?: ReturnType<typeof setInterval>;
-  private knownConnections = new Set<string>();
+  private knownConnections = new Map<string, number>(); // connKey → last-seen timestamp
   private events: NetEvent[] = [];
   private targetPids = new Set<number>();
   private running = false;
@@ -57,8 +67,11 @@ export class NetSentinel {
     }
   }
 
+  /** Returns only meaningful events (filters fd_inheritance + system_noise) */
   getEvents(): NetEvent[] {
-    return [...this.events];
+    return this.events.filter(
+      e => e.classification !== 'fd_inheritance' && e.classification !== 'system_noise',
+    );
   }
 
   getSuspiciousEvents(): NetEvent[] {
@@ -66,47 +79,112 @@ export class NetSentinel {
   }
 
   get eventCount(): number {
-    return this.events.length;
+    return this.getEvents().length;
   }
 
   get suspiciousCount(): number {
     return this.getSuspiciousEvents().length;
   }
 
+  // -------------------------------------------------------------------------
+  // Polling
+  // -------------------------------------------------------------------------
+
   private async poll(): Promise<void> {
-    const pids = await this.expandPidTree();
-    if (pids.length === 0) return;
+    const tree = await this.expandPidTree();
+    if (tree.pids.length === 0) return;
+
+    // Filter out shell PIDs from lsof query (prevents FD inheritance noise at source)
+    const queryPids: number[] = [];
+    for (const pid of tree.pids) {
+      const name = tree.processNames.get(pid) || '';
+      if (SHELL_NAMES.has(name)) continue;
+      queryPids.push(pid);
+    }
+
+    // Always include root target PIDs
+    for (const pid of this.targetPids) {
+      if (!queryPids.includes(pid)) queryPids.push(pid);
+    }
+
+    if (queryPids.length === 0) return;
 
     if (this.isMac) {
-      await this.pollLsof(pids);
+      await this.pollLsof(queryPids, tree);
     } else {
-      await this.pollProcNetTcp(pids);
+      await this.pollProcNetTcp(queryPids, tree);
+    }
+
+    // Expire old dedup entries
+    const now = Date.now();
+    for (const [key, ts] of this.knownConnections) {
+      if (now - ts > DEDUP_WINDOW_MS) {
+        this.knownConnections.delete(key);
+      }
     }
   }
 
-  private async expandPidTree(): Promise<number[]> {
+  // -------------------------------------------------------------------------
+  // PID tree expansion
+  // -------------------------------------------------------------------------
+
+  private async expandPidTree(): Promise<{
+    pids: number[];
+    isAgentMap: Map<number, boolean>;
+    processNames: Map<number, string>;
+  }> {
     const allPids = new Set<number>(this.targetPids);
+    const isAgentMap = new Map<number, boolean>();
+    const processNames = new Map<number, string>();
+
+    for (const p of this.targetPids) isAgentMap.set(p, true);
+
     if (this.isMac) {
+      // Batched pgrep: comma-separated parent PIDs in one call
       let currentLevel = Array.from(this.targetPids);
       while (currentLevel.length > 0) {
-        const nextLevel: number[] = [];
-        for (const pid of currentLevel) {
-          try {
-            const { stdout } = await execFileAsync('pgrep', ['-P', String(pid)], { timeout: 1000 });
-            const childPids = stdout.trim().split('\n').map(p => parseInt(p, 10)).filter(p => !isNaN(p));
-            for (const childPid of childPids) {
-              if (!allPids.has(childPid)) {
-                allPids.add(childPid);
-                nextLevel.push(childPid);
-              }
+        try {
+          const { stdout } = await execFileAsync(
+            'pgrep', ['-P', currentLevel.join(',')],
+            { timeout: 2000 },
+          );
+          const childPids = stdout.trim().split('\n')
+            .map(p => parseInt(p, 10))
+            .filter(p => !isNaN(p));
+          currentLevel = [];
+          for (const childPid of childPids) {
+            if (!allPids.has(childPid)) {
+              allPids.add(childPid);
+              isAgentMap.set(childPid, true);
+              currentLevel.push(childPid);
             }
-          } catch {
-            // Process exited or no children
           }
+        } catch {
+          break; // No children or pgrep failed
         }
-        currentLevel = nextLevel;
+      }
+
+      // Single ps call to get process names
+      if (allPids.size > 0) {
+        try {
+          const pidList = Array.from(allPids).join(',');
+          const { stdout } = await execFileAsync(
+            'ps', ['-o', 'pid=,comm=', '-p', pidList],
+            { timeout: 2000 },
+          );
+          for (const line of stdout.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            const spaceIdx = trimmed.indexOf(' ');
+            if (spaceIdx === -1) continue;
+            const pid = parseInt(trimmed.slice(0, spaceIdx), 10);
+            const comm = trimmed.slice(spaceIdx + 1).trim().split('/').pop()!.replace(/^-/, '');
+            if (!isNaN(pid) && comm) processNames.set(pid, comm);
+          }
+        } catch { /* skip */ }
       }
     } else {
+      // Linux: read /proc to build parent→children map
       try {
         const procDirs = readdirSync('/proc');
         const ppidMap = new Map<number, number[]>();
@@ -115,15 +193,16 @@ export class NetSentinel {
           if (isNaN(pid)) continue;
           try {
             const statContent = readFileSync(`/proc/${pid}/stat`, 'utf8');
-            const match = statContent.match(/^\d+\s+\([^)]+\)\s+[A-Z]\s+(\d+)/);
-            if (match?.[1]) {
-              const ppid = parseInt(match[1], 10);
-              const children = ppidMap.get(ppid) || [];
-              children.push(pid);
-              ppidMap.set(ppid, children);
+            const match = statContent.match(/^\d+\s+\(([^)]+)\)\s+[A-Z]\s+(\d+)/);
+            if (match?.[1] && match?.[2]) {
+              const ppid = parseInt(match[2], 10);
+              processNames.set(pid, match[1]);
+              if (!ppidMap.has(ppid)) ppidMap.set(ppid, []);
+              ppidMap.get(ppid)!.push(pid);
             }
           } catch { /* skip */ }
         }
+
         const queue = Array.from(this.targetPids);
         while (queue.length > 0) {
           const pid = queue.shift()!;
@@ -131,19 +210,27 @@ export class NetSentinel {
           for (const child of children) {
             if (!allPids.has(child)) {
               allPids.add(child);
+              isAgentMap.set(child, true);
               queue.push(child);
             }
           }
         }
-      } catch { /* fallthrough */ }
+      } catch { /* skip */ }
     }
 
-    return Array.from(allPids);
+    return { pids: Array.from(allPids), isAgentMap, processNames };
   }
 
-  private async pollLsof(pids: number[]): Promise<void> {
+  // -------------------------------------------------------------------------
+  // macOS: lsof-based polling
+  // -------------------------------------------------------------------------
+
+  private async pollLsof(
+    queryPids: number[],
+    tree: { isAgentMap: Map<number, boolean>; processNames: Map<number, string> },
+  ): Promise<void> {
     try {
-      const args = ['-i', '-n', '-P', '-F', 'pcPnT', '-p', pids.join(',')];
+      const args = ['-i', '-n', '-P', '-F', 'pcPnT', '-p', queryPids.join(',')];
       let stdout = '';
       try {
         const result = await execFileAsync('lsof', args, { timeout: 3000 });
@@ -155,6 +242,7 @@ export class NetSentinel {
       }
 
       const ts = new Date().toISOString();
+      const nowMs = Date.now();
       let currentPid = -1;
       let currentCmd = '';
       let currentProtocol = '';
@@ -174,7 +262,7 @@ export class NetSentinel {
           const address = val;
           let state = 'UNKNOWN';
 
-          if (i + 1 < lines.length && lines[i + 1]?.startsWith('TST=')) {
+          if (lines[i + 1]?.startsWith('TST=')) {
             state = lines[i + 1]!.slice(4);
             i++;
           }
@@ -182,28 +270,34 @@ export class NetSentinel {
           if (!address.includes('->')) continue;
           if (state !== 'ESTABLISHED' && state !== 'SYN_SENT' && state !== 'UNKNOWN') continue;
 
-          const parts = address.split('->');
-          const local = parts[0] ?? '';
-          const remote = parts[1] ?? '';
+          const arrowIdx = address.indexOf('->');
+          const local = address.slice(0, arrowIdx);
+          const remote = address.slice(arrowIdx + 2);
           if (!remote) continue;
 
+          // Time-windowed dedup
           const connKey = `${currentPid}:${currentProtocol}:${local}:${remote}`;
-          if (this.knownConnections.has(connKey)) continue;
-          this.knownConnections.add(connKey);
+          const lastSeen = this.knownConnections.get(connKey);
+          if (lastSeen && (nowMs - lastSeen < DEDUP_WINDOW_MS)) {
+            this.knownConnections.set(connKey, nowMs); // Refresh timestamp
+            continue;
+          }
+          this.knownConnections.set(connKey, nowMs);
 
+          // Parse IP and port
           const lastColon = remote.lastIndexOf(':');
-          const ip = remote.slice(0, lastColon);
+          const ip = remote.slice(0, lastColon).replace(/^\[|\]$/g, '');
           const port = parseInt(remote.slice(lastColon + 1) || '0', 10);
 
-          let cleanIp = ip;
-          if (cleanIp.startsWith('[') && cleanIp.endsWith(']')) {
-            cleanIp = cleanIp.slice(1, -1);
-          }
+          const resolvedCmd = tree.processNames.get(currentPid) || currentCmd;
+          const isAgent = tree.isAgentMap.get(currentPid) ?? false;
 
-          const classification = await classifyConnection(
-            cleanIp, port, currentCmd, currentPid, pids.includes(currentPid),
-          );
-          if (classification === 'local' || classification === 'system_noise') continue;
+          const classification = await classifyConnection(ip, port, resolvedCmd, currentPid, isAgent);
+
+          // Filter at capture time
+          if (classification === 'local' || classification === 'system_noise' || classification === 'fd_inheritance') {
+            continue;
+          }
 
           this.events.push({
             layer: 'net',
@@ -213,38 +307,42 @@ export class NetSentinel {
             remoteAddress: remote,
             state,
             pid: currentPid,
-            processName: currentCmd,
+            processName: resolvedCmd,
             classification,
           });
         }
       }
-    } catch {
-      // lsof errors can be ignored
-    }
+    } catch { /* skip */ }
   }
 
-  private async pollProcNetTcp(pids: number[]): Promise<void> {
+  // -------------------------------------------------------------------------
+  // Linux: /proc/net/tcp polling
+  // -------------------------------------------------------------------------
+
+  private async pollProcNetTcp(
+    queryPids: number[],
+    tree: { isAgentMap: Map<number, boolean>; processNames: Map<number, string> },
+  ): Promise<void> {
     const inodeToPid = new Map<string, number>();
 
-    for (const pid of pids) {
+    for (const pid of queryPids) {
       try {
         const fdPath = `/proc/${pid}/fd`;
-        if (existsSync(fdPath)) {
-          const fds = readdirSync(fdPath);
-          for (const fd of fds) {
-            try {
-              const link = readFileSync(`${fdPath}/${fd}`, 'utf8');
-              const match = link.match(/^socket:\[(\d+)\]$/);
-              if (match?.[1]) {
-                inodeToPid.set(match[1], pid);
-              }
-            } catch { /* skip */ }
-          }
+        if (!existsSync(fdPath)) continue;
+        const fds = readdirSync(fdPath);
+        for (const fd of fds) {
+          try {
+            const link = readFileSync(`${fdPath}/${fd}`, 'utf8');
+            const match = link.match(/^socket:\[(\d+)\]$/);
+            if (match?.[1]) inodeToPid.set(match[1], pid);
+          } catch { /* skip */ }
         }
       } catch { /* skip */ }
     }
 
     const ts = new Date().toISOString();
+    const nowMs = Date.now();
+
     for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
       if (!existsSync(file)) continue;
       try {
@@ -254,45 +352,62 @@ export class NetSentinel {
           const parts = lines[i]?.trim().split(/\s+/);
           if (!parts || parts.length < 10) continue;
 
+          const localPart = parts[1];
           const remotePart = parts[2];
           const stateCode = parts[3];
           const inode = parts[9];
 
-          if (!inode || !remotePart || !stateCode) continue;
-          if (stateCode !== '01' && stateCode !== '02') continue;
+          if (!inode || !localPart || !remotePart || !stateCode) continue;
+          if (stateCode !== '01' && stateCode !== '02') continue; // ESTABLISHED or SYN_SENT
 
           const pid = inodeToPid.get(inode);
           if (!pid) continue;
 
+          const proto = file.includes('tcp6') ? 'tcp6' : 'tcp';
+          const local = this.parseHexAddress(localPart);
           const remote = this.parseHexAddress(remotePart);
-          const connKey = `${file.includes('tcp6') ? 'tcp6' : 'tcp'}:${remote}`;
-          if (this.knownConnections.has(connKey)) continue;
-          this.knownConnections.add(connKey);
+
+          const connKey = `${pid}:${proto}:${local}:${remote}`;
+          const lastSeen = this.knownConnections.get(connKey);
+          if (lastSeen && (nowMs - lastSeen < DEDUP_WINDOW_MS)) {
+            this.knownConnections.set(connKey, nowMs);
+            continue;
+          }
+          this.knownConnections.set(connKey, nowMs);
 
           const lastColon = remote.lastIndexOf(':');
-          const ip = remote.slice(0, lastColon);
+          const ip = remote.slice(0, lastColon).replace(/^\[|\]$/g, '');
           const portStr = remote.slice(lastColon + 1);
           if (!ip || !portStr) continue;
           const port = parseInt(portStr, 10);
 
-          const classification = await classifyConnection(ip, port, null, pid, true);
-          if (classification === 'local' || classification === 'system_noise') continue;
+          const resolvedCmd = tree.processNames.get(pid) || null;
+          const isAgent = tree.isAgentMap.get(pid) ?? false;
+
+          const classification = await classifyConnection(ip, port, resolvedCmd, pid, isAgent);
+          if (classification === 'local' || classification === 'system_noise' || classification === 'fd_inheritance') {
+            continue;
+          }
 
           this.events.push({
             layer: 'net',
             ts,
-            protocol: file.includes('tcp6') ? 'tcp6' : 'tcp',
-            localAddress: '',
+            protocol: proto,
+            localAddress: local,
             remoteAddress: remote,
             state: stateCode === '01' ? 'ESTABLISHED' : 'SYN_SENT',
             pid,
-            processName: null,
+            processName: resolvedCmd,
             classification,
           });
         }
       } catch { /* skip */ }
     }
   }
+
+  // -------------------------------------------------------------------------
+  // Hex address parsing (Linux /proc/net/tcp)
+  // -------------------------------------------------------------------------
 
   private parseHexAddress(hexAddr: string): string {
     const [addrHex, portHex] = hexAddr.split(':');
