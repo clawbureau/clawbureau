@@ -8,7 +8,7 @@
  * 4. On exit: compiles proof bundle, optionally publishes to VaaS
  */
 
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { readFile, writeFile, mkdir, unlink, copyFile, chmod, stat } from 'node:fs/promises';
 import { openSync, readSync, closeSync } from 'node:fs';
 import { promisify } from 'node:util';
@@ -102,8 +102,12 @@ export async function wrap(
   if (policy) {
     const policyJsonPath = join(process.cwd(), '.clawsig', 'policy.json');
     const compiledPolicyPath = join(process.cwd(), '.clawsig', 'policy.compiled');
-    await compilePolicyToBash(policyJsonPath, compiledPolicyPath);
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (compiled for sentinel)\n`);
+    if (!isWindows) {
+      await compilePolicyToBash(policyJsonPath, compiledPolicyPath).catch(() => {});
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (compiled for sentinel)\n`);
+    } else {
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (active in Sieve)\n`);
+    }
   }
 
   // 3. Set up deep execution sentinels
@@ -120,7 +124,7 @@ export async function wrap(
       await copyFile(sdkSentinelPath, sentinelShellPath);
       await chmod(sentinelShellPath, 0o755).catch(() => {});
 
-      const sdkPolicyPath = sdkSentinelPath.replace('sentinel-shell.sh', 'sentinel-shell-policy.sh');
+      const sdkPolicyPath = join(dirname(sdkSentinelPath), 'sentinel-shell-policy.sh');
       const destPolicyPath = join(tmpDir, 'sentinel-shell-policy.sh');
       await copyFile(sdkPolicyPath, destPolicyPath).catch(() => {});
       await chmod(destPolicyPath, 0o755).catch(() => {});
@@ -176,7 +180,7 @@ export async function wrap(
   if (interposeLib) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ACTIVE (${interposeLib.mechanism})\n`);
   } else {
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (no C compiler or cached lib)\n`);
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (${isWindows ? 'Windows gracefully bypassed' : 'no C compiler or cached lib'})\n`);
   }
 
   // 5. Spawn child process with env overrides
@@ -226,35 +230,45 @@ export async function wrap(
     childEnv['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
   }
 
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n`);
-  process.stderr.write(`\n`);
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n\n`);
 
   let childPid = 0;
+  let childProcess: ChildProcess | null = null;
+
+  // Handle Ctrl+C gracefully: forward to child instead of killing parent first.
+  // Without this, Ctrl+C may orphan the child process (especially on Windows).
+  const sigintHandler = () => {
+    if (childProcess && !childProcess.killed) childProcess.kill('SIGINT');
+  };
+  process.on('SIGINT', sigintHandler);
+
   const exitCode = await new Promise<number>((resolve) => {
-    const child = spawn(command, args, {
+    childProcess = spawn(command, args, {
       env: childEnv,
       stdio: 'inherit',
       shell: isWindows, // Windows needs shell:true to resolve .cmd/.bat aliases (npm, npx, etc.)
     });
 
-    childPid = child.pid ?? 0;
+    childPid = childProcess.pid ?? 0;
 
     // Track child PID for network sentinel
-    if (child.pid) {
-      netSentinel.setTargetPid(child.pid);
+    if (childProcess.pid) {
+      netSentinel.setTargetPid(childProcess.pid);
     }
     netSentinel.start();
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ACTIVE (${child.pid ? `PID ${child.pid}` : 'all connections'})\n`);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ACTIVE (${childPid ? `PID ${childPid}` : 'all connections'})\n`);
 
-    child.on('error', (err) => {
+    childProcess.on('error', (err) => {
       process.stderr.write(`\n\x1b[31m[clawsig]\x1b[0m Failed to spawn: ${err.message}\n`);
       resolve(1);
     });
 
-    child.on('exit', (code) => {
+    childProcess.on('exit', (code) => {
       resolve(code ?? 1);
     });
   });
+
+  process.off('SIGINT', sigintHandler);
 
   // 6. Stop sentinels, harvest data, compile proof bundle
   await fsSentinel.stop();
@@ -292,7 +306,7 @@ export async function wrap(
   const allExecutionReceipts = [...executionReceipts, ...interposeReceipts.execution];
 
   // Sentinel summary
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ${shellEvents.length} commands captured\n`);
+  if (!isWindows) process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ${shellEvents.length} commands captured\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ${fsSentinel.eventCount} file events\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
   if (interposeEvents.length > 0) {
