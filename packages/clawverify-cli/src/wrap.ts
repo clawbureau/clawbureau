@@ -267,6 +267,10 @@ export async function wrap(
   const preloadEvents = await harvestPreloadTrace(traceFile);
   const preloadGatewayReceipts = await synthesizePreloadGatewayReceipts(preloadEvents, agentDid.did, runId);
 
+  // Harvest TLS SNI events (cross-runtime: Bun, Python, Go, Rust via C interpose)
+  const sniEvents = await harvestTlsSniTrace(traceFile);
+  const sniGatewayReceipts = await synthesizeSniGatewayReceipts(sniEvents, agentDid.did, runId);
+
   // Harvest Network Sentinel events
   const netEvents = netSentinel.getEvents();
   const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
@@ -284,6 +288,9 @@ export async function wrap(
   }
   if (preloadGatewayReceipts.length > 0) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Preload LLM intercepts: ${preloadGatewayReceipts.length} (via diagnostics_channel + fetch)\n`);
+  }
+  if (sniGatewayReceipts.length > 0) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m TLS SNI intercepts: ${sniEvents.length} connections → ${sniGatewayReceipts.length} LLM domains\n`);
   }
 
   if (netSentinel.suspiciousCount > 0) {
@@ -304,10 +311,10 @@ export async function wrap(
     bundle.payload.network_receipts = allNetworkReceipts;
   }
   // Inject preload gateway receipts (LLM calls captured via diagnostics_channel)
-  if (preloadGatewayReceipts.length > 0) {
+  if (preloadGatewayReceipts.length > 0 || sniGatewayReceipts.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
-    bundle.payload.receipts = [...existing, ...preloadGatewayReceipts] as typeof bundle.payload.receipts;
+    bundle.payload.receipts = [...existing, ...preloadGatewayReceipts, ...sniGatewayReceipts] as typeof bundle.payload.receipts;
   }
   // Add sentinel metadata
   bundle.payload.metadata = {
@@ -320,14 +327,17 @@ export async function wrap(
       interpose_events: interposeEvents.length,
       interpose_active: !!interposeLib,
       preload_llm_events: preloadGatewayReceipts.length,
+      tls_sni_events: sniEvents.length,
+      tls_sni_receipts: sniGatewayReceipts.length,
     },
   };
 
   // Print summary
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
-  const proxyGateway = (bundle.payload.receipts?.length ?? 0) - preloadGatewayReceipts.length;
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${bundle.payload.receipts?.length ?? 0} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length})\n`);
+  const totalGw = bundle.payload.receipts?.length ?? 0;
+  const proxyGateway = totalGw - preloadGatewayReceipts.length - sniGatewayReceipts.length;
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length})\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts: ${allExecutionReceipts.length} (shell: ${executionReceipts.length}, interpose: ${interposeReceipts.execution.length})\n`);
@@ -1124,5 +1134,110 @@ function isNoisyPath(path: string): boolean {
   // dyld/loader paths
   if (path.startsWith('/dev/')) return true;
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// TLS SNI Trace Harvesting (Cross-Runtime: Bun, Python, Go, Rust, any libc)
+// ---------------------------------------------------------------------------
+
+interface TlsSniTraceEvent {
+  layer: 'interpose';
+  ts: string;
+  syscall: 'tls_sni';
+  pid: number;
+  fd: number;
+  hostname: string;
+  addr: string;
+  port: number;
+}
+
+/**
+ * Harvest TLS SNI events from the C interposition library.
+ * These are emitted when the library parses a TLS ClientHello from send()
+ * or matches a getaddrinfo() cached hostname at connect() time.
+ */
+async function harvestTlsSniTrace(traceFile: string): Promise<TlsSniTraceEvent[]> {
+  const events: TlsSniTraceEvent[] = [];
+  try {
+    const content = await readFile(traceFile, 'utf-8');
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const event = JSON.parse(line);
+        if (event.layer === 'interpose' && event.syscall === 'tls_sni') {
+          events.push(event as TlsSniTraceEvent);
+        }
+      } catch { /* skip */ }
+    }
+  } catch { /* file doesn't exist */ }
+  return events;
+}
+
+const LLM_API_DOMAINS = [
+  'anthropic.com', 'openai.com', 'googleapis.com', 'mistral.ai',
+  'cohere.com', 'cohere.ai', 'x.ai', 'together.xyz', 'groq.com',
+  'deepseek.com', 'openrouter.ai', 'fireworks.ai',
+];
+
+/**
+ * Synthesize gateway-style receipts from TLS SNI events.
+ * Groups by hostname, deduplicates, classifies LLM vs other.
+ */
+async function synthesizeSniGatewayReceipts(
+  events: TlsSniTraceEvent[],
+  agentDid: string,
+  runId: string,
+): Promise<Record<string, unknown>[]> {
+  const receipts: Record<string, unknown>[] = [];
+  const encoder = new TextEncoder();
+  const { sha256B64u } = await import('@clawbureau/clawsig-sdk');
+
+  // Group by hostname
+  const groups = new Map<string, {
+    count: number;
+    first_seen: string;
+    last_seen: string;
+    addr: string;
+  }>();
+
+  for (const event of events) {
+    const key = event.hostname;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, {
+        count: 1,
+        first_seen: event.ts,
+        last_seen: event.ts,
+        addr: event.addr,
+      });
+    } else {
+      existing.count++;
+      if (event.ts > existing.last_seen) existing.last_seen = event.ts;
+    }
+  }
+
+  for (const [hostname, data] of groups.entries()) {
+    const isLlm = LLM_API_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
+    const addrHash = await sha256B64u(encoder.encode(data.addr));
+
+    receipts.push({
+      receipt_version: '1',
+      receipt_id: `gw_sni_${crypto.randomUUID()}`,
+      receipt_type: 'gateway_sni',
+      source: 'tls_sni',
+      hostname,
+      classification: isLlm ? 'llm_api' : 'other',
+      connection_count: data.count,
+      first_seen: data.first_seen,
+      last_seen: data.last_seen,
+      addr_hash_b64u: addrHash,
+      hash_algorithm: 'SHA-256',
+      agent_did: agentDid,
+      timestamp: data.first_seen,
+      binding: { run_id: runId },
+    });
+  }
+
+  return receipts;
 }
 
