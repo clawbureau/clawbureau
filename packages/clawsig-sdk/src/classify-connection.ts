@@ -175,25 +175,12 @@ export async function classifyConnection(
     if (INFRA_DOMAINS.some(p => p.test(host))) return 'infrastructure';
   }
 
-  // 7. Agent's own process making HTTPS calls (Node runtime or named agent binary)
-  if (isAgentPid && (port === 443 || port === 80)) {
-    if (processName) {
-      const baseName = processName.trim().split(' ')[0]!.split('/').pop()!.replace(/^-/, '');
-      // Node runtime, named agent processes, Python runtimes
-      const AGENT_RUNTIMES = new Set([
-        'node', 'bun', 'deno',
-        'python', 'python3', 'python3.11', 'python3.12', 'python3.13',
-        'ruby', 'java', 'dotnet',
-      ]);
-      if (AGENT_RUNTIMES.has(baseName) || baseName === processName.trim()) {
-        return 'agent_http';
-      }
-    }
-    // Any agent PID on 443/80 is likely an API call, not exfiltration
-    return 'agent_http';
-  }
+  // 7. ANY agent PID on HTTPS/HTTP port → agent_http.
+  // Covers node, bun, claude, pi, mcp, python3, and any other binary name.
+  // The process is in the agent's PID tree and making standard web requests.
+  if (isAgentPid && (port === 443 || port === 80)) return 'agent_http';
 
-  // 8. In agent PID tree but unknown purpose (non-HTTP port)
+  // 8. In agent PID tree but non-HTTP port — genuinely suspicious
   if (isAgentPid) return 'suspicious';
 
   // 9. Not in agent PID tree — external noise
