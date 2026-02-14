@@ -176,13 +176,13 @@ export async function wrap(
       `--import ${resolvePreloadPath()}`,
     ].filter(Boolean).join(' '),
 
-    // Polyglot proxy env vars
-    HTTP_PROXY: `http://127.0.0.1:${proxy.port}`,
-    HTTPS_PROXY: `http://127.0.0.1:${proxy.port}`,
-    http_proxy: `http://127.0.0.1:${proxy.port}`,
-    https_proxy: `http://127.0.0.1:${proxy.port}`,
-    NO_PROXY: 'localhost,127.0.0.1',
-    no_proxy: 'localhost,127.0.0.1',
+    // NOTE: We intentionally DO NOT set HTTP_PROXY/HTTPS_PROXY.
+    // Our local proxy is HTTP-only and cannot handle CONNECT tunneling,
+    // so setting these vars causes HTTPS requests to hang indefinitely.
+    // Instead we rely on:
+    //   - OPENAI_BASE_URL / ANTHROPIC_BASE_URL (SDK-level redirect)
+    //   - NODE_OPTIONS --import preload.mjs (patches fetch/https in Node)
+    //   - LD_PRELOAD / DYLD_INSERT_LIBRARIES (syscall-level observation)
 
     // Deep Execution Sentinels
     // BASH_ENV: auto-sourced by every bash subshell (trap DEBUG)
