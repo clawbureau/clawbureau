@@ -16,6 +16,9 @@
     },
     "./preload": {
       "import": "./src/preload.mjs"
+    },
+    "./node-preload-sentinel": {
+      "import": "./src/node-preload-sentinel.mjs"
     }
   },
   "files": [
@@ -24,6 +27,7 @@
     "dist/**/*.d.ts.map",
     "dist/**/*.js.map",
     "src/preload.mjs",
+    "src/node-preload-sentinel.mjs",
     "src/sentinel-shell.sh",
     "src/sentinels/interpose/libclawsig_interpose.c",
     "src/sentinels/interpose/Makefile",
