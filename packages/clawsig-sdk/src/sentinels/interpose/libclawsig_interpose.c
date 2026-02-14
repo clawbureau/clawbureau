@@ -100,6 +100,14 @@ static inline void merkle_release(void) { __sync_lock_release(&merkle_lock); }
 /* --- SSLKEYLOGFILE injection path (from B-Debate stealable idea #9) --- */
 static char sslkeylog_path[512] = {0};
 
+/* --- Anti-stripping: saved env vars for re-injection (from F-RedTeam) --- */
+static char saved_trace_env[1024] = {0};
+static char saved_preload_env[1024] = {0};
+
+/* --- Data-flow causal DAG thread-locals (from F-RedTeam) --- */
+static __thread int tl_causal_read_fd = -1;
+static __thread uint64_t tl_causal_read_seq = 0;
+
 /* ================================================================== */
 /*              LLM Timing Fingerprints (from E-Synthesis)            */
 /* ================================================================== */
@@ -756,33 +764,54 @@ static void check_tls_sni(int fd, const void *buf, size_t count) {
 /* ================================================================== */
 
 /**
- * Build a modified envp with SSLKEYLOGFILE and NODE_OPTIONS injected.
- * Caller provides stack buffers. Returns new_count or 0 if no injection needed.
- * From B-Debate stealable idea #9: force child processes to dump TLS secrets.
+ * Build a hardened envp: inject SSLKEYLOGFILE, NODE_OPTIONS, and re-inject
+ * CLAWSIG_TRACE_FILE + DYLD_INSERT_LIBRARIES/LD_PRELOAD even if the agent
+ * stripped them. From B-Debate (SSLKEYLOG) + F-RedTeam (anti-stripping).
+ *
+ * Anti-stripping is critical: without it, a hostile agent can escape monitoring
+ * by calling execve() with a clean envp that omits DYLD_INSERT_LIBRARIES.
  */
 #define MAX_INJECT_ENV 4096
 
 static int build_injected_env(char *const envp[], char **out_envp,
     char *ssl_buf, size_t ssl_buf_sz, char *node_buf, size_t node_buf_sz) {
-    if (!sslkeylog_path[0] || !envp) return 0;
-    snprintf(ssl_buf, ssl_buf_sz, "SSLKEYLOGFILE=%s", sslkeylog_path);
-    int j = 0, has_ssl = 0, has_node = 0;
-    for (int i = 0; envp[i] && j < MAX_INJECT_ENV - 3; i++) {
-        if (strncmp(envp[i], "SSLKEYLOGFILE=", 14) == 0) {
+    if (!envp) return 0;
+    if (!sslkeylog_path[0] && !saved_trace_env[0] && !saved_preload_env[0]) return 0;
+
+    if (sslkeylog_path[0])
+        snprintf(ssl_buf, ssl_buf_sz, "SSLKEYLOGFILE=%s", sslkeylog_path);
+
+    int j = 0, has_ssl = 0, has_node = 0, has_trace = 0, has_preload = 0;
+    for (int i = 0; envp[i] && j < MAX_INJECT_ENV - 5; i++) {
+        if (sslkeylog_path[0] && strncmp(envp[i], "SSLKEYLOGFILE=", 14) == 0) {
             has_ssl = 1; out_envp[j++] = ssl_buf;
-        } else if (strncmp(envp[i], "NODE_OPTIONS=", 13) == 0) {
-            /* Append our tls-keylog flag to existing NODE_OPTIONS */
+        } else if (sslkeylog_path[0] && strncmp(envp[i], "NODE_OPTIONS=", 13) == 0) {
             snprintf(node_buf, node_buf_sz, "%s --tls-keylog=%s", envp[i], sslkeylog_path);
             has_node = 1; out_envp[j++] = node_buf;
+        } else if (saved_trace_env[0] && strncmp(envp[i], "CLAWSIG_TRACE_FILE=", 19) == 0) {
+            has_trace = 1; out_envp[j++] = saved_trace_env;
+#ifdef __linux__
+        } else if (saved_preload_env[0] && strncmp(envp[i], "LD_PRELOAD=", 11) == 0) {
+            has_preload = 1; out_envp[j++] = saved_preload_env;
+#else
+        } else if (saved_preload_env[0] && strncmp(envp[i], "DYLD_INSERT_LIBRARIES=", 22) == 0) {
+            has_preload = 1; out_envp[j++] = saved_preload_env;
+#endif
         } else {
             out_envp[j++] = envp[i];
         }
     }
-    if (!has_ssl && j < MAX_INJECT_ENV - 2) out_envp[j++] = ssl_buf;
-    if (!has_node && j < MAX_INJECT_ENV - 1) {
+    /* Re-inject any that were stripped */
+    if (sslkeylog_path[0] && !has_ssl && j < MAX_INJECT_ENV - 4)
+        out_envp[j++] = ssl_buf;
+    if (sslkeylog_path[0] && !has_node && j < MAX_INJECT_ENV - 3) {
         snprintf(node_buf, node_buf_sz, "NODE_OPTIONS=--tls-keylog=%s", sslkeylog_path);
         out_envp[j++] = node_buf;
     }
+    if (saved_trace_env[0] && !has_trace && j < MAX_INJECT_ENV - 2)
+        out_envp[j++] = saved_trace_env;
+    if (saved_preload_env[0] && !has_preload && j < MAX_INJECT_ENV - 1)
+        out_envp[j++] = saved_preload_env;
     out_envp[j] = NULL;
     return j;
 }
@@ -869,7 +898,16 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
     if (!in_hook && trace_fd >= 0 && buf && num > 0) {
         in_hook = 1;
         int fd = get_ssl_fd(ssl);
-        if (is_llm_fd(fd)) timing_start_req(fd);
+        if (is_llm_fd(fd)) {
+            timing_start_req(fd);
+            /* Data-flow causal DAG: link this write to the read that caused it */
+            if (tl_causal_read_seq > 0) {
+                tl_event_fd = fd;
+                emit_log_event("https_write_causal", getpid(), num,
+                    ",\"fd\":%d,\"causal_fd\":%d,\"causal_seq\":%llu",
+                    fd, tl_causal_read_fd, (unsigned long long)tl_causal_read_seq);
+            }
+        }
         parse_http(fd, "https_request", buf, num);
         in_hook = 0;
     }
@@ -885,6 +923,9 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
         int fd = get_ssl_fd(ssl);
         if (is_llm_fd(fd)) timing_add_token(fd, (size_t)rc);
         parse_http(fd, "https_response", buf, rc);
+        /* Data-flow causal DAG: record this read for downstream write linking */
+        tl_causal_read_fd = fd;
+        tl_causal_read_seq = global_seq - 1;
         in_hook = 0;
     }
     return rc;
@@ -922,9 +963,11 @@ static void clawsig_init(void) {
         trace_fd = real_open(trace_file, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0666);
 
         /* FD elevation: move trace_fd to 1023+ so agent can't accidentally
-         * close or dup2 over it. From C-YOLO stealable idea #5. */
+         * close or dup2 over it. From C-YOLO stealable idea #5.
+         * Fallback to 255 if 1023 fails (from F-RedTeam). */
         if (trace_fd >= 0 && trace_fd < 1023) {
             int elevated = fcntl(trace_fd, F_DUPFD_CLOEXEC, 1023);
+            if (elevated < 0) elevated = fcntl(trace_fd, F_DUPFD_CLOEXEC, 255);
             if (elevated >= 0) {
 #ifdef __linux__
                 if (real_close) real_close(trace_fd); else close(trace_fd);
@@ -937,6 +980,20 @@ static void clawsig_init(void) {
 
         /* Build SSLKEYLOGFILE path: <trace_file>.keys */
         snprintf(sslkeylog_path, sizeof(sslkeylog_path), "%s.keys", trace_file);
+
+        /* Anti-stripping: save env vars for re-injection in exec hooks.
+         * From F-RedTeam: defeats sandbox escape via clean envp. */
+        snprintf(saved_trace_env, sizeof(saved_trace_env),
+            "CLAWSIG_TRACE_FILE=%s", trace_file);
+#ifdef __linux__
+        const char *preload = getenv("LD_PRELOAD");
+        if (preload) snprintf(saved_preload_env, sizeof(saved_preload_env),
+            "LD_PRELOAD=%s", preload);
+#else
+        const char *preload = getenv("DYLD_INSERT_LIBRARIES");
+        if (preload) snprintf(saved_preload_env, sizeof(saved_preload_env),
+            "DYLD_INSERT_LIBRARIES=%s", preload);
+#endif
 
         char **argv = NULL; char **envp = NULL; const char *prog = "unknown";
 #ifdef __APPLE__
@@ -1514,6 +1571,9 @@ ssize_t HOOK_NAME(recv)(int sockfd, void *buf, size_t len, int flags) {
         tl_event_fd = sockfd;
         emit_log_event("recv_llm", getpid(), -999,
             ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
+        /* Data-flow causal DAG: record this read for downstream write linking */
+        tl_causal_read_fd = sockfd;
+        tl_causal_read_seq = global_seq - 1; /* seq of the event just emitted */
         in_hook = 0;
     }
     return rc;
