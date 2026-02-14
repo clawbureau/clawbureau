@@ -4,6 +4,8 @@ import { promisify } from 'node:util';
 import { classifyConnection, type Classification } from './classify-connection.js';
 
 const execFileAsync = promisify(execFile);
+const isWindows = process.platform === 'win32';
+const isMac = process.platform === 'darwin';
 
 export interface NetEvent {
   layer: 'net';
@@ -39,8 +41,6 @@ export class NetSentinel {
   private targetPids = new Set<number>();
   private running = false;
   private pollIntervalMs: number;
-  private isMac = process.platform === 'darwin';
-  private isWin = process.platform === 'win32';
 
   constructor(options: NetSentinelOptions = {}) {
     this.pollIntervalMs = options.pollIntervalMs ?? 500;
@@ -110,9 +110,9 @@ export class NetSentinel {
 
     if (queryPids.length === 0) return;
 
-    if (this.isWin) {
+    if (isWindows) {
       await this.pollNetstatWindows(queryPids, tree);
-    } else if (this.isMac) {
+    } else if (isMac) {
       await this.pollLsof(queryPids, tree);
     } else {
       await this.pollProcNetTcp(queryPids, tree);
@@ -142,7 +142,7 @@ export class NetSentinel {
 
     for (const p of this.targetPids) isAgentMap.set(p, true);
 
-    if (this.isWin) {
+    if (isWindows) {
       // Windows: wmic process tree
       try {
         const { stdout } = await execFileAsync('wmic', ['process', 'get', 'Name,ParentProcessId,ProcessId'], { timeout: 3000 });
@@ -168,7 +168,7 @@ export class NetSentinel {
           }
         }
       } catch { /* degrade gracefully */ }
-    } else if (this.isMac) {
+    } else if (isMac) {
       // Batched pgrep: comma-separated parent PIDs in one call
       let currentLevel = Array.from(this.targetPids);
       while (currentLevel.length > 0) {

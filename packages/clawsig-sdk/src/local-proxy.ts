@@ -138,8 +138,28 @@ function extractProviderKey(headers: Record<string, string | string[] | undefine
 }
 
 /**
+ * ZlibError fix: Node/Bun fetch auto-decompresses payloads but leaves compression
+ * headers intact. We rigorously strip them here to prevent double-decompression.
+ */
+function extractSafeHeaders(rawHeaders: Headers): Record<string, string> {
+  const safeHeaders: Record<string, string> = {};
+  rawHeaders.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (lower === 'content-encoding' ||
+        lower === 'content-length' ||
+        lower === 'transfer-encoding' ||
+        lower === 'connection') {
+      return;
+    }
+    safeHeaders[key] = value;
+  });
+  return safeHeaders;
+}
+
+/**
  * Forward a request to clawproxy with receipt-binding headers.
- * Handles both streaming (SSE) and non-streaming responses.
+ * Returns a ReadableStream for SSE responses (true streaming passthrough)
+ * and a Buffer for non-streaming responses.
  */
 async function forwardToClawproxy(
   provider: string,
@@ -149,7 +169,7 @@ async function forwardToClawproxy(
   runId: string,
   agentDid: string,
   idempotencyKey: string,
-): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean }> {
+): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
   const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}`;
 
   const headers: Record<string, string> = {
@@ -171,29 +191,16 @@ async function forwardToClawproxy(
 
   const contentType = res.headers.get('content-type') ?? '';
   const isStream = contentType.includes('text/event-stream');
+  const safeHeaders = extractSafeHeaders(res.headers);
 
-  const responseBuffer = Buffer.from(await res.arrayBuffer());
-
-  const responseHeaders: Record<string, string> = {};
-  res.headers.forEach((value, key) => {
-    // Strip compression/framing headers: res.arrayBuffer() already
-    // decompressed the body. If we forward "Content-Encoding: br" with
-    // decompressed bytes, Bun/Node consumers double-decompress → ZlibError.
-    const lower = key.toLowerCase();
-    if (lower === 'content-encoding' || lower === 'content-length' ||
-        lower === 'transfer-encoding' || lower === 'connection') return;
-    responseHeaders[key] = value;
-  });
-
-  // Set correct content-length for the decompressed payload
-  responseHeaders['content-length'] = String(responseBuffer.length);
-
-  return {
-    status: res.status,
-    headers: responseHeaders,
-    body: responseBuffer,
-    isStream,
-  };
+  // For SSE: return the ReadableStream directly for true streaming passthrough.
+  // Buffering entire SSE streams wastes memory on long agent sessions.
+  if (isStream && res.body) {
+    return { status: res.status, headers: safeHeaders, stream: res.body, isStream: true, body: Buffer.alloc(0) };
+  } else {
+    const responseBuffer = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, headers: safeHeaders, stream: null, isStream: false, body: responseBuffer };
+  }
 }
 
 /** Map provider name to upstream API base URL. */
@@ -212,12 +219,13 @@ const UPSTREAM_PATHS: Record<string, string> = {
 /**
  * Forward a request directly to the upstream provider (passthrough mode).
  * Preserves the original auth headers from the incoming request.
+ * Returns a ReadableStream for SSE responses (true streaming passthrough).
  */
 async function forwardToUpstream(
   provider: string,
   bodyBuffer: Buffer,
   incomingHeaders: Record<string, string | string[] | undefined>,
-): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean }> {
+): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
   const baseUrl = UPSTREAM_URLS[provider] ?? `https://api.${provider}.com`;
   const path = UPSTREAM_PATHS[provider] ?? '/v1/chat/completions';
   const targetUrl = `${baseUrl}${path}`;
@@ -249,19 +257,14 @@ async function forwardToUpstream(
 
   const contentType = res.headers.get('content-type') ?? '';
   const isStream = contentType.includes('text/event-stream');
-  const responseBuffer = Buffer.from(await res.arrayBuffer());
+  const safeHeaders = extractSafeHeaders(res.headers);
 
-  const responseHeaders: Record<string, string> = {};
-  res.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    if (lower === 'content-encoding' || lower === 'content-length' ||
-        lower === 'transfer-encoding' || lower === 'connection') return;
-    responseHeaders[key] = value;
-  });
-
-  responseHeaders['content-length'] = String(responseBuffer.length);
-
-  return { status: res.status, headers: responseHeaders, body: responseBuffer, isStream };
+  if (isStream && res.body) {
+    return { status: res.status, headers: safeHeaders, stream: res.body, isStream: true, body: Buffer.alloc(0) };
+  } else {
+    const responseBuffer = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, headers: safeHeaders, body: responseBuffer, isStream: false, stream: null };
+  }
 }
 
 /**
@@ -441,6 +444,40 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
             idempotencyKey,
           );
 
+      // Force explicit content-length to match exact decompressed payload size.
+      // This is crucial to prevent the consumer from expecting chunked boundaries.
+      if (!upstream.isStream) {
+        upstream.headers['content-length'] = String(upstream.body.length);
+      }
+
+      res.writeHead(upstream.status, upstream.headers);
+
+      // Web Stream -> node.js stream passthrough for SSE.
+      // Uses getReader() loop to flush chunks to the client immediately
+      // instead of buffering the entire SSE stream in memory.
+      if (upstream.isStream && upstream.stream) {
+        const reader = upstream.stream.getReader();
+        const chunks: Buffer[] = [];
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (value) {
+              const buf = Buffer.from(value);
+              chunks.push(buf);
+              res.write(buf); // Flush to consumer immediately
+            }
+          }
+        } finally {
+          res.end();
+          reader.releaseLock();
+        }
+        // Reassemble for receipt extraction + Sieve processing
+        upstream.body = Buffer.concat(chunks);
+      } else {
+        res.end(upstream.body);
+      }
+
       // Collect receipt from response
       const receiptInfo = upstream.isStream
         ? extractReceiptFromStream(upstream.body)
@@ -456,7 +493,6 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       }
 
       // CAUSAL SIEVE: Process LLM response for tool_calls.
-      // This detects what tools the LLM is requesting the agent to execute.
       // The TCP Guillotine evaluates these against the local WPC policy.
       let guillotineViolations: PolicyViolation[] = [];
       try {
@@ -468,11 +504,6 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         // Sieve errors must not break the proxy pipeline
       }
 
-      // TCP GUILLOTINE: If the LLM requested a blocked tool,
-      // log the violation. We still forward the response because
-      // the proxy can't reliably sever mid-stream for all clients.
-      // The violation is recorded in the proof bundle for the GitHub
-      // App to enforce at PR time.
       if (guillotineViolations.length > 0) {
         for (const v of guillotineViolations) {
           process.stderr.write(
@@ -480,18 +511,6 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
           );
         }
       }
-
-      // Forward response back to the caller
-      const responseHeaders: Record<string, string> = {};
-      for (const [key, value] of Object.entries(upstream.headers)) {
-        // Skip hop-by-hop headers
-        const lower = key.toLowerCase();
-        if (lower === 'transfer-encoding' || lower === 'connection') continue;
-        responseHeaders[key] = value;
-      }
-
-      res.writeHead(upstream.status, responseHeaders);
-      res.end(upstream.body);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Proxy forwarding failed';
       res.writeHead(502, { 'Content-Type': 'application/json' });
