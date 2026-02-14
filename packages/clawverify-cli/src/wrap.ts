@@ -322,7 +322,25 @@ export async function wrap(
   if (allNetworkReceipts.length > 0) {
     bundle.payload.network_receipts = allNetworkReceipts;
   }
-  // Inject env audit + cred leak as security receipts
+  // Inject Agent Genealogy Receipt (full process tree with harness attribution)
+  const genealogyTree = interposeOracle.getGenealogyTree();
+  if (genealogyTree && Object.keys(genealogyTree).length > 0) {
+    const genealogyReceipt = {
+      receipt_version: '1',
+      receipt_id: `genealogy_${crypto.randomUUID()}`,
+      receipt_type: 'agent_genealogy_graph',
+      root_pid: childPid,
+      tree: genealogyTree,
+      agent_did: agentDid.did,
+      timestamp: new Date().toISOString(),
+      binding: { run_id: runId },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = (bundle.payload.receipts ?? []) as any[];
+    bundle.payload.receipts = [...existing, genealogyReceipt] as typeof bundle.payload.receipts;
+  }
+
+  // Inject Security Audit Receipts (env credential hashes + DLP leak alerts)
   if (interposeOracle.envAudits.length > 0 || interposeOracle.credLeaks.length > 0) {
     const securityReceipts: Record<string, unknown>[] = [];
     if (interposeOracle.envAudits.length > 0) {
