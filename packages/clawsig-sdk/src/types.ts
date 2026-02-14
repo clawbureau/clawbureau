@@ -240,6 +240,8 @@ export interface ProofBundlePayload {
       interpose_events?: number;
       interpose_active?: boolean;
       preload_llm_events?: number;
+      tls_sni_events?: number;
+      tls_sni_receipts?: number;
     };
     [key: string]: unknown;
   };
