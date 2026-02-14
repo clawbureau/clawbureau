@@ -3,8 +3,11 @@
  *
  * Implements: Perfect Process Genealogy, Server Socket Awareness,
  * Full IPC Lifecycle, Nanosecond Kinematics, Causal Sequence Numbers,
+ * Causal DAG (cause_t/cause_f), Merkle Transcript Commitment,
  * Stack-only SHA-256 Env Auditing, Credential DLP, LLM recv() Sampling,
- * and Semantic Harness/MCP Fingerprinting.
+ * Semantic Harness/MCP Fingerprinting, TLS/HTTPS Decryption via
+ * SSL_CTX_set_keylog_callback Chaining, SSLKEYLOGFILE Injection,
+ * and Trace FD Hardening.
  */
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -79,6 +82,21 @@ static inline void set_llm_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_a
 static inline void clear_llm_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_and(&llm_fds_bitset[fd / 64], ~(1ULL << (fd % 64))); }
 static inline int is_llm_fd(int fd) { return fd >= 0 && fd < 1024 && (llm_fds_bitset[fd / 64] & (1ULL << (fd % 64))); }
 
+/* --- Causal DAG state (from C-Naked stealable idea #1) --- */
+static __thread uint64_t tl_last_seq = 0;          /* thread-local: previous event seq */
+static volatile uint64_t fd_last_seq[MAX_TRACKED_FDS]; /* per-fd: previous event seq    */
+static __thread int tl_event_fd = -1;               /* set by hooks before emit        */
+
+/* --- Merkle transcript commitment (from C-Naked stealable idea #2) --- */
+static char merkle_hash[65] = "0000000000000000000000000000000000000000000000000000000000000000";
+static volatile uint64_t merkle_count = 0;
+static volatile int merkle_lock = 0;
+static inline void merkle_acquire(void) { while (__sync_lock_test_and_set(&merkle_lock, 1)) {} }
+static inline void merkle_release(void) { __sync_lock_release(&merkle_lock); }
+
+/* --- SSLKEYLOGFILE injection path (from B-Debate stealable idea #9) --- */
+static char sslkeylog_path[512] = {0};
+
 /* ================================================================== */
 /*                      Function Pointers                             */
 /* ================================================================== */
@@ -122,6 +140,18 @@ static fork_func_t real_fork = NULL; static fork_func_t real_vfork = NULL;
 static kill_func_t real_kill = NULL; static getaddrinfo_func_t real_getaddrinfo = NULL;
 static getsockname_func_t real_getsockname = NULL; static getpeername_func_t real_getpeername = NULL;
 
+/* --- SSL function pointers (from A-Zen stealable ideas #19-20) --- */
+typedef void* (*ssl_new_t)(void*);
+typedef int (*ssl_rw_t)(void*, void*, int);
+typedef int (*ssl_write_t)(void*, const void*, int);
+typedef void (*ssl_set_keylog_cb_t)(void*, void (*)(const void*, const char*));
+
+static ssl_new_t real_SSL_new = NULL;
+static ssl_rw_t real_SSL_read = NULL;
+static ssl_write_t real_SSL_write = NULL;
+static ssl_set_keylog_cb_t real_SSL_CTX_set_keylog_callback = NULL;
+static void (*app_keylog_cb)(const void*, const char*) = NULL;
+
 #ifdef __linux__
 typedef ssize_t (*write_func_t)(int, const void *, size_t);
 typedef int (*close_func_t)(int);
@@ -139,13 +169,23 @@ static open64_func_t real_open64 = NULL; static openat64_func_t real_openat64 = 
     __attribute__((section("__DATA,__interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_replacee };
 #define HOOK_NAME(name) clawsig_##name
 #define CALL_REAL(name, ...) name(__VA_ARGS__)
+#define REAL_FUNC(name) name
 #else
 #define HOOK_NAME(name) name
 #define CALL_REAL(name, ...) real_##name(__VA_ARGS__)
+#define REAL_FUNC(name) real_##name
+#endif
+
+/* --- macOS weak_import for SSL symbols (from A-Zen stealable idea #19) --- */
+#ifdef __APPLE__
+extern void* SSL_new(void*) __attribute__((weak_import));
+extern int SSL_read(void*, void*, int) __attribute__((weak_import));
+extern int SSL_write(void*, const void*, int) __attribute__((weak_import));
+extern void SSL_CTX_set_keylog_callback(void*, void (*)(const void*, const char*)) __attribute__((weak_import));
 #endif
 
 /* ================================================================== */
-/*                 Stack-only SHA-256 (env auditing)                  */
+/*                 Stack-only SHA-256 (env auditing + Merkle)         */
 /* ================================================================== */
 
 #define ROTR(a,b) (((a)>>(b))|((a)<<(32-(b))))
@@ -197,9 +237,45 @@ static void sha256_hash_string(const char *str, char out_hex[65]) {
     for (int i = 0; i < 8; ++i) snprintf(out_hex + i * 8, 9, "%08x", state[i]);
 }
 
+/**
+ * Incremental SHA-256 over (prev_hex[64] || data[data_len]).
+ * Used for Merkle chain: H_n = SHA256(H_{n-1} || event_bytes).
+ */
+static void sha256_hash_chain(const char prev_hex[64], const char *data, size_t data_len, char out_hex[65]) {
+    uint32_t state[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+    uint8_t block[64]; size_t block_pos = 0; uint64_t bitlen = 0;
+    size_t total = 64 + data_len;
+    /* Feed prev_hex (always 64 bytes = exactly 1 block) */
+    for (size_t i = 0; i < 64; i++) {
+        block[block_pos++] = (uint8_t)prev_hex[i];
+        if (block_pos == 64) { sha256_transform(state, block); bitlen += 512; block_pos = 0; }
+    }
+    /* Feed event data */
+    for (size_t i = 0; i < data_len; i++) {
+        block[block_pos++] = (uint8_t)data[i];
+        if (block_pos == 64) { sha256_transform(state, block); bitlen += 512; block_pos = 0; }
+    }
+    /* Pad */
+    bitlen += block_pos * 8; block[block_pos++] = 0x80;
+    if (block_pos > 56) { while (block_pos < 64) block[block_pos++] = 0x00; sha256_transform(state, block); block_pos = 0; }
+    while (block_pos < 56) block[block_pos++] = 0x00;
+    for (int i = 7; i >= 0; i--) block[56 + (7 - i)] = (uint8_t)((bitlen >> (i * 8)) & 0xFF);
+    sha256_transform(state, block);
+    for (int i = 0; i < 8; i++) snprintf(out_hex + i * 8, 9, "%08x", state[i]);
+    (void)total;
+}
+
 /* ================================================================== */
 /*                        Unified Event Emitter                       */
 /* ================================================================== */
+
+static void write_trace(const char *buf, size_t len) {
+    if (trace_fd < 0) return;
+#ifdef __linux__
+    if (real_write) { real_write(trace_fd, buf, len); return; }
+#endif
+    write(trace_fd, buf, len);
+}
 
 static void emit_log_event(const char *syscall_name, int pid, int rc, const char *fmt, ...) {
     if (trace_fd < 0) return;
@@ -207,9 +283,19 @@ static void emit_log_event(const char *syscall_name, int pid, int rc, const char
     strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", tm_info);
     snprintf(ts + strlen(ts), sizeof(ts) - strlen(ts), ".%06dZ", (int)tv.tv_usec);
 
-    uint64_t ns = get_mono_ns(); uint64_t seq = next_seq(); char buf[4096];
-    int len = snprintf(buf, sizeof(buf), "{\"layer\":\"interpose\",\"seq\":%llu,\"ns\":%llu,\"ts\":\"%s\",\"syscall\":\"%s\",\"pid\":%d",
-        (unsigned long long)seq, (unsigned long long)ns, ts, syscall_name, pid);
+    uint64_t ns = get_mono_ns(); uint64_t seq = next_seq();
+
+    /* Causal DAG: capture cause_t (thread) and cause_f (fd) */
+    uint64_t ct = tl_last_seq;
+    int efd = tl_event_fd;
+    uint64_t cf = (efd >= 0 && efd < MAX_TRACKED_FDS) ? fd_last_seq[efd] : 0;
+
+    char buf[4096];
+    int len = snprintf(buf, sizeof(buf),
+        "{\"layer\":\"interpose\",\"seq\":%llu,\"ns\":%llu,\"ts\":\"%s\","
+        "\"syscall\":\"%s\",\"pid\":%d,\"ct\":%llu,\"cf\":%llu",
+        (unsigned long long)seq, (unsigned long long)ns, ts, syscall_name, pid,
+        (unsigned long long)ct, (unsigned long long)cf);
 
     if (fmt && len > 0 && len < (int)sizeof(buf) - 64) {
         va_list args; va_start(args, fmt);
@@ -218,10 +304,29 @@ static void emit_log_event(const char *syscall_name, int pid, int rc, const char
     if (len > 0 && len < (int)sizeof(buf) - 20) {
         if (rc != -999) len += snprintf(buf + len, sizeof(buf) - (size_t)len, ",\"rc\":%d}\n", rc);
         else len += snprintf(buf + len, sizeof(buf) - (size_t)len, "}\n");
-#ifdef __linux__
-        if (real_write) { real_write(trace_fd, buf, (size_t)len); return; }
-#endif
-        write(trace_fd, buf, (size_t)len);
+        write_trace(buf, (size_t)len);
+
+        /* Update causal DAG state */
+        tl_last_seq = seq;
+        if (efd >= 0 && efd < MAX_TRACKED_FDS) fd_last_seq[efd] = seq;
+        tl_event_fd = -1;
+
+        /* Merkle chain: H_n = SHA256(H_{n-1} || event_line) */
+        merkle_acquire();
+        sha256_hash_chain(merkle_hash, buf, (size_t)len, merkle_hash);
+        uint64_t mc = ++merkle_count;
+        if ((mc & 255) == 0) {
+            char ckpt[256];
+            int ckpt_len = snprintf(ckpt, sizeof(ckpt),
+                "{\"layer\":\"interpose\",\"syscall\":\"merkle_checkpoint\","
+                "\"pid\":%d,\"count\":%llu,\"hash\":\"%s\"}\n",
+                pid, (unsigned long long)mc, merkle_hash);
+            write_trace(ckpt, (size_t)ckpt_len);
+            /* Hash the checkpoint event itself into the chain */
+            sha256_hash_chain(merkle_hash, ckpt, (size_t)ckpt_len, merkle_hash);
+            merkle_count++;
+        }
+        merkle_release();
     }
 }
 
@@ -304,12 +409,9 @@ static proc_ident_t identify_process(const char *path, char *const argv[], char 
     base = base ? base + 1 : path;
 
     if (base) {
-        /* Shells */
         if (strcmp(base, "bash") == 0 || strcmp(base, "sh") == 0 || strcmp(base, "zsh") == 0 ||
-            strcmp(base, "dash") == 0 || strcmp(base, "fish") == 0) {
+            strcmp(base, "dash") == 0 || strcmp(base, "fish") == 0)
             id.role = "shell";
-        }
-        /* Common utilities */
         else if (strcmp(base, "git") == 0 || strcmp(base, "curl") == 0 || strcmp(base, "node") == 0 ||
                  strcmp(base, "python") == 0 || strcmp(base, "python3") == 0 || strcmp(base, "bun") == 0 ||
                  strcmp(base, "npm") == 0 || strcmp(base, "npx") == 0 || strcmp(base, "pip") == 0 ||
@@ -320,50 +422,39 @@ static proc_ident_t identify_process(const char *path, char *const argv[], char 
                  strcmp(base, "head") == 0 || strcmp(base, "tail") == 0 || strcmp(base, "wc") == 0 ||
                  strcmp(base, "sort") == 0 || strcmp(base, "uniq") == 0 || strcmp(base, "tr") == 0 ||
                  strcmp(base, "tee") == 0 || strcmp(base, "xargs") == 0 || strcmp(base, "env") == 0 ||
-                 strcmp(base, "which") == 0 || strcmp(base, "whoami") == 0 || strcmp(base, "uname") == 0) {
+                 strcmp(base, "which") == 0 || strcmp(base, "whoami") == 0 || strcmp(base, "uname") == 0)
             id.role = "utility";
-        }
-        /* Browsers */
         else if (strstr(base, "chrome") || strstr(base, "chromium") || strstr(base, "firefox") ||
-                 strstr(base, "safari") || strstr(base, "brave")) {
+                 strstr(base, "safari") || strstr(base, "brave"))
             id.role = "browser";
-        }
-        /* Agent harnesses — direct binary match */
-        else if (strcmp(base, "pi") == 0) { id.harness = "pi"; }
-        else if (strcmp(base, "claude") == 0) { id.harness = "claude_code"; }
-        else if (strcmp(base, "codex") == 0) { id.harness = "codex"; }
-        else if (strcmp(base, "gemini") == 0) { id.harness = "gemini_cli"; }
-        else if (strcmp(base, "openclaw") == 0) { id.harness = "openclaw"; }
-        else if (strcmp(base, "aider") == 0) { id.harness = "aider"; }
-        else if (strcmp(base, "cline") == 0) { id.harness = "cline"; }
-        else if (strcmp(base, "cursor") == 0) { id.harness = "cursor"; }
-        else if (strcmp(base, "opencode") == 0) { id.harness = "opencode"; }
-        else if (strcmp(base, "devin") == 0) { id.harness = "devin"; }
-        else if (strcmp(base, "goose") == 0) { id.harness = "goose"; }
-        else if (strcmp(base, "sweep") == 0) { id.harness = "sweep"; }
+        else if (strcmp(base, "pi") == 0) id.harness = "pi";
+        else if (strcmp(base, "claude") == 0) id.harness = "claude_code";
+        else if (strcmp(base, "codex") == 0) id.harness = "codex";
+        else if (strcmp(base, "gemini") == 0) id.harness = "gemini_cli";
+        else if (strcmp(base, "openclaw") == 0) id.harness = "openclaw";
+        else if (strcmp(base, "aider") == 0) id.harness = "aider";
+        else if (strcmp(base, "cline") == 0) id.harness = "cline";
+        else if (strcmp(base, "cursor") == 0) id.harness = "cursor";
+        else if (strcmp(base, "opencode") == 0) id.harness = "opencode";
+        else if (strcmp(base, "devin") == 0) id.harness = "devin";
+        else if (strcmp(base, "goose") == 0) id.harness = "goose";
+        else if (strcmp(base, "sweep") == 0) id.harness = "sweep";
     }
 
     /* 3. argv scanning for MCP servers and harness packages */
     if (argv) {
         for (int i = 0; argv[i] && i < 15; i++) {
-            /* MCP server detection */
             if (strstr(argv[i], "@modelcontextprotocol/") || strstr(argv[i], "mcp-server") ||
                 strstr(argv[i], "mcp_server")) {
                 id.role = "mcp_server";
                 if (strstr(argv[i], "browser-tools") || strstr(argv[i], "puppeteer") || strstr(argv[i], "playwright"))
                     id.harness = "mcp_browser";
-                else if (strstr(argv[i], "git"))
-                    id.harness = "mcp_git";
-                else if (strstr(argv[i], "filesystem"))
-                    id.harness = "mcp_filesystem";
-                else if (strstr(argv[i], "sqlite"))
-                    id.harness = "mcp_sqlite";
-                else if (strstr(argv[i], "postgres"))
-                    id.harness = "mcp_postgres";
-                else if (!id.harness)
-                    id.harness = "mcp_custom";
+                else if (strstr(argv[i], "git")) id.harness = "mcp_git";
+                else if (strstr(argv[i], "filesystem")) id.harness = "mcp_filesystem";
+                else if (strstr(argv[i], "sqlite")) id.harness = "mcp_sqlite";
+                else if (strstr(argv[i], "postgres")) id.harness = "mcp_postgres";
+                else if (!id.harness) id.harness = "mcp_custom";
             }
-            /* Harness package paths in argv */
             if (!id.harness) {
                 if (strstr(argv[i], "pi-coding-agent")) id.harness = "pi";
                 else if (strstr(argv[i], "claude-code") || strstr(argv[i], "@anthropic/claude-code"))
@@ -376,29 +467,23 @@ static proc_ident_t identify_process(const char *path, char *const argv[], char 
                     id.harness = "openhands";
             }
         }
-        /* Special: gh copilot (binary is gh, sub-command is copilot) */
-        if (base && strcmp(base, "gh") == 0 && argv[1] && strcmp(argv[1], "copilot") == 0) {
+        if (base && strcmp(base, "gh") == 0 && argv[1] && strcmp(argv[1], "copilot") == 0)
             id.harness = "copilot_cli";
-        }
     }
 
     /* 4. Path-based fallback detection */
     if (!id.harness && path) {
         if (strstr(path, "pi-coding-agent")) id.harness = "pi";
-        else if (strstr(path, "claude-code") || strstr(path, "@anthropic/claude"))
-            id.harness = "claude_code";
-        else if (strstr(path, "swe-agent") || strstr(path, "swe_agent"))
-            id.harness = "swe_agent";
-        else if (strstr(path, "openhands") || strstr(path, "opendevin"))
-            id.harness = "openhands";
-        else if (strstr(path, "copilot-cli") || strstr(path, "github-copilot"))
-            id.harness = "copilot_cli";
+        else if (strstr(path, "claude-code") || strstr(path, "@anthropic/claude")) id.harness = "claude_code";
+        else if (strstr(path, "swe-agent") || strstr(path, "swe_agent")) id.harness = "swe_agent";
+        else if (strstr(path, "openhands") || strstr(path, "opendevin")) id.harness = "openhands";
+        else if (strstr(path, "copilot-cli") || strstr(path, "github-copilot")) id.harness = "copilot_cli";
         else if (strstr(path, "crewai")) id.harness = "crewai";
         else if (strstr(path, "autogen")) id.harness = "autogen";
         else if (strstr(path, "langchain")) id.harness = "langchain";
     }
 
-    /* 5. If harness identified but role is still unknown, infer role */
+    /* 5. Infer role from harness */
     if (id.harness && strcmp(id.role, "unknown") == 0) {
         if (strncmp(id.harness, "mcp_", 4) == 0) id.role = "mcp_server";
         else id.role = "agent";
@@ -434,10 +519,12 @@ static void scan_credentials(int fd, const void *buf, size_t len) {
     size_t scan_len = len > 1024 ? 1024 : len;
     for (size_t i = 0; i <= scan_len - 10; i++) {
         if (p[i] == 'B' && i + 10 <= scan_len && memcmp(p + i, "Bearer sk-", 10) == 0) {
+            tl_event_fd = fd;
             emit_log_event("cred_leak", getpid(), -999,
                 ",\"fd\":%d,\"pattern\":\"Bearer sk-*\"", fd); return;
         }
         if (p[i] == 'x' && i + 10 <= scan_len && memcmp(p + i, "x-api-key:", 10) == 0) {
+            tl_event_fd = fd;
             emit_log_event("cred_leak", getpid(), -999,
                 ",\"fd\":%d,\"pattern\":\"x-api-key:*\"", fd); return;
         }
@@ -482,6 +569,7 @@ static void track_fd(int fd, const char *ip, int port) {
     tracked_fds[slot].fd = fd;
 }
 
+/** Destructive claim: atomically read and clear the tracked fd entry (for SNI parsing). */
 static int claim_fd(int fd, char *ip_out, int *port_out) {
     if (fd < 0) return 0;
     int slot = fd & (MAX_TRACKED_FDS - 1);
@@ -491,6 +579,18 @@ static int claim_fd(int fd, char *ip_out, int *port_out) {
             if (port_out) *port_out = tracked_fds[slot].port;
             return 1;
         }
+    }
+    return 0;
+}
+
+/** Non-destructive peek: read tracked fd info without clearing (for SSL hooks). */
+static int peek_fd(int fd, char *ip_out, int *port_out) {
+    if (fd < 0) return 0;
+    int slot = fd & (MAX_TRACKED_FDS - 1);
+    if (tracked_fds[slot].fd == fd) {
+        if (ip_out) strncpy(ip_out, tracked_fds[slot].ip, INET6_ADDRSTRLEN);
+        if (port_out) *port_out = tracked_fds[slot].port;
+        return 1;
     }
     return 0;
 }
@@ -523,6 +623,7 @@ static void check_tls_sni(int fd, const void *buf, size_t count) {
             if (pos + 5 + name_len <= count && name_len < 256) {
                 char sni[256]; memcpy(sni, b + pos + 5, name_len); sni[name_len] = '\0';
                 char sni_esc[512]; escape_json(sni, sni_esc, sizeof(sni_esc));
+                tl_event_fd = fd;
                 emit_log_event("tls_sni", getpid(), -999,
                     ",\"fd\":%d,\"hostname\":\"%s\",\"addr\":\"%s\",\"port\":%d",
                     fd, sni_esc, ip, port);
@@ -534,13 +635,148 @@ static void check_tls_sni(int fd, const void *buf, size_t count) {
 }
 
 /* ================================================================== */
-/*                            Constructor                             */
+/*                SSLKEYLOGFILE Env Injection Helper                  */
+/* ================================================================== */
+
+/**
+ * Build a modified envp with SSLKEYLOGFILE and NODE_OPTIONS injected.
+ * Caller provides stack buffers. Returns new_count or 0 if no injection needed.
+ * From B-Debate stealable idea #9: force child processes to dump TLS secrets.
+ */
+#define MAX_INJECT_ENV 4096
+
+static int build_injected_env(char *const envp[], char **out_envp,
+    char *ssl_buf, size_t ssl_buf_sz, char *node_buf, size_t node_buf_sz) {
+    if (!sslkeylog_path[0] || !envp) return 0;
+    snprintf(ssl_buf, ssl_buf_sz, "SSLKEYLOGFILE=%s", sslkeylog_path);
+    int j = 0, has_ssl = 0, has_node = 0;
+    for (int i = 0; envp[i] && j < MAX_INJECT_ENV - 3; i++) {
+        if (strncmp(envp[i], "SSLKEYLOGFILE=", 14) == 0) {
+            has_ssl = 1; out_envp[j++] = ssl_buf;
+        } else if (strncmp(envp[i], "NODE_OPTIONS=", 13) == 0) {
+            /* Append our tls-keylog flag to existing NODE_OPTIONS */
+            snprintf(node_buf, node_buf_sz, "%s --tls-keylog=%s", envp[i], sslkeylog_path);
+            has_node = 1; out_envp[j++] = node_buf;
+        } else {
+            out_envp[j++] = envp[i];
+        }
+    }
+    if (!has_ssl && j < MAX_INJECT_ENV - 2) out_envp[j++] = ssl_buf;
+    if (!has_node && j < MAX_INJECT_ENV - 1) {
+        snprintf(node_buf, node_buf_sz, "NODE_OPTIONS=--tls-keylog=%s", sslkeylog_path);
+        out_envp[j++] = node_buf;
+    }
+    out_envp[j] = NULL;
+    return j;
+}
+
+/* ================================================================== */
+/*                     THE HOOKS — TLS / OpenSSL                      */
+/* ================================================================== */
+
+static int get_ssl_fd(const void *ssl) {
+    static int (*fn)(const void *) = NULL;
+    if (!fn) fn = (int (*)(const void *))dlsym(RTLD_DEFAULT, "SSL_get_fd");
+    return fn ? fn(ssl) : -1;
+}
+
+/**
+ * Parse HTTP/1.1 content from SSL plaintext (from A-Zen stealable idea #20).
+ * Detects requests (POST/GET/PUT), responses (HTTP/1.), SSE streams, raw JSON.
+ * Only fires for LLM FDs to avoid noise.
+ */
+static void parse_http(int fd, const char *dir, const char *buf, int num) {
+    if (num < 4 || !is_llm_fd(fd)) return;
+    int is_req = !memcmp(buf, "POST", 4) || !memcmp(buf, "GET ", 4) || !memcmp(buf, "PUT ", 4);
+    int is_res = num >= 8 && !memcmp(buf, "HTTP/1.", 7);
+    if (!is_req && !is_res && (num < 6 || memcmp(buf, "data: ", 6) != 0) && buf[0] != '{' && buf[0] != '[') return;
+    const char *body = buf; int blen = num;
+    if (is_req || is_res) {
+        blen = 0;
+        for (int i = 0; i < num - 3; i++) if (buf[i] == '\r' && buf[i+1] == '\n' && buf[i+2] == '\r' && buf[i+3] == '\n') {
+            body = buf + i + 4; blen = num - i - 4; break;
+        }
+    }
+    if (blen > 0) {
+        int to_esc = blen > 1024 ? 1024 : blen; char temp[1025], esc[2050];
+        memcpy(temp, body, to_esc); temp[to_esc] = '\0'; escape_json(temp, esc, sizeof(esc));
+        tl_event_fd = fd;
+        emit_log_event(dir, getpid(), -999, ",\"fd\":%d,\"body\":\"%s\"", fd, esc);
+    }
+}
+
+/**
+ * Our keylog callback — chains the application's original callback.
+ * From A-Zen stealable idea #19: captures TLS pre-master secrets.
+ */
+static void clawsig_keylog_cb(const void *ssl, const char *line) {
+    if (in_hook || trace_fd < 0) return;
+    in_hook = 1;
+    int fd = get_ssl_fd(ssl);
+    char host[256] = "", ip[INET6_ADDRSTRLEN] = "";
+    if (peek_fd(fd, ip, NULL)) lookup_dns(ip, host);
+    char esc_h[512], esc_l[512];
+    escape_json(host, esc_h, sizeof(esc_h));
+    escape_json(line, esc_l, sizeof(esc_l));
+    tl_event_fd = fd;
+    emit_log_event("tls_keylog", getpid(), -999,
+        ",\"fd\":%d,\"hostname\":\"%s\",\"secret\":\"%s\"", fd, esc_h, esc_l);
+    in_hook = 0;
+    if (app_keylog_cb) app_keylog_cb(ssl, line);
+}
+
+void HOOK_NAME(SSL_CTX_set_keylog_callback)(void *ctx, void (*cb)(const void*, const char*)) {
+    RESOLVE(SSL_CTX_set_keylog_callback);
+    app_keylog_cb = cb;
+    if (REAL_FUNC(SSL_CTX_set_keylog_callback))
+        CALL_REAL(SSL_CTX_set_keylog_callback, ctx, clawsig_keylog_cb);
+}
+
+void* HOOK_NAME(SSL_new)(void *ctx) {
+    RESOLVE(SSL_new);
+    if (!REAL_FUNC(SSL_new)) return NULL;
+    /* Inject our keylog callback on first SSL_new if app hasn't set one */
+    if (!in_hook && trace_fd >= 0) {
+        in_hook = 1;
+        RESOLVE(SSL_CTX_set_keylog_callback);
+        if (REAL_FUNC(SSL_CTX_set_keylog_callback) && !app_keylog_cb)
+            CALL_REAL(SSL_CTX_set_keylog_callback, ctx, clawsig_keylog_cb);
+        in_hook = 0;
+    }
+    return CALL_REAL(SSL_new, ctx);
+}
+
+int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
+    RESOLVE(SSL_write);
+    if (!REAL_FUNC(SSL_write)) return -1;
+    if (!in_hook && trace_fd >= 0 && buf && num > 0) {
+        in_hook = 1;
+        parse_http(get_ssl_fd(ssl), "https_request", buf, num);
+        in_hook = 0;
+    }
+    return CALL_REAL(SSL_write, ssl, buf, num);
+}
+
+int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
+    RESOLVE(SSL_read);
+    if (!REAL_FUNC(SSL_read)) return -1;
+    int rc = CALL_REAL(SSL_read, ssl, buf, num);
+    if (!in_hook && trace_fd >= 0 && rc > 0 && buf) {
+        in_hook = 1;
+        parse_http(get_ssl_fd(ssl), "https_response", buf, rc);
+        in_hook = 0;
+    }
+    return rc;
+}
+
+/* ================================================================== */
+/*                    Constructor & Destructor                        */
 /* ================================================================== */
 
 __attribute__((constructor))
 static void clawsig_init(void) {
     in_hook = 1;
-    for (int i = 0; i < MAX_TRACKED_FDS; i++) tracked_fds[i].fd = -1;
+    for (int i = 0; i < MAX_TRACKED_FDS; i++) { tracked_fds[i].fd = -1; fd_last_seq[i] = 0; }
 
     RESOLVE(open); RESOLVE(openat); RESOLVE(connect); RESOLVE(bind);
     RESOLVE(listen); RESOLVE(accept); RESOLVE(socket); RESOLVE(socketpair);
@@ -549,6 +785,11 @@ static void clawsig_init(void) {
     RESOLVE(recvmsg); RESOLVE(execve); RESOLVE(posix_spawn); RESOLVE(posix_spawnp);
     RESOLVE(fork); RESOLVE(vfork); RESOLVE(kill); RESOLVE(getaddrinfo);
     RESOLVE(getsockname); RESOLVE(getpeername);
+
+    /* Resolve SSL functions (may be NULL if no SSL library loaded) */
+    RESOLVE(SSL_new); RESOLVE(SSL_read); RESOLVE(SSL_write);
+    RESOLVE(SSL_CTX_set_keylog_callback);
+
 #ifdef __linux__
     RESOLVE(write); RESOLVE(close); RESOLVE(open64); RESOLVE(openat64);
 #endif
@@ -556,6 +797,23 @@ static void clawsig_init(void) {
     const char *trace_file = getenv("CLAWSIG_TRACE_FILE");
     if (trace_file && real_open) {
         trace_fd = real_open(trace_file, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0666);
+
+        /* FD elevation: move trace_fd to 1023+ so agent can't accidentally
+         * close or dup2 over it. From C-YOLO stealable idea #5. */
+        if (trace_fd >= 0 && trace_fd < 1023) {
+            int elevated = fcntl(trace_fd, F_DUPFD_CLOEXEC, 1023);
+            if (elevated >= 0) {
+#ifdef __linux__
+                if (real_close) real_close(trace_fd); else close(trace_fd);
+#else
+                close(trace_fd);
+#endif
+                trace_fd = elevated;
+            }
+        }
+
+        /* Build SSLKEYLOGFILE path: <trace_file>.keys */
+        snprintf(sslkeylog_path, sizeof(sslkeylog_path), "%s.keys", trace_file);
 
         char **argv = NULL; char **envp = NULL; const char *prog = "unknown";
 #ifdef __APPLE__
@@ -577,9 +835,27 @@ static void clawsig_init(void) {
 #endif
         proc_ident_t id = identify_process(prog, argv, envp);
         emit_log_event("agent_init", getpid(), 0,
-            ",\"harness\":\"%s\",\"role\":\"%s\"",
-            id.harness ? id.harness : "unknown", id.role);
+            ",\"harness\":\"%s\",\"role\":\"%s\",\"trace_fd\":%d",
+            id.harness ? id.harness : "unknown", id.role, trace_fd);
     }
+    in_hook = 0;
+}
+
+__attribute__((destructor))
+static void clawsig_fini(void) {
+    if (trace_fd < 0) return;
+    in_hook = 1;
+    /* Emit final Merkle commitment hash — the single 32-byte value
+     * that proves the exact sequence of every event in the trace.
+     * Tampering with any event invalidates this hash. */
+    merkle_acquire();
+    char final_buf[256];
+    int final_len = snprintf(final_buf, sizeof(final_buf),
+        "{\"layer\":\"interpose\",\"syscall\":\"merkle_final\","
+        "\"pid\":%d,\"count\":%llu,\"hash\":\"%s\"}\n",
+        getpid(), (unsigned long long)merkle_count, merkle_hash);
+    write_trace(final_buf, (size_t)final_len);
+    merkle_release();
     in_hook = 0;
 }
 
@@ -618,8 +894,16 @@ int HOOK_NAME(execve)(const char *pathname, char *const argv[], char *const envp
             ",\"path\":\"%s\",\"argv\":%s,\"role\":\"%s\"",
             path_esc, argv_json, id.role);
 
-    audit_env(envp); in_hook = 0;
-    int rc = CALL_REAL(execve, pathname, argv, envp); int saved_errno = errno;
+    audit_env(envp);
+
+    /* SSLKEYLOGFILE injection: force child to dump TLS secrets */
+    char *inj_envp[MAX_INJECT_ENV]; char ssl_buf[512], node_buf[1024];
+    char *const *final_envp = envp;
+    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf), node_buf, sizeof(node_buf)))
+        final_envp = inj_envp;
+
+    in_hook = 0;
+    int rc = CALL_REAL(execve, pathname, argv, final_envp); int saved_errno = errno;
     in_hook = 1;
     emit_log_event("execve_failed", getpid(), rc, ",\"path\":\"%s\"", path_esc);
     in_hook = 0; errno = saved_errno; return rc;
@@ -631,7 +915,14 @@ int HOOK_NAME(posix_spawn)(pid_t *restrict pid, const char *restrict path,
     RESOLVE(posix_spawn); if (in_hook || trace_fd < 0)
         return CALL_REAL(posix_spawn, pid, path, fa, attr, argv, envp);
     in_hook = 1; audit_env(envp);
-    int rc = CALL_REAL(posix_spawn, pid, path, fa, attr, argv, envp);
+
+    /* SSLKEYLOGFILE injection */
+    char *inj_envp[MAX_INJECT_ENV]; char ssl_buf[512], node_buf[1024];
+    char *const *final_envp = envp;
+    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf), node_buf, sizeof(node_buf)))
+        final_envp = inj_envp;
+
+    int rc = CALL_REAL(posix_spawn, pid, path, fa, attr, argv, final_envp);
     int saved_errno = errno;
 
     char path_esc[1024], argv_json[4096];
@@ -657,7 +948,14 @@ int HOOK_NAME(posix_spawnp)(pid_t *restrict pid, const char *restrict file,
     RESOLVE(posix_spawnp); if (in_hook || trace_fd < 0)
         return CALL_REAL(posix_spawnp, pid, file, fa, attr, argv, envp);
     in_hook = 1; audit_env(envp);
-    int rc = CALL_REAL(posix_spawnp, pid, file, fa, attr, argv, envp);
+
+    /* SSLKEYLOGFILE injection */
+    char *inj_envp[MAX_INJECT_ENV]; char ssl_buf[512], node_buf[1024];
+    char *const *final_envp = envp;
+    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf), node_buf, sizeof(node_buf)))
+        final_envp = inj_envp;
+
+    int rc = CALL_REAL(posix_spawnp, pid, file, fa, attr, argv, final_envp);
     int saved_errno = errno;
 
     char file_esc[1024], argv_json[4096];
@@ -694,6 +992,7 @@ int HOOK_NAME(bind)(int sockfd, const struct sockaddr *addr, socklen_t addrlen) 
     in_hook = 1; int rc = CALL_REAL(bind, sockfd, addr, addrlen); int saved_errno = errno;
     char ip[INET6_ADDRSTRLEN]; int port; const char *family;
     format_addr(addr, ip, sizeof(ip), &port, &family);
+    tl_event_fd = sockfd;
     emit_log_event("bind", getpid(), rc,
         ",\"fd\":%d,\"addr\":\"%s\",\"port\":%d,\"family\":\"%s\"", sockfd, ip, port, family);
     in_hook = 0; errno = saved_errno; return rc;
@@ -702,6 +1001,7 @@ int HOOK_NAME(bind)(int sockfd, const struct sockaddr *addr, socklen_t addrlen) 
 int HOOK_NAME(listen)(int sockfd, int backlog) {
     RESOLVE(listen); if (in_hook || trace_fd < 0) return CALL_REAL(listen, sockfd, backlog);
     in_hook = 1; int rc = CALL_REAL(listen, sockfd, backlog); int saved_errno = errno;
+    tl_event_fd = sockfd;
     emit_log_event("listen", getpid(), rc,
         ",\"fd\":%d,\"backlog\":%d", sockfd, backlog);
     in_hook = 0; errno = saved_errno; return rc;
@@ -713,6 +1013,7 @@ int HOOK_NAME(accept)(int sockfd, struct sockaddr *restrict addr, socklen_t *res
     if (rc >= 0) untrack_fd(rc);
     char ip[INET6_ADDRSTRLEN] = ""; int port = 0; const char *family = "UNKNOWN";
     if (addr) format_addr(addr, ip, sizeof(ip), &port, &family);
+    tl_event_fd = sockfd;
     emit_log_event("accept", getpid(), rc,
         ",\"server_fd\":%d,\"client_fd\":%d,\"addr\":\"%s\",\"port\":%d,\"family\":\"%s\"",
         sockfd, rc, ip, port, family);
@@ -722,8 +1023,11 @@ int HOOK_NAME(accept)(int sockfd, struct sockaddr *restrict addr, socklen_t *res
 int HOOK_NAME(socket)(int domain, int type, int protocol) {
     RESOLVE(socket); if (in_hook || trace_fd < 0) return CALL_REAL(socket, domain, type, protocol);
     in_hook = 1; int rc = CALL_REAL(socket, domain, type, protocol); int saved_errno = errno;
-    if (rc >= 0) emit_log_event("socket", getpid(), rc,
-        ",\"domain\":%d,\"type\":%d,\"protocol\":%d", domain, type, protocol);
+    if (rc >= 0) {
+        tl_event_fd = rc;
+        emit_log_event("socket", getpid(), rc,
+            ",\"domain\":%d,\"type\":%d,\"protocol\":%d", domain, type, protocol);
+    }
     in_hook = 0; errno = saved_errno; return rc;
 }
 
@@ -748,14 +1052,31 @@ int HOOK_NAME(socketpair)(int domain, int type, int protocol, int sv[2]) {
 int HOOK_NAME(dup)(int oldfd) {
     RESOLVE(dup); if (in_hook || trace_fd < 0) return CALL_REAL(dup, oldfd);
     in_hook = 1; int rc = CALL_REAL(dup, oldfd); int saved_errno = errno;
-    if (rc >= 0) emit_log_event("dup", getpid(), rc, ",\"oldfd\":%d", oldfd);
+    if (rc >= 0) {
+        tl_event_fd = oldfd;
+        emit_log_event("dup", getpid(), rc, ",\"oldfd\":%d", oldfd);
+    }
     in_hook = 0; errno = saved_errno; return rc;
 }
 
 int HOOK_NAME(dup2)(int oldfd, int newfd) {
-    RESOLVE(dup2); if (in_hook || trace_fd < 0) return CALL_REAL(dup2, oldfd, newfd);
+    RESOLVE(dup2);
+    /* Trace FD protection: reject dup2 targeting our elevated trace fd.
+     * From C-YOLO stealable idea #5. */
+    if (newfd == trace_fd && trace_fd >= 0) {
+        errno = EBADF;
+        if (!in_hook && trace_fd >= 0) {
+            in_hook = 1;
+            emit_log_event("trace_tamper", getpid(), -1,
+                ",\"action\":\"dup2_blocked\",\"oldfd\":%d,\"target_fd\":%d", oldfd, newfd);
+            in_hook = 0;
+        }
+        return -1;
+    }
+    if (in_hook || trace_fd < 0) return CALL_REAL(dup2, oldfd, newfd);
     in_hook = 1; int rc = CALL_REAL(dup2, oldfd, newfd); int saved_errno = errno;
     if (rc >= 0) untrack_fd(newfd);
+    tl_event_fd = oldfd;
     emit_log_event("dup2", getpid(), rc,
         ",\"oldfd\":%d,\"newfd\":%d", oldfd, newfd);
     in_hook = 0; errno = saved_errno; return rc;
@@ -773,6 +1094,7 @@ int HOOK_NAME(connect)(int sockfd, const struct sockaddr *addr, socklen_t addrle
             char dns_hostname[256]; int emitted_sni = 0;
             if (lookup_dns(ip_str, dns_hostname)) {
                 char sni_esc[512]; escape_json(dns_hostname, sni_esc, sizeof(sni_esc));
+                tl_event_fd = sockfd;
                 emit_log_event("tls_sni", getpid(), -999,
                     ",\"fd\":%d,\"hostname\":\"%s\",\"addr\":\"%s\",\"port\":%d",
                     sockfd, sni_esc, ip_str, port);
@@ -789,6 +1111,7 @@ int HOOK_NAME(connect)(int sockfd, const struct sockaddr *addr, socklen_t addrle
             if (!emitted_sni && (rc == 0 || (rc == -1 && saved_errno == EINPROGRESS)))
                 track_fd(sockfd, ip_str, port);
         }
+        tl_event_fd = sockfd;
         emit_log_event("connect", getpid(), rc,
             ",\"fd\":%d,\"addr\":\"%s\",\"port\":%d,\"family\":\"%s\"",
             sockfd, ip_str, port, family);
@@ -804,6 +1127,7 @@ int HOOK_NAME(getsockname)(int sockfd, struct sockaddr *restrict addr, socklen_t
     if (rc == 0) {
         char ip[INET6_ADDRSTRLEN]; int port; const char *fam;
         format_addr(addr, ip, sizeof(ip), &port, &fam);
+        tl_event_fd = sockfd;
         emit_log_event("getsockname", getpid(), rc,
             ",\"fd\":%d,\"addr\":\"%s\",\"port\":%d,\"family\":\"%s\"", sockfd, ip, port, fam);
     }
@@ -818,6 +1142,7 @@ int HOOK_NAME(getpeername)(int sockfd, struct sockaddr *restrict addr, socklen_t
     if (rc == 0) {
         char ip[INET6_ADDRSTRLEN]; int port; const char *fam;
         format_addr(addr, ip, sizeof(ip), &port, &fam);
+        tl_event_fd = sockfd;
         emit_log_event("getpeername", getpid(), rc,
             ",\"fd\":%d,\"addr\":\"%s\",\"port\":%d,\"family\":\"%s\"", sockfd, ip, port, fam);
     }
@@ -904,10 +1229,12 @@ ssize_t HOOK_NAME(sendto)(int sockfd, const void *buf, size_t len, int flags,
     int saved_errno = errno;
     char ip_str[INET6_ADDRSTRLEN] = {0}; int port; const char *family;
     format_addr(dest_addr, ip_str, sizeof(ip_str), &port, &family);
-    if (ip_str[0] && strcmp(family, "UNKNOWN") != 0)
+    if (ip_str[0] && strcmp(family, "UNKNOWN") != 0) {
+        tl_event_fd = sockfd;
         emit_log_event("sendto", getpid(), -999,
             ",\"fd\":%d,\"addr\":\"%s\",\"port\":%d,\"family\":\"%s\",\"len\":%zu",
             sockfd, ip_str, port, family, len);
+    }
     in_hook = 0; errno = saved_errno; return rc;
 }
 
@@ -916,6 +1243,7 @@ ssize_t HOOK_NAME(recv)(int sockfd, void *buf, size_t len, int flags) {
     if (!in_hook && trace_fd >= 0 && rc > 0 && is_llm_fd(sockfd)) {
         in_hook = 1;
         int is_sse = (rc >= 6 && memcmp(buf, "data: ", 6) == 0) ? 1 : 0;
+        tl_event_fd = sockfd;
         emit_log_event("recv_llm", getpid(), -999,
             ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
         in_hook = 0;
@@ -930,6 +1258,7 @@ ssize_t HOOK_NAME(recvfrom)(int sockfd, void *restrict buf, size_t len, int flag
     if (!in_hook && trace_fd >= 0 && rc > 0 && is_llm_fd(sockfd)) {
         in_hook = 1;
         int is_sse = (rc >= 6 && memcmp(buf, "data: ", 6) == 0) ? 1 : 0;
+        tl_event_fd = sockfd;
         emit_log_event("recv_llm", getpid(), -999,
             ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
         in_hook = 0;
@@ -943,6 +1272,7 @@ ssize_t HOOK_NAME(recvmsg)(int sockfd, struct msghdr *msg, int flags) {
         msg && msg->msg_iovlen > 0 && msg->msg_iov[0].iov_base) {
         in_hook = 1;
         int is_sse = (rc >= 6 && memcmp(msg->msg_iov[0].iov_base, "data: ", 6) == 0) ? 1 : 0;
+        tl_event_fd = sockfd;
         emit_log_event("recv_llm", getpid(), -999,
             ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
         in_hook = 0;
@@ -963,6 +1293,7 @@ int HOOK_NAME(open)(const char *pathname, int flags, ...) {
     in_hook = 1; int rc = CALL_REAL(open, pathname, flags, mode);
     int saved_errno = errno; if (rc >= 0) untrack_fd(rc);
     char path_esc[1024]; escape_json(pathname, path_esc, sizeof(path_esc));
+    tl_event_fd = rc;
     emit_log_event("open", getpid(), rc,
         ",\"path\":\"%s\",\"flags\":\"%s\",\"is_write\":%d",
         path_esc, get_access_mode(flags), is_write_access(flags));
@@ -978,6 +1309,7 @@ int HOOK_NAME(openat)(int dirfd, const char *pathname, int flags, ...) {
     in_hook = 1; int rc = CALL_REAL(openat, dirfd, pathname, flags, mode);
     int saved_errno = errno; if (rc >= 0) untrack_fd(rc);
     char path_esc[1024]; escape_json(pathname, path_esc, sizeof(path_esc));
+    tl_event_fd = rc;
     emit_log_event("openat", getpid(), rc,
         ",\"dirfd\":%d,\"path\":\"%s\",\"flags\":\"%s\",\"is_write\":%d",
         dirfd, path_esc, get_access_mode(flags), is_write_access(flags));
@@ -1000,6 +1332,11 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
 int close(int fd) {
     RESOLVE(close);
+    /* Trace FD protection on Linux too */
+    if (fd == trace_fd && trace_fd >= 0) {
+        errno = EBADF;
+        return -1;
+    }
     if (!in_hook && trace_fd >= 0) { in_hook = 1; untrack_fd(fd); in_hook = 0; }
     return real_close ? real_close(fd) : -1;
 }
@@ -1013,6 +1350,7 @@ int open64(const char *pathname, int flags, ...) {
     in_hook = 1; int rc = real_open64(pathname, flags, mode);
     int saved_errno = errno; if (rc >= 0) untrack_fd(rc);
     char path_esc[1024]; escape_json(pathname, path_esc, sizeof(path_esc));
+    tl_event_fd = rc;
     emit_log_event("open64", getpid(), rc,
         ",\"path\":\"%s\",\"flags\":\"%s\",\"is_write\":%d",
         path_esc, get_access_mode(flags), is_write_access(flags));
@@ -1028,6 +1366,7 @@ int openat64(int dirfd, const char *pathname, int flags, ...) {
     in_hook = 1; int rc = real_openat64(dirfd, pathname, flags, mode);
     int saved_errno = errno; if (rc >= 0) untrack_fd(rc);
     char path_esc[1024]; escape_json(pathname, path_esc, sizeof(path_esc));
+    tl_event_fd = rc;
     emit_log_event("openat64", getpid(), rc,
         ",\"dirfd\":%d,\"path\":\"%s\",\"flags\":\"%s\",\"is_write\":%d",
         dirfd, path_esc, get_access_mode(flags), is_write_access(flags));
@@ -1066,4 +1405,9 @@ DYLD_INTERPOSE(clawsig_recvfrom, recvfrom)
 DYLD_INTERPOSE(clawsig_recvmsg, recvmsg)
 DYLD_INTERPOSE(clawsig_getsockname, getsockname)
 DYLD_INTERPOSE(clawsig_getpeername, getpeername)
+/* SSL hooks — only fire if process dynamically links OpenSSL/BoringSSL/LibreSSL */
+DYLD_INTERPOSE(clawsig_SSL_new, SSL_new)
+DYLD_INTERPOSE(clawsig_SSL_read, SSL_read)
+DYLD_INTERPOSE(clawsig_SSL_write, SSL_write)
+DYLD_INTERPOSE(clawsig_SSL_CTX_set_keylog_callback, SSL_CTX_set_keylog_callback)
 #endif
