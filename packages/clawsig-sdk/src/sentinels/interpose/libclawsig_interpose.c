@@ -1927,6 +1927,19 @@ static ssl_write_t real_SSL_write = NULL;
 static ssl_set_keylog_cb_t real_SSL_CTX_set_keylog_callback = NULL;
 static void (*app_keylog_cb)(const void*, const char*) = NULL;
 
+/* --- Apple Security.framework TLS (R27: covers Claude Code + native Mach-O) --- */
+#ifdef __APPLE__
+typedef int32_t OSStatus;
+typedef const void *SSLContextRef;
+typedef const void *SSLConnectionRef;
+typedef OSStatus (*mac_ssl_read_t)(SSLContextRef, void*, size_t, size_t*);
+typedef OSStatus (*mac_ssl_write_t)(SSLContextRef, const void*, size_t, size_t*);
+typedef OSStatus (*mac_ssl_get_conn_t)(SSLContextRef, SSLConnectionRef*);
+static mac_ssl_read_t real_SSLRead = NULL;
+static mac_ssl_write_t real_SSLWrite = NULL;
+static mac_ssl_get_conn_t real_SSLGetConnection = NULL;
+#endif
+
 #ifdef __linux__
 typedef ssize_t (*write_func_t)(int, const void *, size_t);
 typedef int (*close_func_t)(int);
@@ -1937,6 +1950,12 @@ static open64_func_t real_open64 = NULL; static openat64_func_t real_openat64 = 
 #endif
 
 #define RESOLVE(name) if (!real_##name) { real_##name = (typeof(real_##name))dlsym(RTLD_NEXT, #name); }
+/* R27: RTLD_DEFAULT fallback for SSL symbols — finds BoringSSL exported
+ * for native addons when RTLD_NEXT skips the main executable. */
+#define RESOLVE_SSL(name) if (!real_##name) { \
+    real_##name = (typeof(real_##name))dlsym(RTLD_NEXT, #name); \
+    if (!real_##name) real_##name = (typeof(real_##name))dlsym(RTLD_DEFAULT, #name); \
+}
 
 #ifdef __APPLE__
 #define DYLD_INTERPOSE(_replacement, _replacee) \
@@ -1957,6 +1976,10 @@ extern void* SSL_new(void*) __attribute__((weak_import));
 extern int SSL_read(void*, void*, int) __attribute__((weak_import));
 extern int SSL_write(void*, const void*, int) __attribute__((weak_import));
 extern void SSL_CTX_set_keylog_callback(void*, void (*)(const void*, const char*)) __attribute__((weak_import));
+/* R27: Apple SecureTransport — dynamically linked even when BoringSSL is static */
+extern OSStatus SSLRead(SSLContextRef, void*, size_t, size_t*) __attribute__((weak_import));
+extern OSStatus SSLWrite(SSLContextRef, const void*, size_t, size_t*) __attribute__((weak_import));
+extern OSStatus SSLGetConnection(SSLContextRef, SSLConnectionRef*) __attribute__((weak_import));
 #endif
 
 /* ================================================================== */
@@ -2414,13 +2437,17 @@ static void untrack_fd(int fd) {
 }
 
 static void check_tls_sni(int fd, const void *buf, size_t count) {
-    if (fd < 0 || !buf || count < 47) return;
+    if (fd < 0 || !buf || count < 5) return;
+    const unsigned char *b = (const unsigned char *)buf;
+    /* R27: Mark TLS-carrying FDs early to prevent ciphertext from poisoning
+     * the plaintext HTTP FSM. Detects any TLS record (0x14-0x17, 0x03). */
+    if (b[0] >= 0x14 && b[0] <= 0x17 && b[1] == 0x03) set_ssl_fd(fd);
+    if (count < 47) return;
     int slot = fd & (MAX_TRACKED_FDS - 1);
     if (tracked_fds[slot].fd != fd) return;
 
     char ip[INET6_ADDRSTRLEN]; int port;
     if (!claim_fd(fd, ip, &port)) return;
-    const unsigned char *b = (const unsigned char *)buf;
     if (b[0] != 0x16 || b[1] != 0x03 || b[5] != 0x01) return;
 
     size_t pos = 43; if (pos >= count) return;
@@ -2571,19 +2598,19 @@ static void clawsig_keylog_cb(const void *ssl, const char *line) {
 }
 
 void HOOK_NAME(SSL_CTX_set_keylog_callback)(void *ctx, void (*cb)(const void*, const char*)) {
-    RESOLVE(SSL_CTX_set_keylog_callback);
+    RESOLVE_SSL(SSL_CTX_set_keylog_callback);
     app_keylog_cb = cb;
     if (REAL_FUNC(SSL_CTX_set_keylog_callback))
         CALL_REAL(SSL_CTX_set_keylog_callback, ctx, clawsig_keylog_cb);
 }
 
 void* HOOK_NAME(SSL_new)(void *ctx) {
-    RESOLVE(SSL_new);
+    RESOLVE_SSL(SSL_new);
     if (!REAL_FUNC(SSL_new)) return NULL;
     /* Inject our keylog callback on first SSL_new if app hasn't set one */
     if (!in_hook && trace_fd >= 0) {
         in_hook = 1;
-        RESOLVE(SSL_CTX_set_keylog_callback);
+        RESOLVE_SSL(SSL_CTX_set_keylog_callback);
         if (REAL_FUNC(SSL_CTX_set_keylog_callback) && !app_keylog_cb)
             CALL_REAL(SSL_CTX_set_keylog_callback, ctx, clawsig_keylog_cb);
         in_hook = 0;
@@ -2592,7 +2619,7 @@ void* HOOK_NAME(SSL_new)(void *ctx) {
 }
 
 int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
-    RESOLVE(SSL_write);
+    RESOLVE_SSL(SSL_write);
     if (!REAL_FUNC(SSL_write)) return -1;
     if (!in_hook && trace_fd >= 0 && buf && num > 0) {
         in_hook = 1;
@@ -2637,7 +2664,7 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
 }
 
 int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
-    RESOLVE(SSL_read);
+    RESOLVE_SSL(SSL_read);
     if (!REAL_FUNC(SSL_read)) return -1;
     int rc = CALL_REAL(SSL_read, ssl, buf, num);
     if (!in_hook && trace_fd >= 0 && rc > 0 && buf) {
@@ -2663,6 +2690,100 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
     }
     return rc;
 }
+
+/* ================================================================== */
+/*         R27: Apple Security.framework TLS Hooks                   */
+/* ================================================================== */
+#ifdef __APPLE__
+static int get_mac_ssl_fd(SSLContextRef ctx) {
+    RESOLVE_SSL(SSLGetConnection);
+    if (REAL_FUNC(SSLGetConnection)) {
+        SSLConnectionRef conn = NULL;
+        if (CALL_REAL(SSLGetConnection, ctx, &conn) == 0)
+            return (int)(intptr_t)conn;
+    }
+    return -1;
+}
+
+OSStatus HOOK_NAME(SSLWrite)(SSLContextRef ctx, const void *data,
+                             size_t dataLength, size_t *processed) {
+    RESOLVE_SSL(SSLWrite);
+    if (!REAL_FUNC(SSLWrite)) return -1;
+    if (!in_hook && trace_fd >= 0 && data && dataLength > 0) {
+        in_hook = 1;
+        int fd = get_mac_ssl_fd(ctx);
+        if (fd >= 0) {
+            set_ssl_fd(fd);
+            /* H2 preface detection */
+            if (!is_h2_fd(fd) && dataLength >= 24 &&
+                !memcmp(data, "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n", 24)) {
+                set_h2_fd(fd);
+                h2_init_conn(fd);
+            }
+            if (is_h2_fd(fd)) {
+                h2_feed(fd, (const uint8_t *)data, dataLength, 1);
+                if (tl_causal_read_seq > 0) {
+                    tl_event_fd = fd;
+                    emit_log_event("https_write_causal", getpid(), (int)dataLength,
+                        ",\"fd\":%d,\"causal_fd\":%d,\"causal_seq\":%llu",
+                        fd, tl_causal_read_fd, (unsigned long long)tl_causal_read_seq);
+                }
+            } else {
+                sniff_and_set_llm_fd(fd, data, dataLength);
+                if (is_llm_fd(fd)) {
+                    timing_start_req(fd);
+                    if (fd < MAX_TRACKED_FDS) {
+                        fsm_lock(fd);
+                        fsm_feed(fd, (const uint8_t *)data, dataLength, 1);
+                        fsm_unlock(fd);
+                    }
+                    if (tl_causal_read_seq > 0) {
+                        tl_event_fd = fd;
+                        emit_log_event("https_write_causal", getpid(), (int)dataLength,
+                            ",\"fd\":%d,\"causal_fd\":%d,\"causal_seq\":%llu",
+                            fd, tl_causal_read_fd, (unsigned long long)tl_causal_read_seq);
+                    }
+                }
+                if (!is_h2_fd(fd)) parse_http(fd, "https_request", data, (int)dataLength);
+            }
+        }
+        in_hook = 0;
+    }
+    return CALL_REAL(SSLWrite, ctx, data, dataLength, processed);
+}
+
+OSStatus HOOK_NAME(SSLRead)(SSLContextRef ctx, void *data,
+                            size_t dataLength, size_t *processed) {
+    RESOLVE_SSL(SSLRead);
+    if (!REAL_FUNC(SSLRead)) return -1;
+    OSStatus rc = CALL_REAL(SSLRead, ctx, data, dataLength, processed);
+    /* errSecSuccess=0, errSSLWouldBlock=-9806: both can yield valid bytes */
+    if (!in_hook && trace_fd >= 0 && processed && *processed > 0 && data) {
+        in_hook = 1;
+        int fd = get_mac_ssl_fd(ctx);
+        if (fd >= 0) {
+            set_ssl_fd(fd);
+            size_t num = *processed;
+            if (is_h2_fd(fd)) {
+                if (is_llm_fd(fd)) timing_add_token(fd, num);
+                h2_feed(fd, (const uint8_t *)data, num, 0);
+            } else if (is_llm_fd(fd)) {
+                timing_add_token(fd, num);
+                if (fd < MAX_TRACKED_FDS) {
+                    fsm_lock(fd);
+                    fsm_feed(fd, (const uint8_t *)data, num, 0);
+                    fsm_unlock(fd);
+                }
+            }
+            if (!is_h2_fd(fd)) parse_http(fd, "https_response", data, (int)num);
+            tl_causal_read_fd = fd;
+            tl_causal_read_seq = global_seq - 1;
+        }
+        in_hook = 0;
+    }
+    return rc;
+}
+#endif
 
 /* ================================================================== */
 /*                    Constructor & Destructor                        */
@@ -2692,9 +2813,13 @@ static void clawsig_init(void) {
     RESOLVE(fork); RESOLVE(vfork); RESOLVE(kill); RESOLVE(getaddrinfo);
     RESOLVE(getsockname); RESOLVE(getpeername);
 
-    /* Resolve SSL functions (may be NULL if no SSL library loaded) */
-    RESOLVE(SSL_new); RESOLVE(SSL_read); RESOLVE(SSL_write);
-    RESOLVE(SSL_CTX_set_keylog_callback);
+    /* Resolve SSL functions — RESOLVE_SSL uses RTLD_DEFAULT fallback
+     * to find BoringSSL symbols exported from the main executable. */
+    RESOLVE_SSL(SSL_new); RESOLVE_SSL(SSL_read); RESOLVE_SSL(SSL_write);
+    RESOLVE_SSL(SSL_CTX_set_keylog_callback);
+#ifdef __APPLE__
+    RESOLVE_SSL(SSLRead); RESOLVE_SSL(SSLWrite); RESOLVE_SSL(SSLGetConnection);
+#endif
 
 #ifdef __linux__
     RESOLVE(write); RESOLVE(close); RESOLVE(open64); RESOLVE(openat64);
@@ -2722,6 +2847,24 @@ static void clawsig_init(void) {
 
         /* Build SSLKEYLOGFILE path: <trace_file>.keys */
         snprintf(sslkeylog_path, sizeof(sslkeylog_path), "%s.keys", trace_file);
+
+        /* R27: Inject TLS keylog into CURRENT process environment.
+         * Constructor runs before main() — early enough for Node.js,
+         * Go, Bun, Deno to pick up before their TLS stacks initialize. */
+        setenv("SSLKEYLOGFILE", sslkeylog_path, 1);
+        {
+            const char *existing_node = getenv("NODE_OPTIONS");
+            char node_inject[2048];
+            if (existing_node && !strstr(existing_node, "--tls-keylog")) {
+                snprintf(node_inject, sizeof(node_inject),
+                    "%.1024s --tls-keylog=%s", existing_node, sslkeylog_path);
+                setenv("NODE_OPTIONS", node_inject, 1);
+            } else if (!existing_node) {
+                snprintf(node_inject, sizeof(node_inject),
+                    "--tls-keylog=%s", sslkeylog_path);
+                setenv("NODE_OPTIONS", node_inject, 1);
+            }
+        }
 
         /* Anti-stripping: save env vars for re-injection in exec hooks.
          * From F-RedTeam: defeats sandbox escape via clean envp. */
@@ -3677,4 +3820,7 @@ DYLD_INTERPOSE(clawsig_SSL_new, SSL_new)
 DYLD_INTERPOSE(clawsig_SSL_read, SSL_read)
 DYLD_INTERPOSE(clawsig_SSL_write, SSL_write)
 DYLD_INTERPOSE(clawsig_SSL_CTX_set_keylog_callback, SSL_CTX_set_keylog_callback)
+/* R27: Apple SecureTransport — dynamically linked, unlike BoringSSL */
+DYLD_INTERPOSE(clawsig_SSLRead, SSLRead)
+DYLD_INTERPOSE(clawsig_SSLWrite, SSLWrite)
 #endif
