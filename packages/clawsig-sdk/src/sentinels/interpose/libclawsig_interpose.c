@@ -85,6 +85,13 @@ static inline void set_llm_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_a
 static inline void clear_llm_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_and(&llm_fds_bitset[fd / 64], ~(1ULL << (fd % 64))); }
 static inline int is_llm_fd(int fd) { return fd >= 0 && fd < 1024 && (llm_fds_bitset[fd / 64] & (1ULL << (fd % 64))); }
 
+/* SSL FD tracking — prevents plaintext HTTP parser from double-processing
+ * encrypted traffic that SSL_read/SSL_write already handle (from I-Genesis) */
+static volatile uint64_t ssl_fds_bitset[16] = {0};
+static inline void set_ssl_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_or(&ssl_fds_bitset[fd / 64], 1ULL << (fd % 64)); }
+static inline void clear_ssl_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_and(&ssl_fds_bitset[fd / 64], ~(1ULL << (fd % 64))); }
+static inline int is_ssl_fd(int fd) { return fd >= 0 && fd < 1024 && (ssl_fds_bitset[fd / 64] & (1ULL << (fd % 64))); }
+
 /* --- Causal DAG state (from C-Naked stealable idea #1) --- */
 static __thread uint64_t tl_last_seq = 0;          /* thread-local: previous event seq */
 static volatile uint64_t fd_last_seq[MAX_TRACKED_FDS]; /* per-fd: previous event seq    */
@@ -132,6 +139,16 @@ static int peek_fd(int fd, char *ip_out, int *port_out);
 static int lookup_dns(const char *ip, char *hostname_out);
 static void feed_anomaly_engine(const char *hostname, double ttft,
     double mean_iti, double p50, double p95, double burst, double bpt);
+
+/* Auto-detect LLM FD by HTTP method prefix (from I-Genesis #63) */
+static inline void sniff_and_set_llm_fd(int fd, const void *buf, size_t len) {
+    if (len < 15 || is_llm_fd(fd)) return;
+    const char *b = (const char *)buf;
+    if (!memcmp(b, "POST /v1/chat/", 14) || !memcmp(b, "POST /v1/compl", 14) ||
+        !memcmp(b, "POST /v1/messa", 14) || !memcmp(b, "POST /api/gene", 14) ||
+        !memcmp(b, "POST /api/chat", 14))
+        set_llm_fd(fd);
+}
 
 static void emit_timing_fingerprint(int fd) {
     if (fd < 0 || fd >= MAX_TRACKED_FDS) return;
@@ -317,7 +334,8 @@ static void feed_anomaly_engine(const char *hostname, double ttft,
 /* --- HTTP FSM: unified req/res state machine per FD --- */
 typedef enum {
     HTTP_IDLE = 0, HTTP_REQ_HDR, HTTP_REQ_BODY,
-    HTTP_WAIT_RES, HTTP_RES_HDR, HTTP_RES_BODY
+    HTTP_WAIT_RES, HTTP_RES_HDR, HTTP_RES_BODY,
+    HTTP_TRAILER  /* after final 0-chunk, parse trailer headers (from I-Genesis #60) */
 } http_fsm_state_t;
 
 typedef struct {
@@ -329,8 +347,14 @@ typedef struct {
     char path[512];
     int status;
 
-    /* Model identity (from H-Omega) */
-    char model[128];
+    /* Model identity (from H-Omega headers + I-Genesis JSON scanner) */
+    char model[128];        /* from response headers (x-model/openai-model) */
+    char req_model[128];    /* from request body JSON "model" key */
+    char res_model[128];    /* from response body JSON "model" key */
+    int req_mscan;          /* req JSON model scanner state (0-11) */
+    int req_midx;           /* req model string accumulation index */
+    int res_mscan;          /* res JSON model scanner state (0-11) */
+    int res_midx;           /* res model string accumulation index */
 
     /* Header parsing (line-at-a-time, cross-buffer) */
     char line_buf[512];
@@ -382,12 +406,32 @@ static void fsm_emit_receipt(int fd) {
         snprintf(&hex_rc[k*2], 3, "%02x", rc_h[k]);
     }
 
-    /* Model fallback: scan JSON body for "model" field if header empty */
-    if (sm->model[0] == '\0') strcpy(sm->model, "unknown");
+    /* Model resolution: header > JSON body > "unknown" */
+    const char *effective_model = sm->model[0] ? sm->model :
+                                  sm->res_model[0] ? sm->res_model : "unknown";
 
-    char path_esc[1024], model_esc[256];
+    /* Model substitution detection (from I-Genesis #57):
+     * compare claimed model (from request body) vs actual model (from response).
+     * Orthogonal to timing-based detection — both can fire. */
+    int model_substituted = 0;
+    if (sm->req_model[0] && (sm->res_model[0] || sm->model[0])) {
+        const char *actual = sm->model[0] ? sm->model : sm->res_model;
+        if (strcmp(sm->req_model, actual) != 0) {
+            model_substituted = 1;
+            tl_event_fd = fd;
+            char rm[256], am[256];
+            escape_json(sm->req_model, rm, sizeof(rm));
+            escape_json(actual, am, sizeof(am));
+            emit_log_event("security_anomaly", getpid(), -999,
+                ",\"fd\":%d,\"type\":\"model_substitution_structural\","
+                "\"requested\":\"%s\",\"actual\":\"%s\"", fd, rm, am);
+        }
+    }
+
+    char path_esc[1024], model_esc[256], req_m_esc[256];
     escape_json(sm->path, path_esc, sizeof(path_esc));
-    escape_json(sm->model, model_esc, sizeof(model_esc));
+    escape_json(effective_model, model_esc, sizeof(model_esc));
+    escape_json(sm->req_model, req_m_esc, sizeof(req_m_esc));
 
     tl_event_fd = fd;
     emit_log_event("llm_receipt", getpid(), -999,
@@ -395,12 +439,12 @@ static void fsm_emit_receipt(int fd) {
         ",\"method\":\"%s\",\"path\":\"%s\",\"status\":%d"
         ",\"req_bytes\":%llu,\"res_bytes\":%llu"
         ",\"req_body_sha256\":\"%s\",\"res_body_sha256\":\"%s\""
-        ",\"model\":\"%s\"",
+        ",\"model\":\"%s\",\"req_model\":\"%s\",\"model_substituted\":%d",
         fd, hex_rc,
         sm->method, path_esc, sm->status,
         (unsigned long long)sm->total_req_bytes,
         (unsigned long long)sm->total_res_bytes,
-        hex_rq, hex_rs, model_esc);
+        hex_rq, hex_rs, model_esc, req_m_esc, model_substituted);
 
     sm->state = HTTP_IDLE;
     sm->method[0] = '\0';
@@ -415,15 +459,54 @@ static void fsm_flush(int fd) {
     fsm_unlock(fd);
 }
 
-/** Append bytes to request body hash contexts. */
+/**
+ * Byte-by-byte JSON "model" key scanner (from I-Genesis #56).
+ * 12-state DFA: 0=idle, 1-6=matching "model", 7=post-quote ws,
+ * 8=post-colon ws, 9=accumulating value, 10=done, 11=escape.
+ * Scans streaming body without buffering entire JSON.
+ */
+static void json_model_scan(int *state, int *idx, char *model, size_t model_sz,
+                            const uint8_t *data, size_t len) {
+    static const char key[] = "model";
+    for (size_t i = 0; i < len && *state < 10; i++) {
+        uint8_t b = data[i];
+        switch (*state) {
+        case 0: if (b == '"') *state = 1; break;
+        case 1: case 2: case 3: case 4: case 5:
+            if (b == (uint8_t)key[*state - 1]) (*state)++;
+            else *state = (b == '"') ? 1 : 0;
+            break;
+        case 6: if (b == '"') *state = 7; else *state = (b == '"') ? 1 : 0; break;
+        case 7: if (b == ':') *state = 8;
+                else if (b != ' ' && b != '\t') *state = 0; break;
+        case 8: if (b == '"') { *state = 9; *idx = 0; }
+                else if (b != ' ' && b != '\t') *state = 0; break;
+        case 9:
+            if (b == '"') { model[*idx] = '\0'; *state = 10; }
+            else if (b == '\\') *state = 11;
+            else if (*idx < (int)model_sz - 1) model[(*idx)++] = (char)b;
+            break;
+        case 11:
+            if (*idx < (int)model_sz - 1) model[(*idx)++] = (char)b;
+            *state = 9; break;
+        }
+    }
+}
+
+/** Append bytes to request body hash contexts + scan for model. */
 static inline void fsm_hash_req(http_fsm_t *sm, const uint8_t *d, size_t n) {
     sha256_update(&sm->req_ctx, d, n);
     sha256_update(&sm->receipt_ctx, d, n);
     sm->total_req_bytes += n;
+    json_model_scan(&sm->req_mscan, &sm->req_midx, sm->req_model,
+                    sizeof(sm->req_model), d, n);
 }
 
-/** Append bytes to response body hash contexts with SSE canonicalization. */
+/** Append bytes to response body hash contexts with SSE canonicalization + model scan. */
 static void fsm_hash_res(http_fsm_t *sm, const uint8_t *data, size_t len) {
+    /* JSON model scanner runs on raw bytes regardless of SSE mode */
+    json_model_scan(&sm->res_mscan, &sm->res_midx, sm->res_model,
+                    sizeof(sm->res_model), data, len);
     if (!sm->is_sse) {
         sha256_update(&sm->res_ctx, data, len);
         sha256_update(&sm->receipt_ctx, data, len);
@@ -495,6 +578,9 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
             sm->state = HTTP_REQ_HDR;
             sm->line_len = 0; sm->method[0] = '\0'; sm->path[0] = '\0';
             sm->status = 0; sm->model[0] = '\0';
+            sm->req_model[0] = '\0'; sm->res_model[0] = '\0';
+            sm->req_mscan = 0; sm->req_midx = 0;
+            sm->res_mscan = 0; sm->res_midx = 0;
             sm->total_req_bytes = 0; sm->total_res_bytes = 0;
             sm->content_length = 0; sm->body_bytes_read = 0;
             sm->is_chunked = 0; sm->is_sse = 0;
@@ -528,6 +614,14 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
                             sm->state = HTTP_WAIT_RES;
                         }
                     } else {
+                        /* HTTP 1xx informational: skip and re-parse next response
+                         * (from I-Genesis #59). 100 Continue, 102 Processing, etc. */
+                        if (sm->status >= 100 && sm->status < 200 && sm->status != 101) {
+                            sm->status = 0; sm->state = HTTP_RES_HDR;
+                            sm->content_length = 0; sm->is_chunked = 0;
+                            sm->line_len = 0;
+                            i++; continue;
+                        }
                         sm->state = HTTP_RES_BODY;
                     }
                     sm->body_bytes_read = 0;
@@ -605,12 +699,13 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
                         sm->line_len = 0;
                         i++; /* skip \n */
                         if (sm->chunk_rem == 0) {
-                            /* Final chunk → transition */
+                            /* Final chunk → parse trailers (from I-Genesis #60) */
                             if (is_state_req) {
                                 sha256_update(&sm->receipt_ctx, (const uint8_t*)"\n", 1);
                                 sm->state = HTTP_WAIT_RES;
                             } else {
-                                fsm_emit_receipt(fd);
+                                sm->state = HTTP_TRAILER;
+                                sm->line_len = 0;
                             }
                             continue;
                         }
@@ -655,6 +750,23 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
                         fsm_emit_receipt(fd);
                     }
                 }
+            }
+
+        /* --- State: TRAILER — after final 0-chunk (from I-Genesis #60) --- */
+        } else if (sm->state == HTTP_TRAILER) {
+            size_t start = i;
+            while (i < len && data[i] != '\n') i++;
+            if (i < len) {
+                size_t cplen = i - start;
+                if (cplen > 0 && data[i-1] == '\r') cplen--;
+                if (cplen == 0) {
+                    /* Empty line after trailers → receipt */
+                    fsm_emit_receipt(fd);
+                }
+                /* Non-empty trailer lines are silently consumed */
+                i++; /* skip \n */
+            } else {
+                break; /* wait for more data */
             }
 
         /* --- State: WAIT_RES — request done, waiting for response --- */
@@ -1203,6 +1315,7 @@ static void untrack_fd(int fd) {
         fsm_flush(fd);
     }
     clear_llm_fd(fd);
+    clear_ssl_fd(fd);
 }
 
 static void check_tls_sni(int fd, const void *buf, size_t count) {
@@ -1381,6 +1494,7 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
     if (!in_hook && trace_fd >= 0 && buf && num > 0) {
         in_hook = 1;
         int fd = get_ssl_fd(ssl);
+        if (fd >= 0) set_ssl_fd(fd);
         if (is_llm_fd(fd)) {
             timing_start_req(fd);
             /* Feed HTTP FSM — request direction */
@@ -1410,6 +1524,7 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
     if (!in_hook && trace_fd >= 0 && rc > 0 && buf) {
         in_hook = 1;
         int fd = get_ssl_fd(ssl);
+        if (fd >= 0) set_ssl_fd(fd);
         if (is_llm_fd(fd)) {
             timing_add_token(fd, (size_t)rc);
             /* Feed HTTP FSM — response direction */
@@ -2019,7 +2134,18 @@ ssize_t HOOK_NAME(send)(int sockfd, const void *buf, size_t len, int flags) {
     RESOLVE(send);
     if (!in_hook && trace_fd >= 0) {
         in_hook = 1; check_tls_sni(sockfd, buf, len);
-        scan_credentials(sockfd, buf, len); in_hook = 0;
+        scan_credentials(sockfd, buf, len);
+        /* Plaintext HTTP DFA for non-SSL LLM FDs (from I-Genesis #58) */
+        if (!is_ssl_fd(sockfd)) {
+            sniff_and_set_llm_fd(sockfd, buf, len);
+            if (is_llm_fd(sockfd) && sockfd >= 0 && sockfd < MAX_TRACKED_FDS) {
+                timing_start_req(sockfd);
+                fsm_lock(sockfd);
+                fsm_feed(sockfd, (const uint8_t *)buf, len, 1);
+                fsm_unlock(sockfd);
+            }
+        }
+        in_hook = 0;
     }
     return CALL_REAL(send, sockfd, buf, len, flags);
 }
@@ -2032,7 +2158,18 @@ ssize_t HOOK_NAME(sendmsg)(int sockfd, const struct msghdr *msg, int flags) {
             if (msg->msg_iov[i].iov_base && msg->msg_iov[i].iov_len > 0) {
                 check_tls_sni(sockfd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len);
                 scan_credentials(sockfd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len);
-                parsed = 1; break;
+                /* Plaintext HTTP DFA (from I-Genesis #58) */
+                if (!is_ssl_fd(sockfd)) {
+                    sniff_and_set_llm_fd(sockfd, msg->msg_iov[i].iov_base, msg->msg_iov[i].iov_len);
+                    if (is_llm_fd(sockfd) && sockfd >= 0 && sockfd < MAX_TRACKED_FDS) {
+                        if (i == 0) timing_start_req(sockfd);
+                        fsm_lock(sockfd);
+                        fsm_feed(sockfd, (const uint8_t *)msg->msg_iov[i].iov_base,
+                                 msg->msg_iov[i].iov_len, 1);
+                        fsm_unlock(sockfd);
+                    }
+                }
+                parsed = 1;
             }
         }
         if (!parsed) untrack_fd(sockfd); in_hook = 0;
@@ -2067,14 +2204,21 @@ ssize_t HOOK_NAME(recv)(int sockfd, void *buf, size_t len, int flags) {
     RESOLVE(recv); ssize_t rc = CALL_REAL(recv, sockfd, buf, len, flags);
     if (!in_hook && trace_fd >= 0 && rc > 0 && is_llm_fd(sockfd)) {
         in_hook = 1;
-        timing_add_token(sockfd, (size_t)rc);
-        int is_sse = (rc >= 6 && memcmp(buf, "data: ", 6) == 0) ? 1 : 0;
-        tl_event_fd = sockfd;
-        emit_log_event("recv_llm", getpid(), -999,
-            ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
-        /* Data-flow causal DAG: record this read for downstream write linking */
+        /* Plaintext HTTP DFA response parsing (from I-Genesis #58) */
+        if (!is_ssl_fd(sockfd) && sockfd >= 0 && sockfd < MAX_TRACKED_FDS) {
+            timing_add_token(sockfd, (size_t)rc);
+            fsm_lock(sockfd);
+            fsm_feed(sockfd, (const uint8_t *)buf, (size_t)rc, 0);
+            fsm_unlock(sockfd);
+        } else {
+            timing_add_token(sockfd, (size_t)rc);
+            int is_sse = (rc >= 6 && memcmp(buf, "data: ", 6) == 0) ? 1 : 0;
+            tl_event_fd = sockfd;
+            emit_log_event("recv_llm", getpid(), -999,
+                ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
+        }
         tl_causal_read_fd = sockfd;
-        tl_causal_read_seq = global_seq - 1; /* seq of the event just emitted */
+        tl_causal_read_seq = global_seq - 1;
         in_hook = 0;
     }
     return rc;
@@ -2086,10 +2230,12 @@ ssize_t HOOK_NAME(recvfrom)(int sockfd, void *restrict buf, size_t len, int flag
     ssize_t rc = CALL_REAL(recvfrom, sockfd, buf, len, flags, addr, addrlen);
     if (!in_hook && trace_fd >= 0 && rc > 0 && is_llm_fd(sockfd)) {
         in_hook = 1;
-        int is_sse = (rc >= 6 && memcmp(buf, "data: ", 6) == 0) ? 1 : 0;
-        tl_event_fd = sockfd;
-        emit_log_event("recv_llm", getpid(), -999,
-            ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
+        if (!is_ssl_fd(sockfd) && sockfd >= 0 && sockfd < MAX_TRACKED_FDS) {
+            timing_add_token(sockfd, (size_t)rc);
+            fsm_lock(sockfd);
+            fsm_feed(sockfd, (const uint8_t *)buf, (size_t)rc, 0);
+            fsm_unlock(sockfd);
+        }
         in_hook = 0;
     }
     return rc;
@@ -2100,10 +2246,20 @@ ssize_t HOOK_NAME(recvmsg)(int sockfd, struct msghdr *msg, int flags) {
     if (!in_hook && trace_fd >= 0 && rc > 0 && is_llm_fd(sockfd) &&
         msg && msg->msg_iovlen > 0 && msg->msg_iov[0].iov_base) {
         in_hook = 1;
-        int is_sse = (rc >= 6 && memcmp(msg->msg_iov[0].iov_base, "data: ", 6) == 0) ? 1 : 0;
-        tl_event_fd = sockfd;
-        emit_log_event("recv_llm", getpid(), -999,
-            ",\"fd\":%d,\"bytes\":%zd,\"sse\":%d", sockfd, rc, is_sse);
+        if (!is_ssl_fd(sockfd) && sockfd >= 0 && sockfd < MAX_TRACKED_FDS) {
+            timing_add_token(sockfd, (size_t)rc);
+            size_t remaining = (size_t)rc;
+            fsm_lock(sockfd);
+            for (size_t j = 0; j < (size_t)msg->msg_iovlen && remaining > 0; j++) {
+                if (msg->msg_iov[j].iov_base && msg->msg_iov[j].iov_len > 0) {
+                    size_t chunk = remaining < msg->msg_iov[j].iov_len ?
+                                   remaining : msg->msg_iov[j].iov_len;
+                    fsm_feed(sockfd, (const uint8_t *)msg->msg_iov[j].iov_base, chunk, 0);
+                    remaining -= chunk;
+                }
+            }
+            fsm_unlock(sockfd);
+        }
         in_hook = 0;
     }
     return rc;
