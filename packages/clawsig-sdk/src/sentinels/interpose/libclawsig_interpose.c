@@ -69,6 +69,7 @@ static inline uint64_t get_mono_ns(void) {
 /*                          Global State                              */
 /* ================================================================== */
 
+static volatile pid_t cached_pid = 0;   /* R25: fork/vfork child detection */
 static __thread int in_hook = 0;
 static int trace_fd = -1;
 
@@ -91,6 +92,15 @@ static volatile uint64_t ssl_fds_bitset[16] = {0};
 static inline void set_ssl_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_or(&ssl_fds_bitset[fd / 64], 1ULL << (fd % 64)); }
 static inline void clear_ssl_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_and(&ssl_fds_bitset[fd / 64], ~(1ULL << (fd % 64))); }
 static inline int is_ssl_fd(int fd) { return fd >= 0 && fd < 1024 && (ssl_fds_bitset[fd / 64] & (1ULL << (fd % 64))); }
+
+/* --- HTTP/2 FD tracking (from L-SelfVerify stealable idea #64) --- */
+static volatile uint64_t h2_fds_bitset[16] = {0};
+static inline void set_h2_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_or(&h2_fds_bitset[fd / 64], 1ULL << (fd % 64)); }
+static inline void clear_h2_fd(int fd) { if (fd >= 0 && fd < 1024) __sync_fetch_and_and(&h2_fds_bitset[fd / 64], ~(1ULL << (fd % 64))); }
+static inline int is_h2_fd(int fd) { return fd >= 0 && fd < 1024 && (h2_fds_bitset[fd / 64] & (1ULL << (fd % 64))); }
+
+/* O(1) FD→h2_conn slot lookup (from K-ConstraintsLast #72) — replaces linear scan */
+static volatile int fd_to_h2[1024];
 
 /* --- Causal DAG state (from C-Naked stealable idea #1) --- */
 static __thread uint64_t tl_last_seq = 0;          /* thread-local: previous event seq */
@@ -139,7 +149,6 @@ static int peek_fd(int fd, char *ip_out, int *port_out);
 static int lookup_dns(const char *ip, char *hostname_out);
 static void feed_anomaly_engine(const char *hostname, double ttft,
     double mean_iti, double p50, double p95, double burst, double bpt);
-
 /* Auto-detect LLM FD by HTTP method prefix (from I-Genesis #63) */
 static inline void sniff_and_set_llm_fd(int fd, const void *buf, size_t len) {
     if (len < 15 || is_llm_fd(fd)) return;
@@ -252,6 +261,353 @@ typedef struct { uint32_t state[8]; uint32_t count[2]; uint8_t buffer[64]; } sha
 static void sha256_init(sha256_ctx_t *ctx);
 static void sha256_update(sha256_ctx_t *ctx, const uint8_t *data, size_t len);
 static void sha256_final(sha256_ctx_t *ctx, uint8_t hash[32]);
+
+
+/* ================================================================== */
+/*   R26: Transcript Extraction (llm_msg & llm_tool_call)            */
+/*   Streaming JSON DFA for structured event extraction from LLM     */
+/*   API traffic. Synthesized from U1 (#110-#113), V1 (#115-#117),   */
+/*   W2 (#119-#120). Covers HTTP/1.1 SSE, HTTP/2, gRPC.             */
+/* ================================================================== */
+
+/* FNV-1a key hashes for hot-loop matching (#115) — pre-computed, never hallucinated */
+#define FNV1A_ROLE       0x0fff3219u
+#define FNV1A_CONTENT    0x90bec3c2u
+#define FNV1A_NAME       0x8d39bde6u
+#define FNV1A_ID         0x37386ae0u
+#define FNV1A_ARGUMENTS  0x2951c89fu
+#define FNV1A_FUNCTION   0x9ed64249u
+#define FNV1A_TOOL_CALLS 0x4114df01u
+#define FNV1A_DELTA      0x6b017c21u
+#define FNV1A_CHOICES    0xf796e83fu
+#define FNV1A_MESSAGES   0xc00385b5u
+#define FNV1A_INPUT      0x3f88e1a7u  /* Anthropic: "input" for tool args */
+#define FNV1A_TEXT       0x364492dfu  /* "text" alt content key */
+
+static inline uint32_t fnv1a_str(const char *s, int len) {
+    uint32_t h = 0x811c9dc5u;
+    for (int i = 0; i < len; i++)
+        h = (h ^ (uint8_t)s[i]) * 0x01000193u;
+    return h;
+}
+
+/* Transcript DFA state — one per direction, embedded in FSM structs (#110) */
+typedef struct {
+    /* JSON tokenizer state */
+    int in_str;         /* inside a JSON string */
+    int in_esc;         /* previous char was backslash */
+    int depth;          /* brace/bracket nesting depth */
+    uint8_t container_stack; /* #119: bitmask — bit=1 for object, bit=0 for array (8 levels) */
+
+    /* Key accumulation */
+    char key[64];
+    int key_len;
+    int after_colon;    /* just saw ':' */
+
+    /* Current capture target (set by key hash) */
+    int capture_type;   /* 0=none, 1=role, 2=content, 3=id, 4=name, 5=arguments */
+    int capture_depth;  /* depth at which capture started */
+    int capture_started;/* have we begun reading the value? */
+
+    /* Message state */
+    int msg_active;
+    char role[32];
+    int role_len;
+    int has_content;
+    char preview[128];
+    int preview_len;
+    sha256_ctx_t content_ctx;
+
+    /* Tool call state */
+    int tool_active;
+    char tool_id[64];
+    int tool_id_len;
+    char tool_name[64];
+    int tool_name_len;
+    int has_args;
+    sha256_ctx_t args_ctx;
+    int tool_index;     /* #120: tracks tool_calls[*].index */
+} transcript_dfa_t;
+
+static void tx_init(transcript_dfa_t *tx) {
+    memset(tx, 0, sizeof(*tx));
+    tx->tool_index = -1;
+    sha256_init(&tx->content_ctx);
+    sha256_init(&tx->args_ctx);
+}
+
+static void tx_emit_msg(int fd, uint32_t stream_id, transcript_dfa_t *tx) {
+    if (!tx->msg_active) return;
+    if (!tx->has_content && tx->role[0] == '\0') { tx->msg_active = 0; return; }
+
+    tx->role[tx->role_len < 31 ? tx->role_len : 31] = '\0';
+    tx->preview[tx->preview_len < 127 ? tx->preview_len : 127] = '\0';
+
+    /* Snapshot content hash (#113) */
+    uint8_t hash[32]; sha256_ctx_t snap = tx->content_ctx; sha256_final(&snap, hash);
+    char hex[65];
+    for (int i = 0; i < 32; i++) snprintf(&hex[i*2], 3, "%02x", hash[i]);
+
+    /* Empty content → SHA-256 of empty string */
+    static const char *empty_sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    char role_esc[64]; escape_json(tx->role[0] ? tx->role : "unknown", role_esc, sizeof(role_esc));
+    char preview_esc[512]; escape_json(tx->preview, preview_esc, sizeof(preview_esc));
+
+    int old_fd = tl_event_fd; tl_event_fd = fd;
+    emit_log_event("llm_msg", getpid(), -999,
+        ",\"fd\":%d,\"stream_id\":%u,\"role\":\"%s\""
+        ",\"content_sha256\":\"%s\",\"preview\":\"%s\"",
+        fd, stream_id, role_esc,
+        tx->has_content ? hex : empty_sha, preview_esc);
+    tl_event_fd = old_fd;
+
+    /* Reset msg state for next message */
+    tx->msg_active = 0;
+    tx->role[0] = '\0'; tx->role_len = 0;
+    tx->preview[0] = '\0'; tx->preview_len = 0;
+    tx->has_content = 0;
+    sha256_init(&tx->content_ctx);
+}
+
+static void tx_emit_tool(int fd, uint32_t stream_id, transcript_dfa_t *tx) {
+    if (!tx->tool_active) return;
+    if (!tx->has_args && tx->tool_name[0] == '\0' && tx->tool_id[0] == '\0') {
+        tx->tool_active = 0; return;
+    }
+
+    tx->tool_name[tx->tool_name_len < 63 ? tx->tool_name_len : 63] = '\0';
+    tx->tool_id[tx->tool_id_len < 63 ? tx->tool_id_len : 63] = '\0';
+
+    uint8_t hash[32]; sha256_ctx_t snap = tx->args_ctx; sha256_final(&snap, hash);
+    char hex[65];
+    for (int i = 0; i < 32; i++) snprintf(&hex[i*2], 3, "%02x", hash[i]);
+
+    static const char *empty_sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+    char name_esc[128]; escape_json(tx->tool_name, name_esc, sizeof(name_esc));
+    char id_esc[128]; escape_json(tx->tool_id, id_esc, sizeof(id_esc));
+
+    int old_fd = tl_event_fd; tl_event_fd = fd;
+    emit_log_event("llm_tool_call", getpid(), -999,
+        ",\"fd\":%d,\"stream_id\":%u,\"call_id\":\"%s\""
+        ",\"name\":\"%s\",\"arguments_sha256\":\"%s\"",
+        fd, stream_id, id_esc, name_esc,
+        tx->has_args ? hex : empty_sha);
+    tl_event_fd = old_fd;
+
+    /* Reset tool state */
+    tx->tool_active = 0;
+    tx->tool_id[0] = '\0'; tx->tool_id_len = 0;
+    tx->tool_name[0] = '\0'; tx->tool_name_len = 0;
+    tx->has_args = 0;
+    sha256_init(&tx->args_ctx);
+    tx->tool_index = -1;
+}
+
+/* Flush pending msg + tool on receipt emission (#116) */
+static void tx_flush(int fd, uint32_t stream_id, transcript_dfa_t *tx) {
+    tx_emit_msg(fd, stream_id, tx);
+    tx_emit_tool(fd, stream_id, tx);
+}
+
+/**
+ * Streaming JSON transcript DFA — feed raw bytes, emit llm_msg/llm_tool_call.
+ * Uses FNV-1a key hashing (#115) for O(1) key matching in the hot loop.
+ * Handles SSE delta accumulation and non-streaming bodies.
+ * Zero-malloc. Bounded buffers. Stream-safe across chunk boundaries.
+ */
+static void tx_feed_json(int fd, uint32_t stream_id, transcript_dfa_t *tx,
+                         const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        uint8_t c = data[i];
+
+        /* === String state tracking === */
+        if (tx->in_str) {
+            if (tx->in_esc) { tx->in_esc = 0; }
+            else if (c == '\\') { tx->in_esc = 1; }
+            else if (c == '"') { tx->in_str = 0; }
+
+            /* Capture string value bytes */
+            if (tx->in_str && tx->capture_started) {
+                if (tx->capture_type == 1 && tx->role_len < 31)
+                    tx->role[tx->role_len++] = (char)c;
+                else if (tx->capture_type == 2) {
+                    sha256_update(&tx->content_ctx, &c, 1);
+                    tx->has_content = 1;
+                    if (tx->preview_len < 120 && c != '\n' && c != '\r')
+                        tx->preview[tx->preview_len++] = (char)c;
+                } else if (tx->capture_type == 3 && tx->tool_id_len < 63) {
+                    tx->tool_id[tx->tool_id_len++] = (char)c;
+                } else if (tx->capture_type == 4 && tx->tool_name_len < 63) {
+                    tx->tool_name[tx->tool_name_len++] = (char)c;
+                } else if (tx->capture_type == 5) {
+                    sha256_update(&tx->args_ctx, &c, 1);
+                    tx->has_args = 1;
+                }
+            }
+
+            /* Accumulate key chars when not in a capture */
+            if (tx->in_str && !tx->after_colon && !tx->capture_started) {
+                if (tx->key_len < 63) tx->key[tx->key_len++] = (char)c;
+            }
+
+            /* String ended — finalize key or end capture */
+            if (!tx->in_str) {
+                if (tx->capture_started && tx->capture_type > 0 && tx->capture_type <= 5) {
+                    /* String capture complete — check if at correct depth */
+                    /* (Object captures end via '}', not here) */
+                }
+                tx->after_colon = 0;
+            }
+            continue;
+        }
+
+        /* === Non-string structural characters === */
+        if (c == '"') {
+            tx->in_str = 1;
+            if (tx->after_colon && !tx->capture_started) {
+                /* Starting to capture a string value */
+                tx->capture_started = 1;
+                tx->capture_depth = tx->depth;
+                /* Activate msg/tool based on capture type */
+                if (tx->capture_type == 1 || tx->capture_type == 2) {
+                    if (!tx->msg_active) { tx->msg_active = 1; }
+                } else if (tx->capture_type >= 3 && tx->capture_type <= 5) {
+                    if (!tx->tool_active) { tx->tool_active = 1; }
+                }
+            } else if (!tx->after_colon) {
+                /* Starting a key string */
+                tx->key_len = 0;
+            }
+            continue;
+        }
+
+        if (c == '{') {
+            tx->depth++;
+            if (tx->depth <= 8)
+                tx->container_stack |= (1u << (tx->depth - 1)); /* mark as object */
+            if (tx->after_colon && !tx->capture_started && tx->capture_type == 5) {
+                /* arguments is an object — hash its raw JSON */
+                tx->capture_started = 1;
+                tx->capture_depth = tx->depth;
+                if (!tx->tool_active) tx->tool_active = 1;
+                sha256_update(&tx->args_ctx, (const uint8_t*)"{", 1);
+                tx->has_args = 1;
+            }
+            continue;
+        }
+
+        if (c == '[') {
+            tx->depth++;
+            if (tx->depth <= 8)
+                tx->container_stack &= ~(1u << (tx->depth - 1)); /* mark as array */
+            continue;
+        }
+
+        if (c == '}') {
+            /* Emit captured object value (e.g., arguments) */
+            if (tx->capture_started && tx->capture_type == 5 && tx->depth == tx->capture_depth) {
+                sha256_update(&tx->args_ctx, (const uint8_t*)"}", 1);
+                tx->capture_started = 0;
+                tx->capture_type = 0;
+            }
+            if (tx->depth <= 8)
+                tx->container_stack &= ~(1u << (tx->depth - 1));
+            tx->depth--;
+            continue;
+        }
+
+        if (c == ']') {
+            if (tx->depth <= 8)
+                tx->container_stack &= ~(1u << (tx->depth - 1));
+            tx->depth--;
+            continue;
+        }
+
+        if (c == ':') {
+            tx->after_colon = 1;
+            /* Hash the key to determine capture type (#115) */
+            tx->key[tx->key_len < 63 ? tx->key_len : 63] = '\0';
+            uint32_t h = fnv1a_str(tx->key, tx->key_len);
+            if (h == FNV1A_ROLE)            tx->capture_type = 1;
+            else if (h == FNV1A_CONTENT || h == FNV1A_TEXT) tx->capture_type = 2;
+            else if (h == FNV1A_ID)         tx->capture_type = 3;
+            else if (h == FNV1A_NAME)       tx->capture_type = 4;
+            else if (h == FNV1A_ARGUMENTS || h == FNV1A_INPUT) tx->capture_type = 5;
+            else tx->capture_type = 0;
+
+            /* On "role" key in SSE delta, emit previous msg if active */
+            if (tx->capture_type == 1 && tx->msg_active && tx->has_content) {
+                tx_emit_msg(fd, stream_id, tx);
+            }
+            /* On "id"/"name" key, emit previous tool if active */
+            if ((tx->capture_type == 3 || tx->capture_type == 4) &&
+                tx->tool_active && tx->has_args) {
+                tx_emit_tool(fd, stream_id, tx);
+            }
+            continue;
+        }
+
+        if (c == ',') {
+            if (tx->capture_started && tx->capture_type > 0 &&
+                tx->depth <= tx->capture_depth) {
+                tx->capture_started = 0;
+            }
+            tx->after_colon = 0;
+            tx->capture_type = 0;
+            tx->key_len = 0;
+            continue;
+        }
+
+        /* Raw value bytes (numbers, booleans, null) inside arguments object */
+        if (tx->capture_started && tx->capture_type == 5) {
+            sha256_update(&tx->args_ctx, &c, 1);
+            tx->has_args = 1;
+        }
+    }
+}
+
+/**
+ * gRPC transcript feed — extract printable text runs from protobuf wire format.
+ * Uses role-string heuristic from U1: detects "user"/"assistant"/"model"/"system"
+ * in printable runs to segment messages. Hashes all printable content.
+ */
+static void tx_feed_grpc(int fd, uint32_t stream_id, transcript_dfa_t *tx,
+                         const uint8_t *data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        uint8_t c = data[i];
+        int is_print = (c >= 32 && c <= 126) || c == '\n' || c == '\r' || c == '\t';
+        if (is_print) {
+            if (tx->key_len < 63) tx->key[tx->key_len++] = (char)c;
+            if (tx->msg_active) {
+                sha256_update(&tx->content_ctx, &c, 1);
+                tx->has_content = 1;
+                if (tx->preview_len < 120 && c != '\n' && c != '\r')
+                    tx->preview[tx->preview_len++] = (char)c;
+            }
+        } else {
+            /* Non-printable byte — check if accumulated run is a role marker */
+            if (tx->key_len >= 4 && tx->key_len <= 9) {
+                tx->key[tx->key_len] = '\0';
+                if (!strcmp(tx->key, "user") || !strcmp(tx->key, "model") ||
+                    !strcmp(tx->key, "assistant") || !strcmp(tx->key, "system")) {
+                    /* New role boundary — emit previous msg if active */
+                    if (tx->msg_active && tx->has_content)
+                        tx_emit_msg(fd, stream_id, tx);
+                    tx->msg_active = 1;
+                    strncpy(tx->role, tx->key, sizeof(tx->role) - 1);
+                    tx->role_len = (int)strlen(tx->role);
+                    tx->has_content = 0;
+                    tx->preview_len = 0;
+                    sha256_init(&tx->content_ctx);
+                }
+            }
+            tx->key_len = 0;
+        }
+    }
+}
+
 
 /* Newton-Raphson sqrt — avoids -lm dependency (from H-Omega) */
 static double fast_sqrt(double n) {
@@ -380,6 +736,10 @@ typedef struct {
     /* Byte counters */
     uint64_t total_req_bytes;
     uint64_t total_res_bytes;
+
+    /* R26: Per-direction transcript extraction (#110) */
+    transcript_dfa_t req_tx;
+    transcript_dfa_t res_tx;
 } http_fsm_t;
 
 static http_fsm_t http_fsm[MAX_TRACKED_FDS];
@@ -391,6 +751,10 @@ static inline void fsm_unlock(int fd) { __sync_lock_release(&http_fsm[fd].lock);
 static void fsm_emit_receipt(int fd) {
     http_fsm_t *sm = &http_fsm[fd];
     if (sm->method[0] == '\0') return;
+
+    /* R26 #116: Flush pending transcript events before receipt */
+    tx_flush(fd, 0, &sm->req_tx);
+    tx_flush(fd, 0, &sm->res_tx);
 
     /* Finalize all three hash contexts (snapshot, don't destroy) */
     uint8_t rq_h[32], rs_h[32], rc_h[32];
@@ -500,13 +864,17 @@ static inline void fsm_hash_req(http_fsm_t *sm, const uint8_t *d, size_t n) {
     sm->total_req_bytes += n;
     json_model_scan(&sm->req_mscan, &sm->req_midx, sm->req_model,
                     sizeof(sm->req_model), d, n);
+    /* R26 #111: Feed same bytes into transcript extraction */
+    tx_feed_json(tl_event_fd, 0, &sm->req_tx, d, n);
 }
 
 /** Append bytes to response body hash contexts with SSE canonicalization + model scan. */
-static void fsm_hash_res(http_fsm_t *sm, const uint8_t *data, size_t len) {
+static void fsm_hash_res(int fd, http_fsm_t *sm, const uint8_t *data, size_t len) {
     /* JSON model scanner runs on raw bytes regardless of SSE mode */
     json_model_scan(&sm->res_mscan, &sm->res_midx, sm->res_model,
                     sizeof(sm->res_model), data, len);
+    /* R26 #111: Feed same bytes into transcript extraction */
+    tx_feed_json(fd, 0, &sm->res_tx, data, len);
     if (!sm->is_sse) {
         sha256_update(&sm->res_ctx, data, len);
         sha256_update(&sm->receipt_ctx, data, len);
@@ -588,6 +956,8 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
             sha256_init(&sm->req_ctx);
             sha256_init(&sm->res_ctx);
             sha256_init(&sm->receipt_ctx);
+            tx_init(&sm->req_tx);
+            tx_init(&sm->res_tx);
         }
 
         /* --- States: REQ_HDR / RES_HDR — line-based header parsing --- */
@@ -721,7 +1091,7 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
                     size_t avail = len - i;
                     size_t take = avail > sm->chunk_rem ? (size_t)sm->chunk_rem : avail;
                     if (is_state_req) fsm_hash_req(sm, data + i, take);
-                    else { fsm_hash_res(sm, data + i, take); scan_body_anomalies(fd, data + i, take); }
+                    else { fsm_hash_res(fd, sm, data + i, take); scan_body_anomalies(fd, data + i, take); }
                     sm->chunk_rem -= take;
                     i += take;
                     if (sm->chunk_rem == 0) sm->in_chunk_ext = 1;
@@ -739,7 +1109,7 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
                     if (take > rem) take = rem;
                 }
                 if (is_state_req) fsm_hash_req(sm, data + i, take);
-                else { fsm_hash_res(sm, data + i, take); scan_body_anomalies(fd, data + i, take); }
+                else { fsm_hash_res(fd, sm, data + i, take); scan_body_anomalies(fd, data + i, take); }
                 sm->body_bytes_read += take;
                 i += take;
                 if (sm->content_length > 0 && sm->body_bytes_read >= sm->content_length) {
@@ -780,6 +1150,726 @@ static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
             break;
         }
     }
+}
+
+/* ================================================================== */
+/*   HTTP/2 Multiplexed FSM & HPACK Decoder (L-SelfVerify + K-Constr) */
+/*   Zero-malloc binary frame parser with per-stream SHA-256 receipts, */
+/*   full HPACK Huffman decoding (K #71), fd_to_h2 O(1) lookup (K #72),*/
+/*   HPACK buffer accumulation + END_HEADERS gating (K #73), stream    */
+/*   eviction (K #74), path-based LLM detection (K #75),               */
+/*   end_stream_pending (K #76), per-stream timing_started (K #77),    */
+/*   gRPC protobuf wire format parsing (R24 #81-#87): content-type     */
+/*   detection, 5-byte LPM header, varint decoder, recursive protobuf  */
+/*   model scanner with depth limit + UTF-8 validation.                */
+/* ================================================================== */
+
+#define MAX_H2_CONNS 64
+#define MAX_H2_STREAMS 16
+
+typedef struct {
+    uint32_t stream_id;
+    int active;
+    char method[16];
+    char path[512];
+    int status;
+    char content_type[64];
+    char model[128], req_model[128], res_model[128];
+    int req_mscan, req_midx, res_mscan, res_midx;
+    sha256_ctx_t req_ctx, res_ctx, receipt_ctx;
+    uint64_t total_req_bytes, total_res_bytes;
+    int req_hdr_hashed, res_hdr_hashed;
+    int is_sse;
+    char sse_line[256];
+    size_t sse_len;
+    int timing_started; /* K #77: per-stream timing flag */
+    /* R26: Per-direction transcript extraction (#110/#112) */
+    transcript_dfa_t req_tx;
+    transcript_dfa_t res_tx;
+    /* R24 gRPC protobuf parsing state */
+    int is_grpc;        /* set via content-type: application/grpc */
+    int grpc_state;     /* 0=reading 5-byte hdr, 1=reading msg, 2=done (model found) */
+    uint32_t grpc_msg_rem; /* bytes remaining in current LPM */
+    uint8_t grpc_hdr[5];  /* 5-byte gRPC length-prefixed message header */
+    uint8_t grpc_hdr_pos; /* bytes accumulated in grpc_hdr */
+    uint8_t grpc_req_buf[2048]; /* first 2KB of request payload for model extraction */
+    uint32_t grpc_req_pos;      /* bytes written to grpc_req_buf */
+} h2_stream_t;
+
+/* Directional parser state — separate TX/RX contexts with HPACK buffer
+ * accumulation (K #73) and deferred END_STREAM (K #76). */
+typedef struct {
+    uint8_t hdr[9];
+    uint32_t hdr_pos;
+    uint32_t frame_len;
+    uint8_t frame_type;
+    uint8_t frame_flags;
+    uint32_t stream_id;
+    uint32_t payload_read;
+    uint8_t pad_len;
+    int in_frame;
+    int end_stream_pending; /* K #76 */
+    uint8_t hpack_buf[8192]; /* K #73: accumulate HPACK across CONTINUATIONs */
+    uint32_t hpack_len;
+} h2_parser_t;
+
+typedef struct {
+    volatile int fd;
+    volatile int lock;
+    h2_stream_t streams[MAX_H2_STREAMS];
+    h2_parser_t rx, tx;
+    int preface_read;
+} h2_conn_t;
+
+static h2_conn_t h2_conns[MAX_H2_CONNS];
+
+/* Forward declarations for mutual dependencies */
+static void h2_emit_receipt(int fd, h2_stream_t *sm);
+
+/* ---- R24 gRPC Protobuf Wire Format Parsing ----
+ * Schema-less protobuf parsing for model name extraction from gRPC streams.
+ * Handles: varint (wire 0), 64-bit fixed (wire 1), length-delimited (wire 2),
+ * 32-bit fixed (wire 5). Recursive descent with depth limit for nested msgs.
+ * UTF-8 printability validation prevents binary noise false positives. */
+
+/* R24 #84: Varint decoder with bounds checking and error flag */
+static uint64_t pb_decode_varint(const uint8_t **p, const uint8_t *end, int *err) {
+    uint64_t val = 0; int shift = 0; *err = 1;
+    while (*p < end) {
+        uint8_t b = *(*p)++;
+        val |= (uint64_t)(b & 0x7F) << shift;
+        if (!(b & 0x80)) { *err = 0; return val; }
+        shift += 7;
+        if (shift >= 64) break;
+    }
+    return val;
+}
+
+/* R24 #82/#85: Recursive protobuf model scanner with depth limit + UTF-8 check.
+ * Scans length-delimited (wire type 2) fields for known LLM model prefixes.
+ * Recursively descends into nested messages. Stops on first valid match. */
+static void pb_scan_model(const uint8_t *data, size_t len, char *model_out,
+                          size_t model_sz, int depth) {
+    if (len == 0 || model_out[0] != '\0' || depth > 10) return;
+    const uint8_t *p = data;
+    const uint8_t *end = data + len;
+    while (p < end && model_out[0] == '\0') {
+        int err = 0;
+        uint64_t tag_wire = pb_decode_varint(&p, end, &err);
+        if (err) break;
+        int wire = tag_wire & 7;
+        if (wire == 0) {
+            /* Varint — skip */
+            pb_decode_varint(&p, end, &err);
+            if (err) break;
+        } else if (wire == 1) {
+            /* 64-bit fixed — skip 8 bytes */
+            if (end - p < 8) break;
+            p += 8;
+        } else if (wire == 5) {
+            /* 32-bit fixed — skip 4 bytes */
+            if (end - p < 4) break;
+            p += 4;
+        } else if (wire == 2) {
+            /* Length-delimited: could be string, bytes, or nested message */
+            uint64_t vlen = pb_decode_varint(&p, end, &err);
+            if (err) break;
+            size_t available = (size_t)(end - p);
+            size_t scan_len = vlen < available ? (size_t)vlen : available;
+            if (scan_len > 0) {
+                /* Check for known LLM model name prefixes */
+                if ((scan_len >= 7 && !memcmp(p, "gemini-", 7)) ||
+                    (scan_len >= 4 && !memcmp(p, "gpt-", 4)) ||
+                    (scan_len >= 7 && !memcmp(p, "claude-", 7)) ||
+                    (scan_len >= 7 && !memcmp(p, "models/", 7))) {
+                    /* R24 #81: UTF-8 printability validation */
+                    size_t clen = scan_len < model_sz - 1 ? scan_len : model_sz - 1;
+                    int is_print = 1;
+                    for (size_t k = 0; k < clen; k++) {
+                        if (p[k] < 32 || p[k] > 126) { is_print = 0; break; }
+                    }
+                    if (is_print) {
+                        memcpy(model_out, p, clen);
+                        model_out[clen] = '\0';
+                        return;
+                    }
+                }
+                /* Recurse into potential nested messages */
+                pb_scan_model(p, scan_len, model_out, model_sz, depth + 1);
+            }
+            p += scan_len;
+            if (vlen > available) break;
+        } else {
+            break; /* Unknown wire type — stop parsing */
+        }
+    }
+}
+
+/* R24 #83: gRPC Length-Prefixed Message (LPM) state machine.
+ * Parses 5-byte gRPC header ([compressed:1][length:4]) then buffers up to
+ * 2KB of request payload. Calls pb_scan_model when buffer fills or message
+ * ends. State: 0=reading header, 1=reading message, 2=done (model found). */
+static void grpc_feed(h2_stream_t *st, const uint8_t *data, size_t len) {
+    if (st->grpc_state == 2) return; /* Already found model — skip */
+    size_t i = 0;
+    while (i < len) {
+        if (st->grpc_state == 0) {
+            /* Accumulate 5-byte LPM header */
+            size_t take = 5 - st->grpc_hdr_pos;
+            if (take > len - i) take = len - i;
+            memcpy(st->grpc_hdr + st->grpc_hdr_pos, data + i, take);
+            st->grpc_hdr_pos += (uint8_t)take;
+            i += take;
+            if (st->grpc_hdr_pos == 5) {
+                st->grpc_msg_rem = ((uint32_t)st->grpc_hdr[1] << 24) |
+                                   ((uint32_t)st->grpc_hdr[2] << 16) |
+                                   ((uint32_t)st->grpc_hdr[3] << 8) |
+                                    st->grpc_hdr[4];
+                st->grpc_state = 1;
+            }
+        } else if (st->grpc_state == 1) {
+            /* Buffer message payload (up to 2KB) */
+            size_t take = st->grpc_msg_rem;
+            if (take > len - i) take = len - i;
+            size_t space = sizeof(st->grpc_req_buf) - st->grpc_req_pos;
+            size_t copy = take < space ? take : space;
+            if (copy > 0) {
+                memcpy(st->grpc_req_buf + st->grpc_req_pos, data + i, copy);
+                st->grpc_req_pos += (uint32_t)copy;
+            }
+            st->grpc_msg_rem -= (uint32_t)take;
+            i += take;
+            /* Buffer full — scan now and stop */
+            if (st->grpc_req_pos == sizeof(st->grpc_req_buf)) {
+                st->grpc_state = 2;
+                pb_scan_model(st->grpc_req_buf, st->grpc_req_pos,
+                              st->req_model, sizeof(st->req_model), 0);
+                break;
+            }
+            /* End of LPM — reset header for next message in stream */
+            if (st->grpc_msg_rem == 0) {
+                st->grpc_state = 0;
+                st->grpc_hdr_pos = 0;
+            }
+        }
+    }
+}
+
+/* K #74: stream eviction — when all slots full, evict oldest stream_id
+ * (lowest stream_id = oldest in HTTP/2's monotonic stream numbering). */
+static h2_stream_t* h2_get_stream(h2_conn_t *conn, uint32_t stream_id) {
+    if (stream_id == 0 || (stream_id % 2) == 0) return NULL;
+    int free_idx = -1;
+    uint32_t oldest_id = 0xFFFFFFFF;
+    int oldest_idx = 0;
+    for (int i = 0; i < MAX_H2_STREAMS; i++) {
+        if (conn->streams[i].active && conn->streams[i].stream_id == stream_id)
+            return &conn->streams[i];
+        if (!conn->streams[i].active && free_idx == -1)
+            free_idx = i;
+        if (conn->streams[i].active && conn->streams[i].stream_id < oldest_id) {
+            oldest_id = conn->streams[i].stream_id;
+            oldest_idx = i;
+        }
+    }
+    int idx = free_idx != -1 ? free_idx : oldest_idx;
+    h2_stream_t *st = &conn->streams[idx];
+    if (st->active) h2_emit_receipt(conn->fd, st);
+    memset(st, 0, sizeof(h2_stream_t));
+    st->active = 1;
+    st->stream_id = stream_id;
+    sha256_init(&st->req_ctx);
+    sha256_init(&st->res_ctx);
+    sha256_init(&st->receipt_ctx);
+    tx_init(&st->req_tx);
+    tx_init(&st->res_tx);
+    return st;
+}
+
+/* Unified deferred header hashing (K's h2_check_hash_headers — cleaner than
+ * separate h2_hash_req_hdr/h2_hash_res_hdr from L). Ensures receipt hash
+ * order: method||" "||path||"\n"||req_body||"\n"||status||"\n"||res_body. */
+static void h2_check_hash_headers(h2_stream_t *st) {
+    if (!st->req_hdr_hashed && st->method[0]) {
+        sha256_update(&st->receipt_ctx, (const uint8_t*)st->method, strlen(st->method));
+        sha256_update(&st->receipt_ctx, (const uint8_t*)" ", 1);
+        const char *p = st->path[0] ? st->path : "/";
+        sha256_update(&st->receipt_ctx, (const uint8_t*)p, strlen(p));
+        sha256_update(&st->receipt_ctx, (const uint8_t*)"\n", 1);
+        st->req_hdr_hashed = 1;
+    }
+    if (!st->res_hdr_hashed && st->status != 0) {
+        if (!st->req_hdr_hashed && st->method[0]) {
+            sha256_update(&st->receipt_ctx, (const uint8_t*)st->method, strlen(st->method));
+            sha256_update(&st->receipt_ctx, (const uint8_t*)" ", 1);
+            const char *p = st->path[0] ? st->path : "/";
+            sha256_update(&st->receipt_ctx, (const uint8_t*)p, strlen(p));
+            sha256_update(&st->receipt_ctx, (const uint8_t*)"\n", 1);
+            st->req_hdr_hashed = 1;
+        }
+        char stat_str[32]; snprintf(stat_str, sizeof(stat_str), "%d\n", st->status);
+        sha256_update(&st->receipt_ctx, (const uint8_t*)stat_str, strlen(stat_str));
+        st->res_hdr_hashed = 1;
+    }
+}
+
+static void h2_emit_receipt(int fd, h2_stream_t *sm) {
+    if (!sm->active || sm->method[0] == '\0') { sm->active = 0; return; }
+    /* R26 #116: Flush pending transcript events before receipt */
+    tx_flush(fd, sm->stream_id, &sm->req_tx);
+    tx_flush(fd, sm->stream_id, &sm->res_tx);
+    h2_check_hash_headers(sm);
+
+    uint8_t rq_h[32], rs_h[32], rc_h[32]; sha256_ctx_t t;
+    t = sm->req_ctx; sha256_final(&t, rq_h);
+    t = sm->res_ctx; sha256_final(&t, rs_h);
+    t = sm->receipt_ctx; sha256_final(&t, rc_h);
+
+    char hex_rq[65], hex_rs[65], hex_rc[65];
+    for (int k = 0; k < 32; k++) {
+        snprintf(&hex_rq[k*2], 3, "%02x", rq_h[k]);
+        snprintf(&hex_rs[k*2], 3, "%02x", rs_h[k]);
+        snprintf(&hex_rc[k*2], 3, "%02x", rc_h[k]);
+    }
+
+    /* R24: Use req_model as primary for gRPC (model is always in request) */
+    const char *effective_model = sm->req_model[0] ? sm->req_model :
+                                  sm->model[0] ? sm->model :
+                                  sm->res_model[0] ? sm->res_model : "unknown";
+    int model_substituted = 0;
+    if (sm->req_model[0] && (sm->res_model[0] || sm->model[0])) {
+        const char *actual = sm->model[0] ? sm->model : sm->res_model;
+        if (actual[0] && strcmp(sm->req_model, actual) != 0) {
+            model_substituted = 1; tl_event_fd = fd;
+            char rm[256], am[256]; escape_json(sm->req_model, rm, sizeof(rm)); escape_json(actual, am, sizeof(am));
+            emit_log_event("security_anomaly", getpid(), -999,
+                ",\"fd\":%d,\"type\":\"model_substitution_structural\","
+                "\"requested\":\"%s\",\"actual\":\"%s\"", fd, rm, am);
+        }
+    }
+
+    char path_esc[1024], model_esc[256], req_m_esc[256];
+    escape_json(sm->path, path_esc, sizeof(path_esc));
+    escape_json(effective_model, model_esc, sizeof(model_esc));
+    escape_json(sm->req_model, req_m_esc, sizeof(req_m_esc));
+
+    tl_event_fd = fd;
+    if (sm->is_grpc) {
+        /* R24 #87: Emit grpc_receipt for gRPC streams (compact format) */
+        emit_log_event("grpc_receipt", getpid(), -999,
+            ",\"fd\":%d,\"receipt_hash\":\"%s\""
+            ",\"stream_id\":%u,\"path\":\"%s\""
+            ",\"model\":\"%s\",\"req_model\":\"%s\",\"model_substituted\":%d"
+            ",\"req_bytes\":%llu,\"res_bytes\":%llu",
+            fd, hex_rc, sm->stream_id, path_esc,
+            model_esc, req_m_esc, model_substituted,
+            (unsigned long long)sm->total_req_bytes,
+            (unsigned long long)sm->total_res_bytes);
+    } else {
+        emit_log_event("llm_receipt", getpid(), -999,
+            ",\"fd\":%d,\"receipt_hash\":\"%s\""
+            ",\"method\":\"%s\",\"path\":\"%s\",\"status\":%d"
+            ",\"stream_id\":%u"
+            ",\"req_bytes\":%llu,\"res_bytes\":%llu"
+            ",\"req_body_sha256\":\"%s\",\"res_body_sha256\":\"%s\""
+            ",\"model\":\"%s\",\"req_model\":\"%s\",\"model_substituted\":%d",
+            fd, hex_rc,
+            sm->method, path_esc, sm->status,
+            sm->stream_id,
+            (unsigned long long)sm->total_req_bytes,
+            (unsigned long long)sm->total_res_bytes,
+            hex_rq, hex_rs, model_esc, req_m_esc, model_substituted);
+    }
+    sm->active = 0;
+}
+
+/* Forward declarations for h2_get_stream (used by h2_emit_receipt via eviction) */
+static void h2_flush(int fd);
+
+/* CAS-based H2 connection allocation (K's h2_init_conn) */
+static void h2_init_conn(int fd) {
+    if (fd < 0 || fd >= 1024) return;
+    if (fd_to_h2[fd] != -1) return;
+    for (int i = 0; i < MAX_H2_CONNS; i++) {
+        if (__sync_bool_compare_and_swap(&h2_conns[i].fd, -1, fd)) {
+            h2_conn_t *conn = &h2_conns[i];
+            conn->lock = 0;
+            memset(&conn->rx, 0, sizeof(h2_parser_t));
+            memset(&conn->tx, 0, sizeof(h2_parser_t));
+            for (int j = 0; j < MAX_H2_STREAMS; j++) conn->streams[j].active = 0;
+            conn->preface_read = 0;
+            fd_to_h2[fd] = i;
+            return;
+        }
+    }
+}
+
+/* K #71: Full HPACK static table (RFC 7541 Appendix A) — 62 entries */
+static const char* const hpack_static_name[] = {
+    "", ":authority", ":method", ":method", ":path", ":path", ":scheme", ":scheme",
+    ":status", ":status", ":status", ":status", ":status", ":status", ":status",
+    "accept-charset", "accept-encoding", "accept-language", "accept-ranges",
+    "accept", "access-control-allow-origin", "age", "allow", "authorization",
+    "cache-control", "content-disposition", "content-encoding", "content-language",
+    "content-length", "content-location", "content-range", "content-type",
+    "cookie", "date", "etag", "expect", "expires", "from", "host",
+    "if-match", "if-modified-since", "if-none-match", "if-range",
+    "if-unmodified-since", "last-modified", "link", "location",
+    "max-forwards", "proxy-authenticate", "proxy-authorization",
+    "range", "referer", "refresh", "retry-after", "server", "set-cookie",
+    "strict-transport-security", "transfer-encoding", "user-agent",
+    "vary", "via", "www-authenticate"
+};
+
+static const char* const hpack_static_val[] = {
+    "", "", "GET", "POST", "/", "/index.html", "http", "https",
+    "200", "204", "206", "304", "400", "404", "500",
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+    "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+    "", "", "", "", "", "", "", "", ""
+};
+
+/* K #71: HPACK integer decode with configurable prefix bits (RFC 7541 §5.1) */
+static uint32_t hpack_decode_int(const uint8_t **p, const uint8_t *end, int prefix_bits) {
+    if (*p >= end) return 0;
+    uint32_t mask = (1 << prefix_bits) - 1;
+    uint32_t val = **p & mask;
+    (*p)++;
+    if (val < mask) return val;
+    uint32_t m = 0;
+    while (*p < end) {
+        uint8_t b = **p; (*p)++;
+        val += (b & 127) << m;
+        m += 7;
+        if (!(b & 128)) break;
+    }
+    return val;
+}
+
+/* K #71: Full 512-entry HPACK Huffman decoding tree (RFC 7541 Appendix B).
+ * Values 0-255 = literal byte output, 256 = EOS, 257+ = internal tree node.
+ * Each node has two children: tree[node*2] for bit=0, tree[node*2+1] for bit=1. */
+static const uint16_t hpack_huff_tree[512] = {
+    322,257,349,258,360,259,375,260,400,261,331,262,379,263,327,264,
+    333,265,329,266,267,269,268,358,0,36,383,270,384,271,354,272,
+    123,273,380,274,406,275,276,281,455,277,472,278,279,418,280,417,
+    1,135,423,282,297,283,447,284,467,285,485,286,287,301,288,294,
+    289,291,254,290,2,3,292,293,4,5,6,7,295,308,296,307,
+    8,11,464,298,299,421,239,300,9,142,311,302,319,303,403,304,
+    249,305,306,315,10,13,12,14,309,310,15,16,17,18,312,316,
+    313,314,19,20,21,23,22,256,317,318,24,25,26,27,320,321,
+    28,29,30,31,341,323,324,338,399,325,326,337,32,37,328,335,
+    33,34,124,330,35,62,332,336,38,42,63,334,39,43,40,41,
+    44,59,45,46,339,346,340,345,47,51,342,386,343,344,48,49,
+    50,97,52,53,347,348,54,55,56,57,355,350,394,351,398,352,
+    353,359,58,66,60,96,356,388,357,385,61,65,64,91,67,68,
+    361,368,362,365,363,364,69,70,71,72,366,367,73,74,75,76,
+    369,372,370,371,77,78,79,80,373,374,81,82,83,84,376,392,
+    377,378,85,86,87,89,88,90,381,411,382,404,92,195,93,126,
+    94,125,95,98,387,391,99,101,389,390,100,102,103,104,105,111,
+    393,397,106,107,395,396,108,109,110,112,113,118,114,117,115,116,
+    401,402,119,120,121,122,127,220,208,405,128,130,452,407,408,434,
+    409,414,230,410,129,132,412,431,413,460,131,162,415,416,133,134,
+    136,146,137,138,419,420,139,140,141,143,422,427,144,145,424,441,
+    425,429,426,428,147,149,148,159,150,151,430,437,152,155,497,432,
+    433,444,153,161,435,439,436,438,154,156,157,158,160,163,440,446,
+    164,169,442,450,443,445,165,166,167,172,168,174,170,173,448,474,
+    449,490,171,206,451,459,175,180,453,491,454,458,176,177,456,462,
+    457,461,178,181,179,209,182,183,184,194,185,186,463,466,187,189,
+    465,471,188,191,190,196,468,480,469,478,470,477,192,193,197,231,
+    473,499,198,228,501,475,476,500,199,207,200,201,479,484,202,205,
+    493,481,504,482,255,483,203,204,210,213,486,505,487,495,488,489,
+    211,212,214,221,215,225,492,498,216,217,494,502,218,219,496,503,
+    222,223,224,226,227,229,232,233,234,235,236,237,238,240,241,244,
+    242,243,506,509,507,508,245,246,247,248,510,511,250,251,252,253
+};
+
+/* K #71: Decode HPACK string with full Huffman support */
+static void hpack_decode_string(const uint8_t **p, const uint8_t *end, char *out, int out_sz) {
+    if (*p >= end) { out[0] = 0; return; }
+    int is_huff = (**p & 0x80);
+    uint32_t len = hpack_decode_int(p, end, 7);
+    if ((uint32_t)(end - *p) < len) len = (uint32_t)(end - *p);
+    if (is_huff) {
+        int state = 0, out_len = 0;
+        for (uint32_t i = 0; i < len; i++) {
+            uint8_t b = (*p)[i];
+            for (int j = 7; j >= 0; j--) {
+                uint16_t next = hpack_huff_tree[state * 2 + ((b >> j) & 1)];
+                if (next == 256) { out[out_len] = '\0'; *p += len; return; }
+                if (next < 256) {
+                    if (out_len < out_sz - 1) out[out_len++] = (char)next;
+                    state = 0;
+                } else {
+                    state = next - 256;
+                }
+            }
+        }
+        out[out_len] = '\0';
+    } else {
+        uint32_t cplen = len < (uint32_t)out_sz - 1 ? len : (uint32_t)out_sz - 1;
+        memcpy(out, *p, cplen);
+        out[cplen] = '\0';
+    }
+    *p += len;
+}
+
+/* Full HPACK header block parser using Huffman decoder + static table.
+ * Handles indexed (0x80), literal with/without/never indexing, and
+ * dynamic table size updates. Extracts :method, :path, :status,
+ * content-type, x-model, openai-model into h2_stream_t fields. */
+static void hpack_parse(h2_conn_t *c, h2_stream_t *st, const uint8_t *payload, size_t len, int is_req) {
+    (void)c; (void)is_req;
+    const uint8_t *p = payload;
+    const uint8_t *end = payload + len;
+    while (p < end) {
+        uint8_t b = *p;
+        if (b & 0x80) {
+            uint32_t idx = hpack_decode_int(&p, end, 7);
+            if (idx > 0 && idx <= 61) {
+                const char *n = hpack_static_name[idx];
+                const char *v = hpack_static_val[idx];
+                if (!strcmp(n, ":method")) strncpy(st->method, v, sizeof(st->method)-1);
+                else if (!strcmp(n, ":path")) strncpy(st->path, v, sizeof(st->path)-1);
+                else if (!strcmp(n, ":status")) st->status = atoi(v);
+            }
+        } else if ((b & 0xC0) == 0x40 || (b & 0xF0) == 0x00 || (b & 0xF0) == 0x10) {
+            int is_inc = ((b & 0xC0) == 0x40);
+            int prefix = is_inc ? 6 : 4;
+            uint32_t idx = hpack_decode_int(&p, end, prefix);
+            char name[64] = {0}; char val[256] = {0};
+            if (idx > 0 && idx <= 61) strncpy(name, hpack_static_name[idx], sizeof(name)-1);
+            else if (idx == 0) hpack_decode_string(&p, end, name, sizeof(name));
+            hpack_decode_string(&p, end, val, sizeof(val));
+            if (!strcmp(name, ":method")) strncpy(st->method, val, sizeof(st->method)-1);
+            else if (!strcmp(name, ":path")) strncpy(st->path, val, sizeof(st->path)-1);
+            else if (!strcmp(name, ":status")) st->status = atoi(val);
+            else if (!strcmp(name, "content-type")) {
+                if (my_strcasestr(val, "text/event-stream")) st->is_sse = 1;
+                /* R24 #87: Detect gRPC streams, disable JSON model scanning */
+                if (my_strcasestr(val, "application/grpc")) {
+                    st->is_grpc = 1;
+                    st->req_mscan = 99; st->res_mscan = 99;
+                }
+            }
+            if (my_strcasestr(name, "x-model") || my_strcasestr(name, "openai-model"))
+                strncpy(st->model, val, sizeof(st->model)-1);
+        } else if ((b & 0xE0) == 0x20) {
+            hpack_decode_int(&p, end, 5);
+        } else {
+            break;
+        }
+    }
+}
+
+/* Factored response body hashing with SSE canonicalization (from K) */
+static void h2_hash_res(int fd, h2_stream_t *sm, const uint8_t *data, size_t len) {
+    json_model_scan(&sm->res_mscan, &sm->res_midx, sm->res_model, sizeof(sm->res_model), data, len);
+    scan_body_anomalies(fd, data, len);
+    /* R26 #111/#112: Feed response bytes into transcript (JSON or gRPC) */
+    if (sm->is_grpc) tx_feed_grpc(fd, sm->stream_id, &sm->res_tx, data, len);
+    else tx_feed_json(fd, sm->stream_id, &sm->res_tx, data, len);
+    if (!sm->is_sse) {
+        sha256_update(&sm->res_ctx, data, len);
+        sha256_update(&sm->receipt_ctx, data, len);
+        sm->total_res_bytes += len;
+        return;
+    }
+    for (size_t i = 0; i < len; i++) {
+        char ch = (char)data[i];
+        if (sm->sse_len < sizeof(sm->sse_line) - 1)
+            sm->sse_line[sm->sse_len++] = ch;
+        if (ch == '\n') {
+            sm->sse_line[sm->sse_len] = '\0';
+            if (strncmp(sm->sse_line, "data: ", 6) == 0) {
+                size_t dlen = sm->sse_len - 6;
+                if (dlen > 0 && sm->sse_line[6 + dlen - 1] == '\n') dlen--;
+                if (dlen > 0 && sm->sse_line[6 + dlen - 1] == '\r') dlen--;
+                if (!(dlen == 6 && memcmp(sm->sse_line + 6, "[DONE]", 6) == 0)) {
+                    sha256_update(&sm->res_ctx, (const uint8_t*)sm->sse_line + 6, dlen);
+                    sha256_update(&sm->receipt_ctx, (const uint8_t*)sm->sse_line + 6, dlen);
+                    sm->total_res_bytes += dlen;
+                }
+            }
+            sm->sse_len = 0;
+        }
+    }
+}
+
+/* Flush all active H2 streams on FD close (standalone, uses fd_to_h2) */
+static void h2_flush(int fd) {
+    if (fd < 0 || fd >= 1024) return;
+    int slot = fd_to_h2[fd];
+    if (slot != -1) {
+        h2_conn_t *conn = &h2_conns[slot];
+        while (__sync_lock_test_and_set(&conn->lock, 1)) {}
+        for (int i = 0; i < MAX_H2_STREAMS; i++) {
+            if (conn->streams[i].active && conn->streams[i].method[0])
+                h2_emit_receipt(fd, &conn->streams[i]);
+        }
+        conn->fd = -1;
+        fd_to_h2[fd] = -1;
+        __sync_lock_release(&conn->lock);
+    }
+}
+
+/**
+ * Process raw SSL bytes through the HTTP/2 frame parser.
+ * Uses fd_to_h2 O(1) lookup (K #72), HPACK buffer accumulation with
+ * END_HEADERS gating (K #73), end_stream_pending (K #76),
+ * path-based LLM detection after HEADERS decode (K #75),
+ * per-stream timing_started (K #77).
+ */
+static void h2_feed(int fd, const uint8_t *data, size_t len, int is_req) {
+    int slot = fd >= 0 && fd < 1024 ? fd_to_h2[fd] : -1;
+    if (slot == -1) return;
+    h2_conn_t *c = &h2_conns[slot];
+
+    while (__sync_lock_test_and_set(&c->lock, 1)) {}
+    h2_parser_t *p = is_req ? &c->tx : &c->rx;
+    size_t i = 0;
+
+    /* Skip 24-byte connection preface on TX direction */
+    if (is_req && c->preface_read < 24) {
+        size_t take = 24 - c->preface_read;
+        if (take > len) take = len;
+        c->preface_read += (int)take;
+        i += take;
+    }
+
+    while (i < len) {
+        if (!p->in_frame) {
+            /* Accumulate 9-byte frame header */
+            size_t take = 9 - p->hdr_pos;
+            if (take > len - i) take = len - i;
+            memcpy(p->hdr + p->hdr_pos, data + i, take);
+            p->hdr_pos += (uint32_t)take;
+            i += take;
+
+            if (p->hdr_pos == 9) {
+                p->frame_len = ((uint32_t)p->hdr[0] << 16) | ((uint32_t)p->hdr[1] << 8) | p->hdr[2];
+                p->frame_type = p->hdr[3];
+                p->frame_flags = p->hdr[4];
+                p->stream_id = ((uint32_t)(p->hdr[5] & 0x7F) << 24) | ((uint32_t)p->hdr[6] << 16) |
+                               ((uint32_t)p->hdr[7] << 8) | p->hdr[8];
+                p->payload_read = 0;
+                p->pad_len = 0;
+                p->in_frame = 1;
+            }
+        } else {
+            size_t rem = p->frame_len - p->payload_read;
+            size_t take = len - i;
+            if (take > rem) take = rem;
+
+            int is_client_stream = (p->stream_id > 0 && (p->stream_id % 2) != 0);
+            h2_stream_t *st = NULL;
+            if (is_client_stream) st = h2_get_stream(c, p->stream_id);
+
+            if (take > 0 && st) {
+                size_t p_offset = 0;
+                size_t p_take = take;
+
+                /* Skip PADDED (0x08) and PRIORITY (0x20) prefix bytes */
+                int has_pad = (p->frame_flags & 0x08) && (p->frame_type == 0 || p->frame_type == 1);
+                int pad_skip = has_pad ? 1 : 0;
+                if (p->frame_type == 1 && (p->frame_flags & 0x20)) pad_skip += 5;
+
+                if (p->payload_read < (uint32_t)pad_skip) {
+                    size_t skip = (uint32_t)pad_skip - p->payload_read;
+                    if (skip > p_take) skip = p_take;
+                    if (has_pad && p->payload_read == 0 && skip > 0) p->pad_len = data[i];
+                    p_offset += skip;
+                    p_take -= skip;
+                }
+
+                size_t payload_end = p->frame_len > p->pad_len ? p->frame_len - p->pad_len : 0;
+                size_t curr_pos = p->payload_read + p_offset;
+
+                if (curr_pos < payload_end && p_take > 0) {
+                    size_t data_bytes = p_take;
+                    if (curr_pos + data_bytes > payload_end) data_bytes = payload_end - curr_pos;
+                    if (data_bytes > 0) {
+                        const uint8_t *valid_data = data + i + p_offset;
+                        if (p->frame_type == 1 || p->frame_type == 9) {
+                            /* K #73: Buffer HPACK data until END_HEADERS */
+                            if (p->hpack_len + data_bytes <= sizeof(p->hpack_buf)) {
+                                memcpy(p->hpack_buf + p->hpack_len, valid_data, data_bytes);
+                                p->hpack_len += (uint32_t)data_bytes;
+                            }
+                        } else if (p->frame_type == 0) {
+                            /* DATA frame → hash body */
+                            h2_check_hash_headers(st);
+                            if (is_req) {
+                                sha256_update(&st->req_ctx, valid_data, data_bytes);
+                                sha256_update(&st->receipt_ctx, valid_data, data_bytes);
+                                st->total_req_bytes += data_bytes;
+                                /* R24: gRPC streams use protobuf parsing, not JSON */
+                                if (st->is_grpc) {
+                                    grpc_feed(st, valid_data, data_bytes);
+                                    tx_feed_grpc(fd, st->stream_id, &st->req_tx, valid_data, data_bytes);
+                                } else {
+                                    json_model_scan(&st->req_mscan, &st->req_midx, st->req_model,
+                                                    sizeof(st->req_model), valid_data, data_bytes);
+                                    tx_feed_json(fd, st->stream_id, &st->req_tx, valid_data, data_bytes);
+                                }
+                            } else {
+                                h2_hash_res(fd, st, valid_data, data_bytes);
+                            }
+                        }
+                    }
+                }
+            }
+
+            p->payload_read += (uint32_t)take;
+            i += take;
+
+            if (p->payload_read == p->frame_len) {
+                /* K #73: Decode accumulated HPACK on END_HEADERS (0x04) */
+                if (st && (p->frame_type == 1 || p->frame_type == 9)) {
+                    if (p->frame_flags & 0x04) {
+                        hpack_parse(c, st, p->hpack_buf, p->hpack_len, is_req);
+                        h2_check_hash_headers(st);
+                        /* K #75: Path-based LLM detection after HEADERS decode */
+                        if (is_req && st->method[0] != '\0' && !st->timing_started) {
+                            if (!is_llm_fd(fd) && (my_strcasestr(st->path, "/v1/chat") ||
+                                my_strcasestr(st->path, "/v1/compl") ||
+                                my_strcasestr(st->path, "/api/gene") ||
+                                my_strcasestr(st->path, "/v1/messa") ||
+                                st->is_grpc)) { /* R24: gRPC streams are LLM traffic */
+                                set_llm_fd(fd);
+                            }
+                            if (is_llm_fd(fd)) timing_start_req(fd);
+                            st->timing_started = 1;
+                        }
+                        p->hpack_len = 0;
+                    }
+                }
+                /* K #76: Track END_STREAM for deferred processing */
+                if (st && (p->frame_flags & 0x01) && (p->frame_type == 0 || p->frame_type == 1)) {
+                    p->end_stream_pending = 1;
+                }
+                if (st && p->end_stream_pending && p->hpack_len == 0) {
+                    if (is_req) {
+                        h2_check_hash_headers(st);
+                        sha256_update(&st->receipt_ctx, (const uint8_t*)"\n", 1);
+                        /* R24 #85: Parse remaining gRPC buffer on request end_stream */
+                        if (st->is_grpc && st->grpc_req_pos > 0 && st->req_model[0] == '\0') {
+                            pb_scan_model(st->grpc_req_buf, st->grpc_req_pos,
+                                          st->req_model, sizeof(st->req_model), 0);
+                        }
+                    } else {
+                        h2_check_hash_headers(st);
+                        h2_emit_receipt(fd, st);
+                    }
+                    p->end_stream_pending = 0;
+                }
+
+                p->in_frame = 0;
+                p->hdr_pos = 0;
+            }
+        }
+    }
+    __sync_lock_release(&c->lock);
 }
 
 /* ================================================================== */
@@ -1310,12 +2400,17 @@ static int peek_fd(int fd, char *ip_out, int *port_out) {
 
 static void untrack_fd(int fd) {
     claim_fd(fd, NULL, NULL);
-    if (fd >= 0 && fd < MAX_TRACKED_FDS && is_llm_fd(fd)) {
-        emit_timing_fingerprint(fd);
-        fsm_flush(fd);
+    if (fd >= 0 && fd < MAX_TRACKED_FDS) {
+        if (is_llm_fd(fd) || is_h2_fd(fd)) emit_timing_fingerprint(fd);
+        if (is_h2_fd(fd)) {
+            h2_flush(fd);
+        } else if (is_llm_fd(fd)) {
+            fsm_flush(fd);
+        }
     }
     clear_llm_fd(fd);
     clear_ssl_fd(fd);
+    clear_h2_fd(fd);
 }
 
 static void check_tls_sni(int fd, const void *buf, size_t count) {
@@ -1366,19 +2461,23 @@ static void check_tls_sni(int fd, const void *buf, size_t count) {
  *
  * Anti-stripping is critical: without it, a hostile agent can escape monitoring
  * by calling execve() with a clean envp that omits DYLD_INSERT_LIBRARIES.
+ *
+ * R25: Also injects CLAWSIG_PARENT_CHAIN for cross-process receipt correlation.
  */
 #define MAX_INJECT_ENV 4096
 
 static int build_injected_env(char *const envp[], char **out_envp,
-    char *ssl_buf, size_t ssl_buf_sz, char *node_buf, size_t node_buf_sz) {
+    char *ssl_buf, size_t ssl_buf_sz, char *node_buf, size_t node_buf_sz,
+    char *chain_buf) {
     if (!envp) return 0;
-    if (!sslkeylog_path[0] && !saved_trace_env[0] && !saved_preload_env[0]) return 0;
+    if (!sslkeylog_path[0] && !saved_trace_env[0] && !saved_preload_env[0]
+        && (!chain_buf || !chain_buf[0])) return 0;
 
     if (sslkeylog_path[0])
         snprintf(ssl_buf, ssl_buf_sz, "SSLKEYLOGFILE=%s", sslkeylog_path);
 
-    int j = 0, has_ssl = 0, has_node = 0, has_trace = 0, has_preload = 0;
-    for (int i = 0; envp[i] && j < MAX_INJECT_ENV - 5; i++) {
+    int j = 0, has_ssl = 0, has_node = 0, has_trace = 0, has_preload = 0, has_chain = 0;
+    for (int i = 0; envp[i] && j < MAX_INJECT_ENV - 6; i++) {
         if (sslkeylog_path[0] && strncmp(envp[i], "SSLKEYLOGFILE=", 14) == 0) {
             has_ssl = 1; out_envp[j++] = ssl_buf;
         } else if (sslkeylog_path[0] && strncmp(envp[i], "NODE_OPTIONS=", 13) == 0) {
@@ -1393,21 +2492,25 @@ static int build_injected_env(char *const envp[], char **out_envp,
         } else if (saved_preload_env[0] && strncmp(envp[i], "DYLD_INSERT_LIBRARIES=", 22) == 0) {
             has_preload = 1; out_envp[j++] = saved_preload_env;
 #endif
+        } else if (chain_buf && chain_buf[0] && strncmp(envp[i], "CLAWSIG_PARENT_CHAIN=", 21) == 0) {
+            has_chain = 1; out_envp[j++] = chain_buf;
         } else {
             out_envp[j++] = envp[i];
         }
     }
     /* Re-inject any that were stripped */
-    if (sslkeylog_path[0] && !has_ssl && j < MAX_INJECT_ENV - 4)
+    if (sslkeylog_path[0] && !has_ssl && j < MAX_INJECT_ENV - 5)
         out_envp[j++] = ssl_buf;
-    if (sslkeylog_path[0] && !has_node && j < MAX_INJECT_ENV - 3) {
+    if (sslkeylog_path[0] && !has_node && j < MAX_INJECT_ENV - 4) {
         snprintf(node_buf, node_buf_sz, "NODE_OPTIONS=--tls-keylog=%s", sslkeylog_path);
         out_envp[j++] = node_buf;
     }
-    if (saved_trace_env[0] && !has_trace && j < MAX_INJECT_ENV - 2)
+    if (saved_trace_env[0] && !has_trace && j < MAX_INJECT_ENV - 3)
         out_envp[j++] = saved_trace_env;
-    if (saved_preload_env[0] && !has_preload && j < MAX_INJECT_ENV - 1)
+    if (saved_preload_env[0] && !has_preload && j < MAX_INJECT_ENV - 2)
         out_envp[j++] = saved_preload_env;
+    if (chain_buf && chain_buf[0] && !has_chain && j < MAX_INJECT_ENV - 1)
+        out_envp[j++] = chain_buf;
     out_envp[j] = NULL;
     return j;
 }
@@ -1495,15 +2598,31 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
         in_hook = 1;
         int fd = get_ssl_fd(ssl);
         if (fd >= 0) set_ssl_fd(fd);
-        if (is_llm_fd(fd)) {
+
+        /* H2 preface detection + h2_init_conn (K #72) */
+        if (fd >= 0 && !is_h2_fd(fd) && num >= 24 &&
+            !memcmp(buf, "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n", 24)) {
+            set_h2_fd(fd);
+            h2_init_conn(fd);
+        }
+
+        /* Route to H2 parser (not gated behind is_llm_fd — K #75:
+         * path-based detection sets llm_fd after HEADERS decode) */
+        if (fd >= 0 && is_h2_fd(fd)) {
+            h2_feed(fd, (const uint8_t *)buf, (size_t)num, 1);
+            if (tl_causal_read_seq > 0) {
+                tl_event_fd = fd;
+                emit_log_event("https_write_causal", getpid(), num,
+                    ",\"fd\":%d,\"causal_fd\":%d,\"causal_seq\":%llu",
+                    fd, tl_causal_read_fd, (unsigned long long)tl_causal_read_seq);
+            }
+        } else if (fd >= 0 && is_llm_fd(fd)) {
             timing_start_req(fd);
-            /* Feed HTTP FSM — request direction */
-            if (fd >= 0 && fd < MAX_TRACKED_FDS) {
+            if (fd < MAX_TRACKED_FDS) {
                 fsm_lock(fd);
                 fsm_feed(fd, (const uint8_t *)buf, (size_t)num, 1);
                 fsm_unlock(fd);
             }
-            /* Data-flow causal DAG: link this write to the read that caused it */
             if (tl_causal_read_seq > 0) {
                 tl_event_fd = fd;
                 emit_log_event("https_write_causal", getpid(), num,
@@ -1511,7 +2630,7 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
                     fd, tl_causal_read_fd, (unsigned long long)tl_causal_read_seq);
             }
         }
-        parse_http(fd, "https_request", buf, num);
+        if (!is_h2_fd(fd)) parse_http(fd, "https_request", buf, num); /* M #78 */
         in_hook = 0;
     }
     return CALL_REAL(SSL_write, ssl, buf, num);
@@ -1525,17 +2644,19 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
         in_hook = 1;
         int fd = get_ssl_fd(ssl);
         if (fd >= 0) set_ssl_fd(fd);
-        if (is_llm_fd(fd)) {
+        /* H2: route directly, not gated behind is_llm_fd (K #75) */
+        if (fd >= 0 && is_h2_fd(fd)) {
+            if (is_llm_fd(fd)) timing_add_token(fd, (size_t)rc);
+            h2_feed(fd, (const uint8_t *)buf, (size_t)rc, 0);
+        } else if (fd >= 0 && is_llm_fd(fd)) {
             timing_add_token(fd, (size_t)rc);
-            /* Feed HTTP FSM — response direction */
-            if (fd >= 0 && fd < MAX_TRACKED_FDS) {
+            if (fd < MAX_TRACKED_FDS) {
                 fsm_lock(fd);
                 fsm_feed(fd, (const uint8_t *)buf, (size_t)rc, 0);
                 fsm_unlock(fd);
             }
         }
-        parse_http(fd, "https_response", buf, rc);
-        /* Data-flow causal DAG: record this read for downstream write linking */
+        if (!is_h2_fd(fd)) parse_http(fd, "https_response", buf, rc); /* M #78 */
         tl_causal_read_fd = fd;
         tl_causal_read_seq = global_seq - 1;
         in_hook = 0;
@@ -1550,10 +2671,15 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
 __attribute__((constructor))
 static void clawsig_init(void) {
     in_hook = 1;
+    cached_pid = getpid();
     for (int i = 0; i < MAX_TRACKED_FDS; i++) {
         tracked_fds[i].fd = -1; fd_last_seq[i] = 0;
         http_fsm[i].state = HTTP_IDLE; http_fsm[i].lock = 0;
         http_fsm[i].method[0] = '\0';
+    }
+    for (int i = 0; i < 1024; i++) fd_to_h2[i] = -1;
+    for (int i = 0; i < MAX_H2_CONNS; i++) {
+        h2_conns[i].fd = -1; h2_conns[i].lock = 0;
     }
     sha256_init(&global_merkle_ctx);
     memset(current_merkle_hex, '0', 64); current_merkle_hex[64] = '\0';
@@ -1633,6 +2759,23 @@ static void clawsig_init(void) {
         emit_log_event("agent_init", getpid(), 0,
             ",\"harness\":\"%s\",\"role\":\"%s\",\"trace_fd\":%d",
             id.harness ? id.harness : "unknown", id.role, trace_fd);
+
+        /* R25: Chain inheritance — link this process to parent's Merkle chain.
+         * Format: CLAWSIG_PARENT_CHAIN=pid:merkle_count:chain_hash */
+        const char *parent_chain = getenv("CLAWSIG_PARENT_CHAIN");
+        if (parent_chain) {
+            int p_pid = 0; unsigned long long p_count = 0; char p_hash[128] = {0};
+            if (sscanf(parent_chain, "%d:%llu:%64s", &p_pid, &p_count, p_hash) == 3) {
+                /* Seed merkle with parent hash (from T2, confirmed by GPT-5.2 Pro) */
+                sha256_update(&global_merkle_ctx, (const uint8_t *)p_hash, strlen(p_hash));
+                merkle_count = 1;
+                sha256_hash_string(p_hash, current_merkle_hex);
+                emit_log_event("chain_inherit", getpid(), 0,
+                    ",\"parent_pid\":%d,\"parent_merkle_count\":%llu,"
+                    "\"parent_chain_hash\":\"%s\",\"reason\":\"exec\"",
+                    p_pid, p_count, p_hash);
+            }
+        }
     }
     in_hook = 0;
 }
@@ -1725,7 +2868,7 @@ static void safe_scan_memory(void) {
 
 __attribute__((destructor))
 static void clawsig_fini(void) {
-    if (trace_fd < 0) return;
+    if (trace_fd < 0 || (cached_pid > 0 && getpid() != cached_pid)) return;
     in_hook = 1;
 
     /* Flush any pending timing fingerprints */
@@ -1758,120 +2901,259 @@ static void clawsig_fini(void) {
 /*                  THE HOOKS — Process Lifecycle                     */
 /* ================================================================== */
 
+/**
+ * R25: Cross-process receipt chain correlation.
+ * Best-of-breed from 5 variants (Q/R/S/T/T2), all scored 7.8-8.6.
+ *
+ * Architecture (from S-Socratic):
+ * - cached_pid detects fork/vfork children via getpid() mismatch
+ * - vfork muting: child retains in_hook=1, silencing ALL hooks except execve
+ * - fork child: full state reset (merkle, locks), emits chain_inherit
+ * - exec/spawn: injects CLAWSIG_PARENT_CHAIN=pid:count:hash into envp
+ * - constructor: parses CLAWSIG_PARENT_CHAIN, emits chain_inherit(reason=exec)
+ *
+ * 7 constraints addressed:
+ * (1) fork BSS copy, (2) exec re-init, (3) fork-exec gap,
+ * (4) vfork shared address space, (5) posix_spawn atomicity,
+ * (6) signal safety, (7) concurrent trace writes
+ */
+
 pid_t HOOK_NAME(fork)(void) {
-    RESOLVE(fork); if (in_hook || trace_fd < 0) return CALL_REAL(fork);
-    in_hook = 1; pid_t rc = CALL_REAL(fork); int saved_errno = errno;
+    RESOLVE(fork);
+    if (in_hook || trace_fd < 0 || (cached_pid > 0 && getpid() != cached_pid))
+        return CALL_REAL(fork);
+    in_hook = 1;
+
+    /* Snapshot parent's Merkle chain before fork */
+    char parent_hash[65];
+    merkle_acquire();
+    memcpy(parent_hash, current_merkle_hex, 65);
+    uint64_t p_count = merkle_count;
+    merkle_release();
+    parent_hash[64] = '\0';
+
+    pid_t rc = CALL_REAL(fork);
+    int saved_errno = errno;
+
+    if (rc == 0) {
+        /* Fork child: reset state so parent and child chains diverge.
+         * From S(#96-S4): comprehensive lock reset prevents deadlocks
+         * from locks held by parent threads at fork time. */
+        pid_t parent_pid = cached_pid;
+        cached_pid = getpid();
+        merkle_lock = 0;
+        for (int i = 0; i < MAX_TRACKED_FDS; i++) {
+            http_fsm[i].lock = 0;
+            llm_timings[i].lock = 0;
+        }
+        for (int i = 0; i < MAX_H2_CONNS; i++) h2_conns[i].lock = 0;
+        for (int i = 0; i < MAX_ANOMALY_HOSTS; i++) anomaly_hosts[i].lock = 0;
+
+        /* T2 insight (confirmed by GPT-5.2 Pro review): seed child merkle
+         * with parent hash so the child chain is cryptographically rooted
+         * in the parent, not starting from zeros. */
+        sha256_init(&global_merkle_ctx);
+        sha256_update(&global_merkle_ctx, (const uint8_t *)parent_hash, 64);
+        merkle_count = 1;
+        sha256_hash_string(parent_hash, current_merkle_hex);
+
+        in_hook = 0;
+        emit_log_event("chain_inherit", cached_pid, 0,
+            ",\"parent_pid\":%d,\"parent_merkle_count\":%llu,"
+            "\"parent_chain_hash\":\"%s\",\"reason\":\"fork\"",
+            parent_pid, (unsigned long long)p_count, parent_hash);
+        return 0;
+    }
+
     if (rc > 0) emit_log_event("fork", getpid(), rc, ",\"child_pid\":%d", rc);
     in_hook = 0; errno = saved_errno; return rc;
 }
 
 pid_t HOOK_NAME(vfork)(void) {
-    RESOLVE(vfork); if (in_hook || trace_fd < 0) return CALL_REAL(vfork);
-    in_hook = 1; pid_t rc = CALL_REAL(vfork); int saved_errno = errno;
+    RESOLVE(vfork);
+    if (in_hook || trace_fd < 0 || (cached_pid > 0 && getpid() != cached_pid))
+        return CALL_REAL(vfork);
+    in_hook = 1;
+    /* S(#96-S1): vfork muting — leave in_hook=1 in child.
+     * Since parent and child share address space until exec, setting in_hook=1
+     * silences ALL hooks in the child with zero additional code. The child
+     * will call execve which checks is_vfork_child explicitly. */
+    pid_t rc = CALL_REAL(vfork);
+    if (rc == 0) return 0; /* child: in_hook stays 1, all hooks muted */
+    int saved_errno = errno;
     if (rc > 0) emit_log_event("vfork", getpid(), rc, ",\"child_pid\":%d", rc);
     in_hook = 0; errno = saved_errno; return rc;
 }
 
 int HOOK_NAME(execve)(const char *pathname, char *const argv[], char *const envp[]) {
-    RESOLVE(execve); if (in_hook || trace_fd < 0) return CALL_REAL(execve, pathname, argv, envp);
-    in_hook = 1;
-    char path_esc[1024], argv_json[4096];
-    escape_json(pathname, path_esc, sizeof(path_esc));
-    format_argv(argv, argv_json, sizeof(argv_json));
+    RESOLVE(execve);
+    int is_vfork_child = (cached_pid > 0 && getpid() != cached_pid);
 
-    proc_ident_t id = identify_process(pathname, argv, envp);
-    if (id.harness)
-        emit_log_event("execve", getpid(), 0,
-            ",\"path\":\"%s\",\"argv\":%s,\"role\":\"%s\",\"harness\":\"%s\"",
-            path_esc, argv_json, id.role, id.harness);
-    else
-        emit_log_event("execve", getpid(), 0,
-            ",\"path\":\"%s\",\"argv\":%s,\"role\":\"%s\"",
-            path_esc, argv_json, id.role);
+    if (trace_fd < 0 || (!is_vfork_child && in_hook))
+        return CALL_REAL(execve, pathname, argv, envp);
 
-    audit_env(envp);
+    if (!is_vfork_child) in_hook = 1;
 
-    /* SSLKEYLOGFILE injection: force child to dump TLS secrets */
+    char path_esc[1024] = {0}, argv_json[4096] = {0};
+    if (!is_vfork_child) {
+        escape_json(pathname, path_esc, sizeof(path_esc));
+        format_argv(argv, argv_json, sizeof(argv_json));
+
+        proc_ident_t id = identify_process(pathname, argv, envp);
+        if (id.harness)
+            emit_log_event("execve", getpid(), 0,
+                ",\"path\":\"%s\",\"argv\":%s,\"role\":\"%s\",\"harness\":\"%s\"",
+                path_esc, argv_json, id.role, id.harness);
+        else
+            emit_log_event("execve", getpid(), 0,
+                ",\"path\":\"%s\",\"argv\":%s,\"role\":\"%s\"",
+                path_esc, argv_json, id.role);
+        audit_env(envp);
+    }
+
+    /* Inject parent chain + SSLKEYLOGFILE into child envp */
+    char chain_buf[256] = {0};
+    if (cached_pid > 0) {
+        char parent_hash[65];
+        /* Q(#98): unlocked read in vfork child avoids deadlock with
+         * suspended parent threads holding merkle_lock */
+        if (is_vfork_child) {
+            for (int i = 0; i < 65; i++) parent_hash[i] = current_merkle_hex[i];
+        } else {
+            merkle_acquire();
+            memcpy(parent_hash, current_merkle_hex, 65);
+            merkle_release();
+        }
+        parent_hash[64] = '\0';
+        snprintf(chain_buf, sizeof(chain_buf), "CLAWSIG_PARENT_CHAIN=%d:%llu:%s",
+                 (int)cached_pid, (unsigned long long)merkle_count, parent_hash);
+    }
+
     char *inj_envp[MAX_INJECT_ENV]; char ssl_buf[512], node_buf[1024];
     char *const *final_envp = envp;
-    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf), node_buf, sizeof(node_buf)))
-        final_envp = inj_envp;
+    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf),
+                           node_buf, sizeof(node_buf), chain_buf))
+        final_envp = (char *const *)inj_envp;
 
-    in_hook = 0;
-    int rc = CALL_REAL(execve, pathname, argv, final_envp); int saved_errno = errno;
-    in_hook = 1;
-    emit_log_event("execve_failed", getpid(), rc, ",\"path\":\"%s\"", path_esc);
-    in_hook = 0; errno = saved_errno; return rc;
+    if (!is_vfork_child) in_hook = 0;
+    int rc = CALL_REAL(execve, pathname, argv, final_envp);
+    int saved_errno = errno;
+
+    if (!is_vfork_child) {
+        in_hook = 1;
+        emit_log_event("execve_failed", getpid(), rc, ",\"path\":\"%s\"", path_esc);
+        in_hook = 0;
+    }
+    errno = saved_errno; return rc;
 }
 
 int HOOK_NAME(posix_spawn)(pid_t *restrict pid, const char *restrict path,
     const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *restrict attr,
     char *const argv[restrict], char *const envp[restrict]) {
-    RESOLVE(posix_spawn); if (in_hook || trace_fd < 0)
+    RESOLVE(posix_spawn);
+    int is_vfork_child = (cached_pid > 0 && getpid() != cached_pid);
+    if (trace_fd < 0 || (!is_vfork_child && in_hook))
         return CALL_REAL(posix_spawn, pid, path, fa, attr, argv, envp);
-    in_hook = 1; audit_env(envp);
 
-    /* SSLKEYLOGFILE injection */
+    if (!is_vfork_child) { in_hook = 1; audit_env(envp); }
+
+    /* Inject parent chain */
+    char chain_buf[256] = {0};
+    if (cached_pid > 0) {
+        char parent_hash[65];
+        if (is_vfork_child) {
+            for (int i = 0; i < 65; i++) parent_hash[i] = current_merkle_hex[i];
+        } else {
+            merkle_acquire(); memcpy(parent_hash, current_merkle_hex, 65); merkle_release();
+        }
+        parent_hash[64] = '\0';
+        snprintf(chain_buf, sizeof(chain_buf), "CLAWSIG_PARENT_CHAIN=%d:%llu:%s",
+                 (int)cached_pid, (unsigned long long)merkle_count, parent_hash);
+    }
+
     char *inj_envp[MAX_INJECT_ENV]; char ssl_buf[512], node_buf[1024];
     char *const *final_envp = envp;
-    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf), node_buf, sizeof(node_buf)))
-        final_envp = inj_envp;
+    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf),
+                           node_buf, sizeof(node_buf), chain_buf))
+        final_envp = (char *const *)inj_envp;
 
     int rc = CALL_REAL(posix_spawn, pid, path, fa, attr, argv, final_envp);
     int saved_errno = errno;
 
-    char path_esc[1024], argv_json[4096];
-    escape_json(path, path_esc, sizeof(path_esc));
-    format_argv(argv, argv_json, sizeof(argv_json));
+    if (!is_vfork_child) {
+        char path_esc[1024], argv_json[4096];
+        escape_json(path, path_esc, sizeof(path_esc));
+        format_argv(argv, argv_json, sizeof(argv_json));
 
-    proc_ident_t id = identify_process(path, argv, envp);
-    if (id.harness)
-        emit_log_event("posix_spawn", getpid(), rc,
-            ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\",\"harness\":\"%s\"",
-            path_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role, id.harness);
-    else
-        emit_log_event("posix_spawn", getpid(), rc,
-            ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\"",
-            path_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role);
-
-    in_hook = 0; errno = saved_errno; return rc;
+        proc_ident_t id = identify_process(path, argv, envp);
+        if (id.harness)
+            emit_log_event("posix_spawn", getpid(), rc,
+                ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\",\"harness\":\"%s\"",
+                path_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role, id.harness);
+        else
+            emit_log_event("posix_spawn", getpid(), rc,
+                ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\"",
+                path_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role);
+        in_hook = 0;
+    }
+    errno = saved_errno; return rc;
 }
 
 int HOOK_NAME(posix_spawnp)(pid_t *restrict pid, const char *restrict file,
     const posix_spawn_file_actions_t *fa, const posix_spawnattr_t *restrict attr,
     char *const argv[restrict], char *const envp[restrict]) {
-    RESOLVE(posix_spawnp); if (in_hook || trace_fd < 0)
+    RESOLVE(posix_spawnp);
+    int is_vfork_child = (cached_pid > 0 && getpid() != cached_pid);
+    if (trace_fd < 0 || (!is_vfork_child && in_hook))
         return CALL_REAL(posix_spawnp, pid, file, fa, attr, argv, envp);
-    in_hook = 1; audit_env(envp);
 
-    /* SSLKEYLOGFILE injection */
+    if (!is_vfork_child) { in_hook = 1; audit_env(envp); }
+
+    char chain_buf[256] = {0};
+    if (cached_pid > 0) {
+        char parent_hash[65];
+        if (is_vfork_child) {
+            for (int i = 0; i < 65; i++) parent_hash[i] = current_merkle_hex[i];
+        } else {
+            merkle_acquire(); memcpy(parent_hash, current_merkle_hex, 65); merkle_release();
+        }
+        parent_hash[64] = '\0';
+        snprintf(chain_buf, sizeof(chain_buf), "CLAWSIG_PARENT_CHAIN=%d:%llu:%s",
+                 (int)cached_pid, (unsigned long long)merkle_count, parent_hash);
+    }
+
     char *inj_envp[MAX_INJECT_ENV]; char ssl_buf[512], node_buf[1024];
     char *const *final_envp = envp;
-    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf), node_buf, sizeof(node_buf)))
-        final_envp = inj_envp;
+    if (build_injected_env(envp, inj_envp, ssl_buf, sizeof(ssl_buf),
+                           node_buf, sizeof(node_buf), chain_buf))
+        final_envp = (char *const *)inj_envp;
 
     int rc = CALL_REAL(posix_spawnp, pid, file, fa, attr, argv, final_envp);
     int saved_errno = errno;
 
-    char file_esc[1024], argv_json[4096];
-    escape_json(file, file_esc, sizeof(file_esc));
-    format_argv(argv, argv_json, sizeof(argv_json));
+    if (!is_vfork_child) {
+        char file_esc[1024], argv_json[4096];
+        escape_json(file, file_esc, sizeof(file_esc));
+        format_argv(argv, argv_json, sizeof(argv_json));
 
-    proc_ident_t id = identify_process(file, argv, envp);
-    if (id.harness)
-        emit_log_event("posix_spawnp", getpid(), rc,
-            ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\",\"harness\":\"%s\"",
-            file_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role, id.harness);
-    else
-        emit_log_event("posix_spawnp", getpid(), rc,
-            ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\"",
-            file_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role);
-
-    in_hook = 0; errno = saved_errno; return rc;
+        proc_ident_t id = identify_process(file, argv, envp);
+        if (id.harness)
+            emit_log_event("posix_spawnp", getpid(), rc,
+                ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\",\"harness\":\"%s\"",
+                file_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role, id.harness);
+        else
+            emit_log_event("posix_spawnp", getpid(), rc,
+                ",\"path\":\"%s\",\"argv\":%s,\"child_pid\":%d,\"role\":\"%s\"",
+                file_esc, argv_json, (pid && rc == 0) ? *pid : -1, id.role);
+        in_hook = 0;
+    }
+    errno = saved_errno; return rc;
 }
 
 int HOOK_NAME(kill)(pid_t pid, int sig) {
-    RESOLVE(kill); if (in_hook || trace_fd < 0) return CALL_REAL(kill, pid, sig);
+    RESOLVE(kill);
+    if (in_hook || trace_fd < 0 || (cached_pid > 0 && getpid() != cached_pid))
+        return CALL_REAL(kill, pid, sig);
     in_hook = 1; int rc = CALL_REAL(kill, pid, sig); int saved_errno = errno;
     emit_log_event("kill", getpid(), rc,
         ",\"target_pid\":%d,\"signal\":%d", pid, sig);
