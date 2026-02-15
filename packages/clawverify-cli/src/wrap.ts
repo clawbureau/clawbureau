@@ -310,7 +310,12 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ${fsSentinel.eventCount} file events\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
   if (interposeEvents.length > 0) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ${interposeEvents.length} syscalls (${interposeReceipts.network.length} net, ${interposeReceipts.execution.length} exec)\n`);
+    const parts = [`${interposeReceipts.network.length} net`, `${interposeReceipts.execution.length} exec`];
+    if (interposeReceipts.gateway.length > 0) parts.push(`${interposeReceipts.gateway.length} gateway`);
+    if (interposeReceipts.transcript.length > 0) parts.push(`${interposeReceipts.transcript.length} transcript`);
+    if (interposeReceipts.toolCalls.length > 0) parts.push(`${interposeReceipts.toolCalls.length} tool_calls`);
+    if (interposeReceipts.anomalies.length > 0) parts.push(`${interposeReceipts.anomalies.length} anomalies`);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ${interposeEvents.length} syscalls (${parts.join(', ')})\n`);
   }
   if (preloadGatewayReceipts.length > 0) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Preload LLM intercepts: ${preloadGatewayReceipts.length} (via diagnostics_channel + fetch)\n`);
@@ -395,11 +400,21 @@ export async function wrap(
     bundle.payload.receipts = [...existing, ...securityReceipts] as typeof bundle.payload.receipts;
   }
 
-  // Inject preload gateway receipts (LLM calls captured via diagnostics_channel)
-  if (preloadGatewayReceipts.length > 0 || sniGatewayReceipts.length > 0) {
+  // Inject preload + SNI + interpose FSM receipts into the bundle
+  {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const existing = (bundle.payload.receipts ?? []) as any[];
-    bundle.payload.receipts = [...existing, ...preloadGatewayReceipts, ...sniGatewayReceipts] as typeof bundle.payload.receipts;
+    const additions = [
+      ...preloadGatewayReceipts,
+      ...sniGatewayReceipts,
+      ...interposeReceipts.gateway,
+      ...interposeReceipts.transcript,
+      ...interposeReceipts.toolCalls,
+      ...interposeReceipts.anomalies,
+    ];
+    if (additions.length > 0) {
+      bundle.payload.receipts = [...existing, ...additions] as typeof bundle.payload.receipts;
+    }
   }
   // Add sentinel metadata
   bundle.payload.metadata = {
@@ -411,6 +426,10 @@ export async function wrap(
       net_suspicious: netSentinel.suspiciousCount,
       interpose_events: interposeEvents.length,
       interpose_active: !!interposeLib,
+      interpose_gateway: interposeReceipts.gateway.length,
+      interpose_transcript: interposeReceipts.transcript.length,
+      interpose_tool_calls: interposeReceipts.toolCalls.length,
+      interpose_anomalies: interposeReceipts.anomalies.length,
       preload_llm_events: preloadGatewayReceipts.length,
       tls_sni_events: sniEvents.length,
       tls_sni_receipts: sniGatewayReceipts.length,
@@ -421,9 +440,17 @@ export async function wrap(
   // Print summary
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
-  const totalGw = bundle.payload.receipts?.length ?? 0;
-  const proxyGateway = totalGw - preloadGatewayReceipts.length - sniGatewayReceipts.length;
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length})\n`);
+  const totalReceipts = bundle.payload.receipts?.length ?? 0;
+  const nonGateway = interposeReceipts.transcript.length + interposeReceipts.toolCalls.length + interposeReceipts.anomalies.length;
+  const totalGw = totalReceipts - nonGateway;
+  const proxyGateway = totalGw - preloadGatewayReceipts.length - sniGatewayReceipts.length - interposeReceipts.gateway.length;
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length}, interpose: ${interposeReceipts.gateway.length})\n`);
+  if (interposeReceipts.transcript.length > 0) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Transcript events: ${interposeReceipts.transcript.length} (via interpose FSM)\n`);
+  }
+  if (interposeReceipts.toolCalls.length > 0) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool call events: ${interposeReceipts.toolCalls.length} (via interpose FSM)\n`);
+  }
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts: ${allExecutionReceipts.length} (shell: ${executionReceipts.length}, interpose: ${interposeReceipts.execution.length})\n`);
@@ -857,11 +884,46 @@ interface InterposeTraceEvent {
   // sendto
   len?: number;
   rc: number;
+  // R27: llm_receipt / grpc_receipt fields (from C FSM)
+  receipt_hash?: string;
+  method?: string;
+  status?: number;
+  req_bytes?: number;
+  res_bytes?: number;
+  req_body_sha256?: string;
+  res_body_sha256?: string;
+  model?: string;
+  req_model?: string;
+  model_substituted?: number;
+  stream_id?: number;
+  // R27: llm_msg fields (from C FSM)
+  role?: string;
+  content_sha256?: string;
+  preview?: string;
+  // R27: llm_tool_call fields (from C FSM)
+  call_id?: string;
+  name?: string;
+  arguments_sha256?: string;
+  // R27: behavioral_anomaly fields
+  hostname?: string;
+  dimension?: string;
+  expected?: number;
+  observed?: number;
+  sigma?: number;
 }
 
+/** Receipts synthesized from interpose trace events. */
 interface InterposeSynthesized {
   network: NetworkReceiptPayload[];
   execution: ExecutionReceiptPayload[];
+  /** LLM gateway receipts from HTTP FSM (llm_receipt + grpc_receipt). */
+  gateway: Record<string, unknown>[];
+  /** LLM message transcript events (llm_msg). */
+  transcript: Record<string, unknown>[];
+  /** Tool call events from LLM responses (llm_tool_call). */
+  toolCalls: Record<string, unknown>[];
+  /** Behavioral anomaly alerts. */
+  anomalies: Record<string, unknown>[];
 }
 
 /**
@@ -996,6 +1058,10 @@ async function synthesizeInterposeReceipts(
 ): Promise<InterposeSynthesized> {
   const network: NetworkReceiptPayload[] = [];
   const execution: ExecutionReceiptPayload[] = [];
+  const gateway: Record<string, unknown>[] = [];
+  const transcript: Record<string, unknown>[] = [];
+  const toolCalls: Record<string, unknown>[] = [];
+  const anomalies: Record<string, unknown>[] = [];
   const encoder = new TextEncoder();
   const { sha256B64u } = await import('@clawbureau/clawsig-sdk');
 
@@ -1066,10 +1132,87 @@ async function synthesizeInterposeReceipts(
         timestamp: event.ts,
         binding: { run_id: runId },
       });
+    } else if (syscall === 'llm_receipt' || syscall === 'grpc_receipt') {
+      // R27: Gateway receipts from the C HTTP/gRPC FSM (plaintext or decrypted TLS)
+      gateway.push({
+        receipt_version: '1',
+        receipt_id: `ipr_${crypto.randomUUID()}`,
+        receipt_type: syscall === 'grpc_receipt' ? 'gateway_grpc' : 'gateway_interpose',
+        source: 'interpose_fsm',
+        receipt_hash: event.receipt_hash ?? '',
+        method: event.method ?? '',
+        path: event.path ?? '',
+        status: event.status ?? 0,
+        model: event.model ?? 'unknown',
+        req_model: event.req_model ?? '',
+        model_substituted: !!(event.model_substituted),
+        req_bytes: event.req_bytes ?? 0,
+        res_bytes: event.res_bytes ?? 0,
+        req_body_sha256: event.req_body_sha256 ?? '',
+        res_body_sha256: event.res_body_sha256 ?? '',
+        stream_id: event.stream_id ?? 0,
+        fd: event.fd ?? -1,
+        pid: event.pid,
+        hash_algorithm: 'SHA-256',
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
+    } else if (syscall === 'llm_msg') {
+      // R27: Individual LLM message events (role + content hash + preview)
+      transcript.push({
+        receipt_version: '1',
+        receipt_id: `ipm_${crypto.randomUUID()}`,
+        receipt_type: 'llm_message',
+        source: 'interpose_fsm',
+        role: event.role ?? 'unknown',
+        content_sha256: event.content_sha256 ?? '',
+        preview: event.preview ?? '',
+        stream_id: event.stream_id ?? 0,
+        fd: event.fd ?? -1,
+        pid: event.pid,
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
+    } else if (syscall === 'llm_tool_call') {
+      // R27: Tool call events extracted from LLM response JSON
+      toolCalls.push({
+        receipt_version: '1',
+        receipt_id: `ipt_${crypto.randomUUID()}`,
+        receipt_type: 'tool_call_interpose',
+        source: 'interpose_fsm',
+        call_id: event.call_id ?? '',
+        tool_name: event.name ?? 'unknown',
+        arguments_sha256: event.arguments_sha256 ?? '',
+        stream_id: event.stream_id ?? 0,
+        fd: event.fd ?? -1,
+        pid: event.pid,
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
+    } else if (syscall === 'behavioral_anomaly') {
+      // R27: Statistical anomaly detection from the C library
+      anomalies.push({
+        receipt_version: '1',
+        receipt_id: `ipa_${crypto.randomUUID()}`,
+        receipt_type: 'behavioral_anomaly',
+        source: 'interpose_anomaly_engine',
+        hostname: event.hostname ?? '',
+        dimension: event.dimension ?? '',
+        expected: event.expected ?? 0,
+        observed: event.observed ?? 0,
+        sigma: event.sigma ?? 0,
+        pid: event.pid,
+        agent_did: agentDid,
+        timestamp: event.ts,
+        binding: { run_id: runId },
+      });
     }
   }
 
-  return { network, execution };
+  return { network, execution, gateway, transcript, toolCalls, anomalies };
 }
 
 /**

@@ -239,6 +239,10 @@ export interface ProofBundlePayload {
       net_suspicious?: number;
       interpose_events?: number;
       interpose_active?: boolean;
+      interpose_gateway?: number;
+      interpose_transcript?: number;
+      interpose_tool_calls?: number;
+      interpose_anomalies?: number;
       preload_llm_events?: number;
       tls_sni_events?: number;
       tls_sni_receipts?: number;
