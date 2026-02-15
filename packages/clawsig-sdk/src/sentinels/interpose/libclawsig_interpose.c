@@ -125,8 +125,13 @@ typedef struct {
 
 static llm_timing_t llm_timings[MAX_TRACKED_FDS];
 
-/* Forward declaration — emit_log_event defined below */
+/* Forward declarations — defined later in file */
 static void emit_log_event(const char *syscall_name, int pid, int rc, const char *fmt, ...);
+static void escape_json(const char *src, char *dest, size_t dest_len);
+static int peek_fd(int fd, char *ip_out, int *port_out);
+static int lookup_dns(const char *ip, char *hostname_out);
+static void feed_anomaly_engine(const char *hostname, double ttft,
+    double mean_iti, double p50, double p95, double burst, double bpt);
 
 static void emit_timing_fingerprint(int fd) {
     if (fd < 0 || fd >= MAX_TRACKED_FDS) return;
@@ -164,6 +169,26 @@ static void emit_timing_fingerprint(int fd) {
                 ",\"fd\":%d,\"type\":\"model_substitution\","
                 "\"reason\":\"p50_us_%u_below_1ms_threshold\"", fd, p50);
         }
+
+        /* Feed EMA anomaly engine per hostname (from H-Omega) */
+        char ip[INET6_ADDRSTRLEN] = ""; char host[256] = "llm";
+        if (peek_fd(fd, ip, NULL)) lookup_dns(ip, host);
+        uint64_t sum = 0;
+        for (uint32_t x = 0; x < count; x++) sum += sorted[x];
+        double mean_iti = count > 0 ? (double)sum / count : 0;
+        uint32_t p95 = sorted[(count * 95) / 100];
+        double var = 0;
+        for (uint32_t x = 0; x < count; x++) {
+            double d = (double)sorted[x] - mean_iti;
+            var += d * d;
+        }
+        var = count > 1 ? var / (count - 1) : 0;
+        double burstiness_val = mean_iti > 0 ? var / mean_iti : 0;
+        uint64_t total_bytes = 0;
+        for (uint32_t x = 0; x < count; x++) total_bytes += llm_timings[fd].token_bytes[x];
+        double bpt_val = count > 0 ? (double)total_bytes / count : 0;
+        feed_anomaly_engine(host, (double)ttft, mean_iti, (double)p50,
+            (double)p95, burstiness_val, bpt_val);
     }
     llm_timings[fd].active = 0;
     __sync_lock_release(&llm_timings[fd].lock);
@@ -199,79 +224,236 @@ static void timing_add_token(int fd, size_t bytes) {
 }
 
 /* ================================================================== */
-/*    HTTP/1.1 DFA State Machine & Content-Addressable Receipts       */
-/*    (from J-Crucible: zero-allocation streaming HTTP parser)        */
-/*    Forward-declare SHA-256 types/funcs (defined in SHA-256 section)*/
+/*    HTTP FSM & Content-Addressable Receipts (J-Crucible + H-Omega)  */
+/*    Zero-allocation streaming HTTP parser with req/res pairing,     */
+/*    three-context SHA-256, SSE canonicalization, model extraction,   */
+/*    EMA behavioral anomaly detection, and prompt injection scan.    */
 /* ================================================================== */
 
-typedef struct {
-    uint32_t state[8];
-    uint32_t count[2];
-    uint8_t buffer[64];
-} sha256_ctx_t;
-
+/* Forward-declare SHA-256 (defined in SHA-256 section below) */
+typedef struct { uint32_t state[8]; uint32_t count[2]; uint8_t buffer[64]; } sha256_ctx_t;
 static void sha256_init(sha256_ctx_t *ctx);
 static void sha256_update(sha256_ctx_t *ctx, const uint8_t *data, size_t len);
 static void sha256_final(sha256_ctx_t *ctx, uint8_t hash[32]);
 
-typedef enum {
-    SM_IDLE = 0,
-    SM_HEADER,
-    SM_BODY_IDENTITY,
-    SM_CHUNK_HEX,
-    SM_CHUNK_EXT,
-    SM_CHUNK_DATA,
-    SM_CHUNK_CRLF
-} http_sm_state_t;
-
-typedef struct {
-    http_sm_state_t state;
-    uint32_t window;        /* sliding window for \r\n\r\n detection */
-    uint64_t chunk_rem;
-    uint64_t content_length;
-    uint64_t body_bytes;
-    int is_chunked;
-    int is_sse;
-    int sse_match_idx;      /* tracks position in "data: " prefix */
-    int hash_active;
-    sha256_ctx_t sha;       /* streaming hash of semantic body content */
-    char header_buf[512];   /* enough to find Content-Length/Transfer-Encoding */
-    size_t header_len;
-} http_dfa_t;
-
-/* Per-FD DFA for request (tx) and response (rx) directions */
-static http_dfa_t rx_dfa[MAX_TRACKED_FDS];
-static http_dfa_t tx_dfa[MAX_TRACKED_FDS];
-static volatile int dfa_locks[MAX_TRACKED_FDS];
-
-static inline void dfa_lock(int fd) { while (__sync_lock_test_and_set(&dfa_locks[fd], 1)) {} }
-static inline void dfa_unlock(int fd) { __sync_lock_release(&dfa_locks[fd]); }
-
-/**
- * Emit a content-addressable receipt for a completed HTTP body.
- * The hash covers ONLY semantic payload (headers stripped, chunk framing
- * stripped, SSE "data: " prefixes stripped). This makes the hash stable
- * across different chunk boundaries and transport encodings.
- */
-static void emit_receipt(http_dfa_t *dfa, int fd, const char *dir) {
-    if (!dfa->hash_active) return;
-    uint8_t hash[32];
-    sha256_ctx_t snap = dfa->sha;
-    sha256_final(&snap, hash);
-    char hex[65];
-    for (int k = 0; k < 32; k++) snprintf(&hex[k * 2], 3, "%02x", hash[k]);
-    tl_event_fd = fd;
-    emit_log_event("llm_receipt", getpid(), -999,
-        ",\"fd\":%d,\"dir\":\"%s\",\"receipt_hash\":\"%s\",\"body_bytes\":%llu",
-        fd, dir, hex, (unsigned long long)dfa->body_bytes);
-    dfa->state = SM_IDLE;
-    dfa->hash_active = 0;
+/* Newton-Raphson sqrt — avoids -lm dependency (from H-Omega) */
+static double fast_sqrt(double n) {
+    if (n <= 0) return 0;
+    double x = n, y = (x + 1) / 2;
+    while (y < x) { x = y; y = (x + n / x) / 2; }
+    return x;
 }
 
-/**
- * Scan body content for prompt injection markers.
- * Case-insensitive scan for known injection phrases in streaming data.
- */
+/* Case-insensitive substring search (from H-Omega) */
+static const char *my_strcasestr(const char *h, const char *n) {
+    if (!n[0]) return h;
+    for (; *h; h++) {
+        const char *a = h, *b = n;
+        while (*a && *b) {
+            char ca = *a, cb = *b;
+            if (ca >= 'A' && ca <= 'Z') ca += 32;
+            if (cb >= 'A' && cb <= 'Z') cb += 32;
+            if (ca != cb) break;
+            a++; b++;
+        }
+        if (!*b) return h;
+    }
+    return NULL;
+}
+
+/* --- Behavioral EMA Anomaly Engine (from H-Omega) --- */
+typedef struct { double ema; double var; } ema_stat_t;
+typedef struct {
+    char hostname[256];
+    ema_stat_t ttft, mean_iti, p50_iti, p95_iti, burstiness, bpt;
+    int count;
+    volatile int lock;
+} host_anomaly_t;
+
+#define MAX_ANOMALY_HOSTS 64
+static host_anomaly_t anomaly_hosts[MAX_ANOMALY_HOSTS];
+
+static void update_ema(ema_stat_t *s, double val, const char *dim,
+                       const char *host, int count) {
+    if (count == 0) { s->ema = val; s->var = 0; return; }
+    double diff = val - s->ema;
+    double sd = fast_sqrt(s->var);
+    if (count > 5 && sd > 0) {
+        double sigma = diff / sd;
+        if (sigma < 0) sigma = -sigma;
+        if (sigma > 3.0) {
+            char eh[512]; escape_json(host, eh, sizeof(eh));
+            emit_log_event("behavioral_anomaly", getpid(), -999,
+                ",\"hostname\":\"%s\",\"dimension\":\"%s\","
+                "\"expected\":%.2f,\"observed\":%.2f,\"sigma\":%.2f",
+                eh, dim, s->ema, val, sigma);
+        }
+    }
+    s->ema = 0.9 * s->ema + 0.1 * val;
+    s->var = 0.9 * s->var + 0.1 * (diff * diff);
+}
+
+static void feed_anomaly_engine(const char *hostname, double ttft,
+    double mean_iti, double p50, double p95, double burst, double bpt) {
+    unsigned h = 5381; const char *p = hostname;
+    while (*p) h = ((h << 5) + h) + (unsigned char)*p++;
+    int slot = (int)(h % MAX_ANOMALY_HOSTS);
+    host_anomaly_t *a = &anomaly_hosts[slot];
+    while (__sync_lock_test_and_set(&a->lock, 1)) {}
+    if (a->hostname[0] && strcmp(a->hostname, hostname) != 0) {
+        a->count = 0; /* collision — reset */
+    }
+    strncpy(a->hostname, hostname, 255); a->hostname[255] = '\0';
+    update_ema(&a->ttft, ttft, "ttft_ns", hostname, a->count);
+    update_ema(&a->mean_iti, mean_iti, "mean_iti_us", hostname, a->count);
+    update_ema(&a->p50_iti, p50, "p50_iti_us", hostname, a->count);
+    update_ema(&a->p95_iti, p95, "p95_iti_us", hostname, a->count);
+    update_ema(&a->burstiness, burst, "burstiness", hostname, a->count);
+    update_ema(&a->bpt, bpt, "bytes_per_token", hostname, a->count);
+    a->count++;
+    __sync_lock_release(&a->lock);
+}
+
+/* --- HTTP FSM: unified req/res state machine per FD --- */
+typedef enum {
+    HTTP_IDLE = 0, HTTP_REQ_HDR, HTTP_REQ_BODY,
+    HTTP_WAIT_RES, HTTP_RES_HDR, HTTP_RES_BODY
+} http_fsm_state_t;
+
+typedef struct {
+    http_fsm_state_t state;
+    volatile int lock;
+
+    /* Request metadata */
+    char method[16];
+    char path[512];
+    int status;
+
+    /* Model identity (from H-Omega) */
+    char model[128];
+
+    /* Header parsing (line-at-a-time, cross-buffer) */
+    char line_buf[512];
+    size_t line_len;
+
+    /* Body framing */
+    uint64_t content_length;
+    uint64_t body_bytes_read;
+    uint64_t chunk_rem;
+    int is_chunked;
+    int is_sse;
+    int in_chunk_ext;
+
+    /* SSE canonicalization (from H-Omega: strips "data: " + [DONE]) */
+    char sse_line[256];
+    size_t sse_len;
+
+    /* Three-context streaming SHA-256 (from H-Omega) */
+    sha256_ctx_t req_ctx;   /* hash of request body only */
+    sha256_ctx_t res_ctx;   /* hash of response body only */
+    sha256_ctx_t receipt_ctx;/* hash of method||path||\n||req_body||\n||status||\n||res_body */
+
+    /* Byte counters */
+    uint64_t total_req_bytes;
+    uint64_t total_res_bytes;
+} http_fsm_t;
+
+static http_fsm_t http_fsm[MAX_TRACKED_FDS];
+
+static inline void fsm_lock(int fd) { while (__sync_lock_test_and_set(&http_fsm[fd].lock, 1)) {} }
+static inline void fsm_unlock(int fd) { __sync_lock_release(&http_fsm[fd].lock); }
+
+/** Emit a content-addressable receipt with req/res/composite hashes. */
+static void fsm_emit_receipt(int fd) {
+    http_fsm_t *sm = &http_fsm[fd];
+    if (sm->method[0] == '\0') return;
+
+    /* Finalize all three hash contexts (snapshot, don't destroy) */
+    uint8_t rq_h[32], rs_h[32], rc_h[32];
+    sha256_ctx_t t;
+    t = sm->req_ctx; sha256_final(&t, rq_h);
+    t = sm->res_ctx; sha256_final(&t, rs_h);
+    t = sm->receipt_ctx; sha256_final(&t, rc_h);
+
+    char hex_rq[65], hex_rs[65], hex_rc[65];
+    for (int k = 0; k < 32; k++) {
+        snprintf(&hex_rq[k*2], 3, "%02x", rq_h[k]);
+        snprintf(&hex_rs[k*2], 3, "%02x", rs_h[k]);
+        snprintf(&hex_rc[k*2], 3, "%02x", rc_h[k]);
+    }
+
+    /* Model fallback: scan JSON body for "model" field if header empty */
+    if (sm->model[0] == '\0') strcpy(sm->model, "unknown");
+
+    char path_esc[1024], model_esc[256];
+    escape_json(sm->path, path_esc, sizeof(path_esc));
+    escape_json(sm->model, model_esc, sizeof(model_esc));
+
+    tl_event_fd = fd;
+    emit_log_event("llm_receipt", getpid(), -999,
+        ",\"fd\":%d,\"receipt_hash\":\"%s\""
+        ",\"method\":\"%s\",\"path\":\"%s\",\"status\":%d"
+        ",\"req_bytes\":%llu,\"res_bytes\":%llu"
+        ",\"req_body_sha256\":\"%s\",\"res_body_sha256\":\"%s\""
+        ",\"model\":\"%s\"",
+        fd, hex_rc,
+        sm->method, path_esc, sm->status,
+        (unsigned long long)sm->total_req_bytes,
+        (unsigned long long)sm->total_res_bytes,
+        hex_rq, hex_rs, model_esc);
+
+    sm->state = HTTP_IDLE;
+    sm->method[0] = '\0';
+}
+
+/** Flush FSM on FD close — emit receipt for any in-progress exchange. */
+static void fsm_flush(int fd) {
+    if (fd < 0 || fd >= MAX_TRACKED_FDS) return;
+    http_fsm_t *sm = &http_fsm[fd];
+    fsm_lock(fd);
+    if (sm->state > HTTP_IDLE) fsm_emit_receipt(fd);
+    fsm_unlock(fd);
+}
+
+/** Append bytes to request body hash contexts. */
+static inline void fsm_hash_req(http_fsm_t *sm, const uint8_t *d, size_t n) {
+    sha256_update(&sm->req_ctx, d, n);
+    sha256_update(&sm->receipt_ctx, d, n);
+    sm->total_req_bytes += n;
+}
+
+/** Append bytes to response body hash contexts with SSE canonicalization. */
+static void fsm_hash_res(http_fsm_t *sm, const uint8_t *data, size_t len) {
+    if (!sm->is_sse) {
+        sha256_update(&sm->res_ctx, data, len);
+        sha256_update(&sm->receipt_ctx, data, len);
+        sm->total_res_bytes += len;
+        return;
+    }
+    /* SSE: accumulate lines, strip "data: " prefix, skip [DONE] */
+    for (size_t i = 0; i < len; i++) {
+        char ch = (char)data[i];
+        if (sm->sse_len < sizeof(sm->sse_line) - 1)
+            sm->sse_line[sm->sse_len++] = ch;
+        if (ch == '\n') {
+            sm->sse_line[sm->sse_len] = '\0';
+            if (strncmp(sm->sse_line, "data: ", 6) == 0) {
+                size_t dlen = sm->sse_len - 6;
+                if (dlen > 0 && sm->sse_line[6 + dlen - 1] == '\n') dlen--;
+                if (dlen > 0 && sm->sse_line[6 + dlen - 1] == '\r') dlen--;
+                /* Skip OpenAI [DONE] terminator (from H-Omega) */
+                if (!(dlen == 6 && memcmp(sm->sse_line + 6, "[DONE]", 6) == 0)) {
+                    sha256_update(&sm->res_ctx, (const uint8_t*)sm->sse_line + 6, dlen);
+                    sha256_update(&sm->receipt_ctx, (const uint8_t*)sm->sse_line + 6, dlen);
+                    sm->total_res_bytes += dlen;
+                }
+            }
+            sm->sse_len = 0;
+        }
+    }
+}
+
+/** Scan body for prompt injection markers (case-insensitive). */
 static void scan_body_anomalies(int fd, const uint8_t *buf, size_t len) {
     if (!buf || len < 15) return;
     for (size_t i = 0; i <= len - 15; i++) {
@@ -286,7 +468,8 @@ static void scan_body_anomalies(int fd, const uint8_t *buf, size_t len) {
             if (match) {
                 tl_event_fd = fd;
                 emit_log_event("security_anomaly", getpid(), -999,
-                    ",\"fd\":%d,\"type\":\"prompt_injection\",\"match\":\"ignore previous\"", fd);
+                    ",\"fd\":%d,\"type\":\"prompt_injection\","
+                    "\"match\":\"ignore previous\"", fd);
                 return;
             }
         }
@@ -294,123 +477,195 @@ static void scan_body_anomalies(int fd, const uint8_t *buf, size_t len) {
 }
 
 /**
- * Feed raw SSL_read/SSL_write bytes into the HTTP DFA.
- * Processes byte-by-byte, maintaining state across buffer boundaries.
- * O(1) per byte, stays in L1 cache, no heap allocation.
+ * Process raw SSL bytes through the HTTP FSM.
+ * Handles both request (is_req=1) and response (is_req=0) directions.
+ * Line-based header parsing with cross-buffer accumulation.
+ * Chunked encoding with chunk extension support.
+ * Receipt formula: SHA-256(method || " " || path || "\n" || req_body || "\n" || status || "\n" || res_body)
  */
-static void dfa_feed(int fd, http_dfa_t *dfa, const uint8_t *buf, size_t len, const char *dir) {
-    if (!dfa || !buf || len == 0) return;
+static void fsm_feed(int fd, const uint8_t *data, size_t len, int is_req) {
+    if (fd < 0 || fd >= MAX_TRACKED_FDS || !data || len == 0) return;
+    http_fsm_t *sm = &http_fsm[fd];
     size_t i = 0;
+
     while (i < len) {
-        if (dfa->state == SM_IDLE) {
-            dfa->state = SM_HEADER;
-            dfa->window = 0;
-            dfa->header_len = 0;
-            dfa->is_chunked = 0;
-            dfa->is_sse = 0;
-            dfa->content_length = 0;
-            dfa->body_bytes = 0;
-            dfa->hash_active = 0;
-            dfa->sse_match_idx = 0;
+        /* --- State: IDLE → begin new request --- */
+        if (sm->state == HTTP_IDLE) {
+            if (!is_req) break; /* stray response data with no request */
+            sm->state = HTTP_REQ_HDR;
+            sm->line_len = 0; sm->method[0] = '\0'; sm->path[0] = '\0';
+            sm->status = 0; sm->model[0] = '\0';
+            sm->total_req_bytes = 0; sm->total_res_bytes = 0;
+            sm->content_length = 0; sm->body_bytes_read = 0;
+            sm->is_chunked = 0; sm->is_sse = 0;
+            sm->chunk_rem = 0; sm->in_chunk_ext = 0; sm->sse_len = 0;
+            sha256_init(&sm->req_ctx);
+            sha256_init(&sm->res_ctx);
+            sha256_init(&sm->receipt_ctx);
         }
 
-        if (dfa->state == SM_HEADER) {
-            while (i < len && dfa->state == SM_HEADER) {
-                uint8_t c = buf[i++];
-                if (dfa->header_len < sizeof(dfa->header_buf) - 1)
-                    dfa->header_buf[dfa->header_len++] = (char)c;
-                dfa->window = (dfa->window << 8) | c;
-                /* Detect \r\n\r\n or \n\n end-of-headers */
-                if (dfa->window == 0x0D0A0D0A || (dfa->window & 0xFFFF) == 0x0A0A) {
-                    dfa->header_buf[dfa->header_len] = '\0';
-                    /* Case-fold for header matching */
-                    for (size_t k = 0; k < dfa->header_len; k++)
-                        if (dfa->header_buf[k] >= 'A' && dfa->header_buf[k] <= 'Z')
-                            dfa->header_buf[k] += 32;
-                    if (strstr(dfa->header_buf, "transfer-encoding: chunked"))
-                        dfa->is_chunked = 1;
-                    else {
-                        const char *cl = strstr(dfa->header_buf, "content-length: ");
-                        if (cl) dfa->content_length = strtoull(cl + 16, NULL, 10);
-                    }
-                    if (strstr(dfa->header_buf, "text/event-stream")) dfa->is_sse = 1;
-
-                    sha256_init(&dfa->sha);
-                    dfa->hash_active = 1;
-                    if (dfa->is_chunked) {
-                        dfa->state = SM_CHUNK_HEX;
-                        dfa->chunk_rem = 0;
-                    } else {
-                        dfa->state = SM_BODY_IDENTITY;
-                        if (dfa->content_length == 0) emit_receipt(dfa, fd, dir);
-                    }
+        /* --- States: REQ_HDR / RES_HDR — line-based header parsing --- */
+        if (sm->state == HTTP_REQ_HDR || sm->state == HTTP_RES_HDR) {
+            size_t start = i;
+            while (i < len && data[i] != '\n') i++;
+            if (i < len) {
+                /* Complete line received */
+                size_t cplen = i - start;
+                if (cplen > 0 && data[i-1] == '\r') cplen--;
+                if (sm->line_len + cplen < sizeof(sm->line_buf) - 1) {
+                    memcpy(sm->line_buf + sm->line_len, data + start, cplen);
+                    sm->line_len += cplen;
                 }
-            }
-        } else if (dfa->state == SM_BODY_IDENTITY || dfa->state == SM_CHUNK_DATA) {
-            size_t avail = len - i;
-            size_t take = avail;
-            if (dfa->state == SM_CHUNK_DATA && avail > dfa->chunk_rem)
-                take = (size_t)dfa->chunk_rem;
-            if (dfa->state == SM_BODY_IDENTITY && dfa->content_length > 0
-                && dfa->body_bytes + avail > dfa->content_length)
-                take = (size_t)(dfa->content_length - dfa->body_bytes);
+                sm->line_buf[sm->line_len] = '\0';
 
-            if (dfa->hash_active && take > 0) {
-                if (dfa->is_sse) {
-                    /* SSE: strip "data: " prefix, hash only payload */
-                    for (size_t j = 0; j < take; j++) {
-                        uint8_t c = buf[i + j];
-                        if (c == '\n' || c == '\r') {
-                            dfa->sse_match_idx = 0;
-                        } else if (dfa->sse_match_idx < 6) {
-                            if (c == (uint8_t)"data: "[dfa->sse_match_idx])
-                                dfa->sse_match_idx++;
-                            else dfa->sse_match_idx = 6; /* not a data: line */
-                        } else {
-                            sha256_update(&dfa->sha, &c, 1);
+                if (sm->line_len == 0) {
+                    /* Empty line = end of headers → transition to body */
+                    if (sm->state == HTTP_REQ_HDR) {
+                        sm->state = HTTP_REQ_BODY;
+                        if (!sm->is_chunked && sm->content_length == 0) {
+                            /* No body → separator → wait for response */
+                            sha256_update(&sm->receipt_ctx, (const uint8_t*)"\n", 1);
+                            sm->state = HTTP_WAIT_RES;
+                        }
+                    } else {
+                        sm->state = HTTP_RES_BODY;
+                    }
+                    sm->body_bytes_read = 0;
+                    sm->chunk_rem = 0; sm->in_chunk_ext = 0;
+                } else {
+                    /* Parse header line */
+                    if (sm->state == HTTP_REQ_HDR && sm->method[0] == '\0') {
+                        sscanf(sm->line_buf, "%15s %511s", sm->method, sm->path);
+                        sha256_update(&sm->receipt_ctx, (const uint8_t*)sm->method, strlen(sm->method));
+                        sha256_update(&sm->receipt_ctx, (const uint8_t*)" ", 1);
+                        sha256_update(&sm->receipt_ctx, (const uint8_t*)sm->path, strlen(sm->path));
+                        sha256_update(&sm->receipt_ctx, (const uint8_t*)"\n", 1);
+                    } else if (sm->state == HTTP_RES_HDR && sm->status == 0) {
+                        int maj, min;
+                        sscanf(sm->line_buf, "HTTP/%d.%d %d", &maj, &min, &sm->status);
+                        char stat_str[32]; snprintf(stat_str, sizeof(stat_str), "%d\n", sm->status);
+                        sha256_update(&sm->receipt_ctx, (const uint8_t*)stat_str, strlen(stat_str));
+                    } else {
+                        /* Content-Length / Transfer-Encoding / Content-Type / Model */
+                        if (my_strcasestr(sm->line_buf, "content-length:")) {
+                            const char *v = strchr(sm->line_buf, ':');
+                            if (v) { v++; while(*v == ' ') v++; sm->content_length = strtoull(v, NULL, 10); }
+                        } else if (my_strcasestr(sm->line_buf, "transfer-encoding:") &&
+                                   my_strcasestr(sm->line_buf, "chunked")) {
+                            sm->is_chunked = 1;
+                            sm->content_length = 0; /* RFC 9112: TE takes precedence */
+                        } else if (my_strcasestr(sm->line_buf, "content-type:") &&
+                                   my_strcasestr(sm->line_buf, "text/event-stream")) {
+                            sm->is_sse = 1;
+                        } else if (sm->state == HTTP_RES_HDR && sm->model[0] == '\0') {
+                            if (my_strcasestr(sm->line_buf, "x-model:") ||
+                                my_strcasestr(sm->line_buf, "x-model-id:") ||
+                                my_strcasestr(sm->line_buf, "openai-model:")) {
+                                const char *v = strchr(sm->line_buf, ':');
+                                if (v) { v++; while(*v == ' ') v++;
+                                    strncpy(sm->model, v, sizeof(sm->model)-1);
+                                    sm->model[sizeof(sm->model)-1] = '\0';
+                                }
+                            }
                         }
                     }
-                } else {
-                    sha256_update(&dfa->sha, buf + i, take);
                 }
-                scan_body_anomalies(fd, buf + i, take);
+                sm->line_len = 0;
+                i++; /* skip \n */
+            } else {
+                /* Partial line — accumulate for next buffer */
+                size_t cplen = len - start;
+                if (sm->line_len + cplen < sizeof(sm->line_buf) - 1) {
+                    memcpy(sm->line_buf + sm->line_len, data + start, cplen);
+                    sm->line_len += cplen;
+                }
+                break;
             }
-            dfa->body_bytes += take;
-            if (dfa->state == SM_CHUNK_DATA) dfa->chunk_rem -= take;
-            i += take;
 
-            if (dfa->state == SM_CHUNK_DATA && dfa->chunk_rem == 0)
-                dfa->state = SM_CHUNK_CRLF;
-            else if (dfa->state == SM_BODY_IDENTITY && dfa->content_length > 0
-                     && dfa->body_bytes >= dfa->content_length)
-                emit_receipt(dfa, fd, dir);
-        } else if (dfa->state == SM_CHUNK_HEX) {
-            while (i < len && dfa->state == SM_CHUNK_HEX) {
-                uint8_t c = buf[i++];
-                if (c >= '0' && c <= '9') dfa->chunk_rem = (dfa->chunk_rem << 4) | (c - '0');
-                else if (c >= 'a' && c <= 'f') dfa->chunk_rem = (dfa->chunk_rem << 4) | (c - 'a' + 10);
-                else if (c >= 'A' && c <= 'F') dfa->chunk_rem = (dfa->chunk_rem << 4) | (c - 'A' + 10);
-                else if (c == '\n') {
-                    if (dfa->chunk_rem == 0) emit_receipt(dfa, fd, dir);
-                    else dfa->state = SM_CHUNK_DATA;
-                } else if (c != '\r') {
-                    dfa->state = SM_CHUNK_EXT;
+        /* --- States: REQ_BODY / RES_BODY — payload + chunked --- */
+        } else if (sm->state == HTTP_REQ_BODY || sm->state == HTTP_RES_BODY) {
+            int is_state_req = (sm->state == HTTP_REQ_BODY);
+            if (is_req != is_state_req) break; /* wrong direction */
+
+            if (sm->is_chunked) {
+                /* Chunked: parse hex size → data → CRLF → repeat */
+                if (sm->chunk_rem == 0 && !sm->in_chunk_ext) {
+                    /* Read chunk size line */
+                    size_t start = i;
+                    while (i < len && data[i] != '\n') i++;
+                    if (i < len) {
+                        size_t cplen = i - start;
+                        if (cplen > 0 && data[i-1] == '\r') cplen--;
+                        if (sm->line_len + cplen < sizeof(sm->line_buf) - 1) {
+                            memcpy(sm->line_buf + sm->line_len, data + start, cplen);
+                            sm->line_len += cplen;
+                        }
+                        sm->line_buf[sm->line_len] = '\0';
+                        sm->chunk_rem = strtoull(sm->line_buf, NULL, 16);
+                        sm->line_len = 0;
+                        i++; /* skip \n */
+                        if (sm->chunk_rem == 0) {
+                            /* Final chunk → transition */
+                            if (is_state_req) {
+                                sha256_update(&sm->receipt_ctx, (const uint8_t*)"\n", 1);
+                                sm->state = HTTP_WAIT_RES;
+                            } else {
+                                fsm_emit_receipt(fd);
+                            }
+                            continue;
+                        }
+                    } else {
+                        size_t cplen = len - start;
+                        if (sm->line_len + cplen < sizeof(sm->line_buf) - 1) {
+                            memcpy(sm->line_buf + sm->line_len, data + start, cplen);
+                            sm->line_len += cplen;
+                        }
+                        break;
+                    }
+                } else if (sm->chunk_rem > 0) {
+                    size_t avail = len - i;
+                    size_t take = avail > sm->chunk_rem ? (size_t)sm->chunk_rem : avail;
+                    if (is_state_req) fsm_hash_req(sm, data + i, take);
+                    else { fsm_hash_res(sm, data + i, take); scan_body_anomalies(fd, data + i, take); }
+                    sm->chunk_rem -= take;
+                    i += take;
+                    if (sm->chunk_rem == 0) sm->in_chunk_ext = 1;
+                } else if (sm->in_chunk_ext) {
+                    /* Skip trailing CRLF after chunk data */
+                    if (data[i] == '\n') { i++; sm->in_chunk_ext = 0; }
+                    else i++;
+                }
+            } else {
+                /* Identity body (Content-Length or until close) */
+                size_t avail = len - i;
+                size_t take = avail;
+                if (sm->content_length > 0) {
+                    size_t rem = (size_t)(sm->content_length - sm->body_bytes_read);
+                    if (take > rem) take = rem;
+                }
+                if (is_state_req) fsm_hash_req(sm, data + i, take);
+                else { fsm_hash_res(sm, data + i, take); scan_body_anomalies(fd, data + i, take); }
+                sm->body_bytes_read += take;
+                i += take;
+                if (sm->content_length > 0 && sm->body_bytes_read >= sm->content_length) {
+                    if (is_state_req) {
+                        sha256_update(&sm->receipt_ctx, (const uint8_t*)"\n", 1);
+                        sm->state = HTTP_WAIT_RES;
+                    } else {
+                        fsm_emit_receipt(fd);
+                    }
                 }
             }
-        } else if (dfa->state == SM_CHUNK_EXT) {
-            while (i < len && dfa->state == SM_CHUNK_EXT) {
-                if (buf[i++] == '\n') {
-                    if (dfa->chunk_rem == 0) emit_receipt(dfa, fd, dir);
-                    else dfa->state = SM_CHUNK_DATA;
-                }
-            }
-        } else if (dfa->state == SM_CHUNK_CRLF) {
-            while (i < len && dfa->state == SM_CHUNK_CRLF) {
-                if (buf[i++] == '\n') {
-                    dfa->state = SM_CHUNK_HEX;
-                    dfa->chunk_rem = 0;
-                }
-            }
+
+        /* --- State: WAIT_RES — request done, waiting for response --- */
+        } else if (sm->state == HTTP_WAIT_RES) {
+            if (is_req) break; /* new request while waiting — shouldn't happen on LLM FDs */
+            sm->state = HTTP_RES_HDR;
+            sm->line_len = 0; sm->content_length = 0;
+            sm->body_bytes_read = 0; sm->is_chunked = 0;
+            sm->chunk_rem = 0; sm->in_chunk_ext = 0;
+        } else {
+            break;
         }
     }
 }
@@ -943,15 +1198,9 @@ static int peek_fd(int fd, char *ip_out, int *port_out) {
 
 static void untrack_fd(int fd) {
     claim_fd(fd, NULL, NULL);
-    /* Flush DFA receipts and timing on FD close (from J-Crucible) */
     if (fd >= 0 && fd < MAX_TRACKED_FDS && is_llm_fd(fd)) {
         emit_timing_fingerprint(fd);
-        dfa_lock(fd);
-        if (tx_dfa[fd].hash_active) emit_receipt(&tx_dfa[fd], fd, "https_request_closed");
-        if (rx_dfa[fd].hash_active) emit_receipt(&rx_dfa[fd], fd, "https_response_closed");
-        tx_dfa[fd].state = SM_IDLE; tx_dfa[fd].hash_active = 0;
-        rx_dfa[fd].state = SM_IDLE; rx_dfa[fd].hash_active = 0;
-        dfa_unlock(fd);
+        fsm_flush(fd);
     }
     clear_llm_fd(fd);
 }
@@ -1134,13 +1383,11 @@ int HOOK_NAME(SSL_write)(void *ssl, const void *buf, int num) {
         int fd = get_ssl_fd(ssl);
         if (is_llm_fd(fd)) {
             timing_start_req(fd);
-            /* Feed HTTP DFA: detect new request by method prefix */
+            /* Feed HTTP FSM — request direction */
             if (fd >= 0 && fd < MAX_TRACKED_FDS) {
-                dfa_lock(fd);
-                if (num >= 4 && (!memcmp(buf, "POST", 4) || !memcmp(buf, "GET ", 4) || !memcmp(buf, "PUT ", 4)))
-                    tx_dfa[fd].state = SM_IDLE;
-                dfa_feed(fd, &tx_dfa[fd], (const uint8_t *)buf, (size_t)num, "https_request");
-                dfa_unlock(fd);
+                fsm_lock(fd);
+                fsm_feed(fd, (const uint8_t *)buf, (size_t)num, 1);
+                fsm_unlock(fd);
             }
             /* Data-flow causal DAG: link this write to the read that caused it */
             if (tl_causal_read_seq > 0) {
@@ -1165,13 +1412,11 @@ int HOOK_NAME(SSL_read)(void *ssl, void *buf, int num) {
         int fd = get_ssl_fd(ssl);
         if (is_llm_fd(fd)) {
             timing_add_token(fd, (size_t)rc);
-            /* Feed HTTP DFA: detect new response by HTTP/ prefix */
+            /* Feed HTTP FSM — response direction */
             if (fd >= 0 && fd < MAX_TRACKED_FDS) {
-                dfa_lock(fd);
-                if (rc >= 8 && !memcmp(buf, "HTTP/1.", 7))
-                    rx_dfa[fd].state = SM_IDLE;
-                dfa_feed(fd, &rx_dfa[fd], (const uint8_t *)buf, (size_t)rc, "https_response");
-                dfa_unlock(fd);
+                fsm_lock(fd);
+                fsm_feed(fd, (const uint8_t *)buf, (size_t)rc, 0);
+                fsm_unlock(fd);
             }
         }
         parse_http(fd, "https_response", buf, rc);
@@ -1192,9 +1437,8 @@ static void clawsig_init(void) {
     in_hook = 1;
     for (int i = 0; i < MAX_TRACKED_FDS; i++) {
         tracked_fds[i].fd = -1; fd_last_seq[i] = 0;
-        dfa_locks[i] = 0;
-        tx_dfa[i].state = SM_IDLE; tx_dfa[i].hash_active = 0;
-        rx_dfa[i].state = SM_IDLE; rx_dfa[i].hash_active = 0;
+        http_fsm[i].state = HTTP_IDLE; http_fsm[i].lock = 0;
+        http_fsm[i].method[0] = '\0';
     }
     sha256_init(&global_merkle_ctx);
     memset(current_merkle_hex, '0', 64); current_merkle_hex[64] = '\0';
