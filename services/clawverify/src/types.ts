@@ -12,6 +12,7 @@ export const ENVELOPE_TYPES = [
   'artifact_signature',
   'message_signature',
   'gateway_receipt',
+  'vir_receipt',
   'web_receipt',
   'proof_bundle',
   'event_chain',
@@ -199,6 +200,67 @@ export interface GatewayReceiptPayload {
   metadata?: Record<string, unknown>;
 }
 
+/** VIR observation source strength order: tls_decrypt > gateway > interpose > preload > sni. */
+export type VirSource = 'tls_decrypt' | 'gateway' | 'interpose' | 'preload' | 'sni';
+
+export interface VirTransportAttestation {
+  source?: VirSource;
+  keylog_present?: boolean;
+  cipher_spool_present?: boolean;
+  decrypted_match?: boolean | null;
+}
+
+export interface VirProcessAttestation {
+  harness_attestation_hash?: string | null;
+  harness_recheck_match?: boolean;
+  interpose_active?: boolean;
+}
+
+export interface VirSemanticAttestation {
+  tool_calls_count?: number;
+  side_effect_receipts_count?: number;
+  event_chain_len?: number;
+}
+
+export interface VirSelectiveDisclosure {
+  merkle_root_b64u?: string;
+  leaf_hashes_b64u?: string[];
+  disclosed_leaves?: Record<string, string>;
+  redacted_fields?: string[];
+}
+
+/** Verifiable Inference Receipt payload (vir.v1). */
+export interface VirReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  source: VirSource;
+  provider: string;
+  model: string;
+  model_claimed?: string;
+  model_observed?: string;
+  request_hash_b64u: string;
+  response_hash_b64u: string;
+  tokens_input: number;
+  tokens_output: number;
+  latency_ms: number;
+  agent_did: string;
+  timestamp: string;
+  binding?: ReceiptBinding;
+  transport_attestation?: VirTransportAttestation;
+  process_attestation?: VirProcessAttestation;
+  semantic_attestation?: VirSemanticAttestation;
+  selective_disclosure?: VirSelectiveDisclosure;
+  merkle_disclosure?: {
+    chain_hash: string;
+    event_count: number;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+export type VirReceiptEnvelope = SignedEnvelope<VirReceiptPayload> & {
+  envelope_type: 'vir_receipt';
+};
+
 /**
  * Verification result
  */
@@ -228,6 +290,8 @@ export type VerificationErrorCode =
   | 'MALFORMED_ENVELOPE'
   | 'SCHEMA_VALIDATION_FAILED'
   | 'MISSING_REQUIRED_FIELD'
+  | 'MISSING_NONCE'
+  | 'EVIDENCE_MISMATCH'
   | 'INVALID_DID_FORMAT'
   | 'EXPIRED'
   | 'CLAIM_NOT_FOUND'
@@ -281,7 +345,7 @@ export interface VerifyMessageResponse {
 }
 
 export interface VerifyReceiptRequest {
-  envelope: SignedEnvelope<GatewayReceiptPayload>;
+  envelope: SignedEnvelope<GatewayReceiptPayload | VirReceiptPayload>;
 }
 
 export interface VerifyReceiptResponse {
@@ -878,6 +942,7 @@ export interface ProofBundlePayload {
   urm?: URMReference;
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
+  vir_receipts?: Array<VirReceiptPayload | VirReceiptEnvelope>;
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
 }
@@ -942,12 +1007,20 @@ export interface ProofBundleVerificationResult {
     system_prompt_report_valid?: boolean;
 
     receipts_valid?: boolean;
+    vir_receipts_valid?: boolean;
     attestations_valid?: boolean;
     receipts_count?: number;
+    vir_receipts_count?: number;
+    /** Strongest verified VIR source among this bundle's VIR receipts. */
+    vir_best_source?: VirSource;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */
     receipts_verified_count?: number;
     /** Number of receipts that passed cryptographic signature+hash verification (regardless of binding). */
     receipts_signature_verified_count?: number;
+    /** Number of VIR receipts that passed cryptographic verification AND binding checks (when enforced). */
+    vir_receipts_verified_count?: number;
+    /** Number of VIR receipts that passed cryptographic signature+hash verification (regardless of binding). */
+    vir_receipts_signature_verified_count?: number;
     attestations_count?: number;
     /** Number of attestations that passed cryptographic signature verification (regardless of allowlist/subject binding). */
     attestations_signature_verified_count?: number;

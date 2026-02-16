@@ -171,6 +171,72 @@ export interface SignedEnvelope<T = unknown> {
   issued_at: string;
 }
 
+/** VIR observation source strength order: tls_decrypt > gateway > interpose > preload > sni. */
+export type VirSource = 'tls_decrypt' | 'gateway' | 'interpose' | 'preload' | 'sni';
+
+export interface VirTransportAttestation {
+  source: VirSource;
+  keylog_present?: boolean;
+  cipher_spool_present?: boolean;
+  decrypted_match?: boolean | null;
+}
+
+export interface VirProcessAttestation {
+  harness_attestation_hash?: string | null;
+  harness_recheck_match?: boolean;
+  interpose_active?: boolean;
+}
+
+export interface VirSemanticAttestation {
+  tool_calls_count?: number;
+  side_effect_receipts_count?: number;
+  event_chain_len?: number;
+}
+
+export interface VirSelectiveDisclosure {
+  merkle_root_b64u?: string;
+  leaf_hashes_b64u?: string[];
+  redacted_fields?: string[];
+  disclosed_leaves?: Record<string, string>;
+}
+
+/** Verifiable Inference Receipt (VIR) payload. */
+export interface VirReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  source: VirSource;
+  provider: string;
+  model: string;
+  model_claimed?: string;
+  model_observed?: string;
+  request_hash_b64u: string;
+  response_hash_b64u: string;
+  tokens_input: number;
+  tokens_output: number;
+  latency_ms: number;
+  agent_did: string;
+  timestamp: string;
+  binding?: {
+    run_id?: string;
+    event_hash_b64u?: string;
+    nonce?: string;
+  };
+  transport_attestation?: VirTransportAttestation;
+  process_attestation?: VirProcessAttestation;
+  semantic_attestation?: VirSemanticAttestation;
+  selective_disclosure?: VirSelectiveDisclosure;
+  merkle_disclosure?: {
+    chain_hash: string;
+    event_count: number;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+/** Optional signed VIR envelope representation (future/interop). */
+export type VirReceiptEnvelope = SignedEnvelope<VirReceiptPayload> & {
+  envelope_type: 'vir_receipt';
+};
+
 /** URM reference in proof bundle. */
 export interface URMReference {
   urm_version: '1';
@@ -218,6 +284,7 @@ export interface ProofBundlePayload {
   urm?: URMReference;
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
+  vir_receipts?: Array<VirReceiptPayload | VirReceiptEnvelope>;
   tool_receipts?: ToolReceiptPayload[];
   side_effect_receipts?: SideEffectReceiptPayload[];
   /** Execution receipts from the Sentinel Shell (bash commands). */
@@ -246,6 +313,8 @@ export interface ProofBundlePayload {
       preload_llm_events?: number;
       tls_sni_events?: number;
       tls_sni_receipts?: number;
+      tls_decrypt_receipts?: number;
+      vir_receipts?: number;
       interpose_state?: {
         pid_tree_size?: number;
         bound_ports?: number[];

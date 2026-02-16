@@ -28,6 +28,8 @@ function readJson(relPath) {
 const receiptBinding = readJson('packages/schema/poh/receipt_binding.v1.json');
 const modelIdentity = readJson('packages/schema/poh/model_identity.v1.json');
 const logInclusionProof = readJson('packages/schema/poh/log_inclusion_proof.v1.json');
+const kinematicFingerprint = readJson('packages/schema/poh/kinematic_fingerprint.v1.json');
+const sentinelAnomalyReport = readJson('packages/schema/poh/sentinel_anomaly_report.v1.json');
 
 const derivationAttestation = readJson('packages/schema/poh/derivation_attestation.v1.json');
 const derivationAttestationEnvelope = readJson('packages/schema/poh/derivation_attestation_envelope.v1.json');
@@ -43,6 +45,8 @@ const gatewayReceipt = readJson('packages/schema/poh/gateway_receipt.v1.json');
 const gatewayReceiptEnvelope = readJson('packages/schema/poh/gateway_receipt_envelope.v1.json');
 const webReceipt = readJson('packages/schema/poh/web_receipt.v1.json');
 const webReceiptEnvelope = readJson('packages/schema/poh/web_receipt_envelope.v1.json');
+const vir = readJson('packages/schema/poh/vir.v1.json');
+const virEnvelope = readJson('packages/schema/poh/vir_envelope.v1.json');
 const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
 const proofBundleEnvelope = readJson('packages/schema/poh/proof_bundle_envelope.v1.json');
 const urm = readJson('packages/schema/poh/urm.v1.json');
@@ -68,12 +72,16 @@ addFormats(ajv);
 ajv.addSchema(receiptBinding);
 ajv.addSchema(modelIdentity);
 ajv.addSchema(logInclusionProof);
+ajv.addSchema(kinematicFingerprint);
+ajv.addSchema(sentinelAnomalyReport);
 
 // Add payload + envelope schemas.
 ajv.addSchema(gatewayReceipt);
 ajv.addSchema(gatewayReceiptEnvelope);
 ajv.addSchema(webReceipt);
 ajv.addSchema(webReceiptEnvelope);
+ajv.addSchema(vir);
+ajv.addSchema(virEnvelope);
 ajv.addSchema(proofBundle);
 ajv.addSchema(proofBundleEnvelope);
 
@@ -100,6 +108,8 @@ const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
   validateWebReceiptEnvelopeV1: webReceiptEnvelope.$id,
+  validateVirV1: vir.$id,
+  validateVirEnvelopeV1: virEnvelope.$id,
   validateExecutionAttestationEnvelopeV1: executionAttestationEnvelope.$id,
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,

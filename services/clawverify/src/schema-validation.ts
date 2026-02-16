@@ -13,6 +13,8 @@ import {
   validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
   validateWebReceiptEnvelopeV1 as validateWebReceiptEnvelopeV1Generated,
+  validateVirV1 as validateVirV1Generated,
+  validateVirEnvelopeV1 as validateVirEnvelopeV1Generated,
   validateExecutionAttestationEnvelopeV1 as validateExecutionAttestationEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
@@ -48,6 +50,11 @@ const validateGatewayReceiptEnvelopeV1Fn =
 
 const validateWebReceiptEnvelopeV1Fn =
   validateWebReceiptEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateVirV1Fn = validateVirV1Generated as StandaloneValidateFunction;
+
+const validateVirEnvelopeV1Fn =
+  validateVirEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateExecutionAttestationEnvelopeV1Fn =
   validateExecutionAttestationEnvelopeV1Generated as StandaloneValidateFunction;
@@ -224,6 +231,16 @@ export function validateWebReceiptEnvelopeV1(
     envelope,
     'web_receipt_envelope.v1'
   );
+}
+
+export function validateVirV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateVirV1Fn, value, 'vir.v1');
+}
+
+export function validateVirEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(validateVirEnvelopeV1Fn, envelope, 'vir_envelope.v1');
 }
 
 export function validateExecutionAttestationEnvelopeV1(

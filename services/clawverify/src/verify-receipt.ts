@@ -6,6 +6,7 @@
 import type {
   SignedEnvelope,
   GatewayReceiptPayload,
+  VirReceiptPayload,
   ModelIdentityTier,
   VerificationResult,
   VerificationError,
@@ -25,7 +26,10 @@ import {
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
-import { validateGatewayReceiptEnvelopeV1 } from './schema-validation';
+import {
+  validateGatewayReceiptEnvelopeV1,
+  validateVirEnvelopeV1,
+} from './schema-validation';
 import { verifyModelIdentityFromReceiptPayload } from './model-identity';
 
 export interface ReceiptVerifierOptions {
@@ -34,6 +38,12 @@ export interface ReceiptVerifierOptions {
    * Fail-closed: if empty or missing, receipts are treated as INVALID.
    */
   allowlistedSignerDids?: readonly string[];
+
+  /**
+   * Require nonce binding for VIR receipts.
+   * Useful for bounty/job non-transferability policy checks.
+   */
+  requiresJobBinding?: boolean;
 }
 
 // CVF-US-025: Receipt numeric hardening (finite numbers + reasonable upper bounds)
@@ -46,7 +56,7 @@ const MAX_RECEIPT_LATENCY_MS = 60 * 60 * 1000; // 1 hour
  */
 function validateEnvelopeStructure(
   envelope: unknown
-): envelope is SignedEnvelope<GatewayReceiptPayload> {
+): envelope is SignedEnvelope<GatewayReceiptPayload | VirReceiptPayload> {
   if (typeof envelope !== 'object' || envelope === null) {
     return false;
   }
@@ -128,6 +138,78 @@ function validateReceiptPayload(
 }
 
 /**
+ * Validate VIR payload structure.
+ */
+function validateVirPayload(payload: unknown): payload is VirReceiptPayload {
+  if (typeof payload !== 'object' || payload === null) {
+    return false;
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  if (p.receipt_version !== '1') return false;
+  if (typeof p.receipt_id !== 'string' || p.receipt_id.length === 0) return false;
+  if (
+    p.source !== 'tls_decrypt' &&
+    p.source !== 'gateway' &&
+    p.source !== 'interpose' &&
+    p.source !== 'preload' &&
+    p.source !== 'sni'
+  ) {
+    return false;
+  }
+  if (typeof p.provider !== 'string' || p.provider.length === 0) return false;
+  if (typeof p.model !== 'string' || p.model.length === 0) return false;
+  if (typeof p.request_hash_b64u !== 'string' || p.request_hash_b64u.length === 0) return false;
+  if (typeof p.response_hash_b64u !== 'string' || p.response_hash_b64u.length === 0) return false;
+
+  if (
+    typeof p.tokens_input !== 'number' ||
+    !Number.isFinite(p.tokens_input) ||
+    p.tokens_input < 0 ||
+    p.tokens_input > MAX_RECEIPT_TOKENS
+  ) {
+    return false;
+  }
+
+  if (
+    typeof p.tokens_output !== 'number' ||
+    !Number.isFinite(p.tokens_output) ||
+    p.tokens_output < 0 ||
+    p.tokens_output > MAX_RECEIPT_TOKENS
+  ) {
+    return false;
+  }
+
+  if (
+    typeof p.latency_ms !== 'number' ||
+    !Number.isFinite(p.latency_ms) ||
+    p.latency_ms < 0 ||
+    p.latency_ms > MAX_RECEIPT_LATENCY_MS
+  ) {
+    return false;
+  }
+
+  if (typeof p.agent_did !== 'string' || !isValidDidFormat(p.agent_did)) return false;
+  if (!isValidIsoDate(p.timestamp)) return false;
+
+  const modelClaimed = p.model_claimed;
+  const modelObserved = p.model_observed;
+  if (
+    p.source === 'tls_decrypt' &&
+    typeof modelClaimed === 'string' &&
+    typeof modelObserved === 'string' &&
+    modelClaimed.length > 0 &&
+    modelObserved.length > 0 &&
+    modelClaimed !== modelObserved
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Verify a gateway receipt signature envelope
  *
  * Acceptance Criteria:
@@ -181,7 +263,7 @@ export async function verifyReceipt(
   }
 
   // 3. Fail-closed: reject unknown envelope type
-  if (!isAllowedType(envelope.envelope_type)) {
+  if (!isAllowedType(envelope.envelope_type) && envelope.envelope_type !== 'vir_receipt') {
     return {
       result: {
         status: 'INVALID',
@@ -196,17 +278,17 @@ export async function verifyReceipt(
     };
   }
 
-  // 4. Verify this is a gateway_receipt envelope
-  if (envelope.envelope_type !== 'gateway_receipt') {
+  // 4. Verify this is a gateway_receipt or vir_receipt envelope
+  if (envelope.envelope_type !== 'gateway_receipt' && envelope.envelope_type !== 'vir_receipt') {
     return {
       result: {
         status: 'INVALID',
-        reason: `Expected gateway_receipt envelope, got: ${envelope.envelope_type}`,
+        reason: `Expected gateway_receipt or vir_receipt envelope, got: ${envelope.envelope_type}`,
         verified_at: now,
       },
       error: {
         code: 'UNKNOWN_ENVELOPE_TYPE',
-        message: 'This endpoint only accepts gateway_receipt envelopes',
+        message: 'This endpoint only accepts gateway_receipt or vir_receipt envelopes',
         field: 'envelope_type',
       },
     };
@@ -246,7 +328,10 @@ export async function verifyReceipt(
 
   // 6.5 Strict JSON schema validation (Ajv) for envelope + payload
   // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
-  const schemaResult = validateGatewayReceiptEnvelopeV1(envelope);
+  const schemaResult = envelope.envelope_type === 'gateway_receipt'
+    ? validateGatewayReceiptEnvelopeV1(envelope)
+    : validateVirEnvelopeV1(envelope);
+
   if (!schemaResult.valid) {
     return {
       result: {
@@ -281,40 +366,42 @@ export async function verifyReceipt(
     };
   }
 
-  // 7.5 Fail-closed: require allowlisted gateway signer DID(s)
-  if (!options.allowlistedSignerDids || options.allowlistedSignerDids.length === 0) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Gateway receipt signer allowlist not configured',
-        envelope_type: envelope.envelope_type,
-        signer_did: envelope.signer_did,
-        verified_at: now,
-      },
-      error: {
-        code: 'DEPENDENCY_NOT_CONFIGURED',
-        message:
-          'Gateway receipt signer allowlist is not configured. Set GATEWAY_RECEIPT_SIGNER_DIDS to enable receipt verification.',
-        field: 'env.GATEWAY_RECEIPT_SIGNER_DIDS',
-      },
-    };
-  }
+  // 7.5 Fail-closed: require allowlisted signer DIDs for gateway_receipt only.
+  if (envelope.envelope_type === 'gateway_receipt') {
+    if (!options.allowlistedSignerDids || options.allowlistedSignerDids.length === 0) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Gateway receipt signer allowlist not configured',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        error: {
+          code: 'DEPENDENCY_NOT_CONFIGURED',
+          message:
+            'Gateway receipt signer allowlist is not configured. Set GATEWAY_RECEIPT_SIGNER_DIDS to enable receipt verification.',
+          field: 'env.GATEWAY_RECEIPT_SIGNER_DIDS',
+        },
+      };
+    }
 
-  if (!options.allowlistedSignerDids.includes(envelope.signer_did)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Receipt signer DID is not allowlisted',
-        envelope_type: envelope.envelope_type,
-        signer_did: envelope.signer_did,
-        verified_at: now,
-      },
-      error: {
-        code: 'CLAIM_NOT_FOUND',
-        message: `Signer DID '${envelope.signer_did}' is not in the allowlisted gateway signer list`,
-        field: 'signer_did',
-      },
-    };
+    if (!options.allowlistedSignerDids.includes(envelope.signer_did)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Receipt signer DID is not allowlisted',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        error: {
+          code: 'CLAIM_NOT_FOUND',
+          message: `Signer DID '${envelope.signer_did}' is not in the allowlisted gateway signer list`,
+          field: 'signer_did',
+        },
+      };
+    }
   }
 
   // 8. Validate issued_at format
@@ -365,20 +452,77 @@ export async function verifyReceipt(
   }
 
   // 10. Validate receipt payload structure
-  if (!validateReceiptPayload(envelope.payload)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Invalid receipt payload structure',
-        verified_at: now,
-      },
-      error: {
-        code: 'MALFORMED_ENVELOPE',
-        message:
-          'Receipt payload is missing required fields or has invalid types',
-        field: 'payload',
-      },
-    };
+  if (envelope.envelope_type === 'gateway_receipt') {
+    if (!validateReceiptPayload(envelope.payload)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Invalid receipt payload structure',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message:
+            'Receipt payload is missing required fields or has invalid types',
+          field: 'payload',
+        },
+      };
+    }
+  } else {
+    if (!validateVirPayload(envelope.payload)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Invalid VIR payload structure',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'VIR payload is missing required fields or has invalid types',
+          field: 'payload',
+        },
+      };
+    }
+
+    const virPayload = envelope.payload as VirReceiptPayload;
+    const decryptedMatch = virPayload.transport_attestation?.decrypted_match;
+    if (
+      virPayload.source === 'tls_decrypt' &&
+      decryptedMatch !== undefined &&
+      decryptedMatch !== null &&
+      decryptedMatch !== true
+    ) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'VIR evidence mismatch for tls_decrypt source',
+          verified_at: now,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: 'transport_attestation.decrypted_match must be true for tls_decrypt VIR receipts',
+          field: 'payload.transport_attestation.decrypted_match',
+        },
+      };
+    }
+
+    if (options.requiresJobBinding) {
+      const nonce = virPayload.binding?.nonce;
+      if (typeof nonce !== 'string' || nonce.trim().length === 0) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Missing VIR binding nonce required by policy',
+            verified_at: now,
+          },
+          error: {
+            code: 'MISSING_NONCE',
+            message: 'binding.nonce is required for VIR receipts under current policy',
+            field: 'payload.binding.nonce',
+          },
+        };
+      }
+    }
   }
 
   // 11. Recompute hash and verify it matches
@@ -478,27 +622,37 @@ export async function verifyReceipt(
   let modelIdentityTier: ModelIdentityTier = 'unknown';
   let modelIdentityRiskFlags: string[] = ['MODEL_IDENTITY_VERIFY_FAILED'];
 
-  try {
-    const modelIdentity = await verifyModelIdentityFromReceiptPayload(
-      envelope.payload
-    );
-    modelIdentityTier = modelIdentity.tier;
-    modelIdentityRiskFlags = modelIdentity.risk_flags;
-  } catch {
-    // Fail closed on the model identity axis only; do not break receipt verification.
+  if (envelope.envelope_type === 'gateway_receipt') {
+    try {
+      const modelIdentity = await verifyModelIdentityFromReceiptPayload(
+        envelope.payload as GatewayReceiptPayload
+      );
+      modelIdentityTier = modelIdentity.tier;
+      modelIdentityRiskFlags = modelIdentity.risk_flags;
+    } catch {
+      // Fail closed on the model identity axis only; do not break receipt verification.
+    }
   }
+
+  const payload = envelope.payload as GatewayReceiptPayload | VirReceiptPayload;
 
   return {
     result: {
       status: 'VALID',
-      reason: 'Gateway receipt verified successfully',
+      reason: envelope.envelope_type === 'vir_receipt'
+        ? 'VIR receipt verified successfully'
+        : 'Gateway receipt verified successfully',
       envelope_type: envelope.envelope_type,
       signer_did: envelope.signer_did,
       verified_at: now,
     },
-    provider: envelope.payload.provider,
-    model: envelope.payload.model,
-    gateway_id: envelope.payload.gateway_id,
+    provider: payload.provider,
+    model: envelope.envelope_type === 'vir_receipt'
+      ? (payload as VirReceiptPayload).model_observed ?? payload.model
+      : payload.model,
+    gateway_id: envelope.envelope_type === 'vir_receipt'
+      ? (payload as VirReceiptPayload).receipt_id
+      : (payload as GatewayReceiptPayload).gateway_id,
     model_identity_tier: modelIdentityTier,
     risk_flags: modelIdentityRiskFlags,
   };

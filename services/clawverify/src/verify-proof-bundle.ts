@@ -27,6 +27,9 @@ import type {
   URMReference,
   AttestationReference,
   GatewayReceiptPayload,
+  VirReceiptPayload,
+  VirReceiptEnvelope,
+  VirSource,
 } from './types';
 import {
   isAllowedVersion,
@@ -40,6 +43,7 @@ import {
 import {
   computeHash,
   base64UrlDecode,
+  base64UrlEncode,
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto';
@@ -51,6 +55,8 @@ import {
   validateUrmV1,
   validatePromptPackV1,
   validateSystemPromptReportV1,
+  validateVirV1,
+  validateVirEnvelopeV1,
 } from './schema-validation';
 
 export interface ProofBundleVerifierOptions {
@@ -147,9 +153,11 @@ function validateBundlePayload(
   const hasEventChain = Array.isArray(p.event_chain) && p.event_chain.length > 0;
   const hasReceipts = Array.isArray(p.receipts) && p.receipts.length > 0;
   const hasAttestations = Array.isArray(p.attestations) && p.attestations.length > 0;
+  const virReceipts = p.vir_receipts;
+  const hasVirReceipts = Array.isArray(virReceipts) && virReceipts.length > 0;
 
-  if (!hasUrm && !hasEventChain && !hasReceipts && !hasAttestations) {
-    return { valid: false, error: 'At least one of urm, event_chain, receipts, or attestations is required' };
+  if (!hasUrm && !hasEventChain && !hasReceipts && !hasAttestations && !hasVirReceipts) {
+    return { valid: false, error: 'At least one of urm, event_chain, receipts, attestations, or vir_receipts is required' };
   }
 
   return { valid: true };
@@ -614,6 +622,332 @@ async function verifyReceiptEnvelope(
   };
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asVirSource(value: unknown): VirSource | null {
+  if (
+    value === 'tls_decrypt' ||
+    value === 'gateway' ||
+    value === 'interpose' ||
+    value === 'preload' ||
+    value === 'sni'
+  ) {
+    return value;
+  }
+  return null;
+}
+
+async function sha256Utf8B64u(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+interface ParsedVirReceipt {
+  payload: VirReceiptPayload;
+  envelope?: VirReceiptEnvelope;
+}
+
+function parseVirReceiptEntry(entry: unknown):
+  | { ok: true; parsed: ParsedVirReceipt }
+  | { ok: false; error: string } {
+  const record = isObjectRecord(entry) ? entry : null;
+  if (!record) {
+    return { ok: false, error: 'Malformed VIR receipt entry' };
+  }
+
+  if (record.envelope_type === 'vir_receipt') {
+    const envelopeValidation = validateVirEnvelopeV1(record);
+    if (!envelopeValidation.valid) {
+      return { ok: false, error: envelopeValidation.message };
+    }
+
+    const envelope = record as unknown as VirReceiptEnvelope;
+    const payloadValidation = validateVirV1(envelope.payload);
+    if (!payloadValidation.valid) {
+      return { ok: false, error: payloadValidation.message };
+    }
+
+    return {
+      ok: true,
+      parsed: {
+        payload: envelope.payload,
+        envelope,
+      },
+    };
+  }
+
+  const payloadValidation = validateVirV1(record);
+  if (!payloadValidation.valid) {
+    return { ok: false, error: payloadValidation.message };
+  }
+
+  return {
+    ok: true,
+    parsed: {
+      payload: record as unknown as VirReceiptPayload,
+    },
+  };
+}
+
+async function verifyVirReceiptEntry(
+  entry: unknown,
+  bindingContext: ReceiptBindingContext | null,
+  expectedBountyNonce: string | null,
+): Promise<{
+  valid: boolean;
+  signature_valid: boolean;
+  binding_valid: boolean;
+  source?: VirSource;
+  receipt_id?: string;
+  error?: string;
+}> {
+  const parsed = parseVirReceiptEntry(entry);
+  if (!parsed.ok) {
+    return {
+      valid: false,
+      signature_valid: false,
+      binding_valid: false,
+      error: parsed.error,
+    };
+  }
+
+  const { payload, envelope } = parsed.parsed;
+  const source = asVirSource(payload.source) ?? undefined;
+
+  let signatureValid = false;
+  if (envelope) {
+    let computedHash: string;
+    try {
+      computedHash = await computeHash(envelope.payload, envelope.hash_algorithm);
+    } catch {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR hash computation failed',
+      };
+    }
+
+    if (computedHash !== envelope.payload_hash_b64u) {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR payload hash mismatch',
+      };
+    }
+
+    const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
+    if (!publicKeyBytes) {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'Invalid VIR signer DID',
+      };
+    }
+
+    try {
+      const signatureBytes = base64UrlDecode(envelope.signature_b64u);
+      const messageBytes = new TextEncoder().encode(envelope.payload_hash_b64u);
+      signatureValid = await verifySignature(
+        envelope.algorithm,
+        publicKeyBytes,
+        signatureBytes,
+        messageBytes,
+      );
+    } catch {
+      signatureValid = false;
+    }
+
+    if (!signatureValid) {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR signature verification failed',
+      };
+    }
+
+    if (envelope.signer_did !== payload.agent_did) {
+      return {
+        valid: false,
+        signature_valid: true,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR signer_did does not match payload.agent_did',
+      };
+    }
+  }
+
+  if (source === 'tls_decrypt') {
+    const claimed = payload.model_claimed;
+    const observed = payload.model_observed;
+    if (
+      typeof claimed === 'string' &&
+      claimed.length > 0 &&
+      typeof observed === 'string' &&
+      observed.length > 0 &&
+      claimed !== observed
+    ) {
+      return {
+        valid: false,
+        signature_valid: signatureValid,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR model_claimed/model_observed mismatch for tls_decrypt source',
+      };
+    }
+
+    const decryptedMatch = payload.transport_attestation?.decrypted_match;
+    if (decryptedMatch !== undefined && decryptedMatch !== null && decryptedMatch !== true) {
+      return {
+        valid: false,
+        signature_valid: signatureValid,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR transport_attestation.decrypted_match must be true for tls_decrypt source',
+      };
+    }
+  }
+
+  if (
+    payload.transport_attestation?.source !== undefined &&
+    payload.transport_attestation.source !== payload.source
+  ) {
+    return {
+      valid: false,
+      signature_valid: signatureValid,
+      binding_valid: false,
+      source,
+      receipt_id: payload.receipt_id,
+      error: 'VIR transport_attestation.source does not match payload.source',
+    };
+  }
+
+  const disclosed = payload.selective_disclosure;
+  if (disclosed?.merkle_root_b64u) {
+    let leafHashes: string[] = [];
+
+    if (Array.isArray(disclosed.leaf_hashes_b64u) && disclosed.leaf_hashes_b64u.length > 0) {
+      leafHashes = disclosed.leaf_hashes_b64u.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    } else if (isObjectRecord(disclosed.disclosed_leaves)) {
+      leafHashes = Object.keys(disclosed.disclosed_leaves)
+        .sort()
+        .map((k) => disclosed.disclosed_leaves?.[k])
+        .filter((v): v is string => typeof v === 'string' && v.length > 0);
+    }
+
+    if (leafHashes.length > 0) {
+      const expectedRoot = await sha256Utf8B64u(leafHashes.join('|'));
+      if (expectedRoot !== disclosed.merkle_root_b64u) {
+        return {
+          valid: false,
+          signature_valid: signatureValid,
+          binding_valid: false,
+          source,
+          receipt_id: payload.receipt_id,
+          error: 'VIR selective_disclosure merkle_root mismatch',
+        };
+      }
+    }
+  }
+
+  if (expectedBountyNonce !== null) {
+    const nonce = payload.binding?.nonce;
+    if (nonce !== expectedBountyNonce) {
+      return {
+        valid: false,
+        signature_valid: signatureValid,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR binding.nonce does not match payload.metadata.bounty_nonce',
+      };
+    }
+  }
+
+  if (!bindingContext) {
+    return {
+      valid: false,
+      signature_valid: signatureValid,
+      binding_valid: false,
+      source,
+      receipt_id: payload.receipt_id,
+      error: 'VIR binding cannot be verified: proof bundle event_chain is missing or invalid',
+    };
+  }
+
+  const runId = payload.binding?.run_id;
+  if (typeof runId !== 'string' || runId.trim().length === 0) {
+    return {
+      valid: false,
+      signature_valid: signatureValid,
+      binding_valid: false,
+      source,
+      receipt_id: payload.receipt_id,
+      error: 'VIR binding.run_id is missing or invalid',
+    };
+  }
+
+  if (runId !== bindingContext.expectedRunId) {
+    return {
+      valid: false,
+      signature_valid: signatureValid,
+      binding_valid: false,
+      source,
+      receipt_id: payload.receipt_id,
+      error: 'VIR binding.run_id does not match proof bundle run_id',
+    };
+  }
+
+  const eventHash = payload.binding?.event_hash_b64u;
+  if (typeof eventHash === 'string' && eventHash.length > 0) {
+    if (!isValidBase64Url(eventHash) || eventHash.length < 8) {
+      return {
+        valid: false,
+        signature_valid: signatureValid,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR binding.event_hash_b64u is invalid',
+      };
+    }
+    if (!bindingContext.allowedEventHashes.has(eventHash)) {
+      return {
+        valid: false,
+        signature_valid: signatureValid,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR binding.event_hash_b64u does not reference an event in the proof bundle event chain',
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    signature_valid: signatureValid,
+    binding_valid: true,
+    source,
+    receipt_id: payload.receipt_id,
+  };
+}
+
 /**
  * Compute trust tier based on validated components
  *
@@ -629,6 +963,7 @@ function computeTrustTier(components: {
   urm_valid?: boolean;
   event_chain_valid?: boolean;
   receipts_valid?: boolean;
+  vir_receipts_valid?: boolean;
   attestations_valid?: boolean;
 }): TrustTier {
   if (!components.envelope_valid) {
@@ -639,7 +974,7 @@ function computeTrustTier(components: {
   if (
     components.urm_valid &&
     components.event_chain_valid &&
-    components.receipts_valid &&
+    (components.receipts_valid || components.vir_receipts_valid) &&
     components.attestations_valid
   ) {
     return 'full';
@@ -651,7 +986,7 @@ function computeTrustTier(components: {
   }
 
   // Verified: has valid event chain or receipts
-  if (components.event_chain_valid || components.receipts_valid) {
+  if (components.event_chain_valid || components.receipts_valid || components.vir_receipts_valid) {
     return 'verified';
   }
 
@@ -668,6 +1003,8 @@ function computeTrustTier(components: {
 function computeProofTier(components: {
   envelope_valid: boolean;
   receipts_verified_count?: number;
+  vir_receipts_verified_count?: number;
+  vir_best_source?: VirSource;
   attestations_verified_count?: number;
 }): ProofTier {
   if (!components.envelope_valid) return 'unknown';
@@ -676,6 +1013,16 @@ function computeProofTier(components: {
   // not on the all-or-nothing `*_valid` booleans.
   if ((components.attestations_verified_count ?? 0) > 0) return 'sandbox';
   if ((components.receipts_verified_count ?? 0) > 0) return 'gateway';
+
+  if ((components.vir_receipts_verified_count ?? 0) > 0) {
+    if (
+      components.vir_best_source === 'tls_decrypt' ||
+      components.vir_best_source === 'gateway' ||
+      components.vir_best_source === 'interpose'
+    ) {
+      return 'gateway';
+    }
+  }
 
   return 'self';
 }
@@ -937,6 +1284,21 @@ export async function verifyProofBundle(
     };
   }
 
+  if (p.vir_receipts && p.vir_receipts.length > MAX_RECEIPTS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `vir_receipts exceeds max length (${MAX_RECEIPTS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.vir_receipts length exceeds limit (${MAX_RECEIPTS})`,
+        field: 'payload.vir_receipts',
+      },
+    };
+  }
+
   if (p.attestations && p.attestations.length > MAX_ATTESTATIONS) {
     return {
       result: {
@@ -1045,6 +1407,53 @@ export async function verifyProofBundle(
         };
       }
       seenReceiptIds.add(rid);
+    }
+  }
+
+  if (p.vir_receipts) {
+    const seenVirIds = new Set<string>();
+    for (let i = 0; i < p.vir_receipts.length; i++) {
+      const entry = p.vir_receipts[i];
+      const record = isObjectRecord(entry) ? entry : null;
+      const payloadRecord = record && isObjectRecord(record.payload) ? record.payload : null;
+      const rid =
+        (record && typeof record.receipt_id === 'string' && record.receipt_id.length > 0
+          ? record.receipt_id
+          : undefined) ??
+        (payloadRecord && typeof payloadRecord.receipt_id === 'string' && payloadRecord.receipt_id.length > 0
+          ? payloadRecord.receipt_id
+          : undefined);
+
+      if (!rid) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'VIR receipt_id missing in payload.vir_receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be present for each payload.vir_receipts entry',
+            field: `payload.vir_receipts[${i}]`,
+          },
+        };
+      }
+
+      if (seenVirIds.has(rid)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate receipt_id in payload.vir_receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be unique within payload.vir_receipts',
+            field: `payload.vir_receipts[${i}]`,
+          },
+        };
+      }
+      seenVirIds.add(rid);
     }
   }
 
@@ -1173,7 +1582,7 @@ export async function verifyProofBundle(
 
   // 15. Validate individual components
   const payload = envelope.payload;
-  const componentResults: ProofBundleVerificationResult['component_results'] = {
+  const componentResults: NonNullable<ProofBundleVerificationResult['component_results']> = {
     envelope_valid: true,
   };
 
@@ -1646,24 +2055,71 @@ export async function verifyProofBundle(
     }
   }
 
-  // Verify receipt envelopes cryptographically (POH-US-003)
+  // POH-US-010: Build binding context from event chain for replay-safe receipt checks.
+  const bindingContext =
+    componentResults.event_chain_valid &&
+    payload.event_chain !== undefined &&
+    payload.event_chain.length > 0
+      ? {
+          expectedRunId: payload.event_chain[0].run_id,
+          allowedEventHashes: new Set(
+            payload.event_chain.map((e) => e.event_hash_b64u)
+          ),
+        }
+      : null;
+
+  const expectedBountyNonce =
+    isObjectRecord(payload.metadata) && typeof payload.metadata.bounty_nonce === 'string'
+      ? payload.metadata.bounty_nonce
+      : null;
+
+  // Verify VIR receipts (R43 evidence-fusion path).
+  if (payload.vir_receipts !== undefined && payload.vir_receipts.length > 0) {
+    const virResults = await Promise.all(
+      payload.vir_receipts.map((r) =>
+        verifyVirReceiptEntry(r, bindingContext, expectedBountyNonce)
+      )
+    );
+
+    const signatureValidCount = virResults.filter((r) => r.signature_valid).length;
+    const verifiedCount = virResults.filter((r) => r.valid).length;
+
+    componentResults.vir_receipts_count = payload.vir_receipts.length;
+    componentResults.vir_receipts_signature_verified_count = signatureValidCount;
+    componentResults.vir_receipts_verified_count = verifiedCount;
+    componentResults.vir_receipts_valid = verifiedCount === payload.vir_receipts.length;
+
+    const sourcePriority: Record<VirSource, number> = {
+      tls_decrypt: 5,
+      gateway: 4,
+      interpose: 3,
+      preload: 2,
+      sni: 1,
+    };
+
+    let bestSource: VirSource | undefined;
+    let bestScore = 0;
+    for (const result of virResults) {
+      if (!result.valid || !result.source) continue;
+      const score = sourcePriority[result.source];
+      if (score > bestScore) {
+        bestScore = score;
+        bestSource = result.source;
+      }
+    }
+    if (bestSource) {
+      componentResults.vir_best_source = bestSource;
+    }
+
+    if (virResults.some((r) => !r.valid)) {
+      modelIdentityRiskFlags.add('VIR_VERIFY_PARTIAL_FAILURE');
+    }
+  }
+
+  // Verify gateway receipt envelopes cryptographically (POH-US-003)
   // Each receipt is verified with its signer DID (clawproxy DID) using full
   // signature verification — not just structural validation.
   if (payload.receipts !== undefined && payload.receipts.length > 0) {
-    // POH-US-010: Require receipts to be bound to this bundle's event chain.
-    // Without binding, a signature-valid receipt could be replayed across bundles.
-    const bindingContext =
-      componentResults.event_chain_valid &&
-      payload.event_chain !== undefined &&
-      payload.event_chain.length > 0
-        ? {
-            expectedRunId: payload.event_chain[0].run_id,
-            allowedEventHashes: new Set(
-              payload.event_chain.map((e) => e.event_hash_b64u)
-            ),
-          }
-        : null;
-
     const receiptResults = await Promise.all(
       payload.receipts.map((r) =>
         verifyReceiptEnvelope(

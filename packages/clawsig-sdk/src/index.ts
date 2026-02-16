@@ -90,6 +90,9 @@ export type {
   URMDocument,
   EventChainEntry,
   GatewayReceiptPayload,
+  VirSource,
+  VirReceiptPayload,
+  VirReceiptEnvelope,
   ToolReceiptPayload,
   SideEffectReceiptPayload,
   ExecutionReceiptPayload,
@@ -125,3 +128,8 @@ export type {
   LocalPolicyStatement,
   CausalSieveOptions,
 } from './causal-sieve.js';
+
+// TLS Offline Decryptor
+export { decryptTraffic } from './tls-decrypt.js';
+export type { DecryptedConnection, DecryptedRequest, DecryptResult } from './tls-decrypt.js';
+

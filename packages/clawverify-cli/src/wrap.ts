@@ -12,7 +12,7 @@ import { spawn, execFile, type ChildProcess } from 'node:child_process';
 import { readFile, writeFile, mkdir, unlink, copyFile, chmod, stat } from 'node:fs/promises';
 import { openSync, readSync, closeSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -26,6 +26,7 @@ import {
   analyzeCommand,
   compilePolicyToBash,
   InterposeState,
+  sha256B64u,
 } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
@@ -34,6 +35,9 @@ import type {
   NetworkReceiptPayload,
   LocalPolicy,
   CommandAnalysis,
+  VirSource,
+  VirReceiptPayload,
+  VirReceiptEnvelope,
 } from '@clawbureau/clawsig-sdk';
 
 const execFileAsync = promisify(execFile);
@@ -157,12 +161,15 @@ export async function wrap(
   // clawproxy CST tokens. Gateway receipts are only available when an explicit
   // provider API key is configured for clawproxy routing.
   const usePassthrough = !process.env['CLAWSIG_USE_CLAWPROXY'];
+  const configuredClawproxyUrl = process.env['CLAWSIG_CLAWPROXY_URL']?.trim();
+
   const proxy = await startLocalProxy({
     agentDid,
     runId,
     policy,
     cwd: process.cwd(),
     passthrough: usePassthrough,
+    ...(configuredClawproxyUrl ? { clawproxyUrl: configuredClawproxyUrl } : {}),
     onViolation: (v) => {
       process.stderr.write(
         `\x1b[31m[clawsig:guillotine]\x1b[0m VIOLATION: ${v.reason}\n`,
@@ -173,23 +180,33 @@ export async function wrap(
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Causal Sieve: ACTIVE (tool observability enabled)\n`);
   if (usePassthrough) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
+  } else if (configuredClawproxyUrl) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: clawproxy (${configuredClawproxyUrl})\n`);
   }
 
   // 4b. Build and resolve the interposition library (Layer 6)
-  const interposeLib = await resolveInterposeLibrary(tmpDir);
+  const disableInterpose = process.env['CLAWSIG_DISABLE_INTERPOSE'] === '1';
+  const interposeLib = disableInterpose ? null : await resolveInterposeLibrary(tmpDir);
   if (interposeLib) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ACTIVE (${interposeLib.mechanism})\n`);
   } else {
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (${isWindows ? 'Windows gracefully bypassed' : 'no C compiler or cached lib'})\n`);
+    const reason = disableInterpose
+      ? 'disabled by CLAWSIG_DISABLE_INTERPOSE=1'
+      : (isWindows ? 'Windows gracefully bypassed' : 'no C compiler or cached lib');
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (${reason})\n`);
   }
 
   // 5. Spawn child process with env overrides
+  const commandName = basename(command).toLowerCase();
+  const forceBaseUrlOverride = process.env['CLAWSIG_FORCE_BASE_URL_OVERRIDE'] === '1';
+  const disableBaseUrlOverride = commandName === 'codex' && !forceBaseUrlOverride;
+
+  const bountyNonce = process.env['CLAWSIG_BOUNTY_NONCE'];
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
-    OPENAI_BASE_URL: `http://127.0.0.1:${proxy.port}/v1/proxy/openai`,
-    ANTHROPIC_BASE_URL: `http://127.0.0.1:${proxy.port}/v1/proxy/anthropic`,
     CLAWSIG_RUN_ID: runId,
     CLAWSIG_AGENT_DID: agentDid.did,
+    ...(bountyNonce ? { CLAWSIG_BOUNTY_NONCE: bountyNonce } : {}),
 
     // RED TEAM FIX #6: Socket-level interception preload.
     CLAWSIG_PROXY_PORT: String(proxy.port),
@@ -221,6 +238,13 @@ export async function wrap(
     // Hooks connect(), open(), openat(), execve(), posix_spawn(), sendto()
     ...(interposeLib ? interposeLib.env : {}),
   };
+
+  if (!disableBaseUrlOverride) {
+    childEnv['OPENAI_BASE_URL'] = `http://127.0.0.1:${proxy.port}/v1/proxy/openai`;
+    childEnv['ANTHROPIC_BASE_URL'] = `http://127.0.0.1:${proxy.port}/v1/proxy/anthropic`;
+  } else {
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Provider base override disabled for ${commandName} (OAuth compatibility). Set CLAWSIG_FORCE_BASE_URL_OVERRIDE=1 to force.\n`);
+  }
 
   // Pass through existing API keys from parent env
   if (process.env['OPENAI_API_KEY']) {
@@ -296,6 +320,44 @@ export async function wrap(
   // Harvest TLS SNI events (cross-runtime: Bun, Python, Go, Rust via C interpose)
   const sniEvents = await harvestTlsSniTrace(traceFile);
   const sniGatewayReceipts = await synthesizeSniGatewayReceipts(sniEvents, agentDid.did, runId);
+
+  // R39: Offline TLS decryption — decrypt ciphertext spool + keylog to extract
+  // actual model names, request/response hashes, and token counts from encrypted traffic.
+  // This is the "Oracle Arbitrage" countermeasure: proves which model was ACTUALLY called.
+  let tlsDecryptReceipts: Record<string, unknown>[] = [];
+  const keylogFile = `${traceFile}.keys`;
+  const cipherFile = `${traceFile}.clawcipher`;
+  let keylogPresent = false;
+  let cipherSpoolPresent = false;
+  try {
+    const { access: fsAccess } = await import('node:fs/promises');
+    await fsAccess(keylogFile);
+    keylogPresent = true;
+  } catch {
+    // optional artifact
+  }
+  try {
+    const { access: fsAccess } = await import('node:fs/promises');
+    await fsAccess(cipherFile);
+    cipherSpoolPresent = true;
+    const { decryptTraffic } = await import('@clawbureau/clawsig-sdk');
+    const decryptResult = await decryptTraffic(traceFile, keylogFile, cipherFile);
+    if (decryptResult.receipts.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tlsDecryptReceipts = decryptResult.receipts.map((r: any) => ({
+        ...r,
+        receipt_type: 'tls_decrypted_gateway',
+        agent_did: agentDid.did,
+        binding: { run_id: runId },
+      }));
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m TLS Decrypt: ${decryptResult.receipts.length} requests decrypted from ${decryptResult.connections.length} connections\n`);
+      if (decryptResult.errors.length > 0) {
+        process.stderr.write(`\x1b[33m[clawsig]\x1b[0m TLS Decrypt warnings: ${decryptResult.errors.slice(0, 3).join('; ')}\n`);
+      }
+    }
+  } catch {
+    // No cipher spool or decrypt unavailable — non-fatal
+  }
 
   // Harvest Network Sentinel events
   const netEvents = netSentinel.getEvents();
@@ -400,6 +462,283 @@ export async function wrap(
     bundle.payload.receipts = [...existing, ...securityReceipts] as typeof bundle.payload.receipts;
   }
 
+  // R43: Synthesize VIR (Verified Inference Receipt) v0.1 from multi-source evidence
+  let merkleDisclosure: { chain_hash: string; event_count: number } | undefined;
+  for (const event of interposeEvents) {
+    if (event.syscall === 'merkle_final') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = event as any;
+      const eventCount = typeof raw.count === 'number' ? raw.count : Number(raw.count);
+      const chainHash = typeof raw.hash === 'string' ? raw.hash : undefined;
+      if (chainHash && Number.isFinite(eventCount)) {
+        merkleDisclosure = {
+          chain_hash: chainHash,
+          event_count: Math.max(0, eventCount),
+        };
+      }
+    }
+  }
+
+  const sourceWeight: Record<VirSource, number> = {
+    tls_decrypt: 5,
+    gateway: 4,
+    interpose: 3,
+    preload: 2,
+    sni: 1,
+  };
+
+  type VirCandidate = {
+    source: VirSource;
+    weight: number;
+    ts: number;
+    data: Record<string, unknown>;
+  };
+
+  const toRecord = (value: unknown): Record<string, unknown> | null => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+  };
+
+  const pickString = (...values: unknown[]): string | undefined => {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim().length > 0) return value;
+    }
+    return undefined;
+  };
+
+  const pickNumber = (...values: unknown[]): number | undefined => {
+    for (const value of values) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim().length > 0) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+    }
+    return undefined;
+  };
+
+  const parseBoolean = (value: unknown): boolean | undefined => {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return undefined;
+  };
+
+  const safeTs = (value: unknown): number => {
+    const ms = new Date(typeof value === 'string' || typeof value === 'number' ? value : 0).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+  };
+
+  const tryExtractGatewayPayload = (entry: unknown): Record<string, unknown> | null => {
+    const obj = toRecord(entry);
+    if (!obj) return null;
+    if (obj.envelope_type !== 'gateway_receipt') return null;
+    return toRecord(obj.payload);
+  };
+
+  const virCandidates: VirCandidate[] = [];
+
+  const pushCandidate = (source: VirSource, raw: unknown, tsValue: unknown): void => {
+    const data = toRecord(raw);
+    if (!data) return;
+    virCandidates.push({
+      source,
+      weight: sourceWeight[source],
+      ts: safeTs(tsValue),
+      data,
+    });
+  };
+
+  for (const receipt of bundle.payload.receipts || []) {
+    const payload = tryExtractGatewayPayload(receipt);
+    if (!payload) continue;
+    pushCandidate(
+      'gateway',
+      payload,
+      payload.timestamp ?? payload.issued_at,
+    );
+  }
+
+  for (const receipt of tlsDecryptReceipts) {
+    const r = toRecord(receipt);
+    if (!r) continue;
+    pushCandidate('tls_decrypt', r, r.timestamp);
+  }
+
+  for (const receipt of interposeReceipts.gateway) {
+    const r = toRecord(receipt);
+    if (!r) continue;
+    pushCandidate('interpose', r, r.timestamp);
+  }
+
+  for (const receipt of preloadGatewayReceipts) {
+    const r = toRecord(receipt);
+    if (!r) continue;
+    const receiptType = pickString(r.receipt_type);
+    if (receiptType && receiptType !== 'gateway') continue;
+    pushCandidate('preload', r, r.timestamp);
+  }
+
+  for (const receipt of sniGatewayReceipts) {
+    const r = toRecord(receipt);
+    if (!r) continue;
+    pushCandidate('sni', r, r.timestamp);
+  }
+
+  // Sort chronologically then collapse into 2s windows, keeping highest-precedence source.
+  virCandidates.sort((a, b) => a.ts - b.ts);
+
+  const groupedVir: VirCandidate[] = [];
+  for (const candidate of virCandidates) {
+    let matched = false;
+    for (const group of groupedVir) {
+      if (Math.abs(candidate.ts - group.ts) < 2000) {
+        if (candidate.weight > group.weight) {
+          group.weight = candidate.weight;
+          group.source = candidate.source;
+          group.data = candidate.data;
+          group.ts = candidate.ts;
+        }
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) groupedVir.push({ ...candidate });
+  }
+
+  const harnessAttestation = interposeEvents.find((event) => event.syscall === 'harness_attestation');
+  const harnessRecheck = interposeEvents.find((event) => event.syscall === 'harness_recheck');
+  const harnessAttestationRecord = toRecord(harnessAttestation);
+  const harnessRecheckRecord = toRecord(harnessRecheck);
+  const eventChainLen = bundle.payload.event_chain?.length ?? (shellEvents.length + interposeEvents.length);
+  const encoder = new TextEncoder();
+
+  const virReceipts: VirReceiptEnvelope[] = [];
+
+  for (const grouped of groupedVir) {
+    const data = grouped.data;
+
+    const provider = pickString(data.provider, data.hostname, data.authority) ?? 'unknown';
+    const modelClaimed = pickString(data.req_model, data.model_claimed, data.model, data.model_name) ?? 'unknown';
+    const modelObserved = pickString(data.model, data.model_observed, data.res_model) ?? modelClaimed;
+
+    const requestHash =
+      pickString(
+        data.request_hash_b64u,
+        data.messages_hash_b64u,
+        data.requestBodyHash,
+        data.req_body_sha256,
+        data.url_hash_b64u,
+        data.addr_hash_b64u,
+      ) ??
+      await sha256B64u(encoder.encode(`vir:req:${runId}:${crypto.randomUUID()}`));
+
+    const responseHash =
+      pickString(
+        data.response_hash_b64u,
+        data.responseBodyHash,
+        data.res_body_sha256,
+      ) ??
+      await sha256B64u(encoder.encode(`vir:res:${runId}:${crypto.randomUUID()}`));
+
+    const tokensInput = Math.max(0, Math.floor(pickNumber(data.tokens_input, data.tokensInput, data.req_bytes) ?? 0));
+    const tokensOutput = Math.max(0, Math.floor(pickNumber(data.tokens_output, data.tokensOutput, data.res_bytes) ?? 0));
+    const latencyMs = Math.max(0, Math.floor(pickNumber(data.latency_ms, data.latencyMs) ?? 0));
+
+    const tsMs = grouped.ts > 0 ? grouped.ts : Date.now();
+    const timestamp = pickString(data.timestamp, data.issued_at) ?? new Date(tsMs).toISOString();
+
+    const bindingRecord = toRecord(data.binding);
+    const boundEventHash = pickString(bindingRecord?.event_hash_b64u, data.event_hash_b64u);
+
+    const disclosedLeaves: Record<string, string> = {
+      request_hash: await sha256B64u(encoder.encode(`request_hash:${requestHash}`)),
+      response_hash: await sha256B64u(encoder.encode(`response_hash:${responseHash}`)),
+      source: await sha256B64u(encoder.encode(`source:${grouped.source}`)),
+      provider: await sha256B64u(encoder.encode(`provider:${provider}`)),
+      model: await sha256B64u(encoder.encode(`model:${modelObserved}`)),
+      token_counts: await sha256B64u(encoder.encode(`tokens:${tokensInput}:${tokensOutput}`)),
+      latency: await sha256B64u(encoder.encode(`latency:${latencyMs}`)),
+    };
+    if (boundEventHash) {
+      disclosedLeaves.event_hash = await sha256B64u(encoder.encode(`event_hash:${boundEventHash}`));
+    }
+
+    const sortedLeafKeys = Object.keys(disclosedLeaves).sort();
+    const leafHashes = sortedLeafKeys.map((key) => disclosedLeaves[key]!);
+    const merkleRoot = await sha256B64u(encoder.encode(leafHashes.join('|')));
+
+    const harnessRecheckMatch = parseBoolean(harnessRecheckRecord?.text_hash_match) ?? false;
+    const harnessAttestationHash = pickString(
+      harnessAttestationRecord?.dylib_text_hash,
+      harnessAttestationRecord?.text_hash,
+    );
+
+    const virPayload: VirReceiptPayload = {
+      receipt_version: '1',
+      receipt_id: `vir_${crypto.randomUUID()}`,
+      source: grouped.source,
+      provider,
+      model: modelObserved,
+      model_claimed: modelClaimed,
+      model_observed: modelObserved,
+      request_hash_b64u: requestHash,
+      response_hash_b64u: responseHash,
+      tokens_input: tokensInput,
+      tokens_output: tokensOutput,
+      latency_ms: latencyMs,
+      agent_did: agentDid.did,
+      timestamp,
+      binding: {
+        run_id: runId,
+        ...(boundEventHash ? { event_hash_b64u: boundEventHash } : {}),
+        ...(bountyNonce ? { nonce: bountyNonce } : {}),
+      },
+      transport_attestation: {
+        source: grouped.source,
+        keylog_present: keylogPresent,
+        cipher_spool_present: cipherSpoolPresent,
+        decrypted_match: grouped.source === 'tls_decrypt' ? modelClaimed === modelObserved : null,
+      },
+      process_attestation: {
+        harness_attestation_hash: harnessAttestationHash ?? null,
+        harness_recheck_match: harnessRecheckMatch,
+        interpose_active: !!interposeLib,
+      },
+      semantic_attestation: {
+        tool_calls_count: interposeReceipts.toolCalls.length,
+        side_effect_receipts_count: proxy.sideEffectReceiptCount,
+        event_chain_len: eventChainLen,
+      },
+      selective_disclosure: {
+        merkle_root_b64u: merkleRoot,
+        leaf_hashes_b64u: leafHashes,
+        disclosed_leaves: disclosedLeaves,
+        redacted_fields: ['tool_transcript', 'policy_evidence'],
+      },
+      ...(merkleDisclosure ? { merkle_disclosure: merkleDisclosure } : {}),
+    };
+
+    const payloadHashB64u = await sha256B64u(encoder.encode(JSON.stringify(virPayload)));
+    const signatureB64u = await agentDid.sign(encoder.encode(payloadHashB64u));
+
+    virReceipts.push({
+      envelope_version: '1',
+      envelope_type: 'vir_receipt',
+      payload: virPayload,
+      payload_hash_b64u: payloadHashB64u,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: signatureB64u,
+      algorithm: 'Ed25519',
+      signer_did: agentDid.did,
+      issued_at: timestamp,
+    });
+  }
+
+  if (virReceipts.length > 0) {
+    bundle.payload.vir_receipts = virReceipts;
+  }
+
   // Inject preload + SNI + interpose FSM receipts into the bundle
   {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -411,6 +750,7 @@ export async function wrap(
       ...interposeReceipts.transcript,
       ...interposeReceipts.toolCalls,
       ...interposeReceipts.anomalies,
+      ...tlsDecryptReceipts,
     ];
     if (additions.length > 0) {
       bundle.payload.receipts = [...existing, ...additions] as typeof bundle.payload.receipts;
@@ -433,6 +773,8 @@ export async function wrap(
       preload_llm_events: preloadGatewayReceipts.length,
       tls_sni_events: sniEvents.length,
       tls_sni_receipts: sniGatewayReceipts.length,
+      tls_decrypt_receipts: tlsDecryptReceipts.length,
+      vir_receipts: virReceipts.length,
       interpose_state: interposeOracle.getSummary(),
     },
   };
@@ -443,8 +785,11 @@ export async function wrap(
   const totalReceipts = bundle.payload.receipts?.length ?? 0;
   const nonGateway = interposeReceipts.transcript.length + interposeReceipts.toolCalls.length + interposeReceipts.anomalies.length;
   const totalGw = totalReceipts - nonGateway;
-  const proxyGateway = totalGw - preloadGatewayReceipts.length - sniGatewayReceipts.length - interposeReceipts.gateway.length;
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length}, interpose: ${interposeReceipts.gateway.length})\n`);
+  const proxyGateway = totalGw - preloadGatewayReceipts.length - sniGatewayReceipts.length - interposeReceipts.gateway.length - tlsDecryptReceipts.length;
+  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length}, interpose: ${interposeReceipts.gateway.length}, tls_decrypt: ${tlsDecryptReceipts.length})\n`);
+  if (virReceipts.length > 0) {
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m VIR v0.1 receipts synthesized: ${virReceipts.length}\n`);
+  }
   if (interposeReceipts.transcript.length > 0) {
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Transcript events: ${interposeReceipts.transcript.length} (via interpose FSM)\n`);
   }
