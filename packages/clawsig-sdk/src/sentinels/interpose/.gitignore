@@ -1,3 +1,5 @@
 *.so
 *.dylib
+*.c
 trace.jsonl
+trace*.jsonl

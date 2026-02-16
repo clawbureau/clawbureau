@@ -48,6 +48,10 @@ package-lock.json
 # hackathon / analysis scratch
 hackathons/**/analysis/
 
+# Gemini deep think evaluation docs (IP-sensitive prompt engineering research)
+docs/strategy/GEMINI_ROUND2[0-9]_*
+docs/strategy/GEMINI_ROUND3[0-9]_*
+
 # wrangler local state
 .wrangler/
 .dev.vars
