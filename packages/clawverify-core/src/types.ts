@@ -116,6 +116,7 @@ export interface SignedEnvelope<T = unknown> {
   algorithm: Algorithm;
   signer_did: string;
   issued_at: string;
+  expires_at?: string;
 }
 
 /**
@@ -221,6 +222,13 @@ export type VerificationErrorCode =
   | 'UNKNOWN_ALGORITHM'
   | 'UNKNOWN_HASH_ALGORITHM'
   | 'HASH_MISMATCH'
+  | 'CO_SIGNATURE_INVALID'
+  | 'DISCLOSURE_ALGORITHM_UNKNOWN'
+  | 'DISCLOSURE_ROOT_MISMATCH'
+  | 'DISCLOSURE_TYPE_MISMATCH'
+  | 'RECEIPT_BINDING_MISMATCH'
+  | 'EXPIRED_TTL'
+  | 'POLICY_NONCOMPLIANT'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
   | 'PROMPT_COMMITMENT_MISMATCH'
@@ -872,7 +880,7 @@ export interface ProofBundleMetadata {
   [key: string]: unknown;
 }
 
-/** Tool receipt payload (matches poh/proof_bundle.v1.json tool_receipts). */
+/** Tool receipt payload v1 (legacy; matches historical poh/tool_receipt.v1.json shape). */
 export interface ToolReceiptPayload {
   receipt_version: '1';
   receipt_id: string;
@@ -890,6 +898,87 @@ export interface ToolReceiptPayload {
   timestamp: string;
   binding?: Record<string, unknown>;
 }
+
+export type SelectiveDisclosureLeafType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'null'
+  | 'array'
+  | 'object';
+
+export interface SelectiveDisclosureLeaf {
+  type: SelectiveDisclosureLeafType;
+  value: unknown;
+  salt_b64u: string;
+}
+
+export interface SelectiveDisclosurePayload {
+  disclosure_algorithm: 'vir_v2_typed_lexicographical';
+  merkle_root_b64u: string;
+  redacted_leaf_hashes_b64u: string[];
+  disclosed_leaves: Record<string, SelectiveDisclosureLeaf>;
+}
+
+export interface ToolReceiptV2Payload {
+  receipt_version: '2';
+  receipt_id: string;
+  tool_name: string;
+  tool_version?: string;
+  args_hash_b64u: string;
+  result_hash_b64u: string;
+  result_status?: 'success' | 'error' | 'timeout';
+  hash_algorithm: HashAlgorithm;
+  agent_did: string;
+  timestamp: string;
+  latency_ms: number;
+  binding?: Record<string, unknown>;
+  args_salt_b64u: string;
+  result_salt_b64u: string;
+  args_disclosure?: SelectiveDisclosurePayload;
+  result_disclosure?: SelectiveDisclosurePayload;
+}
+
+export interface CoSignaturePayload {
+  signature_b64u: string;
+  algorithm: 'Ed25519';
+  signer_did: string;
+  issued_at: string;
+  role: 'proxy' | 'approver' | 'auditor' | 'supervisor';
+}
+
+export interface ToolReceiptEnvelopeV1 {
+  envelope_version: '1';
+  envelope_type: 'tool_receipt';
+  payload: ToolReceiptPayload;
+  payload_hash_b64u: string;
+  hash_algorithm: HashAlgorithm;
+  signature_b64u: string;
+  algorithm: Algorithm;
+  signer_did: string;
+  issued_at: string;
+  expires_at?: string;
+}
+
+export interface ToolReceiptEnvelopeV2 {
+  envelope_version: '2';
+  envelope_type: 'tool_receipt';
+  payload: ToolReceiptV2Payload;
+  payload_hash_b64u: string;
+  hash_algorithm: HashAlgorithm;
+  signature_b64u: string;
+  algorithm: Algorithm;
+  signer_did: string;
+  issued_at: string;
+  expires_at?: string;
+  co_signatures?: CoSignaturePayload[];
+}
+
+export type ToolReceiptEntry =
+  | ToolReceiptPayload
+  | ToolReceiptEnvelopeV1
+  | ToolReceiptV2Payload
+  | ToolReceiptEnvelopeV2;
 
 /** Side-effect receipt payload (matches poh/proof_bundle.v1.json). */
 export interface SideEffectReceiptPayload {
@@ -947,7 +1036,7 @@ export interface ProofBundlePayload {
   urm?: URMReference;
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
-  tool_receipts?: ToolReceiptPayload[];
+  tool_receipts?: ToolReceiptEntry[];
   side_effect_receipts?: SideEffectReceiptPayload[];
   human_approval_receipts?: HumanApprovalReceiptPayload[];
   delegation_receipts?: DelegationReceiptPayload[];

@@ -27,6 +27,13 @@ import type {
   URMReference,
   AttestationReference,
   GatewayReceiptPayload,
+  ToolReceiptEntry,
+  ToolReceiptEnvelopeV1,
+  ToolReceiptEnvelopeV2,
+  ToolReceiptPayload,
+  ToolReceiptV2Payload,
+  SelectiveDisclosurePayload,
+  CoSignaturePayload,
 } from './types.js';
 import {
   isAllowedVersion,
@@ -40,6 +47,7 @@ import {
 import {
   computeHash,
   base64UrlDecode,
+  base64UrlEncode,
   extractPublicKeyFromDidKey,
   verifySignature,
 } from './crypto.js';
@@ -51,6 +59,12 @@ import {
   validateUrmV1,
   validatePromptPackV1,
   validateSystemPromptReportV1,
+  validateToolReceiptV1,
+  validateToolReceiptEnvelopeV1,
+  validateSelectiveDisclosureV1,
+  validateCoSignatureV1,
+  validateToolReceiptV2,
+  validateToolReceiptEnvelopeV2,
 } from './schema-validation.js';
 
 export interface ProofBundleVerifierOptions {
@@ -612,6 +626,419 @@ async function verifyReceiptEnvelope(
     gateway_id: verification.gateway_id,
     signer_did: verification.result.signer_did,
   };
+}
+
+type ParsedToolReceiptEntry =
+  | {
+      ok: true;
+      kind: 'payload-v1';
+      payload: ToolReceiptPayload;
+      envelope: null;
+    }
+  | {
+      ok: true;
+      kind: 'payload-v2';
+      payload: ToolReceiptV2Payload;
+      envelope: null;
+    }
+  | {
+      ok: true;
+      kind: 'envelope-v1';
+      payload: ToolReceiptPayload;
+      envelope: ToolReceiptEnvelopeV1;
+    }
+  | {
+      ok: true;
+      kind: 'envelope-v2';
+      payload: ToolReceiptV2Payload;
+      envelope: ToolReceiptEnvelopeV2;
+    }
+  | {
+      ok: false;
+      errorCode:
+        | 'SCHEMA_VALIDATION_FAILED'
+        | 'UNKNOWN_VERSION'
+        | 'MALFORMED_ENVELOPE';
+      message: string;
+      field?: string;
+    };
+
+function parseToolReceiptEntry(entry: unknown): ParsedToolReceiptEntry {
+  const envelopeV2Schema = validateToolReceiptEnvelopeV2(entry);
+  if (envelopeV2Schema.valid) {
+    const envelope = entry as ToolReceiptEnvelopeV2;
+    return {
+      ok: true,
+      kind: 'envelope-v2',
+      payload: envelope.payload,
+      envelope,
+    };
+  }
+
+  const envelopeV1Schema = validateToolReceiptEnvelopeV1(entry);
+  if (envelopeV1Schema.valid) {
+    const envelope = entry as ToolReceiptEnvelopeV1;
+    return {
+      ok: true,
+      kind: 'envelope-v1',
+      payload: envelope.payload,
+      envelope,
+    };
+  }
+
+  const payloadV2Schema = validateToolReceiptV2(entry);
+  if (payloadV2Schema.valid) {
+    return {
+      ok: true,
+      kind: 'payload-v2',
+      payload: entry as ToolReceiptV2Payload,
+      envelope: null,
+    };
+  }
+
+  const payloadV1Schema = validateToolReceiptV1(entry);
+  if (payloadV1Schema.valid) {
+    return {
+      ok: true,
+      kind: 'payload-v1',
+      payload: entry as ToolReceiptPayload,
+      envelope: null,
+    };
+  }
+
+  const record =
+    typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      ? (entry as Record<string, unknown>)
+      : null;
+
+  if (record && record.receipt_version !== undefined) {
+    return {
+      ok: false,
+      errorCode: 'UNKNOWN_VERSION',
+      message: 'tool_receipt receipt_version is not supported',
+      field: 'receipt_version',
+    };
+  }
+
+  return {
+    ok: false,
+    errorCode: 'SCHEMA_VALIDATION_FAILED',
+    message:
+      payloadV2Schema.message ??
+      payloadV1Schema.message ??
+      envelopeV2Schema.message ??
+      envelopeV1Schema.message ??
+      'tool_receipt entry failed schema validation',
+    field:
+      payloadV2Schema.field ??
+      payloadV1Schema.field ??
+      envelopeV2Schema.field ??
+      envelopeV1Schema.field,
+  };
+}
+
+function runtimeJsonType(value: unknown):
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'null'
+  | 'array'
+  | 'object' {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  const t = typeof value;
+  if (
+    t === 'string' ||
+    t === 'number' ||
+    t === 'boolean' ||
+    t === 'object'
+  ) {
+    return t;
+  }
+  return 'string';
+}
+
+async function sha256B64uFromString(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function verifySelectiveDisclosure(
+  disclosure: SelectiveDisclosurePayload,
+  expectedRootHash: string
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      errorCode:
+        | 'DISCLOSURE_ALGORITHM_UNKNOWN'
+        | 'DISCLOSURE_TYPE_MISMATCH'
+        | 'DISCLOSURE_ROOT_MISMATCH'
+        | 'SCHEMA_VALIDATION_FAILED';
+      message: string;
+      field?: string;
+    }
+> {
+  const schemaResult = validateSelectiveDisclosureV1(disclosure);
+  if (!schemaResult.valid) {
+    return {
+      ok: false,
+      errorCode: 'SCHEMA_VALIDATION_FAILED',
+      message: schemaResult.message,
+      field: schemaResult.field,
+    };
+  }
+
+  if (disclosure.disclosure_algorithm !== 'vir_v2_typed_lexicographical') {
+    return {
+      ok: false,
+      errorCode: 'DISCLOSURE_ALGORITHM_UNKNOWN',
+      message: 'Selective disclosure algorithm is not allowlisted',
+      field: 'disclosure_algorithm',
+    };
+  }
+
+  if (disclosure.merkle_root_b64u !== expectedRootHash) {
+    return {
+      ok: false,
+      errorCode: 'DISCLOSURE_ROOT_MISMATCH',
+      message: 'Selective disclosure root does not match committed hash',
+      field: 'merkle_root_b64u',
+    };
+  }
+
+  const leafHashes = [...disclosure.redacted_leaf_hashes_b64u];
+
+  for (const [leafPath, leaf] of Object.entries(disclosure.disclosed_leaves)) {
+    if (runtimeJsonType(leaf.value) !== leaf.type) {
+      return {
+        ok: false,
+        errorCode: 'DISCLOSURE_TYPE_MISMATCH',
+        message: `Selective disclosure leaf type mismatch for path: ${leafPath}`,
+        field: `disclosed_leaves.${leafPath}`,
+      };
+    }
+
+    const canonicalLeaf = jcsCanonicalize({
+      type: leaf.type,
+      value: leaf.value,
+      salt_b64u: leaf.salt_b64u,
+    });
+    const leafHash = await sha256B64uFromString(`${leafPath}:${canonicalLeaf}`);
+    leafHashes.push(leafHash);
+  }
+
+  leafHashes.sort();
+  const computedRoot = await sha256B64uFromString(jcsCanonicalize(leafHashes));
+
+  if (computedRoot !== disclosure.merkle_root_b64u) {
+    return {
+      ok: false,
+      errorCode: 'DISCLOSURE_ROOT_MISMATCH',
+      message: 'Selective disclosure Merkle root mismatch',
+      field: 'merkle_root_b64u',
+    };
+  }
+
+  return { ok: true };
+}
+
+async function verifyDetachedSignatureByDid(
+  signerDid: string,
+  algorithm: string,
+  signatureB64u: string,
+  message: string
+): Promise<boolean> {
+  if (algorithm !== 'Ed25519') {
+    return false;
+  }
+
+  const publicKeyBytes = extractPublicKeyFromDidKey(signerDid);
+  if (!publicKeyBytes) {
+    return false;
+  }
+
+  try {
+    const signatureBytes = base64UrlDecode(signatureB64u);
+    if (signatureBytes.length !== 64) return false;
+    const messageBytes = new TextEncoder().encode(message);
+    return await verifySignature(
+      'Ed25519',
+      publicKeyBytes,
+      signatureBytes,
+      messageBytes
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function verifyToolReceiptEnvelopeSignatures(
+  envelope: ToolReceiptEnvelopeV1 | ToolReceiptEnvelopeV2
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      errorCode:
+        | 'UNKNOWN_HASH_ALGORITHM'
+        | 'HASH_MISMATCH'
+        | 'SIGNATURE_INVALID'
+        | 'EXPIRED_TTL'
+        | 'CO_SIGNATURE_INVALID'
+        | 'SCHEMA_VALIDATION_FAILED';
+      message: string;
+      field?: string;
+    }
+> {
+  if (envelope.expires_at) {
+    if (!isValidIsoDate(envelope.expires_at)) {
+      return {
+        ok: false,
+        errorCode: 'SCHEMA_VALIDATION_FAILED',
+        message: 'tool_receipt envelope expires_at must be ISO-8601 date-time',
+        field: 'expires_at',
+      };
+    }
+
+    if (Date.parse(envelope.expires_at) < Date.now()) {
+      return {
+        ok: false,
+        errorCode: 'EXPIRED_TTL',
+        message: 'tool_receipt envelope has expired',
+        field: 'expires_at',
+      };
+    }
+  }
+
+  let computedPayloadHash: string;
+  try {
+    computedPayloadHash = await computeHash(envelope.payload, envelope.hash_algorithm);
+  } catch {
+    return {
+      ok: false,
+      errorCode: 'UNKNOWN_HASH_ALGORITHM',
+      message: `tool_receipt envelope hash_algorithm is unsupported: ${envelope.hash_algorithm}`,
+      field: 'hash_algorithm',
+    };
+  }
+
+  if (computedPayloadHash !== envelope.payload_hash_b64u) {
+    return {
+      ok: false,
+      errorCode: 'HASH_MISMATCH',
+      message: 'tool_receipt envelope payload hash mismatch',
+      field: 'payload_hash_b64u',
+    };
+  }
+
+  const primaryValid = await verifyDetachedSignatureByDid(
+    envelope.signer_did,
+    envelope.algorithm,
+    envelope.signature_b64u,
+    envelope.payload_hash_b64u
+  );
+
+  if (!primaryValid) {
+    return {
+      ok: false,
+      errorCode: 'SIGNATURE_INVALID',
+      message: 'tool_receipt envelope primary signature verification failed',
+      field: 'signature_b64u',
+    };
+  }
+
+  if (envelope.envelope_version === '2' && envelope.co_signatures) {
+    for (let i = 0; i < envelope.co_signatures.length; i++) {
+      const co = envelope.co_signatures[i] as CoSignaturePayload;
+      const schemaResult = validateCoSignatureV1(co);
+      if (!schemaResult.valid) {
+        return {
+          ok: false,
+          errorCode: 'SCHEMA_VALIDATION_FAILED',
+          message: schemaResult.message,
+          field: schemaResult.field
+            ? `co_signatures[${i}].${schemaResult.field}`
+            : `co_signatures[${i}]`,
+        };
+      }
+
+      const valid = await verifyDetachedSignatureByDid(
+        co.signer_did,
+        co.algorithm,
+        co.signature_b64u,
+        envelope.payload_hash_b64u
+      );
+
+      if (!valid) {
+        return {
+          ok: false,
+          errorCode: 'CO_SIGNATURE_INVALID',
+          message: 'tool_receipt envelope co-signature verification failed',
+          field: `co_signatures[${i}].signature_b64u`,
+        };
+      }
+    }
+  }
+
+  return { ok: true };
+}
+
+function validateToolReceiptBinding(
+  payload: ToolReceiptPayload | ToolReceiptV2Payload,
+  bindingContext: ReceiptBindingContext | null
+):
+  | { ok: true }
+  | {
+      ok: false;
+      errorCode: 'RECEIPT_BINDING_MISMATCH' | 'SCHEMA_VALIDATION_FAILED';
+      message: string;
+      field?: string;
+    } {
+  const binding =
+    payload.binding && typeof payload.binding === 'object'
+      ? (payload.binding as Record<string, unknown>)
+      : null;
+
+  if (!binding || !bindingContext) {
+    return { ok: true };
+  }
+
+  const runId = binding.run_id;
+  if (typeof runId === 'string' && runId.length > 0) {
+    if (runId !== bindingContext.expectedRunId) {
+      return {
+        ok: false,
+        errorCode: 'RECEIPT_BINDING_MISMATCH',
+        message: 'tool_receipt binding.run_id does not match proof bundle run_id',
+        field: 'binding.run_id',
+      };
+    }
+  }
+
+  const eventHash = binding.event_hash_b64u;
+  if (eventHash !== undefined) {
+    if (typeof eventHash !== 'string' || !isValidBase64Url(eventHash)) {
+      return {
+        ok: false,
+        errorCode: 'SCHEMA_VALIDATION_FAILED',
+        message: 'tool_receipt binding.event_hash_b64u must be base64url',
+        field: 'binding.event_hash_b64u',
+      };
+    }
+
+    if (!bindingContext.allowedEventHashes.has(eventHash)) {
+      return {
+        ok: false,
+        errorCode: 'RECEIPT_BINDING_MISMATCH',
+        message:
+          'tool_receipt binding.event_hash_b64u does not reference a bundle event hash',
+        field: 'binding.event_hash_b64u',
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 /**
@@ -1698,10 +2125,11 @@ export async function verifyProofBundle(
     }
   }
 
-  // Validate tool receipts when present (CPL-US-006: fail-closed on unknown schema)
+  // Validate tool receipts (R48): v1/v2 payloads + v1/v2 envelopes,
+  // including deterministic co-signature cascade and selective disclosure checks.
   if ((payload as unknown as Record<string, unknown>).tool_receipts !== undefined) {
-    const toolReceipts = (payload as unknown as Record<string, unknown>).tool_receipts;
-    if (!Array.isArray(toolReceipts)) {
+    const toolReceiptsUnknown = (payload as unknown as Record<string, unknown>).tool_receipts;
+    if (!Array.isArray(toolReceiptsUnknown)) {
       return {
         result: {
           status: 'INVALID',
@@ -1716,80 +2144,145 @@ export async function verifyProofBundle(
       };
     }
 
-    const REQUIRED_TOOL_RECEIPT_FIELDS = [
-      'receipt_version', 'receipt_id', 'tool_name', 'args_hash_b64u',
-      'result_hash_b64u', 'hash_algorithm', 'agent_did', 'timestamp', 'latency_ms',
-    ] as const;
+    const toolReceipts = toolReceiptsUnknown as ToolReceiptEntry[];
+
+    const toolBindingContext: ReceiptBindingContext | null =
+      componentResults.event_chain_valid &&
+      payload.event_chain !== undefined &&
+      payload.event_chain.length > 0
+        ? {
+            expectedRunId: payload.event_chain[0].run_id,
+            allowedEventHashes: new Set(
+              payload.event_chain.map((e) => e.event_hash_b64u)
+            ),
+          }
+        : null;
 
     for (let i = 0; i < toolReceipts.length; i++) {
-      const tr = toolReceipts[i];
-      if (typeof tr !== 'object' || tr === null || Array.isArray(tr)) {
+      const parsed = parseToolReceiptEntry(toolReceipts[i]);
+      if (!parsed.ok) {
         return {
-          result: { status: 'INVALID', reason: `tool_receipts[${i}] must be an object`, verified_at: now },
-          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}] must be an object`, field: `payload.tool_receipts[${i}]` },
+          result: {
+            status: 'INVALID',
+            reason: `tool_receipts[${i}] failed validation: ${parsed.message}`,
+            verified_at: now,
+          },
+          error: {
+            code: parsed.errorCode,
+            message: parsed.message,
+            field: parsed.field
+              ? `payload.tool_receipts[${i}].${parsed.field}`
+              : `payload.tool_receipts[${i}]`,
+          },
         };
       }
 
-      const rec = tr as Record<string, unknown>;
-
-      // Fail-closed: unknown receipt_version
-      if (rec.receipt_version !== '1') {
+      if (parsed.payload.agent_did !== payload.agent_did) {
         return {
-          result: { status: 'INVALID', reason: `tool_receipts[${i}]: unknown receipt_version`, verified_at: now },
-          error: { code: 'UNKNOWN_VERSION', message: `tool_receipts[${i}].receipt_version must be "1"`, field: `payload.tool_receipts[${i}].receipt_version` },
+          result: {
+            status: 'INVALID',
+            reason: `tool_receipts[${i}] agent DID mismatch`,
+            verified_at: now,
+          },
+          error: {
+            code: 'PROOF_BUNDLE_AGENT_MISMATCH',
+            message: 'tool_receipt agent_did must equal payload.agent_did',
+            field: `payload.tool_receipts[${i}].agent_did`,
+          },
         };
       }
 
-      // Fail-closed: unknown hash algorithm
-      if (rec.hash_algorithm !== 'SHA-256') {
+      const bindingCheck = validateToolReceiptBinding(
+        parsed.payload,
+        toolBindingContext
+      );
+      if (!bindingCheck.ok) {
         return {
-          result: { status: 'INVALID', reason: `tool_receipts[${i}]: unknown hash_algorithm`, verified_at: now },
-          error: { code: 'UNKNOWN_HASH_ALGORITHM', message: `tool_receipts[${i}].hash_algorithm must be "SHA-256"`, field: `payload.tool_receipts[${i}].hash_algorithm` },
+          result: {
+            status: 'INVALID',
+            reason: `tool_receipts[${i}] binding check failed: ${bindingCheck.message}`,
+            verified_at: now,
+          },
+          error: {
+            code: bindingCheck.errorCode,
+            message: bindingCheck.message,
+            field: bindingCheck.field
+              ? `payload.tool_receipts[${i}].${bindingCheck.field}`
+              : `payload.tool_receipts[${i}]`,
+          },
         };
       }
 
-      for (const field of REQUIRED_TOOL_RECEIPT_FIELDS) {
-        if (rec[field] === undefined || rec[field] === null) {
+      if (parsed.envelope) {
+        const signatureCheck = await verifyToolReceiptEnvelopeSignatures(
+          parsed.envelope
+        );
+        if (!signatureCheck.ok) {
           return {
-            result: { status: 'INVALID', reason: `tool_receipts[${i}]: missing ${field}`, verified_at: now },
-            error: { code: 'MISSING_REQUIRED_FIELD', message: `tool_receipts[${i}].${field} is required`, field: `payload.tool_receipts[${i}].${field}` },
+            result: {
+              status: 'INVALID',
+              reason: `tool_receipts[${i}] envelope verification failed: ${signatureCheck.message}`,
+              verified_at: now,
+            },
+            error: {
+              code: signatureCheck.errorCode,
+              message: signatureCheck.message,
+              field: signatureCheck.field
+                ? `payload.tool_receipts[${i}].${signatureCheck.field}`
+                : `payload.tool_receipts[${i}]`,
+            },
           };
         }
       }
 
-      // Validate string fields
-      for (const f of ['receipt_id', 'tool_name', 'args_hash_b64u', 'result_hash_b64u', 'agent_did', 'timestamp'] as const) {
-        if (typeof rec[f] !== 'string' || (rec[f] as string).length === 0) {
-          return {
-            result: { status: 'INVALID', reason: `tool_receipts[${i}]: invalid ${f}`, verified_at: now },
-            error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}].${f} must be a non-empty string`, field: `payload.tool_receipts[${i}].${f}` },
-          };
+      if (parsed.payload.receipt_version === '2') {
+        const payloadV2 = parsed.payload as ToolReceiptV2Payload;
+
+        if (payloadV2.args_disclosure) {
+          const argsDisclosureCheck = await verifySelectiveDisclosure(
+            payloadV2.args_disclosure,
+            payloadV2.args_hash_b64u
+          );
+          if (!argsDisclosureCheck.ok) {
+            return {
+              result: {
+                status: 'INVALID',
+                reason: `tool_receipts[${i}] args disclosure check failed: ${argsDisclosureCheck.message}`,
+                verified_at: now,
+              },
+              error: {
+                code: argsDisclosureCheck.errorCode,
+                message: argsDisclosureCheck.message,
+                field: argsDisclosureCheck.field
+                  ? `payload.tool_receipts[${i}].args_disclosure.${argsDisclosureCheck.field}`
+                  : `payload.tool_receipts[${i}].args_disclosure`,
+              },
+            };
+          }
         }
-      }
 
-      if (typeof rec.latency_ms !== 'number' || rec.latency_ms < 0) {
-        return {
-          result: { status: 'INVALID', reason: `tool_receipts[${i}]: invalid latency_ms`, verified_at: now },
-          error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}].latency_ms must be a non-negative number`, field: `payload.tool_receipts[${i}].latency_ms` },
-        };
-      }
-
-      // Validate base64url hashes
-      for (const f of ['args_hash_b64u', 'result_hash_b64u'] as const) {
-        if (!isValidBase64Url(rec[f])) {
-          return {
-            result: { status: 'INVALID', reason: `tool_receipts[${i}]: invalid ${f} format`, verified_at: now },
-            error: { code: 'SCHEMA_VALIDATION_FAILED', message: `tool_receipts[${i}].${f} must be valid base64url`, field: `payload.tool_receipts[${i}].${f}` },
-          };
+        if (payloadV2.result_disclosure) {
+          const resultDisclosureCheck = await verifySelectiveDisclosure(
+            payloadV2.result_disclosure,
+            payloadV2.result_hash_b64u
+          );
+          if (!resultDisclosureCheck.ok) {
+            return {
+              result: {
+                status: 'INVALID',
+                reason: `tool_receipts[${i}] result disclosure check failed: ${resultDisclosureCheck.message}`,
+                verified_at: now,
+              },
+              error: {
+                code: resultDisclosureCheck.errorCode,
+                message: resultDisclosureCheck.message,
+                field: resultDisclosureCheck.field
+                  ? `payload.tool_receipts[${i}].result_disclosure.${resultDisclosureCheck.field}`
+                  : `payload.tool_receipts[${i}].result_disclosure`,
+              },
+            };
+          }
         }
-      }
-
-      // Agent DID must match bundle agent
-      if (rec.agent_did !== payload.agent_did) {
-        return {
-          result: { status: 'INVALID', reason: `tool_receipts[${i}]: agent_did mismatch`, verified_at: now },
-          error: { code: 'PROOF_BUNDLE_AGENT_MISMATCH', message: `tool_receipts[${i}].agent_did must equal payload.agent_did`, field: `payload.tool_receipts[${i}].agent_did` },
-        };
       }
     }
 

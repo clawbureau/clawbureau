@@ -29,7 +29,20 @@ export function compileSemanticTrace(bundle: ProofBundlePayload): string {
 
   if (bundle.tool_receipts) {
     for (const tr of bundle.tool_receipts) {
-      events.push({ timestamp: tr.timestamp, token: `[TOOL:${tr.tool_name}]` });
+      const payload =
+        typeof tr === 'object' &&
+        tr !== null &&
+        'payload' in tr &&
+        typeof (tr as { payload?: unknown }).payload === 'object' &&
+        (tr as { payload?: unknown }).payload !== null
+          ? ((tr as { payload: { timestamp?: string; tool_name?: string } }).payload)
+          : (tr as { timestamp?: string; tool_name?: string });
+
+      const timestamp = typeof payload.timestamp === 'string' ? payload.timestamp : '';
+      const toolName = typeof payload.tool_name === 'string' ? payload.tool_name : 'unknown';
+      if (timestamp.length > 0) {
+        events.push({ timestamp, token: `[TOOL:${toolName}]` });
+      }
     }
   }
 

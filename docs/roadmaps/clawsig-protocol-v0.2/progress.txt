@@ -37,3 +37,34 @@ Notes:
 Validation:
 - `services/clawverify`: `npm run check:schema-runtime-sync`, `npm run typecheck`, `npm test` ✅
 - `packages/clawverify-core`: `npm run typecheck` ✅
+
+---
+
+2026-02-17 — verifier R48 lane (CPL-V2-002/004 runtime enforcement)
+
+- Upgraded `packages/clawverify-core/src/verify-proof-bundle.ts` tool receipt path from legacy v1-only checks to finite union handling:
+  - payload v1
+  - envelope v1
+  - payload v2
+  - envelope v2
+- Added deterministic R48 fail-closed checks in core verifier:
+  - co-signature cascade verification (`CO_SIGNATURE_INVALID` on any failing co-signature)
+  - selective disclosure validation (`DISCLOSURE_ALGORITHM_UNKNOWN`, `DISCLOSURE_TYPE_MISMATCH`, `DISCLOSURE_ROOT_MISMATCH`)
+  - tool-receipt binding checks against bundle run/event context (`RECEIPT_BINDING_MISMATCH`)
+  - envelope TTL enforcement for tool receipt envelopes (`EXPIRED_TTL`)
+- Extended core schema-validation wrappers for newly generated validators:
+  - `validateToolReceipt{V1,V2}`
+  - `validateToolReceiptEnvelope{V1,V2}`
+  - `validateSelectiveDisclosureV1`
+  - `validateCoSignatureV1`
+- Updated core type surface for additive schema support:
+  - new tool receipt v2 / envelope v2 / co-signature / selective-disclosure interfaces
+  - `ProofBundlePayload.tool_receipts` widened to v1/v2 payload+envelope union
+- Updated `trace-compiler` to handle envelope-backed tool receipt entries without breaking deterministic trace compilation.
+
+Validation:
+- `cd packages/clawverify-core && npm run typecheck` ✅
+- `cd packages/clawverify-core && npm run build` ✅
+- `cd packages/clawverify-cli && npm run build` ✅
+- `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
+- `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
