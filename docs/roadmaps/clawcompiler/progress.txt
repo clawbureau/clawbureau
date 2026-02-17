@@ -1,0 +1,39 @@
+## Codebase Patterns
+- Keep the deterministic compliance matrix authoritative.
+- Keep narrative output optional and cryptographically/non-semantically partitioned from authoritative control outcomes.
+- Keep schema evolution additive and backward-compatible.
+
+# Ralph Progress Log
+Started: 2026-02-17T18:30:00Z
+---
+
+## 2026-02-17T18:30:00Z - CEC-US-001..003 bootstrap
+- What was implemented
+  - Added new roadmap folder + tracker files for clawcompiler bootstrap:
+    - `docs/roadmaps/clawcompiler/README.md`
+    - `docs/roadmaps/clawcompiler/prd.json`
+    - `docs/roadmaps/clawcompiler/progress.txt`
+  - Added schema contracts:
+    - `packages/schema/compliance/compiled_evidence_report.v1.json`
+    - `packages/schema/compliance/compiled_evidence_report_envelope.v1.json`
+    - `packages/schema/compliance/compiled_evidence_narrative.v1.json`
+  - Added deterministic conformance fixtures and manifest for valid/invalid hash/signature/disclaimer/authoritative-flag cases.
+  - Added conformance test + runner:
+    - `services/clawverify/test/clawcompiler-schema-conformance.test.ts`
+    - `scripts/protocol/run-clawcompiler-schema-conformance.mjs`
+- Files changed
+  - docs/roadmaps/clawcompiler/README.md
+  - docs/roadmaps/clawcompiler/prd.json
+  - docs/roadmaps/clawcompiler/progress.txt
+  - docs/roadmaps/README.md
+  - docs/README.md
+  - packages/schema/compliance/compiled_evidence_report.v1.json
+  - packages/schema/compliance/compiled_evidence_report_envelope.v1.json
+  - packages/schema/compliance/compiled_evidence_narrative.v1.json
+  - packages/schema/fixtures/protocol-conformance/clawcompiler-compiled-evidence/*
+  - services/clawverify/test/clawcompiler-schema-conformance.test.ts
+  - scripts/protocol/run-clawcompiler-schema-conformance.mjs
+- Quality checks
+  - node scripts/docs/lint-prds.mjs
+  - node scripts/protocol/run-clawcompiler-schema-conformance.mjs
+---

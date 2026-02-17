@@ -1,0 +1,37 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "compiled_evidence_report",
+  "payload": {
+    "report_version": "1",
+    "report_id": "cer_2026-02-17_bootstrap",
+    "compiled_at": "2026-02-17T18:30:00Z",
+    "compiler_version": "0.1.0",
+    "evidence_refs": {
+      "proof_bundle_hash_b64u": "cHJvb2ZfYnVuZGxlX2hhc2hfMDAx",
+      "ontology_hash_b64u": "b250b2xvZ3lfaGFzaF8wMDE",
+      "mapping_rules_hash_b64u": "bWFwcGluZ19ydWxlc19oYXNoXzAwMQ",
+      "verify_result_hash_b64u": "dmVyaWZ5X3Jlc3VsdF9oYXNoXzAwMQ"
+    },
+    "overall_status": "PASS",
+    "matrix_hash_b64u": "bWF0cml4X2hhc2hfMDAx",
+    "control_results": [
+      {
+        "control_id": "SOC2-CC6.1",
+        "status": "PASS",
+        "reason_codes": [
+          "CONTROL_PREDICATE_SATISFIED"
+        ],
+        "evidence_hashes_b64u": [
+          "ZXZpZGVuY2VfMDAxX2hhc2g"
+        ],
+        "waiver_applied": false
+      }
+    ]
+  },
+  "payload_hash_b64u": "cGF5bG9hZF9oYXNoXzAwMQ",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "c2lnbmF0dXJlX2Jhc2U2NHVfMDAx",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6Mkf3k8vYJrAoCompilerSignerDemo1111111111",
+  "issued_at": "2026-02-17T18:30:05Z"
+}

@@ -1,0 +1,10 @@
+{
+  "narrative_version": "1",
+  "report_id": "cer_2026-02-17_bootstrap",
+  "generated_at": "2026-02-17T18:30:01Z",
+  "authoritative": true,
+  "disclaimer": "NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.",
+  "text": "Invalid fixture: authoritative must remain false.",
+  "generator_provider": "openai",
+  "generator_model": "gpt-5.3"
+}

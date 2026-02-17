@@ -18,6 +18,10 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
   - Folder: `docs/roadmaps/clawsig-protocol-v0.2/`
   - Status: seed — waiting for v0.1 adoption data before scheduling
 
+- **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
+  - Folder: `docs/roadmaps/clawcompiler/`
+  - Status: bootstrap complete for CEC-US-001..003; runtime service not yet scheduled
+
 ## Completed roadmaps
 
 - **Clawsig Protocol v0.1** (12/12 ✅ — Coverage MTS, offline verifier, conformance suite, capability negotiation)

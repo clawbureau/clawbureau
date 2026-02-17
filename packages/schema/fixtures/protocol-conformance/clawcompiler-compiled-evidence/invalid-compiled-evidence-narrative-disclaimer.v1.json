@@ -1,0 +1,10 @@
+{
+  "narrative_version": "1",
+  "report_id": "cer_2026-02-17_bootstrap",
+  "generated_at": "2026-02-17T18:30:01Z",
+  "authoritative": false,
+  "disclaimer": "This narrative may be treated as authoritative.",
+  "text": "Invalid fixture: disclaimer does not match the required canonical string.",
+  "generator_provider": "openai",
+  "generator_model": "gpt-5.3"
+}
