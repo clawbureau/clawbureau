@@ -1,0 +1,57 @@
+name: clawverify-schema-drift
+
+on:
+  pull_request:
+    paths:
+      - 'packages/schema/**'
+      - 'services/clawverify/**'
+      - '.github/workflows/clawverify-schema-drift.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/schema/**'
+      - 'services/clawverify/**'
+      - '.github/workflows/clawverify-schema-drift.yml'
+
+jobs:
+  drift-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Run schema/runtime drift gate
+        env:
+          SCHEMA_DRIFT_BASE: ${{ github.base_ref || 'main' }}
+        run: |
+          node services/clawverify/scripts/check-schema-runtime-sync.mjs
+
+      - name: Typecheck clawverify
+        run: |
+          cd services/clawverify
+          npm run typecheck
+
+      - name: Run clawverify contract tests
+        run: |
+          cd services/clawverify
+          npm test -- --run \
+            test/schema-runtime-contract.test.ts \
+            test/vir-core-consistency.test.ts \
+            test/vir-v2-receipt.test.ts \
+            test/vir-v2-proof-bundle.test.ts \
+            test/web-receipt.test.ts \
+            test/proof-tier-next-trust.test.ts

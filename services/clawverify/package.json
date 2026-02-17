@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:schema-runtime-sync": "node scripts/check-schema-runtime-sync.mjs"
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
