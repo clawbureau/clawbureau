@@ -499,3 +499,34 @@ Started: 2026-02-02T03:08:26.937416
 - Record is intentionally `passes:false` and marked as pending/deferred.
 - Reinstatement is auditability-only; no runtime/schema behavior changes were made in this lane.
 ---
+
+## 2026-02-17 - CVF-US-065/066/067 (deterministic completeness contract + runtime + conformance)
+- What was implemented
+  - Added deterministic completeness contract types in clawverify proof-bundle outputs:
+    - `CompletenessVerdict`
+    - `CompletenessReasonCode`
+    - `component_results.completeness_verdict`
+    - `component_results.completeness_reason_code`
+  - Added runtime evaluator `src/verify-completeness.ts` with strict precedence:
+    1) binding context missing (inconsistent)
+    2) receipt binding mismatch (inconsistent)
+    3) receipt class unverified (incomplete)
+    4) attestation class unverified (partial)
+    5) event-chain only (partial)
+    6) complete evidence bound (complete)
+  - Wired completeness policy into `verify-proof-bundle.ts`:
+    - `INCONSISTENT` -> fail-closed `INVALID` (`EVIDENCE_MISMATCH`)
+    - `INCOMPLETE` -> deterministic trust/proof-tier constraint (no high-tier uplift)
+  - Added adversarial conformance suite + runner + CI workflow:
+    - fixtures: `packages/schema/fixtures/protocol-conformance/clawverify-completeness/*`
+    - test: `services/clawverify/test/completeness-conformance.test.ts`
+    - runner: `scripts/protocol/run-clawverify-completeness-conformance.mjs`
+    - workflow: `.github/workflows/clawverify-completeness-conformance.yml`
+- Quality checks
+  - `cd services/clawverify && npm run typecheck`
+  - `cd services/clawverify && npm test`
+  - `cd services/clawverify && npm run check:schema-runtime-sync`
+  - `node scripts/protocol/run-clawverify-firewall-conformance.mjs`
+  - `node scripts/protocol/run-clawverify-binary-semantic-conformance.mjs`
+  - `node scripts/protocol/run-clawverify-completeness-conformance.mjs`
+---

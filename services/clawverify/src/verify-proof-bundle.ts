@@ -61,6 +61,11 @@ import {
   verificationFailureToPolicyResult,
   type BinarySemanticPolicyResult,
 } from './verify-binary-semantic-evidence';
+import {
+  evaluateCompletenessPolicy,
+  isCompletenessConstrainedVerdict,
+  isCompletenessFailClosedVerdict,
+} from './verify-completeness';
 import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { verifyLogInclusionProof } from './verify-log-inclusion-proof';
 import { computeModelIdentityTierFromReceipts } from './model-identity';
@@ -3472,6 +3477,73 @@ export async function verifyProofBundle(
     if (trustTier === 'verified' || trustTier === 'attested' || trustTier === 'full') {
       trustTier = 'basic';
       modelIdentityRiskFlags.add('BINARY_SEMANTIC_TRUST_CONSTRAINED');
+    }
+  }
+
+  // CVF-US-065/066: deterministic completeness semantics under partial observability.
+  const completenessPolicyResult = evaluateCompletenessPolicy({
+    envelope_valid: componentResults.envelope_valid,
+    event_chain_declared:
+      payload.event_chain !== undefined && payload.event_chain.length > 0,
+    event_chain_valid: componentResults.event_chain_valid === true,
+    binding_context_available: bindingContext !== null,
+    receipts_declared:
+      payload.receipts !== undefined && payload.receipts.length > 0,
+    receipts_signature_verified_count:
+      componentResults.receipts_signature_verified_count ?? 0,
+    receipts_verified_count: componentResults.receipts_verified_count ?? 0,
+    attestations_declared:
+      payload.attestations !== undefined && payload.attestations.length > 0,
+    attestations_signature_verified_count:
+      componentResults.attestations_signature_verified_count ?? 0,
+    attestations_verified_count:
+      componentResults.attestations_verified_count ?? 0,
+  });
+
+  componentResults.completeness_verdict = completenessPolicyResult.verdict;
+  componentResults.completeness_reason_code = completenessPolicyResult.reason_code;
+
+  if (isCompletenessFailClosedVerdict(completenessPolicyResult.verdict)) {
+    const reason = `Completeness policy verdict ${completenessPolicyResult.verdict} (${completenessPolicyResult.reason_code})`;
+
+    return {
+      result: {
+        status: 'INVALID',
+        reason,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        model_identity_tier: modelIdentityTier,
+        risk_flags:
+          modelIdentityRiskFlags.size > 0
+            ? [...modelIdentityRiskFlags].sort()
+            : undefined,
+        component_results: componentResults,
+      },
+      error: {
+        code: 'EVIDENCE_MISMATCH',
+        message: reason,
+        field: 'payload',
+      },
+    };
+  }
+
+  if (isCompletenessConstrainedVerdict(completenessPolicyResult.verdict)) {
+    if (
+      proofTier === 'gateway' ||
+      proofTier === 'sandbox' ||
+      proofTier === 'tee' ||
+      proofTier === 'witnessed_web'
+    ) {
+      proofTier = 'self';
+      modelIdentityRiskFlags.add('COMPLETENESS_PROOF_TIER_CONSTRAINED');
+    }
+
+    if (trustTier === 'verified' || trustTier === 'attested' || trustTier === 'full') {
+      trustTier = 'basic';
+      modelIdentityRiskFlags.add('COMPLETENESS_TRUST_TIER_CONSTRAINED');
     }
   }
 

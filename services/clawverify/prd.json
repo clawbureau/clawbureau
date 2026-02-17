@@ -534,6 +534,48 @@
       "priority": 36,
       "passes": true,
       "notes": "Merged via PR #269 (`2802d59`). Added additive schema fields for TEE nonce/model-weights, strict runtime requirements, fail-closed tee claim handling, and explicit tee tier semantics across verify-bundle and verify-agent paths."
+    },
+    {
+      "id": "CVF-US-065",
+      "title": "Deterministic completeness contract for proof bundle verification",
+      "description": "As a verifier, I want explicit completeness verdict/reason outputs so partial observability is machine-auditable and non-narrative.",
+      "acceptanceCriteria": [
+        "Introduce typed completeness verdict + reason-code unions in clawverify runtime types",
+        "Populate component_results completeness fields on every proof bundle verification path",
+        "Completeness semantics are deterministic and independent of probabilistic scoring",
+        "Typecheck/tests/schema-runtime-sync/firewall+binary-semantic conformance pass"
+      ],
+      "priority": 37,
+      "passes": true,
+      "notes": "Shipped via PR #TBD (R46 lane). Added `CompletenessVerdict`/`CompletenessReasonCode` and `component_results.completeness_verdict/completeness_reason_code` in proof-bundle output."
+    },
+    {
+      "id": "CVF-US-066",
+      "title": "Runtime completeness evaluator with deterministic fail-closed coupling",
+      "description": "As an operator, I want completeness policy evaluation over evidence classes so binding/context contradictions fail closed and incomplete classes constrain tiers deterministically.",
+      "acceptanceCriteria": [
+        "Evaluate event chain, binding context, receipts, and attestations with deterministic precedence",
+        "Inconsistent completeness outcomes fail closed with deterministic EVIDENCE_MISMATCH surface",
+        "Incomplete completeness outcomes constrain trust/proof tier uplift without probabilistic heuristics",
+        "No string-parsed security decisions in completeness policy path"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": "Shipped via PR #TBD (R46 lane). Added `verify-completeness.ts` policy evaluator and runtime coupling in `verify-proof-bundle.ts`."
+    },
+    {
+      "id": "CVF-US-067",
+      "title": "Completeness adversarial conformance fixtures + CI gate",
+      "description": "As maintainers, we need fixture-locked completeness branches so regressions in deterministic verdict/reason behavior are caught automatically.",
+      "acceptanceCriteria": [
+        "Fixture corpus covers complete/partial/incomplete/inconsistent branches",
+        "Conformance assertions require exact completeness verdict + reason code",
+        "Protocol runner executes completeness conformance suite deterministically",
+        "CI workflow runs completeness conformance runner"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Shipped via PR #TBD (R46 lane). Added `clawverify-completeness` fixture suite, `test/completeness-conformance.test.ts`, runner script, and CI workflow."
     }
   ]
 }

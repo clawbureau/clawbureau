@@ -1,0 +1,39 @@
+name: clawverify-completeness-conformance
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-completeness/**'
+      - 'scripts/protocol/run-clawverify-completeness-conformance.mjs'
+      - '.github/workflows/clawverify-completeness-conformance.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-completeness/**'
+      - 'scripts/protocol/run-clawverify-completeness-conformance.mjs'
+      - '.github/workflows/clawverify-completeness-conformance.yml'
+
+jobs:
+  completeness-conformance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Run completeness conformance fixtures
+        run: |
+          node scripts/protocol/run-clawverify-completeness-conformance.mjs

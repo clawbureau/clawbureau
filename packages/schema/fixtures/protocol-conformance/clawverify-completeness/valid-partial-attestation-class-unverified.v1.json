@@ -1,0 +1,11 @@
+{
+  "id": "valid-partial-attestation-class-unverified",
+  "scenario": "partial_attestation_class_unverified",
+  "expected": {
+    "status": "VALID",
+    "completeness_verdict": "PARTIAL",
+    "completeness_reason_code": "ATTESTATION_CLASS_UNVERIFIED",
+    "proof_tier": "self",
+    "trust_tier": "verified"
+  }
+}

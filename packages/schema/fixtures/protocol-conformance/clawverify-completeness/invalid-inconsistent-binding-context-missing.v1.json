@@ -1,0 +1,10 @@
+{
+  "id": "invalid-inconsistent-binding-context-missing",
+  "scenario": "inconsistent_binding_context_missing",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "completeness_verdict": "INCONSISTENT",
+    "completeness_reason_code": "BINDING_CONTEXT_MISSING"
+  }
+}

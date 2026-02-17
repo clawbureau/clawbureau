@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-completeness",
+  "cases": [
+    "valid-complete-evidence-bound.v1.json",
+    "valid-partial-event-chain-only.v1.json",
+    "valid-partial-envelope-only.v1.json",
+    "valid-partial-attestation-class-unverified.v1.json",
+    "valid-incomplete-receipt-class-unverified.v1.json",
+    "invalid-inconsistent-binding-context-missing.v1.json",
+    "invalid-inconsistent-receipt-binding-mismatch.v1.json"
+  ]
+}

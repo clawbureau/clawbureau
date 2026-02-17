@@ -1,0 +1,11 @@
+{
+  "id": "valid-incomplete-receipt-class-unverified",
+  "scenario": "incomplete_receipt_class_unverified",
+  "expected": {
+    "status": "VALID",
+    "completeness_verdict": "INCOMPLETE",
+    "completeness_reason_code": "RECEIPT_CLASS_UNVERIFIED",
+    "proof_tier": "self",
+    "trust_tier": "basic"
+  }
+}
