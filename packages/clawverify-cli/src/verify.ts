@@ -1,11 +1,14 @@
 import * as fs from 'node:fs/promises';
 
 import {
+  verifyAggregateBundle,
   verifyExportBundle,
   verifyProofBundle,
+  type AggregateBundleEnvelope,
   type ExportBundlePayload,
   type ProofBundlePayload,
   type SignedEnvelope,
+  type VerifyAggregateBundleResponse,
   type VerifyBundleResponse,
   type VerifyExportBundleResponse,
 } from '@clawbureau/clawverify-core';
@@ -52,6 +55,22 @@ function unwrapExportBundleInput(value: unknown): unknown {
   const bundle = value.bundle;
   if (bundle !== undefined) return bundle;
   return value;
+}
+
+function unwrapAggregateBundleInput(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const envelope = value.envelope;
+  if (envelope !== undefined) return envelope;
+  return value;
+}
+
+function isAggregateBundleEnvelope(value: unknown): value is AggregateBundleEnvelope {
+  return (
+    isRecord(value) &&
+    value.envelope_type === 'aggregate_bundle' &&
+    isRecord(value.payload) &&
+    value.payload.aggregate_version === '1'
+  );
 }
 
 function countReceiptsFromEnvelope(envelope: unknown): number {
@@ -192,14 +211,63 @@ export async function verifyExportBundleFromFile(opts: {
   const verifiedAt = nowIso();
 
   const raw = await readJsonFile(opts.inputPath);
+  const aggregateEnvelope = unwrapAggregateBundleInput(raw);
+
+  if (isAggregateBundleEnvelope(aggregateEnvelope)) {
+    const aggregateVerification: VerifyAggregateBundleResponse =
+      await verifyAggregateBundle(aggregateEnvelope, {
+        allowlistedReceiptSignerDids: opts.config.gatewayReceiptSignerDids,
+        allowlistedAttesterDids: opts.config.attestationSignerDids,
+        allowlistedExecutionAttestationSignerDids:
+          opts.config.executionAttestationSignerDids,
+        allowlistedDerivationAttestationSignerDids:
+          opts.config.derivationAttestationSignerDids,
+        allowlistedAuditResultAttestationSignerDids:
+          opts.config.auditResultAttestationSignerDids,
+      });
+
+    if (aggregateVerification.result.status !== 'VALID') {
+      return {
+        kind: 'export_bundle',
+        status: 'FAIL',
+        verified_at: verifiedAt,
+        reason_code: aggregateVerification.error?.code ?? 'INVALID',
+        reason:
+          aggregateVerification.error?.message ??
+          aggregateVerification.result.reason,
+        input: {
+          path: opts.inputPath,
+          config_path: opts.configPath,
+        },
+        verification: aggregateVerification,
+      };
+    }
+
+    return {
+      kind: 'export_bundle',
+      status: 'PASS',
+      verified_at: verifiedAt,
+      reason_code: 'OK',
+      reason: 'Aggregate bundle verified successfully',
+      input: {
+        path: opts.inputPath,
+        config_path: opts.configPath,
+      },
+      verification: aggregateVerification,
+    };
+  }
+
   const bundle = unwrapExportBundleInput(raw) as ExportBundlePayload;
 
   const verification: VerifyExportBundleResponse = await verifyExportBundle(bundle, {
     allowlistedReceiptSignerDids: opts.config.gatewayReceiptSignerDids,
     allowlistedAttesterDids: opts.config.attestationSignerDids,
-    allowlistedExecutionAttestationSignerDids: opts.config.executionAttestationSignerDids,
-    allowlistedDerivationAttestationSignerDids: opts.config.derivationAttestationSignerDids,
-    allowlistedAuditResultAttestationSignerDids: opts.config.auditResultAttestationSignerDids,
+    allowlistedExecutionAttestationSignerDids:
+      opts.config.executionAttestationSignerDids,
+    allowlistedDerivationAttestationSignerDids:
+      opts.config.derivationAttestationSignerDids,
+    allowlistedAuditResultAttestationSignerDids:
+      opts.config.auditResultAttestationSignerDids,
   });
 
   if (verification.result.status !== 'VALID') {
@@ -218,7 +286,11 @@ export async function verifyExportBundleFromFile(opts: {
   }
 
   // Optional strict receipt enforcement for nested proof bundle.
-  const nestedProofEnvelope = (bundle as any)?.artifacts?.proof_bundle_envelope;
+  const artifacts = isRecord(bundle) ? bundle.artifacts : undefined;
+  const nestedProofEnvelope = isRecord(artifacts)
+    ? artifacts.proof_bundle_envelope
+    : undefined;
+
   if (nestedProofEnvelope !== undefined) {
     const proofOut = await verifyProofBundle(nestedProofEnvelope, {
       allowlistedReceiptSignerDids: opts.config.gatewayReceiptSignerDids,
@@ -490,7 +562,14 @@ export async function verifyCommitSigFromFile(opts: {
 
 export function kindForSubcommand(cmd: string): CliKind | null {
   if (cmd === 'proof-bundle' || cmd === 'proof_bundle') return 'proof_bundle';
-  if (cmd === 'export-bundle' || cmd === 'export_bundle') return 'export_bundle';
+  if (
+    cmd === 'export-bundle' ||
+    cmd === 'export_bundle' ||
+    cmd === 'aggregate-bundle' ||
+    cmd === 'aggregate_bundle'
+  ) {
+    return 'export_bundle';
+  }
   if (cmd === 'commit-sig' || cmd === 'commit_sig') return 'commit_sig';
   return null;
 }

@@ -556,3 +556,21 @@ Started: 2026-02-02T03:08:26.937416
   - `node scripts/protocol/run-clawverify-completeness-conformance.mjs`
   - `node scripts/protocol/run-clawverify-x402-binding-conformance.mjs`
 ---
+
+## 2026-02-17 - CPL-V2 R48/R49 core uptake (verifier runtime)
+- What was implemented
+  - Landed v0.2 runtime enforcement in shared verifier core (`packages/clawverify-core`), consumed by CLI/conformance:
+    - R48: co-signature cascade + selective disclosure verification + tool receipt v1/v2 union handling.
+    - R49: aggregate bundle verifier with strict-liability cascade, deterministic temporal guardrails, anti-replay dedupe, and fleet summary reconciliation.
+  - Added aggregate dispatch path in CLI/export verification flow so conformance vectors can validate aggregate envelopes without changing runner contract.
+  - Hardened export verifier temporal checks (`verifyAt` + skew allowance), expiry hashing parity (`expires_at` included in signable view), and orphan attachment guards for derivation/audit proof-bundle hash bindings.
+- Notes
+  - This lane was core/runtime focused; hosted `services/clawverify` API surface unchanged in this commit.
+- Quality checks
+  - `cd packages/clawverify-core && npm run typecheck`
+  - `cd packages/clawverify-core && npm run build`
+  - `cd packages/clawverify-cli && npm run build`
+  - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts`
+  - `node scripts/protocol/run-clawsig-protocol-conformance.mjs`
+  - `node scripts/protocol/run-clawsig-verified-pr.mjs`
+---

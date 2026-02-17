@@ -29,6 +29,10 @@ export interface VerifyExportBundleOptions {
   allowlistedExecutionAttestationSignerDids?: readonly string[];
   allowlistedDerivationAttestationSignerDids?: readonly string[];
   allowlistedAuditResultAttestationSignerDids?: readonly string[];
+  /** Optional deterministic verification-time override (ISO-8601). */
+  verifyAt?: string;
+  /** Optional skew allowance for temporal checks, in ms. Default 300000 (5m). */
+  ttlSkewMs?: number;
 }
 
 function utf8Bytes(input: string): Uint8Array {
@@ -100,6 +104,46 @@ function firstRunIdFromProofBundle(bundle: ExportBundlePayload): string | null {
   return typeof runId === 'string' && runId.length > 0 ? runId : null;
 }
 
+function maybeProofBundleHashFromExecutionRef(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  const rec = value as Record<string, unknown>;
+  const execution = rec.execution;
+  if (
+    typeof execution !== 'object' ||
+    execution === null ||
+    Array.isArray(execution)
+  ) {
+    return null;
+  }
+
+  const hash = (execution as Record<string, unknown>).proof_bundle_hash_b64u;
+  return typeof hash === 'string' && hash.length > 0 ? hash : null;
+}
+
+function resolveVerificationTime(
+  nowIso: string,
+  verifyAt?: string
+):
+  | { ok: true; verifyAtIso: string; verifyAtMs: number }
+  | { ok: false; message: string } {
+  const verifyAtIso = verifyAt ?? nowIso;
+  if (!isValidIsoDate(verifyAtIso)) {
+    return {
+      ok: false,
+      message: 'verifyAt must be a valid ISO-8601 date-time string',
+    };
+  }
+
+  return {
+    ok: true,
+    verifyAtIso,
+    verifyAtMs: Date.parse(verifyAtIso),
+  };
+}
+
 function signableBundleView(bundle: ExportBundlePayload): Record<string, unknown> {
   const out: Record<string, unknown> = {
     export_version: bundle.export_version,
@@ -110,6 +154,10 @@ function signableBundleView(bundle: ExportBundlePayload): Record<string, unknown
     artifacts: bundle.artifacts,
     issued_at: bundle.issued_at,
   };
+
+  if (bundle.expires_at !== undefined) {
+    out.expires_at = bundle.expires_at;
+  }
 
   if (bundle.metadata !== undefined) {
     out.metadata = bundle.metadata;
@@ -172,6 +220,19 @@ export async function verifyExportBundle(
 
   const bundle = bundleInput as ExportBundlePayload;
 
+  const verifyTime = resolveVerificationTime(now, options.verifyAt);
+  if (!verifyTime.ok) {
+    return invalid(now, verifyTime.message, {
+      code: 'MALFORMED_ENVELOPE',
+      message: verifyTime.message,
+      field: 'verifyAt',
+    });
+  }
+
+  const ttlSkewMs = Number.isFinite(options.ttlSkewMs)
+    ? Math.max(0, Math.trunc(options.ttlSkewMs as number))
+    : 300_000;
+
   if (!isValidDidFormat(bundle.issuer_did)) {
     return invalid(now, 'Invalid issuer DID format', {
       code: 'INVALID_DID_FORMAT',
@@ -185,6 +246,44 @@ export async function verifyExportBundle(
       code: 'MALFORMED_ENVELOPE',
       message: 'created_at and issued_at must be valid ISO 8601 strings',
       field: !isValidIsoDate(bundle.created_at) ? 'created_at' : 'issued_at',
+    });
+  }
+
+  if (bundle.expires_at !== undefined && !isValidIsoDate(bundle.expires_at)) {
+    return invalid(now, 'Invalid expires_at field', {
+      code: 'MALFORMED_ENVELOPE',
+      message: 'expires_at must be a valid ISO 8601 string when provided',
+      field: 'expires_at',
+    });
+  }
+
+  const createdAtMs = Date.parse(bundle.created_at);
+  const issuedAtMs = Date.parse(bundle.issued_at);
+
+  if (createdAtMs > issuedAtMs) {
+    return invalid(now, 'created_at is after issued_at', {
+      code: 'CAUSAL_CLOCK_CONTRADICTION',
+      message: 'created_at must be less than or equal to issued_at',
+      field: 'created_at',
+    });
+  }
+
+  if (issuedAtMs > verifyTime.verifyAtMs + ttlSkewMs) {
+    return invalid(now, 'issued_at is in the future beyond skew allowance', {
+      code: 'FUTURE_TIMESTAMP_POISONING',
+      message: 'issued_at exceeds verifyAt + ttlSkewMs',
+      field: 'issued_at',
+    });
+  }
+
+  if (
+    bundle.expires_at !== undefined &&
+    verifyTime.verifyAtMs > Date.parse(bundle.expires_at) + ttlSkewMs
+  ) {
+    return invalid(now, 'Export bundle has expired', {
+      code: 'EXPIRED_TTL',
+      message: 'expires_at is in the past for the verification timestamp',
+      field: 'expires_at',
     });
   }
 
@@ -297,6 +396,8 @@ export async function verifyExportBundle(
   const proofBundleOut = await verifyProofBundle(bundle.artifacts.proof_bundle_envelope, {
     allowlistedReceiptSignerDids: options.allowlistedReceiptSignerDids,
     allowlistedAttesterDids: options.allowlistedAttesterDids,
+    verificationTime: verifyTime.verifyAtIso,
+    ttlSkewMs,
   });
 
   if (proofBundleOut.result.status !== 'VALID') {
@@ -379,6 +480,22 @@ export async function verifyExportBundle(
         },
       );
     }
+
+    const derivationProofHash = maybeProofBundleHashFromExecutionRef(
+      derivations[i].payload
+    );
+    if (
+      derivationProofHash !== null &&
+      derivationProofHash !== expectedProofBundleHash
+    ) {
+      return invalid(now, 'Derivation attestation proof bundle hash mismatch', {
+        code: 'HASH_MISMATCH',
+        message:
+          `derivation_attestation execution.proof_bundle_hash_b64u mismatch at index ${i}`,
+        field:
+          `artifacts.derivation_attestation_envelopes[${i}].payload.execution.proof_bundle_hash_b64u`,
+      });
+    }
   }
 
   const audits = bundle.artifacts.audit_result_attestation_envelopes ?? [];
@@ -397,6 +514,17 @@ export async function verifyExportBundle(
           field: `artifacts.audit_result_attestation_envelopes[${i}]`,
         },
       );
+    }
+
+    const auditProofHash = maybeProofBundleHashFromExecutionRef(audits[i].payload);
+    if (auditProofHash !== null && auditProofHash !== expectedProofBundleHash) {
+      return invalid(now, 'Audit-result attestation proof bundle hash mismatch', {
+        code: 'HASH_MISMATCH',
+        message:
+          `audit_result_attestation execution.proof_bundle_hash_b64u mismatch at index ${i}`,
+        field:
+          `artifacts.audit_result_attestation_envelopes[${i}].payload.execution.proof_bundle_hash_b64u`,
+      });
     }
   }
 

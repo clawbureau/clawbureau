@@ -68,3 +68,43 @@ Validation:
 - `cd packages/clawverify-cli && npm run build` ✅
 - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
 - `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
+
+---
+
+2026-02-17 — verifier R49 lane (aggregate + temporal guardrails)
+
+- Added new aggregate verifier in core:
+  - `packages/clawverify-core/src/verify-aggregate-bundle.ts`
+  - deterministic fail-closed checks for:
+    - signer/issuer binding (`AGGREGATE_SIGNER_MISMATCH`)
+    - temporal causality/future poisoning/TTL (`CAUSAL_CLOCK_CONTRADICTION`, `FUTURE_TIMESTAMP_POISONING`, `EXPIRED_TTL`)
+    - member sorting + anti-replay dedupe (`UNSORTED_MEMBER_ARRAY`, `AGGREGATE_DUPLICATE_MEMBER`, `AGGREGATE_DUPLICATE_BUNDLE_ID`, `AGGREGATE_DUPLICATE_RUN_ID`)
+    - strict-liability member cascade (`AGGREGATE_MEMBER_INVALID`)
+    - aggregate/member TTL coherence (`AGGREGATE_TTL_EXCEEDS_MEMBER`)
+    - aggregate issuer/member identity conflict (`IDENTITY_CONFLICT`)
+    - fleet summary reconciliation (`FLEET_SUMMARY_MISMATCH`)
+- Extended core exports/types for aggregate runtime:
+  - `packages/clawverify-core/src/types.ts`
+  - `packages/clawverify-core/src/index.ts`
+- Extended schema-validation wrappers with aggregate schema validators:
+  - `validateAggregateBundleV1`
+  - `validateAggregateBundleEnvelopeV1`
+- Hardened export-bundle verifier for R49 temporal + orphan-attachment constraints:
+  - `verifyAt` / `ttlSkewMs` support
+  - `expires_at` included in bundle hash view
+  - temporal checks (`EXPIRED_TTL`, `CAUSAL_CLOCK_CONTRADICTION`, `FUTURE_TIMESTAMP_POISONING`)
+  - derivation/audit `execution.proof_bundle_hash_b64u` mismatch guard (`HASH_MISMATCH`)
+- Added CLI/runtime wiring for aggregate verification without changing manifest contract:
+  - `clawverify verify export-bundle` now auto-dispatches aggregate envelopes to `verifyAggregateBundle`
+  - alias support: `clawverify verify aggregate-bundle`
+  - conformance runner accepts `kind: aggregate_bundle` mapping to `aggregate-bundle`
+- Added reason-code hint coverage for new R48/R49 codes in:
+  - `packages/clawverify-cli/src/hints.ts`
+
+Validation:
+- `cd packages/clawverify-core && npm run typecheck` ✅
+- `cd packages/clawverify-core && npm run build` ✅
+- `cd packages/clawverify-cli && npm run build` ✅
+- `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
+- `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
+- `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅

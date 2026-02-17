@@ -19,6 +19,8 @@ import {
   validateCoSignatureV1 as validateCoSignatureV1Generated,
   validateToolReceiptV2 as validateToolReceiptV2Generated,
   validateToolReceiptEnvelopeV2 as validateToolReceiptEnvelopeV2Generated,
+  validateAggregateBundleV1 as validateAggregateBundleV1Generated,
+  validateAggregateBundleEnvelopeV1 as validateAggregateBundleEnvelopeV1Generated,
   validateExecutionAttestationEnvelopeV1 as validateExecutionAttestationEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
@@ -72,6 +74,12 @@ const validateToolReceiptV2Fn =
 
 const validateToolReceiptEnvelopeV2Fn =
   validateToolReceiptEnvelopeV2Generated as StandaloneValidateFunction;
+
+const validateAggregateBundleV1Fn =
+  validateAggregateBundleV1Generated as StandaloneValidateFunction;
+
+const validateAggregateBundleEnvelopeV1Fn =
+  validateAggregateBundleEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateExecutionAttestationEnvelopeV1Fn =
   validateExecutionAttestationEnvelopeV1Generated as StandaloneValidateFunction;
@@ -322,6 +330,18 @@ export function validateLogInclusionProofV1(value: unknown): SchemaValidationRes
 
 export function validateExportBundleV1(value: unknown): SchemaValidationResult {
   return validateWith(validateExportBundleV1Fn, value, 'export_bundle.v1');
+}
+
+export function validateAggregateBundleV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateAggregateBundleV1Fn, value, 'aggregate_bundle.v1');
+}
+
+export function validateAggregateBundleEnvelopeV1(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateAggregateBundleEnvelopeV1Fn,
+    value,
+    'aggregate_bundle_envelope.v1'
+  );
 }
 
 export function validateModelIdentityV1(value: unknown): SchemaValidationResult {
