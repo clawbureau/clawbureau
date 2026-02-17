@@ -37,3 +37,20 @@ Started: 2026-02-17T18:30:00Z
   - node scripts/docs/lint-prds.mjs
   - node scripts/protocol/run-clawcompiler-schema-conformance.mjs
 ---
+
+## 2026-02-17T19:15:00Z - R45 oracle intake + CEC-US-004..006 planning insertion
+- What was implemented
+  - Imported canonical R45 synthesis:
+    - `docs/roadmaps/clawcompiler/oracle/2026-02-17/R45_BINARY_SEM_CANONICAL.md`
+  - Added oracle run index with explicit A/C/S disposition:
+    - `docs/roadmaps/clawcompiler/oracle/2026-02-17/INDEX.md`
+  - Updated roadmap README with oracle intake links and disposition notes.
+  - Updated tracker `prd.json` with planned stories:
+    - `CEC-US-004` canonical binary semantic evidence schema contract
+    - `CEC-US-005` deterministic runtime policy state machine
+    - `CEC-US-006` precedence/adversarial conformance fixture suite
+- Notes
+  - S-run remains rejected as final artifact due output/schema hygiene, but retained as policy-language donor for precedence + contradiction ordering.
+  - S-run is donor-only and explicitly not a copy source for schema/code literals.
+  - This entry is planning/intake only; no runtime implementation landed in this step.
+---

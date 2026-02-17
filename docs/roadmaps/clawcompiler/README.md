@@ -28,3 +28,14 @@ This roadmap tracks the bootstrap tranche for **Clawcompiler** (Regulatory Evide
 
 - Fixtures: `packages/schema/fixtures/protocol-conformance/clawcompiler-compiled-evidence/`
 - Runner: `scripts/protocol/run-clawcompiler-schema-conformance.mjs`
+
+## Oracle intake (R45)
+
+- Folder: `docs/roadmaps/clawcompiler/oracle/2026-02-17/`
+- Index: `docs/roadmaps/clawcompiler/oracle/2026-02-17/INDEX.md`
+- Canonical synthesis: `docs/roadmaps/clawcompiler/oracle/2026-02-17/R45_BINARY_SEM_CANONICAL.md`
+
+R45 disposition:
+- A accepted for depth
+- C accepted as canonical base
+- S rejected as final artifact, policy-language donor only
