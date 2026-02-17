@@ -23,7 +23,9 @@ type FixtureCase = {
     | 'valid_self'
     | 'valid_witnessed_web'
     | 'valid_gateway'
+    | 'valid_gateway_coverage'
     | 'valid_sandbox_tee'
+    | 'invalid_coverage_chain_root_enforce'
     | 'invalid_vir_merkle_mismatch'
     | 'invalid_vir_conflict_unreported'
     | 'invalid_vir_precedence_violation'
@@ -301,7 +303,11 @@ async function buildFixtureScenario(spec: FixtureCase) {
     };
   }
 
-  if (spec.scenario === 'valid_gateway') {
+  if (
+    spec.scenario === 'valid_gateway' ||
+    spec.scenario === 'valid_gateway_coverage' ||
+    spec.scenario === 'invalid_coverage_chain_root_enforce'
+  ) {
     const gateway = await makeDidKeyEd25519();
 
     const receiptPayload: Record<string, unknown> = {
@@ -330,11 +336,65 @@ async function buildFixtureScenario(spec: FixtureCase) {
       issuedAt: '2026-02-17T00:00:00Z',
     });
 
+    const bundlePayloadWithGateway: Record<string, unknown> = {
+      ...bundlePayload,
+      receipts: [receiptEnvelope],
+    };
+
+    const options: Record<string, unknown> = {
+      allowlistedReceiptSignerDids: [gateway.did],
+    };
+
+    if (spec.scenario !== 'valid_gateway') {
+      const sentinel = await makeDidKeyEd25519();
+      const coveragePayload: Record<string, unknown> = {
+        attestation_version: '1',
+        attestation_id: `cov_${runId}`,
+        run_id: runId,
+        agent_did: agent.did,
+        sentinel_did: sentinel.did,
+        issued_at: '2026-02-17T00:00:00Z',
+        binding: {
+          event_chain_root_hash_b64u:
+            spec.scenario === 'invalid_coverage_chain_root_enforce'
+              ? 'chain_root_mismatch_firewall_001'
+              : eventHash,
+        },
+        metrics: {
+          lineage: {
+            root_pid: 1000,
+            processes_tracked: 10,
+            unmonitored_spawns: 0,
+            escapes_suspected: false,
+          },
+          egress: {
+            connections_total: 2,
+            unmediated_connections: 0,
+          },
+          liveness: {
+            status: 'continuous',
+            uptime_ms: 12_000,
+            heartbeat_interval_ms: 500,
+            max_gap_ms: 200,
+          },
+        },
+      };
+
+      const coverageEnvelope = await signEnvelope({
+        payload: coveragePayload,
+        envelopeType: 'coverage_attestation',
+        signerDid: sentinel.did,
+        privateKey: sentinel.privateKey,
+        issuedAt: '2026-02-17T00:00:00Z',
+      });
+
+      bundlePayloadWithGateway.coverage_attestations = [coverageEnvelope];
+      options.allowlistedCoverageAttestationSignerDids = [sentinel.did];
+      options.coverage_enforcement_phase = 'enforce';
+    }
+
     const bundleEnvelope = await signEnvelope({
-      payload: {
-        ...bundlePayload,
-        receipts: [receiptEnvelope],
-      },
+      payload: bundlePayloadWithGateway,
       envelopeType: 'proof_bundle',
       signerDid: agent.did,
       privateKey: agent.privateKey,
@@ -343,9 +403,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
 
     return {
       envelope: bundleEnvelope,
-      options: {
-        allowlistedReceiptSignerDids: [gateway.did],
-      },
+      options,
     };
   }
 

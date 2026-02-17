@@ -28,6 +28,7 @@ import {
   validateUrmV1 as validateUrmV1Generated,
   validatePromptPackV1 as validatePromptPackV1Generated,
   validateSystemPromptReportV1 as validateSystemPromptReportV1Generated,
+  validateWorkPolicyContractV2 as validateWorkPolicyContractV2Generated,
 } from './schema-validators.generated';
 
 export interface SchemaValidationFailure {
@@ -96,6 +97,9 @@ const validatePromptPackV1Fn =
 
 const validateSystemPromptReportV1Fn =
   validateSystemPromptReportV1Generated as StandaloneValidateFunction;
+
+const validateWorkPolicyContractV2Fn =
+  validateWorkPolicyContractV2Generated as StandaloneValidateFunction;
 
 export function getSchemaValidationInitError(): string | null {
   // Standalone validators are generated at build/commit time.
@@ -336,4 +340,12 @@ export function validatePromptPackV1(value: unknown): SchemaValidationResult {
 
 export function validateSystemPromptReportV1(value: unknown): SchemaValidationResult {
   return validateWith(validateSystemPromptReportV1Fn, value, 'system_prompt_report.v1');
+}
+
+export function validateWorkPolicyContractV2(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateWorkPolicyContractV2Fn,
+    value,
+    'work_policy_contract.v2'
+  );
 }

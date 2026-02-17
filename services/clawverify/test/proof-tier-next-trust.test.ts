@@ -217,6 +217,116 @@ async function makeBundleWithTeeExecutionAttestation(args?: { revokedTcb?: boole
   };
 }
 
+async function makeGatewayBundleWithCoverageInvariantFailure() {
+  const agent = await makeDidKeyEd25519();
+  const gateway = await makeDidKeyEd25519();
+  const sentinel = await makeDidKeyEd25519();
+
+  const runId = 'run_cov_phase_001';
+  const eventPayloadHash = await computeHash({ type: 'llm_call_cov_phase' }, 'SHA-256');
+  const eventHeader = {
+    event_id: 'evt_cov_phase_001',
+    run_id: runId,
+    event_type: 'llm_call',
+    timestamp: '2026-02-17T00:00:00Z',
+    payload_hash_b64u: eventPayloadHash,
+    prev_hash_b64u: null as string | null,
+  };
+  const eventHash = await computeHash(eventHeader, 'SHA-256');
+
+  const receiptPayload: Record<string, unknown> = {
+    receipt_version: '1',
+    receipt_id: 'rcpt_cov_phase_001',
+    gateway_id: 'gw_cov_phase_001',
+    provider: 'openai',
+    model: 'gpt-4',
+    request_hash_b64u: 'req_cov_phase_hash_001',
+    response_hash_b64u: 'res_cov_phase_hash_001',
+    tokens_input: 12,
+    tokens_output: 24,
+    latency_ms: 45,
+    timestamp: '2026-02-17T00:00:00Z',
+    binding: {
+      run_id: runId,
+      event_hash_b64u: eventHash,
+    },
+  };
+
+  const receiptEnvelope = await signEnvelope({
+    payload: receiptPayload,
+    envelopeType: 'gateway_receipt',
+    signerDid: gateway.did,
+    privateKey: gateway.privateKey,
+    issuedAt: '2026-02-17T00:00:00Z',
+  });
+
+  const coveragePayload: Record<string, unknown> = {
+    attestation_version: '1',
+    attestation_id: 'cov_phase_001',
+    run_id: runId,
+    agent_did: agent.did,
+    sentinel_did: sentinel.did,
+    issued_at: '2026-02-17T00:00:00Z',
+    binding: {
+      event_chain_root_hash_b64u: eventHash,
+    },
+    metrics: {
+      lineage: {
+        root_pid: 1000,
+        processes_tracked: 8,
+        unmonitored_spawns: 0,
+        escapes_suspected: false,
+      },
+      egress: {
+        connections_total: 2,
+        unmediated_connections: 0,
+      },
+      liveness: {
+        status: 'continuous',
+        uptime_ms: 10_000,
+        heartbeat_interval_ms: 500,
+        max_gap_ms: 9_000,
+      },
+    },
+  };
+
+  const coverageEnvelope = await signEnvelope({
+    payload: coveragePayload,
+    envelopeType: 'coverage_attestation',
+    signerDid: sentinel.did,
+    privateKey: sentinel.privateKey,
+    issuedAt: '2026-02-17T00:00:00Z',
+  });
+
+  const bundlePayload: Record<string, unknown> = {
+    bundle_version: '1',
+    bundle_id: 'bundle_cov_phase_001',
+    agent_did: agent.did,
+    event_chain: [
+      {
+        ...eventHeader,
+        event_hash_b64u: eventHash,
+      },
+    ],
+    receipts: [receiptEnvelope],
+    coverage_attestations: [coverageEnvelope],
+  };
+
+  const bundleEnvelope = await signEnvelope({
+    payload: bundlePayload,
+    envelopeType: 'proof_bundle',
+    signerDid: agent.did,
+    privateKey: agent.privateKey,
+    issuedAt: '2026-02-17T00:00:01Z',
+  });
+
+  return {
+    bundleEnvelope,
+    gatewayDid: gateway.did,
+    sentinelDid: sentinel.did,
+  };
+}
+
 describe('P0 deterministic evidence firewall: web + tee core', () => {
   it('uplifts proof_tier to witnessed_web for valid allowlisted web receipts', async () => {
     const { bundleEnvelope, witnessDid } = await makeWebOnlyBundle();
@@ -288,4 +398,39 @@ describe('P0 deterministic evidence firewall: web + tee core', () => {
     expect(out.result.status).toBe('INVALID');
     expect(out.error?.code).toBe('REVOKED');
   });
+
+  it('enforce phase fails closed on coverage invariant failures', async () => {
+    const { bundleEnvelope, gatewayDid, sentinelDid } =
+      await makeGatewayBundleWithCoverageInvariantFailure();
+
+    const out = await verifyProofBundle(bundleEnvelope, {
+      allowlistedReceiptSignerDids: [gatewayDid],
+      allowlistedCoverageAttestationSignerDids: [sentinelDid],
+      coverage_enforcement_phase: 'enforce',
+      maxCoverageLivenessGapMs: 1_000,
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.result.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
+  });
+
+  it.each(['observe', 'warn'] as const)(
+    '%s phase does not downgrade proof tier on coverage invariant failures',
+    async (phase) => {
+      const { bundleEnvelope, gatewayDid, sentinelDid } =
+        await makeGatewayBundleWithCoverageInvariantFailure();
+
+      const out = await verifyProofBundle(bundleEnvelope, {
+        allowlistedReceiptSignerDids: [gatewayDid],
+        allowlistedCoverageAttestationSignerDids: [sentinelDid],
+        coverage_enforcement_phase: phase,
+        maxCoverageLivenessGapMs: 1_000,
+      });
+
+      expect(out.result.status).toBe('VALID');
+      expect(out.result.proof_tier).toBe('gateway');
+      expect(out.result.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
+    }
+  );
 });

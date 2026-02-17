@@ -1,0 +1,8 @@
+{
+  "id": "valid-gateway-coverage",
+  "scenario": "valid_gateway_coverage",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

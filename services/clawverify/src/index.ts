@@ -21,6 +21,7 @@ import { verifyScopedToken } from './verify-scoped-token';
 import { verifyControlChain } from './verify-control-chain';
 import { verifyTokenControl } from './verify-token-control';
 import { verifyExportBundle } from './verify-export-bundle';
+import { validateWorkPolicyContractV2 } from './schema-validation';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -69,6 +70,24 @@ export interface Env {
    * Used for fail-closed web receipt verification (POH-US-018).
    */
   WEB_RECEIPT_SIGNER_DIDS?: string;
+
+  /**
+   * Comma-separated list of trusted coverage attestation signer DIDs (did:key:...).
+   * Used for fail-closed coverage_attestation verification in proof bundles.
+   */
+  COVERAGE_ATTESTATION_SIGNER_DIDS?: string;
+
+  /**
+   * Coverage enforcement phase for proof-bundle verification.
+   * Allowed values: observe | warn | enforce.
+   */
+  COVERAGE_ENFORCEMENT_PHASE?: string;
+
+  /**
+   * Maximum tolerated coverage liveness gap (ms).
+   * Used by proof-bundle coverage invariant checks.
+   */
+  COVERAGE_MAX_LIVENESS_GAP_MS?: string;
 
   /**
    * Comma-separated list of repo claim IDs that exist in clawclaim.
@@ -671,6 +690,46 @@ function parseCommaSeparatedAllowlist(value: string | undefined): string[] {
     .filter((s) => s.length > 0);
 }
 
+function parseCoverageEnforcementPhase(
+  value: string | undefined,
+): 'observe' | 'warn' | 'enforce' | undefined {
+  if (!value) return undefined;
+  const phase = value.trim().toLowerCase();
+  if (phase === 'observe' || phase === 'warn' || phase === 'enforce') {
+    return phase;
+  }
+  return undefined;
+}
+
+function parseNonNegativeInteger(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
+function getCoveragePhaseFromWorkPolicyContract(
+  workPolicyContract: unknown,
+): 'observe' | 'warn' | 'enforce' {
+  if (
+    typeof workPolicyContract !== 'object' ||
+    workPolicyContract === null ||
+    Array.isArray(workPolicyContract)
+  ) {
+    return 'observe';
+  }
+
+  const raw = (workPolicyContract as Record<string, unknown>).coverage_enforcement;
+  if (raw === 'observe' || raw === 'warn' || raw === 'enforce') {
+    return raw;
+  }
+
+  // Schema default for v2.
+  return 'observe';
+}
+
 /**
  * Handle POST /v1/introspect/scoped-token - Scoped token introspection
  */
@@ -994,10 +1053,11 @@ async function handleVerifyBundle(
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
-  const { envelope, urm, execution_attestations } = body as {
+  const { envelope, urm, execution_attestations, work_policy_contract } = body as {
     envelope: unknown;
     urm?: unknown;
     execution_attestations?: unknown;
+    work_policy_contract?: unknown;
   };
 
   // Verify the proof bundle
@@ -1013,10 +1073,36 @@ async function handleVerifyBundle(
     env.WEB_RECEIPT_SIGNER_DIDS
   );
 
+  const coverageAttestationSignerAllowlist = parseCommaSeparatedAllowlist(
+    env.COVERAGE_ATTESTATION_SIGNER_DIDS
+  );
+
+  let effectiveCoverageEnforcementPhase = parseCoverageEnforcementPhase(
+    env.COVERAGE_ENFORCEMENT_PHASE
+  );
+
+  if (work_policy_contract !== undefined) {
+    const wpcValidation = validateWorkPolicyContractV2(work_policy_contract);
+    if (!wpcValidation.valid) {
+      return errorResponse(
+        `Invalid work_policy_contract: ${wpcValidation.message}`,
+        400
+      );
+    }
+
+    effectiveCoverageEnforcementPhase =
+      getCoveragePhaseFromWorkPolicyContract(work_policy_contract);
+  }
+
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedWitnessSignerDids: witnessSignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
+    allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
+    coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
+    maxCoverageLivenessGapMs: parseNonNegativeInteger(
+      env.COVERAGE_MAX_LIVENESS_GAP_MS
+    ),
     urm,
   });
 
