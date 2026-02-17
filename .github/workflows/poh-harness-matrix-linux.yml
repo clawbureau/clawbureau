@@ -1,0 +1,57 @@
+name: poh-harness-matrix-linux
+
+on:
+  pull_request:
+    paths:
+      - 'packages/clawsig-conformance/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'scripts/e2e/linux-harness-smoke.mjs'
+      - '.github/workflows/poh-harness-matrix-linux.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/clawsig-conformance/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'scripts/e2e/linux-harness-smoke.mjs'
+      - '.github/workflows/poh-harness-matrix-linux.yml'
+
+jobs:
+  linux-harness-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install + build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm install
+          npm run build
+
+      - name: Install + build clawverify-cli
+        run: |
+          cd packages/clawverify-cli
+          npm install
+          npm run build
+
+      - name: Install + build clawsig-conformance
+        run: |
+          cd packages/clawsig-conformance
+          npm install
+          npm run build
+
+      - name: Run Linux harness matrix smoke (codex + gemini lanes)
+        env:
+          CLAWSIG_E2E_SKIP_BUILD: '1'
+          CLAWSIG_E2E_LINUX_AGENTS: 'codex,gemini'
+        run: |
+          node scripts/e2e/linux-harness-smoke.mjs
