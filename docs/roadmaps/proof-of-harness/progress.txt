@@ -366,3 +366,29 @@ Started: 2026-02-05T21:49:28Z
     - `node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env staging`
     - `node scripts/poh/smoke-fal-openrouter-via-clawproxy.mjs --env prod`
 ---
+
+
+## 2026-02-17T03:35:00Z - CVF-US-054/CVF-US-056 (firewall conformance + harness matrix expansion)
+- What was implemented
+  - Added deterministic firewall conformance fixture corpus:
+    - `packages/schema/fixtures/protocol-conformance/clawverify-firewall/manifest.v1.json`
+    - valid tiers: self, witnessed_web, gateway, sandbox/tee
+    - invalid critical cases: VIR merkle mismatch, unreported conflict, precedence violation, revoked TEE
+  - Added fixture-driven conformance test and one-command runner:
+    - `services/clawverify/test/firewall-conformance.test.ts`
+    - `scripts/protocol/run-clawverify-firewall-conformance.mjs`
+  - Added CI gate for firewall conformance:
+    - `.github/workflows/clawverify-firewall-conformance.yml`
+  - Expanded harness matrix with Gemini CLI lane:
+    - `packages/clawsig-conformance/src/harness-matrix.ts`
+    - agent set now includes `gemini` in matrix defaults and env wiring
+  - Added Linux-first harness reporting lane:
+    - `scripts/e2e/linux-harness-smoke.mjs`
+    - `.github/workflows/poh-harness-matrix-linux.yml`
+- Artifact paths + expected signals
+  - Firewall conformance: test/runner passes when fixture assertions match expected `status/proof_tier/error_code`.
+    - Runner: `node scripts/protocol/run-clawverify-firewall-conformance.mjs`
+  - Linux harness smoke artifact (always emitted):
+    - `.clawsig/e2e-linux-results.json`
+    - expected signal: report contains per-agent pass/fail/skip rows; lane is currently reporting-mode (non-blocking) while adapter parity stabilizes.
+---
