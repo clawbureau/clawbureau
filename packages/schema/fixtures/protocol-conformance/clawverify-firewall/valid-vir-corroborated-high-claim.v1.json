@@ -1,0 +1,8 @@
+{
+  "id": "valid-vir-corroborated-high-claim",
+  "scenario": "valid_vir_corroborated_high_claim",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

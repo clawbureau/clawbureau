@@ -90,6 +90,17 @@ export interface Env {
   COVERAGE_MAX_LIVENESS_GAP_MS?: string;
 
   /**
+   * VIR conflict policy mode for proof-bundle verification.
+   * Allowed values: strict | cap.
+   */
+  VIR_CONFLICT_POLICY_MODE?: string;
+
+  /**
+   * Maximum tolerated VIR↔gateway corroboration timestamp skew (ms).
+   */
+  VIR_CORROBORATION_MAX_SKEW_MS?: string;
+
+  /**
    * Comma-separated list of repo claim IDs that exist in clawclaim.
    * Used for CVF-US-011 commit proof verification.
    */
@@ -701,6 +712,17 @@ function parseCoverageEnforcementPhase(
   return undefined;
 }
 
+function parseVirConflictPolicyMode(
+  value: string | undefined,
+): 'strict' | 'cap' | undefined {
+  if (!value) return undefined;
+  const mode = value.trim().toLowerCase();
+  if (mode === 'strict' || mode === 'cap') {
+    return mode;
+  }
+  return undefined;
+}
+
 function parseNonNegativeInteger(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
@@ -1100,6 +1122,12 @@ async function handleVerifyBundle(
     allowlistedAttesterDids: attesterAllowlist,
     allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
     coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
+    vir_conflict_policy_mode: parseVirConflictPolicyMode(
+      env.VIR_CONFLICT_POLICY_MODE
+    ),
+    maxVirCorroborationSkewMs: parseNonNegativeInteger(
+      env.VIR_CORROBORATION_MAX_SKEW_MS
+    ),
     maxCoverageLivenessGapMs: parseNonNegativeInteger(
       env.COVERAGE_MAX_LIVENESS_GAP_MS
     ),

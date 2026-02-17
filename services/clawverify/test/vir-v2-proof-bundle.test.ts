@@ -223,7 +223,46 @@ describe('VIR v2 proof-bundle fail-closed integrity', () => {
     expect(out.result.reason).toContain('merkle_root mismatch');
   });
 
-  it('accepts reported model divergence when conflict is explicit', async () => {
+  it('keeps medium-severity metric conflicts valid with deterministic risk flags', async () => {
+    const { bundleEnvelope } = await makeVirV2Bundle({
+      evidenceConflicts: [
+        {
+          field: 'tokens_input',
+          authoritative_source: 'gateway',
+          divergent_source: 'preload',
+          authoritative_value: 111,
+          divergent_value: 112,
+        },
+      ],
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.result.risk_flags).toContain('VIR_CONFLICT_MEDIUM');
+    expect(out.result.risk_flags).toContain('EVIDENCE_METRIC_DISCREPANCY');
+  });
+
+  it('keeps low-severity conflicts valid with deterministic risk flags', async () => {
+    const { bundleEnvelope } = await makeVirV2Bundle({
+      evidenceConflicts: [
+        {
+          field: 'metadata.experimental_hint',
+          authoritative_source: 'gateway',
+          divergent_source: 'preload',
+          authoritative_value: 'a',
+          divergent_value: 'b',
+        },
+      ],
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.result.risk_flags).toContain('VIR_CONFLICT_LOW');
+  });
+
+  it('rejects explicit high-severity model conflicts under strict policy mode', async () => {
     const { bundleEnvelope } = await makeVirV2Bundle({
       modelClaimed: 'gpt-4',
       modelObserved: 'gpt-3.5',
@@ -240,8 +279,53 @@ describe('VIR v2 proof-bundle fail-closed integrity', () => {
 
     const out = await verifyProofBundle(bundleEnvelope);
 
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.message).toBe('ERR_VIR_CONFLICT_HIGH_POLICY');
+  });
+
+  it('rejects critical conflicts under strict policy mode', async () => {
+    const { bundleEnvelope } = await makeVirV2Bundle({
+      evidenceConflicts: [
+        {
+          field: 'request_hash_b64u',
+          authoritative_source: 'gateway',
+          divergent_source: 'preload',
+          authoritative_value: 'req_hash_vir_v2_bundle_001',
+          divergent_value: 'req_hash_tampered',
+        },
+      ],
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.message).toBe('ERR_VIR_CONFLICT_CRITICAL_POLICY');
+  });
+
+  it('caps high-severity model conflicts under cap policy mode', async () => {
+    const { bundleEnvelope } = await makeVirV2Bundle({
+      modelClaimed: 'gpt-4',
+      modelObserved: 'gpt-3.5',
+      evidenceConflicts: [
+        {
+          field: 'model',
+          authoritative_source: 'gateway',
+          divergent_source: 'preload',
+          authoritative_value: 'gpt-3.5',
+          divergent_value: 'gpt-4',
+        },
+      ],
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope, {
+      vir_conflict_policy_mode: 'cap',
+    });
+
     expect(out.result.status).toBe('VALID');
-    expect(out.result.proof_tier).toBe('gateway');
+    expect(out.result.proof_tier).toBe('self');
     expect(out.result.risk_flags).toContain('MODEL_SUBSTITUTION_DETECTED');
+    expect(out.result.risk_flags).toContain('VIR_CONFLICT_HIGH_TIER_CAPPED');
   });
 });

@@ -57,8 +57,10 @@ import { computeModelIdentityTierFromReceipts } from './model-identity';
 import { jcsCanonicalize } from './jcs';
 import {
   CRITICAL_VIR_CODES,
-  SOURCE_SCORE,
   compareVirCandidate,
+  classifyVirConflictSeverity,
+  mergeVirConflictSeverity,
+  type VirConflictSeverity,
   type VirFailureCode,
   validateVirReceiptCore,
 } from './vir-core';
@@ -95,6 +97,12 @@ export interface ProofBundleVerifierOptions {
   expectedVirSubject?: string;
   expectedVirScope?: string;
 
+  /** VIR conflict resolver policy. `strict` fail-closes on high/critical conflict; `cap` demotes to low-trust source. */
+  vir_conflict_policy_mode?: 'strict' | 'cap';
+
+  /** Maximum tolerated timestamp skew (ms) when correlating VIR claims to allowlisted gateway receipts. */
+  maxVirCorroborationSkewMs?: number;
+
   /** Optional execution attestations bound to this bundle. */
   execution_attestations?: SignedEnvelope<ExecutionAttestationPayload>[];
 
@@ -130,6 +138,13 @@ const MAX_EVENT_CHAIN_ENTRIES = 1000;
 const MAX_RECEIPTS = 1000;
 const MAX_ATTESTATIONS = 100;
 const MAX_METADATA_BYTES = 16 * 1024;
+
+const DEFAULT_VIR_CORROBORATION_MAX_SKEW_MS = 5 * 60 * 1000;
+const HIGH_CLAIM_VIR_SOURCES = new Set<VirSource>([
+  'tls_decrypt',
+  'gateway',
+  'interpose',
+]);
 
 function jsonByteSize(value: unknown): number {
   try {
@@ -967,6 +982,38 @@ function parseVirReceiptEntry(entry: unknown):
       payload: record as unknown as VirReceiptPayload,
     },
   };
+}
+
+function parseGatewayReceiptEntry(entry: unknown):
+  | { ok: true; payload: GatewayReceiptPayload }
+  | { ok: false } {
+  const record = isObjectRecord(entry) ? entry : null;
+  if (!record || record.envelope_type !== 'gateway_receipt') {
+    return { ok: false };
+  }
+
+  const payload = isObjectRecord(record.payload) ? record.payload : null;
+  if (!payload) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    payload: payload as unknown as GatewayReceiptPayload,
+  };
+}
+
+function normalizeVirConflictPolicyMode(
+  mode: ProofBundleVerifierOptions['vir_conflict_policy_mode']
+): 'strict' | 'cap' {
+  return mode === 'cap' ? 'cap' : 'strict';
+}
+
+function normalizeVirCorroborationSkewMs(value: number | undefined): number {
+  if (!Number.isFinite(value) || value === undefined || value < 0) {
+    return DEFAULT_VIR_CORROBORATION_MAX_SKEW_MS;
+  }
+  return value;
 }
 
 async function verifyVirReceiptEntry(
@@ -2326,6 +2373,46 @@ export async function verifyProofBundle(
 
   // Verify VIR receipts (R43 evidence-fusion path).
   if (payload.vir_receipts !== undefined && payload.vir_receipts.length > 0) {
+    const virConflictPolicyMode = normalizeVirConflictPolicyMode(
+      options.vir_conflict_policy_mode
+    );
+    const maxVirCorroborationSkewMs = normalizeVirCorroborationSkewMs(
+      options.maxVirCorroborationSkewMs
+    );
+
+    const gatewayCorroborationByEvent = new Map<string, number[]>();
+
+    // CVF-US-059: corroboration sources must be cryptographic + allowlisted.
+    // Only verified gateway receipts qualify (web receipts and metadata do not).
+    if (payload.receipts !== undefined && payload.receipts.length > 0) {
+      const receiptCorroborationResults = await Promise.all(
+        payload.receipts.map((r) =>
+          verifyReceiptEnvelope(
+            r,
+            options.allowlistedReceiptSignerDids,
+            bindingContext
+          )
+        )
+      );
+
+      for (let i = 0; i < receiptCorroborationResults.length; i++) {
+        if (!receiptCorroborationResults[i]?.valid) continue;
+
+        const parsedReceipt = parseGatewayReceiptEntry(payload.receipts[i]);
+        if (!parsedReceipt.ok) continue;
+
+        const eventHash = parsedReceipt.payload.binding?.event_hash_b64u;
+        if (typeof eventHash !== 'string' || eventHash.trim().length === 0) continue;
+
+        const timestampMs = Date.parse(parsedReceipt.payload.timestamp);
+        if (!Number.isFinite(timestampMs)) continue;
+
+        const timestamps = gatewayCorroborationByEvent.get(eventHash) ?? [];
+        timestamps.push(timestampMs);
+        gatewayCorroborationByEvent.set(eventHash, timestamps);
+      }
+    }
+
     const virResults = await Promise.all(
       payload.vir_receipts.map((r) =>
         verifyVirReceiptEntry(
@@ -2356,7 +2443,10 @@ export async function verifyProofBundle(
         },
         error: {
           code: 'EVIDENCE_MISMATCH',
-          message: criticalVirFailure.error ?? criticalVirFailure.code ?? 'Critical VIR validation failure',
+          message:
+            criticalVirFailure.error ??
+            criticalVirFailure.code ??
+            'Critical VIR validation failure',
           field: 'payload.vir_receipts',
         },
       };
@@ -2368,20 +2458,10 @@ export async function verifyProofBundle(
     componentResults.vir_receipts_valid = verifiedCount === payload.vir_receipts.length;
 
     type VirCandidate = {
-      index: number;
       source: VirSource;
       timestampMs: number;
       receiptId: string;
       eventHash?: string;
-      payload: VirReceiptPayload;
-      claim: {
-        model_observed: string;
-        request_hash_b64u: string;
-        response_hash_b64u: string;
-        tokens_input: number;
-        tokens_output: number;
-        latency_ms: number;
-      };
     };
 
     const validVirCandidates: VirCandidate[] = [];
@@ -2401,21 +2481,87 @@ export async function verifyProofBundle(
       const eventHash = virPayload.binding?.event_hash_b64u;
       const timestampMs = Date.parse(virPayload.timestamp);
 
+      let effectiveSource: VirSource = result.source;
+      let maxConflictSeverity: VirConflictSeverity = 'none';
+
+      const evidenceConflicts = Array.isArray(virPayload.evidence_conflicts)
+        ? virPayload.evidence_conflicts
+        : [];
+
+      for (const conflict of evidenceConflicts) {
+        if (!isObjectRecord(conflict)) continue;
+        const severity = classifyVirConflictSeverity(conflict.field);
+        maxConflictSeverity = mergeVirConflictSeverity(maxConflictSeverity, severity);
+      }
+
+      if (maxConflictSeverity !== 'none') {
+        modelIdentityRiskFlags.add(
+          `VIR_CONFLICT_${maxConflictSeverity.toUpperCase()}`
+        );
+      }
+
+      if (maxConflictSeverity === 'high' || maxConflictSeverity === 'critical') {
+        if (virConflictPolicyMode === 'strict') {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: `VIR conflict severity ${maxConflictSeverity} rejected by policy`,
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'EVIDENCE_MISMATCH',
+              message: `ERR_VIR_CONFLICT_${maxConflictSeverity.toUpperCase()}_POLICY`,
+              field: `payload.vir_receipts[${i}].evidence_conflicts`,
+            },
+          };
+        }
+
+        effectiveSource = 'sni';
+        modelIdentityRiskFlags.add(
+          `VIR_CONFLICT_${maxConflictSeverity.toUpperCase()}_TIER_CAPPED`
+        );
+      }
+
+      if (HIGH_CLAIM_VIR_SOURCES.has(result.source)) {
+        const normalizedEventHash =
+          typeof eventHash === 'string' && eventHash.length > 0
+            ? eventHash
+            : undefined;
+
+        const corroborationTimestamps = normalizedEventHash
+          ? gatewayCorroborationByEvent.get(normalizedEventHash) ?? []
+          : [];
+
+        const hasCorroboration =
+          normalizedEventHash !== undefined &&
+          Number.isFinite(timestampMs) &&
+          corroborationTimestamps.some(
+            (receiptTimestampMs) =>
+              Math.abs(receiptTimestampMs - timestampMs) <=
+              maxVirCorroborationSkewMs
+          );
+
+        if (!hasCorroboration) {
+          effectiveSource = 'sni';
+          modelIdentityRiskFlags.add('VIR_HIGH_CLAIM_UNCORROBORATED');
+
+          if (!normalizedEventHash) {
+            modelIdentityRiskFlags.add('VIR_CORROBORATION_BINDING_MISSING');
+          } else if (corroborationTimestamps.length > 0 && Number.isFinite(timestampMs)) {
+            modelIdentityRiskFlags.add('VIR_CORROBORATION_SKEW_EXCEEDED');
+          }
+        }
+      }
+
       validVirCandidates.push({
-        index: i,
-        source: result.source,
-        timestampMs: Number.isFinite(timestampMs) ? timestampMs : Number.POSITIVE_INFINITY,
+        source: effectiveSource,
+        timestampMs: Number.isFinite(timestampMs)
+          ? timestampMs
+          : Number.POSITIVE_INFINITY,
         receiptId: virPayload.receipt_id,
         eventHash: typeof eventHash === 'string' && eventHash.length > 0 ? eventHash : undefined,
-        payload: virPayload,
-        claim: {
-          model_observed: virPayload.model_observed ?? virPayload.model,
-          request_hash_b64u: virPayload.request_hash_b64u,
-          response_hash_b64u: virPayload.response_hash_b64u,
-          tokens_input: virPayload.tokens_input,
-          tokens_output: virPayload.tokens_output,
-          latency_ms: virPayload.latency_ms,
-        },
       });
     }
 
@@ -2430,6 +2576,7 @@ export async function verifyProofBundle(
       componentResults.vir_best_source = bestCandidate.source;
     }
 
+    // CVF-US-060: reject intra-bundle event contradictions deterministically.
     const candidatesByEvent = new Map<string, VirCandidate[]>();
     for (const c of validVirCandidates) {
       if (!c.eventHash) continue;
@@ -2439,72 +2586,22 @@ export async function verifyProofBundle(
     }
 
     for (const [eventHash, candidates] of candidatesByEvent.entries()) {
-      const sorted = [...candidates].sort(compareVirCandidate);
+      if (candidates.length <= 1) continue;
 
-      const canonical = sorted[0];
-
-      for (let i = 1; i < sorted.length; i++) {
-        const other = sorted[i];
-
-        const samePriority = SOURCE_SCORE[other.source] === SOURCE_SCORE[canonical.source];
-        const conflicts =
-          canonical.claim.model_observed !== other.claim.model_observed ||
-          canonical.claim.request_hash_b64u !== other.claim.request_hash_b64u ||
-          canonical.claim.response_hash_b64u !== other.claim.response_hash_b64u ||
-          canonical.claim.tokens_input !== other.claim.tokens_input ||
-          canonical.claim.tokens_output !== other.claim.tokens_output ||
-          canonical.claim.latency_ms !== other.claim.latency_ms;
-
-        if (!conflicts) continue;
-
-        if (samePriority) {
-          return {
-            result: {
-              status: 'INVALID',
-              reason: `VIR evidence conflict for event_hash_b64u ${eventHash}`,
-              verified_at: now,
-              bundle_id: payload.bundle_id,
-              agent_did: payload.agent_did,
-            },
-            error: {
-              code: 'EVIDENCE_MISMATCH',
-              message:
-                `Conflicting same-tier VIR claims for event_hash_b64u ${eventHash} ` +
-                `(canonical source=${canonical.source}, conflicting source=${other.source})`,
-              field: 'payload.vir_receipts',
-            },
-          };
-        }
-
-        const canonicalConflicts = Array.isArray(canonical.payload.evidence_conflicts)
-          ? canonical.payload.evidence_conflicts
-          : [];
-
-        const reportedModelConflict = canonicalConflicts.some(
-          (conflict) =>
-            isObjectRecord(conflict) &&
-            conflict.field === 'model' &&
-            conflict.authoritative_source === canonical.source &&
-            conflict.divergent_source === other.source
-        );
-
-        if (!reportedModelConflict && canonical.claim.model_observed !== other.claim.model_observed) {
-          return {
-            result: {
-              status: 'INVALID',
-              reason: `VIR conflict is unreported for event_hash_b64u ${eventHash}`,
-              verified_at: now,
-              bundle_id: payload.bundle_id,
-              agent_did: payload.agent_did,
-            },
-            error: {
-              code: 'EVIDENCE_MISMATCH',
-              message: 'EVIDENCE_CONFLICT_UNREPORTED',
-              field: 'payload.vir_receipts',
-            },
-          };
-        }
-      }
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `VIR event contradiction detected for event_hash_b64u ${eventHash}`,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: 'ERR_VIR_EVENT_CONTRADICTION',
+          field: 'payload.vir_receipts',
+        },
+      };
     }
 
     if (virResults.some((r) => !r.valid)) {

@@ -1,0 +1,8 @@
+{
+  "id": "valid-vir-uncorroborated-high-claim",
+  "scenario": "valid_vir_uncorroborated_high_claim",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "self"
+  }
+}
