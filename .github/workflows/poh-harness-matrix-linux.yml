@@ -49,9 +49,10 @@ jobs:
           npm install
           npm run build
 
-      - name: Run Linux harness matrix smoke (codex + gemini lanes)
+      - name: Run Linux harness matrix strict gate (codex + gemini lanes)
         env:
           CLAWSIG_E2E_SKIP_BUILD: '1'
           CLAWSIG_E2E_LINUX_AGENTS: 'codex,gemini'
+          CLAWSIG_FORCE_BASE_URL_OVERRIDE: '1'
         run: |
           node scripts/e2e/linux-harness-smoke.mjs

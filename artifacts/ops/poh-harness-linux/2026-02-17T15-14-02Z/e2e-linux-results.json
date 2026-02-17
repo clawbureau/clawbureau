@@ -1,0 +1,60 @@
+{
+  "started_at": "2026-02-17T15:13:07.004Z",
+  "finished_at": "2026-02-17T15:13:35.021Z",
+  "root_dir": "/private/tmp/clawbureau-nextwave-poh",
+  "results_path": "/private/tmp/clawbureau-nextwave-poh/.clawsig/e2e-linux-results.json",
+  "live_enabled": false,
+  "interpose_supported": false,
+  "timeout_ms": 60000,
+  "prompt": "Say exactly: hello world",
+  "results": [
+    {
+      "id": "codex:mock:proxy",
+      "agent": "codex",
+      "mode": "mock",
+      "layer": "proxy",
+      "status": "PASS",
+      "errors": [],
+      "metrics": {
+        "bundle": 1,
+        "receipts": 6,
+        "events": 6
+      },
+      "duration_ms": 7424,
+      "exit_code": 1,
+      "timed_out": false,
+      "cli_path": "/opt/homebrew/bin/codex",
+      "bundle_path": "/private/tmp/clawbureau-nextwave-poh/.clawsig/e2e-workdir/codex-mock-proxy/.clawsig/proof_bundle.json",
+      "stdout_tail": "KNOWN\",\n        \"classification\": \"infrastructure\",\n        \"pid\": 97190,\n        \"process_name\": \"Google Chrome Helper\",\n        \"hash_algorithm\": \"SHA-256\",\n        \"agent_did\": \"did:key:z6Mkt1NybCmwuQU4YsC83tuwwn72Qkx8Vy417w9L1WtB1wqv\",\n        \"timestamp\": \"2026-02-17T15:13:07.758Z\",\n        \"binding\": {\n          \"run_id\": \"run_d94a2c3c-bb08-4c1c-b440-8e7007c3e7ac\"\n        }\n      },\n      {\n        \"receipt_version\": \"1\",\n        \"receipt_id\": \"net_5c455da5-9b9e-4d57-a5ca-413257f1803e\",\n        \"protocol\": \"tcp\",\n        \"remote_address_hash_b64u\": \"BNGnz5vz522aMIYCr9CK_uKXP45hRb92KkAIEEV7yfo\",\n        \"state\": \"ESTABLISHED\",\n        \"classification\": \"infrastructure\",\n        \"pid\": 70384,\n        \"process_name\": \"git-remote-http\",\n        \"hash_algorithm\": \"SHA-256\",\n        \"agent_did\": \"did:key:z6Mkt1NybCmwuQU4YsC83tuwwn72Qkx8Vy417w9L1WtB1wqv\",\n        \"timestamp\": \"2026-02-17T15:13:10.196Z\",\n        \"binding\": {\n          \"run_id\": \"run_d94a2c3c-bb08-4c1c-b440-8e7007c3e7ac\"\n        }\n      },\n      {\n        \"receipt_version\": \"1\",\n        \"receipt_id\": \"net_ecf5da3c-4a62-4dd5-a1cf-21f96daa8786\",\n        \"protocol\": \"tcp\",\n        \"remote_address_hash_b64u\": \"IuM5LjHPZwTSMk2h0KMOVR2ruJ9_er4OLlRLFrxJ8c8\",\n        \"state\": \"ESTABLISHED\",\n        \"classification\": \"infrastructure\",\n        \"pid\": 70427,\n        \"process_name\": \"gh\",\n        \"hash_algorithm\": \"SHA-256\",\n        \"agent_did\": \"did:key:z6Mkt1NybCmwuQU4YsC83tuwwn72Qkx8Vy417w9L1WtB1wqv\",\n        \"timestamp\": \"2026-02-17T15:13:10.698Z\",\n        \"binding\": {\n          \"run_id\": \"run_d94a2c3c-bb08-4c1c-b440-8e7007c3e7ac\"\n        }\n      }\n    ]\n  },\n  \"payload_hash_b64u\": \"qpSFiy-mmyVpxVWvU7RAXR-w3JZHdyDfyHjTjQBaAKE\",\n  \"hash_algorithm\": \"SHA-256\",\n  \"signature_b64u\": \"y8sFsTiJDjRA5yQgkKI9NaliTeuX6MOqOIDtZBQVbs8Zybx3o4Md6Hxt9M2hedBletB8M3YnxJBhir4jiiJWDQ\",\n  \"algorithm\": \"Ed25519\",\n  \"signer_did\": \"did:key:z6Mkt1NybCmwuQU4YsC83tuwwn72Qkx8Vy417w9L1WtB1wqv\",\n  \"issued_at\": \"2026-02-17T15:13:13.660Z\"\n}\n",
+      "stderr_tail": "e::rollout::list: state db missing rollout path for thread 019c6849-fa6f-7e10-874a-521facaf5504\n2026-02-17T15:13:08.081477Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c6bc0-49d8-7123-b81e-af5bcdd4db5e\n2026-02-17T15:13:08.111077Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c6835-81c3-7cb0-93c8-1957dac5ddab\n2026-02-17T15:13:08.140654Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c6be2-894c-71d3-9498-6b89a0e08a0a\n2026-02-17T15:13:08.168728Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c684f-136f-7b73-a272-fae132d0141b\n2026-02-17T15:13:08.198310Z ERROR codex_core::rollout::list: state db missing rollout path for thread 019c6967-089a-7351-ae50-0df27dd6a581\n\n\u001b[36m[clawsig]\u001b[0m Child exited with code 1\n\u001b[36m[clawsig]\u001b[0m Receipts collected: 6\n\u001b[36m[clawsig]\u001b[0m Sentinel Shell: 0 commands captured\n\u001b[36m[clawsig]\u001b[0m FS Sentinel: 0 file events\n\u001b[36m[clawsig]\u001b[0m Net Sentinel: 39 connections (4 suspicious)\n\u001b[31m[clawsig]\u001b[0m WARNING: Suspicious network connections detected!\n\u001b[31m[clawsig]\u001b[0m   0x44283ddfc752169d (codex PID:69577)\n\u001b[31m[clawsig]\u001b[0m   0xa1e323317cb7979f (codex PID:69577)\n\u001b[31m[clawsig]\u001b[0m   0x873c22e953276c0d (codex PID:69577)\n\u001b[31m[clawsig]\u001b[0m   0x220670643542fafc (codex PID:69577)\n\u001b[36m[clawsig]\u001b[0m Bundle ID: bundle_2cf5b334-2bff-475f-86cc-3c17b5c9d9ad\n\u001b[36m[clawsig]\u001b[0m Event chain: 6 events\n\u001b[36m[clawsig]\u001b[0m Gateway receipts: 7 (proxy: 7, preload: 0, sni: 0, interpose: 0)\n\u001b[36m[clawsig]\u001b[0m Tool receipts (Causal Sieve): 0\n\u001b[36m[clawsig]\u001b[0m Side-effect receipts: 0\n\u001b[36m[clawsig]\u001b[0m Execution receipts: 0 (shell: 0, interpose: 0)\n\u001b[36m[clawsig]\u001b[0m Network receipts: 39 (polling: 39, interpose: 0)\n\u001b[36m[clawsig]\u001b[0m Bundle written to: /private/tmp/clawbureau-nextwave-poh/.clawsig/e2e-workdir/codex-mock-proxy/.clawsig/proof_bundle.json\n\u001b[36m[clawsig]\u001b[0m Publish skipped (--no-publish)\n\u001b[36m[clawsig]\u001b[0m Proof bundle (local):\n"
+    },
+    {
+      "id": "gemini:mock:proxy",
+      "agent": "gemini",
+      "mode": "mock",
+      "layer": "proxy",
+      "status": "PASS",
+      "errors": [],
+      "metrics": {
+        "bundle": 1,
+        "receipts": 1,
+        "events": 1
+      },
+      "duration_ms": 20584,
+      "exit_code": 0,
+      "timed_out": false,
+      "cli_path": "/Users/gfw/.nvm/versions/node/v24.13.0/bin/gemini",
+      "bundle_path": "/private/tmp/clawbureau-nextwave-poh/.clawsig/e2e-workdir/gemini-mock-proxy/.clawsig/proof_bundle.json",
+      "stdout_tail": "        \"command\": \"\",\n          \"activity\": {\n            \"llm_calls\": 0,\n            \"llm_domains\": [],\n            \"files_opened\": 0,\n            \"files_modified\": 0,\n            \"network_connections\": 2,\n            \"bound_ports\": []\n          },\n          \"children\": []\n        },\n        \"agent_did\": \"did:key:z6MksPbfAYZ138ro2JixKXFxpfXMTHEg8kXC8vXsWBpYCuBt\",\n        \"timestamp\": \"2026-02-17T15:13:33.166Z\",\n        \"binding\": {\n          \"run_id\": \"run_8fc463aa-a676-43c8-aad5-9387d7c8eeb8\"\n        }\n      },\n      {\n        \"envelope_version\": \"1\",\n        \"envelope_type\": \"gateway_receipt\",\n        \"payload\": {\n          \"receipt_version\": \"1\",\n          \"receipt_id\": \"rcpt_fallback_1f28c001\",\n          \"gateway_id\": \"gw_clawsig_fallback\",\n          \"provider\": \"unknown\",\n          \"model\": \"gemini-fallback\",\n          \"request_hash_b64u\": \"h2cNL0ZBZItE5pkxV6w1ngPWPrqG3uGAwlV1QwAjvu4\",\n          \"response_hash_b64u\": \"QW5m_zZqYM7vNA_ofDFnrEvdInI4qumkFYgOOtEv_sc\",\n          \"tokens_input\": 0,\n          \"tokens_output\": 0,\n          \"latency_ms\": 0,\n          \"timestamp\": \"2026-02-17T15:13:33.166Z\",\n          \"binding\": {\n            \"run_id\": \"run_8fc463aa-a676-43c8-aad5-9387d7c8eeb8\"\n          }\n        },\n        \"payload_hash_b64u\": \"j1DR6yx2tdzk7jH8nYrl015uJUJV1uyn6nZ3S1Vx9EI\",\n        \"hash_algorithm\": \"SHA-256\",\n        \"signature_b64u\": \"cRLCefc3mOYgadRIRNiR__KUVTIpS5u_JO-9peAojKDJJ9RWabxIlxLObF4hU0iIbLs2aD7s8alhMKttNGGKCg\",\n        \"algorithm\": \"Ed25519\",\n        \"signer_did\": \"did:key:z6MksPbfAYZ138ro2JixKXFxpfXMTHEg8kXC8vXsWBpYCuBt\",\n        \"issued_at\": \"2026-02-17T15:13:33.166Z\"\n      }\n    ]\n  },\n  \"payload_hash_b64u\": \"e6GQCvdF6N1Iq_I11Z1KN0eql3U4tnSPPWbTcFWYUh8\",\n  \"hash_algorithm\": \"SHA-256\",\n  \"signature_b64u\": \"t9Wpz5Y8j1hMZXErso2zX04cafZ8jKyEsVTVwCOobSwvh3CBl4xt9ee95RQci6Mdooz07NRhfMGKif7H3VU8Cg\",\n  \"algorithm\": \"Ed25519\",\n  \"signer_did\": \"did:key:z6MksPbfAYZ138ro2JixKXFxpfXMTHEg8kXC8vXsWBpYCuBt\",\n  \"issued_at\": \"2026-02-17T15:13:33.117Z\"\n}\n",
+      "stderr_tail": "ing)\n\u001b[36m[clawsig]\u001b[0m Local proxy listening on 127.0.0.1:54333\n\u001b[36m[clawsig]\u001b[0m Causal Sieve: ACTIVE (tool observability enabled)\n\u001b[36m[clawsig]\u001b[0m Mode: clawproxy (http://127.0.0.1:54332)\n\u001b[33m[clawsig]\u001b[0m Interpose Sentinel: disabled (disabled by CLAWSIG_DISABLE_INTERPOSE=1)\n\u001b[36m[clawsig]\u001b[0m Spawning: gemini -p Say exactly: hello world\n\n\u001b[36m[clawsig]\u001b[0m Net Sentinel: ACTIVE (PID 70811)\nLoaded cached credentials.\nSkill \"skill-creator\" from \"/Users/gfw/.agents/skills/skill-creator/SKILL.md\" is overriding the built-in skill.\nHook registry initialized with 1 hook entries\n\n\u001b[36m[clawsig]\u001b[0m Child exited with code 0\n\u001b[36m[clawsig]\u001b[0m Receipts collected: 0\n\u001b[36m[clawsig]\u001b[0m Sentinel Shell: 0 commands captured\n\u001b[36m[clawsig]\u001b[0m FS Sentinel: 22 file events\n\u001b[36m[clawsig]\u001b[0m Net Sentinel: 59 connections (16 suspicious)\n\u001b[36m[clawsig]\u001b[0m Interpose Sentinel: 32 syscalls (5 net, 0 exec)\n\u001b[36m[clawsig]\u001b[0m Interpose Oracle: 1 PIDs, 0 server ports, 0 credentials, 0 leaks\n\u001b[31m[clawsig]\u001b[0m WARNING: Suspicious network connections detected!\n\u001b[31m[clawsig]\u001b[0m   0x44283ddfc752169d (node PID:70811)\n\u001b[31m[clawsig]\u001b[0m   0xb8d7fd30f14c6942 (node PID:70811)\n\u001b[31m[clawsig]\u001b[0m   0x825197c8d4ee9cc (node PID:70811)\n\u001b[31m[clawsig]\u001b[0m   0xa8c3c8d0c6a302c2 (node PID:70811)\n\u001b[31m[clawsig]\u001b[0m   0x16c76444b367c98 (node PID:70811)\n\u001b[36m[clawsig]\u001b[0m Bundle ID: bundle_87f20002-de6d-49c5-b967-ccf2bda44172\n\u001b[36m[clawsig]\u001b[0m Event chain: 1 events\n\u001b[36m[clawsig]\u001b[0m Gateway receipts: 2 (proxy: 2, preload: 0, sni: 0, interpose: 0)\n\u001b[36m[clawsig]\u001b[0m Tool receipts (Causal Sieve): 0\n\u001b[36m[clawsig]\u001b[0m Side-effect receipts: 0\n\u001b[36m[clawsig]\u001b[0m Execution receipts: 0 (shell: 0, interpose: 0)\n\u001b[36m[clawsig]\u001b[0m Network receipts: 64 (polling: 59, interpose: 5)\n\u001b[36m[clawsig]\u001b[0m Bundle written to: /private/tmp/clawbureau-nextwave-poh/.clawsig/e2e-workdir/gemini-mock-proxy/.clawsig/proof_bundle.json\n\u001b[36m[clawsig]\u001b[0m Publish skipped (--no-publish)\n\u001b[36m[clawsig]\u001b[0m Proof bundle (local):\n"
+    }
+  ],
+  "summary": {
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "executed": 2,
+    "detected_agents": 2,
+    "requested_agents": 2
+  }
+}

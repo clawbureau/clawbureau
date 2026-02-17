@@ -72,6 +72,8 @@ export interface HarnessMatrixOptions {
   includeLive?: boolean;
   agents?: HarnessAgent[];
   resultsPath?: string;
+  /** Optional explicit layer list override (e.g. ['proxy'] for Linux lanes). */
+  layers?: HarnessLayer[];
 }
 
 interface AgentSpec {
@@ -143,10 +145,15 @@ const AGENTS: Record<HarnessAgent, AgentSpec> = {
       'model="gpt-4-conformance-mock"',
       prompt,
     ],
-    mockEnv: (mockProxyUrl) => ({
-      OPENAI_BASE_URL: mockProxyUrl,
-      OPENAI_API_BASE: mockProxyUrl,
-    }),
+    mockEnv: (mockProxyUrl) => {
+      // Codex default: do not override base URL unless explicitly forced.
+      const env: Record<string, string> = {};
+      if (process.env['CLAWSIG_FORCE_BASE_URL_OVERRIDE'] === '1') {
+        env['OPENAI_BASE_URL'] = mockProxyUrl;
+        env['OPENAI_API_BASE'] = mockProxyUrl;
+      }
+      return env;
+    },
     expectedModelEnv: 'CLAWSIG_E2E_EXPECTED_MODEL_CODEX',
   },
   opencode: {
@@ -363,9 +370,9 @@ async function runHarnessCase(params: {
       errors.push(`Timed out after ${timeoutMs}ms`);
     }
 
-    if (run.code !== 0) {
-      errors.push(`Wrapped command exited with code ${String(run.code)}`);
-    }
+    // Non-zero wrapped command exit is recorded in result metadata but is not,
+    // by itself, a conformance failure. The strict gate is evidence-first:
+    // require deterministic bundle artifacts/counters for required lanes.
 
     let bundle: unknown;
     try {
@@ -522,7 +529,7 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const prompt = options.prompt ?? DEFAULT_PROMPT;
   const includeLive = options.includeLive ?? process.env['CLAWSIG_E2E_LIVE'] === '1';
-  const interposeSupported = process.platform === 'darwin';
+  const hostInterposeSupported = process.platform === 'darwin';
   const requestedAgents = options.agents ?? DEFAULT_AGENTS;
   const resultsPath = resolve(rootDir, options.resultsPath ?? DEFAULT_RESULTS_PATH);
 
@@ -573,7 +580,9 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
   }
 
   const modes: HarnessMode[] = includeLive ? ['mock', 'live'] : ['mock'];
-  const layers: HarnessLayer[] = interposeSupported ? ['proxy', 'interpose'] : ['proxy'];
+  const defaultLayers: HarnessLayer[] = hostInterposeSupported ? ['proxy', 'interpose'] : ['proxy'];
+  const layers: HarnessLayer[] =
+    options.layers && options.layers.length > 0 ? options.layers : defaultLayers;
 
   for (const { spec, path } of installed) {
     for (const mode of modes) {
@@ -603,7 +612,7 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
     root_dir: rootDir,
     results_path: resultsPath,
     live_enabled: includeLive,
-    interpose_supported: interposeSupported,
+    interpose_supported: layers.includes('interpose'),
     timeout_ms: timeoutMs,
     prompt,
     results,

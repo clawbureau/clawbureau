@@ -101,20 +101,45 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
 }
 
 /**
- * Detect provider from the request path.
- * Supported routes:
- *   /v1/proxy/openai   -> openai
- *   /v1/proxy/anthropic -> anthropic
- *   /v1/chat/completions -> openai (compatibility)
- *   /v1/messages -> anthropic (compatibility)
+ * Resolve provider + upstream path from incoming local-proxy route.
+ *
+ * Supported patterns:
+ *   /v1/proxy/<provider>[/...]  -> provider + mapped upstream path
+ *   /v1/chat/completions        -> openai /v1/chat/completions
+ *   /v1/responses               -> openai /v1/responses
+ *   /v1/messages                -> anthropic /v1/messages
  */
-function detectProvider(pathname: string): string | null {
+interface ProxyRoute {
+  provider: string;
+  upstreamPath: string;
+}
+
+function parseProxyRoute(pathname: string): ProxyRoute | null {
   if (pathname.startsWith('/v1/proxy/')) {
-    const provider = pathname.slice('/v1/proxy/'.length).split('/')[0];
-    return provider || null;
+    const rest = pathname.slice('/v1/proxy/'.length);
+    const slash = rest.indexOf('/');
+    const provider = slash === -1 ? rest : rest.slice(0, slash);
+    if (!provider) return null;
+
+    const suffix = slash === -1 ? '' : rest.slice(slash); // e.g. /models
+    const defaultPath = UPSTREAM_PATHS[provider] ?? '/v1/chat/completions';
+    const upstreamPath = !suffix
+      ? defaultPath
+      : (suffix.startsWith('/v1/') ? suffix : `/v1${suffix}`);
+
+    return { provider, upstreamPath };
   }
-  if (pathname === '/v1/chat/completions') return 'openai';
-  if (pathname === '/v1/messages') return 'anthropic';
+
+  if (pathname === '/v1/chat/completions') {
+    return { provider: 'openai', upstreamPath: '/v1/chat/completions' };
+  }
+  if (pathname === '/v1/responses') {
+    return { provider: 'openai', upstreamPath: '/v1/responses' };
+  }
+  if (pathname === '/v1/messages') {
+    return { provider: 'anthropic', upstreamPath: '/v1/messages' };
+  }
+
   return null;
 }
 
@@ -135,6 +160,42 @@ function extractProviderKey(headers: Record<string, string | string[] | undefine
   }
 
   return undefined;
+}
+
+/**
+ * Copy incoming request headers for upstream forwarding while stripping hop-by-hop headers.
+ *
+ * Important for Codex compatibility:
+ * - Preserve Content-Encoding when clients send compressed JSON bodies.
+ * - Preserve provider-specific headers (OpenAI-Beta, Anthropic-Version, etc).
+ */
+function buildUpstreamRequestHeaders(
+  incomingHeaders: Record<string, string | string[] | undefined>,
+  bodyBuffer: Buffer,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const hopByHop = new Set([
+    'host',
+    'content-length',
+    'connection',
+    'transfer-encoding',
+    'proxy-connection',
+    'keep-alive',
+  ]);
+
+  for (const [key, value] of Object.entries(incomingHeaders)) {
+    if (!value) continue;
+    const lower = key.toLowerCase();
+    if (hopByHop.has(lower)) continue;
+    headers[key] = Array.isArray(value) ? value.join(', ') : value;
+  }
+
+  // Sensible default when caller omitted content-type on non-empty body.
+  if (bodyBuffer.length > 0 && !Object.keys(headers).some(k => k.toLowerCase() === 'content-type')) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return headers;
 }
 
 /**
@@ -163,30 +224,37 @@ function extractSafeHeaders(rawHeaders: Headers): Record<string, string> {
  */
 async function forwardToClawproxy(
   provider: string,
+  upstreamPathWithQuery: string,
+  method: string,
   bodyBuffer: Buffer,
+  incomingHeaders: Record<string, string | string[] | undefined>,
   providerApiKey: string | undefined,
   clawproxyUrl: string,
   runId: string,
   agentDid: string,
   idempotencyKey: string,
 ): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
-  const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}`;
+  const suffix = upstreamPathWithQuery.startsWith('/v1/')
+    ? upstreamPathWithQuery.slice('/v1'.length)
+    : upstreamPathWithQuery;
+  const targetUrl = `${clawproxyUrl}/v1/proxy/${provider}${suffix}`;
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-Run-Id': runId,
-    'X-Idempotency-Key': idempotencyKey,
-    'X-Agent-DID': agentDid,
-  };
+  const headers = buildUpstreamRequestHeaders(incomingHeaders, bodyBuffer);
+  headers['X-Run-Id'] = runId;
+  headers['X-Idempotency-Key'] = idempotencyKey;
+  headers['X-Agent-DID'] = agentDid;
 
   if (providerApiKey) {
     headers['X-Provider-API-Key'] = providerApiKey;
   }
 
+  const upperMethod = method.toUpperCase();
+  const hasBody = upperMethod !== 'GET' && upperMethod !== 'HEAD' && bodyBuffer.length > 0;
+
   const res = await fetch(targetUrl, {
-    method: 'POST',
+    method: upperMethod,
     headers,
-    body: new Uint8Array(bodyBuffer),
+    ...(hasBody ? { body: new Uint8Array(bodyBuffer) } : {}),
   });
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -218,41 +286,27 @@ const UPSTREAM_PATHS: Record<string, string> = {
 
 /**
  * Forward a request directly to the upstream provider (passthrough mode).
- * Preserves the original auth headers from the incoming request.
+ * Preserves original request method/path/headers for maximal client compatibility.
  * Returns a ReadableStream for SSE responses (true streaming passthrough).
  */
 async function forwardToUpstream(
   provider: string,
+  upstreamPathWithQuery: string,
+  method: string,
   bodyBuffer: Buffer,
   incomingHeaders: Record<string, string | string[] | undefined>,
 ): Promise<{ status: number; headers: Record<string, string>; body: Buffer; isStream: boolean; stream?: ReadableStream<Uint8Array> | null }> {
   const baseUrl = UPSTREAM_URLS[provider] ?? `https://api.${provider}.com`;
-  const path = UPSTREAM_PATHS[provider] ?? '/v1/chat/completions';
-  const targetUrl = `${baseUrl}${path}`;
+  const targetUrl = `${baseUrl}${upstreamPathWithQuery}`;
 
-  // Forward relevant headers (auth, content-type, provider-specific)
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  // Preserve auth headers
-  const authHeader = incomingHeaders['authorization'];
-  if (typeof authHeader === 'string') headers['Authorization'] = authHeader;
-
-  const apiKey = incomingHeaders['x-api-key'];
-  if (typeof apiKey === 'string') headers['x-api-key'] = apiKey;
-
-  // Preserve Anthropic-specific headers
-  const anthropicVersion = incomingHeaders['anthropic-version'];
-  if (typeof anthropicVersion === 'string') headers['anthropic-version'] = anthropicVersion;
-
-  const anthropicBeta = incomingHeaders['anthropic-beta'];
-  if (typeof anthropicBeta === 'string') headers['anthropic-beta'] = anthropicBeta;
+  const headers = buildUpstreamRequestHeaders(incomingHeaders, bodyBuffer);
+  const upperMethod = method.toUpperCase();
+  const hasBody = upperMethod !== 'GET' && upperMethod !== 'HEAD' && bodyBuffer.length > 0;
 
   const res = await fetch(targetUrl, {
-    method: 'POST',
+    method: upperMethod,
     headers,
-    body: new Uint8Array(bodyBuffer),
+    ...(hasBody ? { body: new Uint8Array(bodyBuffer) } : {}),
   });
 
   const contentType = res.headers.get('content-type') ?? '';
@@ -349,10 +403,11 @@ function extractReceiptFromStream(body: Buffer): {
  * forwarding them through clawproxy with proper receipt-binding headers.
  *
  * Supported routes:
- *   POST /v1/proxy/openai
- *   POST /v1/proxy/anthropic
- *   POST /v1/chat/completions  (alias for openai)
- *   POST /v1/messages          (alias for anthropic)
+ *   * /v1/proxy/openai[/...]      (method-preserving passthrough)
+ *   * /v1/proxy/anthropic[/...]   (method-preserving passthrough)
+ *   POST /v1/chat/completions     (alias for openai)
+ *   POST /v1/responses            (alias for openai)
+ *   POST /v1/messages             (alias for anthropic)
  *   GET  /health
  */
 export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy> {
@@ -398,22 +453,28 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       return;
     }
 
-    // Only handle POST requests to proxy routes
-    if (req.method !== 'POST') {
+    const method = (req.method ?? 'GET').toUpperCase();
+    const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']);
+    if (!allowedMethods.has(method)) {
       res.writeHead(405, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'METHOD_NOT_ALLOWED', message: 'Only POST is supported' }));
+      res.end(JSON.stringify({ error: 'METHOD_NOT_ALLOWED', message: `Method ${method} is not supported` }));
       return;
     }
 
-    const provider = detectProvider(pathname);
-    if (!provider) {
+    const route = parseProxyRoute(pathname);
+    if (!route) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'NOT_FOUND', message: `Unknown route: ${pathname}` }));
       return;
     }
 
+    const provider = route.provider;
+    const upstreamPathWithQuery = `${route.upstreamPath}${url.search}`;
+
     try {
-      const bodyBuffer = await readBody(req);
+      const bodyBuffer = (method === 'GET' || method === 'HEAD')
+        ? Buffer.alloc(0)
+        : await readBody(req);
       const idempotencyKey = randomUUID();
 
       // Extract provider key from the incoming request, fall back to constructor option
@@ -425,18 +486,23 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
       // to the LLM, which means a tool just finished executing.
       // We run git diff to capture file mutations from that tool.
       const providerType = (provider === 'anthropic' ? 'anthropic' : 'openai') as 'openai' | 'anthropic';
-      try {
-        await sieve.processAgentRequest(providerType, bodyBuffer.toString('utf-8'));
-      } catch {
-        // Sieve errors must not break the proxy pipeline
+      if (bodyBuffer.length > 0) {
+        try {
+          await sieve.processAgentRequest(providerType, bodyBuffer.toString('utf-8'));
+        } catch {
+          // Sieve errors must not break the proxy pipeline
+        }
       }
 
       // Forward request: passthrough goes direct to provider, otherwise through clawproxy
       const upstream = passthrough
-        ? await forwardToUpstream(provider, bodyBuffer, reqHeaders)
+        ? await forwardToUpstream(provider, upstreamPathWithQuery, method, bodyBuffer, reqHeaders)
         : await forwardToClawproxy(
             provider,
+            upstreamPathWithQuery,
+            method,
             bodyBuffer,
+            reqHeaders,
             incomingKey,
             normalizedUrl,
             runId,
