@@ -11,7 +11,7 @@
  * Spec per: docs/specs/x402/CLAWPROXY_X402_INTEGRATION_v1.md
  */
 
-import type { Env } from './types';
+import type { Env, GatewayReceiptX402Metadata } from './types';
 
 // ---------- Types ----------
 
@@ -58,14 +58,14 @@ export interface X402PaymentContext {
   settledAmountMinor?: number;
 }
 
-export interface X402ReceiptMetadata {
+export type X402ReceiptMetadata = GatewayReceiptX402Metadata & {
   x402_payment_ref: string;
   x402_amount_minor: number;
   x402_currency: string;
   x402_network: string;
   /** sha256_b64u of the payment payload — bidirectional hash cross-commitment */
   x402_payment_auth_hash_b64u: string;
-}
+};
 
 // ---------- Config ----------
 

@@ -1,0 +1,10 @@
+{
+  "id": "valid-x402-bound",
+  "scenario": "x402_bound",
+  "expected": {
+    "status": "VALID",
+    "x402_reason_code": "X402_BOUND",
+    "proof_tier": "gateway",
+    "trust_tier": "verified"
+  }
+}

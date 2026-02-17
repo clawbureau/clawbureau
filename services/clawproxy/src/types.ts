@@ -362,6 +362,18 @@ export interface GatewayReceiptBinding {
  * Canonical gateway receipt payload (snake_case).
  * This shape is verified by clawverify (SignedEnvelope<GatewayReceiptPayload>).
  */
+export interface GatewayReceiptX402Metadata {
+  x402_payment_ref?: string;
+  x402_amount_minor?: number;
+  x402_currency?: string;
+  x402_network?: string;
+  x402_payment_auth_hash_b64u?: string;
+}
+
+export interface GatewayReceiptMetadata
+  extends Record<string, unknown>,
+    GatewayReceiptX402Metadata {}
+
 export interface GatewayReceiptPayload {
   receipt_version: '1';
   receipt_id: string;
@@ -375,7 +387,7 @@ export interface GatewayReceiptPayload {
   latency_ms: number;
   timestamp: string;
   binding?: GatewayReceiptBinding;
-  metadata?: Record<string, unknown>;
+  metadata?: GatewayReceiptMetadata;
 }
 
 /** Signed envelope structure (matches clawverify SignedEnvelope). */

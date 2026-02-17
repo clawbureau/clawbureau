@@ -199,6 +199,23 @@ export interface HarnessMetadata {
  * Gateway receipt payload - represents a proxy receipt for proof-of-harness
  * Used by marketplaces to validate that requests were routed through a trusted gateway
  */
+export interface GatewayReceiptX402Metadata {
+  /** x402 payment transaction hash or facilitator reference. */
+  x402_payment_ref?: string;
+  /** Settled amount in minor currency units. */
+  x402_amount_minor?: number;
+  /** Payment currency (e.g., USDC). */
+  x402_currency?: string;
+  /** Payment network (e.g., base-sepolia, base). */
+  x402_network?: string;
+  /** sha256_b64u(payment authorization payload). */
+  x402_payment_auth_hash_b64u?: string;
+}
+
+export interface GatewayReceiptMetadata
+  extends Record<string, unknown>,
+    GatewayReceiptX402Metadata {}
+
 export interface GatewayReceiptPayload {
   receipt_version: '1';
   receipt_id: string;
@@ -213,7 +230,7 @@ export interface GatewayReceiptPayload {
   timestamp: string;
   /** Binding fields tying this receipt to a run/event (set by clawproxy from headers) */
   binding?: ReceiptBinding;
-  metadata?: Record<string, unknown>;
+  metadata?: GatewayReceiptMetadata;
 }
 
 /** VIR observation source strength order: tls_decrypt > gateway > interpose > preload > sni. */
@@ -399,6 +416,9 @@ export interface VerifyReceiptResponse {
   gateway_id?: string;
   model_identity_tier?: ModelIdentityTier;
   risk_flags?: string[];
+  x402_claimed?: boolean;
+  x402_reason_code?: X402BindingReasonCode;
+  x402_payment_auth_hash_b64u?: string;
   error?: VerificationError;
 }
 
@@ -1096,6 +1116,18 @@ export type CompletenessReasonCode =
   | 'BINDING_CONTEXT_MISSING'
   | 'RECEIPT_BINDING_MISMATCH';
 
+export type X402BindingReasonCode =
+  | 'X402_NOT_CLAIMED'
+  | 'X402_METADATA_PARTIAL'
+  | 'X402_PAYMENT_AUTH_HASH_INVALID'
+  | 'X402_BINDING_MISSING'
+  | 'X402_BINDING_RUN_ID_MISSING'
+  | 'X402_BINDING_EVENT_HASH_MISSING'
+  | 'X402_BINDING_EVENT_HASH_INVALID'
+  | 'X402_EXECUTION_BINDING_MISMATCH'
+  | 'X402_PAYMENT_AUTH_REPLAY'
+  | 'X402_BOUND';
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
@@ -1209,6 +1241,16 @@ export interface ProofBundleVerificationResult {
     completeness_verdict?: CompletenessVerdict;
     /** Deterministic completeness reason code. */
     completeness_reason_code?: CompletenessReasonCode;
+
+    /** Number of gateway receipts that claim x402 payment metadata. */
+    x402_claimed_count?: number;
+    /** Number of x402-claimed receipts that passed execution binding checks. */
+    x402_bound_count?: number;
+    /** Aggregated x402 payment↔execution binding validity. */
+    x402_binding_valid?: boolean;
+    /** Aggregated deterministic x402 reason code. */
+    x402_reason_code?: X402BindingReasonCode;
+
     /** Strongest verified VIR source among this bundle's VIR receipts. */
     vir_best_source?: VirSource;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */

@@ -74,4 +74,46 @@ describe('CVF-US-024: Ajv strict schema validation (fail-closed)', () => {
     expect(out.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
     expect(out.error?.field).toBe('extra');
   });
+
+  it('rejects malformed x402 auth hash metadata by schema contract', async () => {
+    const envelope: any = {
+      envelope_version: '1',
+      envelope_type: 'gateway_receipt',
+      payload: {
+        receipt_version: '1',
+        receipt_id: 'rcpt_002',
+        gateway_id: 'gw_001',
+        provider: 'anthropic',
+        model: 'claude-test',
+        request_hash_b64u: b64u(16),
+        response_hash_b64u: b64u(16),
+        tokens_input: 1,
+        tokens_output: 1,
+        latency_ms: 1,
+        timestamp: '2026-02-07T00:00:00Z',
+        binding: {
+          run_id: 'run_002',
+          event_hash_b64u: b64u(16),
+        },
+        metadata: {
+          x402_payment_ref: '0xabc',
+          x402_amount_minor: 1,
+          x402_currency: 'USDC',
+          x402_network: 'base-sepolia',
+          x402_payment_auth_hash_b64u: '***',
+        },
+      },
+      payload_hash_b64u: b64u(16),
+      hash_algorithm: 'SHA-256',
+      signature_b64u: b64u(86),
+      algorithm: 'Ed25519',
+      signer_did: 'did:key:abc123',
+      issued_at: '2026-02-07T00:00:01Z',
+    };
+
+    const out = await verifyReceipt(envelope);
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+    expect(out.error?.field).toBe('payload.metadata.x402_payment_auth_hash_b64u');
+  });
 });

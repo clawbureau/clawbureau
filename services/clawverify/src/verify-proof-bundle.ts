@@ -33,6 +33,7 @@ import type {
   WebReceiptPayload,
   CoverageAttestationPayload,
   ExecutionAttestationPayload,
+  X402BindingReasonCode,
 } from './types';
 import {
   isAllowedVersion,
@@ -66,6 +67,7 @@ import {
   isCompletenessConstrainedVerdict,
   isCompletenessFailClosedVerdict,
 } from './verify-completeness';
+import { inspectX402Claim } from './x402-binding';
 import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { verifyLogInclusionProof } from './verify-log-inclusion-proof';
 import { computeModelIdentityTierFromReceipts } from './model-identity';
@@ -617,12 +619,27 @@ async function verifyReceiptEnvelope(
   signature_valid: boolean;
   /** Whether the receipt was bound to the proof bundle's event chain. */
   binding_valid: boolean;
+  /** Whether this receipt claims x402 payment metadata. */
+  x402_claimed: boolean;
+  /** Deterministic x402 reason code for this receipt path. */
+  x402_reason_code?: X402BindingReasonCode;
+  /** Claimed x402 payment auth hash (if present). */
+  x402_payment_auth_hash_b64u?: string;
   provider?: string;
   model?: string;
   gateway_id?: string;
   signer_did?: string;
   error?: string;
 }> {
+  const envelopePayload =
+    typeof receipt === 'object' &&
+    receipt !== null &&
+    'payload' in (receipt as Record<string, unknown>)
+      ? (receipt as { payload: unknown }).payload
+      : undefined;
+
+  const x402Inspection = inspectX402Claim(envelopePayload);
+
   const verification = await verifyReceipt(receipt, { allowlistedSignerDids });
 
   if (verification.result.status !== 'VALID') {
@@ -630,15 +647,25 @@ async function verifyReceiptEnvelope(
       valid: false,
       signature_valid: false,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: verification.x402_reason_code,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       error: verification.error?.message ?? verification.result.reason,
     };
   }
+
+  const x402BindingMismatchCode = x402Inspection.claimed
+    ? ('X402_EXECUTION_BINDING_MISMATCH' as const)
+    : verification.x402_reason_code;
 
   if (!bindingContext) {
     return {
       valid: false,
       signature_valid: true,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: x402BindingMismatchCode,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       provider: verification.provider,
       model: verification.model,
       gateway_id: verification.gateway_id,
@@ -656,6 +683,9 @@ async function verifyReceiptEnvelope(
       valid: false,
       signature_valid: true,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: x402BindingMismatchCode,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       provider: verification.provider,
       model: verification.model,
       gateway_id: verification.gateway_id,
@@ -672,6 +702,9 @@ async function verifyReceiptEnvelope(
       valid: false,
       signature_valid: true,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: x402BindingMismatchCode,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       provider: verification.provider,
       model: verification.model,
       gateway_id: verification.gateway_id,
@@ -685,6 +718,9 @@ async function verifyReceiptEnvelope(
       valid: false,
       signature_valid: true,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: x402BindingMismatchCode,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       provider: verification.provider,
       model: verification.model,
       gateway_id: verification.gateway_id,
@@ -702,6 +738,9 @@ async function verifyReceiptEnvelope(
       valid: false,
       signature_valid: true,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: x402BindingMismatchCode,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       provider: verification.provider,
       model: verification.model,
       gateway_id: verification.gateway_id,
@@ -715,6 +754,9 @@ async function verifyReceiptEnvelope(
       valid: false,
       signature_valid: true,
       binding_valid: false,
+      x402_claimed: x402Inspection.claimed,
+      x402_reason_code: x402BindingMismatchCode,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       provider: verification.provider,
       model: verification.model,
       gateway_id: verification.gateway_id,
@@ -728,6 +770,9 @@ async function verifyReceiptEnvelope(
     valid: true,
     signature_valid: true,
     binding_valid: true,
+    x402_claimed: x402Inspection.claimed,
+    x402_reason_code: verification.x402_reason_code,
+    x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
     provider: verification.provider,
     model: verification.model,
     gateway_id: verification.gateway_id,
@@ -2856,6 +2901,67 @@ export async function verifyProofBundle(
     componentResults.receipts_count = payload.receipts.length;
     componentResults.receipts_signature_verified_count = signatureValidCount;
     componentResults.receipts_verified_count = boundValidCount;
+
+    const x402ClaimedResults = receiptResults.filter((r) => r.x402_claimed);
+    const x402ClaimedCount = x402ClaimedResults.length;
+    const x402BoundCount = x402ClaimedResults.filter((r) => r.valid).length;
+
+    componentResults.x402_claimed_count = x402ClaimedCount;
+    componentResults.x402_bound_count = x402BoundCount;
+    componentResults.x402_binding_valid =
+      x402ClaimedCount === 0 ? true : x402BoundCount === x402ClaimedCount;
+
+    let x402ReasonCode: X402BindingReasonCode =
+      x402ClaimedCount === 0 ? 'X402_NOT_CLAIMED' : 'X402_BOUND';
+
+    const seenPaymentAuthHashes = new Set<string>();
+    for (const result of x402ClaimedResults) {
+      const hash = result.x402_payment_auth_hash_b64u;
+      if (typeof hash !== 'string' || hash.length === 0) continue;
+
+      if (seenPaymentAuthHashes.has(hash)) {
+        x402ReasonCode = 'X402_PAYMENT_AUTH_REPLAY';
+        break;
+      }
+
+      seenPaymentAuthHashes.add(hash);
+    }
+
+    if (x402ReasonCode === 'X402_BOUND') {
+      const firstX402Failure = x402ClaimedResults.find((r) => !r.valid);
+      if (firstX402Failure?.x402_reason_code) {
+        x402ReasonCode = firstX402Failure.x402_reason_code;
+      } else if (firstX402Failure) {
+        x402ReasonCode = 'X402_EXECUTION_BINDING_MISMATCH';
+      }
+    }
+
+    componentResults.x402_reason_code = x402ReasonCode;
+
+    if (x402ClaimedCount > 0 && x402ReasonCode !== 'X402_BOUND') {
+      modelIdentityRiskFlags.add(`X402_${x402ReasonCode}`);
+
+      const reason = `x402 payment↔execution binding failed (${x402ReasonCode})`;
+      return {
+        result: {
+          status: 'INVALID',
+          reason,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+          risk_flags:
+            modelIdentityRiskFlags.size > 0
+              ? [...modelIdentityRiskFlags].sort()
+              : undefined,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: x402ReasonCode,
+          field: 'payload.receipts',
+        },
+      };
+    }
 
     // CVF-US-016: Extract + verify model identity and compute an overall tier.
     try {

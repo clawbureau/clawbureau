@@ -1,0 +1,9 @@
+{
+  "id": "invalid-x402-payment-auth-replay",
+  "scenario": "x402_payment_auth_replay",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "x402_reason_code": "X402_PAYMENT_AUTH_REPLAY"
+  }
+}
