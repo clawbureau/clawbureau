@@ -1,22 +1,22 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-12
+> **Last reviewed:** 2026-02-17
 > **Source of truth:** `docs/roadmaps/*/prd.json` + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
 > - Roadmaps are the execution layer: concrete stories + progress logs.
-> - Roadmaps are the canonical “what we’re doing next”.
+> - Roadmaps are the canonical "what we’re doing next".
 
 # Roadmaps
 
 Roadmaps are the **execution layer** of planning: concrete stories + progress logs that can be run via `scripts/ralph/ralph.sh`.
 
-## Seed (not yet scheduled)
+## In progress / partially shipped
 
-- **Clawsig Protocol v0.2** (rate limits, co-signing, TTL, selective disclosure, aggregate bundles)
+- **Clawsig Protocol v0.2**
   - Folder: `docs/roadmaps/clawsig-protocol-v0.2/`
-  - Status: seed — waiting for v0.1 adoption data before scheduling
+  - Status: partially shipped — CPL-V2-002..005 complete (PRs #281/#282/#283), CPL-V2-001 remains open
 
 - **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
   - Folder: `docs/roadmaps/clawcompiler/`

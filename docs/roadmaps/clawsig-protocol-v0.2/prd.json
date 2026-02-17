@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 candidate stories. These are identified but not scheduled — v0.1 must see real adoption first.",
+  "description": "Clawsig Protocol v0.2 roadmap. R48/R49 tranche is shipped; CPL-V2-001 remains open for implementation.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -15,7 +15,7 @@
       ],
       "priority": 1,
       "passes": false,
-      "notes": "Candidate. Blocked on real adoption data to inform the right semantics."
+      "notes": "Open. This is now the only remaining v0.2 story after R48/R49 lanes merged."
     },
     {
       "id": "CPL-V2-002",
@@ -27,8 +27,8 @@
         "Threshold semantics (e.g., 2-of-3 required)"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": "Candidate. Useful for high-stakes autonomous agent deployments. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
+      "passes": true,
+      "notes": "Shipped via R48 verifier + conformance lanes. Refs: PR #281 (merge a936c099814802df68e810d974d03017f39fd497), PR #283 (merge 7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5)."
     },
     {
       "id": "CPL-V2-003",
@@ -40,8 +40,8 @@
         "Grace period semantics for clock skew"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": "Candidate. Needed for compliance regimes that require fresh attestations. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
+      "passes": true,
+      "notes": "Shipped via R49 temporal guardrails and verifier/runtime uptake. Refs: PR #282 (merge 4199b2b80ea5e1993e9063b8408dd81b90757e74), PR #283 (merge 7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5)."
     },
     {
       "id": "CPL-V2-004",
@@ -53,8 +53,8 @@
         "Privacy-preserving: default remains hash-only"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "Candidate. Enables audit use cases that need to see 'which file was read' without seeing 'what was in it'. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
+      "passes": true,
+      "notes": "Shipped via selective-disclosure schema/runtime + executable fixtures. Refs: PR #281 (merge a936c099814802df68e810d974d03017f39fd497), PR #283 (merge 7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5)."
     },
     {
       "id": "CPL-V2-005",
@@ -66,12 +66,26 @@
         "Fleet summary statistics in aggregate metadata"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Candidate. Needed for enterprise fleet dashboards and compliance reporting across agent pools. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
+      "passes": true,
+      "notes": "Shipped via aggregate verifier/runtime + executable aggregate vectors. Refs: PR #282 (merge 4199b2b80ea5e1993e9063b8408dd81b90757e74), PR #283 (merge 7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5)."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-17T22:45:00Z",
-    "status": "seed — no stories scheduled"
+    "updatedAt": "2026-02-17T22:55:00Z",
+    "status": "partially shipped — CPL-V2-002..005 complete; CPL-V2-001 pending",
+    "references": [
+      {
+        "pr": "#281",
+        "merge_commit": "a936c099814802df68e810d974d03017f39fd497"
+      },
+      {
+        "pr": "#282",
+        "merge_commit": "4199b2b80ea5e1993e9063b8408dd81b90757e74"
+      },
+      {
+        "pr": "#283",
+        "merge_commit": "7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5"
+      }
+    ]
   }
 }
