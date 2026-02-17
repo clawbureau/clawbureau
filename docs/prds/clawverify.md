@@ -469,4 +469,21 @@ M6 evidence:
 
 ---
 
+## 12) 2026-02-17 addendum — CVF-US-057/058 coverage phase state + backlog split
+
+Current shipped state (merged):
+- **CVF-US-057:** coverage attestation runtime verification + binding is active (`agent_did`, `run_id`, `event_chain_root_hash_b64u`) with deterministic coverage counters.
+- **CVF-US-058:** `/v1/verify/bundle` accepts optional inline `work_policy_contract` and validates it locally; effective coverage phase is derived from WPC first, then env fallback.
+
+Coverage phase contract (as shipped):
+- `observe` / `warn` => non-blocking risk signaling only.
+- `enforce` => fail-closed `INVALID` + `EVIDENCE_MISMATCH` when required coverage evidence is missing or fails runtime verification/invariants.
+
+Backlog split after CVF-US-058 (next tranche):
+- **CVF-US-059/060:** VIR corroboration gating + deterministic conflict severity policy.
+- **CVF-US-062/063:** witnessed_web quorum semantics + transparency requirement hooks (while preserving witnessed_web namespace isolation).
+- **CVF-US-064:** TEE nonce/report-data binding + explicit `proof_tier=tee` path under verified conditions.
+
+---
+
 *Generated for Claw Bureau monorepo. All PRDs follow a uniform structure for Ralph execution.*
