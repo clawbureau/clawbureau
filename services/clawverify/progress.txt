@@ -493,3 +493,9 @@ Started: 2026-02-02T03:08:26.937416
   - `cd services/clawverify && npm run check:schema-runtime-sync`
   - `node scripts/protocol/run-clawverify-firewall-conformance.mjs`
 ---
+
+## 2026-02-17 - CVF-US-061 tracker reinstatement
+- Reintroduced missing `CVF-US-061` record in `services/clawverify/prd.json`.
+- Record is intentionally `passes:false` and marked as pending/deferred.
+- Reinstatement is auditability-only; no runtime/schema behavior changes were made in this lane.
+---

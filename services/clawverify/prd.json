@@ -480,6 +480,19 @@
       "notes": "Merged via PR #267 (`564608a`). Implemented deterministic VIR conflict severity policy, including same-event contradiction fail-closed behavior and conformance fixtures."
     },
     {
+      "id": "CVF-US-061",
+      "title": "Tracker continuity placeholder for CVF-US-061",
+      "description": "As maintainers, we need CVF-US-061 explicitly tracked so story numbering and audit history remain continuous and reviewable.",
+      "acceptanceCriteria": [
+        "CVF-US-061 is present in services/clawverify/prd.json with passes:false",
+        "Notes explicitly mark implementation status as pending/deferred",
+        "Reinstatement lane introduces no runtime or schema behavior changes"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": "Record reinstated for auditability after numbering-gap discovery. Implementation status is pending/deferred; no runtime change has shipped in this tracker-only lane."
+    },
+    {
       "id": "CVF-US-062",
       "title": "Witnessed-web quorum policy enforcement",
       "description": "As a verifier, I want witnessed-web evidence to require quorum semantics so single-witness artifacts cannot overstate trust.",
