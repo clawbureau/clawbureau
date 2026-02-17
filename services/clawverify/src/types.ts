@@ -415,6 +415,11 @@ export interface WebReceiptPayload {
   session_hash_b64u?: string;
   timestamp: string;
   binding?: ReceiptBinding;
+  transparency?: {
+    inclusion_proof?: unknown;
+    anchor_id?: string;
+    anchor_uri?: string;
+  };
   metadata?: Record<string, unknown>;
 }
 

@@ -1,0 +1,8 @@
+{
+  "id": "valid-witnessed-web-quorum-fail-warn",
+  "scenario": "valid_witnessed_web_quorum_fail_warn",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "self"
+  }
+}

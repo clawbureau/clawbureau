@@ -1,0 +1,8 @@
+{
+  "id": "valid-witnessed-web-transparency-pass",
+  "scenario": "valid_witnessed_web_transparency_pass",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "witnessed_web"
+  }
+}

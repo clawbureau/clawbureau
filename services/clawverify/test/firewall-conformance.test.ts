@@ -22,12 +22,18 @@ type FixtureCase = {
   scenario:
     | 'valid_self'
     | 'valid_witnessed_web'
+    | 'valid_witnessed_web_quorum_pass'
+    | 'valid_witnessed_web_quorum_fail_warn'
+    | 'valid_witnessed_web_transparency_pass'
     | 'valid_gateway'
     | 'valid_gateway_coverage'
     | 'valid_sandbox_tee'
     | 'valid_vir_uncorroborated_high_claim'
     | 'valid_vir_corroborated_high_claim'
     | 'invalid_coverage_chain_root_enforce'
+    | 'invalid_witnessed_web_quorum_fail_enforce'
+    | 'invalid_witnessed_web_split_view_enforce'
+    | 'invalid_witnessed_web_transparency_enforce_missing'
     | 'invalid_vir_merkle_mismatch'
     | 'invalid_vir_conflict_unreported'
     | 'invalid_vir_precedence_violation'
@@ -247,6 +253,121 @@ async function makeVirV2Envelope(args: {
   });
 }
 
+async function computeWebReceiptLeafHash(
+  payload: Record<string, unknown>
+): Promise<string> {
+  const bindingRecord =
+    typeof payload.binding === 'object' && payload.binding !== null
+      ? (payload.binding as Record<string, unknown>)
+      : null;
+
+  return computeHash(
+    {
+      leaf_version: 'web_receipt_v1',
+      receipt_version: payload.receipt_version,
+      receipt_id: payload.receipt_id,
+      witness_id: payload.witness_id,
+      source: payload.source,
+      request_hash_b64u: payload.request_hash_b64u,
+      response_hash_b64u: payload.response_hash_b64u,
+      session_hash_b64u: payload.session_hash_b64u ?? null,
+      timestamp: payload.timestamp,
+      binding: bindingRecord
+        ? {
+            run_id: bindingRecord.run_id ?? null,
+            event_hash_b64u: bindingRecord.event_hash_b64u ?? null,
+            nonce: bindingRecord.nonce ?? null,
+            subject: bindingRecord.subject ?? bindingRecord.subject_did ?? null,
+            scope: bindingRecord.scope ?? bindingRecord.scope_hash_b64u ?? null,
+            job_id: bindingRecord.job_id ?? null,
+            contract_id: bindingRecord.contract_id ?? null,
+            jurisdiction: bindingRecord.jurisdiction ?? null,
+            policy_hash: bindingRecord.policy_hash ?? null,
+            token_scope_hash_b64u: bindingRecord.token_scope_hash_b64u ?? null,
+          }
+        : null,
+    },
+    'SHA-256'
+  );
+}
+
+async function makeSingleLeafInclusionProof(args: {
+  leafHashB64u: string;
+  signerDid: string;
+  signerKey: CryptoKey;
+  corruptLeaf?: boolean;
+}) {
+  const leafHash = args.corruptLeaf ? `${args.leafHashB64u}x` : args.leafHashB64u;
+
+  const sigBytes = new Uint8Array(
+    await crypto.subtle.sign('Ed25519', args.signerKey, new TextEncoder().encode(leafHash))
+  );
+
+  return {
+    proof_version: '1',
+    log_id: 'clawlogs-firewall-web',
+    tree_size: 1,
+    leaf_hash_b64u: leafHash,
+    root_hash_b64u: leafHash,
+    audit_path: [],
+    root_published_at: '2026-02-17T00:00:00Z',
+    root_signature: {
+      signer_did: args.signerDid,
+      sig_b64u: base64UrlEncode(sigBytes),
+    },
+    metadata: {
+      leaf_index: 0,
+    },
+  };
+}
+
+async function makeWebReceiptEnvelope(args: {
+  runId: string;
+  eventHash: string;
+  witnessDid: string;
+  witnessKey: CryptoKey;
+  receiptId: string;
+  responseHash: string;
+  includeTransparencyProof?: boolean;
+  corruptTransparencyProof?: boolean;
+}) {
+  const payload: Record<string, unknown> = {
+    receipt_version: '1',
+    receipt_id: args.receiptId,
+    witness_id: `witness_${args.receiptId}`,
+    source: 'chatgpt_web',
+    request_hash_b64u: 'req_web_firewall_001',
+    response_hash_b64u: args.responseHash,
+    timestamp: '2026-02-17T00:00:00Z',
+    binding: {
+      run_id: args.runId,
+      event_hash_b64u: args.eventHash,
+    },
+  };
+
+  if (args.includeTransparencyProof) {
+    const logSigner = await makeDidKeyEd25519();
+    const leafHash = await computeWebReceiptLeafHash(payload);
+
+    payload.transparency = {
+      inclusion_proof: await makeSingleLeafInclusionProof({
+        leafHashB64u: leafHash,
+        signerDid: logSigner.did,
+        signerKey: logSigner.privateKey,
+        corruptLeaf: args.corruptTransparencyProof,
+      }),
+    };
+  }
+
+  return signEnvelope({
+    payload,
+    envelopeType: 'web_receipt',
+    signerDid: args.witnessDid,
+    privateKey: args.witnessKey,
+    issuedAt: '2026-02-17T00:00:00Z',
+  });
+}
+
 async function buildFixtureScenario(spec: FixtureCase) {
   const runId = `run_firewall_${spec.id.replace(/[^a-z0-9]+/gi, '_')}`;
   const agent = await makeDidKeyEd25519();
@@ -264,35 +385,91 @@ async function buildFixtureScenario(spec: FixtureCase) {
     return { envelope: bundleEnvelope, options: {} };
   }
 
-  if (spec.scenario === 'valid_witnessed_web') {
-    const witness = await makeDidKeyEd25519();
+  if (
+    spec.scenario === 'valid_witnessed_web' ||
+    spec.scenario === 'valid_witnessed_web_quorum_pass' ||
+    spec.scenario === 'valid_witnessed_web_quorum_fail_warn' ||
+    spec.scenario === 'valid_witnessed_web_transparency_pass' ||
+    spec.scenario === 'invalid_witnessed_web_quorum_fail_enforce' ||
+    spec.scenario === 'invalid_witnessed_web_split_view_enforce' ||
+    spec.scenario === 'invalid_witnessed_web_transparency_enforce_missing'
+  ) {
+    const witnessA = await makeDidKeyEd25519();
+    const witnessB = await makeDidKeyEd25519();
 
-    const webPayload: Record<string, unknown> = {
-      receipt_version: '1',
-      receipt_id: `wr_${runId}`,
-      witness_id: 'witness_runtime_firewall_001',
-      source: 'chatgpt_web',
-      request_hash_b64u: 'req_web_firewall_001',
-      response_hash_b64u: 'res_web_firewall_001',
-      timestamp: '2026-02-17T00:00:00Z',
-      binding: {
-        run_id: runId,
-        event_hash_b64u: eventHash,
-      },
-    };
+    const webReceipts: unknown[] = [];
 
-    const webEnvelope = await signEnvelope({
-      payload: webPayload,
-      envelopeType: 'web_receipt',
-      signerDid: witness.did,
-      privateKey: witness.privateKey,
-      issuedAt: '2026-02-17T00:00:00Z',
-    });
+    if (spec.scenario === 'invalid_witnessed_web_split_view_enforce') {
+      webReceipts.push(
+        await makeWebReceiptEnvelope({
+          runId,
+          eventHash,
+          witnessDid: witnessA.did,
+          witnessKey: witnessA.privateKey,
+          receiptId: `${runId}_a`,
+          responseHash: 'res_web_firewall_split_a',
+        })
+      );
+      webReceipts.push(
+        await makeWebReceiptEnvelope({
+          runId,
+          eventHash,
+          witnessDid: witnessB.did,
+          witnessKey: witnessB.privateKey,
+          receiptId: `${runId}_b`,
+          responseHash: 'res_web_firewall_split_b',
+        })
+      );
+    } else if (spec.scenario === 'valid_witnessed_web_quorum_pass') {
+      webReceipts.push(
+        await makeWebReceiptEnvelope({
+          runId,
+          eventHash,
+          witnessDid: witnessA.did,
+          witnessKey: witnessA.privateKey,
+          receiptId: `${runId}_a`,
+          responseHash: 'res_web_firewall_quorum_pass',
+        })
+      );
+      webReceipts.push(
+        await makeWebReceiptEnvelope({
+          runId,
+          eventHash,
+          witnessDid: witnessB.did,
+          witnessKey: witnessB.privateKey,
+          receiptId: `${runId}_b`,
+          responseHash: 'res_web_firewall_quorum_pass',
+        })
+      );
+    } else if (spec.scenario === 'valid_witnessed_web_transparency_pass') {
+      webReceipts.push(
+        await makeWebReceiptEnvelope({
+          runId,
+          eventHash,
+          witnessDid: witnessA.did,
+          witnessKey: witnessA.privateKey,
+          receiptId: `${runId}_a`,
+          responseHash: 'res_web_firewall_transparency_pass',
+          includeTransparencyProof: true,
+        })
+      );
+    } else {
+      webReceipts.push(
+        await makeWebReceiptEnvelope({
+          runId,
+          eventHash,
+          witnessDid: witnessA.did,
+          witnessKey: witnessA.privateKey,
+          receiptId: `${runId}_a`,
+          responseHash: 'res_web_firewall_001',
+        })
+      );
+    }
 
     const bundleEnvelope = await signEnvelope({
       payload: {
         ...bundlePayload,
-        web_receipts: [webEnvelope],
+        web_receipts: webReceipts,
       },
       envelopeType: 'proof_bundle',
       signerDid: agent.did,
@@ -300,11 +477,37 @@ async function buildFixtureScenario(spec: FixtureCase) {
       issuedAt: '2026-02-17T00:00:01Z',
     });
 
+    const options: Record<string, unknown> = {
+      allowlistedWitnessSignerDids: [witnessA.did, witnessB.did],
+    };
+
+    if (
+      spec.scenario === 'valid_witnessed_web_quorum_pass' ||
+      spec.scenario === 'valid_witnessed_web_quorum_fail_warn' ||
+      spec.scenario === 'invalid_witnessed_web_quorum_fail_enforce'
+    ) {
+      options.witnessed_web_quorum_m = 2;
+      options.witnessed_web_quorum_n = 2;
+      options.witnessed_web_policy_mode =
+        spec.scenario === 'invalid_witnessed_web_quorum_fail_enforce'
+          ? 'enforce'
+          : 'warn';
+    }
+
+    if (spec.scenario === 'invalid_witnessed_web_split_view_enforce') {
+      options.witnessed_web_policy_mode = 'enforce';
+    }
+
+    if (
+      spec.scenario === 'valid_witnessed_web_transparency_pass' ||
+      spec.scenario === 'invalid_witnessed_web_transparency_enforce_missing'
+    ) {
+      options.witnessed_web_transparency_mode = 'enforce';
+    }
+
     return {
       envelope: bundleEnvelope,
-      options: {
-        allowlistedWitnessSignerDids: [witness.did],
-      },
+      options,
     };
   }
 

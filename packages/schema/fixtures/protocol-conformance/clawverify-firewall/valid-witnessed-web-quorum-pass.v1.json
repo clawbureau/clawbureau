@@ -1,0 +1,8 @@
+{
+  "id": "valid-witnessed-web-quorum-pass",
+  "scenario": "valid_witnessed_web_quorum_pass",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "witnessed_web"
+  }
+}
