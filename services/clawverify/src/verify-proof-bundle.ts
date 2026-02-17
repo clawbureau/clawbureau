@@ -51,6 +51,7 @@ import {
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
 import { verifyWebReceipt } from './verify-web-receipt';
+import { verifyCoverageAttestation } from './verify-coverage-attestation';
 import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { computeModelIdentityTierFromReceipts } from './model-identity';
 import { jcsCanonicalize } from './jcs';
@@ -82,6 +83,9 @@ export interface ProofBundleVerifierOptions {
 
   /** Allowlisted attester DIDs for proof bundle attestations (did:key:...). */
   allowlistedAttesterDids?: readonly string[];
+
+  /** Allowlisted signer DIDs for coverage attestations (did:key:...). */
+  allowlistedCoverageAttestationSignerDids?: readonly string[];
 
   /** Phase gate for deterministic coverage invariants. Defaults to 'observe'. */
   coverage_enforcement_phase?: 'observe' | 'warn' | 'enforce';
@@ -520,6 +524,7 @@ async function verifyAttestationReference(
 interface ReceiptBindingContext {
   expectedRunId: string;
   allowedEventHashes: ReadonlySet<string>;
+  expectedChainRootHash: string;
 }
 
 /**
@@ -781,6 +786,113 @@ async function verifyWebReceiptEnvelope(
     witness_id: verification.witness_id,
     source: verification.source,
     signer_did: verification.result.signer_did,
+  };
+}
+
+async function verifyCoverageAttestationEnvelope(
+  attestation: unknown,
+  allowlistedSignerDids: readonly string[] | undefined,
+  bindingContext: ReceiptBindingContext | null,
+  expectedAgentDid: string,
+  maxLivenessGapMs: number,
+): Promise<{
+  valid: boolean;
+  signature_valid: boolean;
+  binding_valid: boolean;
+  invariants_valid: boolean;
+  signer_did?: string;
+  sentinel_did?: string;
+  error?: string;
+  risk_flags?: string[];
+}> {
+  const verification = await verifyCoverageAttestation(attestation, {
+    allowlistedSignerDids,
+  });
+
+  if (verification.result.status !== 'VALID') {
+    return {
+      valid: false,
+      signature_valid: false,
+      binding_valid: false,
+      invariants_valid: false,
+      signer_did: verification.signer_did,
+      sentinel_did: verification.sentinel_did,
+      error: verification.error?.message ?? verification.result.reason,
+      risk_flags: ['COVERAGE_ATTESTATION_VERIFY_FAILED'],
+    };
+  }
+
+  const riskFlags: string[] = [];
+
+  let bindingValid = true;
+  if (verification.agent_did !== expectedAgentDid) {
+    bindingValid = false;
+    riskFlags.push('COVERAGE_ATTESTATION_AGENT_MISMATCH');
+  }
+
+  if (!bindingContext) {
+    bindingValid = false;
+    riskFlags.push('COVERAGE_ATTESTATION_BINDING_CONTEXT_MISSING');
+  } else {
+    if (verification.run_id !== bindingContext.expectedRunId) {
+      bindingValid = false;
+      riskFlags.push('COVERAGE_ATTESTATION_RUN_ID_MISMATCH');
+    }
+
+    if (
+      verification.event_chain_root_hash_b64u !==
+      bindingContext.expectedChainRootHash
+    ) {
+      bindingValid = false;
+      riskFlags.push('COVERAGE_ATTESTATION_CHAIN_ROOT_MISMATCH');
+    }
+  }
+
+  const metrics = verification.metrics;
+  let invariantsValid = true;
+
+  if (!metrics) {
+    invariantsValid = false;
+    riskFlags.push('COVERAGE_ATTESTATION_METRICS_MISSING');
+  } else {
+    if (metrics.lineage.unmonitored_spawns > 0) {
+      invariantsValid = false;
+      riskFlags.push('COVERAGE_UNMONITORED_SPAWNS');
+    }
+
+    if (metrics.lineage.escapes_suspected) {
+      invariantsValid = false;
+      riskFlags.push('COVERAGE_ESCAPES_SUSPECTED');
+    }
+
+    if (metrics.egress.unmediated_connections > 0) {
+      invariantsValid = false;
+      riskFlags.push('COVERAGE_UNMEDIATED_EGRESS');
+    }
+
+    if (metrics.liveness.status !== 'continuous') {
+      invariantsValid = false;
+      riskFlags.push('COVERAGE_LIVENESS_INTERRUPTED');
+    }
+
+    if (metrics.liveness.max_gap_ms > maxLivenessGapMs) {
+      invariantsValid = false;
+      riskFlags.push('COVERAGE_LIVENESS_GAP_EXCEEDED');
+    }
+  }
+
+  return {
+    valid: bindingValid && invariantsValid,
+    signature_valid: true,
+    binding_valid: bindingValid,
+    invariants_valid: invariantsValid,
+    signer_did: verification.signer_did,
+    sentinel_did: verification.sentinel_did,
+    error:
+      bindingValid && invariantsValid
+        ? undefined
+        : 'Coverage attestation failed bundle binding or coverage invariants',
+    risk_flags: riskFlags.length > 0 ? riskFlags : undefined,
   };
 }
 
@@ -2174,12 +2286,15 @@ export async function verifyProofBundle(
   const bindingContext =
     componentResults.event_chain_valid &&
     payload.event_chain !== undefined &&
-    payload.event_chain.length > 0
+    payload.event_chain.length > 0 &&
+    typeof componentResults.chain_root_hash === 'string' &&
+    componentResults.chain_root_hash.length > 0
       ? {
           expectedRunId: payload.event_chain[0].run_id,
           allowedEventHashes: new Set(
             payload.event_chain.map((e) => e.event_hash_b64u)
           ),
+          expectedChainRootHash: componentResults.chain_root_hash,
         }
       : null;
 
@@ -2465,6 +2580,47 @@ export async function verifyProofBundle(
     }
   }
 
+  const maxCoverageLivenessGapMs =
+    typeof options.maxCoverageLivenessGapMs === 'number' &&
+    Number.isInteger(options.maxCoverageLivenessGapMs) &&
+    options.maxCoverageLivenessGapMs >= 0
+      ? options.maxCoverageLivenessGapMs
+      : 1_000;
+
+  // Verify coverage attestations (CVF-US-057)
+  if (payload.coverage_attestations !== undefined && payload.coverage_attestations.length > 0) {
+    const coverageResults = await Promise.all(
+      payload.coverage_attestations.map((a) =>
+        verifyCoverageAttestationEnvelope(
+          a,
+          options.allowlistedCoverageAttestationSignerDids,
+          bindingContext,
+          payload.agent_did,
+          maxCoverageLivenessGapMs,
+        )
+      )
+    );
+
+    const signatureValidCount = coverageResults.filter((r) => r.signature_valid).length;
+    const verifiedCount = coverageResults.filter((r) => r.valid).length;
+
+    componentResults.coverage_attestations_count = payload.coverage_attestations.length;
+    componentResults.coverage_attestations_signature_verified_count = signatureValidCount;
+    componentResults.coverage_attestations_verified_count = verifiedCount;
+    componentResults.coverage_attestations_valid =
+      verifiedCount === payload.coverage_attestations.length;
+
+    for (const r of coverageResults) {
+      if (r.risk_flags) {
+        for (const flag of r.risk_flags) modelIdentityRiskFlags.add(flag);
+      }
+    }
+
+    if (coverageResults.some((r) => !r.valid)) {
+      modelIdentityRiskFlags.add('COVERAGE_ATTESTATION_VERIFY_PARTIAL_FAILURE');
+    }
+  }
+
   // Optional in-band execution attestations (TEE/sandbox) bound to this bundle.
   if (options.execution_attestations && options.execution_attestations.length > 0) {
     const expectedBundleHash = envelope.payload_hash_b64u;
@@ -2577,50 +2733,53 @@ export async function verifyProofBundle(
   let trustTier = computeTrustTier(componentResults);
   let proofTier = computeProofTier(componentResults);
 
-  // CVF-US-030: Profile-Gated Deterministic Enforcement (PGDE)
+  // CVF-US-057: coverage attestation phase-gating (deterministic, fail-closed semantics)
   const enforcementPhase = options.coverage_enforcement_phase ?? 'observe';
-  const sentinels = metadataRecord?.sentinels;
 
+  const sentinels = metadataRecord?.sentinels;
   const claimedInterpose =
     isObjectRecord(sentinels) && sentinels.interpose_active === true;
 
-  let cryptoProvenInterpose = false;
+  const coveragePolicy =
+    metadataRecord && isObjectRecord(metadataRecord.coverage_enforcement)
+      ? metadataRecord.coverage_enforcement
+      : null;
+  const coverageRequired = coveragePolicy?.required === true;
 
-  if (claimedInterpose) {
-    if (payload.vir_receipts) {
-      for (const entry of payload.vir_receipts) {
-        const parsed = parseVirReceiptEntry(entry);
-        if (!parsed.ok) continue;
-        if (parsed.parsed.payload.process_attestation?.interpose_active === true) {
-          cryptoProvenInterpose = true;
-          break;
-        }
-      }
-    }
+  const coverageCount = componentResults.coverage_attestations_count ?? 0;
+  const coverageVerifiedCount = componentResults.coverage_attestations_verified_count ?? 0;
+  const hasCoverageEvidence = coverageCount > 0;
 
-    if (!cryptoProvenInterpose && payload.receipts) {
-      cryptoProvenInterpose = payload.receipts.some((env) => {
-        const payloadRecord = env.payload as unknown as Record<string, unknown>;
-        return payloadRecord.source === 'interpose_fsm';
-      });
-    }
+  const coverageInvariantFailed =
+    hasCoverageEvidence && coverageVerifiedCount < coverageCount;
+  const requiredCoverageMissing = coverageRequired && !hasCoverageEvidence;
+
+  if (claimedInterpose && !hasCoverageEvidence) {
+    modelIdentityRiskFlags.add('COVERAGE_DEGRADED_NO_INTERPOSE');
+    modelIdentityRiskFlags.add('COVERAGE_INTERPOSE_CLAIM_WITHOUT_ATTESTATION');
   }
 
-  const coverageInvariantFailed = claimedInterpose ? !cryptoProvenInterpose : true;
+  if (coverageInvariantFailed) {
+    modelIdentityRiskFlags.add('COVERAGE_INVARIANT_FAILED');
+  }
 
-  if (coverageInvariantFailed && enforcementPhase !== 'observe') {
-    if (enforcementPhase === 'warn') {
-      modelIdentityRiskFlags.add('COVERAGE_DEGRADED_NO_INTERPOSE');
-    } else if (enforcementPhase === 'enforce') {
-      modelIdentityRiskFlags.add('COVERAGE_INVARIANT_FAILED');
+  if (requiredCoverageMissing) {
+    modelIdentityRiskFlags.add('COVERAGE_REQUIRED_MISSING');
+  }
 
-      if (proofTier === 'gateway' || proofTier === 'sandbox') {
-        proofTier = 'self';
-      }
+  const shouldDowngradeForCoverage =
+    enforcementPhase === 'enforce' &&
+    (coverageInvariantFailed || requiredCoverageMissing);
 
-      if (trustTier === 'full' || trustTier === 'verified' || trustTier === 'attested') {
-        trustTier = 'basic';
-      }
+  if (shouldDowngradeForCoverage) {
+    modelIdentityRiskFlags.add('COVERAGE_ENFORCEMENT_DOWNGRADE');
+
+    if (proofTier === 'gateway' || proofTier === 'sandbox' || proofTier === 'witnessed_web') {
+      proofTier = 'self';
+    }
+
+    if (trustTier === 'full' || trustTier === 'verified' || trustTier === 'attested') {
+      trustTier = 'basic';
     }
   }
 

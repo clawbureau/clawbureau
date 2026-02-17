@@ -418,6 +418,22 @@
       "priority": 29,
       "passes": true,
       "notes": "Expanded harness matrix agent set to include Gemini CLI lane in `packages/clawsig-conformance/src/harness-matrix.ts` (agent enum/default matrix/env wiring). Added Linux-first harness smoke path `scripts/e2e/linux-harness-smoke.mjs` with deterministic artifact output (`.clawsig/e2e-linux-results.json`) and CI workflow `.github/workflows/poh-harness-matrix-linux.yml` to run codex+gemini lanes as reporting smoke in Linux. Current smoke is report-first (non-blocking) and surfaces adapter parity failures (event_chain/receipt gaps) for codex/gemini pending follow-up fixes."
+    },
+    {
+      "id": "CVF-US-057",
+      "title": "Coverage attestation runtime binding and enforcement",
+      "description": "As a verifier, I want coverage_attestations to be cryptographically verified and bound to the proof bundle run/chain so enforcement phases operate on verified evidence instead of schema presence.",
+      "acceptanceCriteria": [
+        "Add runtime coverage attestation verifier module with schema validation, payload hash recompute, signature verification, and signer allowlist",
+        "Verify payload.coverage_attestations against bundle binding (agent_did, run_id, event_chain_root_hash_b64u) in verify-proof-bundle",
+        "Expose and populate deterministic coverage component counters (count, signature_verified_count, verified_count, valid)",
+        "Enforcement semantics are deterministic: observe/warn add risk flags only; enforce downgrades only on verified coverage invariant failures or explicitly required coverage absence",
+        "Wire env options in Worker entrypoint for signer allowlist, enforcement phase, and liveness max gap",
+        "Typecheck, tests, schema-drift gate, and firewall conformance pass"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": "Implemented `src/verify-coverage-attestation.ts` and wired proof-bundle runtime verification for `coverage_attestations` with fail-closed signer allowlist, hash+signature checks, and bundle binding checks (`agent_did`, `run_id`, `event_chain_root_hash_b64u`). Added deterministic counters: `coverage_attestations_count`, `coverage_attestations_signature_verified_count`, `coverage_attestations_verified_count`, `coverage_attestations_valid`. Reworked phase behavior so `observe`/`warn` never downgrade tiers, while `enforce` downgrades only when verified coverage evidence fails invariants (lineage/egress/liveness) or required coverage is missing. Exposed env passthrough in `src/index.ts`: `COVERAGE_ATTESTATION_SIGNER_DIDS`, `COVERAGE_ENFORCEMENT_PHASE`, `COVERAGE_MAX_LIVENESS_GAP_MS`. Added/updated tests in `test/coverage-attestation.test.ts`, `test/proof-tier-next-trust.test.ts`, and firewall conformance fixtures."
     }
   ]
 }

@@ -71,6 +71,24 @@ export interface Env {
   WEB_RECEIPT_SIGNER_DIDS?: string;
 
   /**
+   * Comma-separated list of trusted coverage attestation signer DIDs (did:key:...).
+   * Used for fail-closed coverage_attestation verification in proof bundles.
+   */
+  COVERAGE_ATTESTATION_SIGNER_DIDS?: string;
+
+  /**
+   * Coverage enforcement phase for proof-bundle verification.
+   * Allowed values: observe | warn | enforce.
+   */
+  COVERAGE_ENFORCEMENT_PHASE?: string;
+
+  /**
+   * Maximum tolerated coverage liveness gap (ms).
+   * Used by proof-bundle coverage invariant checks.
+   */
+  COVERAGE_MAX_LIVENESS_GAP_MS?: string;
+
+  /**
    * Comma-separated list of repo claim IDs that exist in clawclaim.
    * Used for CVF-US-011 commit proof verification.
    */
@@ -671,6 +689,26 @@ function parseCommaSeparatedAllowlist(value: string | undefined): string[] {
     .filter((s) => s.length > 0);
 }
 
+function parseCoverageEnforcementPhase(
+  value: string | undefined,
+): 'observe' | 'warn' | 'enforce' | undefined {
+  if (!value) return undefined;
+  const phase = value.trim().toLowerCase();
+  if (phase === 'observe' || phase === 'warn' || phase === 'enforce') {
+    return phase;
+  }
+  return undefined;
+}
+
+function parseNonNegativeInteger(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 /**
  * Handle POST /v1/introspect/scoped-token - Scoped token introspection
  */
@@ -1013,10 +1051,21 @@ async function handleVerifyBundle(
     env.WEB_RECEIPT_SIGNER_DIDS
   );
 
+  const coverageAttestationSignerAllowlist = parseCommaSeparatedAllowlist(
+    env.COVERAGE_ATTESTATION_SIGNER_DIDS
+  );
+
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedWitnessSignerDids: witnessSignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
+    allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
+    coverage_enforcement_phase: parseCoverageEnforcementPhase(
+      env.COVERAGE_ENFORCEMENT_PHASE
+    ),
+    maxCoverageLivenessGapMs: parseNonNegativeInteger(
+      env.COVERAGE_MAX_LIVENESS_GAP_MS
+    ),
     urm,
   });
 

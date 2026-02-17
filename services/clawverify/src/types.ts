@@ -1112,6 +1112,10 @@ export interface ProofBundleVerificationResult {
     vir_receipts_count?: number;
     web_receipts_count?: number;
     coverage_attestations_count?: number;
+    /** Number of coverage attestations that passed cryptographic signature+hash verification. */
+    coverage_attestations_signature_verified_count?: number;
+    /** Number of coverage attestations that passed verification + bundle binding + semantic invariants. */
+    coverage_attestations_verified_count?: number;
     /** Strongest verified VIR source among this bundle's VIR receipts. */
     vir_best_source?: VirSource;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */

@@ -1,0 +1,8 @@
+{
+  "id": "invalid-coverage-chain-root-enforce",
+  "scenario": "invalid_coverage_chain_root_enforce",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "self"
+  }
+}
