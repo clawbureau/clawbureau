@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.clawbureau.com/poh/tool_receipt.v1.json",
   "title": "Tool Receipt v1",
   "description": "A receipt emitted at a tool dispatcher boundary. Hash-only by default: captures tool identity, argument digest, result digest, timing, and agent DID — without leaking raw arguments or results.",

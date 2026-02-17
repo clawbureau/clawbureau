@@ -1,0 +1,52 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.selective_disclosure.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Selective Disclosure v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "disclosure_algorithm",
+    "merkle_root_b64u",
+    "redacted_leaf_hashes_b64u",
+    "disclosed_leaves"
+  ],
+  "properties": {
+    "disclosure_algorithm": {
+      "type": "string",
+      "const": "vir_v2_typed_lexicographical"
+    },
+    "merkle_root_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "redacted_leaf_hashes_b64u": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "minLength": 8
+      }
+    },
+    "disclosed_leaves": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "value", "salt_b64u"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "null", "array", "object"]
+          },
+          "value": {},
+          "salt_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8
+          }
+        }
+      }
+    }
+  }
+}

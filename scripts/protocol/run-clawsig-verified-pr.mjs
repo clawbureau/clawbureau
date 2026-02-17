@@ -141,6 +141,35 @@ async function changedFilesFromGit(baseSha, headSha) {
     .filter((s) => s.length > 0);
 }
 
+function gitCommitExists(commitSha) {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${commitSha}^{commit}`], {
+      cwd: ROOT,
+      stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureCommitPresent(commitSha) {
+  if (!commitSha) return false;
+  if (gitCommitExists(commitSha)) return true;
+
+  // Shallow PR merge checkouts may not include the signed head commit object.
+  // Attempt direct SHA fetch first; if remote policy blocks that, widen to a bounded history fetch.
+  await execFileText('git', ['fetch', '--no-tags', '--depth', '1', 'origin', commitSha], {
+    cwd: ROOT,
+  });
+  if (gitCommitExists(commitSha)) return true;
+
+  await execFileText('git', ['fetch', '--no-tags', '--depth', '200', 'origin'], {
+    cwd: ROOT,
+  });
+  return gitCommitExists(commitSha);
+}
+
 function pickEvidenceFiles(changed) {
   const bundles = [];
   const commitSigs = [];
@@ -342,15 +371,7 @@ async function verifyCommitSigFile(relPath) {
   }
 
   // Optional repo binding: ensure commit exists in this checkout.
-  let commitExists = true;
-  try {
-    execFileSync('git', ['cat-file', '-e', `${commitSha}^{commit}`], {
-      cwd: ROOT,
-      stdio: 'ignore',
-    });
-  } catch {
-    commitExists = false;
-  }
+  const commitExists = await ensureCommitPresent(commitSha);
 
   if (!commitExists) {
     return {
@@ -486,12 +507,7 @@ async function verifyCommitSigWithCli(relPath, cliPath) {
   const ok = parseError === null && run.exitCode === 0 && status === 'PASS';
 
   // Also check commit exists in this checkout
-  let commitExists = true;
-  if (commitSha) {
-    try {
-      execFileSync('git', ['cat-file', '-e', `${commitSha}^{commit}`], { cwd: ROOT, stdio: 'ignore' });
-    } catch { commitExists = false; }
-  }
+  const commitExists = commitSha ? await ensureCommitPresent(commitSha) : true;
 
   if (ok && !commitExists) {
     return {

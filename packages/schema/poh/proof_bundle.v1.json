@@ -230,7 +230,8 @@
             "pattern": "^did:",
             "description": "Receipt signer DID. Must start with 'did:'."
           },
-          "issued_at": { "type": "string", "format": "date-time" }
+          "issued_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": "string", "format": "date-time" }
         }
       }
     },
@@ -258,31 +259,28 @@
     },
     "tool_receipts": {
       "type": "array",
-      "description": "Tool receipt payloads (Coverage MT). Raw ToolReceiptPayload objects — not envelope-wrapped.",
+      "maxItems": 1000,
+      "description": "Tool receipt payloads/envelopes (Coverage MT). Supports legacy v1 IDs and additive v2 schema forms.",
       "items": {
-        "type": "object",
-        "required": ["receipt_version", "receipt_id", "tool_name", "hash_algorithm", "agent_did", "timestamp"],
-        "properties": {
-          "receipt_version": { "const": "1" },
-          "receipt_id": { "type": "string", "minLength": 1 },
-          "tool_name": { "type": "string", "minLength": 1 },
-          "tool_version": { "type": "string" },
-          "args_hash_b64u": { "type": "string", "minLength": 1 },
-          "args_digest": { "type": "string", "minLength": 1 },
-          "result_hash_b64u": { "type": "string", "minLength": 1 },
-          "result_digest": { "type": "string", "minLength": 1 },
-          "result_status": { "type": "string" },
-          "hash_algorithm": { "type": "string", "enum": ["SHA-256", "BLAKE3"] },
-          "duration_ms": { "type": "number", "minimum": 0 },
-          "latency_ms": { "type": "number", "minimum": 0 },
-          "agent_did": { "type": "string", "pattern": "^did:" },
-          "timestamp": { "type": "string", "format": "date-time" },
-          "binding": { "type": "object" }
-        }
+        "oneOf": [
+          {
+            "$ref": "https://schemas.clawbureau.com/poh/tool_receipt.v1.json"
+          },
+          {
+            "$ref": "https://schemas.clawbureau.com/poh/tool_receipt_envelope.v1.json"
+          },
+          {
+            "$ref": "https://schemas.clawbureau.org/claw.poh.tool_receipt.v2.json"
+          },
+          {
+            "$ref": "https://schemas.clawbureau.org/claw.poh.tool_receipt_envelope.v2.json"
+          }
+        ]
       }
     },
     "side_effect_receipts": {
       "type": "array",
+      "maxItems": 1000,
       "description": "Side-effect receipt payloads (Coverage MTS). Raw SideEffectReceiptPayload objects.",
       "items": {
         "type": "object",
@@ -305,6 +303,7 @@
     },
     "human_approval_receipts": {
       "type": "array",
+      "maxItems": 1000,
       "description": "Human approval receipt payloads (Coverage MTS). Raw HumanApprovalReceiptPayload objects.",
       "items": {
         "type": "object",
@@ -326,6 +325,7 @@
     },
     "delegation_receipts": {
       "type": "array",
+      "maxItems": 1000,
       "description": "Delegation receipt payloads for multi-agent orchestration (Merkle DAG). Each receipt links to a delegate agent's proof bundle by hash, enabling strict liability cascade verification.",
       "items": {
         "type": "object",

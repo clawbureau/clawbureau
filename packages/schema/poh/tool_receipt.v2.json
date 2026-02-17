@@ -1,0 +1,87 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.tool_receipt.v2.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tool Receipt v2",
+  "description": "Tool receipt with deterministic selective-disclosure support and anti-rainbow salting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "tool_name",
+    "args_hash_b64u",
+    "result_hash_b64u",
+    "hash_algorithm",
+    "agent_did",
+    "timestamp",
+    "latency_ms",
+    "args_salt_b64u",
+    "result_salt_b64u"
+  ],
+  "properties": {
+    "receipt_version": {
+      "type": "string",
+      "const": "2"
+    },
+    "receipt_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "args_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "result_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "result_status": {
+      "type": "string",
+      "enum": ["success", "error", "timeout"]
+    },
+    "hash_algorithm": {
+      "type": "string",
+      "enum": ["SHA-256", "BLAKE3"]
+    },
+    "agent_did": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "binding": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json"
+    },
+    "args_salt_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "result_salt_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "args_disclosure": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.selective_disclosure.v1.json"
+    },
+    "result_disclosure": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.selective_disclosure.v1.json"
+    }
+  }
+}

@@ -72,6 +72,7 @@
     },
     "algorithm": { "type": "string", "enum": ["Ed25519"] },
     "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
     "metadata": { "type": "object" }
   }
 }

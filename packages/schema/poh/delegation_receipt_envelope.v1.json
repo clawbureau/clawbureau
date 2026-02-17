@@ -53,6 +53,10 @@
     "issued_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "additionalProperties": false
