@@ -3,7 +3,7 @@
   "scenario": "valid_sandbox_tee",
   "expected": {
     "status": "VALID",
-    "proof_tier": "sandbox",
+    "proof_tier": "tee",
     "model_identity_tier": "tee_measured"
   }
 }

@@ -1356,8 +1356,14 @@ function computeProofTier(components: {
   web_receipts_verified_count?: number;
   attestations_verified_count?: number;
   execution_attestations_verified_count?: number;
+  tee_execution_verified_count?: number;
 }): ProofTier {
   if (!components.envelope_valid) return 'unknown';
+
+  // Explicit tee path (CVF-US-064) wins when verified tee_execution evidence exists.
+  if ((components.tee_execution_verified_count ?? 0) > 0) {
+    return 'tee';
+  }
 
   // Higher tiers win. Proof tiers are based on *at least one* verified component,
   // not on the all-or-nothing `*_valid` booleans.
@@ -3084,6 +3090,9 @@ export async function verifyProofBundle(
 
     for (let i = 0; i < options.execution_attestations.length; i++) {
       const attEnv = options.execution_attestations[i]!;
+      const attPayload = attEnv.payload;
+      const teeClaimed = attPayload.execution_type === 'tee_execution';
+
       const verification = await verifyExecutionAttestation(attEnv, {
         allowlistedSignerDids: options.allowlistedExecutionAttestationSignerDids,
         teeRootAllowlist: options.teeRootAllowlist,
@@ -3110,29 +3119,101 @@ export async function verifyProofBundle(
           };
         }
 
+        if (teeClaimed) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason:
+                verification.result.reason ||
+                'TEE execution attestation verification failed',
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error:
+              verification.error ??
+              {
+                code: 'EVIDENCE_MISMATCH',
+                message: 'TEE execution attestation verification failed',
+                field: `execution_attestations[${i}]`,
+              },
+          };
+        }
+
         modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_VERIFY_PARTIAL_FAILURE');
         continue;
       }
 
-      const attPayload = attEnv.payload;
       if (attPayload.agent_did !== payload.agent_did) {
+        if (teeClaimed) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: 'TEE execution attestation agent_did binding mismatch',
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'EVIDENCE_MISMATCH',
+              message: 'TEE execution attestation agent_did does not match proof bundle agent_did',
+              field: `execution_attestations[${i}].payload.agent_did`,
+            },
+          };
+        }
+
         modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_BINDING_MISMATCH');
         continue;
       }
 
       if (!expectedRunId || attPayload.run_id !== expectedRunId) {
+        if (teeClaimed) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: 'TEE execution attestation run_id binding mismatch',
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'EVIDENCE_MISMATCH',
+              message: 'TEE execution attestation run_id does not match proof bundle run_id',
+              field: `execution_attestations[${i}].payload.run_id`,
+            },
+          };
+        }
+
         modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_BINDING_MISMATCH');
         continue;
       }
 
       if (attPayload.proof_bundle_hash_b64u !== expectedBundleHash) {
+        if (teeClaimed) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: 'TEE execution attestation proof_bundle_hash binding mismatch',
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'EVIDENCE_MISMATCH',
+              message:
+                'TEE execution attestation proof_bundle_hash_b64u does not match this proof bundle',
+              field: `execution_attestations[${i}].payload.proof_bundle_hash_b64u`,
+            },
+          };
+        }
+
         modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_BINDING_MISMATCH');
         continue;
       }
 
       executionVerifiedCount += 1;
 
-      if (attPayload.execution_type === 'tee_execution') {
+      if (teeClaimed) {
         teeExecutionVerifiedCount += 1;
       }
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { base64UrlEncode, computeHash } from '../src/crypto';
+import { computeExpectedTeeNonceBinding } from '../src/verify-execution-attestation';
 import { verifyProofBundle } from '../src/verify-proof-bundle';
 
 const BASE58_ALPHABET =
@@ -136,7 +137,10 @@ async function makeWebOnlyBundle(args?: { replayMismatch?: boolean }) {
   return { bundleEnvelope, witnessDid: witness.did };
 }
 
-async function makeBundleWithTeeExecutionAttestation(args?: { revokedTcb?: boolean }) {
+async function makeBundleWithTeeExecutionAttestation(args?: {
+  revokedTcb?: boolean;
+  nonceMismatch?: boolean;
+}) {
   const agent = await makeDidKeyEd25519();
   const attester = await makeDidKeyEd25519();
 
@@ -168,6 +172,16 @@ async function makeBundleWithTeeExecutionAttestation(args?: { revokedTcb?: boole
 
   const tcbVersion = args?.revokedTcb ? 'tdx-1.2.3-revoked' : 'tdx-1.2.3-good';
 
+  const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+    agentDid: agent.did,
+    runId,
+    proofBundleHashB64u: bundlePayloadHash,
+  });
+
+  const nonceBinding = args?.nonceMismatch
+    ? 'tee_nonce_binding_mismatch_001'
+    : expectedNonceBinding;
+
   const executionAttestationPayload: Record<string, unknown> = {
     attestation_version: '1',
     attestation_id: 'ea_tee_001',
@@ -181,12 +195,14 @@ async function makeBundleWithTeeExecutionAttestation(args?: { revokedTcb?: boole
         attestation_type: 'tdx_quote',
         root_id: 'intel-tdx-root-001',
         tcb_version: tcbVersion,
+        nonce_binding_b64u: nonceBinding,
         evidence_ref: {
           resource_type: 'tee_quote',
           resource_hash_b64u: 'tee_quote_hash_001',
         },
         measurements: {
           measurement_hash_b64u: 'tee_measurement_hash_001',
+          model_weights_digest_b64u: 'tee_model_weights_hash_001',
         },
       },
     },
@@ -372,7 +388,7 @@ describe('P0 deterministic evidence firewall: web + tee core', () => {
     });
 
     expect(out.result.status).toBe('VALID');
-    expect(out.result.proof_tier).toBe('sandbox');
+    expect(out.result.proof_tier).toBe('tee');
     expect(out.result.model_identity_tier).toBe('tee_measured');
     expect(out.result.component_results?.execution_attestations_verified_count).toBe(1);
     expect(out.result.component_results?.tee_execution_verified_count).toBe(1);
@@ -397,6 +413,28 @@ describe('P0 deterministic evidence firewall: web + tee core', () => {
 
     expect(out.result.status).toBe('INVALID');
     expect(out.error?.code).toBe('REVOKED');
+  });
+
+  it('hard-fails on TEE nonce/report-data binding mismatch (no fallback)', async () => {
+    const {
+      bundleEnvelope,
+      executionAttestationEnvelope,
+      attesterDid,
+      tcbVersion,
+    } = await makeBundleWithTeeExecutionAttestation({ nonceMismatch: true });
+
+    const out = await verifyProofBundle(bundleEnvelope, {
+      execution_attestations: [executionAttestationEnvelope],
+      allowlistedExecutionAttestationSignerDids: [attesterDid],
+      teeRootAllowlist: ['intel-tdx-root-001'],
+      teeTcbAllowlist: [tcbVersion],
+      teeRootRevoked: [],
+      teeTcbRevoked: [],
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe('payload.runtime_metadata.tee.nonce_binding_b64u');
   });
 
   it('enforce phase fails closed on coverage invariant failures', async () => {

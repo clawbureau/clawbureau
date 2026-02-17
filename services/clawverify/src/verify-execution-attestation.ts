@@ -97,10 +97,28 @@ function validatePayload(
 type TeeClaims = {
   rootId: string;
   tcbVersion: string;
+  nonceBindingB64u: string;
+  modelWeightsDigestB64u: string;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+export async function computeExpectedTeeNonceBinding(input: {
+  agentDid: string;
+  runId: string;
+  proofBundleHashB64u: string;
+}): Promise<string> {
+  return computeHash(
+    {
+      nonce_binding_version: 'tee_nonce_binding_v1',
+      agent_did: input.agentDid,
+      run_id: input.runId,
+      proof_bundle_hash_b64u: input.proofBundleHashB64u,
+    },
+    'SHA-256'
+  );
 }
 
 function extractTeeClaims(payload: ExecutionAttestationPayload): TeeClaims | null {
@@ -112,10 +130,32 @@ function extractTeeClaims(payload: ExecutionAttestationPayload): TeeClaims | nul
 
   const rootId = typeof tee.root_id === 'string' ? tee.root_id.trim() : '';
   const tcbVersion = typeof tee.tcb_version === 'string' ? tee.tcb_version.trim() : '';
+  const nonceBinding =
+    typeof tee.nonce_binding_b64u === 'string' ? tee.nonce_binding_b64u.trim() : '';
+
+  const measurements = asObject(tee.measurements);
+  const modelWeightsDigest =
+    measurements && typeof measurements.model_weights_digest_b64u === 'string'
+      ? measurements.model_weights_digest_b64u.trim()
+      : '';
 
   if (rootId.length === 0 || tcbVersion.length === 0) return null;
 
-  return { rootId, tcbVersion };
+  if (
+    nonceBinding.length < 8 ||
+    !isValidBase64Url(nonceBinding) ||
+    modelWeightsDigest.length < 8 ||
+    !isValidBase64Url(modelWeightsDigest)
+  ) {
+    return null;
+  }
+
+  return {
+    rootId,
+    tcbVersion,
+    nonceBindingB64u: nonceBinding,
+    modelWeightsDigestB64u: modelWeightsDigest,
+  };
 }
 
 export async function verifyExecutionAttestation(
@@ -133,6 +173,8 @@ export async function verifyExecutionAttestation(
   allowlisted?: boolean;
   tee_root_id?: string;
   tee_tcb_version?: string;
+  tee_nonce_binding_b64u?: string;
+  tee_model_weights_digest_b64u?: string;
   error?: VerificationError;
 }> {
   const now = new Date().toISOString();
@@ -529,7 +571,7 @@ export async function verifyExecutionAttestation(
         error: {
           code: 'SCHEMA_VALIDATION_FAILED',
           message:
-            'tee_execution requires runtime_metadata.tee.{attestation_type,root_id,tcb_version,evidence_ref,measurements}',
+            'tee_execution requires runtime_metadata.tee.{attestation_type,root_id,tcb_version,nonce_binding_b64u,evidence_ref,measurements.model_weights_digest_b64u}',
           field: 'payload.runtime_metadata.tee',
         },
       };
@@ -664,6 +706,64 @@ export async function verifyExecutionAttestation(
         },
       };
     }
+
+    const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+    const proofBundleHash =
+      typeof payload.proof_bundle_hash_b64u === 'string'
+        ? payload.proof_bundle_hash_b64u
+        : null;
+
+    if (!runId || !proofBundleHash) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE nonce binding requires run_id and proof_bundle_hash_b64u',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        tee_nonce_binding_b64u: teeClaims.nonceBindingB64u,
+        tee_model_weights_digest_b64u: teeClaims.modelWeightsDigestB64u,
+        error: {
+          code: 'SCHEMA_VALIDATION_FAILED',
+          message: 'TEE nonce binding requires payload.run_id and payload.proof_bundle_hash_b64u',
+          field: 'payload.runtime_metadata.tee.nonce_binding_b64u',
+        },
+      };
+    }
+
+    const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: payload.agent_did,
+      runId,
+      proofBundleHashB64u: proofBundleHash,
+    });
+
+    if (teeClaims.nonceBindingB64u !== expectedNonceBinding) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'TEE nonce/report-data binding mismatch',
+          envelope_type: envelope.envelope_type,
+          signer_did: envelope.signer_did,
+          verified_at: now,
+        },
+        signer_did: envelope.signer_did,
+        allowlisted,
+        tee_root_id: teeClaims.rootId,
+        tee_tcb_version: teeClaims.tcbVersion,
+        tee_nonce_binding_b64u: teeClaims.nonceBindingB64u,
+        tee_model_weights_digest_b64u: teeClaims.modelWeightsDigestB64u,
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: 'TEE nonce binding does not match deterministic run/proof-bundle context',
+          field: 'payload.runtime_metadata.tee.nonce_binding_b64u',
+        },
+      };
+    }
   }
 
   return {
@@ -684,5 +784,7 @@ export async function verifyExecutionAttestation(
     proof_bundle_hash_b64u: payload.proof_bundle_hash_b64u,
     tee_root_id: teeClaims?.rootId,
     tee_tcb_version: teeClaims?.tcbVersion,
+    tee_nonce_binding_b64u: teeClaims?.nonceBindingB64u,
+    tee_model_weights_digest_b64u: teeClaims?.modelWeightsDigestB64u,
   };
 }

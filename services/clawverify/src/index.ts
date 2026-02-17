@@ -1050,10 +1050,30 @@ async function handleVerifyAgent(request: Request, env: Env): Promise<Response> 
     env.EXECUTION_ATTESTATION_SIGNER_DIDS
   );
 
+  const teeRootAllowlist = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_ROOT_ALLOWLIST
+  );
+
+  const teeTcbAllowlist = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_TCB_ALLOWLIST
+  );
+
+  const teeRootRevoked = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_ROOT_REVOKED
+  );
+
+  const teeTcbRevoked = parseCommaSeparatedAllowlist(
+    env.TEE_ATTESTATION_TCB_REVOKED
+  );
+
   const verification = await verifyAgent(body, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
     allowlistedExecutionAttesterDids: executionAttesterAllowlist,
+    teeRootAllowlist,
+    teeTcbAllowlist,
+    teeRootRevoked,
+    teeTcbRevoked,
   });
   const status = verification.result.status === 'VALID' ? 200 : 422;
   return jsonResponse(verification as VerifyAgentResponse, status);
@@ -1324,6 +1344,22 @@ async function handleVerifyBundle(
       env.EXECUTION_ATTESTATION_SIGNER_DIDS
     );
 
+    const teeRootAllowlist = parseCommaSeparatedAllowlist(
+      env.TEE_ATTESTATION_ROOT_ALLOWLIST
+    );
+
+    const teeTcbAllowlist = parseCommaSeparatedAllowlist(
+      env.TEE_ATTESTATION_TCB_ALLOWLIST
+    );
+
+    const teeRootRevoked = parseCommaSeparatedAllowlist(
+      env.TEE_ATTESTATION_ROOT_REVOKED
+    );
+
+    const teeTcbRevoked = parseCommaSeparatedAllowlist(
+      env.TEE_ATTESTATION_TCB_REVOKED
+    );
+
     const bundleEnvelope = envelope as Record<string, unknown>;
     const payloadRecord =
       typeof bundleEnvelope.payload === 'object' && bundleEnvelope.payload !== null
@@ -1374,12 +1410,17 @@ async function handleVerifyBundle(
     }
 
     let verifiedCount = 0;
+    let teeExecutionVerifiedCount = 0;
     let bestTier: 'sandbox' | 'tee' = 'sandbox';
 
     for (let i = 0; i < execution_attestations.length; i++) {
       const att = execution_attestations[i];
       const attV = await verifyExecutionAttestation(att, {
         allowlistedSignerDids: executionAttesterAllowlist,
+        teeRootAllowlist,
+        teeTcbAllowlist,
+        teeRootRevoked,
+        teeTcbRevoked,
       });
 
       if (attV.result.status !== 'VALID') {
@@ -1460,7 +1501,10 @@ async function handleVerifyBundle(
       }
 
       verifiedCount++;
-      if (attV.execution_type === 'tee_execution') bestTier = 'tee';
+      if (attV.execution_type === 'tee_execution') {
+        teeExecutionVerifiedCount++;
+        bestTier = 'tee';
+      }
     }
 
     const tierRank: Record<string, number> = {
@@ -1468,8 +1512,8 @@ async function handleVerifyBundle(
       self: 1,
       gateway: 2,
       sandbox: 3,
-      tee: 4,
-      witnessed_web: 5,
+      witnessed_web: 4,
+      tee: 5,
     };
 
     const candidateTier = bestTier === 'tee' ? 'tee' : 'sandbox';
@@ -1484,11 +1528,14 @@ async function handleVerifyBundle(
     finalResult = {
       ...finalResult,
       proof_tier: nextProofTier,
+      model_identity_tier:
+        bestTier === 'tee' ? 'tee_measured' : finalResult.model_identity_tier,
       component_results: {
         ...prevComponentResults,
         execution_attestations_valid: true,
         execution_attestations_count: execution_attestations.length,
         execution_attestations_verified_count: verifiedCount,
+        tee_execution_verified_count: teeExecutionVerifiedCount,
       },
     };
   }
