@@ -49,6 +49,12 @@ jobs:
           npm install
           npm run build
 
+      - name: Install required agent CLIs (deterministic)
+        run: |
+          npm install -g @openai/codex@0.101.0 @google/gemini-cli@0.28.2
+          codex --version
+          gemini --version
+
       - name: Run Linux harness matrix strict gate (codex + gemini lanes)
         env:
           CLAWSIG_E2E_SKIP_BUILD: '1'
