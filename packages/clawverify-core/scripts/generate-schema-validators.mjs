@@ -142,7 +142,7 @@ const code = standaloneCode(ajv, {
   validateSystemPromptReportV1: systemPromptReport.$id,
 });
 
-const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node packages/clawverify-core/scripts/generate-schema-validators.mjs\n\n`;
+const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED\nimport { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node packages/clawverify-core/scripts/generate-schema-validators.mjs\n\n`;
 
 const outPath = path.resolve(repoRoot, 'packages/clawverify-core/src/schema-validators.generated.ts');
 fs.writeFileSync(outPath, `${header}${code}\n`, 'utf8');

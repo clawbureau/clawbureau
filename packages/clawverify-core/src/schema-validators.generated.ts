@@ -1,6 +1,10 @@
 /* eslint-disable */
 // @ts-nocheck
 
+// AUTO-GENERATED
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+
 // AUTO-GENERATED FILE. DO NOT EDIT.
 // Regenerate via:
 //   node packages/clawverify-core/scripts/generate-schema-validators.mjs
