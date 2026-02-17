@@ -1060,6 +1060,27 @@ export interface BinarySemanticEvidencePayload {
   metadata?: Record<string, unknown>;
 }
 
+export type BinarySemanticEvidenceVerdict =
+  | 'VALID'
+  | 'INVALID'
+  | 'PARTIAL'
+  | 'INAPPLICABLE'
+  | 'UNKNOWN';
+
+export type BinarySemanticEvidenceReasonCode =
+  | 'MISSING_DEPENDENCY'
+  | 'SIGNATURE_MISMATCH'
+  | 'HASH_MISMATCH'
+  | 'MERKLE_CHAIN_BROKEN'
+  | 'UNATTESTED_CHILD_PROCESS'
+  | 'CAPABILITY_EXCEEDS_STATIC_PROOF'
+  | 'STATIC_HOOK_SPOOFING'
+  | 'STATIC_ANALYSIS_TIMEOUT'
+  | 'UNSUPPORTED_ARCH'
+  | 'SIP_RESTRICTION_INAPPLICABLE'
+  | 'STRIPPED_SYMBOLS'
+  | 'SEMANTICS_VERIFIED';
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
@@ -1149,15 +1170,25 @@ export interface ProofBundleVerificationResult {
     vir_receipts_valid?: boolean;
     web_receipts_valid?: boolean;
     coverage_attestations_valid?: boolean;
+    binary_semantic_evidence_valid?: boolean;
     attestations_valid?: boolean;
     receipts_count?: number;
     vir_receipts_count?: number;
     web_receipts_count?: number;
     coverage_attestations_count?: number;
+    binary_semantic_evidence_count?: number;
     /** Number of coverage attestations that passed cryptographic signature+hash verification. */
     coverage_attestations_signature_verified_count?: number;
     /** Number of coverage attestations that passed verification + bundle binding + semantic invariants. */
     coverage_attestations_verified_count?: number;
+    /** Number of binary semantic evidence attestations that passed cryptographic signature+hash verification. */
+    binary_semantic_evidence_signature_verified_count?: number;
+    /** Number of binary semantic evidence attestations that passed deterministic policy evaluation (VALID/PARTIAL/INAPPLICABLE). */
+    binary_semantic_evidence_verified_count?: number;
+    /** Aggregated deterministic policy verdict for binary semantic evidence attestations. */
+    binary_semantic_evidence_policy_verdict?: BinarySemanticEvidenceVerdict;
+    /** Aggregated deterministic reason code for binary semantic evidence attestations. */
+    binary_semantic_evidence_reason_code?: BinarySemanticEvidenceReasonCode;
     /** Strongest verified VIR source among this bundle's VIR receipts. */
     vir_best_source?: VirSource;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */

@@ -52,6 +52,15 @@ import {
 import { verifyReceipt } from './verify-receipt';
 import { verifyWebReceipt } from './verify-web-receipt';
 import { verifyCoverageAttestation } from './verify-coverage-attestation';
+import {
+  verifyBinarySemanticEvidence,
+  evaluateBinarySemanticEvidencePolicy,
+  compareBinarySemanticPolicyResult,
+  isBinarySemanticFailClosedVerdict,
+  isBinarySemanticConstrainedVerdict,
+  verificationFailureToPolicyResult,
+  type BinarySemanticPolicyResult,
+} from './verify-binary-semantic-evidence';
 import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { verifyLogInclusionProof } from './verify-log-inclusion-proof';
 import { computeModelIdentityTierFromReceipts } from './model-identity';
@@ -102,6 +111,9 @@ export interface ProofBundleVerifierOptions {
 
   /** Allowlisted signer DIDs for coverage attestations (did:key:...). */
   allowlistedCoverageAttestationSignerDids?: readonly string[];
+
+  /** Allowlisted signer DIDs for binary semantic evidence attestations (did:key:...). */
+  allowlistedBinarySemanticEvidenceSignerDids?: readonly string[];
 
   /** Phase gate for deterministic coverage invariants. Defaults to 'observe'. */
   coverage_enforcement_phase?: 'observe' | 'warn' | 'enforce';
@@ -235,9 +247,24 @@ function validateBundlePayload(
   const hasVirReceipts = Array.isArray(virReceipts) && virReceipts.length > 0;
   const webReceipts = p.web_receipts;
   const hasWebReceipts = Array.isArray(webReceipts) && webReceipts.length > 0;
+  const binarySemanticEvidence = p.binary_semantic_evidence_attestations;
+  const hasBinarySemanticEvidence =
+    Array.isArray(binarySemanticEvidence) && binarySemanticEvidence.length > 0;
 
-  if (!hasUrm && !hasEventChain && !hasReceipts && !hasAttestations && !hasVirReceipts && !hasWebReceipts) {
-    return { valid: false, error: 'At least one of urm, event_chain, receipts, attestations, vir_receipts, or web_receipts is required' };
+  if (
+    !hasUrm &&
+    !hasEventChain &&
+    !hasReceipts &&
+    !hasAttestations &&
+    !hasVirReceipts &&
+    !hasWebReceipts &&
+    !hasBinarySemanticEvidence
+  ) {
+    return {
+      valid: false,
+      error:
+        'At least one of urm, event_chain, receipts, attestations, vir_receipts, web_receipts, or binary_semantic_evidence_attestations is required',
+    };
   }
 
   return { valid: true };
@@ -1680,6 +1707,24 @@ export async function verifyProofBundle(
     };
   }
 
+  if (
+    p.binary_semantic_evidence_attestations &&
+    p.binary_semantic_evidence_attestations.length > MAX_RECEIPTS
+  ) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `binary_semantic_evidence_attestations exceeds max length (${MAX_RECEIPTS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.binary_semantic_evidence_attestations length exceeds limit (${MAX_RECEIPTS})`,
+        field: 'payload.binary_semantic_evidence_attestations',
+      },
+    };
+  }
+
   if (p.attestations && p.attestations.length > MAX_ATTESTATIONS) {
     return {
       result: {
@@ -1860,6 +1905,50 @@ export async function verifyProofBundle(
     }
   }
 
+  if (p.binary_semantic_evidence_attestations) {
+    const seenBinaryEvidenceHashes = new Set<string>();
+    for (let i = 0; i < p.binary_semantic_evidence_attestations.length; i++) {
+      const entry = p.binary_semantic_evidence_attestations[i];
+      const hash = entry?.payload?.binary_hash_b64u;
+
+      if (typeof hash !== 'string' || hash.length < 8 || !isValidBase64Url(hash)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason:
+              'binary_semantic_evidence_attestations entry is missing payload.binary_hash_b64u',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message:
+              'payload.binary_semantic_evidence_attestations[*].payload.binary_hash_b64u must be present and base64url',
+            field: `payload.binary_semantic_evidence_attestations[${i}].payload.binary_hash_b64u`,
+          },
+        };
+      }
+
+      if (seenBinaryEvidenceHashes.has(hash)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason:
+              'Duplicate binary_hash_b64u in payload.binary_semantic_evidence_attestations',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message:
+              'binary_hash_b64u must be unique within payload.binary_semantic_evidence_attestations',
+            field: `payload.binary_semantic_evidence_attestations[${i}].payload.binary_hash_b64u`,
+          },
+        };
+      }
+
+      seenBinaryEvidenceHashes.add(hash);
+    }
+  }
+
   // 11. Validate agent_did in payload matches expected format
   if (!isValidDidFormat(envelope.payload.agent_did)) {
     return {
@@ -1992,6 +2081,7 @@ export async function verifyProofBundle(
   // CVF-US-016: model identity is an orthogonal axis to PoH tiers.
   let modelIdentityTier: ModelIdentityTier = 'unknown';
   const modelIdentityRiskFlags = new Set<string>();
+  let binarySemanticPolicyResult: BinarySemanticPolicyResult | null = null;
 
   // Validate event chain if present (verify hash linkage per POH-US-003)
   if (payload.event_chain !== undefined && payload.event_chain.length > 0) {
@@ -3080,6 +3170,103 @@ export async function verifyProofBundle(
     }
   }
 
+  // Verify binary semantic evidence attestations (CEC-US-005 / CEC-US-006)
+  if (
+    payload.binary_semantic_evidence_attestations !== undefined &&
+    payload.binary_semantic_evidence_attestations.length > 0
+  ) {
+    const envelopeResults = await Promise.all(
+      payload.binary_semantic_evidence_attestations.map((attestation) =>
+        verifyBinarySemanticEvidence(attestation, {
+          allowlistedSignerDids:
+            options.allowlistedBinarySemanticEvidenceSignerDids,
+        }),
+      ),
+    );
+
+    const dynamicContext = {
+      verifiedNetworkEgressPresent:
+        (componentResults.receipts_verified_count ?? 0) > 0 ||
+        (componentResults.vir_receipts_verified_count ?? 0) > 0 ||
+        (componentResults.web_receipts_verified_count ?? 0) > 0,
+    };
+
+    const policyResults: BinarySemanticPolicyResult[] = [];
+    let signatureVerifiedCount = 0;
+
+    for (const envelopeResult of envelopeResults) {
+      if (envelopeResult.result.status === 'VALID' && envelopeResult.payload) {
+        signatureVerifiedCount += 1;
+        policyResults.push(
+          evaluateBinarySemanticEvidencePolicy(
+            envelopeResult.payload,
+            dynamicContext,
+          ),
+        );
+        continue;
+      }
+
+      policyResults.push(
+        verificationFailureToPolicyResult(
+          envelopeResult.error,
+          envelopeResult.reason_code,
+        ),
+      );
+    }
+
+    let aggregatePolicyResult = policyResults[0]!;
+    for (let i = 1; i < policyResults.length; i++) {
+      if (compareBinarySemanticPolicyResult(policyResults[i]!, aggregatePolicyResult) < 0) {
+        aggregatePolicyResult = policyResults[i]!;
+      }
+    }
+
+    componentResults.binary_semantic_evidence_count =
+      payload.binary_semantic_evidence_attestations.length;
+    componentResults.binary_semantic_evidence_signature_verified_count =
+      signatureVerifiedCount;
+    componentResults.binary_semantic_evidence_verified_count = policyResults.filter(
+      (r) => !isBinarySemanticFailClosedVerdict(r.verdict),
+    ).length;
+    componentResults.binary_semantic_evidence_policy_verdict =
+      aggregatePolicyResult.verdict;
+    componentResults.binary_semantic_evidence_reason_code =
+      aggregatePolicyResult.reason_code;
+    componentResults.binary_semantic_evidence_valid =
+      aggregatePolicyResult.verdict === 'VALID';
+
+    binarySemanticPolicyResult = aggregatePolicyResult;
+
+    if (isBinarySemanticFailClosedVerdict(aggregatePolicyResult.verdict)) {
+      const reason = `Binary semantic evidence policy verdict ${aggregatePolicyResult.verdict} (${aggregatePolicyResult.reason_code})`;
+      return {
+        result: {
+          status: 'INVALID',
+          reason,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+          component_results: componentResults,
+          risk_flags:
+            modelIdentityRiskFlags.size > 0
+              ? [...modelIdentityRiskFlags].sort()
+              : undefined,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: reason,
+          field: 'payload.binary_semantic_evidence_attestations',
+        },
+      };
+    }
+
+    if (isBinarySemanticConstrainedVerdict(aggregatePolicyResult.verdict)) {
+      modelIdentityRiskFlags.add(
+        `BINARY_SEMANTIC_${aggregatePolicyResult.reason_code}`,
+      );
+    }
+  }
+
   // Optional in-band execution attestations (TEE/sandbox) bound to this bundle.
   if (options.execution_attestations && options.execution_attestations.length > 0) {
     const expectedBundleHash = envelope.payload_hash_b64u;
@@ -3266,6 +3453,27 @@ export async function verifyProofBundle(
   // 16. Compute tiers based on validated components
   let trustTier = computeTrustTier(componentResults);
   let proofTier = computeProofTier(componentResults);
+
+  // CEC-US-005: constrained binary semantic verdicts are non-fail but must not uplift tiers.
+  if (
+    binarySemanticPolicyResult &&
+    isBinarySemanticConstrainedVerdict(binarySemanticPolicyResult.verdict)
+  ) {
+    if (
+      proofTier === 'gateway' ||
+      proofTier === 'sandbox' ||
+      proofTier === 'tee' ||
+      proofTier === 'witnessed_web'
+    ) {
+      proofTier = 'self';
+      modelIdentityRiskFlags.add('BINARY_SEMANTIC_TIER_CONSTRAINED');
+    }
+
+    if (trustTier === 'verified' || trustTier === 'attested' || trustTier === 'full') {
+      trustTier = 'basic';
+      modelIdentityRiskFlags.add('BINARY_SEMANTIC_TRUST_CONSTRAINED');
+    }
+  }
 
   // CVF-US-057: coverage attestation phase-gating (deterministic, fail-closed semantics)
   const enforcementPhase = options.coverage_enforcement_phase ?? 'observe';

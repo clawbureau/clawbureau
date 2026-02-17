@@ -1,0 +1,11 @@
+{
+  "id": "valid-inapplicable-unsupported-arch",
+  "scenario": "valid_inapplicable_unsupported_arch",
+  "expected": {
+    "status": "VALID",
+    "policy_verdict": "INAPPLICABLE",
+    "reason_code": "UNSUPPORTED_ARCH",
+    "proof_tier": "self",
+    "trust_tier": "basic"
+  }
+}

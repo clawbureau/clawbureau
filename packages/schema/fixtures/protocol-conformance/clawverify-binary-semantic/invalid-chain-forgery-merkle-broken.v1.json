@@ -1,0 +1,10 @@
+{
+  "id": "invalid-chain-forgery-merkle-broken",
+  "scenario": "invalid_chain_forgery_merkle_broken",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "policy_verdict": "INVALID",
+    "reason_code": "MERKLE_CHAIN_BROKEN"
+  }
+}

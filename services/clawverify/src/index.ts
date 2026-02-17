@@ -101,6 +101,12 @@ export interface Env {
   COVERAGE_ATTESTATION_SIGNER_DIDS?: string;
 
   /**
+   * Comma-separated list of trusted binary semantic evidence signer DIDs (did:key:...).
+   * Used for fail-closed binary semantic evidence verification in proof bundles.
+   */
+  BINARY_SEMANTIC_EVIDENCE_SIGNER_DIDS?: string;
+
+  /**
    * Coverage enforcement phase for proof-bundle verification.
    * Allowed values: observe | warn | enforce.
    */
@@ -1046,6 +1052,10 @@ async function handleVerifyAgent(request: Request, env: Env): Promise<Response> 
     env.ATTESTATION_SIGNER_DIDS
   );
 
+  const binarySemanticEvidenceSignerAllowlist = parseCommaSeparatedAllowlist(
+    env.BINARY_SEMANTIC_EVIDENCE_SIGNER_DIDS
+  );
+
   const executionAttesterAllowlist = parseCommaSeparatedAllowlist(
     env.EXECUTION_ATTESTATION_SIGNER_DIDS
   );
@@ -1068,6 +1078,8 @@ async function handleVerifyAgent(request: Request, env: Env): Promise<Response> 
 
   const verification = await verifyAgent(body, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+    allowlistedBinarySemanticEvidenceSignerDids:
+      binarySemanticEvidenceSignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
     allowlistedExecutionAttesterDids: executionAttesterAllowlist,
     teeRootAllowlist,
@@ -1250,6 +1262,10 @@ async function handleVerifyBundle(
     env.COVERAGE_ATTESTATION_SIGNER_DIDS
   );
 
+  const binarySemanticEvidenceSignerAllowlist = parseCommaSeparatedAllowlist(
+    env.BINARY_SEMANTIC_EVIDENCE_SIGNER_DIDS
+  );
+
   let effectiveCoverageEnforcementPhase = parseCoverageEnforcementPhase(
     env.COVERAGE_ENFORCEMENT_PHASE
   );
@@ -1316,6 +1332,8 @@ async function handleVerifyBundle(
       effectiveWitnessedWebTransparencyRequiredAfter,
     allowlistedAttesterDids: attesterAllowlist,
     allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
+    allowlistedBinarySemanticEvidenceSignerDids:
+      binarySemanticEvidenceSignerAllowlist,
     coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
     vir_conflict_policy_mode: parseVirConflictPolicyMode(
       env.VIR_CONFLICT_POLICY_MODE

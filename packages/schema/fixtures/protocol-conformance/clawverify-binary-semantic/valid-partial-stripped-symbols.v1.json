@@ -1,0 +1,11 @@
+{
+  "id": "valid-partial-stripped-symbols",
+  "scenario": "valid_partial_stripped_symbols",
+  "expected": {
+    "status": "VALID",
+    "policy_verdict": "PARTIAL",
+    "reason_code": "STRIPPED_SYMBOLS",
+    "proof_tier": "self",
+    "trust_tier": "basic"
+  }
+}

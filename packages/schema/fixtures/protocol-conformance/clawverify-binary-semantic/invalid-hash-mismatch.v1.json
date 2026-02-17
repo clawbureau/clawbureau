@@ -1,0 +1,10 @@
+{
+  "id": "invalid-hash-mismatch",
+  "scenario": "invalid_hash_mismatch",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "policy_verdict": "INVALID",
+    "reason_code": "HASH_MISMATCH"
+  }
+}
