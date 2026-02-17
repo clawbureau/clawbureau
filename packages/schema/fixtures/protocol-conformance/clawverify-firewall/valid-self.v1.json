@@ -1,0 +1,8 @@
+{
+  "id": "valid-self",
+  "scenario": "valid_self",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "self"
+  }
+}

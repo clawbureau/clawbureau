@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawverify-phase1-trust",
-  "description": "clawverify.com (Verification API) — PRD — Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
+  "description": "clawverify.com (Verification API) \u2014 PRD \u2014 Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
   "userStories": [
     {
       "id": "CVF-US-001",
@@ -244,7 +244,7 @@
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old→new rotation is proven. Added vitest coverage for rotated owner attestations."
+      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old\u2192new rotation is proven. Added vitest coverage for rotated owner attestations."
     },
     {
       "id": "CVF-US-018",
@@ -313,6 +313,111 @@
       "priority": 22,
       "passes": true,
       "notes": "Implemented in `services/clawverify/src/verify-token-control.ts` with deterministic errors `TOKEN_CONTROL_TRANSPARENCY_STALE`, `TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN`, `TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED` and `transparency_snapshot` response field. Config gate: `CONTROL_KEY_TRANSPARENCY_MAX_AGE_SECONDS`. Validated by M6 suite staging/prod deploy summaries under `artifacts/ops/identity-control-plane/2026-02-12T00-52-18-553Z-staging/` and `.../2026-02-12T00-52-32-525Z-prod/`."
+    },
+    {
+      "id": "CVF-US-050",
+      "title": "Unify VIR verification core across receipt and proof-bundle paths",
+      "description": "As a verifier, I want one shared VIR validation engine so v1/v2 semantics cannot drift between /v1/verify/receipt and /v1/verify/bundle.",
+      "acceptanceCriteria": [
+        "Add src/vir-core.ts with shared VIR validation entrypoint and shared helper functions",
+        "verify-receipt.ts and verify-proof-bundle.ts both call the shared VIR core for v1/v2 checks",
+        "Shared core enforces legal binding, selective-disclosure merkle recompute, and evidence_conflicts precedence",
+        "Duplicate VIR v2 logic is removed from call sites",
+        "Typecheck and relevant tests pass"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Implemented shared VIR core in `services/clawverify/src/vir-core.ts` and wired both `verify-receipt.ts` and `verify-proof-bundle.ts` through `validateVirReceiptCore(...)`. Removed duplicate VIR v2 merkle/conflict/binding logic from both call sites. Validated with `npm run typecheck` and VIR suites including `test/vir-core-consistency.test.ts`, `test/vir-v2-receipt.test.ts`, and `test/vir-v2-proof-bundle.test.ts`."
+    },
+    {
+      "id": "CVF-US-051",
+      "title": "Replace string-matching with structured critical VIR failure codes",
+      "description": "As a verifier, I want deterministic fail-closed behavior keyed by explicit error codes rather than brittle message matching.",
+      "acceptanceCriteria": [
+        "Define explicit VIR failure code union/type (e.g. ERR_MERKLE_ROOT_MISMATCH, ERR_CONFLICT_UNREPORTED, ERR_PRECEDENCE_VIOLATION)",
+        "Bundle verification critical-gates on structured codes, not error.includes(...)",
+        "Critical VIR failures always return INVALID with deterministic EVIDENCE_MISMATCH mapping",
+        "Add tests that assert code-based fail-closed behavior",
+        "Typecheck and tests pass"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Structured VIR failure codes are now authoritative (`VirFailureCode` in `vir-core.ts`) and proof-bundle critical gating uses `CRITICAL_VIR_CODES` instead of message matching. `verify-proof-bundle.ts` now fail-closes via explicit codes (`ERR_MERKLE_ROOT_MISMATCH`, `ERR_CONFLICT_UNREPORTED`, `ERR_PRECEDENCE_VIOLATION`). Added table-driven cross-path regression coverage in `test/vir-core-consistency.test.ts`."
+    },
+    {
+      "id": "CVF-US-052",
+      "title": "Deterministic proof-tiering with strict witnessed_web namespace isolation",
+      "description": "As a marketplace, I want proof tiers computed deterministically so witnessed web evidence never overclaims gateway trust.",
+      "acceptanceCriteria": [
+        "Proof tier comparator is deterministic (source priority + timestamp + receipt_id tie-break)",
+        "web_receipts can uplift only to witnessed_web and never gateway",
+        "gateway tier requires gateway receipts or high-confidence VIR sources per policy",
+        "sandbox tier uplift remains isolated to attestations/execution attestations",
+        "Add/extend tests for tier determinism and namespace isolation"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Proof-tiering remains deterministic and namespace-isolated: `web_receipts` uplift only to `witnessed_web` (never gateway), `sandbox` requires attestation/execution evidence, and VIR canonical selection now uses shared comparator (`compareVirCandidate` + `SOURCE_SCORE`) for global stability. Covered by `test/proof-tier-next-trust.test.ts`, `test/vir-proof-tier.test.ts`, and `test/web-receipt.test.ts`."
+    },
+    {
+      "id": "CVF-US-053",
+      "title": "Schema-runtime drift gate in CI for clawverify",
+      "description": "As an operator, I want CI to fail when schema changes are not mirrored in validators/runtime/tests.",
+      "acceptanceCriteria": [
+        "Add a drift-check script (schema registry + validator exports + generated validators consistency)",
+        "CI workflow runs drift check and fails on unsynced schema/runtime state",
+        "Validator generation step is enforced (generated file drift detected by CI)",
+        "Add at least one test/assertion to confirm new schema refs are wired into runtime validation",
+        "Typecheck and CI checks pass"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Added schema/runtime drift gate via `services/clawverify/scripts/check-schema-runtime-sync.mjs` and CI workflow `.github/workflows/clawverify-schema-drift.yml`. The gate verifies schema registry + validator export wiring, enforces regenerated standalone validators, and fails schema-only deltas without clawverify runtime/test updates. Added explicit contract coverage in `test/schema-runtime-contract.test.ts` for `vir_receipts` (VIR v2), `web_receipts`, and `coverage_attestations` schema wiring."
+    },
+    {
+      "id": "CVF-US-054",
+      "title": "Deterministic firewall conformance fixture corpus",
+      "description": "As a platform, I want reproducible fixture-based verification vectors so trust-tier and fail-code regressions are caught immediately.",
+      "acceptanceCriteria": [
+        "Add fixture corpus for VALID tiers (self, witnessed_web, gateway, sandbox/tee_measured)",
+        "Add fixture corpus for INVALID critical VIR failures (merkle mismatch, unreported conflict, precedence violation, revoked TEE)",
+        "Add conformance runner script that asserts expected status + proof_tier + error code",
+        "Wire fixture runner into CI or documented smoke gate",
+        "Typecheck and tests pass"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "Added deterministic firewall fixture corpus under `packages/schema/fixtures/protocol-conformance/clawverify-firewall/` (valid self/witnessed_web/gateway/sandbox+tee and invalid critical VIR + revoked TEE cases). Added conformance test `services/clawverify/test/firewall-conformance.test.ts` and runner `scripts/protocol/run-clawverify-firewall-conformance.mjs` that asserts expected status/proof_tier/error_code per fixture. Wired into CI via `.github/workflows/clawverify-firewall-conformance.yml`."
+    },
+    {
+      "id": "CVF-US-055",
+      "title": "TEE attestation operational hardening for fail-closed uplift",
+      "description": "As a verifier, I want tee_measured uplift only under strict allowlist + binding + revocation checks.",
+      "acceptanceCriteria": [
+        "Execution attestation verification requires signer allowlist and binding to agent_did/run_id/proof_bundle_hash_b64u",
+        "TEE root/TCB allowlist and revocation checks are enforced for tee_execution",
+        "Revoked root/TCB deterministically returns INVALID with REVOKED semantics",
+        "model_identity_tier can be tee_measured only when tee_execution evidence verifies",
+        "Add tests for revoked, mismatch, and valid uplift paths"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "TEE attestation path is fail-closed in proof-bundle verification: signer allowlist + agent/run/proof-bundle-hash bindings are enforced, root/TCB allowlist+revocation checks gate `tee_execution`, and revoked claims hard-fail with `REVOKED`. Verified by `test/proof-tier-next-trust.test.ts` (valid uplift + revoked hard-fail) and full clawverify suite pass."
+    },
+    {
+      "id": "CVF-US-056",
+      "title": "Harness matrix expansion: Gemini CLI lane and Linux-ready verification lane",
+      "description": "As a platform, I want the harness matrix to include Gemini CLI and Linux-lane validation so PoH trust claims hold cross-runtime.",
+      "acceptanceCriteria": [
+        "Add Gemini CLI path to harness matrix and e2e runner inputs",
+        "Codex wrapper and Gemini lanes both produce verifiable PoH artifacts",
+        "Define Linux verification lane script/job for clawverify/clawsig paths with deterministic outputs",
+        "Document artifact paths and expected pass/fail signals",
+        "Typecheck/tests for modified packages pass"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "Expanded harness matrix agent set to include Gemini CLI lane in `packages/clawsig-conformance/src/harness-matrix.ts` (agent enum/default matrix/env wiring). Added Linux-first harness smoke path `scripts/e2e/linux-harness-smoke.mjs` with deterministic artifact output (`.clawsig/e2e-linux-results.json`) and CI workflow `.github/workflows/poh-harness-matrix-linux.yml` to run codex+gemini lanes as reporting smoke in Linux."
     }
   ]
 }
