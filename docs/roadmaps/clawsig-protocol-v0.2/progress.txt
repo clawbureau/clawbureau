@@ -169,3 +169,21 @@ Validation:
 - `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
 - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
 - `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
+
+---
+
+2026-02-18 — v0.2 release notes + tracker closeout
+
+- Final CPL-V2-001 lane merged:
+  - PR #285 (`1b21d0cdb562e02347304451cc6edd137a5b99d2`)
+- Tracker status updated to fully shipped on main:
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/README.md`
+- Added release-grade protocol changelog entry:
+  - `docs/specs/clawsig-protocol/CHANGELOG.md` (`v0.2.0`)
+  - covers merged tranche PRs #281/#282/#283/#285 and behavior deltas.
+
+Validation:
+- `jq . docs/roadmaps/clawsig-protocol-v0.2/prd.json` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

@@ -1,10 +1,60 @@
 > **Type:** Reference
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-12
-> **Source of truth:** Git history + `docs/roadmaps/clawsig-protocol/prd.json`
+> **Last reviewed:** 2026-02-18
+> **Source of truth:** Git history + `docs/roadmaps/clawsig-protocol/prd.json` + `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
 
 # Clawsig Protocol — Changelog
+
+## v0.2.0 (2026-02-18)
+
+**Deterministic verifier expansion release.** Adds co-signatures, selective disclosure, temporal TTL semantics, aggregate fleet verification, and offline rate-limit abuse detection.
+
+### Shipped stories (5/5)
+
+- **CPL-V2-001** — Protocol-level rate limiting semantics
+- **CPL-V2-002** — Multi-party receipt co-signing
+- **CPL-V2-003** — Receipt expiry / TTL semantics
+- **CPL-V2-004** — Selective disclosure for tool receipt arguments
+- **CPL-V2-005** — Aggregate proof bundles (bundle-of-bundles)
+
+### Schema deltas (additive)
+
+- Added:
+  - `selective_disclosure.v1.json`
+  - `co_signature.v1.json`
+  - `tool_receipt.v2.json` + `tool_receipt_envelope.v2.json`
+  - `aggregate_bundle.v1.json` + `aggregate_bundle_envelope.v1.json`
+- Extended existing payload/envelope schemas without breaking v1:
+  - `proof_bundle.v1.json`
+    - tool receipt union handling (v1/v2 payload+envelope set)
+    - `rate_limit_claims[]`
+  - envelope TTL support (`expires_at`) across proof/export/receipt paths
+
+### Verifier/runtime behavior
+
+- Proof bundle verification now fail-closes on:
+  - co-signature failure (`CO_SIGNATURE_INVALID`)
+  - selective-disclosure type/root issues (`DISCLOSURE_TYPE_MISMATCH`, `DISCLOSURE_ROOT_MISMATCH`)
+  - deterministic rate-limit violations (`RATE_LIMIT_WINDOW_INVALID`, `RATE_LIMIT_CLAIM_INCONSISTENT`, `RATE_LIMIT_EXCEEDED`)
+- Export/aggregate verification includes:
+  - deterministic temporal guards (`EXPIRED_TTL`, `CAUSAL_CLOCK_CONTRADICTION`, `FUTURE_TIMESTAMP_POISONING`)
+  - strict aggregate member and fleet invariants (`AGGREGATE_*`, `FLEET_SUMMARY_MISMATCH`, `IDENTITY_CONFLICT`)
+  - aggregate member strict-liability cascade (`AGGREGATE_MEMBER_INVALID`)
+
+### Conformance and CI
+
+- Added executable R48/R49 vector corpus and `kind: aggregate_bundle` runner mapping.
+- Added CPL-V2-001 vector corpus under:
+  - `packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/`
+- Cross-platform protocol verification suite expanded accordingly (node + bun + deno-capable harness).
+
+### Merge evidence
+
+- PR #281 → `a936c099814802df68e810d974d03017f39fd497`
+- PR #282 → `4199b2b80ea5e1993e9063b8408dd81b90757e74`
+- PR #283 → `7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5`
+- PR #285 → `1b21d0cdb562e02347304451cc6edd137a5b99d2`
 
 ## v0.1.0 (2026-02-12)
 
