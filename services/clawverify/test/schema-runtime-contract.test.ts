@@ -191,6 +191,36 @@ function makeBinarySemanticEvidenceEnvelope() {
   };
 }
 
+function makeToolReceiptEnvelopeV2() {
+  return {
+    envelope_version: '2',
+    envelope_type: 'tool_receipt',
+    payload: {
+      receipt_version: '2',
+      receipt_id: 'tool_contract_001',
+      tool_name: 'search.docs',
+      args_hash_b64u: b64u(16),
+      result_hash_b64u: b64u(16),
+      hash_algorithm: 'SHA-256',
+      agent_did: 'did:key:zSchemaContractSigner0001',
+      timestamp: '2026-02-17T00:00:00Z',
+      latency_ms: 12,
+      args_salt_b64u: b64u(16),
+      result_salt_b64u: b64u(16),
+      binding: {
+        run_id: 'run_contract_001',
+        event_hash_b64u: b64u(16),
+      },
+    },
+    payload_hash_b64u: b64u(16),
+    hash_algorithm: 'SHA-256',
+    signature_b64u: b64u(86),
+    algorithm: 'Ed25519',
+    signer_did: 'did:key:zSchemaContractToolSigner0001',
+    issued_at: '2026-02-17T00:00:00Z',
+  };
+}
+
 describe('schema/runtime contract wiring', () => {
   it('accepts proof bundles with vir_receipts carrying VIR v2 envelopes', () => {
     const envelope = makeProofBundleEnvelope({
@@ -238,6 +268,19 @@ describe('schema/runtime contract wiring', () => {
       agent_did: 'did:key:zSchemaContractSigner0001',
       event_chain: makeBaseEventChain(),
       binary_semantic_evidence_attestations: [makeBinarySemanticEvidenceEnvelope()],
+    });
+
+    const out = validateProofBundleEnvelopeV1(envelope);
+    expect(out.valid).toBe(true);
+  });
+
+  it('accepts proof bundles with tool_receipts v2 envelope refs wired to schema oneOf', () => {
+    const envelope = makeProofBundleEnvelope({
+      bundle_version: '1',
+      bundle_id: 'bundle_contract_tool_v2_001',
+      agent_did: 'did:key:zSchemaContractSigner0001',
+      event_chain: makeBaseEventChain(),
+      tool_receipts: [makeToolReceiptEnvelopeV2()],
     });
 
     const out = validateProofBundleEnvelopeV1(envelope);

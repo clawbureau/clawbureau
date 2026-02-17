@@ -2,9 +2,9 @@
   "manifest_version": "1",
   "protocol": {
     "name": "Clawsig Protocol",
-    "version": "0.1"
+    "version": "0.2"
   },
-  "generated_at": "2026-02-12T00:00:00.000Z",
+  "generated_at": "2026-02-17T22:38:41.556Z",
   "vectors": [
     {
       "name": "export_bundle.golden",
@@ -254,6 +254,134 @@
           "SCHEMA_VALIDATION_FAILED",
           "HASH_MISMATCH",
           "PROOF_BUNDLE_AGENT_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "proof_bundle.r48.tool_receipt_v2_cosig_valid",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/v2_tool_receipt_cosig_valid.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "proof_bundle.r48.tool_receipt_v2_cosig_secondary_invalid",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/v2_tool_receipt_cosig_secondary_invalid.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "CO_SIGNATURE_INVALID"
+        ]
+      }
+    },
+    {
+      "name": "proof_bundle.r48.tool_receipt_v2_sd_type_confusion",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/v2_tool_receipt_sd_type_confusion.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "DISCLOSURE_TYPE_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "proof_bundle.r48.tool_receipt_v2_sd_merkle_mismatch",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/v2_tool_receipt_sd_merkle_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "DISCLOSURE_ROOT_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "proof_bundle.r48.tool_receipt_v2_binding_mismatch",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/v2_tool_receipt_binding_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RECEIPT_BINDING_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.pass.golden",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_pass_golden.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "aggregate_bundle.fail.signer_mismatch",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_fail_signer_mismatch.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "AGGREGATE_SIGNER_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.fail.unsorted_array",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_fail_unsorted_array.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "UNSORTED_MEMBER_ARRAY"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.fail.duplicate_run_id",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_fail_duplicate_run_id.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "AGGREGATE_DUPLICATE_RUN_ID"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.fail.fleet_summary_members",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_fail_fleet_summary_members.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "FLEET_SUMMARY_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.fail.self_dealing_identity",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_fail_self_dealing_identity.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "IDENTITY_CONFLICT"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.fail.member_invalid",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_fail_member_invalid.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "AGGREGATE_MEMBER_INVALID"
         ]
       }
     }

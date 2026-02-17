@@ -574,3 +574,26 @@ Started: 2026-02-02T03:08:26.937416
   - `node scripts/protocol/run-clawsig-protocol-conformance.mjs`
   - `node scripts/protocol/run-clawsig-verified-pr.mjs`
 ---
+
+## 2026-02-17 - CPL-V2 R48/R49 conformance fixtures (executable vectors)
+- What was implemented
+  - Added executable R48 proof-bundle vectors (`r48-r49-v02/proof_bundle/*`) covering:
+    - v2 co-signature pass/fail
+    - selective disclosure mismatch/type confusion
+    - tool-receipt binding replay mismatch
+  - Added executable R49 aggregate vectors (`r48-r49-v02/aggregate_bundle/*`) covering:
+    - golden pass
+    - signer mismatch
+    - unsorted member array
+    - duplicate run replay
+    - strict-liability member invalidation
+    - fleet summary mismatch
+    - self-dealing identity conflict
+  - Updated protocol conformance manifest with these vectors and `aggregate_bundle` kind mapping.
+- Notes
+  - Hosted service API unchanged; this lane hardens protocol conformance corpus for CI/runtime parity.
+- Quality checks
+  - `node scripts/protocol/run-clawsig-protocol-conformance.mjs`
+  - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts`
+  - `node scripts/protocol/run-clawsig-verified-pr.mjs`
+---

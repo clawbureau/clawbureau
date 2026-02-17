@@ -108,3 +108,33 @@ Validation:
 - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
 - `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
 - `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
+
+---
+
+2026-02-17 — fixtures + conformance lane (CPL-V2 R48/R49 executable vectors)
+
+- Added concrete R48 proof-bundle vectors under:
+  - `packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/`
+  - coverage includes:
+    - v2 co-signature pass/fail (`OK`, `CO_SIGNATURE_INVALID`)
+    - selective disclosure fail paths (`DISCLOSURE_TYPE_MISMATCH`, `DISCLOSURE_ROOT_MISMATCH`)
+    - v2 tool receipt binding replay fail (`RECEIPT_BINDING_MISMATCH`)
+- Added concrete R49 aggregate vectors under:
+  - `packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/`
+  - coverage includes:
+    - pass golden (`OK`)
+    - signer mismatch (`AGGREGATE_SIGNER_MISMATCH`)
+    - ordering invariant (`UNSORTED_MEMBER_ARRAY`)
+    - duplicate run replay (`AGGREGATE_DUPLICATE_RUN_ID`)
+    - strict-liability child failure (`AGGREGATE_MEMBER_INVALID`)
+    - fleet summary mismatch (`FLEET_SUMMARY_MISMATCH`)
+    - self-dealing identity conflict (`IDENTITY_CONFLICT`)
+- Updated protocol conformance manifest contract with executable R48/R49 vectors:
+  - `packages/schema/fixtures/protocol-conformance/manifest.v1.json`
+  - protocol header moved to `0.2`
+  - added `kind: aggregate_bundle` vectors (supported by runner/CLI mapping)
+
+Validation:
+- `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
+- `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
+- `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
