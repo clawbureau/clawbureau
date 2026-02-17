@@ -21,6 +21,7 @@ export const ENVELOPE_TYPES = [
   'derivation_attestation',
   'audit_result_attestation',
   'export_bundle',
+  'aggregate_bundle',
   'scoped_token',
 ] as const;
 export type EnvelopeType = (typeof ENVELOPE_TYPES)[number];
@@ -227,6 +228,18 @@ export type VerificationErrorCode =
   | 'DISCLOSURE_ROOT_MISMATCH'
   | 'DISCLOSURE_TYPE_MISMATCH'
   | 'RECEIPT_BINDING_MISMATCH'
+  | 'AGGREGATE_BUNDLE_INVALID'
+  | 'AGGREGATE_SIGNER_MISMATCH'
+  | 'AGGREGATE_MEMBER_INVALID'
+  | 'AGGREGATE_DUPLICATE_MEMBER'
+  | 'AGGREGATE_DUPLICATE_BUNDLE_ID'
+  | 'AGGREGATE_DUPLICATE_RUN_ID'
+  | 'AGGREGATE_TTL_EXCEEDS_MEMBER'
+  | 'UNSORTED_MEMBER_ARRAY'
+  | 'FLEET_SUMMARY_MISMATCH'
+  | 'CAUSAL_CLOCK_CONTRADICTION'
+  | 'FUTURE_TIMESTAMP_POISONING'
+  | 'IDENTITY_CONFLICT'
   | 'EXPIRED_TTL'
   | 'POLICY_NONCOMPLIANT'
   | 'URM_MISSING'
@@ -257,6 +270,7 @@ export type VerificationErrorCode =
   | 'TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN'
   | 'TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED'
   | 'UNKNOWN_VERSION'
+  | 'INCONSISTENT_RUN_ID'
   | 'PROOF_BUNDLE_AGENT_MISMATCH';
 
 /**
@@ -1183,6 +1197,7 @@ export interface ExportBundlePayload {
   export_version: '1';
   export_id: string;
   created_at: string;
+  expires_at?: string;
   issuer_did: string;
   manifest: ExportBundleManifest;
   artifacts: ExportBundleArtifacts;
@@ -1209,6 +1224,52 @@ export interface VerifyExportBundleResponse {
     derivation_attestations_verified: number;
     audit_result_attestations_verified: number;
   };
+  proof_tier?: ProofTier;
+  model_identity_tier?: ModelIdentityTier;
+  error?: VerificationError;
+}
+
+export type AggregateBundleMember =
+  | SignedEnvelope<ProofBundlePayload>
+  | ExportBundlePayload;
+
+export interface AggregateFleetSummary {
+  total_members: number;
+  unique_agents: number;
+  total_runs: number;
+  fleet_proof_tier?: ProofTier;
+}
+
+export interface AggregateBundlePayload {
+  aggregate_version: '1';
+  aggregate_id: string;
+  created_at: string;
+  expires_at?: string;
+  issuer_did: string;
+  manifest: ExportBundleManifest;
+  artifacts: {
+    member_bundles: AggregateBundleMember[];
+  };
+  metadata: {
+    fleet_summary: AggregateFleetSummary;
+    [key: string]: unknown;
+  };
+}
+
+export type AggregateBundleEnvelope = SignedEnvelope<AggregateBundlePayload>;
+
+export interface VerifyAggregateBundleRequest {
+  envelope: AggregateBundleEnvelope;
+}
+
+export interface VerifyAggregateBundleResponse {
+  result: VerificationResult;
+  aggregate_id?: string;
+  signer_did?: string;
+  manifest_entries_verified?: number;
+  member_count?: number;
+  unique_agents?: number;
+  total_runs?: number;
   proof_tier?: ProofTier;
   model_identity_tier?: ModelIdentityTier;
   error?: VerificationError;

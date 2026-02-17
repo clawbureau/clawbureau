@@ -75,6 +75,17 @@ export interface ProofBundleVerifierOptions {
   allowlistedAttesterDids?: readonly string[];
 
   /**
+   * Optional deterministic verification-time override (ISO 8601).
+   *
+   * When set, temporal checks (e.g. envelope `expires_at`) are evaluated
+   * against this timestamp instead of wall-clock `Date.now()`.
+   */
+  verificationTime?: string;
+
+  /** Optional skew allowance for TTL checks (milliseconds). Default: 0. */
+  ttlSkewMs?: number;
+
+  /**
    * Optional materialized URM document (JSON object).
    *
    * POH-US-015: If provided, clawverify will:
@@ -875,7 +886,9 @@ async function verifyDetachedSignatureByDid(
 }
 
 async function verifyToolReceiptEnvelopeSignatures(
-  envelope: ToolReceiptEnvelopeV1 | ToolReceiptEnvelopeV2
+  envelope: ToolReceiptEnvelopeV1 | ToolReceiptEnvelopeV2,
+  verificationTimeMs: number,
+  ttlSkewMs: number
 ): Promise<
   | { ok: true }
   | {
@@ -901,7 +914,7 @@ async function verifyToolReceiptEnvelopeSignatures(
       };
     }
 
-    if (Date.parse(envelope.expires_at) < Date.now()) {
+    if (verificationTimeMs > Date.parse(envelope.expires_at) + ttlSkewMs) {
       return {
         ok: false,
         errorCode: 'EXPIRED_TTL',
@@ -1121,6 +1134,27 @@ export async function verifyProofBundle(
 ): Promise<{ result: ProofBundleVerificationResult; error?: VerificationError }> {
   const now = new Date().toISOString();
 
+  const verificationTime = options.verificationTime ?? now;
+  if (!isValidIsoDate(verificationTime)) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: 'verificationTime must be a valid ISO-8601 timestamp',
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: 'verificationTime must be a valid ISO-8601 date-time string',
+        field: 'verificationTime',
+      },
+    };
+  }
+
+  const verificationTimeMs = Date.parse(verificationTime);
+  const ttlSkewMs = Number.isFinite(options.ttlSkewMs)
+    ? Math.max(0, Math.trunc(options.ttlSkewMs as number))
+    : 0;
+
   // 1. Validate envelope structure
   if (!validateEnvelopeStructure(envelope)) {
     return {
@@ -1247,6 +1281,38 @@ export async function verifyProofBundle(
         field: 'issued_at',
       },
     };
+  }
+
+  if (envelope.expires_at !== undefined) {
+    if (!isValidIsoDate(envelope.expires_at)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Invalid expires_at date format',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'expires_at must be a valid ISO 8601 date string',
+          field: 'expires_at',
+        },
+      };
+    }
+
+    if (verificationTimeMs > Date.parse(envelope.expires_at) + ttlSkewMs) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Proof bundle envelope has expired',
+          verified_at: now,
+        },
+        error: {
+          code: 'EXPIRED_TTL',
+          message: 'Envelope expires_at is in the past for the verification time',
+          field: 'expires_at',
+        },
+      };
+    }
   }
 
   // 9. Validate base64url fields
@@ -2215,7 +2281,9 @@ export async function verifyProofBundle(
 
       if (parsed.envelope) {
         const signatureCheck = await verifyToolReceiptEnvelopeSignatures(
-          parsed.envelope
+          parsed.envelope,
+          verificationTimeMs,
+          ttlSkewMs
         );
         if (!signatureCheck.ok) {
           return {

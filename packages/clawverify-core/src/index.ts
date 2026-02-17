@@ -19,6 +19,9 @@ export type { ProofBundleVerifierOptions } from './verify-proof-bundle.js';
 export { verifyExportBundle } from './verify-export-bundle.js';
 export type { VerifyExportBundleOptions } from './verify-export-bundle.js';
 
+export { verifyAggregateBundle } from './verify-aggregate-bundle.js';
+export type { VerifyAggregateBundleOptions } from './verify-aggregate-bundle.js';
+
 export { verifyReceipt } from './verify-receipt.js';
 export type { ReceiptVerifierOptions } from './verify-receipt.js';
 

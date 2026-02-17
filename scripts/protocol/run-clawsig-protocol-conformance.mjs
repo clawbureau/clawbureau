@@ -88,7 +88,9 @@ async function main() {
         ? 'proof-bundle'
         : kind === 'commit_sig'
           ? 'commit-sig'
-          : 'export-bundle';
+          : kind === 'aggregate_bundle'
+            ? 'aggregate-bundle'
+            : 'export-bundle';
 
     const args = [cliPath, 'verify', sub, '--input', inputPath];
     // commit-sig doesn't require a config file

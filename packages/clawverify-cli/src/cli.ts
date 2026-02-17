@@ -27,7 +27,7 @@ function usageText(): string {
     'Usage:',
     '  clawsig wrap [--no-publish] [--output <path>] -- <command> [args...]',
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
-    '  clawverify verify export-bundle --input <path> [--config <path>]',
+    '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>]',
     '  clawverify verify commit-sig   --input <path>',
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>]',
     '  clawverify migrate-policy      <v1-policy.json>',

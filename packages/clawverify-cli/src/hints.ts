@@ -13,6 +13,8 @@ const HINTS: Record<string, string> = {
   // ── Signature ─────────────────────────────────────────
   SIGNATURE_INVALID:
     'The Ed25519 signature does not match the payload. Check that the signing key matches signer_did and the payload was not modified after signing.',
+  CO_SIGNATURE_INVALID:
+    'A co-signature did not verify against the committed payload hash. Ensure each co-signer signed the exact payload hash and signer_did is correct.',
 
   // ── Schema ────────────────────────────────────────────
   SCHEMA_VALIDATION_FAILED:
@@ -37,6 +39,14 @@ const HINTS: Record<string, string> = {
     'Envelope type not recognized. Check the envelope_type field matches a registered type.',
   UNKNOWN_ENVELOPE_VERSION:
     'Envelope version not recognized. Check envelope_version is "1".',
+
+  // ── Disclosure ────────────────────────────────────────
+  DISCLOSURE_ALGORITHM_UNKNOWN:
+    'Selective disclosure algorithm is not allowlisted. Use vir_v2_typed_lexicographical.',
+  DISCLOSURE_ROOT_MISMATCH:
+    'Selective disclosure Merkle root does not match the committed hash. Recompute leaf hashes and root deterministically.',
+  DISCLOSURE_TYPE_MISMATCH:
+    'A disclosed leaf value type does not match its declared type. Ensure runtime JSON type and declared leaf.type agree.',
 
   // ── Hash ──────────────────────────────────────────────
   HASH_MISMATCH:
@@ -81,6 +91,36 @@ const HINTS: Record<string, string> = {
     'Run IDs are inconsistent across bundle elements. All events, receipts, and attestations in a single bundle must share the same run_id.',
   EMPTY_CHAIN:
     'Event chain has no entries. A proof bundle must have at least one event.',
+  IDENTITY_CONFLICT:
+    'A forbidden DID overlap was detected (for example, aggregate issuer equals member agent DID). Use distinct identities for orchestrator and members.',
+
+  // ── Aggregate ─────────────────────────────────────────
+  AGGREGATE_BUNDLE_INVALID:
+    'Aggregate bundle structure or invariants failed. Check signer/issuer binding, manifest integrity, and member schema validity.',
+  AGGREGATE_SIGNER_MISMATCH:
+    'Aggregate envelope signer_did must match payload.issuer_did.',
+  AGGREGATE_MEMBER_INVALID:
+    'At least one aggregate member failed verification under strict-liability cascade. Verify failing member independently.',
+  AGGREGATE_DUPLICATE_MEMBER:
+    'Duplicate canonical member hash detected. Remove duplicate members from the aggregate.',
+  AGGREGATE_DUPLICATE_BUNDLE_ID:
+    'Duplicate bundle_id detected across aggregate members. Each member must represent a distinct bundle.',
+  AGGREGATE_DUPLICATE_RUN_ID:
+    'Duplicate run_id detected across aggregate members. Each member must represent a distinct run.',
+  AGGREGATE_TTL_EXCEEDS_MEMBER:
+    'Aggregate expires_at exceeds at least one member expiry. Aggregate TTL cannot outlive member TTL.',
+  UNSORTED_MEMBER_ARRAY:
+    'Aggregate member array is not lexicographically sorted by canonical hash. Reorder members deterministically before signing.',
+  FLEET_SUMMARY_MISMATCH:
+    'Declared fleet_summary values do not match computed member metrics. Recompute totals and proof tier before signing.',
+
+  // ── Time ──────────────────────────────────────────────
+  EXPIRED_TTL:
+    'A TTL-bound envelope or payload has expired for the verification timestamp. Re-sign with a fresh expires_at or verify at an archival timestamp.',
+  CAUSAL_CLOCK_CONTRADICTION:
+    'Timestamp causality is broken (e.g., created_at > issued_at). Fix timestamps before signing.',
+  FUTURE_TIMESTAMP_POISONING:
+    'issued_at is too far in the future relative to verification time and skew allowance. Correct system clock or issued_at.',
 
   // ── Receipt ───────────────────────────────────────────
   RECEIPT_BINDING_MISMATCH:
