@@ -34,7 +34,13 @@ async function ensureBuildArtifacts() {
 
 async function loadHarnessMatrixModule() {
   const distPath = resolve(ROOT, 'packages/clawsig-conformance/dist/harness-matrix.js');
-  return import(pathToFileURL(distPath).href);
+
+  try {
+    return await import(pathToFileURL(distPath).href);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Unable to load ${distPath}. Run builds first (or unset CLAWSIG_E2E_SKIP_BUILD). Details: ${detail}`);
+  }
 }
 
 async function main() {
@@ -50,20 +56,72 @@ async function main() {
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const timeoutOverride = Number.parseInt(
+    process.env.CLAWSIG_E2E_LINUX_TIMEOUT_MS || '',
+    10,
+  );
+  const timeoutMs =
+    Number.isFinite(timeoutOverride) && timeoutOverride > 0
+      ? timeoutOverride
+      : 60_000;
+
+  // Linux strict lane is proxy-only by contract.
+  // Codex base URL override remains opt-in via CLAWSIG_FORCE_BASE_URL_OVERRIDE=1.
   const run = await runHarnessMatrix({
     rootDir: ROOT,
     resultsPath: '.clawsig/e2e-linux-results.json',
     includeLive: false,
-    timeoutMs: 60_000,
+    timeoutMs,
     prompt: 'Say exactly: hello world',
     agents: requestedAgents,
+    layers: ['proxy'],
   });
 
   process.stdout.write(`${formatHarnessMatrixReport(run)}\n`);
   process.stdout.write(`artifact: ${run.results_path}\n`);
 
-  // Linux lane is currently a smoke/reporting gate.
-  // It emits deterministic artifacts and pass/fail counts but does not hard-fail CI yet.
+  const byId = new Map(run.results.map((r) => [r.id, r]));
+  const requiredCaseIds = requestedAgents.map((agent) => `${agent}:mock:proxy`);
+
+  const strictFailures = requiredCaseIds
+    .map((id) => {
+      const result = byId.get(id);
+
+      if (!result) {
+        return {
+          id,
+          code: 'AGENT_UNAVAILABLE',
+          reason: 'required lane result missing (deterministic matrix contract violated)',
+        };
+      }
+
+      if (result.status === 'PASS') {
+        return null;
+      }
+
+      const reason =
+        typeof result.reason === 'string' && result.reason.trim().length > 0
+          ? result.reason.trim()
+          : result.status;
+
+      const code =
+        result.status === 'SKIP' || reason.startsWith('AGENT_UNAVAILABLE:')
+          ? 'AGENT_UNAVAILABLE'
+          : 'PARITY_FAILURE';
+
+      return { id, code, reason };
+    })
+    .filter(Boolean);
+
+  if (strictFailures.length > 0) {
+    process.stdout.write('strict lane failures:\n');
+    for (const failure of strictFailures) {
+      process.stdout.write(`- ${failure.id}: ${failure.code} (${failure.reason})\n`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+
   process.exitCode = 0;
 }
 

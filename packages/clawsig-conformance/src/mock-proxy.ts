@@ -1,9 +1,9 @@
 /**
  * Mock LLM Proxy Server
  *
- * Lightweight HTTP server that mimics OpenAI and Anthropic APIs.
- * Returns deterministic canned responses, records all requests,
- * and generates self-signed mock gateway receipts.
+ * Lightweight HTTP server that mimics OpenAI, Anthropic, and clawproxy-style
+ * provider endpoints. Returns deterministic canned responses, records all
+ * requests, and generates self-signed mock gateway receipts.
  *
  * Self-contained: no external network calls.
  */
@@ -23,7 +23,7 @@ const OPENAI_CHAT_RESPONSE = {
   model: 'gpt-4-conformance-mock',
   choices: [{
     index: 0,
-    message: { role: 'assistant', content: 'Hello, I am a test agent. This is a conformance test response.' },
+    message: { role: 'assistant', content: 'hello world' },
     finish_reason: 'stop',
   }],
   usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
@@ -33,7 +33,7 @@ const ANTHROPIC_MESSAGES_RESPONSE = {
   id: 'msg_conformance_mock',
   type: 'message',
   role: 'assistant',
-  content: [{ type: 'text', text: 'Hello, I am a test agent. This is a conformance test response.' }],
+  content: [{ type: 'text', text: 'hello world' }],
   model: 'claude-conformance-mock',
   stop_reason: 'end_turn',
   usage: { input_tokens: 10, output_tokens: 20 },
@@ -54,7 +54,10 @@ async function sha256B64u(data: string): Promise<string> {
 }
 
 async function buildMockReceipt(
-  provider: string, model: string, requestBody: string, responseBody: string,
+  provider: string,
+  model: string,
+  requestBody: string,
+  responseBody: string,
   binding?: { run_id?: string; event_hash_b64u?: string; nonce?: string },
 ): Promise<MockReceipt> {
   const now = new Date().toISOString();
@@ -62,17 +65,57 @@ async function buildMockReceipt(
     receipt_version: '1' as const,
     receipt_id: `rcpt_mock_${randomUUID().slice(0, 8)}`,
     gateway_id: MOCK_GATEWAY_ID,
-    provider, model,
+    provider,
+    model,
     request_hash_b64u: await sha256B64u(requestBody),
     response_hash_b64u: await sha256B64u(responseBody),
-    tokens_input: 10, tokens_output: 20, latency_ms: 1, timestamp: now,
+    tokens_input: 10,
+    tokens_output: 20,
+    latency_ms: 1,
+    timestamp: now,
     ...(binding && Object.keys(binding).length > 0 ? { binding } : {}),
   };
+
   return {
-    envelope_version: '1', envelope_type: 'gateway_receipt', payload,
+    envelope_version: '1',
+    envelope_type: 'gateway_receipt',
+    payload,
     payload_hash_b64u: await sha256B64u(JSON.stringify(payload)),
-    hash_algorithm: 'SHA-256', signature_b64u: MOCK_SIGNATURE,
-    algorithm: 'Ed25519', signer_did: MOCK_GATEWAY_DID, issued_at: now,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: MOCK_SIGNATURE,
+    algorithm: 'Ed25519',
+    signer_did: MOCK_GATEWAY_DID,
+    issued_at: now,
+  };
+}
+
+function toLegacyReceipt(receipt: MockReceipt): Record<string, unknown> {
+  return {
+    version: '1.0',
+    provider: receipt.payload.provider,
+    model: receipt.payload.model,
+    requestHash: receipt.payload.request_hash_b64u,
+    responseHash: receipt.payload.response_hash_b64u,
+    timestamp: receipt.payload.timestamp,
+    latencyMs: receipt.payload.latency_ms,
+    signature: receipt.signature_b64u,
+    kid: receipt.signer_did,
+    binding: {
+      runId: receipt.payload.binding?.run_id,
+      eventHash: receipt.payload.binding?.event_hash_b64u,
+      nonce: receipt.payload.binding?.nonce,
+    },
+  };
+}
+
+function attachReceipts<T extends Record<string, unknown>>(payload: T, receipt: MockReceipt): T & {
+  _receipt: Record<string, unknown>;
+  _receipt_envelope: MockReceipt;
+} {
+  return {
+    ...payload,
+    _receipt: toLegacyReceipt(receipt),
+    _receipt_envelope: receipt,
   };
 }
 
@@ -85,9 +128,32 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function isOpenAIChatRoute(p: string): boolean { return /\/v1\/(chat\/completions|proxy\/openai\/chat\/completions)/.test(p); }
-function isOpenAIModelsRoute(p: string): boolean { return /\/v1\/(models|proxy\/openai\/models)/.test(p); }
-function isAnthropicRoute(p: string): boolean { return /\/(v1\/(messages|proxy\/anthropic\/messages))/.test(p); }
+function normalizePath(url: string): string {
+  const idx = url.indexOf('?');
+  return idx === -1 ? url : url.slice(0, idx);
+}
+
+// OpenAI-compatible:
+//   /v1/chat/completions
+//   /v1/proxy/openai/chat/completions
+// clawproxy-compatible provider route:
+//   /v1/proxy/openai
+function isOpenAIChatRoute(pathname: string): boolean {
+  return /\/v1\/(chat\/completions|proxy\/openai(?:\/chat\/completions)?)$/.test(pathname);
+}
+
+function isOpenAIModelsRoute(pathname: string): boolean {
+  return /\/v1\/(models|proxy\/openai\/models)$/.test(pathname);
+}
+
+// Anthropic-compatible:
+//   /v1/messages
+//   /v1/proxy/anthropic/messages
+// clawproxy-compatible provider route:
+//   /v1/proxy/anthropic
+function isAnthropicRoute(pathname: string): boolean {
+  return /\/v1\/(messages|proxy\/anthropic(?:\/messages)?)$/.test(pathname);
+}
 
 export interface MockProxyHandle {
   port: number;
@@ -102,17 +168,27 @@ export async function startMockProxy(port = 0): Promise<MockProxyHandle> {
   const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const method = req.method ?? 'GET';
     const url = req.url ?? '/';
+    const pathname = normalizePath(url);
     const body = method === 'POST' || method === 'PUT' ? await readBody(req) : '';
+
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) {
       if (typeof v === 'string') headers[k] = v;
       else if (Array.isArray(v)) headers[k] = v.join(', ');
     }
+
     let parsedBody: unknown;
     try { parsedBody = body ? JSON.parse(body) : null; } catch { parsedBody = body; }
-    requests.push({ method, path: url, headers, body: parsedBody, timestamp: new Date().toISOString() });
 
-    if (url === '/health') {
+    requests.push({
+      method,
+      path: url,
+      headers,
+      body: parsedBody,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (pathname === '/health') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'ok', mode: 'conformance-mock' }));
       return;
@@ -123,36 +199,55 @@ export async function startMockProxy(port = 0): Promise<MockProxyHandle> {
     if (headers['x-event-hash']) binding.event_hash_b64u = headers['x-event-hash'];
     if (headers['x-idempotency-key']) binding.nonce = headers['x-idempotency-key'];
 
-    if (isOpenAIChatRoute(url) && method === 'POST') {
-      const responseJson = JSON.stringify(OPENAI_CHAT_RESPONSE);
-      const receipt = await buildMockReceipt('openai', 'gpt-4-conformance-mock', body, responseJson, binding);
+    if (isOpenAIChatRoute(pathname) && method === 'POST') {
+      const baseResponseJson = JSON.stringify(OPENAI_CHAT_RESPONSE);
+      const receipt = await buildMockReceipt('openai', 'gpt-4-conformance-mock', body, baseResponseJson, binding);
       receipts.push(receipt);
-      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Clawsig-Receipt': JSON.stringify(receipt) });
+
+      const responseJson = JSON.stringify(attachReceipts(OPENAI_CHAT_RESPONSE, receipt));
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'X-Clawsig-Receipt': JSON.stringify(receipt),
+      });
       res.end(responseJson);
       return;
     }
-    if (isOpenAIModelsRoute(url) && method === 'GET') {
+
+    if (isOpenAIModelsRoute(pathname) && method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(OPENAI_MODELS_RESPONSE));
       return;
     }
-    if (isAnthropicRoute(url) && method === 'POST') {
-      const responseJson = JSON.stringify(ANTHROPIC_MESSAGES_RESPONSE);
-      const receipt = await buildMockReceipt('anthropic', 'claude-conformance-mock', body, responseJson, binding);
+
+    if (isAnthropicRoute(pathname) && method === 'POST') {
+      const baseResponseJson = JSON.stringify(ANTHROPIC_MESSAGES_RESPONSE);
+      const receipt = await buildMockReceipt('anthropic', 'claude-conformance-mock', body, baseResponseJson, binding);
       receipts.push(receipt);
-      res.writeHead(200, { 'Content-Type': 'application/json', 'X-Clawsig-Receipt': JSON.stringify(receipt) });
+
+      const responseJson = JSON.stringify(attachReceipts(ANTHROPIC_MESSAGES_RESPONSE, receipt));
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'X-Clawsig-Receipt': JSON.stringify(receipt),
+      });
       res.end(responseJson);
       return;
     }
-    if (url.startsWith('/v1/receipt/') && method === 'GET') {
-      const nonce = url.split('/v1/receipt/')[1];
+
+    if (pathname.startsWith('/v1/receipt/') && method === 'GET') {
+      const nonce = pathname.split('/v1/receipt/')[1];
       const found = receipts.find(r => r.payload.binding?.nonce === nonce);
-      if (found) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(found)); }
-      else { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'receipt_not_found' })); }
+      if (found) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(found));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'receipt_not_found' }));
+      }
       return;
     }
+
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'not_found', path: url }));
+    res.end(JSON.stringify({ error: 'not_found', path: pathname }));
   });
 
   const actualPort = await new Promise<number>((resolve, reject) => {
@@ -168,7 +263,10 @@ export async function startMockProxy(port = 0): Promise<MockProxyHandle> {
     port: actualPort,
     baseUrl: `http://127.0.0.1:${actualPort}`,
     shutdown: () => new Promise<MockProxyState>((resolve, reject) => {
-      server.close((err) => { if (err) reject(err); else resolve({ requests, receipts, port: actualPort }); });
+      server.close((err) => {
+        if (err) reject(err);
+        else resolve({ requests, receipts, port: actualPort });
+      });
     }),
   };
 }

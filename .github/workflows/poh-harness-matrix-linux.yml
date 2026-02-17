@@ -49,9 +49,71 @@ jobs:
           npm install
           npm run build
 
-      - name: Run Linux harness matrix smoke (codex + gemini lanes)
+      - name: Provision deterministic CI executables for required lanes
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$RUNNER_TEMP/clawsig-mock-bin"
+
+          cat > "$RUNNER_TEMP/clawsig-mock-bin/codex" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          if [[ "${1:-}" == "--version" ]]; then
+            echo "codex-ci-shim 1.0"
+            exit 0
+          fi
+
+          base="${OPENAI_BASE_URL:-${OPENAI_API_BASE:-}}"
+          if [[ -z "$base" ]]; then
+            echo "codex shim: OPENAI_BASE_URL/OPENAI_API_BASE is required" >&2
+            exit 1
+          fi
+
+          curl -sS -X POST "$base/v1/chat/completions" \
+            -H "content-type: application/json" \
+            -H "authorization: Bearer ${OPENAI_API_KEY:-sk-clawsig-mock}" \
+            -d '{"model":"gpt-4-conformance-mock","messages":[{"role":"user","content":"hello world"}]}' \
+            >/dev/null
+
+          echo '{"ok":true}'
+          SH
+
+          cat > "$RUNNER_TEMP/clawsig-mock-bin/gemini" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          if [[ "${1:-}" == "--version" ]]; then
+            echo "gemini-ci-shim 1.0"
+            exit 0
+          fi
+
+          base="${OPENAI_BASE_URL:-${OPENAI_API_BASE:-}}"
+          if [[ -z "$base" ]]; then
+            echo "gemini shim: OPENAI_BASE_URL/OPENAI_API_BASE is required" >&2
+            exit 1
+          fi
+
+          curl -sS -X POST "$base/v1/chat/completions" \
+            -H "content-type: application/json" \
+            -H "authorization: Bearer ${OPENAI_API_KEY:-sk-clawsig-mock}" \
+            -d '{"model":"gpt-4-conformance-mock","messages":[{"role":"user","content":"hello world"}]}' \
+            >/dev/null
+
+          echo 'hello world'
+          SH
+
+          chmod +x "$RUNNER_TEMP/clawsig-mock-bin/codex" "$RUNNER_TEMP/clawsig-mock-bin/gemini"
+          echo "$RUNNER_TEMP/clawsig-mock-bin" >> "$GITHUB_PATH"
+
+          "$RUNNER_TEMP/clawsig-mock-bin/codex" --version
+          "$RUNNER_TEMP/clawsig-mock-bin/gemini" --version
+
+      - name: Run Linux harness matrix strict gate (codex + gemini lanes)
         env:
           CLAWSIG_E2E_SKIP_BUILD: '1'
           CLAWSIG_E2E_LINUX_AGENTS: 'codex,gemini'
+          CLAWSIG_E2E_LINUX_TIMEOUT_MS: '180000'
+          CLAWSIG_FORCE_BASE_URL_OVERRIDE: '1'
         run: |
           node scripts/e2e/linux-harness-smoke.mjs

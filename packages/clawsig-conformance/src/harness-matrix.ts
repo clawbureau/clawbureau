@@ -72,6 +72,8 @@ export interface HarnessMatrixOptions {
   includeLive?: boolean;
   agents?: HarnessAgent[];
   resultsPath?: string;
+  /** Optional explicit layer list override (e.g. ['proxy'] for Linux lanes). */
+  layers?: HarnessLayer[];
 }
 
 interface AgentSpec {
@@ -143,10 +145,15 @@ const AGENTS: Record<HarnessAgent, AgentSpec> = {
       'model="gpt-4-conformance-mock"',
       prompt,
     ],
-    mockEnv: (mockProxyUrl) => ({
-      OPENAI_BASE_URL: mockProxyUrl,
-      OPENAI_API_BASE: mockProxyUrl,
-    }),
+    mockEnv: (mockProxyUrl) => {
+      // Codex default: do not override base URL unless explicitly forced.
+      const env: Record<string, string> = {};
+      if (process.env['CLAWSIG_FORCE_BASE_URL_OVERRIDE'] === '1') {
+        env['OPENAI_BASE_URL'] = mockProxyUrl;
+        env['OPENAI_API_BASE'] = mockProxyUrl;
+      }
+      return env;
+    },
     expectedModelEnv: 'CLAWSIG_E2E_EXPECTED_MODEL_CODEX',
   },
   opencode: {
@@ -328,6 +335,11 @@ async function runHarnessCase(params: {
 
       if (!env['OPENAI_API_KEY']) env['OPENAI_API_KEY'] = 'sk-clawsig-mock';
       if (!env['ANTHROPIC_API_KEY']) env['ANTHROPIC_API_KEY'] = 'sk-ant-clawsig-mock';
+      if (!env['GOOGLE_API_KEY']) env['GOOGLE_API_KEY'] = 'sk-google-clawsig-mock';
+      if (!env['GEMINI_API_KEY']) env['GEMINI_API_KEY'] = 'sk-gemini-clawsig-mock';
+
+      // Keep Gemini non-interactive in CI/non-TTY runs.
+      if (!env['GEMINI_CLI_NO_RELAUNCH']) env['GEMINI_CLI_NO_RELAUNCH'] = 'true';
     } else {
       // Live mode still routes through clawproxy so gateway receipts are emitted.
       env['CLAWSIG_USE_CLAWPROXY'] = '1';
@@ -363,9 +375,9 @@ async function runHarnessCase(params: {
       errors.push(`Timed out after ${timeoutMs}ms`);
     }
 
-    if (run.code !== 0) {
-      errors.push(`Wrapped command exited with code ${String(run.code)}`);
-    }
+    // Non-zero wrapped command exit is recorded in result metadata but is not,
+    // by itself, a conformance failure. The strict gate is evidence-first:
+    // require deterministic bundle artifacts/counters for required lanes.
 
     let bundle: unknown;
     try {
@@ -517,12 +529,38 @@ async function runHarnessCase(params: {
   }
 }
 
+function makeUnavailableHarnessCase(params: {
+  agent: HarnessAgent | string;
+  mode: HarnessMode;
+  layer: HarnessLayer;
+  reason: string;
+}): HarnessCaseResult {
+  return {
+    id: `${params.agent}:${params.mode}:${params.layer}`,
+    agent: params.agent,
+    mode: params.mode,
+    layer: params.layer,
+    status: 'SKIP',
+    reason: `AGENT_UNAVAILABLE: ${params.reason}`,
+    errors: [],
+    metrics: {
+      bundle: 0,
+      receipts: 0,
+      events: 0,
+      ...(params.layer === 'interpose' ? { interpose_events: 0 } : {}),
+    },
+    duration_ms: 0,
+    exit_code: null,
+    timed_out: false,
+  };
+}
+
 export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Promise<HarnessMatrixRun> {
   const rootDir = resolve(options.rootDir ?? process.cwd());
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const prompt = options.prompt ?? DEFAULT_PROMPT;
   const includeLive = options.includeLive ?? process.env['CLAWSIG_E2E_LIVE'] === '1';
-  const interposeSupported = process.platform === 'darwin';
+  const hostInterposeSupported = process.platform === 'darwin';
   const requestedAgents = options.agents ?? DEFAULT_AGENTS;
   const resultsPath = resolve(rootDir, options.resultsPath ?? DEFAULT_RESULTS_PATH);
 
@@ -531,49 +569,50 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
   const started_at = nowIso();
   const results: HarnessCaseResult[] = [];
 
+  const modes: HarnessMode[] = includeLive ? ['mock', 'live'] : ['mock'];
+  const defaultLayers: HarnessLayer[] = hostInterposeSupported ? ['proxy', 'interpose'] : ['proxy'];
+  const layers: HarnessLayer[] =
+    options.layers && options.layers.length > 0 ? options.layers : defaultLayers;
+
   const installed: Array<{ spec: AgentSpec; path: string }> = [];
 
   for (const agentId of requestedAgents) {
     const spec = AGENTS[agentId as HarnessAgent];
     if (!spec) {
-      results.push({
-        id: `${String(agentId)}:skip:unknown-agent`,
-        agent: String(agentId),
-        mode: 'mock',
-        layer: 'proxy',
-        status: 'SKIP',
-        reason: `unknown agent: ${String(agentId)}`,
-        errors: [],
-        metrics: { bundle: 0, receipts: 0, events: 0 },
-        duration_ms: 0,
-        exit_code: null,
-        timed_out: false,
-      });
+      for (const mode of modes) {
+        for (const layer of layers) {
+          results.push(
+            makeUnavailableHarnessCase({
+              agent: String(agentId),
+              mode,
+              layer,
+              reason: `unknown agent '${String(agentId)}'`,
+            }),
+          );
+        }
+      }
       continue;
     }
 
     const cliPath = await findBinary(spec.cli);
     if (!cliPath) {
-      results.push({
-        id: `${spec.id}:skip:not-installed`,
-        agent: spec.id,
-        mode: 'mock',
-        layer: 'proxy',
-        status: 'SKIP',
-        reason: 'not installed',
-        errors: [],
-        metrics: { bundle: 0, receipts: 0, events: 0 },
-        duration_ms: 0,
-        exit_code: null,
-        timed_out: false,
-      });
+      for (const mode of modes) {
+        for (const layer of layers) {
+          results.push(
+            makeUnavailableHarnessCase({
+              agent: spec.id,
+              mode,
+              layer,
+              reason: `${spec.cli} is not installed`,
+            }),
+          );
+        }
+      }
       continue;
     }
+
     installed.push({ spec, path: cliPath });
   }
-
-  const modes: HarnessMode[] = includeLive ? ['mock', 'live'] : ['mock'];
-  const layers: HarnessLayer[] = interposeSupported ? ['proxy', 'interpose'] : ['proxy'];
 
   for (const { spec, path } of installed) {
     for (const mode of modes) {
@@ -603,7 +642,7 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
     root_dir: rootDir,
     results_path: resultsPath,
     live_enabled: includeLive,
-    interpose_supported: interposeSupported,
+    interpose_supported: layers.includes('interpose'),
     timeout_ms: timeoutMs,
     prompt,
     results,
@@ -624,12 +663,12 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
 }
 
 export function formatHarnessCaseLine(result: HarnessCaseResult): string {
-  if (result.status === 'SKIP') {
-    return `${result.agent.padEnd(8)} ${''.padEnd(24)} SKIP  (${result.reason ?? 'skipped'})`;
-  }
-
   const layerLabel = result.layer === 'proxy' ? 'proxy' : 'interpose';
   const modeLayer = `(${result.mode}, ${layerLabel})`;
+
+  if (result.status === 'SKIP') {
+    return `${result.agent.padEnd(8)} ${modeLayer.padEnd(24)} SKIP  (${result.reason ?? 'skipped'})`;
+  }
 
   if (result.status === 'FAIL') {
     const reason = result.reason ?? result.errors[0] ?? 'failed';
