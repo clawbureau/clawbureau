@@ -1,7 +1,7 @@
 {
   "project": "clawbureau",
   "branchName": "ralph/clawverify-phase1-trust",
-  "description": "clawverify.com (Verification API) \u2014 PRD \u2014 Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
+  "description": "clawverify.com (Verification API) — PRD — Universal signature verifier for artifacts, messages, receipts, and attestations. Fail-closed on unknown schema/versions.",
   "userStories": [
     {
       "id": "CVF-US-001",
@@ -244,7 +244,7 @@
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old\u2192new rotation is proven. Added vitest coverage for rotated owner attestations."
+      "notes": "Added optional did_rotation_certificates to VerifyAgentRequest. verifyAgent now verifies provided rotation certs (fail-closed) and allows subject binding mismatches only when old→new rotation is proven. Added vitest coverage for rotated owner attestations."
     },
     {
       "id": "CVF-US-018",
@@ -450,6 +450,77 @@
       "priority": 31,
       "passes": true,
       "notes": "Updated `packages/schema/policy/work_policy_contract.v2.json` with `coverage_enforcement` and regenerated standalone validators. Added `validateWorkPolicyContractV2` wiring in schema-validation and used it in `src/index.ts` for `/v1/verify/bundle` request-level validation of optional `work_policy_contract`. Effective phase precedence is now deterministic: WPC field when provided, else env fallback. Updated `verify-proof-bundle.ts` enforce semantics to fail closed (`INVALID` + `EVIDENCE_MISMATCH`) when coverage evidence is missing or invalid under enforce. Added API/runtime regression coverage in `test/coverage-attestation.test.ts`, updated phase behavior checks in `test/proof-tier-next-trust.test.ts`, and extended firewall conformance fixtures/tests for coverage-enforce scenarios."
+    },
+    {
+      "id": "CVF-US-059",
+      "title": "VIR corroboration gating for high-confidence source claims",
+      "description": "As a verifier, I want high-confidence VIR claims to require corroboration so trust uplift cannot be granted on uncorroborated assertions.",
+      "acceptanceCriteria": [
+        "High-claim VIR sources are corroboration-gated against allowlisted receipt evidence",
+        "Uncorroborated high-claim evidence does not uplift to gateway-equivalent trust",
+        "Behavior is deterministic and fail-closed when corroboration invariants fail",
+        "Typecheck/tests/schema-runtime-sync/firewall-conformance pass"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Merged via PR #267 (`564608a`) with CVF-US-060. Added deterministic corroboration checks and high-claim demotion rules in `verify-proof-bundle.ts`/`vir-core.ts` with fixture and test coverage."
+    },
+    {
+      "id": "CVF-US-060",
+      "title": "Deterministic VIR conflict severity policy",
+      "description": "As a verifier, I want VIR conflict handling to be severity-driven and deterministic so contradictory claims cannot silently degrade trust semantics.",
+      "acceptanceCriteria": [
+        "Conflict severity policy maps contradictions to deterministic actions",
+        "Same-event VIR contradictions fail closed under strict policy",
+        "Conflict handling preserves reproducible ordering and outcomes",
+        "Typecheck/tests/schema-runtime-sync/firewall-conformance pass"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": "Merged via PR #267 (`564608a`). Implemented deterministic VIR conflict severity policy, including same-event contradiction fail-closed behavior and conformance fixtures."
+    },
+    {
+      "id": "CVF-US-062",
+      "title": "Witnessed-web quorum policy enforcement",
+      "description": "As a verifier, I want witnessed-web evidence to require quorum semantics so single-witness artifacts cannot overstate trust.",
+      "acceptanceCriteria": [
+        "m-of-n quorum policy is evaluated per run_id + event_hash binding context",
+        "Split-view conflicts are detected deterministically",
+        "warn mode degrades witnessed_web uplift; enforce mode returns INVALID",
+        "Typecheck/tests/schema-runtime-sync/firewall-conformance pass"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": "Merged via PR #268 (`e59d25e`). Added witnessed-web quorum m-of-n checks and split-view conflict detection with deterministic warn/enforce policy semantics."
+    },
+    {
+      "id": "CVF-US-063",
+      "title": "Witnessed-web transparency anchoring hooks",
+      "description": "As a verifier, I want optional/strict transparency anchoring hooks for witnessed-web receipts so policy can require log inclusion proofs when needed.",
+      "acceptanceCriteria": [
+        "Transparency policy modes optional|warn|enforce are supported",
+        "required_after cutoff is honored deterministically",
+        "Receipt leaf binding to transparency proof is verified",
+        "Typecheck/tests/schema-runtime-sync/firewall-conformance pass"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": "Merged via PR #268 (`e59d25e`). Reused `verifyLogInclusionProof(...)` and added deterministic receipt-leaf binding checks plus policy hooks in verify-bundle path."
+    },
+    {
+      "id": "CVF-US-064",
+      "title": "TEE nonce/report-data binding and deterministic tee tier uplift",
+      "description": "As a verifier, I want tee_execution attestations bound to deterministic run/proof-bundle context so replay/mismatch attempts fail closed and tee tiering remains explicit.",
+      "acceptanceCriteria": [
+        "TEE nonce/report-data binding is validated against deterministic context hash",
+        "TEE measured identity requires model_weights digest for acceptance",
+        "Valid TEE evidence yields explicit proof_tier=tee",
+        "tee_execution claim failures (root/TCB/revocation/nonce/binding) are INVALID with no fallback",
+        "Typecheck/tests/schema-runtime-sync/firewall-conformance pass"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": "Merged via PR #269 (`2802d59`). Added additive schema fields for TEE nonce/model-weights, strict runtime requirements, fail-closed tee claim handling, and explicit tee tier semantics across verify-bundle and verify-agent paths."
     }
   ]
 }
