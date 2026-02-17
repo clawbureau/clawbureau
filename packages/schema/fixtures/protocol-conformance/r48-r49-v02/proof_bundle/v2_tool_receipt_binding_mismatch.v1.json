@@ -1,0 +1,55 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "bundle_r48_shared",
+    "agent_did": "did:key:z6MkjThSggFgCaZ2gvuBbGeEaNofuer1GkxtWpYxy1kWJd7m",
+    "event_chain": [
+      {
+        "event_id": "bundle_r48_shared_evt_001",
+        "run_id": "run_r48_001",
+        "event_type": "llm_call",
+        "timestamp": "2026-02-17T12:00:00.000Z",
+        "payload_hash_b64u": "RMCRMrog-JgNiBrHw8TOo1HRnV1NSl37u1_T4p1TsC4",
+        "prev_hash_b64u": null,
+        "event_hash_b64u": "R-K_493NdTnQkXIO2Pk_H5JU7-6BbDmzro2xBUwolGA"
+      }
+    ],
+    "tool_receipts": [
+      {
+        "envelope_version": "2",
+        "envelope_type": "tool_receipt",
+        "payload": {
+          "receipt_version": "2",
+          "receipt_id": "tool_receipt_r48_binding_mismatch",
+          "tool_name": "search.docs",
+          "args_hash_b64u": "RfkBCLKZkEMQ4TzeA3zPjE9vOxqR5gz80tAH1Bkhibo",
+          "result_hash_b64u": "rBEYLEwtDFAZpSqGDZvDpGBOqOVvHJp9yKJMPB6snbI",
+          "hash_algorithm": "SHA-256",
+          "agent_did": "did:key:z6MkjThSggFgCaZ2gvuBbGeEaNofuer1GkxtWpYxy1kWJd7m",
+          "timestamp": "2026-02-17T12:00:01.000Z",
+          "latency_ms": 31,
+          "args_salt_b64u": "YcxIS5jsSUGb3DB82wXDwbCUBnEbd9pmkg5OZ5F0m9Y",
+          "result_salt_b64u": "DavkJE8-wEs_88e6dBCr3hEUIq2yLC-8iaIzfI8xGXk",
+          "binding": {
+            "run_id": "run_r48_different",
+            "event_hash_b64u": "R-K_493NdTnQkXIO2Pk_H5JU7-6BbDmzro2xBUwolGA"
+          }
+        },
+        "payload_hash_b64u": "MtroasJBuXM7DNGE2xV3w-DwN-tI8cP6IPx0VCzorvA",
+        "hash_algorithm": "SHA-256",
+        "signature_b64u": "NxBM5sFfN4pX0loaOKFmlDCVl5lCbXcvjuMI-Trh08VcXmhTLystY9bs-tNjXnZrTEFWBuBdIr2Ge_m-M7yHAA",
+        "algorithm": "Ed25519",
+        "signer_did": "did:key:z6Mkw813dX8i5pnj9r47BpS65AJEYn2yMU4na9KYkLj4jUJv",
+        "issued_at": "2026-02-17T12:00:02.000Z"
+      }
+    ]
+  },
+  "payload_hash_b64u": "lYq7QkP5u6iDa6Jk53NOkUcBVMsOaVer3Xqf9JB4p1I",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "6fY3OvwNGYx-cNSbpT0kJ7egirJYNRAuBEU2aY_lGOXYmVw-AZx1-tgaz_nA9kzcg-AmOP2qUv0I4mL60DTXDw",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkjThSggFgCaZ2gvuBbGeEaNofuer1GkxtWpYxy1kWJd7m",
+  "issued_at": "2026-02-17T12:00:05.000Z"
+}
