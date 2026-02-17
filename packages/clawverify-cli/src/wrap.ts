@@ -417,24 +417,26 @@ export async function wrap(
     }
   }
   // Add sentinel metadata
+  const sentinelsMetadata = {
+    shell_events: shellEvents.length,
+    fs_events: fsSentinel.eventCount,
+    net_events: netSentinel.eventCount,
+    net_suspicious: netSentinel.suspiciousCount,
+    interpose_events: interposeEvents.length,
+    interpose_active: !!interposeLib,
+    interpose_gateway: interposeReceipts.gateway.length,
+    interpose_transcript: interposeReceipts.transcript.length,
+    interpose_tool_calls: interposeReceipts.toolCalls.length,
+    interpose_anomalies: interposeReceipts.anomalies.length,
+    preload_llm_events: preloadGatewayReceipts.length,
+    tls_sni_events: sniEvents.length,
+    tls_sni_receipts: sniGatewayReceipts.length,
+    interpose_state: interposeOracle.getSummary(),
+  } as Record<string, unknown>;
+
   bundle.payload.metadata = {
     ...bundle.payload.metadata,
-    sentinels: {
-      shell_events: shellEvents.length,
-      fs_events: fsSentinel.eventCount,
-      net_events: netSentinel.eventCount,
-      net_suspicious: netSentinel.suspiciousCount,
-      interpose_events: interposeEvents.length,
-      interpose_active: !!interposeLib,
-      interpose_gateway: interposeReceipts.gateway.length,
-      interpose_transcript: interposeReceipts.transcript.length,
-      interpose_tool_calls: interposeReceipts.toolCalls.length,
-      interpose_anomalies: interposeReceipts.anomalies.length,
-      preload_llm_events: preloadGatewayReceipts.length,
-      tls_sni_events: sniEvents.length,
-      tls_sni_receipts: sniGatewayReceipts.length,
-      interpose_state: interposeOracle.getSummary(),
-    },
+    sentinels: sentinelsMetadata as NonNullable<NonNullable<ProofBundlePayload['metadata']>['sentinels']>,
   };
 
   // Print summary
