@@ -72,6 +72,29 @@ export interface Env {
   WEB_RECEIPT_SIGNER_DIDS?: string;
 
   /**
+   * Witnessed-web policy mode for quorum/conflict outcomes.
+   * Allowed values: warn | enforce.
+   */
+  WITNESSED_WEB_POLICY_MODE?: string;
+
+  /**
+   * Optional witnessed-web quorum parameters (m-of-n).
+   */
+  WITNESSED_WEB_QUORUM_M?: string;
+  WITNESSED_WEB_QUORUM_N?: string;
+
+  /**
+   * Witnessed-web transparency policy mode.
+   * Allowed values: optional | warn | enforce.
+   */
+  WITNESSED_WEB_TRANSPARENCY_MODE?: string;
+
+  /**
+   * Require witnessed-web transparency only at/after this receipt timestamp (ISO-8601).
+   */
+  WITNESSED_WEB_TRANSPARENCY_REQUIRED_AFTER?: string;
+
+  /**
    * Comma-separated list of trusted coverage attestation signer DIDs (did:key:...).
    * Used for fail-closed coverage_attestation verification in proof bundles.
    */
@@ -723,10 +746,40 @@ function parseVirConflictPolicyMode(
   return undefined;
 }
 
+function parseWitnessedWebPolicyMode(
+  value: string | undefined,
+): 'warn' | 'enforce' | undefined {
+  if (!value) return undefined;
+  const mode = value.trim().toLowerCase();
+  if (mode === 'warn' || mode === 'enforce') {
+    return mode;
+  }
+  return undefined;
+}
+
+function parseWitnessedWebTransparencyMode(
+  value: string | undefined,
+): 'optional' | 'warn' | 'enforce' | undefined {
+  if (!value) return undefined;
+  const mode = value.trim().toLowerCase();
+  if (mode === 'optional' || mode === 'warn' || mode === 'enforce') {
+    return mode;
+  }
+  return undefined;
+}
+
 function parseNonNegativeInteger(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  const parsed = parseNonNegativeInteger(value);
+  if (parsed === undefined || parsed === 0) {
     return undefined;
   }
   return parsed;
@@ -750,6 +803,84 @@ function getCoveragePhaseFromWorkPolicyContract(
 
   // Schema default for v2.
   return 'observe';
+}
+
+function getWitnessedWebPolicyFromWorkPolicyContract(
+  workPolicyContract: unknown,
+): {
+  mode?: 'warn' | 'enforce';
+  quorumM?: number;
+  quorumN?: number;
+  transparencyMode?: 'optional' | 'warn' | 'enforce';
+  transparencyRequiredAfter?: string;
+} {
+  if (
+    typeof workPolicyContract !== 'object' ||
+    workPolicyContract === null ||
+    Array.isArray(workPolicyContract)
+  ) {
+    return {};
+  }
+
+  const root = workPolicyContract as Record<string, unknown>;
+  const policy =
+    typeof root.witnessed_web_policy === 'object' &&
+    root.witnessed_web_policy !== null &&
+    !Array.isArray(root.witnessed_web_policy)
+      ? (root.witnessed_web_policy as Record<string, unknown>)
+      : null;
+
+  if (!policy) {
+    return {};
+  }
+
+  const mode =
+    policy.mode === 'warn' || policy.mode === 'enforce' ? policy.mode : undefined;
+
+  const quorum =
+    typeof policy.quorum === 'object' &&
+    policy.quorum !== null &&
+    !Array.isArray(policy.quorum)
+      ? (policy.quorum as Record<string, unknown>)
+      : null;
+
+  const quorumM =
+    quorum && Number.isInteger(quorum.m) && (quorum.m as number) > 0
+      ? (quorum.m as number)
+      : undefined;
+
+  const quorumN =
+    quorum && Number.isInteger(quorum.n) && (quorum.n as number) > 0
+      ? (quorum.n as number)
+      : undefined;
+
+  const transparency =
+    typeof policy.transparency === 'object' &&
+    policy.transparency !== null &&
+    !Array.isArray(policy.transparency)
+      ? (policy.transparency as Record<string, unknown>)
+      : null;
+
+  const transparencyMode =
+    transparency &&
+    (transparency.mode === 'optional' ||
+      transparency.mode === 'warn' ||
+      transparency.mode === 'enforce')
+      ? (transparency.mode as 'optional' | 'warn' | 'enforce')
+      : undefined;
+
+  const transparencyRequiredAfter =
+    transparency && typeof transparency.required_after === 'string'
+      ? transparency.required_after
+      : undefined;
+
+  return {
+    mode,
+    quorumM,
+    quorumN,
+    transparencyMode,
+    transparencyRequiredAfter,
+  };
 }
 
 /**
@@ -1103,6 +1234,20 @@ async function handleVerifyBundle(
     env.COVERAGE_ENFORCEMENT_PHASE
   );
 
+  let effectiveWitnessedWebPolicyMode = parseWitnessedWebPolicyMode(
+    env.WITNESSED_WEB_POLICY_MODE
+  );
+  let effectiveWitnessedWebQuorumM = parsePositiveInteger(
+    env.WITNESSED_WEB_QUORUM_M
+  );
+  let effectiveWitnessedWebQuorumN = parsePositiveInteger(
+    env.WITNESSED_WEB_QUORUM_N
+  );
+  let effectiveWitnessedWebTransparencyMode =
+    parseWitnessedWebTransparencyMode(env.WITNESSED_WEB_TRANSPARENCY_MODE);
+  let effectiveWitnessedWebTransparencyRequiredAfter =
+    env.WITNESSED_WEB_TRANSPARENCY_REQUIRED_AFTER;
+
   if (work_policy_contract !== undefined) {
     const wpcValidation = validateWorkPolicyContractV2(work_policy_contract);
     if (!wpcValidation.valid) {
@@ -1114,11 +1259,41 @@ async function handleVerifyBundle(
 
     effectiveCoverageEnforcementPhase =
       getCoveragePhaseFromWorkPolicyContract(work_policy_contract);
+
+    const witnessedWebPolicy =
+      getWitnessedWebPolicyFromWorkPolicyContract(work_policy_contract);
+
+    if (witnessedWebPolicy.mode !== undefined) {
+      effectiveWitnessedWebPolicyMode = witnessedWebPolicy.mode;
+    }
+
+    if (witnessedWebPolicy.quorumM !== undefined) {
+      effectiveWitnessedWebQuorumM = witnessedWebPolicy.quorumM;
+    }
+
+    if (witnessedWebPolicy.quorumN !== undefined) {
+      effectiveWitnessedWebQuorumN = witnessedWebPolicy.quorumN;
+    }
+
+    if (witnessedWebPolicy.transparencyMode !== undefined) {
+      effectiveWitnessedWebTransparencyMode = witnessedWebPolicy.transparencyMode;
+    }
+
+    if (witnessedWebPolicy.transparencyRequiredAfter !== undefined) {
+      effectiveWitnessedWebTransparencyRequiredAfter =
+        witnessedWebPolicy.transparencyRequiredAfter;
+    }
   }
 
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedWitnessSignerDids: witnessSignerAllowlist,
+    witnessed_web_policy_mode: effectiveWitnessedWebPolicyMode,
+    witnessed_web_quorum_m: effectiveWitnessedWebQuorumM,
+    witnessed_web_quorum_n: effectiveWitnessedWebQuorumN,
+    witnessed_web_transparency_mode: effectiveWitnessedWebTransparencyMode,
+    witnessed_web_transparency_required_after:
+      effectiveWitnessedWebTransparencyRequiredAfter,
     allowlistedAttesterDids: attesterAllowlist,
     allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
     coverage_enforcement_phase: effectiveCoverageEnforcementPhase,

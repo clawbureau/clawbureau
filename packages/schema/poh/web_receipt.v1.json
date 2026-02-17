@@ -49,6 +49,18 @@
     "binding": {
       "$ref": "https://schemas.clawbureau.org/claw.poh.receipt_binding.v1.json"
     },
+    "transparency": {
+      "type": "object",
+      "description": "Optional transparency anchoring metadata for witnessed-web receipts.",
+      "additionalProperties": false,
+      "properties": {
+        "inclusion_proof": {
+          "$ref": "https://schemas.clawbureau.org/claw.poh.log_inclusion_proof.v1.json"
+        },
+        "anchor_id": { "type": "string", "minLength": 1 },
+        "anchor_uri": { "type": "string", "minLength": 1 }
+      }
+    },
     "metadata": {
       "type": "object",
       "description": "Optional metadata for non-sensitive witness context.",

@@ -36,6 +36,10 @@
       "default": "observe",
       "description": "Coverage evidence enforcement phase for proof-bundle verification. observe/warn are non-blocking; enforce requires valid coverage evidence."
     },
+    "witnessed_web_policy": {
+      "$ref": "#/$defs/WitnessedWebPolicy",
+      "description": "Optional witnessed-web quorum/conflict/transparency policy controls for proof-bundle verification."
+    },
     "statements": {
       "type": "array",
       "description": "IAM-style policy statements. Evaluated in order; explicit Deny always wins.",
@@ -52,6 +56,58 @@
     }
   },
   "$defs": {
+    "WitnessedWebPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["warn", "enforce"],
+          "default": "warn",
+          "description": "Behavior when quorum/conflict policy checks fail for witnessed-web evidence. warn degrades witnessed_web uplift; enforce returns INVALID."
+        },
+        "quorum": {
+          "$ref": "#/$defs/WitnessedWebQuorumPolicy"
+        },
+        "transparency": {
+          "$ref": "#/$defs/WitnessedWebTransparencyPolicy"
+        }
+      }
+    },
+    "WitnessedWebQuorumPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["m", "n"],
+      "properties": {
+        "m": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Minimum agreeing witnesses required for quorum."
+        },
+        "n": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Minimum total witnessed observations required in the same binding context."
+        }
+      }
+    },
+    "WitnessedWebTransparencyPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["optional", "warn", "enforce"],
+          "default": "optional",
+          "description": "Transparency anchoring mode for witnessed-web receipts."
+        },
+        "required_after": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Require transparency anchoring only for witnessed-web receipts at/after this timestamp."
+        }
+      }
+    },
     "PolicyStatement": {
       "type": "object",
       "additionalProperties": false,

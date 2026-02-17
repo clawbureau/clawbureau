@@ -1,0 +1,8 @@
+{
+  "id": "invalid-witnessed-web-transparency-enforce-missing",
+  "scenario": "invalid_witnessed_web_transparency_enforce_missing",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH"
+  }
+}

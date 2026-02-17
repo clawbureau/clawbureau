@@ -53,6 +53,7 @@ import { verifyReceipt } from './verify-receipt';
 import { verifyWebReceipt } from './verify-web-receipt';
 import { verifyCoverageAttestation } from './verify-coverage-attestation';
 import { verifyExecutionAttestation } from './verify-execution-attestation';
+import { verifyLogInclusionProof } from './verify-log-inclusion-proof';
 import { computeModelIdentityTierFromReceipts } from './model-identity';
 import { jcsCanonicalize } from './jcs';
 import {
@@ -82,6 +83,19 @@ export interface ProofBundleVerifierOptions {
 
   /** Allowlisted witness signer DIDs for web_receipts (did:key:...). */
   allowlistedWitnessSignerDids?: readonly string[];
+
+  /** Witnessed-web policy mode: warn/degrade (default) or strict INVALID. */
+  witnessed_web_policy_mode?: 'warn' | 'enforce';
+
+  /** Optional witnessed-web quorum policy (m-of-n) scoped per run_id + event_hash. */
+  witnessed_web_quorum_m?: number;
+  witnessed_web_quorum_n?: number;
+
+  /** Witnessed-web transparency policy mode. */
+  witnessed_web_transparency_mode?: 'optional' | 'warn' | 'enforce';
+
+  /** Require transparency anchoring only at/after this receipt timestamp (ISO-8601 UTC). */
+  witnessed_web_transparency_required_after?: string;
 
   /** Allowlisted attester DIDs for proof bundle attestations (did:key:...). */
   allowlistedAttesterDids?: readonly string[];
@@ -145,6 +159,9 @@ const HIGH_CLAIM_VIR_SOURCES = new Set<VirSource>([
   'gateway',
   'interpose',
 ]);
+
+type WitnessedWebPolicyMode = 'warn' | 'enforce';
+type WitnessedWebTransparencyMode = 'optional' | 'warn' | 'enforce';
 
 function jsonByteSize(value: unknown): number {
   try {
@@ -1001,6 +1018,112 @@ function parseGatewayReceiptEntry(entry: unknown):
     ok: true,
     payload: payload as unknown as GatewayReceiptPayload,
   };
+}
+
+function parseWebReceiptEntry(entry: unknown):
+  | {
+      ok: true;
+      envelope: SignedEnvelope<WebReceiptPayload>;
+      payload: WebReceiptPayload;
+    }
+  | { ok: false } {
+  const record = isObjectRecord(entry) ? entry : null;
+  if (!record || record.envelope_type !== 'web_receipt') {
+    return { ok: false };
+  }
+
+  const payload = isObjectRecord(record.payload) ? record.payload : null;
+  if (!payload) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    envelope: record as unknown as SignedEnvelope<WebReceiptPayload>,
+    payload: payload as unknown as WebReceiptPayload,
+  };
+}
+
+function normalizePositiveInteger(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value) || value === undefined) return undefined;
+  if (!Number.isInteger(value) || value <= 0) return undefined;
+  return value;
+}
+
+function normalizeWitnessedWebPolicyMode(
+  mode: ProofBundleVerifierOptions['witnessed_web_policy_mode']
+): WitnessedWebPolicyMode {
+  return mode === 'enforce' ? 'enforce' : 'warn';
+}
+
+function normalizeWitnessedWebTransparencyMode(
+  mode: ProofBundleVerifierOptions['witnessed_web_transparency_mode']
+): WitnessedWebTransparencyMode {
+  if (mode === 'warn' || mode === 'enforce' || mode === 'optional') {
+    return mode;
+  }
+  return 'optional';
+}
+
+function normalizeIsoTimestampToMs(value: string | undefined): number | undefined {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return undefined;
+  }
+
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function extractWebReceiptInclusionProof(payload: WebReceiptPayload): unknown {
+  if (isObjectRecord(payload.transparency) && payload.transparency.inclusion_proof !== undefined) {
+    return payload.transparency.inclusion_proof;
+  }
+
+  const metadata = isObjectRecord(payload.metadata) ? payload.metadata : null;
+  const metadataTransparency = metadata && isObjectRecord(metadata.transparency)
+    ? metadata.transparency
+    : null;
+
+  if (metadataTransparency && metadataTransparency.inclusion_proof !== undefined) {
+    return metadataTransparency.inclusion_proof;
+  }
+
+  return undefined;
+}
+
+async function computeWebReceiptTransparencyLeafHash(
+  payload: WebReceiptPayload
+): Promise<string> {
+  const binding = payload.binding;
+
+  return computeHash(
+    {
+      leaf_version: 'web_receipt_v1',
+      receipt_version: payload.receipt_version,
+      receipt_id: payload.receipt_id,
+      witness_id: payload.witness_id,
+      source: payload.source,
+      request_hash_b64u: payload.request_hash_b64u,
+      response_hash_b64u: payload.response_hash_b64u,
+      session_hash_b64u: payload.session_hash_b64u ?? null,
+      timestamp: payload.timestamp,
+      binding: binding
+        ? {
+            run_id: binding.run_id ?? null,
+            event_hash_b64u: binding.event_hash_b64u ?? null,
+            nonce: binding.nonce ?? null,
+            subject: binding.subject ?? binding.subject_did ?? null,
+            scope: binding.scope ?? binding.scope_hash_b64u ?? null,
+            job_id: binding.job_id ?? null,
+            contract_id: binding.contract_id ?? null,
+            jurisdiction: binding.jurisdiction ?? null,
+            policy_hash: binding.policy_hash ?? null,
+            token_scope_hash_b64u: binding.token_scope_hash_b64u ?? null,
+          }
+        : null,
+    },
+    'SHA-256'
+  );
 }
 
 function normalizeVirConflictPolicyMode(
@@ -2647,8 +2770,31 @@ export async function verifyProofBundle(
     }
   }
 
-  // Verify witnessed-web receipts (POH-US-018)
+  // Verify witnessed-web receipts (POH-US-018, CVF-US-062, CVF-US-063)
   if (payload.web_receipts !== undefined && payload.web_receipts.length > 0) {
+    const witnessedWebPolicyMode = normalizeWitnessedWebPolicyMode(
+      options.witnessed_web_policy_mode
+    );
+    const transparencyMode = normalizeWitnessedWebTransparencyMode(
+      options.witnessed_web_transparency_mode
+    );
+    const transparencyRequiredAfterMs = normalizeIsoTimestampToMs(
+      options.witnessed_web_transparency_required_after
+    );
+
+    const quorumM = normalizePositiveInteger(options.witnessed_web_quorum_m);
+    const quorumN = normalizePositiveInteger(options.witnessed_web_quorum_n);
+
+    const quorumPolicyConfigured = quorumM !== undefined || quorumN !== undefined;
+    const quorumPolicyValid =
+      quorumM !== undefined &&
+      quorumN !== undefined &&
+      quorumM <= quorumN;
+
+    if (quorumPolicyConfigured && !quorumPolicyValid) {
+      modelIdentityRiskFlags.add('WITNESS_QUORUM_POLICY_INVALID');
+    }
+
     const webReceiptResults = await Promise.all(
       payload.web_receipts.map((r) =>
         verifyWebReceiptEnvelope(
@@ -2660,19 +2806,229 @@ export async function verifyProofBundle(
     );
 
     const signatureValidCount = webReceiptResults.filter((r) => r.signature_valid).length;
-    const verifiedCount = webReceiptResults.filter((r) => r.valid).length;
+
+    type WebCandidate = {
+      signerDid: string;
+      witnessId: string;
+      runId: string;
+      eventHash: string;
+      responseHash: string;
+      timestampMs: number;
+      payload: WebReceiptPayload;
+      transparencyEligible: boolean;
+    };
+
+    const verifiedWebCandidates: WebCandidate[] = [];
+
+    for (let i = 0; i < webReceiptResults.length; i++) {
+      const result = webReceiptResults[i];
+      if (!result?.valid || !result.signer_did) continue;
+
+      const parsed = parseWebReceiptEntry(payload.web_receipts[i]);
+      if (!parsed.ok) continue;
+
+      const binding = parsed.payload.binding;
+      const runId = typeof binding?.run_id === 'string' ? binding.run_id : null;
+      const eventHash =
+        typeof binding?.event_hash_b64u === 'string' ? binding.event_hash_b64u : null;
+
+      if (!runId || !eventHash) {
+        modelIdentityRiskFlags.add('WITNESS_BINDING_MISSING');
+        continue;
+      }
+
+      const timestampMs = Date.parse(parsed.payload.timestamp);
+
+      verifiedWebCandidates.push({
+        signerDid: result.signer_did,
+        witnessId: parsed.payload.witness_id,
+        runId,
+        eventHash,
+        responseHash: parsed.payload.response_hash_b64u,
+        timestampMs: Number.isFinite(timestampMs)
+          ? timestampMs
+          : Number.POSITIVE_INFINITY,
+        payload: parsed.payload,
+        transparencyEligible: true,
+      });
+    }
+
+    let transparencyPolicyViolation = false;
+
+    for (const candidate of verifiedWebCandidates) {
+      const transparencyRequired =
+        transparencyMode !== 'optional' &&
+        (transparencyRequiredAfterMs === undefined ||
+          (Number.isFinite(candidate.timestampMs) &&
+            candidate.timestampMs >= transparencyRequiredAfterMs));
+
+      if (!transparencyRequired) continue;
+
+      const inclusionProof = extractWebReceiptInclusionProof(candidate.payload);
+      if (inclusionProof === undefined) {
+        candidate.transparencyEligible = false;
+        transparencyPolicyViolation = true;
+        modelIdentityRiskFlags.add('WITNESS_TRANSPARENCY_REQUIRED_MISSING');
+        continue;
+      }
+
+      const proofVerification = await verifyLogInclusionProof(inclusionProof);
+      if (!proofVerification.valid) {
+        candidate.transparencyEligible = false;
+        transparencyPolicyViolation = true;
+        modelIdentityRiskFlags.add('WITNESS_TRANSPARENCY_REQUIRED_INVALID');
+        continue;
+      }
+
+      const proofLeafHash =
+        isObjectRecord(inclusionProof) &&
+        typeof inclusionProof.leaf_hash_b64u === 'string'
+          ? inclusionProof.leaf_hash_b64u
+          : null;
+
+      const expectedLeafHash = await computeWebReceiptTransparencyLeafHash(
+        candidate.payload
+      );
+
+      if (!proofLeafHash || proofLeafHash !== expectedLeafHash) {
+        candidate.transparencyEligible = false;
+        transparencyPolicyViolation = true;
+        modelIdentityRiskFlags.add('WITNESS_TRANSPARENCY_LEAF_MISMATCH');
+      }
+    }
+
+    const transparencyEligibleCandidates = verifiedWebCandidates.filter(
+      (candidate) => candidate.transparencyEligible
+    );
+
+    type WitnessGroup = {
+      responseBySigner: Map<string, string>;
+      responseCount: Map<string, number>;
+    };
+
+    const witnessGroups = new Map<string, WitnessGroup>();
+
+    for (const candidate of transparencyEligibleCandidates) {
+      const key = `${candidate.runId}::${candidate.eventHash}`;
+      const group =
+        witnessGroups.get(key) ??
+        {
+          responseBySigner: new Map<string, string>(),
+          responseCount: new Map<string, number>(),
+        };
+
+      const priorResponse = group.responseBySigner.get(candidate.signerDid);
+      if (priorResponse) {
+        if (priorResponse !== candidate.responseHash) {
+          modelIdentityRiskFlags.add('WITNESS_DUPLICATE_SIGNER_CONFLICT');
+        }
+        witnessGroups.set(key, group);
+        continue;
+      }
+
+      group.responseBySigner.set(candidate.signerDid, candidate.responseHash);
+      group.responseCount.set(
+        candidate.responseHash,
+        (group.responseCount.get(candidate.responseHash) ?? 0) + 1
+      );
+      witnessGroups.set(key, group);
+    }
+
+    let witnessSplitViewConflict = false;
+    let witnessQuorumFailed = false;
+
+    for (const group of witnessGroups.values()) {
+      if (group.responseCount.size > 1) {
+        witnessSplitViewConflict = true;
+      }
+
+      if (quorumPolicyValid && quorumM !== undefined && quorumN !== undefined) {
+        const witnessCount = group.responseBySigner.size;
+        let maxAgreementCount = 0;
+        for (const count of group.responseCount.values()) {
+          if (count > maxAgreementCount) maxAgreementCount = count;
+        }
+
+        const quorumSatisfied =
+          witnessCount >= quorumN && maxAgreementCount >= quorumM;
+        if (!quorumSatisfied) {
+          witnessQuorumFailed = true;
+        }
+      }
+    }
+
+    if (witnessSplitViewConflict) {
+      modelIdentityRiskFlags.add('WITNESS_CONFLICT_SPLIT_VIEW');
+    }
+
+    if (quorumPolicyValid && witnessQuorumFailed) {
+      modelIdentityRiskFlags.add('WITNESS_QUORUM_FAILED');
+    }
+
+    const witnessPolicyViolation =
+      (quorumPolicyConfigured && !quorumPolicyValid) ||
+      witnessSplitViewConflict ||
+      (quorumPolicyValid && witnessQuorumFailed);
+
+    const enforceWitnessPolicyViolation =
+      (witnessPolicyViolation && witnessedWebPolicyMode === 'enforce') ||
+      (transparencyPolicyViolation && transparencyMode === 'enforce');
+
+    if (enforceWitnessPolicyViolation) {
+      const reason = transparencyPolicyViolation
+        ? 'Witnessed-web transparency requirement failed under enforce policy'
+        : witnessSplitViewConflict
+          ? 'Witnessed-web split-view conflict detected under enforce policy'
+          : quorumPolicyConfigured && !quorumPolicyValid
+            ? 'Witnessed-web quorum policy is invalid (expected positive m<=n)'
+            : 'Witnessed-web quorum policy failed under enforce mode';
+
+      const message = transparencyPolicyViolation
+        ? 'WITNESS_TRANSPARENCY_REQUIRED'
+        : witnessSplitViewConflict
+          ? 'WITNESS_CONFLICT_SPLIT_VIEW'
+          : quorumPolicyConfigured && !quorumPolicyValid
+            ? 'WITNESS_QUORUM_POLICY_INVALID'
+            : 'WITNESS_QUORUM_FAILED';
+
+      return {
+        result: {
+          status: 'INVALID',
+          reason,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message,
+          field: 'payload.web_receipts',
+        },
+      };
+    }
+
+    const shouldDegradeWitnessedWeb =
+      witnessPolicyViolation ||
+      (transparencyPolicyViolation && transparencyMode === 'warn');
+
+    let effectiveVerifiedCount = transparencyEligibleCandidates.length;
+    if (shouldDegradeWitnessedWeb) {
+      effectiveVerifiedCount = 0;
+      modelIdentityRiskFlags.add('WITNESS_POLICY_DEGRADED');
+    }
 
     componentResults.web_receipts_count = payload.web_receipts.length;
     componentResults.web_receipts_signature_verified_count = signatureValidCount;
-    componentResults.web_receipts_verified_count = verifiedCount;
-    componentResults.web_receipts_valid = verifiedCount === payload.web_receipts.length;
+    componentResults.web_receipts_verified_count = effectiveVerifiedCount;
+    componentResults.web_receipts_valid =
+      effectiveVerifiedCount === payload.web_receipts.length;
 
     if (webReceiptResults.some((r) => !r.valid)) {
       modelIdentityRiskFlags.add('WEB_RECEIPT_VERIFY_PARTIAL_FAILURE');
     }
 
     // witnessed_web can only claim closed opaque identity, never gateway-equivalent model identity.
-    if (modelIdentityTier === 'unknown' && verifiedCount > 0) {
+    if (modelIdentityTier === 'unknown' && effectiveVerifiedCount > 0) {
       modelIdentityTier = 'closed_opaque';
     }
   }
