@@ -459,3 +459,15 @@ Started: 2026-02-02T03:08:26.937416
 - Quality checks:
   - `cd services/clawverify && npm run typecheck && npm test`
 ---
+
+## 2026-02-17 - CVF-US-057/058 (coverage runtime binding + strict WPC coupling)
+- Shipped and merged to `main`:
+  - CVF-US-057: runtime verification/binding for `payload.coverage_attestations` (`agent_did`, `run_id`, `event_chain_root_hash_b64u`) with deterministic coverage counters.
+  - CVF-US-058: WPC v2 `coverage_enforcement` policy coupling for `/v1/verify/bundle` with local schema validation and deterministic phase precedence (WPC first, env fallback).
+- Enforce semantics (current shipped behavior):
+  - `observe`/`warn`: non-blocking, risk flags only.
+  - `enforce`: fail-closed `INVALID` + `EVIDENCE_MISMATCH` when required coverage evidence is missing/invalid.
+- Merge/evidence refs:
+  - merge commits: `034b09ce91222d7a85fb50497cdebdbdc010fffd` (CVF-US-057 stack close-out), `ff2aa6f85bf152f1776d8fe04377fbf57a8a8062` (CVF-US-058)
+  - proofs: `proofs/feat/clawverify/CVF-US-057-coverage-attestation-runtime-binding/commit.sig.json`, `proofs/feat/clawverify/CVF-US-058-coverage-enforcement-policy-coupling/commit.sig.json`
+---
