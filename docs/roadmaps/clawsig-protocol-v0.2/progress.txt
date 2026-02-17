@@ -1,0 +1,12 @@
+2026-02-17 — docs normalization lane (CPL-V2-002/003/004/005 pre-implementation)
+
+- Integrated normalized reason-code registry deltas for co-sign, disclosure, aggregate, and temporal guardrail semantics in:
+  - docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md
+- Added canonical schema-ID namespace policy and explicit legacy v1 tool alias handling in:
+  - docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md
+- Locked fail-closed unknown schema behavior:
+  - UNKNOWN_SCHEMA_ID remains mandatory for unrecognized IDs.
+
+Notes:
+- This lane is docs-only and architecture-preserving.
+- Runtime/schema/conformance implementation follows in subsequent CPL-V2 execution lanes.

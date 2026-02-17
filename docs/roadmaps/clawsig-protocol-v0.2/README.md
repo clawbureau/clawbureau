@@ -2,7 +2,7 @@
 > **Status:** DRAFT
 > **Owner:** @clawbureau/core
 > **Last reviewed:** 2026-02-12
-> **Source of truth:** `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+> **Source of truth:** `docs/roadmaps/clawsig-protocol-v0.2/prd.json` + `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
 
 # Clawsig Protocol v0.2 — Candidate Stories
 

@@ -59,6 +59,7 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | Code | Meaning |
 |------|---------|
 | `SIGNATURE_INVALID` | Ed25519/envelope signature verification failed |
+| `CO_SIGNATURE_INVALID` | One or more required co-signatures failed cryptographic verification against the envelope payload hash |
 
 ### SCHEMA_*
 
@@ -81,12 +82,21 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `UNKNOWN_ENVELOPE_VERSION` | Envelope version field not recognized |
 | `UNKNOWN_HASH_ALGORITHM` | Hash algorithm not recognized |
 
+### DISCLOSURE_*
+
+| Code | Meaning |
+|------|---------|
+| `DISCLOSURE_ALGORITHM_UNKNOWN` | Selective-disclosure algorithm is not allowlisted (`vir_v2_typed_lexicographical` is currently required) |
+| `DISCLOSURE_ROOT_MISMATCH` | Reconstructed selective-disclosure Merkle root does not match the committed hash |
+| `DISCLOSURE_TYPE_MISMATCH` | A disclosed leaf value runtime type does not match its declared disclosure type |
+
 ### HASH_*
 
 | Code | Meaning |
 |------|---------|
 | `HASH_MISMATCH` | Content hash does not match declared hash |
 | `HASH_CHAIN_BREAK` | Event chain hash linkage is broken |
+| `FLEET_SUMMARY_MISMATCH` | Computed aggregate fleet metrics do not match declared fleet summary values |
 
 ### INVALID_*
 
@@ -97,6 +107,7 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `INVALID_DID_FORMAT` | DID format not supported (e.g. not did:key with Ed25519) |
 | `INVALID_JSON` | Input is not valid JSON |
 | `INVALID_ROOT` | Merkle/hash root is invalid |
+| `UNSORTED_MEMBER_ARRAY` | Aggregate member array is not in required deterministic canonical order |
 
 ### MALFORMED_*
 
@@ -129,6 +140,19 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `MISSING_PROOF_BUNDLE` | Expected proof bundle not present |
 | `INCONSISTENT_RUN_ID` | Run IDs across bundle elements are inconsistent |
 | `EMPTY_CHAIN` | Event chain has no entries |
+| `IDENTITY_CONFLICT` | Forbidden DID overlap detected across aggregate/member trust boundaries |
+
+### AGGREGATE_*
+
+| Code | Meaning |
+|------|---------|
+| `AGGREGATE_BUNDLE_INVALID` | Aggregate envelope/payload invariants failed before member recursion |
+| `AGGREGATE_SIGNER_MISMATCH` | Aggregate envelope signer DID does not match aggregate payload issuer DID |
+| `AGGREGATE_MEMBER_INVALID` | Strict-liability cascade: at least one nested member failed verification |
+| `AGGREGATE_DUPLICATE_MEMBER` | Duplicate canonical member payload hash detected inside an aggregate |
+| `AGGREGATE_DUPLICATE_BUNDLE_ID` | Duplicate nested `bundle_id` detected across aggregate members |
+| `AGGREGATE_DUPLICATE_RUN_ID` | Duplicate nested `run_id` detected across aggregate members |
+| `AGGREGATE_TTL_EXCEEDS_MEMBER` | Aggregate expiry exceeds a member expiry bound |
 
 ### RECEIPT_*
 
@@ -136,6 +160,14 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 |------|---------|
 | `RECEIPT_BINDING_MISMATCH` | Receipt binding (run_id/event_hash) does not match bundle |
 | `RECEIPT_VERIFICATION_FAILED` | Individual receipt envelope verification failed |
+
+### TIME_*
+
+| Code | Meaning |
+|------|---------|
+| `EXPIRED_TTL` | Verification time exceeded `expires_at` plus configured skew allowance |
+| `CAUSAL_CLOCK_CONTRADICTION` | Temporal causality bounds are violated (e.g. created_at > issued_at) |
+| `FUTURE_TIMESTAMP_POISONING` | `issued_at` exceeds `verification_time + skew_allowance` |
 
 ### URM_*
 
@@ -217,6 +249,13 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | Code | Meaning |
 |------|---------|
 | `INCLUSION_PROOF_INVALID` | Log inclusion proof verification failed |
+
+### EVIDENCE_*
+
+| Code | Meaning |
+|------|---------|
+| `EVIDENCE_MISMATCH` | Deterministic evidence for the same subject/event is contradictory |
+| `PROMPT_COMMITMENT_MISMATCH` | Prompt commitment hashes diverge from declared prompt-pack commitments |
 
 ---
 
@@ -301,6 +340,7 @@ These codes are emitted by protocol-adjacent services and are part of the deny s
 3. Prefix with the category (e.g. `TOKEN_`, `POLICY_`, `SCHEMA_`).
 4. Add a conformance vector if the code is emitted by the verifier.
 5. Codes are additive-only — never remove or rename existing codes.
+6. Do not mint near-duplicate policy codes when an existing deny code is canonical (e.g. co-sign threshold failures MUST map to `POLICY_NONCOMPLIANT`, not a new threshold-specific code).
 
 ---
 
