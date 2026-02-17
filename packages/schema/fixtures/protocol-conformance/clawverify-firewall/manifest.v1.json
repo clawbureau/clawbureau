@@ -1,0 +1,14 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-firewall",
+  "cases": [
+    "valid-self.v1.json",
+    "valid-witnessed-web.v1.json",
+    "valid-gateway.v1.json",
+    "valid-sandbox-tee.v1.json",
+    "invalid-vir-merkle-mismatch.v1.json",
+    "invalid-vir-conflict-unreported.v1.json",
+    "invalid-vir-precedence-violation.v1.json",
+    "invalid-tee-revoked.v1.json"
+  ]
+}

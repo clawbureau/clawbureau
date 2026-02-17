@@ -1,0 +1,9 @@
+{
+  "id": "valid-sandbox-tee",
+  "scenario": "valid_sandbox_tee",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "sandbox",
+    "model_identity_tier": "tee_measured"
+  }
+}

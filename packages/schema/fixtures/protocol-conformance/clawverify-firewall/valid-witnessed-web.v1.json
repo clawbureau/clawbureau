@@ -1,0 +1,8 @@
+{
+  "id": "valid-witnessed-web",
+  "scenario": "valid_witnessed_web",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "witnessed_web"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.coverage_attestation.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Coverage Attestation v1",
+  "description": "Attestation of monitoring completeness and absence-of-bypass.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "attestation_version",
+    "attestation_id",
+    "run_id",
+    "agent_did",
+    "sentinel_did",
+    "issued_at",
+    "binding",
+    "metrics"
+  ],
+  "properties": {
+    "attestation_version": { "const": "1" },
+    "attestation_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "agent_did": { "type": "string", "pattern": "^did:" },
+    "sentinel_did": { "type": "string", "pattern": "^did:" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_chain_root_hash_b64u"],
+      "properties": {
+        "event_chain_root_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineage", "egress", "liveness"],
+      "properties": {
+        "lineage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["root_pid", "processes_tracked", "unmonitored_spawns", "escapes_suspected"],
+          "properties": {
+            "root_pid": { "type": "integer", "minimum": 1 },
+            "processes_tracked": { "type": "integer", "minimum": 0 },
+            "unmonitored_spawns": { "type": "integer", "minimum": 0 },
+            "escapes_suspected": { "type": "boolean" }
+          }
+        },
+        "egress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["connections_total", "unmediated_connections"],
+          "properties": {
+            "connections_total": { "type": "integer", "minimum": 0 },
+            "unmediated_connections": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "liveness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "uptime_ms", "heartbeat_interval_ms", "max_gap_ms"],
+          "properties": {
+            "status": { "type": "string", "enum": ["continuous", "interrupted"] },
+            "uptime_ms": { "type": "integer", "minimum": 0 },
+            "heartbeat_interval_ms": { "type": "integer", "minimum": 1 },
+            "max_gap_ms": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "metadata": { "type": "object" }
+  }
+}
