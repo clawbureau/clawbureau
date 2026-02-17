@@ -13,6 +13,12 @@ import {
   validateGatewayReceiptEnvelopeV1 as validateGatewayReceiptEnvelopeV1Generated,
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
   validateWebReceiptEnvelopeV1 as validateWebReceiptEnvelopeV1Generated,
+  validateToolReceiptV1 as validateToolReceiptV1Generated,
+  validateToolReceiptEnvelopeV1 as validateToolReceiptEnvelopeV1Generated,
+  validateSelectiveDisclosureV1 as validateSelectiveDisclosureV1Generated,
+  validateCoSignatureV1 as validateCoSignatureV1Generated,
+  validateToolReceiptV2 as validateToolReceiptV2Generated,
+  validateToolReceiptEnvelopeV2 as validateToolReceiptEnvelopeV2Generated,
   validateExecutionAttestationEnvelopeV1 as validateExecutionAttestationEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
@@ -48,6 +54,24 @@ const validateGatewayReceiptEnvelopeV1Fn =
 
 const validateWebReceiptEnvelopeV1Fn =
   validateWebReceiptEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateToolReceiptV1Fn =
+  validateToolReceiptV1Generated as StandaloneValidateFunction;
+
+const validateToolReceiptEnvelopeV1Fn =
+  validateToolReceiptEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateSelectiveDisclosureV1Fn =
+  validateSelectiveDisclosureV1Generated as StandaloneValidateFunction;
+
+const validateCoSignatureV1Fn =
+  validateCoSignatureV1Generated as StandaloneValidateFunction;
+
+const validateToolReceiptV2Fn =
+  validateToolReceiptV2Generated as StandaloneValidateFunction;
+
+const validateToolReceiptEnvelopeV2Fn =
+  validateToolReceiptEnvelopeV2Generated as StandaloneValidateFunction;
 
 const validateExecutionAttestationEnvelopeV1Fn =
   validateExecutionAttestationEnvelopeV1Generated as StandaloneValidateFunction;
@@ -223,6 +247,42 @@ export function validateWebReceiptEnvelopeV1(
     validateWebReceiptEnvelopeV1Fn,
     envelope,
     'web_receipt_envelope.v1'
+  );
+}
+
+export function validateToolReceiptV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateToolReceiptV1Fn, value, 'tool_receipt.v1');
+}
+
+export function validateToolReceiptEnvelopeV1(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateToolReceiptEnvelopeV1Fn,
+    value,
+    'tool_receipt_envelope.v1'
+  );
+}
+
+export function validateSelectiveDisclosureV1(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateSelectiveDisclosureV1Fn,
+    value,
+    'selective_disclosure.v1'
+  );
+}
+
+export function validateCoSignatureV1(value: unknown): SchemaValidationResult {
+  return validateWith(validateCoSignatureV1Fn, value, 'co_signature.v1');
+}
+
+export function validateToolReceiptV2(value: unknown): SchemaValidationResult {
+  return validateWith(validateToolReceiptV2Fn, value, 'tool_receipt.v2');
+}
+
+export function validateToolReceiptEnvelopeV2(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateToolReceiptEnvelopeV2Fn,
+    value,
+    'tool_receipt_envelope.v2'
   );
 }
 
