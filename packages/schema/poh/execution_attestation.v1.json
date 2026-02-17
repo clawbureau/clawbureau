@@ -100,6 +100,12 @@
                 "uri": { "type": "string" }
               }
             },
+            "nonce_binding_b64u": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "minLength": 8,
+              "description": "Deterministic TEE nonce/report-data binding derived from run/proof bundle context."
+            },
             "measurements": {
               "type": "object",
               "additionalProperties": false,
@@ -119,6 +125,12 @@
                   "type": "string",
                   "pattern": "^[A-Za-z0-9_-]+$",
                   "minLength": 8
+                },
+                "model_weights_digest_b64u": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "minLength": 8,
+                  "description": "Deterministic digest of measured model weights used for tee_measured identity claims."
                 }
               }
             },

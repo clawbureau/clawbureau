@@ -608,10 +608,12 @@ export interface ExecutionAttestationPayload {
         resource_hash_b64u: string;
         uri?: string;
       };
+      nonce_binding_b64u?: string;
       measurements: {
         measurement_hash_b64u: string;
         runtime_digest_b64u?: string;
         kernel_digest_b64u?: string;
+        model_weights_digest_b64u?: string;
       };
       tcb?: {
         status?: 'up_to_date' | 'out_of_date' | 'configuration_needed' | 'revoked' | 'unknown';
@@ -642,6 +644,8 @@ export interface VerifyExecutionAttestationResponse {
   allowlisted?: boolean;
   tee_root_id?: string;
   tee_tcb_version?: string;
+  tee_nonce_binding_b64u?: string;
+  tee_model_weights_digest_b64u?: string;
   error?: VerificationError;
 }
 

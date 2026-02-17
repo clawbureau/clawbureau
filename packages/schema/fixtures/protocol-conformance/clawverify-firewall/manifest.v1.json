@@ -20,6 +20,7 @@
     "invalid-vir-conflict-unreported.v1.json",
     "invalid-vir-precedence-violation.v1.json",
     "invalid-vir-event-contradiction.v1.json",
+    "invalid-tee-nonce-binding-mismatch.v1.json",
     "invalid-tee-revoked.v1.json"
   ]
 }

@@ -37,6 +37,14 @@ export interface VerifyAgentOptions {
 
   /** Allowlisted signer DIDs for execution attestations (CEA-US-010). */
   allowlistedExecutionAttesterDids?: readonly string[];
+
+  /** Allowlisted TEE roots/TCB versions for tee_execution attestations. */
+  teeRootAllowlist?: readonly string[];
+  teeTcbAllowlist?: readonly string[];
+
+  /** Revocation denylist for TEE roots/TCB versions. */
+  teeRootRevoked?: readonly string[];
+  teeTcbRevoked?: readonly string[];
 }
 
 function proofTierToPoHTier(proofTier: ProofTier): number {
@@ -670,6 +678,10 @@ export async function verifyAgent(
       const attEnv = req.execution_attestations[i] as SignedEnvelope<ExecutionAttestationPayload>;
       const attV = await verifyExecutionAttestation(attEnv, {
         allowlistedSignerDids: options.allowlistedExecutionAttesterDids,
+        teeRootAllowlist: options.teeRootAllowlist,
+        teeTcbAllowlist: options.teeTcbAllowlist,
+        teeRootRevoked: options.teeRootRevoked,
+        teeTcbRevoked: options.teeTcbRevoked,
       });
 
       if (attV.result.status !== 'VALID') {
@@ -808,7 +820,11 @@ export async function verifyAgent(
       witnessed_web: 5,
     };
 
-    if (tierRank[bestTier] > (tierRank[proofTier] ?? 0)) {
+    // CVF-US-064: deterministic tee tier when valid tee evidence exists.
+    if (bestTier === 'tee') {
+      proofTier = 'tee';
+      modelIdentityTier = 'tee_measured';
+    } else if (tierRank[bestTier] > (tierRank[proofTier] ?? 0)) {
       proofTier = bestTier;
     }
 

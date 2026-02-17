@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import worker from '../src/index';
 import { base64UrlEncode, computeHash } from '../src/crypto';
-import { verifyExecutionAttestation } from '../src/verify-execution-attestation';
+import {
+  computeExpectedTeeNonceBinding,
+  verifyExecutionAttestation,
+} from '../src/verify-execution-attestation';
 import { verifyAgent } from '../src/verify-agent';
 
 const BASE58_ALPHABET =
@@ -128,25 +131,35 @@ describe('CEA-US-010: execution attestation', () => {
     const agent = await makeDidKeyEd25519();
     const attester = await makeDidKeyEd25519();
 
+    const runId = 'run_execatt_tee_001';
+    const proofBundleHash = 'tee_bundle_hash_aaaaaaaa';
+    const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: proofBundleHash,
+    });
+
     const payload = {
       attestation_version: '1',
       attestation_id: 'execatt_tee_001',
       execution_type: 'tee_execution',
       agent_did: agent.did,
       attester_did: attester.did,
-      run_id: 'run_execatt_tee_001',
-      proof_bundle_hash_b64u: 'tee_bundle_hash_aaaaaaaa',
+      run_id: runId,
+      proof_bundle_hash_b64u: proofBundleHash,
       runtime_metadata: {
         tee: {
           attestation_type: 'tdx_quote',
           root_id: 'tee_root_sim_v1',
           tcb_version: 'tee_tcb_sim_v1',
+          nonce_binding_b64u: expectedNonceBinding,
           evidence_ref: {
             resource_type: 'tee_quote',
             resource_hash_b64u: 'teeQuoteHash_aaaaaaaa',
           },
           measurements: {
             measurement_hash_b64u: 'teeMeasureHash_aaaaaaaa',
+            model_weights_digest_b64u: 'teeModelWeightsHash_aaaaaaaa',
           },
         },
       },
@@ -171,19 +184,28 @@ describe('CEA-US-010: execution attestation', () => {
     const rootId = 'tee_root_sim_v1';
     const tcbVersion = 'tee_tcb_sim_v1';
 
+    const runId = 'run_execatt_tee_002';
+    const proofBundleHash = 'tee_bundle_hash_bbbbbbbb';
+    const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: proofBundleHash,
+    });
+
     const payload = {
       attestation_version: '1',
       attestation_id: 'execatt_tee_002',
       execution_type: 'tee_execution',
       agent_did: agent.did,
       attester_did: attester.did,
-      run_id: 'run_execatt_tee_002',
-      proof_bundle_hash_b64u: 'tee_bundle_hash_bbbbbbbb',
+      run_id: runId,
+      proof_bundle_hash_b64u: proofBundleHash,
       runtime_metadata: {
         tee: {
           attestation_type: 'tdx_quote',
           root_id: rootId,
           tcb_version: tcbVersion,
+          nonce_binding_b64u: expectedNonceBinding,
           evidence_ref: {
             resource_type: 'tee_quote',
             resource_hash_b64u: 'teeQuoteHash_bbbbbbbb',
@@ -191,6 +213,7 @@ describe('CEA-US-010: execution attestation', () => {
           measurements: {
             measurement_hash_b64u: 'teeMeasureHash_bbbbbbbb',
             runtime_digest_b64u: 'teeRuntimeHash_bbbbbbbb',
+            model_weights_digest_b64u: 'teeModelWeightsHash_bbbbbbbb',
           },
         },
       },
@@ -211,7 +234,7 @@ describe('CEA-US-010: execution attestation', () => {
     expect(out.tee_tcb_version).toBe(tcbVersion);
   });
 
-  it('rejects tee_execution when TCB version is revoked', async () => {
+  it('rejects tee_execution when nonce/report-data binding mismatches expected context', async () => {
     const agent = await makeDidKeyEd25519();
     const attester = await makeDidKeyEd25519();
 
@@ -220,23 +243,133 @@ describe('CEA-US-010: execution attestation', () => {
 
     const payload = {
       attestation_version: '1',
+      attestation_id: 'execatt_tee_nonce_mismatch_001',
+      execution_type: 'tee_execution',
+      agent_did: agent.did,
+      attester_did: attester.did,
+      run_id: 'run_execatt_tee_nonce_mismatch_001',
+      proof_bundle_hash_b64u: 'tee_bundle_hash_nonce_mismatch_aaaaaaaa',
+      runtime_metadata: {
+        tee: {
+          attestation_type: 'tdx_quote',
+          root_id: rootId,
+          tcb_version: tcbVersion,
+          nonce_binding_b64u: 'nonceBindingMismatch_aaaaaaaa',
+          evidence_ref: {
+            resource_type: 'tee_quote',
+            resource_hash_b64u: 'teeQuoteHash_nonce_mismatch_aaaaaaaa',
+          },
+          measurements: {
+            measurement_hash_b64u: 'teeMeasureHash_nonce_mismatch_aaaaaaaa',
+            model_weights_digest_b64u: 'teeModelWeightsHash_nonce_mismatch_aaaaaaaa',
+          },
+        },
+      },
+      issued_at: '2026-02-11T00:00:00Z',
+    };
+
+    const envelope = await makeExecutionAttestationEnvelope(payload, attester);
+
+    const out = await verifyExecutionAttestation(envelope, {
+      allowlistedSignerDids: [attester.did],
+      teeRootAllowlist: [rootId],
+      teeTcbAllowlist: [tcbVersion],
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe('payload.runtime_metadata.tee.nonce_binding_b64u');
+  });
+
+  it('rejects tee_execution when measured identity fields are malformed', async () => {
+    const agent = await makeDidKeyEd25519();
+    const attester = await makeDidKeyEd25519();
+
+    const rootId = 'tee_root_sim_v1';
+    const tcbVersion = 'tee_tcb_sim_v1';
+    const runId = 'run_execatt_tee_malformed_001';
+    const proofBundleHash = 'tee_bundle_hash_malformed_aaaaaaaa';
+    const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: proofBundleHash,
+    });
+
+    const payload = {
+      attestation_version: '1',
+      attestation_id: 'execatt_tee_malformed_001',
+      execution_type: 'tee_execution',
+      agent_did: agent.did,
+      attester_did: attester.did,
+      run_id: runId,
+      proof_bundle_hash_b64u: proofBundleHash,
+      runtime_metadata: {
+        tee: {
+          attestation_type: 'tdx_quote',
+          root_id: rootId,
+          tcb_version: tcbVersion,
+          nonce_binding_b64u: expectedNonceBinding,
+          evidence_ref: {
+            resource_type: 'tee_quote',
+            resource_hash_b64u: 'teeQuoteHash_malformed_aaaaaaaa',
+          },
+          measurements: {
+            measurement_hash_b64u: 'teeMeasureHash_malformed_aaaaaaaa',
+            model_weights_digest_b64u: '',
+          },
+        },
+      },
+      issued_at: '2026-02-11T00:00:00Z',
+    };
+
+    const envelope = await makeExecutionAttestationEnvelope(payload, attester);
+
+    const out = await verifyExecutionAttestation(envelope, {
+      allowlistedSignerDids: [attester.did],
+      teeRootAllowlist: [rootId],
+      teeTcbAllowlist: [tcbVersion],
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('SCHEMA_VALIDATION_FAILED');
+  });
+
+  it('rejects tee_execution when TCB version is revoked', async () => {
+    const agent = await makeDidKeyEd25519();
+    const attester = await makeDidKeyEd25519();
+
+    const rootId = 'tee_root_sim_v1';
+    const tcbVersion = 'tee_tcb_sim_v1';
+
+    const runId = 'run_execatt_tee_003';
+    const proofBundleHash = 'tee_bundle_hash_cccccccc';
+    const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: proofBundleHash,
+    });
+
+    const payload = {
+      attestation_version: '1',
       attestation_id: 'execatt_tee_003',
       execution_type: 'tee_execution',
       agent_did: agent.did,
       attester_did: attester.did,
-      run_id: 'run_execatt_tee_003',
-      proof_bundle_hash_b64u: 'tee_bundle_hash_cccccccc',
+      run_id: runId,
+      proof_bundle_hash_b64u: proofBundleHash,
       runtime_metadata: {
         tee: {
           attestation_type: 'sev_snp_report',
           root_id: rootId,
           tcb_version: tcbVersion,
+          nonce_binding_b64u: expectedNonceBinding,
           evidence_ref: {
             resource_type: 'tee_quote',
             resource_hash_b64u: 'teeQuoteHash_cccccccc',
           },
           measurements: {
             measurement_hash_b64u: 'teeMeasureHash_cccccccc',
+            model_weights_digest_b64u: 'teeModelWeightsHash_cccccccc',
           },
         },
       },
@@ -442,6 +575,244 @@ describe('CEA-US-010: execution attestation', () => {
     expect(json?.result?.status).toBe('VALID');
     expect(json?.result?.proof_tier).toBe('sandbox');
     expect(json?.proof_tier).toBe('sandbox');
+    expect(json?.result?.component_results?.execution_attestations_valid).toBe(true);
+  });
+
+  it('uplifts verifyAgent proof_tier to tee for valid tee execution attestation', async () => {
+    const agent = await makeDidKeyEd25519();
+    const execAttester = await makeDidKeyEd25519();
+
+    const runId = 'run_execatt_tee_agent_001';
+    const rootId = 'tee_root_sim_agent_v1';
+    const tcbVersion = 'tee_tcb_sim_agent_v1';
+
+    const e1PayloadHash = await computeHash({ type: 'llm_call_tee' }, 'SHA-256');
+    const e1Header = {
+      event_id: 'evt_tee_001',
+      run_id: runId,
+      event_type: 'llm_call',
+      timestamp: '2026-02-11T00:00:00Z',
+      payload_hash_b64u: e1PayloadHash,
+      prev_hash_b64u: null as string | null,
+    };
+    const e1Hash = await computeHash(e1Header, 'SHA-256');
+
+    const bundlePayload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_execatt_tee_agent_001',
+      agent_did: agent.did,
+      event_chain: [
+        {
+          ...e1Header,
+          event_hash_b64u: e1Hash,
+        },
+      ],
+    };
+
+    const bundlePayloadHash = await computeHash(bundlePayload, 'SHA-256');
+
+    const proofBundleEnvelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload: bundlePayload,
+      payload_hash_b64u: bundlePayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await signB64uEd25519(agent.privateKey, bundlePayloadHash),
+      algorithm: 'Ed25519',
+      signer_did: agent.did,
+      issued_at: '2026-02-11T00:00:02Z',
+    };
+
+    const nonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: bundlePayloadHash,
+    });
+
+    const execPayload = {
+      attestation_version: '1',
+      attestation_id: 'execatt_tee_agent_001',
+      execution_type: 'tee_execution',
+      agent_did: agent.did,
+      attester_did: execAttester.did,
+      run_id: runId,
+      proof_bundle_hash_b64u: bundlePayloadHash,
+      runtime_metadata: {
+        tee: {
+          attestation_type: 'tdx_quote',
+          root_id: rootId,
+          tcb_version: tcbVersion,
+          nonce_binding_b64u: nonceBinding,
+          evidence_ref: {
+            resource_type: 'tee_quote',
+            resource_hash_b64u: 'teeQuoteHash_agent_aaaaaaaa',
+          },
+          measurements: {
+            measurement_hash_b64u: 'teeMeasureHash_agent_aaaaaaaa',
+            model_weights_digest_b64u: 'teeModelWeightsHash_agent_aaaaaaaa',
+          },
+        },
+      },
+      issued_at: '2026-02-11T00:00:03Z',
+    };
+
+    const execPayloadHash = await computeHash(execPayload, 'SHA-256');
+
+    const execEnvelope = {
+      envelope_version: '1',
+      envelope_type: 'execution_attestation',
+      payload: execPayload,
+      payload_hash_b64u: execPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await signB64uEd25519(execAttester.privateKey, execPayloadHash),
+      algorithm: 'Ed25519',
+      signer_did: execAttester.did,
+      issued_at: '2026-02-11T00:00:04Z',
+    };
+
+    const out = await verifyAgent(
+      {
+        agent_did: agent.did,
+        proof_bundle_envelope: proofBundleEnvelope,
+        execution_attestations: [execEnvelope],
+      },
+      {
+        allowlistedExecutionAttesterDids: [execAttester.did],
+        teeRootAllowlist: [rootId],
+        teeTcbAllowlist: [tcbVersion],
+        teeRootRevoked: [],
+        teeTcbRevoked: [],
+      }
+    );
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.proof_tier).toBe('tee');
+    expect(out.model_identity_tier).toBe('tee_measured');
+  });
+
+  it('uplifts /v1/verify/bundle proof_tier to tee for valid tee execution attestation', async () => {
+    const agent = await makeDidKeyEd25519();
+    const execAttester = await makeDidKeyEd25519();
+
+    const runId = 'run_execatt_tee_bundle_001';
+    const rootId = 'tee_root_sim_bundle_v1';
+    const tcbVersion = 'tee_tcb_sim_bundle_v1';
+
+    const e1PayloadHash = await computeHash({ type: 'llm_call_tee' }, 'SHA-256');
+    const e1Header = {
+      event_id: 'evt_tee_bundle_001',
+      run_id: runId,
+      event_type: 'llm_call',
+      timestamp: '2026-02-11T00:00:00Z',
+      payload_hash_b64u: e1PayloadHash,
+      prev_hash_b64u: null as string | null,
+    };
+    const e1Hash = await computeHash(e1Header, 'SHA-256');
+
+    const bundlePayload = {
+      bundle_version: '1',
+      bundle_id: 'bundle_execatt_tee_bundle_001',
+      agent_did: agent.did,
+      event_chain: [
+        {
+          ...e1Header,
+          event_hash_b64u: e1Hash,
+        },
+      ],
+    };
+
+    const bundlePayloadHash = await computeHash(bundlePayload, 'SHA-256');
+
+    const proofBundleEnvelope = {
+      envelope_version: '1',
+      envelope_type: 'proof_bundle',
+      payload: bundlePayload,
+      payload_hash_b64u: bundlePayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await signB64uEd25519(agent.privateKey, bundlePayloadHash),
+      algorithm: 'Ed25519',
+      signer_did: agent.did,
+      issued_at: '2026-02-11T00:00:02Z',
+    };
+
+    const nonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: bundlePayloadHash,
+    });
+
+    const execPayload = {
+      attestation_version: '1',
+      attestation_id: 'execatt_tee_bundle_001',
+      execution_type: 'tee_execution',
+      agent_did: agent.did,
+      attester_did: execAttester.did,
+      run_id: runId,
+      proof_bundle_hash_b64u: bundlePayloadHash,
+      runtime_metadata: {
+        tee: {
+          attestation_type: 'tdx_quote',
+          root_id: rootId,
+          tcb_version: tcbVersion,
+          nonce_binding_b64u: nonceBinding,
+          evidence_ref: {
+            resource_type: 'tee_quote',
+            resource_hash_b64u: 'teeQuoteHash_bundle_aaaaaaaa',
+          },
+          measurements: {
+            measurement_hash_b64u: 'teeMeasureHash_bundle_aaaaaaaa',
+            model_weights_digest_b64u: 'teeModelWeightsHash_bundle_aaaaaaaa',
+          },
+        },
+      },
+      issued_at: '2026-02-11T00:00:03Z',
+    };
+
+    const execPayloadHash = await computeHash(execPayload, 'SHA-256');
+
+    const execEnvelope = {
+      envelope_version: '1',
+      envelope_type: 'execution_attestation',
+      payload: execPayload,
+      payload_hash_b64u: execPayloadHash,
+      hash_algorithm: 'SHA-256',
+      signature_b64u: await signB64uEd25519(execAttester.privateKey, execPayloadHash),
+      algorithm: 'Ed25519',
+      signer_did: execAttester.did,
+      issued_at: '2026-02-11T00:00:04Z',
+    };
+
+    const req = new Request('https://clawverify.com/v1/verify/bundle', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        envelope: proofBundleEnvelope,
+        execution_attestations: [execEnvelope],
+      }),
+    });
+
+    const env = {
+      ENVIRONMENT: 'test',
+      AUDIT_LOG_DB: undefined,
+      GATEWAY_RECEIPT_SIGNER_DIDS: '',
+      ATTESTATION_SIGNER_DIDS: '',
+      EXECUTION_ATTESTATION_SIGNER_DIDS: execAttester.did,
+      TEE_ATTESTATION_ROOT_ALLOWLIST: rootId,
+      TEE_ATTESTATION_TCB_ALLOWLIST: tcbVersion,
+      TEE_ATTESTATION_ROOT_REVOKED: '',
+      TEE_ATTESTATION_TCB_REVOKED: '',
+    };
+
+    const res = await worker.fetch(req, env as any, {} as any);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json?.result?.status).toBe('VALID');
+    expect(json?.result?.proof_tier).toBe('tee');
+    expect(json?.proof_tier).toBe('tee');
+    expect(json?.result?.model_identity_tier).toBe('tee_measured');
     expect(json?.result?.component_results?.execution_attestations_valid).toBe(true);
   });
 });

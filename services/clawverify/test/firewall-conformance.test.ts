@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { base64UrlEncode, computeHash } from '../src/crypto';
+import { computeExpectedTeeNonceBinding } from '../src/verify-execution-attestation';
 import { verifyProofBundle } from '../src/verify-proof-bundle';
 
 const BASE58_ALPHABET =
@@ -38,6 +39,7 @@ type FixtureCase = {
     | 'invalid_vir_conflict_unreported'
     | 'invalid_vir_precedence_violation'
     | 'invalid_vir_event_contradiction'
+    | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
 };
@@ -615,11 +617,24 @@ async function buildFixtureScenario(spec: FixtureCase) {
     };
   }
 
-  if (spec.scenario === 'valid_sandbox_tee' || spec.scenario === 'invalid_tee_revoked') {
+  if (
+    spec.scenario === 'valid_sandbox_tee' ||
+    spec.scenario === 'invalid_tee_nonce_binding_mismatch' ||
+    spec.scenario === 'invalid_tee_revoked'
+  ) {
     const attester = await makeDidKeyEd25519();
     const tcbVersion = spec.scenario === 'invalid_tee_revoked' ? 'tdx-firewall-revoked' : 'tdx-firewall-good';
 
     const bundlePayloadHash = await computeHash(bundlePayload, 'SHA-256');
+    const expectedNonceBinding = await computeExpectedTeeNonceBinding({
+      agentDid: agent.did,
+      runId,
+      proofBundleHashB64u: bundlePayloadHash,
+    });
+    const nonceBinding =
+      spec.scenario === 'invalid_tee_nonce_binding_mismatch'
+        ? 'tee_nonce_binding_mismatch_firewall_001'
+        : expectedNonceBinding;
 
     const executionAttestationPayload: Record<string, unknown> = {
       attestation_version: '1',
@@ -634,12 +649,14 @@ async function buildFixtureScenario(spec: FixtureCase) {
           attestation_type: 'tdx_quote',
           root_id: 'intel-tdx-root-firewall',
           tcb_version: tcbVersion,
+          nonce_binding_b64u: nonceBinding,
           evidence_ref: {
             resource_type: 'tee_quote',
             resource_hash_b64u: 'tee_quote_hash_firewall_001',
           },
           measurements: {
             measurement_hash_b64u: 'tee_measurement_hash_firewall_001',
+            model_weights_digest_b64u: 'tee_model_weights_hash_firewall_001',
           },
         },
       },
