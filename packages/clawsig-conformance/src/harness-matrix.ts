@@ -524,6 +524,32 @@ async function runHarnessCase(params: {
   }
 }
 
+function makeUnavailableHarnessCase(params: {
+  agent: HarnessAgent | string;
+  mode: HarnessMode;
+  layer: HarnessLayer;
+  reason: string;
+}): HarnessCaseResult {
+  return {
+    id: `${params.agent}:${params.mode}:${params.layer}`,
+    agent: params.agent,
+    mode: params.mode,
+    layer: params.layer,
+    status: 'SKIP',
+    reason: `AGENT_UNAVAILABLE: ${params.reason}`,
+    errors: [],
+    metrics: {
+      bundle: 0,
+      receipts: 0,
+      events: 0,
+      ...(params.layer === 'interpose' ? { interpose_events: 0 } : {}),
+    },
+    duration_ms: 0,
+    exit_code: null,
+    timed_out: false,
+  };
+}
+
 export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Promise<HarnessMatrixRun> {
   const rootDir = resolve(options.rootDir ?? process.cwd());
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -538,51 +564,50 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
   const started_at = nowIso();
   const results: HarnessCaseResult[] = [];
 
+  const modes: HarnessMode[] = includeLive ? ['mock', 'live'] : ['mock'];
+  const defaultLayers: HarnessLayer[] = hostInterposeSupported ? ['proxy', 'interpose'] : ['proxy'];
+  const layers: HarnessLayer[] =
+    options.layers && options.layers.length > 0 ? options.layers : defaultLayers;
+
   const installed: Array<{ spec: AgentSpec; path: string }> = [];
 
   for (const agentId of requestedAgents) {
     const spec = AGENTS[agentId as HarnessAgent];
     if (!spec) {
-      results.push({
-        id: `${String(agentId)}:skip:unknown-agent`,
-        agent: String(agentId),
-        mode: 'mock',
-        layer: 'proxy',
-        status: 'SKIP',
-        reason: `unknown agent: ${String(agentId)}`,
-        errors: [],
-        metrics: { bundle: 0, receipts: 0, events: 0 },
-        duration_ms: 0,
-        exit_code: null,
-        timed_out: false,
-      });
+      for (const mode of modes) {
+        for (const layer of layers) {
+          results.push(
+            makeUnavailableHarnessCase({
+              agent: String(agentId),
+              mode,
+              layer,
+              reason: `unknown agent '${String(agentId)}'`,
+            }),
+          );
+        }
+      }
       continue;
     }
 
     const cliPath = await findBinary(spec.cli);
     if (!cliPath) {
-      results.push({
-        id: `${spec.id}:skip:not-installed`,
-        agent: spec.id,
-        mode: 'mock',
-        layer: 'proxy',
-        status: 'SKIP',
-        reason: 'not installed',
-        errors: [],
-        metrics: { bundle: 0, receipts: 0, events: 0 },
-        duration_ms: 0,
-        exit_code: null,
-        timed_out: false,
-      });
+      for (const mode of modes) {
+        for (const layer of layers) {
+          results.push(
+            makeUnavailableHarnessCase({
+              agent: spec.id,
+              mode,
+              layer,
+              reason: `${spec.cli} is not installed`,
+            }),
+          );
+        }
+      }
       continue;
     }
+
     installed.push({ spec, path: cliPath });
   }
-
-  const modes: HarnessMode[] = includeLive ? ['mock', 'live'] : ['mock'];
-  const defaultLayers: HarnessLayer[] = hostInterposeSupported ? ['proxy', 'interpose'] : ['proxy'];
-  const layers: HarnessLayer[] =
-    options.layers && options.layers.length > 0 ? options.layers : defaultLayers;
 
   for (const { spec, path } of installed) {
     for (const mode of modes) {
@@ -633,12 +658,12 @@ export async function runHarnessMatrix(options: HarnessMatrixOptions = {}): Prom
 }
 
 export function formatHarnessCaseLine(result: HarnessCaseResult): string {
-  if (result.status === 'SKIP') {
-    return `${result.agent.padEnd(8)} ${''.padEnd(24)} SKIP  (${result.reason ?? 'skipped'})`;
-  }
-
   const layerLabel = result.layer === 'proxy' ? 'proxy' : 'interpose';
   const modeLayer = `(${result.mode}, ${layerLabel})`;
+
+  if (result.status === 'SKIP') {
+    return `${result.agent.padEnd(8)} ${modeLayer.padEnd(24)} SKIP  (${result.reason ?? 'skipped'})`;
+  }
 
   if (result.status === 'FAIL') {
     const reason = result.reason ?? result.errors[0] ?? 'failed';

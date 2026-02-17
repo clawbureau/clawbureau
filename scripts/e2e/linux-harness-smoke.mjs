@@ -77,20 +77,37 @@ async function main() {
   const strictFailures = requiredCaseIds
     .map((id) => {
       const result = byId.get(id);
+
       if (!result) {
-        return { id, reason: 'missing result' };
+        return {
+          id,
+          code: 'AGENT_UNAVAILABLE',
+          reason: 'required lane result missing (deterministic matrix contract violated)',
+        };
       }
-      if (result.status !== 'PASS') {
-        return { id, reason: result.reason ?? result.status };
+
+      if (result.status === 'PASS') {
+        return null;
       }
-      return null;
+
+      const reason =
+        typeof result.reason === 'string' && result.reason.trim().length > 0
+          ? result.reason.trim()
+          : result.status;
+
+      const code =
+        result.status === 'SKIP' || reason.startsWith('AGENT_UNAVAILABLE:')
+          ? 'AGENT_UNAVAILABLE'
+          : 'PARITY_FAILURE';
+
+      return { id, code, reason };
     })
     .filter(Boolean);
 
   if (strictFailures.length > 0) {
     process.stdout.write('strict lane failures:\n');
     for (const failure of strictFailures) {
-      process.stdout.write(`- ${failure.id}: ${failure.reason}\n`);
+      process.stdout.write(`- ${failure.id}: ${failure.code} (${failure.reason})\n`);
     }
     process.exitCode = 1;
     return;
