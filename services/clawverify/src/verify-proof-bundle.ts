@@ -27,6 +27,12 @@ import type {
   URMReference,
   AttestationReference,
   GatewayReceiptPayload,
+  VirReceiptPayload,
+  VirReceiptEnvelope,
+  VirSource,
+  WebReceiptPayload,
+  CoverageAttestationPayload,
+  ExecutionAttestationPayload,
 } from './types';
 import {
   isAllowedVersion,
@@ -44,21 +50,63 @@ import {
   verifySignature,
 } from './crypto';
 import { verifyReceipt } from './verify-receipt';
+import { verifyWebReceipt } from './verify-web-receipt';
+import { verifyExecutionAttestation } from './verify-execution-attestation';
 import { computeModelIdentityTierFromReceipts } from './model-identity';
 import { jcsCanonicalize } from './jcs';
+import {
+  CRITICAL_VIR_CODES,
+  SOURCE_SCORE,
+  compareVirCandidate,
+  type VirFailureCode,
+  validateVirReceiptCore,
+} from './vir-core';
 import {
   validateProofBundleEnvelopeV1,
   validateUrmV1,
   validatePromptPackV1,
   validateSystemPromptReportV1,
+  validateVirV1,
+  validateVirV2,
+  validateVirEnvelopeV1,
+  validateVirEnvelopeV2,
+  validateCoverageAttestationEnvelopeV1,
 } from './schema-validation';
 
 export interface ProofBundleVerifierOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
   allowlistedReceiptSignerDids?: readonly string[];
 
+  /** Allowlisted witness signer DIDs for web_receipts (did:key:...). */
+  allowlistedWitnessSignerDids?: readonly string[];
+
   /** Allowlisted attester DIDs for proof bundle attestations (did:key:...). */
   allowlistedAttesterDids?: readonly string[];
+
+  /** Phase gate for deterministic coverage invariants. Defaults to 'observe'. */
+  coverage_enforcement_phase?: 'observe' | 'warn' | 'enforce';
+
+  /** Optional strict VIR binding checks (non-transferability). */
+  expectedVirNonce?: string;
+  expectedVirSubject?: string;
+  expectedVirScope?: string;
+
+  /** Optional execution attestations bound to this bundle. */
+  execution_attestations?: SignedEnvelope<ExecutionAttestationPayload>[];
+
+  /** Allowlisted execution attestation signer DIDs (did:key:...). */
+  allowlistedExecutionAttestationSignerDids?: readonly string[];
+
+  /** Allowlisted TEE roots/TCB versions for tee_execution attestations. */
+  teeRootAllowlist?: readonly string[];
+  teeTcbAllowlist?: readonly string[];
+
+  /** Revocation denylist for TEE roots/TCB versions. */
+  teeRootRevoked?: readonly string[];
+  teeTcbRevoked?: readonly string[];
+
+  /** Max tolerated coverage liveness gap in milliseconds (default 1000). */
+  maxCoverageLivenessGapMs?: number;
 
   /**
    * Optional materialized URM document (JSON object).
@@ -147,9 +195,13 @@ function validateBundlePayload(
   const hasEventChain = Array.isArray(p.event_chain) && p.event_chain.length > 0;
   const hasReceipts = Array.isArray(p.receipts) && p.receipts.length > 0;
   const hasAttestations = Array.isArray(p.attestations) && p.attestations.length > 0;
+  const virReceipts = p.vir_receipts;
+  const hasVirReceipts = Array.isArray(virReceipts) && virReceipts.length > 0;
+  const webReceipts = p.web_receipts;
+  const hasWebReceipts = Array.isArray(webReceipts) && webReceipts.length > 0;
 
-  if (!hasUrm && !hasEventChain && !hasReceipts && !hasAttestations) {
-    return { valid: false, error: 'At least one of urm, event_chain, receipts, or attestations is required' };
+  if (!hasUrm && !hasEventChain && !hasReceipts && !hasAttestations && !hasVirReceipts && !hasWebReceipts) {
+    return { valid: false, error: 'At least one of urm, event_chain, receipts, attestations, vir_receipts, or web_receipts is required' };
   }
 
   return { valid: true };
@@ -614,6 +666,346 @@ async function verifyReceiptEnvelope(
   };
 }
 
+async function verifyWebReceiptEnvelope(
+  receipt: unknown,
+  allowlistedSignerDids: readonly string[] | undefined,
+  bindingContext: ReceiptBindingContext | null
+): Promise<{
+  valid: boolean;
+  signature_valid: boolean;
+  binding_valid: boolean;
+  witness_id?: string;
+  source?: WebReceiptPayload['source'];
+  signer_did?: string;
+  error?: string;
+}> {
+  const verification = await verifyWebReceipt(receipt, { allowlistedSignerDids });
+
+  if (verification.result.status !== 'VALID') {
+    return {
+      valid: false,
+      signature_valid: false,
+      binding_valid: false,
+      error: verification.error?.message ?? verification.result.reason,
+    };
+  }
+
+  if (!bindingContext) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      witness_id: verification.witness_id,
+      source: verification.source,
+      signer_did: verification.result.signer_did,
+      error:
+        'Web receipt binding cannot be verified: proof bundle event_chain is missing or invalid',
+    };
+  }
+
+  const env = receipt as SignedEnvelope<WebReceiptPayload>;
+  const binding = env.payload.binding;
+
+  if (!binding || typeof binding !== 'object') {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      witness_id: verification.witness_id,
+      source: verification.source,
+      signer_did: verification.result.signer_did,
+      error: 'Web receipt is missing binding (expected run_id + event_hash_b64u)',
+    };
+  }
+
+  const runId = (binding as Record<string, unknown>).run_id;
+  const eventHash = (binding as Record<string, unknown>).event_hash_b64u;
+
+  if (typeof runId !== 'string' || runId.trim().length === 0) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      witness_id: verification.witness_id,
+      source: verification.source,
+      signer_did: verification.result.signer_did,
+      error: 'Web receipt binding.run_id is missing or invalid',
+    };
+  }
+
+  if (runId !== bindingContext.expectedRunId) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      witness_id: verification.witness_id,
+      source: verification.source,
+      signer_did: verification.result.signer_did,
+      error: 'Web receipt binding.run_id does not match proof bundle run_id',
+    };
+  }
+
+  if (
+    typeof eventHash !== 'string' ||
+    eventHash.length < 8 ||
+    !isValidBase64Url(eventHash)
+  ) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      witness_id: verification.witness_id,
+      source: verification.source,
+      signer_did: verification.result.signer_did,
+      error: 'Web receipt binding.event_hash_b64u is missing or invalid',
+    };
+  }
+
+  if (!bindingContext.allowedEventHashes.has(eventHash)) {
+    return {
+      valid: false,
+      signature_valid: true,
+      binding_valid: false,
+      witness_id: verification.witness_id,
+      source: verification.source,
+      signer_did: verification.result.signer_did,
+      error:
+        'Web receipt binding.event_hash_b64u does not reference an event in the proof bundle event chain',
+    };
+  }
+
+  return {
+    valid: true,
+    signature_valid: true,
+    binding_valid: true,
+    witness_id: verification.witness_id,
+    source: verification.source,
+    signer_did: verification.result.signer_did,
+  };
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+interface ParsedVirReceipt {
+  payload: VirReceiptPayload;
+  envelope?: VirReceiptEnvelope;
+}
+
+function parseVirReceiptEntry(entry: unknown):
+  | { ok: true; parsed: ParsedVirReceipt }
+  | { ok: false; error: string } {
+  const record = isObjectRecord(entry) ? entry : null;
+  if (!record) {
+    return { ok: false, error: 'Malformed VIR receipt entry' };
+  }
+
+  if (record.envelope_type === 'vir_receipt') {
+    const envelopeValidationV2 = validateVirEnvelopeV2(record);
+    if (envelopeValidationV2.valid) {
+      const envelope = record as unknown as VirReceiptEnvelope;
+      return {
+        ok: true,
+        parsed: {
+          payload: envelope.payload,
+          envelope,
+        },
+      };
+    }
+
+    const envelopeValidationV1 = validateVirEnvelopeV1(record);
+    if (!envelopeValidationV1.valid) {
+      return { ok: false, error: envelopeValidationV1.message };
+    }
+
+    const envelope = record as unknown as VirReceiptEnvelope;
+    const payloadValidation = validateVirV1(envelope.payload);
+    if (!payloadValidation.valid) {
+      return { ok: false, error: payloadValidation.message };
+    }
+
+    return {
+      ok: true,
+      parsed: {
+        payload: envelope.payload,
+        envelope,
+      },
+    };
+  }
+
+  const payloadValidationV2 = validateVirV2(record);
+  if (payloadValidationV2.valid) {
+    return {
+      ok: true,
+      parsed: {
+        payload: record as unknown as VirReceiptPayload,
+      },
+    };
+  }
+
+  const payloadValidationV1 = validateVirV1(record);
+  if (!payloadValidationV1.valid) {
+    return { ok: false, error: payloadValidationV1.message };
+  }
+
+  return {
+    ok: true,
+    parsed: {
+      payload: record as unknown as VirReceiptPayload,
+    },
+  };
+}
+
+async function verifyVirReceiptEntry(
+  entry: unknown,
+  bindingContext: ReceiptBindingContext | null,
+  expectedBountyNonce: string | null,
+  expectedSubject: string | null,
+  expectedScope: string | null,
+): Promise<{
+  valid: boolean;
+  signature_valid: boolean;
+  binding_valid: boolean;
+  source?: VirSource;
+  receipt_id?: string;
+  risk_flags?: string[];
+  code?: VirFailureCode;
+  error?: string;
+}> {
+  const parsed = parseVirReceiptEntry(entry);
+  if (!parsed.ok) {
+    return {
+      valid: false,
+      signature_valid: false,
+      binding_valid: false,
+      error: parsed.error,
+    };
+  }
+
+  const { payload, envelope } = parsed.parsed;
+  const source = payload.source;
+
+  let signatureValid = false;
+  if (envelope) {
+    let computedHash: string;
+    try {
+      computedHash = await computeHash(envelope.payload, envelope.hash_algorithm);
+    } catch {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR hash computation failed',
+      };
+    }
+
+    if (computedHash !== envelope.payload_hash_b64u) {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR payload hash mismatch',
+      };
+    }
+
+    const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
+    if (!publicKeyBytes) {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'Invalid VIR signer DID',
+      };
+    }
+
+    try {
+      const signatureBytes = base64UrlDecode(envelope.signature_b64u);
+      const messageBytes = new TextEncoder().encode(envelope.payload_hash_b64u);
+      signatureValid = await verifySignature(
+        envelope.algorithm,
+        publicKeyBytes,
+        signatureBytes,
+        messageBytes,
+      );
+    } catch {
+      signatureValid = false;
+    }
+
+    if (!signatureValid) {
+      return {
+        valid: false,
+        signature_valid: false,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR signature verification failed',
+      };
+    }
+
+    if (envelope.signer_did !== payload.agent_did) {
+      return {
+        valid: false,
+        signature_valid: true,
+        binding_valid: false,
+        source,
+        receipt_id: payload.receipt_id,
+        error: 'VIR signer_did does not match payload.agent_did',
+      };
+    }
+  }
+
+  if (!bindingContext) {
+    return {
+      valid: false,
+      signature_valid: signatureValid,
+      binding_valid: false,
+      source,
+      receipt_id: payload.receipt_id,
+      code: 'ERR_BINDING_RUN_ID_MISMATCH',
+      error: 'VIR binding cannot be verified: proof bundle event_chain is missing or invalid',
+    };
+  }
+
+  const vir = await validateVirReceiptCore({
+    payload,
+    bindingContext,
+    expected: {
+      nonce: expectedBountyNonce,
+      subject: expectedSubject,
+      scope: expectedScope,
+    },
+  });
+
+  if (!vir.valid) {
+    return {
+      valid: false,
+      signature_valid: signatureValid,
+      binding_valid: false,
+      source: vir.source ?? source,
+      receipt_id: payload.receipt_id,
+      risk_flags: vir.riskFlags.length > 0 ? vir.riskFlags : undefined,
+      code: vir.code,
+      error: vir.message ?? vir.code,
+    };
+  }
+
+  return {
+    valid: true,
+    signature_valid: signatureValid,
+    binding_valid: true,
+    source: vir.source ?? source,
+    receipt_id: payload.receipt_id,
+    risk_flags: vir.riskFlags.length > 0 ? vir.riskFlags : undefined,
+  };
+}
+
 /**
  * Compute trust tier based on validated components
  *
@@ -629,6 +1021,10 @@ function computeTrustTier(components: {
   urm_valid?: boolean;
   event_chain_valid?: boolean;
   receipts_valid?: boolean;
+  vir_receipts_valid?: boolean;
+  web_receipts_valid?: boolean;
+  coverage_attestations_valid?: boolean;
+  execution_attestations_valid?: boolean;
   attestations_valid?: boolean;
 }): TrustTier {
   if (!components.envelope_valid) {
@@ -639,8 +1035,8 @@ function computeTrustTier(components: {
   if (
     components.urm_valid &&
     components.event_chain_valid &&
-    components.receipts_valid &&
-    components.attestations_valid
+    (components.receipts_valid || components.vir_receipts_valid || components.web_receipts_valid) &&
+    (components.attestations_valid || components.execution_attestations_valid)
   ) {
     return 'full';
   }
@@ -651,7 +1047,12 @@ function computeTrustTier(components: {
   }
 
   // Verified: has valid event chain or receipts
-  if (components.event_chain_valid || components.receipts_valid) {
+  if (
+    components.event_chain_valid ||
+    components.receipts_valid ||
+    components.vir_receipts_valid ||
+    components.web_receipts_valid
+  ) {
     return 'verified';
   }
 
@@ -668,14 +1069,38 @@ function computeTrustTier(components: {
 function computeProofTier(components: {
   envelope_valid: boolean;
   receipts_verified_count?: number;
+  vir_receipts_verified_count?: number;
+  vir_best_source?: VirSource;
+  web_receipts_verified_count?: number;
   attestations_verified_count?: number;
+  execution_attestations_verified_count?: number;
 }): ProofTier {
   if (!components.envelope_valid) return 'unknown';
 
   // Higher tiers win. Proof tiers are based on *at least one* verified component,
   // not on the all-or-nothing `*_valid` booleans.
-  if ((components.attestations_verified_count ?? 0) > 0) return 'sandbox';
+  if (
+    (components.attestations_verified_count ?? 0) > 0 ||
+    (components.execution_attestations_verified_count ?? 0) > 0
+  ) {
+    return 'sandbox';
+  }
+
   if ((components.receipts_verified_count ?? 0) > 0) return 'gateway';
+
+  if ((components.vir_receipts_verified_count ?? 0) > 0) {
+    if (
+      components.vir_best_source === 'tls_decrypt' ||
+      components.vir_best_source === 'gateway' ||
+      components.vir_best_source === 'interpose'
+    ) {
+      return 'gateway';
+    }
+  }
+
+  if ((components.web_receipts_verified_count ?? 0) > 0) {
+    return 'witnessed_web';
+  }
 
   return 'self';
 }
@@ -937,6 +1362,36 @@ export async function verifyProofBundle(
     };
   }
 
+  if (p.vir_receipts && p.vir_receipts.length > MAX_RECEIPTS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `vir_receipts exceeds max length (${MAX_RECEIPTS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.vir_receipts length exceeds limit (${MAX_RECEIPTS})`,
+        field: 'payload.vir_receipts',
+      },
+    };
+  }
+
+  if (p.web_receipts && p.web_receipts.length > MAX_RECEIPTS) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: `web_receipts exceeds max length (${MAX_RECEIPTS})`,
+        verified_at: now,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: `payload.web_receipts length exceeds limit (${MAX_RECEIPTS})`,
+        field: 'payload.web_receipts',
+      },
+    };
+  }
+
   if (p.attestations && p.attestations.length > MAX_ATTESTATIONS) {
     return {
       result: {
@@ -1045,6 +1500,75 @@ export async function verifyProofBundle(
         };
       }
       seenReceiptIds.add(rid);
+    }
+  }
+
+  if (p.web_receipts) {
+    const seenWebReceiptIds = new Set<string>();
+    for (let i = 0; i < p.web_receipts.length; i++) {
+      const rid = p.web_receipts[i].payload.receipt_id;
+      if (seenWebReceiptIds.has(rid)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate receipt_id in payload.web_receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be unique within payload.web_receipts',
+            field: `payload.web_receipts[${i}].payload.receipt_id`,
+          },
+        };
+      }
+      seenWebReceiptIds.add(rid);
+    }
+  }
+
+  if (p.vir_receipts) {
+    const seenVirIds = new Set<string>();
+    for (let i = 0; i < p.vir_receipts.length; i++) {
+      const entry = p.vir_receipts[i];
+      const record = isObjectRecord(entry) ? entry : null;
+      const payloadRecord = record && isObjectRecord(record.payload) ? record.payload : null;
+      const rid =
+        (record && typeof record.receipt_id === 'string' && record.receipt_id.length > 0
+          ? record.receipt_id
+          : undefined) ??
+        (payloadRecord && typeof payloadRecord.receipt_id === 'string' && payloadRecord.receipt_id.length > 0
+          ? payloadRecord.receipt_id
+          : undefined);
+
+      if (!rid) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'VIR receipt_id missing in payload.vir_receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be present for each payload.vir_receipts entry',
+            field: `payload.vir_receipts[${i}]`,
+          },
+        };
+      }
+
+      if (seenVirIds.has(rid)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Duplicate receipt_id in payload.vir_receipts',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'receipt_id must be unique within payload.vir_receipts',
+            field: `payload.vir_receipts[${i}]`,
+          },
+        };
+      }
+      seenVirIds.add(rid);
     }
   }
 
@@ -1173,7 +1697,7 @@ export async function verifyProofBundle(
 
   // 15. Validate individual components
   const payload = envelope.payload;
-  const componentResults: ProofBundleVerificationResult['component_results'] = {
+  const componentResults: NonNullable<ProofBundleVerificationResult['component_results']> = {
     envelope_valid: true,
   };
 
@@ -1646,24 +2170,237 @@ export async function verifyProofBundle(
     }
   }
 
-  // Verify receipt envelopes cryptographically (POH-US-003)
+  // POH-US-010: Build binding context from event chain for replay-safe receipt checks.
+  const bindingContext =
+    componentResults.event_chain_valid &&
+    payload.event_chain !== undefined &&
+    payload.event_chain.length > 0
+      ? {
+          expectedRunId: payload.event_chain[0].run_id,
+          allowedEventHashes: new Set(
+            payload.event_chain.map((e) => e.event_hash_b64u)
+          ),
+        }
+      : null;
+
+  const metadataRecord = isObjectRecord(payload.metadata) ? payload.metadata : null;
+
+  const metadataBountyNonce =
+    metadataRecord && typeof metadataRecord.bounty_nonce === 'string'
+      ? metadataRecord.bounty_nonce
+      : null;
+
+  const expectedVirNonce =
+    typeof options.expectedVirNonce === 'string' && options.expectedVirNonce.length > 0
+      ? options.expectedVirNonce
+      : metadataBountyNonce;
+
+  const expectedVirSubject =
+    typeof options.expectedVirSubject === 'string' && options.expectedVirSubject.length > 0
+      ? options.expectedVirSubject
+      : metadataRecord && typeof metadataRecord.bounty_subject_did === 'string'
+        ? metadataRecord.bounty_subject_did
+        : null;
+
+  const expectedVirScope =
+    typeof options.expectedVirScope === 'string' && options.expectedVirScope.length > 0
+      ? options.expectedVirScope
+      : metadataRecord && typeof metadataRecord.bounty_scope_hash_b64u === 'string'
+        ? metadataRecord.bounty_scope_hash_b64u
+        : null;
+
+  // Verify VIR receipts (R43 evidence-fusion path).
+  if (payload.vir_receipts !== undefined && payload.vir_receipts.length > 0) {
+    const virResults = await Promise.all(
+      payload.vir_receipts.map((r) =>
+        verifyVirReceiptEntry(
+          r,
+          bindingContext,
+          expectedVirNonce,
+          expectedVirSubject,
+          expectedVirScope
+        )
+      )
+    );
+
+    const signatureValidCount = virResults.filter((r) => r.signature_valid).length;
+    const verifiedCount = virResults.filter((r) => r.valid).length;
+
+    const criticalVirFailure = virResults.find(
+      (r) => !r.valid && r.code !== undefined && CRITICAL_VIR_CODES.has(r.code)
+    );
+
+    if (criticalVirFailure) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Critical VIR validation failure: ${criticalVirFailure.error ?? criticalVirFailure.code}`,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: criticalVirFailure.error ?? criticalVirFailure.code ?? 'Critical VIR validation failure',
+          field: 'payload.vir_receipts',
+        },
+      };
+    }
+
+    componentResults.vir_receipts_count = payload.vir_receipts.length;
+    componentResults.vir_receipts_signature_verified_count = signatureValidCount;
+    componentResults.vir_receipts_verified_count = verifiedCount;
+    componentResults.vir_receipts_valid = verifiedCount === payload.vir_receipts.length;
+
+    type VirCandidate = {
+      index: number;
+      source: VirSource;
+      timestampMs: number;
+      receiptId: string;
+      eventHash?: string;
+      payload: VirReceiptPayload;
+      claim: {
+        model_observed: string;
+        request_hash_b64u: string;
+        response_hash_b64u: string;
+        tokens_input: number;
+        tokens_output: number;
+        latency_ms: number;
+      };
+    };
+
+    const validVirCandidates: VirCandidate[] = [];
+
+    for (let i = 0; i < virResults.length; i++) {
+      const result = virResults[i];
+      if (result.risk_flags) {
+        for (const flag of result.risk_flags) modelIdentityRiskFlags.add(flag);
+      }
+      if (!result.valid || !result.source) continue;
+
+      const entry = payload.vir_receipts[i];
+      const parsed = parseVirReceiptEntry(entry);
+      if (!parsed.ok) continue;
+
+      const virPayload = parsed.parsed.payload;
+      const eventHash = virPayload.binding?.event_hash_b64u;
+      const timestampMs = Date.parse(virPayload.timestamp);
+
+      validVirCandidates.push({
+        index: i,
+        source: result.source,
+        timestampMs: Number.isFinite(timestampMs) ? timestampMs : Number.POSITIVE_INFINITY,
+        receiptId: virPayload.receipt_id,
+        eventHash: typeof eventHash === 'string' && eventHash.length > 0 ? eventHash : undefined,
+        payload: virPayload,
+        claim: {
+          model_observed: virPayload.model_observed ?? virPayload.model,
+          request_hash_b64u: virPayload.request_hash_b64u,
+          response_hash_b64u: virPayload.response_hash_b64u,
+          tokens_input: virPayload.tokens_input,
+          tokens_output: virPayload.tokens_output,
+          latency_ms: virPayload.latency_ms,
+        },
+      });
+    }
+
+    let bestCandidate: VirCandidate | undefined;
+    for (const c of validVirCandidates) {
+      if (!bestCandidate || compareVirCandidate(c, bestCandidate) < 0) {
+        bestCandidate = c;
+      }
+    }
+
+    if (bestCandidate) {
+      componentResults.vir_best_source = bestCandidate.source;
+    }
+
+    const candidatesByEvent = new Map<string, VirCandidate[]>();
+    for (const c of validVirCandidates) {
+      if (!c.eventHash) continue;
+      const arr = candidatesByEvent.get(c.eventHash) ?? [];
+      arr.push(c);
+      candidatesByEvent.set(c.eventHash, arr);
+    }
+
+    for (const [eventHash, candidates] of candidatesByEvent.entries()) {
+      const sorted = [...candidates].sort(compareVirCandidate);
+
+      const canonical = sorted[0];
+
+      for (let i = 1; i < sorted.length; i++) {
+        const other = sorted[i];
+
+        const samePriority = SOURCE_SCORE[other.source] === SOURCE_SCORE[canonical.source];
+        const conflicts =
+          canonical.claim.model_observed !== other.claim.model_observed ||
+          canonical.claim.request_hash_b64u !== other.claim.request_hash_b64u ||
+          canonical.claim.response_hash_b64u !== other.claim.response_hash_b64u ||
+          canonical.claim.tokens_input !== other.claim.tokens_input ||
+          canonical.claim.tokens_output !== other.claim.tokens_output ||
+          canonical.claim.latency_ms !== other.claim.latency_ms;
+
+        if (!conflicts) continue;
+
+        if (samePriority) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: `VIR evidence conflict for event_hash_b64u ${eventHash}`,
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'EVIDENCE_MISMATCH',
+              message:
+                `Conflicting same-tier VIR claims for event_hash_b64u ${eventHash} ` +
+                `(canonical source=${canonical.source}, conflicting source=${other.source})`,
+              field: 'payload.vir_receipts',
+            },
+          };
+        }
+
+        const canonicalConflicts = Array.isArray(canonical.payload.evidence_conflicts)
+          ? canonical.payload.evidence_conflicts
+          : [];
+
+        const reportedModelConflict = canonicalConflicts.some(
+          (conflict) =>
+            isObjectRecord(conflict) &&
+            conflict.field === 'model' &&
+            conflict.authoritative_source === canonical.source &&
+            conflict.divergent_source === other.source
+        );
+
+        if (!reportedModelConflict && canonical.claim.model_observed !== other.claim.model_observed) {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: `VIR conflict is unreported for event_hash_b64u ${eventHash}`,
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'EVIDENCE_MISMATCH',
+              message: 'EVIDENCE_CONFLICT_UNREPORTED',
+              field: 'payload.vir_receipts',
+            },
+          };
+        }
+      }
+    }
+
+    if (virResults.some((r) => !r.valid)) {
+      modelIdentityRiskFlags.add('VIR_VERIFY_PARTIAL_FAILURE');
+    }
+  }
+
+  // Verify gateway receipt envelopes cryptographically (POH-US-003)
   // Each receipt is verified with its signer DID (clawproxy DID) using full
   // signature verification — not just structural validation.
   if (payload.receipts !== undefined && payload.receipts.length > 0) {
-    // POH-US-010: Require receipts to be bound to this bundle's event chain.
-    // Without binding, a signature-valid receipt could be replayed across bundles.
-    const bindingContext =
-      componentResults.event_chain_valid &&
-      payload.event_chain !== undefined &&
-      payload.event_chain.length > 0
-        ? {
-            expectedRunId: payload.event_chain[0].run_id,
-            allowedEventHashes: new Set(
-              payload.event_chain.map((e) => e.event_hash_b64u)
-            ),
-          }
-        : null;
-
     const receiptResults = await Promise.all(
       payload.receipts.map((r) =>
         verifyReceiptEnvelope(
@@ -1695,6 +2432,110 @@ export async function verifyProofBundle(
     } catch {
       modelIdentityTier = 'unknown';
       modelIdentityRiskFlags.add('MODEL_IDENTITY_VERIFY_FAILED');
+    }
+  }
+
+  // Verify witnessed-web receipts (POH-US-018)
+  if (payload.web_receipts !== undefined && payload.web_receipts.length > 0) {
+    const webReceiptResults = await Promise.all(
+      payload.web_receipts.map((r) =>
+        verifyWebReceiptEnvelope(
+          r,
+          options.allowlistedWitnessSignerDids,
+          bindingContext
+        )
+      )
+    );
+
+    const signatureValidCount = webReceiptResults.filter((r) => r.signature_valid).length;
+    const verifiedCount = webReceiptResults.filter((r) => r.valid).length;
+
+    componentResults.web_receipts_count = payload.web_receipts.length;
+    componentResults.web_receipts_signature_verified_count = signatureValidCount;
+    componentResults.web_receipts_verified_count = verifiedCount;
+    componentResults.web_receipts_valid = verifiedCount === payload.web_receipts.length;
+
+    if (webReceiptResults.some((r) => !r.valid)) {
+      modelIdentityRiskFlags.add('WEB_RECEIPT_VERIFY_PARTIAL_FAILURE');
+    }
+
+    // witnessed_web can only claim closed opaque identity, never gateway-equivalent model identity.
+    if (modelIdentityTier === 'unknown' && verifiedCount > 0) {
+      modelIdentityTier = 'closed_opaque';
+    }
+  }
+
+  // Optional in-band execution attestations (TEE/sandbox) bound to this bundle.
+  if (options.execution_attestations && options.execution_attestations.length > 0) {
+    const expectedBundleHash = envelope.payload_hash_b64u;
+    const expectedRunId = bindingContext?.expectedRunId ?? null;
+
+    let executionVerifiedCount = 0;
+    let teeExecutionVerifiedCount = 0;
+
+    for (let i = 0; i < options.execution_attestations.length; i++) {
+      const attEnv = options.execution_attestations[i]!;
+      const verification = await verifyExecutionAttestation(attEnv, {
+        allowlistedSignerDids: options.allowlistedExecutionAttestationSignerDids,
+        teeRootAllowlist: options.teeRootAllowlist,
+        teeTcbAllowlist: options.teeTcbAllowlist,
+        teeRootRevoked: options.teeRootRevoked,
+        teeTcbRevoked: options.teeTcbRevoked,
+      });
+
+      if (verification.result.status !== 'VALID') {
+        if (verification.error?.code === 'REVOKED') {
+          return {
+            result: {
+              status: 'INVALID',
+              reason: verification.result.reason,
+              verified_at: now,
+              bundle_id: payload.bundle_id,
+              agent_did: payload.agent_did,
+            },
+            error: {
+              code: 'REVOKED',
+              message: verification.error.message,
+              field: `execution_attestations[${i}]`,
+            },
+          };
+        }
+
+        modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_VERIFY_PARTIAL_FAILURE');
+        continue;
+      }
+
+      const attPayload = attEnv.payload;
+      if (attPayload.agent_did !== payload.agent_did) {
+        modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_BINDING_MISMATCH');
+        continue;
+      }
+
+      if (!expectedRunId || attPayload.run_id !== expectedRunId) {
+        modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_BINDING_MISMATCH');
+        continue;
+      }
+
+      if (attPayload.proof_bundle_hash_b64u !== expectedBundleHash) {
+        modelIdentityRiskFlags.add('EXECUTION_ATTESTATION_BINDING_MISMATCH');
+        continue;
+      }
+
+      executionVerifiedCount += 1;
+
+      if (attPayload.execution_type === 'tee_execution') {
+        teeExecutionVerifiedCount += 1;
+      }
+    }
+
+    componentResults.execution_attestations_count = options.execution_attestations.length;
+    componentResults.execution_attestations_verified_count = executionVerifiedCount;
+    componentResults.execution_attestations_valid =
+      executionVerifiedCount === options.execution_attestations.length;
+    componentResults.tee_execution_verified_count = teeExecutionVerifiedCount;
+
+    if (teeExecutionVerifiedCount > 0) {
+      modelIdentityTier = 'tee_measured';
     }
   }
 
@@ -1733,8 +2574,55 @@ export async function verifyProofBundle(
   }
 
   // 16. Compute tiers based on validated components
-  const trustTier = computeTrustTier(componentResults);
-  const proofTier = computeProofTier(componentResults);
+  let trustTier = computeTrustTier(componentResults);
+  let proofTier = computeProofTier(componentResults);
+
+  // CVF-US-030: Profile-Gated Deterministic Enforcement (PGDE)
+  const enforcementPhase = options.coverage_enforcement_phase ?? 'observe';
+  const sentinels = metadataRecord?.sentinels;
+
+  const claimedInterpose =
+    isObjectRecord(sentinels) && sentinels.interpose_active === true;
+
+  let cryptoProvenInterpose = false;
+
+  if (claimedInterpose) {
+    if (payload.vir_receipts) {
+      for (const entry of payload.vir_receipts) {
+        const parsed = parseVirReceiptEntry(entry);
+        if (!parsed.ok) continue;
+        if (parsed.parsed.payload.process_attestation?.interpose_active === true) {
+          cryptoProvenInterpose = true;
+          break;
+        }
+      }
+    }
+
+    if (!cryptoProvenInterpose && payload.receipts) {
+      cryptoProvenInterpose = payload.receipts.some((env) => {
+        const payloadRecord = env.payload as unknown as Record<string, unknown>;
+        return payloadRecord.source === 'interpose_fsm';
+      });
+    }
+  }
+
+  const coverageInvariantFailed = claimedInterpose ? !cryptoProvenInterpose : true;
+
+  if (coverageInvariantFailed && enforcementPhase !== 'observe') {
+    if (enforcementPhase === 'warn') {
+      modelIdentityRiskFlags.add('COVERAGE_DEGRADED_NO_INTERPOSE');
+    } else if (enforcementPhase === 'enforce') {
+      modelIdentityRiskFlags.add('COVERAGE_INVARIANT_FAILED');
+
+      if (proofTier === 'gateway' || proofTier === 'sandbox') {
+        proofTier = 'self';
+      }
+
+      if (trustTier === 'full' || trustTier === 'verified' || trustTier === 'attested') {
+        trustTier = 'basic';
+      }
+    }
+  }
 
   // 17. Return success with computed tiers
   return {

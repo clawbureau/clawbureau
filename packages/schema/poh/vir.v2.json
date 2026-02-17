@@ -1,0 +1,145 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.vir.v2.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verifiable Inference Receipt v2",
+  "description": "VIR v2 with legal binding and deterministic selective-disclosure commitments.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "source",
+    "provider",
+    "model_claimed",
+    "model_observed",
+    "agent_did",
+    "timestamp",
+    "legal_binding",
+    "selective_disclosure"
+  ],
+  "properties": {
+    "receipt_version": { "const": "2" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "string",
+      "enum": ["tls_decrypt", "gateway", "interpose", "preload", "sni"]
+    },
+    "provider": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "model_claimed": { "type": "string" },
+    "model_observed": { "type": "string" },
+    "request_hash_b64u": { "type": "string", "minLength": 8 },
+    "response_hash_b64u": { "type": "string", "minLength": 8 },
+    "tokens_input": { "type": "number", "minimum": 0 },
+    "tokens_output": { "type": "number", "minimum": 0 },
+    "latency_ms": { "type": "number", "minimum": 0 },
+    "agent_did": { "type": "string", "pattern": "^did:" },
+    "timestamp": { "type": "string", "format": "date-time" },
+
+    "binding": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "event_hash_b64u": { "type": "string", "minLength": 8 },
+        "nonce": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string", "pattern": "^did:" },
+        "subject_did": { "type": "string", "pattern": "^did:" },
+        "scope": { "type": "string", "minLength": 1 },
+        "scope_hash_b64u": { "type": "string", "minLength": 8 }
+      }
+    },
+
+    "legal_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nonce", "subject_did", "scope_hash_b64u"],
+      "properties": {
+        "nonce": { "type": "string", "minLength": 8 },
+        "subject_did": { "type": "string", "pattern": "^did:" },
+        "scope_hash_b64u": { "type": "string", "minLength": 8 },
+        "job_id": { "type": "string" },
+        "contract_id": { "type": "string" },
+        "policy_hash_b64u": { "type": "string", "minLength": 8 },
+        "jurisdiction": { "type": "string" }
+      }
+    },
+
+    "evidence_conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "field",
+          "authoritative_source",
+          "divergent_source",
+          "authoritative_value",
+          "divergent_value"
+        ],
+        "properties": {
+          "field": { "type": "string", "minLength": 1 },
+          "authoritative_source": {
+            "type": "string",
+            "enum": ["tls_decrypt", "gateway", "interpose", "preload", "sni"]
+          },
+          "divergent_source": {
+            "type": "string",
+            "enum": ["tls_decrypt", "gateway", "interpose", "preload", "sni"]
+          },
+          "authoritative_value": {},
+          "divergent_value": {}
+        }
+      }
+    },
+
+    "selective_disclosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "disclosure_algorithm",
+        "merkle_root_b64u",
+        "redacted_leaf_hashes_b64u",
+        "disclosed_leaves"
+      ],
+      "properties": {
+        "disclosure_algorithm": {
+          "type": "string",
+          "enum": ["vir_v2_typed_lexicographical"]
+        },
+        "merkle_root_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "redacted_leaf_hashes_b64u": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8
+          }
+        },
+        "disclosed_leaves": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "value", "salt_b64u"],
+            "properties": {
+              "type": { "type": "string", "enum": ["string", "number", "boolean", "null"] },
+              "value": {},
+              "salt_b64u": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "minLength": 8
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "metadata": { "type": "object" }
+  }
+}
