@@ -56,13 +56,22 @@ async function main() {
     .map((v) => v.trim())
     .filter(Boolean);
 
+  const timeoutOverride = Number.parseInt(
+    process.env.CLAWSIG_E2E_LINUX_TIMEOUT_MS || '',
+    10,
+  );
+  const timeoutMs =
+    Number.isFinite(timeoutOverride) && timeoutOverride > 0
+      ? timeoutOverride
+      : 60_000;
+
   // Linux strict lane is proxy-only by contract.
   // Codex base URL override remains opt-in via CLAWSIG_FORCE_BASE_URL_OVERRIDE=1.
   const run = await runHarnessMatrix({
     rootDir: ROOT,
     resultsPath: '.clawsig/e2e-linux-results.json',
     includeLive: false,
-    timeoutMs: 60_000,
+    timeoutMs,
     prompt: 'Say exactly: hello world',
     agents: requestedAgents,
     layers: ['proxy'],

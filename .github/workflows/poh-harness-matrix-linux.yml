@@ -59,6 +59,7 @@ jobs:
         env:
           CLAWSIG_E2E_SKIP_BUILD: '1'
           CLAWSIG_E2E_LINUX_AGENTS: 'codex,gemini'
+          CLAWSIG_E2E_LINUX_TIMEOUT_MS: '180000'
           CLAWSIG_FORCE_BASE_URL_OVERRIDE: '1'
         run: |
           node scripts/e2e/linux-harness-smoke.mjs

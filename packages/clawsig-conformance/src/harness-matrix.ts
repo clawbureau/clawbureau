@@ -335,6 +335,11 @@ async function runHarnessCase(params: {
 
       if (!env['OPENAI_API_KEY']) env['OPENAI_API_KEY'] = 'sk-clawsig-mock';
       if (!env['ANTHROPIC_API_KEY']) env['ANTHROPIC_API_KEY'] = 'sk-ant-clawsig-mock';
+      if (!env['GOOGLE_API_KEY']) env['GOOGLE_API_KEY'] = 'sk-google-clawsig-mock';
+      if (!env['GEMINI_API_KEY']) env['GEMINI_API_KEY'] = 'sk-gemini-clawsig-mock';
+
+      // Keep Gemini non-interactive in CI/non-TTY runs.
+      if (!env['GEMINI_CLI_NO_RELAUNCH']) env['GEMINI_CLI_NO_RELAUNCH'] = 'true';
     } else {
       // Live mode still routes through clawproxy so gateway receipts are emitted.
       env['CLAWSIG_USE_CLAWPROXY'] = '1';
