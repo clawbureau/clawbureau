@@ -51,6 +51,8 @@ const virEnvelope = readJson('packages/schema/poh/vir_envelope.v1.json');
 const virEnvelopeV2 = readJson('packages/schema/poh/vir_envelope.v2.json');
 const coverageAttestation = readJson('packages/schema/poh/coverage_attestation.v1.json');
 const coverageAttestationEnvelope = readJson('packages/schema/poh/coverage_attestation_envelope.v1.json');
+const binarySemanticEvidence = readJson('packages/schema/poh/binary_semantic_evidence.v1.json');
+const binarySemanticEvidenceEnvelope = readJson('packages/schema/poh/binary_semantic_evidence_envelope.v1.json');
 const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
 const proofBundleEnvelope = readJson('packages/schema/poh/proof_bundle_envelope.v1.json');
 const urm = readJson('packages/schema/poh/urm.v1.json');
@@ -93,6 +95,8 @@ ajv.addSchema(virEnvelope);
 ajv.addSchema(virEnvelopeV2);
 ajv.addSchema(coverageAttestation);
 ajv.addSchema(coverageAttestationEnvelope);
+ajv.addSchema(binarySemanticEvidence);
+ajv.addSchema(binarySemanticEvidenceEnvelope);
 ajv.addSchema(proofBundle);
 ajv.addSchema(proofBundleEnvelope);
 
@@ -128,6 +132,7 @@ const code = standaloneCode(ajv, {
   validateVirEnvelopeV2: virEnvelopeV2.$id,
   validateCoverageAttestationV1: coverageAttestation.$id,
   validateCoverageAttestationEnvelopeV1: coverageAttestationEnvelope.$id,
+  validateBinarySemanticEvidenceEnvelopeV1: binarySemanticEvidenceEnvelope.$id,
   validateExecutionAttestationEnvelopeV1: executionAttestationEnvelope.$id,
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,

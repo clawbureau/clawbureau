@@ -155,6 +155,42 @@ function makeCoverageAttestationEnvelope() {
   };
 }
 
+function makeBinarySemanticEvidenceEnvelope() {
+  return {
+    envelope_version: '1',
+    envelope_type: 'binary_semantic_evidence',
+    payload: {
+      evidence_version: '1',
+      binary_hash_b64u: b64u(16),
+      binary_profile: {
+        target_architecture: 'arm64',
+        linkage: 'DYNAMIC',
+        symbols: 'INTACT',
+        is_sip_protected: false,
+      },
+      extracted_claims: {
+        network_egress: 'PRESENT',
+        dynamic_code_generation: 'ABSENT',
+      },
+      causality_metrics: {
+        merkle_chain_intact: true,
+        unattested_children_spawned: false,
+      },
+      forensic_metrics: {
+        static_analysis_budget_exhausted: false,
+        parser_timeout: false,
+        normalized_regions_scanned: 12,
+      },
+    },
+    payload_hash_b64u: b64u(16),
+    hash_algorithm: 'SHA-256',
+    signature_b64u: b64u(86),
+    algorithm: 'Ed25519',
+    signer_did: 'did:key:zSchemaContractBinaryWitness0001',
+    issued_at: '2026-02-17T00:00:00Z',
+  };
+}
+
 describe('schema/runtime contract wiring', () => {
   it('accepts proof bundles with vir_receipts carrying VIR v2 envelopes', () => {
     const envelope = makeProofBundleEnvelope({
@@ -189,6 +225,19 @@ describe('schema/runtime contract wiring', () => {
       agent_did: 'did:key:zSchemaContractSigner0001',
       event_chain: makeBaseEventChain(),
       coverage_attestations: [makeCoverageAttestationEnvelope()],
+    });
+
+    const out = validateProofBundleEnvelopeV1(envelope);
+    expect(out.valid).toBe(true);
+  });
+
+  it('accepts proof bundles with binary_semantic_evidence_attestations field wired to schema refs', () => {
+    const envelope = makeProofBundleEnvelope({
+      bundle_version: '1',
+      bundle_id: 'bundle_contract_binary_semantics_001',
+      agent_did: 'did:key:zSchemaContractSigner0001',
+      event_chain: makeBaseEventChain(),
+      binary_semantic_evidence_attestations: [makeBinarySemanticEvidenceEnvelope()],
     });
 
     const out = validateProofBundleEnvelopeV1(envelope);

@@ -249,6 +249,13 @@
         "$ref": "https://schemas.clawbureau.org/claw.poh.coverage_attestation_envelope.v1.json"
       }
     },
+    "binary_semantic_evidence_attestations": {
+      "type": "array",
+      "description": "Optional signed binary semantic evidence envelopes for deterministic static-vs-dynamic capability analysis.",
+      "items": {
+        "$ref": "https://schemas.clawbureau.org/claw.poh.binary_semantic_evidence_envelope.v1.json"
+      }
+    },
     "tool_receipts": {
       "type": "array",
       "description": "Tool receipt payloads (Coverage MT). Raw ToolReceiptPayload objects — not envelope-wrapped.",
@@ -433,6 +440,7 @@
     { "required": ["receipts"] },
     { "required": ["vir_receipts"] },
     { "required": ["web_receipts"] },
+    { "required": ["binary_semantic_evidence_attestations"] },
     { "required": ["tool_receipts"] },
     { "required": ["side_effect_receipts"] },
     { "required": ["human_approval_receipts"] },
