@@ -21,6 +21,7 @@ import type {
   ProofBundlePayload,
   ProofBundleVerificationResult,
   VerificationError,
+  RateLimitClaim,
   TrustTier,
   ProofTier,
   ModelIdentityTier,
@@ -407,6 +408,130 @@ function validateEventChain(
   }
 
   return { valid: true, chain_root_hash: chainRootHash ?? undefined };
+}
+
+function hasFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+function validateRateLimitClaims(
+  claims: RateLimitClaim[],
+  expectedRunId: string | null
+):
+  | { ok: true }
+  | {
+      ok: false;
+      code:
+        | 'RATE_LIMIT_WINDOW_INVALID'
+        | 'RATE_LIMIT_CLAIM_INCONSISTENT'
+        | 'RATE_LIMIT_EXCEEDED';
+      message: string;
+      field: string;
+    } {
+  for (let i = 0; i < claims.length; i++) {
+    const c = claims[i];
+
+    const windowStartMs = Date.parse(c.window_start);
+    const windowEndMs = Date.parse(c.window_end);
+    if (!Number.isFinite(windowStartMs) || !Number.isFinite(windowEndMs)) {
+      return {
+        ok: false,
+        code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+        message: 'rate_limit_claim window_start/window_end must be valid ISO-8601 timestamps',
+        field: `rate_limit_claims[${i}]`,
+      };
+    }
+
+    if (windowStartMs > windowEndMs) {
+      return {
+        ok: false,
+        code: 'RATE_LIMIT_WINDOW_INVALID',
+        message: 'rate_limit_claim window_start must be less than or equal to window_end',
+        field: `rate_limit_claims[${i}].window_start`,
+      };
+    }
+
+    if (
+      !hasFiniteNonNegativeNumber(c.max_requests) ||
+      !hasFiniteNonNegativeNumber(c.observed_requests)
+    ) {
+      return {
+        ok: false,
+        code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+        message: 'rate_limit_claim max_requests and observed_requests must be finite non-negative numbers',
+        field: `rate_limit_claims[${i}]`,
+      };
+    }
+
+    if (c.observed_requests > c.max_requests) {
+      return {
+        ok: false,
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'rate_limit_claim observed_requests exceeds max_requests',
+        field: `rate_limit_claims[${i}].observed_requests`,
+      };
+    }
+
+    const pairs: Array<
+      [
+        max: number | undefined,
+        observed: number | undefined,
+        label: 'tokens_input' | 'tokens_output'
+      ]
+    > = [
+      [c.max_tokens_input, c.observed_tokens_input, 'tokens_input'],
+      [c.max_tokens_output, c.observed_tokens_output, 'tokens_output'],
+    ];
+
+    for (const [max, observed, label] of pairs) {
+      const maxSet = max !== undefined;
+      const observedSet = observed !== undefined;
+
+      if (maxSet !== observedSet) {
+        return {
+          ok: false,
+          code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+          message: `rate_limit_claim max_${label} and observed_${label} must be provided together`,
+          field: `rate_limit_claims[${i}]`,
+        };
+      }
+
+      if (!maxSet || !observedSet) continue;
+
+      if (!hasFiniteNonNegativeNumber(max) || !hasFiniteNonNegativeNumber(observed)) {
+        return {
+          ok: false,
+          code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+          message: `rate_limit_claim max_${label} and observed_${label} must be finite non-negative numbers`,
+          field: `rate_limit_claims[${i}]`,
+        };
+      }
+
+      if (observed > max) {
+        return {
+          ok: false,
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: `rate_limit_claim observed_${label} exceeds max_${label}`,
+          field: `rate_limit_claims[${i}].observed_${label}`,
+        };
+      }
+    }
+
+    if (
+      expectedRunId !== null &&
+      c.run_id !== undefined &&
+      c.run_id !== expectedRunId
+    ) {
+      return {
+        ok: false,
+        code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+        message: 'rate_limit_claim run_id does not match proof bundle run_id',
+        field: `rate_limit_claims[${i}].run_id`,
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 /**
@@ -2204,6 +2329,40 @@ export async function verifyProofBundle(
     if (chainResult.chain_root_hash) {
       componentResults.chain_root_hash = chainResult.chain_root_hash;
     }
+  }
+
+  // CPL-V2-001: deterministic, fail-closed rate-limit claim semantics.
+  if (
+    payload.rate_limit_claims !== undefined &&
+    payload.rate_limit_claims.length > 0
+  ) {
+    const expectedRunId =
+      payload.event_chain && payload.event_chain.length > 0
+        ? payload.event_chain[0].run_id
+        : null;
+
+    const rateCheck = validateRateLimitClaims(
+      payload.rate_limit_claims,
+      expectedRunId
+    );
+
+    if (!rateCheck.ok) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: rateCheck.message,
+          verified_at: now,
+        },
+        error: {
+          code: rateCheck.code,
+          message: rateCheck.message,
+          field: `payload.${rateCheck.field}`,
+        },
+      };
+    }
+
+    componentResults.rate_limit_claims_count = payload.rate_limit_claims.length;
+    componentResults.rate_limit_claims_valid = true;
   }
 
   // POH-US-016/017: Prompt commitments (optional; fail-closed when present)

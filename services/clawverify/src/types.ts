@@ -344,6 +344,9 @@ export type VerificationErrorCode =
   | 'UNKNOWN_ALGORITHM'
   | 'UNKNOWN_HASH_ALGORITHM'
   | 'HASH_MISMATCH'
+  | 'RATE_LIMIT_EXCEEDED'
+  | 'RATE_LIMIT_CLAIM_INCONSISTENT'
+  | 'RATE_LIMIT_WINDOW_INVALID'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
   | 'PROMPT_COMMITMENT_MISMATCH'
@@ -1138,6 +1141,22 @@ export interface ProofBundleMetadata {
   [key: string]: unknown;
 }
 
+/** Optional deterministic rate-limit claim carried in proof bundles (CPL-V2-001). */
+export interface RateLimitClaim {
+  claim_version: '1';
+  scope: 'agent' | 'model' | 'tool';
+  scope_key: string;
+  window_start: string;
+  window_end: string;
+  max_requests: number;
+  observed_requests: number;
+  max_tokens_input?: number;
+  observed_tokens_input?: number;
+  max_tokens_output?: number;
+  observed_tokens_output?: number;
+  run_id?: string;
+}
+
 /** Proof bundle payload structure */
 export interface ProofBundlePayload {
   bundle_version: '1';
@@ -1150,6 +1169,7 @@ export interface ProofBundlePayload {
   web_receipts?: SignedEnvelope<WebReceiptPayload>[];
   coverage_attestations?: SignedEnvelope<CoverageAttestationPayload>[];
   binary_semantic_evidence_attestations?: SignedEnvelope<BinarySemanticEvidencePayload>[];
+  rate_limit_claims?: RateLimitClaim[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
 }
@@ -1224,6 +1244,9 @@ export interface ProofBundleVerificationResult {
     web_receipts_count?: number;
     coverage_attestations_count?: number;
     binary_semantic_evidence_count?: number;
+    /** CPL-V2-001: deterministic rate-limit claim validation results. */
+    rate_limit_claims_valid?: boolean;
+    rate_limit_claims_count?: number;
     /** Number of coverage attestations that passed cryptographic signature+hash verification. */
     coverage_attestations_signature_verified_count?: number;
     /** Number of coverage attestations that passed verification + bundle binding + semantic invariants. */

@@ -221,6 +221,23 @@ function makeToolReceiptEnvelopeV2() {
   };
 }
 
+function makeRateLimitClaim() {
+  return {
+    claim_version: '1',
+    scope: 'agent',
+    scope_key: 'did:key:zSchemaContractSigner0001',
+    window_start: '2026-02-17T00:00:00Z',
+    window_end: '2026-02-17T00:05:00Z',
+    max_requests: 5,
+    observed_requests: 3,
+    max_tokens_input: 500,
+    observed_tokens_input: 320,
+    max_tokens_output: 700,
+    observed_tokens_output: 410,
+    run_id: 'run_contract_001',
+  };
+}
+
 describe('schema/runtime contract wiring', () => {
   it('accepts proof bundles with vir_receipts carrying VIR v2 envelopes', () => {
     const envelope = makeProofBundleEnvelope({
@@ -268,6 +285,19 @@ describe('schema/runtime contract wiring', () => {
       agent_did: 'did:key:zSchemaContractSigner0001',
       event_chain: makeBaseEventChain(),
       binary_semantic_evidence_attestations: [makeBinarySemanticEvidenceEnvelope()],
+    });
+
+    const out = validateProofBundleEnvelopeV1(envelope);
+    expect(out.valid).toBe(true);
+  });
+
+  it('accepts proof bundles with rate_limit_claims wired to schema refs', () => {
+    const envelope = makeProofBundleEnvelope({
+      bundle_version: '1',
+      bundle_id: 'bundle_contract_rate_limit_001',
+      agent_did: 'did:key:zSchemaContractSigner0001',
+      event_chain: makeBaseEventChain(),
+      rate_limit_claims: [makeRateLimitClaim()],
     });
 
     const out = validateProofBundleEnvelopeV1(envelope);

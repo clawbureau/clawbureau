@@ -228,6 +228,9 @@ export type VerificationErrorCode =
   | 'DISCLOSURE_ROOT_MISMATCH'
   | 'DISCLOSURE_TYPE_MISMATCH'
   | 'RECEIPT_BINDING_MISMATCH'
+  | 'RATE_LIMIT_EXCEEDED'
+  | 'RATE_LIMIT_CLAIM_INCONSISTENT'
+  | 'RATE_LIMIT_WINDOW_INVALID'
   | 'AGGREGATE_BUNDLE_INVALID'
   | 'AGGREGATE_SIGNER_MISMATCH'
   | 'AGGREGATE_MEMBER_INVALID'
@@ -1040,6 +1043,24 @@ export interface DelegationReceiptPayload {
   binding?: Record<string, unknown>;
 }
 
+/**
+ * Optional deterministic rate-limit claim carried in proof bundles (CPL-V2-001).
+ */
+export interface RateLimitClaim {
+  claim_version: '1';
+  scope: 'agent' | 'model' | 'tool';
+  scope_key: string;
+  window_start: string;
+  window_end: string;
+  max_requests: number;
+  observed_requests: number;
+  max_tokens_input?: number;
+  observed_tokens_input?: number;
+  max_tokens_output?: number;
+  observed_tokens_output?: number;
+  run_id?: string;
+}
+
 /** Proof bundle payload structure (matches poh/proof_bundle.v1.json) */
 export interface ProofBundlePayload {
   bundle_version: '1';
@@ -1054,6 +1075,7 @@ export interface ProofBundlePayload {
   side_effect_receipts?: SideEffectReceiptPayload[];
   human_approval_receipts?: HumanApprovalReceiptPayload[];
   delegation_receipts?: DelegationReceiptPayload[];
+  rate_limit_claims?: RateLimitClaim[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
 }
@@ -1133,6 +1155,10 @@ export interface ProofBundleVerificationResult {
     /** CPL-US-006: tool receipt validation results. */
     tool_receipts_valid?: boolean;
     tool_receipts_count?: number;
+
+    /** CPL-V2-001: deterministic rate-limit claim validation results. */
+    rate_limit_claims_valid?: boolean;
+    rate_limit_claims_count?: number;
 
     /** CPL-US-007: side-effect receipt validation results. */
     side_effect_receipts_valid?: boolean;

@@ -1,0 +1,42 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "bundle_rate_limit_window_invalid_001",
+    "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "event_chain": [
+      {
+        "event_id": "bundle_rate_limit_window_invalid_001_evt_001",
+        "run_id": "run_rate_limit_window_invalid_001",
+        "event_type": "llm_call",
+        "timestamp": "2026-02-16T00:00:00.000Z",
+        "payload_hash_b64u": "eC7MvUdofU43kKvauxxYCREzMmiecsUIDBVHsPQ-oQU",
+        "prev_hash_b64u": null,
+        "event_hash_b64u": "FhHhdbPtQuoc6RRkFnyMYa3u9bD1d6pjdJI60lCVzYQ"
+      }
+    ],
+    "rate_limit_claims": [
+      {
+        "claim_version": "1",
+        "scope": "agent",
+        "scope_key": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "window_start": "2026-02-16T00:06:00.000Z",
+        "window_end": "2026-02-16T00:05:00.000Z",
+        "max_requests": 5,
+        "observed_requests": 3,
+        "max_tokens_input": 500,
+        "observed_tokens_input": 300,
+        "max_tokens_output": 700,
+        "observed_tokens_output": 420,
+        "run_id": "run_rate_limit_window_invalid_001"
+      }
+    ]
+  },
+  "payload_hash_b64u": "fneOjWVrpvXYaFdSYOt5WeecHq4oHnKQi92K24lm6Mk",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "Ct5_yatAKHswRb7IoThVrGVNqINEjLfUcY9HjDm_8CjMotba0Qk2ebr8_rF5eeBTkRYYUsoh8xKvVnfRlaJhBw",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "issued_at": "2026-02-16T00:00:02.000Z"
+}

@@ -138,3 +138,34 @@ Validation:
 - `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
 - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
 - `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
+
+---
+
+2026-02-18 — CPL-V2-001 rate-limit semantics lane (schema + verifier + conformance)
+
+- Extended additive proof bundle schema with deterministic rate-limit claims:
+  - `packages/schema/poh/proof_bundle.v1.json`
+  - new optional `rate_limit_claims[]` entries (scope/window/max/observed requests + token counters)
+- Implemented fail-closed proof-bundle checks in core + service verifiers:
+  - `RATE_LIMIT_WINDOW_INVALID` for `window_start > window_end`
+  - `RATE_LIMIT_CLAIM_INCONSISTENT` for malformed paired fields/run-id mismatches
+  - `RATE_LIMIT_EXCEEDED` when observed usage exceeds declared maxima
+- Implemented aggregate cross-bundle checks in core verifier:
+  - per agent/scope/window claim consistency reconciliation
+  - deterministic burst detection by summing observed counts across members
+- Added reason-code documentation and CLI hints for new rate-limit reason codes.
+- Added executable conformance vectors under:
+  - `packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/`
+    - proof bundle pass + fail cases
+    - aggregate bundle inconsistent + exceeded cases
+  - wired in `packages/schema/fixtures/protocol-conformance/manifest.v1.json`
+- Regenerated core/service AJV standalone validators after schema update.
+
+Validation:
+- `cd packages/clawverify-core && npm run typecheck && npm run build` ✅
+- `cd packages/clawverify-cli && npm run build` ✅
+- `cd services/clawverify && npm run typecheck && npm test` ✅
+- `node services/clawverify/scripts/check-schema-runtime-sync.mjs` ✅
+- `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
+- `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅
+- `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅

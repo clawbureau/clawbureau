@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-17
+> **Last reviewed:** 2026-02-18
 > **Source of truth:** `docs/roadmaps/*/prd.json` + `docs/roadmaps/*/progress.txt`
 >
 > **Scope:**
@@ -16,7 +16,7 @@ Roadmaps are the **execution layer** of planning: concrete stories + progress lo
 
 - **Clawsig Protocol v0.2**
   - Folder: `docs/roadmaps/clawsig-protocol-v0.2/`
-  - Status: partially shipped — CPL-V2-002..005 complete (PRs #281/#282/#283), CPL-V2-001 remains open
+  - Status: implementation complete in lane branch — CPL-V2-001..005 pass (CPL-V2-001 pending merge)
 
 - **Clawcompiler bootstrap** (deterministic compiled-evidence schemas + conformance scaffolding)
   - Folder: `docs/roadmaps/clawcompiler/`

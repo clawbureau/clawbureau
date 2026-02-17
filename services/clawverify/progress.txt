@@ -597,3 +597,34 @@ Started: 2026-02-02T03:08:26.937416
   - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts`
   - `node scripts/protocol/run-clawsig-verified-pr.mjs`
 ---
+
+## 2026-02-18 - CPL-V2-001 rate-limit semantics (service + core parity)
+- What was implemented
+  - Added additive `rate_limit_claims[]` support to proof bundle schema:
+    - `packages/schema/poh/proof_bundle.v1.json`
+  - Implemented deterministic fail-closed proof-bundle checks in:
+    - `packages/clawverify-core/src/verify-proof-bundle.ts`
+    - `services/clawverify/src/verify-proof-bundle.ts`
+    - reason codes: `RATE_LIMIT_WINDOW_INVALID`, `RATE_LIMIT_CLAIM_INCONSISTENT`, `RATE_LIMIT_EXCEEDED`
+  - Implemented aggregate cross-member reconciliation in core:
+    - `packages/clawverify-core/src/verify-aggregate-bundle.ts`
+    - enforces claim-limit consistency and burst-limit accumulation by agent/scope/window.
+  - Wired reason-code hints + registry docs:
+    - `packages/clawverify-cli/src/hints.ts`
+    - `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md`
+  - Added executable protocol-conformance vectors:
+    - `packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/*`
+    - manifest entries in `packages/schema/fixtures/protocol-conformance/manifest.v1.json`
+  - Regenerated AJV standalone validators and extended schema/runtime contract test:
+    - `packages/clawverify-core/src/schema-validators.generated.ts`
+    - `services/clawverify/src/schema-validators.generated.ts`
+    - `services/clawverify/test/schema-runtime-contract.test.ts`
+- Quality checks
+  - `cd packages/clawverify-core && npm run typecheck && npm run build`
+  - `cd packages/clawverify-cli && npm run build`
+  - `cd services/clawverify && npm run typecheck && npm test`
+  - `node services/clawverify/scripts/check-schema-runtime-sync.mjs`
+  - `node scripts/protocol/run-clawsig-protocol-conformance.mjs`
+  - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts`
+  - `node scripts/protocol/run-clawsig-verified-pr.mjs`
+---
