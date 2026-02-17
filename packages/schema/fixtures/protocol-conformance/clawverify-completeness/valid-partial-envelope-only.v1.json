@@ -1,0 +1,11 @@
+{
+  "id": "valid-partial-envelope-only",
+  "scenario": "partial_envelope_only",
+  "expected": {
+    "status": "VALID",
+    "completeness_verdict": "PARTIAL",
+    "completeness_reason_code": "ENVELOPE_ONLY",
+    "proof_tier": "self",
+    "trust_tier": "basic"
+  }
+}

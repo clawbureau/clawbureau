@@ -1081,6 +1081,21 @@ export type BinarySemanticEvidenceReasonCode =
   | 'STRIPPED_SYMBOLS'
   | 'SEMANTICS_VERIFIED';
 
+export type CompletenessVerdict =
+  | 'COMPLETE'
+  | 'PARTIAL'
+  | 'INCOMPLETE'
+  | 'INCONSISTENT';
+
+export type CompletenessReasonCode =
+  | 'COMPLETE_EVIDENCE_BOUND'
+  | 'EVENT_CHAIN_ONLY'
+  | 'ENVELOPE_ONLY'
+  | 'ATTESTATION_CLASS_UNVERIFIED'
+  | 'RECEIPT_CLASS_UNVERIFIED'
+  | 'BINDING_CONTEXT_MISSING'
+  | 'RECEIPT_BINDING_MISMATCH';
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
@@ -1189,6 +1204,11 @@ export interface ProofBundleVerificationResult {
     binary_semantic_evidence_policy_verdict?: BinarySemanticEvidenceVerdict;
     /** Aggregated deterministic reason code for binary semantic evidence attestations. */
     binary_semantic_evidence_reason_code?: BinarySemanticEvidenceReasonCode;
+
+    /** Deterministic completeness verdict over evidence classes (event chain/binding/receipts/attestations). */
+    completeness_verdict?: CompletenessVerdict;
+    /** Deterministic completeness reason code. */
+    completeness_reason_code?: CompletenessReasonCode;
     /** Strongest verified VIR source among this bundle's VIR receipts. */
     vir_best_source?: VirSource;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */

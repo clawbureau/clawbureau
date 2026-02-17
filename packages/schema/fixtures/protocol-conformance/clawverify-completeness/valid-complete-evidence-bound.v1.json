@@ -1,0 +1,11 @@
+{
+  "id": "valid-complete-evidence-bound",
+  "scenario": "complete_evidence_bound",
+  "expected": {
+    "status": "VALID",
+    "completeness_verdict": "COMPLETE",
+    "completeness_reason_code": "COMPLETE_EVIDENCE_BOUND",
+    "proof_tier": "gateway",
+    "trust_tier": "verified"
+  }
+}

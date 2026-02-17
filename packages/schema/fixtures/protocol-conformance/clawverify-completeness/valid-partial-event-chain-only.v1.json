@@ -1,0 +1,11 @@
+{
+  "id": "valid-partial-event-chain-only",
+  "scenario": "partial_event_chain_only",
+  "expected": {
+    "status": "VALID",
+    "completeness_verdict": "PARTIAL",
+    "completeness_reason_code": "EVENT_CHAIN_ONLY",
+    "proof_tier": "self",
+    "trust_tier": "verified"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "invalid-inconsistent-receipt-binding-mismatch",
+  "scenario": "inconsistent_receipt_binding_mismatch",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "completeness_verdict": "INCONSISTENT",
+    "completeness_reason_code": "RECEIPT_BINDING_MISMATCH"
+  }
+}
