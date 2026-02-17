@@ -172,6 +172,21 @@ Table of Contents
    MUST contain tree_size, leaf_hash_b64u, root_hash_b64u, audit_path,
    and a valid root_signature from the RT Log operator.
 
+   4.11 Schema Identifier Canonicalization (v0.2 compatibility)
+   Implementations MUST treat schema identifiers as canonical, fully-qualified
+   URIs. Shorthand labels MUST NOT be used in manifests or verifier dispatch.
+
+   For backward compatibility, ingest-time normalization MAY map only the
+   following explicit legacy aliases:
+   * https://schemas.clawbureau.org/claw.poh.tool_receipt.v1.json
+     -> https://schemas.clawbureau.com/poh/tool_receipt.v1.json
+   * https://schemas.clawbureau.org/claw.poh.tool_receipt_envelope.v1.json
+     -> https://schemas.clawbureau.com/poh/tool_receipt_envelope.v1.json
+
+   This alias set is finite and deterministic. Unknown schema identifiers
+   MUST fail closed with UNKNOWN_SCHEMA_ID. Implementations MUST NOT apply
+   wildcard, heuristic, or best-effort namespace rewrites.
+
 5. Work Policy Contract (WPC)
 
    The WPC defines the operational boundaries of the agent. WPC v1 uses

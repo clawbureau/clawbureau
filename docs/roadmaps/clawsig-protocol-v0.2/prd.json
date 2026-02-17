@@ -28,7 +28,7 @@
       ],
       "priority": 2,
       "passes": false,
-      "notes": "Candidate. Useful for high-stakes autonomous agent deployments."
+      "notes": "Candidate. Useful for high-stakes autonomous agent deployments. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
     },
     {
       "id": "CPL-V2-003",
@@ -41,7 +41,7 @@
       ],
       "priority": 3,
       "passes": false,
-      "notes": "Candidate. Needed for compliance regimes that require fresh attestations."
+      "notes": "Candidate. Needed for compliance regimes that require fresh attestations. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
     },
     {
       "id": "CPL-V2-004",
@@ -54,7 +54,7 @@
       ],
       "priority": 4,
       "passes": false,
-      "notes": "Candidate. Enables audit use cases that need to see 'which file was read' without seeing 'what was in it'."
+      "notes": "Candidate. Enables audit use cases that need to see 'which file was read' without seeing 'what was in it'. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
     },
     {
       "id": "CPL-V2-005",
@@ -67,11 +67,11 @@
       ],
       "priority": 5,
       "passes": false,
-      "notes": "Candidate. Needed for enterprise fleet dashboards and compliance reporting across agent pools."
+      "notes": "Candidate. Needed for enterprise fleet dashboards and compliance reporting across agent pools. Docs normalization complete (R48/R49 patch set): canonical schema-ID policy + reason-code registry wiring draft landed; implementation lane pending."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-12T18:30:00Z",
+    "updatedAt": "2026-02-17T22:45:00Z",
     "status": "seed — no stories scheduled"
   }
 }
