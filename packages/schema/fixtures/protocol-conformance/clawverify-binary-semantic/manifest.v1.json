@@ -1,0 +1,16 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-binary-semantic",
+  "cases": [
+    "valid-semantics-verified.v1.json",
+    "invalid-hash-mismatch.v1.json",
+    "invalid-chain-forgery-merkle-broken.v1.json",
+    "invalid-unattested-child-process.v1.json",
+    "invalid-capability-arbitrage.v1.json",
+    "invalid-analysis-exhaustion.v1.json",
+    "valid-inapplicable-unsupported-arch.v1.json",
+    "valid-inapplicable-sip-protected.v1.json",
+    "valid-partial-stripped-symbols.v1.json",
+    "invalid-precedence-causal-over-contradiction.v1.json"
+  ]
+}

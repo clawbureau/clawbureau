@@ -1,0 +1,10 @@
+{
+  "id": "invalid-analysis-exhaustion",
+  "scenario": "invalid_analysis_exhaustion",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "policy_verdict": "UNKNOWN",
+    "reason_code": "STATIC_ANALYSIS_TIMEOUT"
+  }
+}

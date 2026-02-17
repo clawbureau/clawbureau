@@ -1,0 +1,11 @@
+{
+  "id": "valid-inapplicable-sip-protected",
+  "scenario": "valid_inapplicable_sip_protected",
+  "expected": {
+    "status": "VALID",
+    "policy_verdict": "INAPPLICABLE",
+    "reason_code": "SIP_RESTRICTION_INAPPLICABLE",
+    "proof_tier": "self",
+    "trust_tier": "basic"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "invalid-unattested-child-process",
+  "scenario": "invalid_unattested_child_process",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "policy_verdict": "INVALID",
+    "reason_code": "UNATTESTED_CHILD_PROCESS"
+  }
+}

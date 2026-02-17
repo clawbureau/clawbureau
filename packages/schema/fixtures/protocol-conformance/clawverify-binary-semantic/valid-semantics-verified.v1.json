@@ -1,0 +1,9 @@
+{
+  "id": "valid-semantics-verified",
+  "scenario": "valid_semantics_verified",
+  "expected": {
+    "status": "VALID",
+    "policy_verdict": "VALID",
+    "reason_code": "SEMANTICS_VERIFIED"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "invalid-precedence-causal-over-contradiction",
+  "scenario": "invalid_precedence_causal_over_contradiction",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "policy_verdict": "INVALID",
+    "reason_code": "MERKLE_CHAIN_BROKEN"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "invalid-capability-arbitrage",
+  "scenario": "invalid_capability_arbitrage",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "policy_verdict": "INVALID",
+    "reason_code": "CAPABILITY_EXCEEDS_STATIC_PROOF"
+  }
+}

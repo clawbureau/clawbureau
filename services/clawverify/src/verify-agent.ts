@@ -32,6 +32,9 @@ export interface VerifyAgentOptions {
   /** Allowlisted gateway receipt signer DIDs (did:key:...). */
   allowlistedReceiptSignerDids?: readonly string[];
 
+  /** Allowlisted signer DIDs for binary semantic evidence attestations. */
+  allowlistedBinarySemanticEvidenceSignerDids?: readonly string[];
+
   /** Allowlisted attester DIDs for proof bundle attestations. */
   allowlistedAttesterDids?: readonly string[];
 
@@ -457,6 +460,8 @@ export async function verifyAgent(
   if (req.proof_bundle_envelope !== undefined) {
     const bundleVerification = await verifyProofBundle(req.proof_bundle_envelope, {
       allowlistedReceiptSignerDids: options.allowlistedReceiptSignerDids,
+      allowlistedBinarySemanticEvidenceSignerDids:
+        options.allowlistedBinarySemanticEvidenceSignerDids,
       allowlistedAttesterDids: options.allowlistedAttesterDids,
       urm: req.urm,
     });
