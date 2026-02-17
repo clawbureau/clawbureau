@@ -2,7 +2,7 @@
   "name": "clawcompiler-bootstrap",
   "project": "clawbureau",
   "description": "Bootstrap deterministic Regulatory Evidence Compiler contracts (schemas + conformance) before runtime service implementation.",
-  "branchName": "feat/clawcompiler/CEC-US-001-003-bootstrap",
+  "branchName": "feat/clawcompiler/CEC-US-004-006-r45-canonical-roadmap",
   "userStories": [
     {
       "id": "CEC-US-001",
@@ -43,10 +43,52 @@
       "priority": 3,
       "passes": true,
       "notes": "Implemented dual-plane narrative schema with hard membrane via const authoritative:false and fixed disclaimer, plus deterministic conformance vectors."
+    },
+    {
+      "id": "CEC-US-004",
+      "title": "Canonical binary semantic evidence schema contract",
+      "description": "As a compiler/verifier pipeline, I need a canonical binary semantic evidence schema contract so policy decisions are deterministic and machine-verifiable.",
+      "acceptanceCriteria": [
+        "Define canonical schema family names and IDs for binary semantic evidence payload + envelope (single naming convention, no alias drift)",
+        "Use strict enums and additionalProperties:false at all decision-boundary objects",
+        "Additive-only integration into proof bundle contracts (optional field; no breaking required-field changes)",
+        "Reason-code registry for binary semantic evidence is explicitly enumerated and versioned"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "R45 canonical intake source: docs/roadmaps/clawcompiler/oracle/2026-02-17/R45_BINARY_SEM_CANONICAL.md. S run contributes policy ordering only; malformed schema/code literals are excluded."
+    },
+    {
+      "id": "CEC-US-005",
+      "title": "Deterministic runtime policy state machine for binary semantic evidence",
+      "description": "As a verifier, I need a deterministic precedence state machine so binary semantic evidence yields reproducible fail-closed outcomes.",
+      "acceptanceCriteria": [
+        "Implement precedence ordering exactly: crypto/causal failure -> contradiction -> analysis exhaustion -> inapplicable bounds -> partial -> valid",
+        "Enforce contradiction invariant: static ABSENT claim contradicted by verified dynamic PRESENT evidence yields deterministic fail-closed invalid outcome",
+        "No probabilistic or stringly-typed security decisions in policy evaluation",
+        "Deterministic verdict + reason-code outputs are stable for identical inputs"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "Policy ordering and contradiction framing derived from R45 synthesis (A/C base + S policy donor)."
+    },
+    {
+      "id": "CEC-US-006",
+      "title": "Conformance fixtures for precedence and adversarial normalization",
+      "description": "As an operator, I need conformance fixtures that lock policy semantics so regression or drift is caught automatically.",
+      "acceptanceCriteria": [
+        "Add fixture corpus that covers each precedence branch and expected deterministic reason code",
+        "Include normalized adversarial cases: chain forgery, capability arbitrage, analysis exhaustion, unsupported/inapplicable bounds, stripped/partial paths",
+        "CI conformance runner must assert exact verdict + reason-code determinism",
+        "Fixtures and runner are scoped to this domain and do not depend on narrative interpretation"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Derived from normalized R45 adversarial matrix in canonical synthesis doc."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-17T18:30:00Z",
-    "status": "bootstrap complete (schema + conformance scaffold)"
+    "updatedAt": "2026-02-17T19:15:00Z",
+    "status": "bootstrap complete (CEC-US-001..003); R45 intake captured; CEC-US-004..006 planned"
   }
 }
