@@ -12,6 +12,7 @@ import type {
   ModelIdentityTier,
   ProofBundlePayload,
   ProofTier,
+  RateLimitClaim,
   SignedEnvelope,
   VerificationError,
   VerifyAggregateBundleResponse,
@@ -228,6 +229,23 @@ function parseExpiresAtMs(
   if (value === undefined) return { ok: true, ms: null };
   if (typeof value !== 'string' || !isValidIsoDate(value)) return { ok: false };
   return { ok: true, ms: Date.parse(value) };
+}
+
+function rateClaimKey(agentDid: string, claim: RateLimitClaim): string {
+  return [
+    agentDid,
+    claim.scope,
+    claim.scope_key,
+    claim.window_start,
+    claim.window_end,
+  ].join('|');
+}
+
+function optionalLimitEqual(
+  a: number | undefined,
+  b: number | undefined
+): boolean {
+  return a === b;
 }
 
 export async function verifyAggregateBundle(
@@ -487,6 +505,18 @@ export async function verifyAggregateBundle(
   const seenBundleIds = new Set<string>();
   const seenRunIds = new Set<string>();
   const uniqueAgents = new Set<string>();
+  const aggregatedRateClaims = new Map<
+    string,
+    {
+      max_requests: number;
+      observed_requests: number;
+      max_tokens_input?: number;
+      observed_tokens_input: number;
+      max_tokens_output?: number;
+      observed_tokens_output: number;
+      firstField: string;
+    }
+  >();
 
   let fleetProofTier: ProofTier = 'witnessed_web';
   let fleetModelTier: ModelIdentityTier = 'tee_measured';
@@ -500,10 +530,15 @@ export async function verifyAggregateBundle(
     let memberExpiresAtMs: number | null = null;
     let childProofTier: ProofTier = 'unknown';
     let childModelTier: ModelIdentityTier = 'unknown';
+    let memberRateClaims: RateLimitClaim[] = [];
+    let memberRateClaimsField = `payload.artifacts.member_bundles[${i}]`;
 
     if (isProofBundleMember(member)) {
       memberBundleId = member.payload.bundle_id;
       memberAgentDid = member.payload.agent_did;
+      memberRateClaims = member.payload.rate_limit_claims ?? [];
+      memberRateClaimsField =
+        `payload.artifacts.member_bundles[${i}].payload.rate_limit_claims`;
 
       const runInfo = extractRunIdFromProofEnvelope(member);
       if (!runInfo.ok) {
@@ -547,6 +582,9 @@ export async function verifyAggregateBundle(
       const nestedProof = member.artifacts.proof_bundle_envelope;
       memberBundleId = nestedProof.payload.bundle_id;
       memberAgentDid = nestedProof.payload.agent_did;
+      memberRateClaims = nestedProof.payload.rate_limit_claims ?? [];
+      memberRateClaimsField =
+        `payload.artifacts.member_bundles[${i}].artifacts.proof_bundle_envelope.payload.rate_limit_claims`;
 
       const runInfo = extractRunIdFromProofEnvelope(nestedProof);
       if (!runInfo.ok) {
@@ -649,9 +687,135 @@ export async function verifyAggregateBundle(
     }
     seenRunIds.add(memberRunId);
 
+    for (let claimIndex = 0; claimIndex < memberRateClaims.length; claimIndex++) {
+      const claim = memberRateClaims[claimIndex];
+      const claimField = `${memberRateClaimsField}[${claimIndex}]`;
+
+      const windowStartMs = Date.parse(claim.window_start);
+      const windowEndMs = Date.parse(claim.window_end);
+      if (!Number.isFinite(windowStartMs) || !Number.isFinite(windowEndMs)) {
+        return invalid(now, 'Invalid rate-limit claim window timestamps', {
+          code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+          message: 'rate_limit_claim window_start/window_end must be valid ISO-8601 timestamps',
+          field: claimField,
+        });
+      }
+
+      if (windowStartMs > windowEndMs) {
+        return invalid(now, 'Rate-limit claim window is invalid', {
+          code: 'RATE_LIMIT_WINDOW_INVALID',
+          message: 'rate_limit_claim window_start must be <= window_end',
+          field: `${claimField}.window_start`,
+        });
+      }
+
+      if (
+        !Number.isFinite(claim.max_requests) ||
+        claim.max_requests < 0 ||
+        !Number.isFinite(claim.observed_requests) ||
+        claim.observed_requests < 0
+      ) {
+        return invalid(now, 'Invalid rate-limit claim numeric values', {
+          code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+          message: 'rate_limit_claim max_requests/observed_requests must be finite non-negative numbers',
+          field: claimField,
+        });
+      }
+
+      const maxInputSet = claim.max_tokens_input !== undefined;
+      const observedInputSet = claim.observed_tokens_input !== undefined;
+      const maxOutputSet = claim.max_tokens_output !== undefined;
+      const observedOutputSet = claim.observed_tokens_output !== undefined;
+
+      if (maxInputSet !== observedInputSet || maxOutputSet !== observedOutputSet) {
+        return invalid(now, 'Incomplete rate-limit token claim fields', {
+          code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+          message: 'rate_limit_claim max_tokens_* and observed_tokens_* must be provided together',
+          field: claimField,
+        });
+      }
+
+      if (
+        (maxInputSet && (!Number.isFinite(claim.max_tokens_input) || claim.max_tokens_input! < 0)) ||
+        (observedInputSet && (!Number.isFinite(claim.observed_tokens_input) || claim.observed_tokens_input! < 0)) ||
+        (maxOutputSet && (!Number.isFinite(claim.max_tokens_output) || claim.max_tokens_output! < 0)) ||
+        (observedOutputSet && (!Number.isFinite(claim.observed_tokens_output) || claim.observed_tokens_output! < 0))
+      ) {
+        return invalid(now, 'Invalid rate-limit token claim values', {
+          code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+          message: 'rate_limit_claim token limits/observations must be finite non-negative numbers',
+          field: claimField,
+        });
+      }
+
+      const key = rateClaimKey(memberAgentDid, claim);
+      const existing = aggregatedRateClaims.get(key);
+      if (!existing) {
+        aggregatedRateClaims.set(key, {
+          max_requests: claim.max_requests,
+          observed_requests: claim.observed_requests,
+          max_tokens_input: claim.max_tokens_input,
+          observed_tokens_input: claim.observed_tokens_input ?? 0,
+          max_tokens_output: claim.max_tokens_output,
+          observed_tokens_output: claim.observed_tokens_output ?? 0,
+          firstField: claimField,
+        });
+      } else {
+        if (
+          existing.max_requests !== claim.max_requests ||
+          !optionalLimitEqual(existing.max_tokens_input, claim.max_tokens_input) ||
+          !optionalLimitEqual(existing.max_tokens_output, claim.max_tokens_output)
+        ) {
+          return invalid(now, 'Rate-limit claim is inconsistent across bundles', {
+            code: 'RATE_LIMIT_CLAIM_INCONSISTENT',
+            message: 'Conflicting max limits detected for the same agent/scope/window rate-limit claim',
+            field: claimField,
+          });
+        }
+
+        existing.observed_requests += claim.observed_requests;
+        existing.observed_tokens_input += claim.observed_tokens_input ?? 0;
+        existing.observed_tokens_output += claim.observed_tokens_output ?? 0;
+      }
+    }
+
     uniqueAgents.add(memberAgentDid);
     fleetProofTier = proofTierMin(fleetProofTier, childProofTier);
     fleetModelTier = modelTierMin(fleetModelTier, childModelTier);
+  }
+
+  for (const [claimKey, agg] of aggregatedRateClaims) {
+    if (agg.observed_requests > agg.max_requests) {
+      return invalid(now, 'Aggregated rate-limit request count exceeded', {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: `Aggregated observed_requests exceeds max_requests for claim ${claimKey}`,
+        field: agg.firstField,
+      });
+    }
+
+    if (
+      agg.max_tokens_input !== undefined &&
+      agg.observed_tokens_input > agg.max_tokens_input
+    ) {
+      return invalid(now, 'Aggregated rate-limit input token count exceeded', {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message:
+          `Aggregated observed_tokens_input exceeds max_tokens_input for claim ${claimKey}`,
+        field: agg.firstField,
+      });
+    }
+
+    if (
+      agg.max_tokens_output !== undefined &&
+      agg.observed_tokens_output > agg.max_tokens_output
+    ) {
+      return invalid(now, 'Aggregated rate-limit output token count exceeded', {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message:
+          `Aggregated observed_tokens_output exceeds max_tokens_output for claim ${claimKey}`,
+        field: agg.firstField,
+      });
+    }
   }
 
   const summary = payload.metadata.fleet_summary;

@@ -114,6 +114,14 @@ const HINTS: Record<string, string> = {
   FLEET_SUMMARY_MISMATCH:
     'Declared fleet_summary values do not match computed member metrics. Recompute totals and proof tier before signing.',
 
+  // ── Rate limit ───────────────────────────────────────
+  RATE_LIMIT_WINDOW_INVALID:
+    'Rate-limit claim window is invalid. Ensure window_start is less than or equal to window_end.',
+  RATE_LIMIT_CLAIM_INCONSISTENT:
+    'Rate-limit claim fields are inconsistent (missing pairs, conflicting limits, or run mismatch). Normalize claim structure before signing.',
+  RATE_LIMIT_EXCEEDED:
+    'Observed usage exceeds declared rate-limit maximum. Claims must fail closed when observed usage is above max thresholds.',
+
   // ── Time ──────────────────────────────────────────────
   EXPIRED_TTL:
     'A TTL-bound envelope or payload has expired for the verification timestamp. Re-sign with a fresh expires_at or verify at an archival timestamp.',

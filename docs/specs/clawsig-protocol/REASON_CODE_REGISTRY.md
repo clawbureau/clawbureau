@@ -161,6 +161,14 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `RECEIPT_BINDING_MISMATCH` | Receipt binding (run_id/event_hash) does not match bundle |
 | `RECEIPT_VERIFICATION_FAILED` | Individual receipt envelope verification failed |
 
+### RATE_LIMIT_*
+
+| Code | Meaning |
+|------|---------|
+| `RATE_LIMIT_WINDOW_INVALID` | A rate-limit claim window is invalid (`window_start > window_end`) |
+| `RATE_LIMIT_CLAIM_INCONSISTENT` | Rate-limit claim fields are internally inconsistent or conflict across same agent/scope/window claims |
+| `RATE_LIMIT_EXCEEDED` | Observed request/token counts exceed declared deterministic max thresholds |
+
 ### TIME_*
 
 | Code | Meaning |

@@ -345,6 +345,38 @@
         }
       }
     },
+    "rate_limit_claims": {
+      "type": "array",
+      "maxItems": 256,
+      "description": "Optional deterministic offline rate-limit claims (CPL-V2-001).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_version",
+          "scope",
+          "scope_key",
+          "window_start",
+          "window_end",
+          "max_requests",
+          "observed_requests"
+        ],
+        "properties": {
+          "claim_version": { "const": "1" },
+          "scope": { "type": "string", "enum": ["agent", "model", "tool"] },
+          "scope_key": { "type": "string", "minLength": 1 },
+          "window_start": { "type": "string", "format": "date-time" },
+          "window_end": { "type": "string", "format": "date-time" },
+          "max_requests": { "type": "number", "minimum": 0 },
+          "observed_requests": { "type": "number", "minimum": 0 },
+          "max_tokens_input": { "type": "number", "minimum": 0 },
+          "observed_tokens_input": { "type": "number", "minimum": 0 },
+          "max_tokens_output": { "type": "number", "minimum": 0 },
+          "observed_tokens_output": { "type": "number", "minimum": 0 },
+          "run_id": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "attestations": {
       "type": "array",
       "minItems": 1,

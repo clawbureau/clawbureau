@@ -1,0 +1,130 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "aggregate_bundle",
+  "payload": {
+    "aggregate_version": "1",
+    "aggregate_id": "aggregate_rate_limit_inconsistent_001",
+    "created_at": "2026-02-16T00:10:00.000Z",
+    "issuer_did": "did:key:z6Mku8szPsZYv1PF9iXdXWMkHyCKW2fTmhX817uZVPPj4YK9",
+    "manifest": {
+      "manifest_version": "1",
+      "generated_at": "2026-02-16T00:10:01.000Z",
+      "entries": [
+        {
+          "path": "artifacts/member_bundles/0.json",
+          "sha256_b64u": "0yDJeud_kSb1krBHpSW36R-0TEjkXUDmTEPrjZX6ZVQ",
+          "content_type": "application/json",
+          "size_bytes": 1235
+        },
+        {
+          "path": "artifacts/member_bundles/1.json",
+          "sha256_b64u": "F74vF_6ylzdSQo9LaYJOZAm1Mv1zso6flycMUJNiEfg",
+          "content_type": "application/json",
+          "size_bytes": 1235
+        }
+      ]
+    },
+    "artifacts": {
+      "member_bundles": [
+        {
+          "envelope_version": "1",
+          "envelope_type": "proof_bundle",
+          "payload": {
+            "bundle_version": "1",
+            "bundle_id": "bundle_rate_limit_agg_inconsistent_b",
+            "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+            "event_chain": [
+              {
+                "event_id": "bundle_rate_limit_agg_inconsistent_b_evt_001",
+                "run_id": "run_rate_limit_agg_inconsistent_b",
+                "event_type": "llm_call",
+                "timestamp": "2026-02-16T00:00:00.000Z",
+                "payload_hash_b64u": "aJ5tgZvAm_qdKHVkExv6A4Ydjxoi1rTfL-hnGqIYlms",
+                "prev_hash_b64u": null,
+                "event_hash_b64u": "iT5hJlW6G65WjqcT00xGL2_Fg0T9AgFOGbQZARfhCL0"
+              }
+            ],
+            "rate_limit_claims": [
+              {
+                "claim_version": "1",
+                "scope": "model",
+                "scope_key": "openai:gpt-5",
+                "window_start": "2026-02-16T00:00:00.000Z",
+                "window_end": "2026-02-16T00:10:00.000Z",
+                "max_requests": 7,
+                "observed_requests": 2,
+                "max_tokens_input": 500,
+                "observed_tokens_input": 130,
+                "max_tokens_output": 700,
+                "observed_tokens_output": 170,
+                "run_id": "run_rate_limit_agg_inconsistent_b"
+              }
+            ]
+          },
+          "payload_hash_b64u": "j-QYsaKnuFujVaYGkVP2_QV_T2MzQxlBkpEhwUXZSIM",
+          "hash_algorithm": "SHA-256",
+          "signature_b64u": "i1lGaIfHpyVyxLGas9rNXTvUc7G050IuGp_6dkGvYMFTtYKWrMaRC4wVu2YmXgv3dRKjFruW8ZwHt58GvgL2Cw",
+          "algorithm": "Ed25519",
+          "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+          "issued_at": "2026-02-16T00:00:02.000Z"
+        },
+        {
+          "envelope_version": "1",
+          "envelope_type": "proof_bundle",
+          "payload": {
+            "bundle_version": "1",
+            "bundle_id": "bundle_rate_limit_agg_inconsistent_a",
+            "agent_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+            "event_chain": [
+              {
+                "event_id": "bundle_rate_limit_agg_inconsistent_a_evt_001",
+                "run_id": "run_rate_limit_agg_inconsistent_a",
+                "event_type": "llm_call",
+                "timestamp": "2026-02-16T00:00:00.000Z",
+                "payload_hash_b64u": "vSBSwlw99J8xx9NhVs82rrHKiMQTBBk36FLIJFNFoVI",
+                "prev_hash_b64u": null,
+                "event_hash_b64u": "u4Ldk9ZsZF7LO4NsoFb0vyKHOG3D4yTPPIH2grJKMwo"
+              }
+            ],
+            "rate_limit_claims": [
+              {
+                "claim_version": "1",
+                "scope": "model",
+                "scope_key": "openai:gpt-5",
+                "window_start": "2026-02-16T00:00:00.000Z",
+                "window_end": "2026-02-16T00:10:00.000Z",
+                "max_requests": 5,
+                "observed_requests": 2,
+                "max_tokens_input": 500,
+                "observed_tokens_input": 120,
+                "max_tokens_output": 700,
+                "observed_tokens_output": 150,
+                "run_id": "run_rate_limit_agg_inconsistent_a"
+              }
+            ]
+          },
+          "payload_hash_b64u": "Az84TnSffziImZlNTgXWEMM_dygXjJY9TWU3l7tgs-Q",
+          "hash_algorithm": "SHA-256",
+          "signature_b64u": "KtBdGFhhR1isNhpVc-p5k1vjfDKMHlvQ9U7LAWs7zDe4w2x9xarYxqx703i7ExHTd_2KdKDYHEAx_olJvhS_Cg",
+          "algorithm": "Ed25519",
+          "signer_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+          "issued_at": "2026-02-16T00:00:02.000Z"
+        }
+      ]
+    },
+    "metadata": {
+      "fleet_summary": {
+        "total_members": 2,
+        "unique_agents": 1,
+        "total_runs": 2,
+        "fleet_proof_tier": "self"
+      }
+    }
+  },
+  "payload_hash_b64u": "XS3_5LKycojuXv_8h6AsuXeSjt7-Y8kmpDHa5Ef3nCE",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "lfVoOBDm1zZy50pQZgBLAzgAjKDs_BlLWa_-1f8Dm3yGWNfNsGxMvHqgtLX6Mg4zsrUdBntZlVnVFTGnuPCyCA",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6Mku8szPsZYv1PF9iXdXWMkHyCKW2fTmhX817uZVPPj4YK9",
+  "issued_at": "2026-02-16T00:10:02.000Z"
+}

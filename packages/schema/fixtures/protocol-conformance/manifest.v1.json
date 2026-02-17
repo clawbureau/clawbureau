@@ -384,6 +384,59 @@
           "AGGREGATE_MEMBER_INVALID"
         ]
       }
+    },
+    {
+      "name": "proof_bundle.cpl_v2_rate_limit.pass",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/proof_bundle_rate_limit_pass.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "proof_bundle.cpl_v2_rate_limit.fail.window_invalid",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/proof_bundle_rate_limit_fail_window_invalid.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RATE_LIMIT_WINDOW_INVALID"
+        ]
+      }
+    },
+    {
+      "name": "proof_bundle.cpl_v2_rate_limit.fail.exceeded",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/proof_bundle_rate_limit_fail_exceeded.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RATE_LIMIT_EXCEEDED"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.cpl_v2_rate_limit.fail.inconsistent",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/aggregate_bundle_rate_limit_fail_inconsistent.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RATE_LIMIT_CLAIM_INCONSISTENT"
+        ]
+      }
+    },
+    {
+      "name": "aggregate_bundle.cpl_v2_rate_limit.fail.exceeded",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/aggregate_bundle_rate_limit_fail_exceeded.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RATE_LIMIT_EXCEEDED"
+        ]
+      }
     }
   ]
 }
