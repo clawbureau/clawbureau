@@ -62,7 +62,7 @@ async function sha256Utf8B64u(value: string): Promise<string> {
 
 async function signEnvelope<T extends Record<string, unknown>>(args: {
   payload: T;
-  envelopeType: 'vir_receipt' | 'proof_bundle';
+  envelopeType: 'vir_receipt' | 'proof_bundle' | 'gateway_receipt';
   signerDid: string;
   privateKey: CryptoKey;
   issuedAt: string;
@@ -91,6 +91,8 @@ async function makeVirBundle(args?: {
   modelClaimed?: string;
   modelObserved?: string;
   decryptedMatch?: boolean | null;
+  virSource?: 'tls_decrypt' | 'gateway' | 'interpose' | 'preload' | 'sni';
+  includeCorroboratingGatewayReceipt?: boolean;
 }) {
   const agent = await makeDidKeyEd25519();
   const runId = 'run_vir_001';
@@ -118,7 +120,7 @@ async function makeVirBundle(args?: {
   const virPayload: Record<string, unknown> = {
     receipt_version: '1',
     receipt_id: 'vir_001',
-    source: 'tls_decrypt',
+    source: args?.virSource ?? 'tls_decrypt',
     provider: 'anthropic',
     model: args?.modelObserved ?? 'claude-test',
     model_claimed: args?.modelClaimed ?? 'claude-test',
@@ -136,7 +138,7 @@ async function makeVirBundle(args?: {
       nonce: args?.nonce ?? 'nonce_001',
     },
     transport_attestation: {
-      source: 'tls_decrypt',
+      source: args?.virSource ?? 'tls_decrypt',
       decrypted_match: args?.decryptedMatch ?? true,
     },
     selective_disclosure: {
@@ -155,6 +157,43 @@ async function makeVirBundle(args?: {
     issuedAt: '2026-02-16T00:00:00Z',
   });
 
+  let verificationOptions: Record<string, unknown> = {};
+  let receipts: unknown[] | undefined;
+
+  if (args?.includeCorroboratingGatewayReceipt) {
+    const gatewaySigner = await makeDidKeyEd25519();
+    const receiptPayload: Record<string, unknown> = {
+      receipt_version: '1',
+      receipt_id: 'rcpt_vir_001',
+      gateway_id: 'gw_vir_test',
+      provider: 'anthropic',
+      model: 'claude-test',
+      request_hash_b64u: 'req_hash_001',
+      response_hash_b64u: 'res_hash_001',
+      tokens_input: 12,
+      tokens_output: 34,
+      latency_ms: 120,
+      timestamp: '2026-02-16T00:00:00Z',
+      binding: {
+        run_id: runId,
+        event_hash_b64u: e1Hash,
+      },
+    };
+
+    const receiptEnvelope = await signEnvelope({
+      payload: receiptPayload,
+      envelopeType: 'gateway_receipt',
+      signerDid: gatewaySigner.did,
+      privateKey: gatewaySigner.privateKey,
+      issuedAt: '2026-02-16T00:00:00Z',
+    });
+
+    receipts = [receiptEnvelope];
+    verificationOptions = {
+      allowlistedReceiptSignerDids: [gatewaySigner.did],
+    };
+  }
+
   const bundlePayload: Record<string, unknown> = {
     bundle_version: '1',
     bundle_id: 'bundle_vir_001',
@@ -166,6 +205,7 @@ async function makeVirBundle(args?: {
       },
     ],
     vir_receipts: [virEnvelope],
+    ...(receipts ? { receipts } : {}),
     metadata: {
       ...(args?.expectedBountyNonce ? { bounty_nonce: args.expectedBountyNonce } : {}),
     },
@@ -179,7 +219,7 @@ async function makeVirBundle(args?: {
     issuedAt: '2026-02-16T00:00:01Z',
   });
 
-  return { bundleEnvelope };
+  return { bundleEnvelope, verificationOptions };
 }
 
 async function makeConflictingSameTierVirBundle() {
@@ -266,22 +306,43 @@ async function makeConflictingSameTierVirBundle() {
 }
 
 describe('R43 VIR synthesis verification', () => {
-  it('computes proof_tier=gateway from valid VIR receipt (tls_decrypt)', async () => {
-    const { bundleEnvelope } = await makeVirBundle({
+  it('computes proof_tier=gateway from corroborated high-claim VIR receipt (tls_decrypt)', async () => {
+    const { bundleEnvelope, verificationOptions } = await makeVirBundle({
       nonce: 'nonce_001',
       expectedBountyNonce: 'nonce_001',
       modelClaimed: 'claude-test',
       modelObserved: 'claude-test',
       decryptedMatch: true,
+      includeCorroboratingGatewayReceipt: true,
     });
 
-    const out = await verifyProofBundle(bundleEnvelope);
+    const out = await verifyProofBundle(bundleEnvelope, verificationOptions);
 
     expect(out.result.status).toBe('VALID');
     expect(out.result.proof_tier).toBe('gateway');
     expect(out.result.component_results?.vir_receipts_count).toBe(1);
     expect(out.result.component_results?.vir_receipts_verified_count).toBe(1);
     expect(out.result.component_results?.vir_best_source).toBe('tls_decrypt');
+  });
+
+  it('demotes uncorroborated high-claim VIR to self with explicit risk flags', async () => {
+    const { bundleEnvelope } = await makeVirBundle({
+      nonce: 'nonce_001',
+      expectedBountyNonce: 'nonce_001',
+      modelClaimed: 'claude-test',
+      modelObserved: 'claude-test',
+      decryptedMatch: true,
+      virSource: 'gateway',
+      includeCorroboratingGatewayReceipt: false,
+    });
+
+    const out = await verifyProofBundle(bundleEnvelope);
+
+    expect(out.result.status).toBe('VALID');
+    expect(out.result.proof_tier).toBe('self');
+    expect(out.result.component_results?.vir_receipts_verified_count).toBe(1);
+    expect(out.result.component_results?.vir_best_source).toBe('sni');
+    expect(out.result.risk_flags ?? []).toContain('VIR_HIGH_CLAIM_UNCORROBORATED');
   });
 
   it('does not uplift proof tier when VIR nonce mismatches expected bounty nonce', async () => {
@@ -318,14 +379,15 @@ describe('R43 VIR synthesis verification', () => {
     expect(out.result.component_results?.vir_receipts_verified_count).toBe(0);
   });
 
-  it('fails closed on conflicting same-tier VIR claims for the same event hash', async () => {
+  it('fails closed on multiple VIR receipts bound to the same event hash', async () => {
     const { bundleEnvelope } = await makeConflictingSameTierVirBundle();
 
     const out = await verifyProofBundle(bundleEnvelope);
 
     expect(out.result.status).toBe('INVALID');
-    expect(out.result.reason).toContain('VIR evidence conflict');
+    expect(out.result.reason).toContain('event contradiction');
     expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.message).toBe('ERR_VIR_EVENT_CONTRADICTION');
     expect(out.error?.field).toBe('payload.vir_receipts');
   });
 });

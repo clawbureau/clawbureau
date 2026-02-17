@@ -25,10 +25,13 @@ type FixtureCase = {
     | 'valid_gateway'
     | 'valid_gateway_coverage'
     | 'valid_sandbox_tee'
+    | 'valid_vir_uncorroborated_high_claim'
+    | 'valid_vir_corroborated_high_claim'
     | 'invalid_coverage_chain_root_enforce'
     | 'invalid_vir_merkle_mismatch'
     | 'invalid_vir_conflict_unreported'
     | 'invalid_vir_precedence_violation'
+    | 'invalid_vir_event_contradiction'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
 };
@@ -148,6 +151,8 @@ async function makeVirV2Envelope(args: {
   agentKey: CryptoKey;
   runId: string;
   eventHash: string;
+  receiptId?: string;
+  source?: 'tls_decrypt' | 'gateway' | 'interpose' | 'preload' | 'sni';
   modelClaimed?: string;
   modelObserved?: string;
   evidenceConflicts?: unknown[];
@@ -199,8 +204,8 @@ async function makeVirV2Envelope(args: {
 
   const virPayload: Record<string, unknown> = {
     receipt_version: '2',
-    receipt_id: `vir_${args.runId}`,
-    source: 'gateway',
+    receipt_id: args.receiptId ?? `vir_${args.runId}`,
+    source: args.source ?? 'gateway',
     provider: 'openai',
     model: modelObserved,
     model_claimed: modelClaimed,
@@ -472,6 +477,12 @@ async function buildFixtureScenario(spec: FixtureCase) {
     agentKey: agent.privateKey,
     runId,
     eventHash,
+    ...(spec.scenario === 'valid_vir_uncorroborated_high_claim'
+      ? { source: 'gateway' as const }
+      : {}),
+    ...(spec.scenario === 'valid_vir_corroborated_high_claim'
+      ? { source: 'gateway' as const }
+      : {}),
     ...(spec.scenario === 'invalid_vir_merkle_mismatch'
       ? { tamperLeafValue: true }
       : {}),
@@ -496,6 +507,80 @@ async function buildFixtureScenario(spec: FixtureCase) {
         }
       : {}),
   });
+
+  if (spec.scenario === 'invalid_vir_event_contradiction') {
+    const secondVirEnvelope = await makeVirV2Envelope({
+      agentDid: agent.did,
+      agentKey: agent.privateKey,
+      runId,
+      eventHash,
+      receiptId: `vir_${runId}_second`,
+      source: 'gateway',
+    });
+
+    const bundleEnvelope = await signEnvelope({
+      payload: {
+        ...bundlePayload,
+        vir_receipts: [virEnvelope, secondVirEnvelope],
+      },
+      envelopeType: 'proof_bundle',
+      signerDid: agent.did,
+      privateKey: agent.privateKey,
+      issuedAt: '2026-02-17T00:00:01Z',
+    });
+
+    return {
+      envelope: bundleEnvelope,
+      options: {},
+    };
+  }
+
+  if (spec.scenario === 'valid_vir_corroborated_high_claim') {
+    const gatewaySigner = await makeDidKeyEd25519();
+
+    const receiptEnvelope = await signEnvelope({
+      payload: {
+        receipt_version: '1',
+        receipt_id: `rcpt_${runId}`,
+        gateway_id: 'gw_firewall_vir_001',
+        provider: 'openai',
+        model: 'gpt-4',
+        request_hash_b64u: 'req_hash_firewall_001',
+        response_hash_b64u: 'res_hash_firewall_001',
+        tokens_input: 100,
+        tokens_output: 200,
+        latency_ms: 250,
+        timestamp: '2026-02-17T00:00:00Z',
+        binding: {
+          run_id: runId,
+          event_hash_b64u: eventHash,
+        },
+      },
+      envelopeType: 'gateway_receipt',
+      signerDid: gatewaySigner.did,
+      privateKey: gatewaySigner.privateKey,
+      issuedAt: '2026-02-17T00:00:00Z',
+    });
+
+    const bundleEnvelope = await signEnvelope({
+      payload: {
+        ...bundlePayload,
+        vir_receipts: [virEnvelope],
+        receipts: [receiptEnvelope],
+      },
+      envelopeType: 'proof_bundle',
+      signerDid: agent.did,
+      privateKey: agent.privateKey,
+      issuedAt: '2026-02-17T00:00:01Z',
+    });
+
+    return {
+      envelope: bundleEnvelope,
+      options: {
+        allowlistedReceiptSignerDids: [gatewaySigner.did],
+      },
+    };
+  }
 
   const bundleEnvelope = await signEnvelope({
     payload: {

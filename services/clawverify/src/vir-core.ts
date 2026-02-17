@@ -47,6 +47,71 @@ export const SOURCE_SCORE: Record<VirSource, number> = {
   sni: 1,
 };
 
+export type VirConflictSeverity =
+  | 'none'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical';
+
+export const VIR_CONFLICT_SEVERITY_SCORE: Record<VirConflictSeverity, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
+
+export function classifyVirConflictSeverity(field: unknown): VirConflictSeverity {
+  if (typeof field !== 'string' || field.trim().length === 0) return 'low';
+
+  const normalized = field.trim().toLowerCase();
+
+  if (
+    normalized === 'request_hash_b64u' ||
+    normalized === 'request_hash' ||
+    normalized === 'response_hash_b64u' ||
+    normalized === 'response_hash' ||
+    normalized === 'binding.run_id' ||
+    normalized === 'binding.event_hash_b64u' ||
+    normalized === 'legal_binding.nonce' ||
+    normalized === 'legal_binding.subject_did' ||
+    normalized === 'legal_binding.scope_hash_b64u'
+  ) {
+    return 'critical';
+  }
+
+  if (
+    normalized === 'model' ||
+    normalized === 'model_claimed' ||
+    normalized === 'model_observed' ||
+    normalized === 'provider' ||
+    normalized === 'source'
+  ) {
+    return 'high';
+  }
+
+  if (
+    normalized === 'tokens_input' ||
+    normalized === 'tokens_output' ||
+    normalized === 'latency' ||
+    normalized === 'latency_ms'
+  ) {
+    return 'medium';
+  }
+
+  return 'low';
+}
+
+export function mergeVirConflictSeverity(
+  current: VirConflictSeverity,
+  next: VirConflictSeverity
+): VirConflictSeverity {
+  return VIR_CONFLICT_SEVERITY_SCORE[next] > VIR_CONFLICT_SEVERITY_SCORE[current]
+    ? next
+    : current;
+}
+
 export const CRITICAL_VIR_CODES = new Set<VirFailureCode>([
   'ERR_MERKLE_ROOT_MISMATCH',
   'ERR_CONFLICT_UNREPORTED',
@@ -309,6 +374,9 @@ export async function validateVirReceiptCore(
         'VIR evidence_conflicts precedence violation'
       );
     }
+
+    const severity = classifyVirConflictSeverity(conflict.field);
+    riskFlags.add(`VIR_CONFLICT_${severity.toUpperCase()}`);
 
     if (conflict.field === 'tokens_input' || conflict.field === 'tokens_output') {
       riskFlags.add('EVIDENCE_METRIC_DISCREPANCY');

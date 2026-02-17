@@ -7,10 +7,13 @@
     "valid-gateway.v1.json",
     "valid-gateway-coverage.v1.json",
     "valid-sandbox-tee.v1.json",
+    "valid-vir-uncorroborated-high-claim.v1.json",
+    "valid-vir-corroborated-high-claim.v1.json",
     "invalid-coverage-chain-root-enforce.v1.json",
     "invalid-vir-merkle-mismatch.v1.json",
     "invalid-vir-conflict-unreported.v1.json",
     "invalid-vir-precedence-violation.v1.json",
+    "invalid-vir-event-contradiction.v1.json",
     "invalid-tee-revoked.v1.json"
   ]
 }
