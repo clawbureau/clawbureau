@@ -533,7 +533,9 @@ async function main() {
 
   const { bundlePaths, commitSigPaths } = pickEvidenceFiles(changed);
 
-  const enforce = labelEnforce || commitSigPaths.length > 0;
+  const enforceBundles = labelEnforce || bundlePaths.length > 0;
+  const enforceCommitSigs = labelEnforce || commitSigPaths.length > 0;
+  const enforce = enforceBundles || enforceCommitSigs;
 
   const cliPath = path.join(ROOT, 'packages/clawverify-cli/dist/cli.js');
   const configPath = path.join(
@@ -586,8 +588,8 @@ async function main() {
   }
 
   const missingEvidence = {
-    bundles_required_missing: enforce && bundlePaths.length === 0,
-    commit_sigs_required_missing: enforce && commitSigPaths.length === 0,
+    bundles_required_missing: enforceBundles && bundlePaths.length === 0,
+    commit_sigs_required_missing: enforceCommitSigs && commitSigPaths.length === 0,
   };
 
   const bundlesOk = bundleResults.every((r) => r.ok);
@@ -606,9 +608,13 @@ async function main() {
       enforce,
       reason: labelEnforce
         ? 'label:claw-verified'
-        : commitSigPaths.length > 0
-          ? 'proofs/**/commit.sig.json present'
-          : 'observe',
+        : bundlePaths.length > 0 && commitSigPaths.length > 0
+          ? 'bundle + commit proofs present'
+          : bundlePaths.length > 0
+            ? 'artifacts/poh/**-bundle.json present'
+            : commitSigPaths.length > 0
+              ? 'proofs/**/commit.sig.json present'
+              : 'observe',
       labels,
     },
     inputs: {
