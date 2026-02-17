@@ -182,6 +182,89 @@ async function makeVirBundle(args?: {
   return { bundleEnvelope };
 }
 
+async function makeConflictingSameTierVirBundle() {
+  const agent = await makeDidKeyEd25519();
+  const runId = 'run_vir_conflict_001';
+
+  const eventPayloadHash = await computeHash({ type: 'llm_call_conflict' }, 'SHA-256');
+  const e1Header = {
+    event_id: 'evt_vir_conflict_001',
+    run_id: runId,
+    event_type: 'llm_call',
+    timestamp: '2026-02-16T00:10:00Z',
+    payload_hash_b64u: eventPayloadHash,
+    prev_hash_b64u: null as string | null,
+  };
+  const e1Hash = await computeHash(e1Header, 'SHA-256');
+
+  const baseVirPayload: Record<string, unknown> = {
+    receipt_version: '1',
+    source: 'gateway',
+    provider: 'anthropic',
+    request_hash_b64u: 'req_hash_conflict_001',
+    response_hash_b64u: 'res_hash_conflict_001',
+    tokens_input: 42,
+    tokens_output: 84,
+    latency_ms: 210,
+    agent_did: agent.did,
+    timestamp: '2026-02-16T00:10:00Z',
+    binding: {
+      run_id: runId,
+      event_hash_b64u: e1Hash,
+      nonce: 'nonce_conflict_001',
+    },
+  };
+
+  const virEnvelopeA = await signEnvelope({
+    payload: {
+      ...baseVirPayload,
+      receipt_id: 'vir_conflict_001',
+      model: 'claude-a',
+      model_observed: 'claude-a',
+    },
+    envelopeType: 'vir_receipt',
+    signerDid: agent.did,
+    privateKey: agent.privateKey,
+    issuedAt: '2026-02-16T00:10:00Z',
+  });
+
+  const virEnvelopeB = await signEnvelope({
+    payload: {
+      ...baseVirPayload,
+      receipt_id: 'vir_conflict_002',
+      model: 'claude-b',
+      model_observed: 'claude-b',
+    },
+    envelopeType: 'vir_receipt',
+    signerDid: agent.did,
+    privateKey: agent.privateKey,
+    issuedAt: '2026-02-16T00:10:01Z',
+  });
+
+  const bundlePayload: Record<string, unknown> = {
+    bundle_version: '1',
+    bundle_id: 'bundle_vir_conflict_001',
+    agent_did: agent.did,
+    event_chain: [
+      {
+        ...e1Header,
+        event_hash_b64u: e1Hash,
+      },
+    ],
+    vir_receipts: [virEnvelopeA, virEnvelopeB],
+  };
+
+  const bundleEnvelope = await signEnvelope({
+    payload: bundlePayload,
+    envelopeType: 'proof_bundle',
+    signerDid: agent.did,
+    privateKey: agent.privateKey,
+    issuedAt: '2026-02-16T00:10:02Z',
+  });
+
+  return { bundleEnvelope };
+}
+
 describe('R43 VIR synthesis verification', () => {
   it('computes proof_tier=gateway from valid VIR receipt (tls_decrypt)', async () => {
     const { bundleEnvelope } = await makeVirBundle({
@@ -233,5 +316,16 @@ describe('R43 VIR synthesis verification', () => {
     expect(out.result.proof_tier).toBe('self');
     expect(out.result.component_results?.vir_receipts_valid).toBe(false);
     expect(out.result.component_results?.vir_receipts_verified_count).toBe(0);
+  });
+
+  it('fails closed on conflicting same-tier VIR claims for the same event hash', async () => {
+    const { bundleEnvelope } = await makeConflictingSameTierVirBundle();
+
+    const out = await verifyProofBundle(bundleEnvelope);
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.result.reason).toContain('VIR evidence conflict');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe('payload.vir_receipts');
   });
 });

@@ -29,8 +29,13 @@ import {
 import {
   validateGatewayReceiptEnvelopeV1,
   validateVirEnvelopeV1,
+  validateVirEnvelopeV2,
 } from './schema-validation';
 import { verifyModelIdentityFromReceiptPayload } from './model-identity';
+import {
+  type VirFailureCode,
+  validateVirReceiptCore,
+} from './vir-core';
 
 export interface ReceiptVerifierOptions {
   /**
@@ -44,6 +49,14 @@ export interface ReceiptVerifierOptions {
    * Useful for bounty/job non-transferability policy checks.
    */
   requiresJobBinding?: boolean;
+
+  /**
+   * Optional strict binding checks for VIR receipts.
+   * When set, the verifier requires matching binding.subject and binding.scope.
+   */
+  expectedSubject?: string;
+  expectedScope?: string;
+  expectedNonce?: string;
 }
 
 // CVF-US-025: Receipt numeric hardening (finite numbers + reasonable upper bounds)
@@ -147,7 +160,7 @@ function validateVirPayload(payload: unknown): payload is VirReceiptPayload {
 
   const p = payload as Record<string, unknown>;
 
-  if (p.receipt_version !== '1') return false;
+  if (p.receipt_version !== '1' && p.receipt_version !== '2') return false;
   if (typeof p.receipt_id !== 'string' || p.receipt_id.length === 0) return false;
   if (
     p.source !== 'tls_decrypt' &&
@@ -196,6 +209,7 @@ function validateVirPayload(payload: unknown): payload is VirReceiptPayload {
   const modelClaimed = p.model_claimed;
   const modelObserved = p.model_observed;
   if (
+    p.receipt_version === '1' &&
     p.source === 'tls_decrypt' &&
     typeof modelClaimed === 'string' &&
     typeof modelObserved === 'string' &&
@@ -207,6 +221,112 @@ function validateVirPayload(payload: unknown): payload is VirReceiptPayload {
   }
 
   return true;
+}
+
+function mapVirFailureToReceiptError(
+  failureCode: VirFailureCode | undefined,
+  failureMessage: string | undefined,
+  options: ReceiptVerifierOptions,
+  payload: VirReceiptPayload
+): VerificationError {
+  const message = failureMessage ?? failureCode ?? 'VIR validation failed';
+
+  const nonce = payload.binding?.nonce ?? payload.legal_binding?.nonce;
+  const subject =
+    payload.binding?.subject ??
+    payload.binding?.subject_did ??
+    payload.legal_binding?.subject_did;
+  const scope =
+    payload.binding?.scope ??
+    payload.binding?.scope_hash_b64u ??
+    payload.legal_binding?.scope_hash_b64u;
+
+  switch (failureCode) {
+    case 'ERR_MERKLE_ROOT_MISMATCH':
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message: 'ERR_MERKLE_ROOT_MISMATCH',
+        field: 'payload.selective_disclosure.merkle_root_b64u',
+      };
+    case 'ERR_CONFLICT_UNREPORTED':
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message: 'ERR_CONFLICT_UNREPORTED',
+        field: 'payload.evidence_conflicts',
+      };
+    case 'ERR_PRECEDENCE_VIOLATION':
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message: 'ERR_PRECEDENCE_VIOLATION',
+        field: 'payload.evidence_conflicts',
+      };
+    case 'ERR_LEGAL_BINDING_REQUIRED':
+      return {
+        code: 'MISSING_REQUIRED_FIELD',
+        message,
+        field: 'payload.legal_binding',
+      };
+    case 'ERR_BINDING_NONCE_MISMATCH': {
+      const expectsSpecificNonce =
+        typeof options.expectedNonce === 'string' && options.expectedNonce.trim().length > 0;
+
+      if (!expectsSpecificNonce && options.requiresJobBinding && (!nonce || nonce.trim().length === 0)) {
+        return {
+          code: 'MISSING_NONCE',
+          message,
+          field: 'payload.binding.nonce',
+        };
+      }
+
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message,
+        field: 'payload.binding.nonce',
+      };
+    }
+    case 'ERR_BINDING_SUBJECT_MISMATCH': {
+      const missing =
+        typeof options.expectedSubject === 'string' &&
+        options.expectedSubject.trim().length > 0 &&
+        (!subject || subject.trim().length === 0);
+
+      return {
+        code: missing ? 'MISSING_REQUIRED_FIELD' : 'EVIDENCE_MISMATCH',
+        message,
+        field: 'payload.binding.subject',
+      };
+    }
+    case 'ERR_BINDING_SCOPE_MISMATCH': {
+      const missing =
+        typeof options.expectedScope === 'string' &&
+        options.expectedScope.trim().length > 0 &&
+        (!scope || scope.trim().length === 0);
+
+      return {
+        code: missing ? 'MISSING_REQUIRED_FIELD' : 'EVIDENCE_MISMATCH',
+        message,
+        field: 'payload.binding.scope',
+      };
+    }
+    case 'ERR_BINDING_EVENT_HASH_INVALID':
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message,
+        field: 'payload.binding.event_hash_b64u',
+      };
+    case 'ERR_BINDING_RUN_ID_MISMATCH':
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message,
+        field: 'payload.binding.run_id',
+      };
+    default:
+      return {
+        code: 'EVIDENCE_MISMATCH',
+        message,
+        field: 'payload',
+      };
+  }
 }
 
 /**
@@ -230,6 +350,7 @@ export async function verifyReceipt(
   error?: VerificationError;
 }> {
   const now = new Date().toISOString();
+  const virRiskFlags = new Set<string>();
 
   // 1. Validate envelope structure
   if (!validateEnvelopeStructure(envelope)) {
@@ -328,9 +449,16 @@ export async function verifyReceipt(
 
   // 6.5 Strict JSON schema validation (Ajv) for envelope + payload
   // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
-  const schemaResult = envelope.envelope_type === 'gateway_receipt'
-    ? validateGatewayReceiptEnvelopeV1(envelope)
-    : validateVirEnvelopeV1(envelope);
+  const schemaResult = (() => {
+    if (envelope.envelope_type === 'gateway_receipt') {
+      return validateGatewayReceiptEnvelopeV1(envelope);
+    }
+
+    const virV2 = validateVirEnvelopeV2(envelope);
+    if (virV2.valid) return virV2;
+
+    return validateVirEnvelopeV1(envelope);
+  })();
 
   if (!schemaResult.valid) {
     return {
@@ -485,43 +613,45 @@ export async function verifyReceipt(
     }
 
     const virPayload = envelope.payload as VirReceiptPayload;
-    const decryptedMatch = virPayload.transport_attestation?.decrypted_match;
-    if (
-      virPayload.source === 'tls_decrypt' &&
-      decryptedMatch !== undefined &&
-      decryptedMatch !== null &&
-      decryptedMatch !== true
-    ) {
+    const virValidation = await validateVirReceiptCore({
+      payload: virPayload,
+      expected: {
+        requireNonce: options.requiresJobBinding === true,
+        nonce:
+          typeof options.expectedNonce === 'string' && options.expectedNonce.trim().length > 0
+            ? options.expectedNonce
+            : null,
+        subject:
+          typeof options.expectedSubject === 'string' && options.expectedSubject.trim().length > 0
+            ? options.expectedSubject
+            : null,
+        scope:
+          typeof options.expectedScope === 'string' && options.expectedScope.trim().length > 0
+            ? options.expectedScope
+            : null,
+      },
+    });
+
+    if (!virValidation.valid) {
+      const mappedError = mapVirFailureToReceiptError(
+        virValidation.code,
+        virValidation.message,
+        options,
+        virPayload
+      );
+
       return {
         result: {
           status: 'INVALID',
-          reason: 'VIR evidence mismatch for tls_decrypt source',
+          reason: virValidation.message ?? virValidation.code ?? 'VIR validation failed',
           verified_at: now,
         },
-        error: {
-          code: 'EVIDENCE_MISMATCH',
-          message: 'transport_attestation.decrypted_match must be true for tls_decrypt VIR receipts',
-          field: 'payload.transport_attestation.decrypted_match',
-        },
+        error: mappedError,
       };
     }
 
-    if (options.requiresJobBinding) {
-      const nonce = virPayload.binding?.nonce;
-      if (typeof nonce !== 'string' || nonce.trim().length === 0) {
-        return {
-          result: {
-            status: 'INVALID',
-            reason: 'Missing VIR binding nonce required by policy',
-            verified_at: now,
-          },
-          error: {
-            code: 'MISSING_NONCE',
-            message: 'binding.nonce is required for VIR receipts under current policy',
-            field: 'payload.binding.nonce',
-          },
-        };
-      }
+    for (const flag of virValidation.riskFlags) {
+      virRiskFlags.add(flag);
     }
   }
 
@@ -620,7 +750,7 @@ export async function verifyReceipt(
 
   // 14. All checks passed - receipt is valid
   let modelIdentityTier: ModelIdentityTier = 'unknown';
-  let modelIdentityRiskFlags: string[] = ['MODEL_IDENTITY_VERIFY_FAILED'];
+  let modelIdentityRiskFlags: string[] = [];
 
   if (envelope.envelope_type === 'gateway_receipt') {
     try {
@@ -630,6 +760,7 @@ export async function verifyReceipt(
       modelIdentityTier = modelIdentity.tier;
       modelIdentityRiskFlags = modelIdentity.risk_flags;
     } catch {
+      modelIdentityRiskFlags = ['MODEL_IDENTITY_VERIFY_FAILED'];
       // Fail closed on the model identity axis only; do not break receipt verification.
     }
   }
@@ -654,6 +785,9 @@ export async function verifyReceipt(
       ? (payload as VirReceiptPayload).receipt_id
       : (payload as GatewayReceiptPayload).gateway_id,
     model_identity_tier: modelIdentityTier,
-    risk_flags: modelIdentityRiskFlags,
+    risk_flags: (() => {
+      const merged = [...modelIdentityRiskFlags, ...Array.from(virRiskFlags)];
+      return merged.length > 0 ? [...new Set(merged)].sort() : undefined;
+    })(),
   };
 }

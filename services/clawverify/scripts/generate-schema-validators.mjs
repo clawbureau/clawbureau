@@ -46,7 +46,11 @@ const gatewayReceiptEnvelope = readJson('packages/schema/poh/gateway_receipt_env
 const webReceipt = readJson('packages/schema/poh/web_receipt.v1.json');
 const webReceiptEnvelope = readJson('packages/schema/poh/web_receipt_envelope.v1.json');
 const vir = readJson('packages/schema/poh/vir.v1.json');
+const virV2 = readJson('packages/schema/poh/vir.v2.json');
 const virEnvelope = readJson('packages/schema/poh/vir_envelope.v1.json');
+const virEnvelopeV2 = readJson('packages/schema/poh/vir_envelope.v2.json');
+const coverageAttestation = readJson('packages/schema/poh/coverage_attestation.v1.json');
+const coverageAttestationEnvelope = readJson('packages/schema/poh/coverage_attestation_envelope.v1.json');
 const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
 const proofBundleEnvelope = readJson('packages/schema/poh/proof_bundle_envelope.v1.json');
 const urm = readJson('packages/schema/poh/urm.v1.json');
@@ -81,7 +85,11 @@ ajv.addSchema(gatewayReceiptEnvelope);
 ajv.addSchema(webReceipt);
 ajv.addSchema(webReceiptEnvelope);
 ajv.addSchema(vir);
+ajv.addSchema(virV2);
 ajv.addSchema(virEnvelope);
+ajv.addSchema(virEnvelopeV2);
+ajv.addSchema(coverageAttestation);
+ajv.addSchema(coverageAttestationEnvelope);
 ajv.addSchema(proofBundle);
 ajv.addSchema(proofBundleEnvelope);
 
@@ -109,7 +117,11 @@ const code = standaloneCode(ajv, {
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
   validateWebReceiptEnvelopeV1: webReceiptEnvelope.$id,
   validateVirV1: vir.$id,
+  validateVirV2: virV2.$id,
   validateVirEnvelopeV1: virEnvelope.$id,
+  validateVirEnvelopeV2: virEnvelopeV2.$id,
+  validateCoverageAttestationV1: coverageAttestation.$id,
+  validateCoverageAttestationEnvelopeV1: coverageAttestationEnvelope.$id,
   validateExecutionAttestationEnvelopeV1: executionAttestationEnvelope.$id,
   validateDerivationAttestationEnvelopeV1: derivationAttestationEnvelope.$id,
   validateAuditResultAttestationEnvelopeV1: auditResultAttestationEnvelope.$id,

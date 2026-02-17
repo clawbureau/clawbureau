@@ -14,6 +14,7 @@ export const ENVELOPE_TYPES = [
   'gateway_receipt',
   'vir_receipt',
   'web_receipt',
+  'coverage_attestation',
   'proof_bundle',
   'event_chain',
   'owner_attestation',
@@ -158,6 +159,20 @@ export interface ReceiptBinding {
   event_hash_b64u?: string;
   /** Idempotency nonce preventing duplicate receipt issuance (from X-Idempotency-Key header) */
   nonce?: string;
+  /** Optional subject identity for strict non-transferability contexts (VIR v0.2+). */
+  subject?: string;
+  /** Alias used by some schemas/producers for subject binding. */
+  subject_did?: string;
+  /** Optional task/job scope for strict non-transferability contexts (VIR v0.2+). */
+  scope?: string;
+  /** Alias used by some schemas/producers for scope binding. */
+  scope_hash_b64u?: string;
+  /** Optional job binding identifier for legal non-transferability contexts. */
+  job_id?: string;
+  /** Optional contract binding identifier for legal non-transferability contexts. */
+  contract_id?: string;
+  /** Optional jurisdiction marker for legal binding contexts. */
+  jurisdiction?: string;
   /** Work Policy Contract hash injected by the proxy */
   policy_hash?: string;
   /** CST token scope hash injected by the proxy */
@@ -222,16 +237,42 @@ export interface VirSemanticAttestation {
   event_chain_len?: number;
 }
 
+export interface VirDisclosedLeafV2 {
+  type: 'string' | 'number' | 'boolean' | 'null';
+  value: unknown;
+  salt_b64u: string;
+}
+
+export interface VirEvidenceConflict {
+  field: string;
+  authoritative_source: VirSource;
+  divergent_source: VirSource;
+  authoritative_value: unknown;
+  divergent_value: unknown;
+}
+
+export interface VirLegalBinding {
+  nonce: string;
+  subject_did: string;
+  scope_hash_b64u: string;
+  job_id?: string;
+  contract_id?: string;
+  policy_hash_b64u?: string;
+  jurisdiction?: string;
+}
+
 export interface VirSelectiveDisclosure {
   merkle_root_b64u?: string;
   leaf_hashes_b64u?: string[];
-  disclosed_leaves?: Record<string, string>;
+  disclosed_leaves?: Record<string, string | VirDisclosedLeafV2>;
   redacted_fields?: string[];
+  disclosure_algorithm?: 'vir_v2_typed_lexicographical';
+  redacted_leaf_hashes_b64u?: string[];
 }
 
-/** Verifiable Inference Receipt payload (vir.v1). */
+/** Verifiable Inference Receipt payload (vir.v1 and vir.v2). */
 export interface VirReceiptPayload {
-  receipt_version: '1';
+  receipt_version: '1' | '2';
   receipt_id: string;
   source: VirSource;
   provider: string;
@@ -246,6 +287,8 @@ export interface VirReceiptPayload {
   agent_did: string;
   timestamp: string;
   binding?: ReceiptBinding;
+  legal_binding?: VirLegalBinding;
+  evidence_conflicts?: VirEvidenceConflict[];
   transport_attestation?: VirTransportAttestation;
   process_attestation?: VirProcessAttestation;
   semantic_attestation?: VirSemanticAttestation;
@@ -926,10 +969,62 @@ export interface AttestationReference {
   signature_b64u: string;
 }
 
+export interface SentinelTelemetry {
+  interpose_active: boolean;
+  shell_events?: number;
+  fs_events?: number;
+  net_events?: number;
+  net_suspicious?: number;
+  interpose_events?: number;
+  interpose_gateway?: number;
+  interpose_transcript?: number;
+  interpose_tool_calls?: number;
+  interpose_anomalies?: number;
+  preload_llm_events?: number;
+  tls_sni_events?: number;
+  tls_sni_receipts?: number;
+  tls_decrypt_receipts?: number;
+  vir_receipts?: number;
+  interpose_state?: Record<string, unknown>;
+}
+
+export interface CoverageAttestationPayload {
+  attestation_version: '1';
+  attestation_id: string;
+  run_id: string;
+  agent_did: string;
+  sentinel_did: string;
+  issued_at: string;
+  binding: {
+    event_chain_root_hash_b64u: string;
+  };
+  metrics: {
+    lineage: {
+      root_pid: number;
+      processes_tracked: number;
+      unmonitored_spawns: number;
+      escapes_suspected: boolean;
+    };
+    egress: {
+      connections_total: number;
+      unmediated_connections: number;
+    };
+    liveness: {
+      status: 'continuous' | 'interrupted';
+      uptime_ms: number;
+      heartbeat_interval_ms: number;
+      max_gap_ms: number;
+    };
+  };
+  metadata?: Record<string, unknown>;
+}
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
   harness?: HarnessMetadata;
+  /** Deterministic coverage telemetry from local sentinels. */
+  sentinels?: SentinelTelemetry;
   /** Additional metadata (non-normative) */
   [key: string]: unknown;
 }
@@ -943,6 +1038,8 @@ export interface ProofBundlePayload {
   event_chain?: EventChainEntry[];
   receipts?: SignedEnvelope<GatewayReceiptPayload>[];
   vir_receipts?: Array<VirReceiptPayload | VirReceiptEnvelope>;
+  web_receipts?: SignedEnvelope<WebReceiptPayload>[];
+  coverage_attestations?: SignedEnvelope<CoverageAttestationPayload>[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
 }
@@ -1008,9 +1105,13 @@ export interface ProofBundleVerificationResult {
 
     receipts_valid?: boolean;
     vir_receipts_valid?: boolean;
+    web_receipts_valid?: boolean;
+    coverage_attestations_valid?: boolean;
     attestations_valid?: boolean;
     receipts_count?: number;
     vir_receipts_count?: number;
+    web_receipts_count?: number;
+    coverage_attestations_count?: number;
     /** Strongest verified VIR source among this bundle's VIR receipts. */
     vir_best_source?: VirSource;
     /** Number of receipts that passed cryptographic verification AND binding checks (when enforced). */
@@ -1021,6 +1122,10 @@ export interface ProofBundleVerificationResult {
     vir_receipts_verified_count?: number;
     /** Number of VIR receipts that passed cryptographic signature+hash verification (regardless of binding). */
     vir_receipts_signature_verified_count?: number;
+    /** Number of web receipts that passed cryptographic verification AND binding checks (when enforced). */
+    web_receipts_verified_count?: number;
+    /** Number of web receipts that passed cryptographic signature+hash verification (regardless of binding). */
+    web_receipts_signature_verified_count?: number;
     attestations_count?: number;
     /** Number of attestations that passed cryptographic signature verification (regardless of allowlist/subject binding). */
     attestations_signature_verified_count?: number;
@@ -1031,6 +1136,7 @@ export interface ProofBundleVerificationResult {
     execution_attestations_valid?: boolean;
     execution_attestations_count?: number;
     execution_attestations_verified_count?: number;
+    tee_execution_verified_count?: number;
   };
 }
 

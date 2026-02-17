@@ -14,7 +14,11 @@ import {
   validateProofBundleEnvelopeV1 as validateProofBundleEnvelopeV1Generated,
   validateWebReceiptEnvelopeV1 as validateWebReceiptEnvelopeV1Generated,
   validateVirV1 as validateVirV1Generated,
+  validateVirV2 as validateVirV2Generated,
   validateVirEnvelopeV1 as validateVirEnvelopeV1Generated,
+  validateVirEnvelopeV2 as validateVirEnvelopeV2Generated,
+  validateCoverageAttestationV1 as validateCoverageAttestationV1Generated,
+  validateCoverageAttestationEnvelopeV1 as validateCoverageAttestationEnvelopeV1Generated,
   validateExecutionAttestationEnvelopeV1 as validateExecutionAttestationEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
@@ -53,8 +57,19 @@ const validateWebReceiptEnvelopeV1Fn =
 
 const validateVirV1Fn = validateVirV1Generated as StandaloneValidateFunction;
 
+const validateVirV2Fn = validateVirV2Generated as StandaloneValidateFunction;
+
 const validateVirEnvelopeV1Fn =
   validateVirEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateVirEnvelopeV2Fn =
+  validateVirEnvelopeV2Generated as StandaloneValidateFunction;
+
+const validateCoverageAttestationV1Fn =
+  validateCoverageAttestationV1Generated as StandaloneValidateFunction;
+
+const validateCoverageAttestationEnvelopeV1Fn =
+  validateCoverageAttestationEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateExecutionAttestationEnvelopeV1Fn =
   validateExecutionAttestationEnvelopeV1Generated as StandaloneValidateFunction;
@@ -237,10 +252,36 @@ export function validateVirV1(value: unknown): SchemaValidationResult {
   return validateWith(validateVirV1Fn, value, 'vir.v1');
 }
 
+export function validateVirV2(value: unknown): SchemaValidationResult {
+  return validateWith(validateVirV2Fn, value, 'vir.v2');
+}
+
 export function validateVirEnvelopeV1(
   envelope: unknown
 ): SchemaValidationResult {
   return validateWith(validateVirEnvelopeV1Fn, envelope, 'vir_envelope.v1');
+}
+
+export function validateVirEnvelopeV2(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(validateVirEnvelopeV2Fn, envelope, 'vir_envelope.v2');
+}
+
+export function validateCoverageAttestationV1(
+  value: unknown
+): SchemaValidationResult {
+  return validateWith(validateCoverageAttestationV1Fn, value, 'coverage_attestation.v1');
+}
+
+export function validateCoverageAttestationEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(
+    validateCoverageAttestationEnvelopeV1Fn,
+    envelope,
+    'coverage_attestation_envelope.v1'
+  );
 }
 
 export function validateExecutionAttestationEnvelopeV1(

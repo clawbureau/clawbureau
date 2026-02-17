@@ -57,7 +57,13 @@ async function makeDidKeyEd25519(): Promise<{
   };
 }
 
-async function makeVirEnvelope(options?: { nonce?: string }) {
+async function makeVirEnvelope(options?: {
+  nonce?: string;
+  subject?: string;
+  scope?: string;
+  subjectDid?: string;
+  scopeHash?: string;
+}) {
   const signer = await makeDidKeyEd25519();
 
   const payload: Record<string, unknown> = {
@@ -78,6 +84,10 @@ async function makeVirEnvelope(options?: { nonce?: string }) {
     binding: {
       run_id: 'run_vir_receipt',
       nonce: options?.nonce,
+      ...(options?.subject ? { subject: options.subject } : {}),
+      ...(options?.scope ? { scope: options.scope } : {}),
+      ...(options?.subjectDid ? { subject_did: options.subjectDid } : {}),
+      ...(options?.scopeHash ? { scope_hash_b64u: options.scopeHash } : {}),
     },
     transport_attestation: {
       source: 'tls_decrypt',
@@ -125,5 +135,52 @@ describe('VIR receipt verification', () => {
 
     expect(out.result.status).toBe('INVALID');
     expect(out.error?.code).toBe('MISSING_NONCE');
+  });
+
+  it('fails closed when expectedSubject is required but missing', async () => {
+    const { envelope } = await makeVirEnvelope({ nonce: 'nonce_ok' });
+
+    const out = await verifyReceipt(envelope, {
+      requiresJobBinding: true,
+      expectedSubject: 'did:key:zExpectedSubject',
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('MISSING_REQUIRED_FIELD');
+    expect(out.error?.field).toBe('payload.binding.subject');
+  });
+
+  it('fails closed when expectedScope mismatches', async () => {
+    const { envelope } = await makeVirEnvelope({
+      nonce: 'nonce_ok',
+      subject: 'did:key:zExpectedSubject',
+      scope: 'scope-A',
+    });
+
+    const out = await verifyReceipt(envelope, {
+      requiresJobBinding: true,
+      expectedSubject: 'did:key:zExpectedSubject',
+      expectedScope: 'scope-B',
+    });
+
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.error?.field).toBe('payload.binding.scope');
+  });
+
+  it('accepts subject_did and scope_hash_b64u aliases for strict binding checks', async () => {
+    const { envelope } = await makeVirEnvelope({
+      nonce: 'nonce_ok',
+      subjectDid: 'did:key:zAliasSubject',
+      scopeHash: 'scope-hash-001',
+    });
+
+    const out = await verifyReceipt(envelope, {
+      requiresJobBinding: true,
+      expectedSubject: 'did:key:zAliasSubject',
+      expectedScope: 'scope-hash-001',
+    });
+
+    expect(out.result.status).toBe('VALID');
   });
 });
