@@ -15,6 +15,7 @@ export const ENVELOPE_TYPES = [
   'vir_receipt',
   'web_receipt',
   'coverage_attestation',
+  'binary_semantic_evidence',
   'proof_bundle',
   'event_chain',
   'owner_attestation',
@@ -1028,6 +1029,37 @@ export interface CoverageAttestationPayload {
   metadata?: Record<string, unknown>;
 }
 
+export interface BinarySemanticEvidencePayload {
+  evidence_version: '1';
+  binary_hash_b64u: string;
+  binary_profile: {
+    target_architecture:
+      | 'x86_64'
+      | 'arm64'
+      | 'x86'
+      | 'arm'
+      | 'riscv64'
+      | 'unknown';
+    linkage: 'STATIC' | 'DYNAMIC' | 'UNKNOWN';
+    symbols: 'STRIPPED' | 'INTACT' | 'UNKNOWN';
+    is_sip_protected: boolean;
+  };
+  extracted_claims: {
+    network_egress: 'PRESENT' | 'ABSENT' | 'UNKNOWN';
+    dynamic_code_generation: 'PRESENT' | 'ABSENT' | 'UNKNOWN';
+  };
+  causality_metrics: {
+    merkle_chain_intact: boolean;
+    unattested_children_spawned: boolean;
+  };
+  forensic_metrics: {
+    static_analysis_budget_exhausted: boolean;
+    parser_timeout: boolean;
+    normalized_regions_scanned: number;
+  };
+  metadata?: Record<string, unknown>;
+}
+
 /** Proof bundle metadata with optional harness information */
 export interface ProofBundleMetadata {
   /** Harness metadata identifying the runtime that produced this bundle */
@@ -1049,6 +1081,7 @@ export interface ProofBundlePayload {
   vir_receipts?: Array<VirReceiptPayload | VirReceiptEnvelope>;
   web_receipts?: SignedEnvelope<WebReceiptPayload>[];
   coverage_attestations?: SignedEnvelope<CoverageAttestationPayload>[];
+  binary_semantic_evidence_attestations?: SignedEnvelope<BinarySemanticEvidencePayload>[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
 }

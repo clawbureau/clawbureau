@@ -19,6 +19,7 @@ import {
   validateVirEnvelopeV2 as validateVirEnvelopeV2Generated,
   validateCoverageAttestationV1 as validateCoverageAttestationV1Generated,
   validateCoverageAttestationEnvelopeV1 as validateCoverageAttestationEnvelopeV1Generated,
+  validateBinarySemanticEvidenceEnvelopeV1 as validateBinarySemanticEvidenceEnvelopeV1Generated,
   validateExecutionAttestationEnvelopeV1 as validateExecutionAttestationEnvelopeV1Generated,
   validateDerivationAttestationEnvelopeV1 as validateDerivationAttestationEnvelopeV1Generated,
   validateAuditResultAttestationEnvelopeV1 as validateAuditResultAttestationEnvelopeV1Generated,
@@ -71,6 +72,9 @@ const validateCoverageAttestationV1Fn =
 
 const validateCoverageAttestationEnvelopeV1Fn =
   validateCoverageAttestationEnvelopeV1Generated as StandaloneValidateFunction;
+
+const validateBinarySemanticEvidenceEnvelopeV1Fn =
+  validateBinarySemanticEvidenceEnvelopeV1Generated as StandaloneValidateFunction;
 
 const validateExecutionAttestationEnvelopeV1Fn =
   validateExecutionAttestationEnvelopeV1Generated as StandaloneValidateFunction;
@@ -285,6 +289,16 @@ export function validateCoverageAttestationEnvelopeV1(
     validateCoverageAttestationEnvelopeV1Fn,
     envelope,
     'coverage_attestation_envelope.v1'
+  );
+}
+
+export function validateBinarySemanticEvidenceEnvelopeV1(
+  envelope: unknown
+): SchemaValidationResult {
+  return validateWith(
+    validateBinarySemanticEvidenceEnvelopeV1Fn,
+    envelope,
+    'binary_semantic_evidence_envelope.v1'
   );
 }
 

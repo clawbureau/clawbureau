@@ -1,0 +1,134 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.binary_semantic_evidence.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Binary Semantic Evidence v1",
+  "description": "Deterministic static binary semantic evidence payload for capability and causality claims.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "evidence_version",
+    "binary_hash_b64u",
+    "binary_profile",
+    "extracted_claims",
+    "causality_metrics",
+    "forensic_metrics"
+  ],
+  "properties": {
+    "evidence_version": {
+      "const": "1"
+    },
+    "binary_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "binary_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_architecture",
+        "linkage",
+        "symbols",
+        "is_sip_protected"
+      ],
+      "properties": {
+        "target_architecture": {
+          "type": "string",
+          "enum": [
+            "x86_64",
+            "arm64",
+            "x86",
+            "arm",
+            "riscv64",
+            "unknown"
+          ]
+        },
+        "linkage": {
+          "type": "string",
+          "enum": [
+            "STATIC",
+            "DYNAMIC",
+            "UNKNOWN"
+          ]
+        },
+        "symbols": {
+          "type": "string",
+          "enum": [
+            "STRIPPED",
+            "INTACT",
+            "UNKNOWN"
+          ]
+        },
+        "is_sip_protected": {
+          "type": "boolean"
+        }
+      }
+    },
+    "extracted_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "network_egress",
+        "dynamic_code_generation"
+      ],
+      "properties": {
+        "network_egress": {
+          "type": "string",
+          "enum": [
+            "PRESENT",
+            "ABSENT",
+            "UNKNOWN"
+          ]
+        },
+        "dynamic_code_generation": {
+          "type": "string",
+          "enum": [
+            "PRESENT",
+            "ABSENT",
+            "UNKNOWN"
+          ]
+        }
+      }
+    },
+    "causality_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "merkle_chain_intact",
+        "unattested_children_spawned"
+      ],
+      "properties": {
+        "merkle_chain_intact": {
+          "type": "boolean"
+        },
+        "unattested_children_spawned": {
+          "type": "boolean"
+        }
+      }
+    },
+    "forensic_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "static_analysis_budget_exhausted",
+        "parser_timeout",
+        "normalized_regions_scanned"
+      ],
+      "properties": {
+        "static_analysis_budget_exhausted": {
+          "type": "boolean"
+        },
+        "parser_timeout": {
+          "type": "boolean"
+        },
+        "normalized_regions_scanned": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

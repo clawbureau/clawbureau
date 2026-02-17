@@ -80,6 +80,7 @@ const requiredGeneratedValidators = [
   'validateVirEnvelopeV2',
   'validateWebReceiptEnvelopeV1',
   'validateCoverageAttestationEnvelopeV1',
+  'validateBinarySemanticEvidenceEnvelopeV1',
   'validateProofBundleEnvelopeV1',
 ];
 
@@ -96,6 +97,7 @@ const requiredSchemaValidationExports = [
   'export function validateVirEnvelopeV2',
   'export function validateWebReceiptEnvelopeV1',
   'export function validateCoverageAttestationEnvelopeV1',
+  'export function validateBinarySemanticEvidenceEnvelopeV1',
   'export function validateProofBundleEnvelopeV1',
 ];
 
@@ -107,6 +109,7 @@ const requiredAllowlistEntries = [
   "schema_id: 'vir_receipt'",
   "schema_id: 'web_receipt'",
   "schema_id: 'coverage_attestation'",
+  "schema_id: 'binary_semantic_evidence'",
   "schema_id: 'proof_bundle'",
 ];
 
@@ -120,6 +123,7 @@ if (!fs.existsSync(contractTestPath)) {
 
 assertFileContains(contractTestPath, 'web_receipts', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'coverage_attestations', 'schema-runtime-contract.test.ts');
+assertFileContains(contractTestPath, 'binary_semantic_evidence_attestations', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'vir_receipts', 'schema-runtime-contract.test.ts');
 
 // Regeneration guard: if running the generator mutates the generated file, fail.
