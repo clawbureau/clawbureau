@@ -1,0 +1,48 @@
+{
+  "report_version": "1",
+  "report_id": "cer_2026-02-17_bootstrap",
+  "compiled_at": "2026-02-17T18:30:00Z",
+  "compiler_version": "0.1.0",
+  "evidence_refs": {
+    "proof_bundle_hash_b64u": "cHJvb2ZfYnVuZGxlX2hhc2hfMDAx",
+    "ontology_hash_b64u": "b250b2xvZ3lfaGFzaF8wMDE",
+    "mapping_rules_hash_b64u": "bWFwcGluZ19ydWxlc19oYXNoXzAwMQ",
+    "verify_result_hash_b64u": "dmVyaWZ5X3Jlc3VsdF9oYXNoXzAwMQ"
+  },
+  "overall_status": "PARTIAL",
+  "matrix_hash_b64u": "bWF0cml4X2hhc2hfMDAx",
+  "control_results": [
+    {
+      "control_id": "SOC2-CC6.1",
+      "status": "PASS",
+      "reason_codes": [
+        "CONTROL_PREDICATE_SATISFIED"
+      ],
+      "evidence_hashes_b64u": [
+        "ZXZpZGVuY2VfMDAxX2hhc2g"
+      ],
+      "waiver_applied": false
+    },
+    {
+      "control_id": "EU-AI-ACT-ART14",
+      "status": "PARTIAL",
+      "reason_codes": [
+        "WAIVER_APPLIED_SCOPE_BOUND"
+      ],
+      "evidence_hashes_b64u": [
+        "ZXZpZGVuY2VfMDAyX2hhc2g"
+      ],
+      "waiver_applied": true
+    }
+  ],
+  "narrative": {
+    "narrative_version": "1",
+    "report_id": "cer_2026-02-17_bootstrap",
+    "generated_at": "2026-02-17T18:30:01Z",
+    "authoritative": false,
+    "disclaimer": "NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results.",
+    "text": "Deterministic matrix evaluation completed successfully. One control is PARTIAL due to an approved, scope-bound waiver.",
+    "generator_provider": "openai",
+    "generator_model": "gpt-5.3"
+  }
+}

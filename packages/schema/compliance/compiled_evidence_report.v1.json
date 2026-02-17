@@ -1,0 +1,154 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_report.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compiled Evidence Report v1",
+  "description": "Deterministic control-matrix output compiled from verified evidence artifacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_version",
+    "report_id",
+    "compiled_at",
+    "compiler_version",
+    "evidence_refs",
+    "overall_status",
+    "matrix_hash_b64u",
+    "control_results"
+  ],
+  "properties": {
+    "report_version": {
+      "const": "1"
+    },
+    "report_id": {
+      "type": "string",
+      "pattern": "^cer_[A-Za-z0-9._:-]+$"
+    },
+    "compiled_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "compiler_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proof_bundle_hash_b64u",
+        "ontology_hash_b64u",
+        "mapping_rules_hash_b64u",
+        "verify_result_hash_b64u"
+      ],
+      "properties": {
+        "proof_bundle_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "ontology_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "mapping_rules_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "verify_result_hash_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        }
+      }
+    },
+    "overall_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "PARTIAL",
+        "FAIL_CLOSED_INVALID_EVIDENCE"
+      ]
+    },
+    "matrix_hash_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "control_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "control_id",
+          "status",
+          "reason_codes",
+          "evidence_hashes_b64u",
+          "waiver_applied"
+        ],
+        "properties": {
+          "control_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "PARTIAL",
+              "INAPPLICABLE",
+              "FAIL_CLOSED_INVALID_EVIDENCE"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]+$",
+              "minLength": 3
+            }
+          },
+          "evidence_hashes_b64u": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "minLength": 8
+            }
+          },
+          "waiver_applied": {
+            "type": "boolean"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "waiver_applied": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "status": {
+                  "const": "PARTIAL"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "narrative": {
+      "$ref": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_narrative.v1.json"
+    }
+  }
+}

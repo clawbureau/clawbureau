@@ -1,0 +1,52 @@
+{
+  "name": "clawcompiler-bootstrap",
+  "project": "clawbureau",
+  "description": "Bootstrap deterministic Regulatory Evidence Compiler contracts (schemas + conformance) before runtime service implementation.",
+  "branchName": "feat/clawcompiler/CEC-US-001-003-bootstrap",
+  "userStories": [
+    {
+      "id": "CEC-US-001",
+      "title": "Deterministic compiled evidence report schema",
+      "description": "As a compliance pipeline, I need a deterministic compiled evidence report schema so control outcomes are machine-verifiable and auditable.",
+      "acceptanceCriteria": [
+        "Add compiled_evidence_report.v1 schema under packages/schema/compliance",
+        "Schema defines deterministic control-result status and reason-code fields",
+        "Schema remains additive and does not break compliance_report.v1.json"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Implemented schema contract with deterministic control status enums, reason-code formatting constraints, evidence hash references, and waiver->PARTIAL guardrail."
+    },
+    {
+      "id": "CEC-US-002",
+      "title": "Signed compiled evidence report envelope schema",
+      "description": "As an auditor, I need compiled reports wrapped in a signed envelope so payload hash and signer identity are cryptographically bindable.",
+      "acceptanceCriteria": [
+        "Add compiled_evidence_report_envelope.v1 schema under packages/schema/compliance",
+        "Envelope enforces payload hash/signature/signer/issued_at fields",
+        "Envelope payload references compiled_evidence_report.v1"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Implemented envelope schema with deterministic hash/signature/signer constraints and explicit payload linkage to compiled_evidence_report.v1."
+    },
+    {
+      "id": "CEC-US-003",
+      "title": "Dual-plane narrative schema membrane",
+      "description": "As governance, I need narrative explanations to be optional and explicitly non-authoritative so deterministic compliance results cannot be overridden by prose.",
+      "acceptanceCriteria": [
+        "Add compiled_evidence_narrative.v1 schema under packages/schema/compliance",
+        "Schema enforces authoritative:false",
+        "Schema enforces a fixed disclaimer string",
+        "Add conformance fixtures covering valid/invalid disclaimer and authoritative flag"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Implemented dual-plane narrative schema with hard membrane via const authoritative:false and fixed disclaimer, plus deterministic conformance vectors."
+    }
+  ],
+  "metadata": {
+    "updatedAt": "2026-02-17T18:30:00Z",
+    "status": "bootstrap complete (schema + conformance scaffold)"
+  }
+}

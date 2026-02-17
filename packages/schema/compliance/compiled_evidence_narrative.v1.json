@@ -1,0 +1,48 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_narrative.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Compiled Evidence Narrative v1",
+  "description": "Optional non-authoritative narrative plane for compiled compliance evidence reports.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "narrative_version",
+    "report_id",
+    "generated_at",
+    "authoritative",
+    "disclaimer",
+    "text"
+  ],
+  "properties": {
+    "narrative_version": {
+      "const": "1"
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authoritative": {
+      "const": false
+    },
+    "disclaimer": {
+      "const": "NON_NORMATIVE: This narrative is explanatory only and is not authoritative compliance evidence. Authoritative determinations are in compiled_evidence_report.control_results."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000
+    },
+    "generator_provider": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generator_model": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

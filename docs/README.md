@@ -44,6 +44,7 @@ These are the docs most likely to matter when making code changes:
 
 - `docs/roadmaps/clawsig-protocol/` — Clawsig Protocol v0.1 (narrow waist + explicit coverage + approvals UX)
 - `docs/roadmaps/docs-ia/` — docs information architecture / freshness cleanup
+- `docs/roadmaps/clawcompiler/` — Regulatory Evidence Compiler bootstrap (CEC-US-001..003 schema + conformance contracts)
 
 ## Roadmaps (completed)
 

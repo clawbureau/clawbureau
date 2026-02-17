@@ -1,0 +1,52 @@
+{
+  "manifest_version": "1",
+  "suite": "clawcompiler-compiled-evidence",
+  "cases": [
+    {
+      "id": "valid-report",
+      "fixture": "valid-compiled-evidence-report.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_report.v1.json",
+      "expect_valid": true
+    },
+    {
+      "id": "invalid-report-hash",
+      "fixture": "invalid-compiled-evidence-report-hash.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_report.v1.json",
+      "expect_valid": false,
+      "expected_error_path": "/matrix_hash_b64u"
+    },
+    {
+      "id": "valid-envelope",
+      "fixture": "valid-compiled-evidence-report-envelope.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_report_envelope.v1.json",
+      "expect_valid": true
+    },
+    {
+      "id": "invalid-envelope-signature",
+      "fixture": "invalid-compiled-evidence-report-envelope-signature.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_report_envelope.v1.json",
+      "expect_valid": false,
+      "expected_error_path": "/signature_b64u"
+    },
+    {
+      "id": "valid-narrative",
+      "fixture": "valid-compiled-evidence-narrative.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_narrative.v1.json",
+      "expect_valid": true
+    },
+    {
+      "id": "invalid-narrative-disclaimer",
+      "fixture": "invalid-compiled-evidence-narrative-disclaimer.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_narrative.v1.json",
+      "expect_valid": false,
+      "expected_error_path": "/disclaimer"
+    },
+    {
+      "id": "invalid-narrative-authoritative-flag",
+      "fixture": "invalid-compiled-evidence-narrative-authoritative-flag.v1.json",
+      "schema_id": "https://schemas.clawbureau.org/claw.compliance.compiled_evidence_narrative.v1.json",
+      "expect_valid": false,
+      "expected_error_path": "/authoritative"
+    }
+  ]
+}
