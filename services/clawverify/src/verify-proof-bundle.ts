@@ -2744,7 +2744,7 @@ export async function verifyProofBundle(
     metadataRecord && isObjectRecord(metadataRecord.coverage_enforcement)
       ? metadataRecord.coverage_enforcement
       : null;
-  const coverageRequired = coveragePolicy?.required === true;
+  const coverageRequiredByMetadata = coveragePolicy?.required === true;
 
   const coverageCount = componentResults.coverage_attestations_count ?? 0;
   const coverageVerifiedCount = componentResults.coverage_attestations_verified_count ?? 0;
@@ -2752,7 +2752,10 @@ export async function verifyProofBundle(
 
   const coverageInvariantFailed =
     hasCoverageEvidence && coverageVerifiedCount < coverageCount;
-  const requiredCoverageMissing = coverageRequired && !hasCoverageEvidence;
+
+  const requiredCoverage =
+    enforcementPhase === 'enforce' || coverageRequiredByMetadata;
+  const requiredCoverageMissing = requiredCoverage && !hasCoverageEvidence;
 
   if (claimedInterpose && !hasCoverageEvidence) {
     modelIdentityRiskFlags.add('COVERAGE_DEGRADED_NO_INTERPOSE');
@@ -2767,20 +2770,33 @@ export async function verifyProofBundle(
     modelIdentityRiskFlags.add('COVERAGE_REQUIRED_MISSING');
   }
 
-  const shouldDowngradeForCoverage =
-    enforcementPhase === 'enforce' &&
-    (coverageInvariantFailed || requiredCoverageMissing);
+  if (enforcementPhase === 'enforce' && (requiredCoverageMissing || coverageInvariantFailed)) {
+    const reason = requiredCoverageMissing
+      ? 'Coverage enforcement is set to enforce but coverage_attestations are missing'
+      : 'Coverage enforcement is set to enforce but coverage evidence failed verification invariants';
 
-  if (shouldDowngradeForCoverage) {
-    modelIdentityRiskFlags.add('COVERAGE_ENFORCEMENT_DOWNGRADE');
-
-    if (proofTier === 'gateway' || proofTier === 'sandbox' || proofTier === 'witnessed_web') {
-      proofTier = 'self';
-    }
-
-    if (trustTier === 'full' || trustTier === 'verified' || trustTier === 'attested') {
-      trustTier = 'basic';
-    }
+    return {
+      result: {
+        status: 'INVALID',
+        reason,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        model_identity_tier: modelIdentityTier,
+        risk_flags:
+          modelIdentityRiskFlags.size > 0
+            ? [...modelIdentityRiskFlags].sort()
+            : undefined,
+        component_results: componentResults,
+      },
+      error: {
+        code: 'EVIDENCE_MISMATCH',
+        message: reason,
+        field: 'payload.coverage_attestations',
+      },
+    };
   }
 
   // 17. Return success with computed tiers

@@ -59,6 +59,9 @@ const urm = readJson('packages/schema/poh/urm.v1.json');
 const promptPack = readJson('packages/schema/poh/prompt_pack.v1.json');
 const systemPromptReport = readJson('packages/schema/poh/system_prompt_report.v1.json');
 
+// WPC v2 policy schema
+const workPolicyContractV2 = readJson('packages/schema/policy/work_policy_contract.v2.json');
+
 const ajv = new Ajv2020({
   allErrors: true,
   // This is about schema correctness warnings, not validation strictness.
@@ -112,6 +115,9 @@ ajv.addSchema(urm);
 ajv.addSchema(promptPack);
 ajv.addSchema(systemPromptReport);
 
+// Policy schemas
+ajv.addSchema(workPolicyContractV2);
+
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
   validateGatewayReceiptEnvelopeV1: gatewayReceiptEnvelope.$id,
@@ -131,6 +137,7 @@ const code = standaloneCode(ajv, {
   validateUrmV1: urm.$id,
   validatePromptPackV1: promptPack.$id,
   validateSystemPromptReportV1: systemPromptReport.$id,
+  validateWorkPolicyContractV2: workPolicyContractV2.$id,
 });
 
 const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node services/clawverify/scripts/generate-schema-validators.mjs\n\n`;

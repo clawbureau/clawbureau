@@ -30,6 +30,12 @@
       "maxLength": 128,
       "description": "Optional parent policy ID for Strict Intersection. When set, both parent AND child must allow an action for it to be permitted."
     },
+    "coverage_enforcement": {
+      "type": "string",
+      "enum": ["observe", "warn", "enforce"],
+      "default": "observe",
+      "description": "Coverage evidence enforcement phase for proof-bundle verification. observe/warn are non-blocking; enforce requires valid coverage evidence."
+    },
     "statements": {
       "type": "array",
       "description": "IAM-style policy statements. Evaluated in order; explicit Deny always wins.",

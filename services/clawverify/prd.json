@@ -434,6 +434,22 @@
       "priority": 30,
       "passes": true,
       "notes": "Implemented `src/verify-coverage-attestation.ts` and wired proof-bundle runtime verification for `coverage_attestations` with fail-closed signer allowlist, hash+signature checks, and bundle binding checks (`agent_did`, `run_id`, `event_chain_root_hash_b64u`). Added deterministic counters: `coverage_attestations_count`, `coverage_attestations_signature_verified_count`, `coverage_attestations_verified_count`, `coverage_attestations_valid`. Reworked phase behavior so `observe`/`warn` never downgrade tiers, while `enforce` downgrades only when verified coverage evidence fails invariants (lineage/egress/liveness) or required coverage is missing. Exposed env passthrough in `src/index.ts`: `COVERAGE_ATTESTATION_SIGNER_DIDS`, `COVERAGE_ENFORCEMENT_PHASE`, `COVERAGE_MAX_LIVENESS_GAP_MS`. Added/updated tests in `test/coverage-attestation.test.ts`, `test/proof-tier-next-trust.test.ts`, and firewall conformance fixtures."
+    },
+    {
+      "id": "CVF-US-058",
+      "title": "Strict coverage enforcement policy coupling (WPC v2)",
+      "description": "As a verifier, I want /v1/verify/bundle coverage phase behavior to be explicitly driven by a validated Work Policy Contract so enforce mode is fail-closed on missing/invalid coverage evidence.",
+      "acceptanceCriteria": [
+        "Add coverage_enforcement enum (observe|warn|enforce, default observe) to work_policy_contract.v2 schema",
+        "Validate optional work_policy_contract object in /v1/verify/bundle request using local schema validation (no network fetch)",
+        "Derive effective coverage phase from WPC when present, otherwise fall back to COVERAGE_ENFORCEMENT_PHASE env",
+        "When effective phase is enforce, missing/invalid required coverage evidence returns INVALID (no downgrade-only behavior)",
+        "observe/warn phases remain non-blocking and emit risk flags",
+        "Typecheck/tests/schema-drift/firewall-conformance pass"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Updated `packages/schema/policy/work_policy_contract.v2.json` with `coverage_enforcement` and regenerated standalone validators. Added `validateWorkPolicyContractV2` wiring in schema-validation and used it in `src/index.ts` for `/v1/verify/bundle` request-level validation of optional `work_policy_contract`. Effective phase precedence is now deterministic: WPC field when provided, else env fallback. Updated `verify-proof-bundle.ts` enforce semantics to fail closed (`INVALID` + `EVIDENCE_MISMATCH`) when coverage evidence is missing or invalid under enforce. Added API/runtime regression coverage in `test/coverage-attestation.test.ts`, updated phase behavior checks in `test/proof-tier-next-trust.test.ts`, and extended firewall conformance fixtures/tests for coverage-enforce scenarios."
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { base64UrlEncode, computeHash } from '../src/crypto';
+import worker from '../src/index';
 import { verifyCoverageAttestation } from '../src/verify-coverage-attestation';
 import { verifyProofBundle } from '../src/verify-proof-bundle';
 
@@ -82,6 +83,7 @@ async function makeGatewayBundleWithCoverage(args?: {
   coverageChainRootHash?: string;
   livenessStatus?: 'continuous' | 'interrupted';
   livenessMaxGapMs?: number;
+  includeCoverage?: boolean;
 }) {
   const agent = await makeDidKeyEd25519();
   const gateway = await makeDidKeyEd25519();
@@ -174,8 +176,11 @@ async function makeGatewayBundleWithCoverage(args?: {
       },
     ],
     receipts: [gatewayReceiptEnvelope],
-    coverage_attestations: [coverageEnvelope],
   };
+
+  if (args?.includeCoverage !== false) {
+    bundlePayload.coverage_attestations = [coverageEnvelope];
+  }
 
   const bundleEnvelope = await signEnvelope({
     payload: bundlePayload,
@@ -191,6 +196,25 @@ async function makeGatewayBundleWithCoverage(args?: {
     agentDid: agent.did,
     gatewayDid: gateway.did,
     sentinelDid: sentinel.did,
+  };
+}
+
+function makeWorkPolicyContractV2(
+  phase: 'observe' | 'warn' | 'enforce'
+): Record<string, unknown> {
+  return {
+    policy_version: '2',
+    policy_id: `wpc_cov_${phase}`,
+    issuer_did: 'did:key:zWpcCoverageIssuer0001',
+    coverage_enforcement: phase,
+    statements: [
+      {
+        sid: 'AllowAllForCoverageTests',
+        effect: 'Allow',
+        actions: ['*'],
+        resources: ['*'],
+      },
+    ],
   };
 }
 
@@ -270,7 +294,7 @@ describe('proof bundle coverage runtime binding + phase gating', () => {
     expect(out.result.risk_flags).toContain('COVERAGE_ATTESTATION_RUN_ID_MISMATCH');
   });
 
-  it('enforce phase downgrades on verified coverage invariant failure', async () => {
+  it('enforce phase fails closed on verified coverage invariant failure', async () => {
     const { bundleEnvelope, gatewayDid, sentinelDid } = await makeGatewayBundleWithCoverage({
       livenessMaxGapMs: 7_500,
     });
@@ -282,11 +306,9 @@ describe('proof bundle coverage runtime binding + phase gating', () => {
       maxCoverageLivenessGapMs: 1_000,
     });
 
-    expect(out.result.status).toBe('VALID');
-    expect(out.result.proof_tier).toBe('self');
-    expect(out.result.trust_tier).toBe('basic');
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
     expect(out.result.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
-    expect(out.result.risk_flags).toContain('COVERAGE_ENFORCEMENT_DOWNGRADE');
   });
 
   it.each(['observe', 'warn'] as const)(
@@ -306,7 +328,108 @@ describe('proof bundle coverage runtime binding + phase gating', () => {
       expect(out.result.status).toBe('VALID');
       expect(out.result.proof_tier).toBe('gateway');
       expect(out.result.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
-      expect(out.result.risk_flags).not.toContain('COVERAGE_ENFORCEMENT_DOWNGRADE');
     }
   );
+});
+
+describe('/v1/verify/bundle WPC coverage phase coupling', () => {
+  it('WPC enforce + no coverage attestation => INVALID', async () => {
+    const { bundleEnvelope, gatewayDid, sentinelDid } = await makeGatewayBundleWithCoverage({
+      includeCoverage: false,
+    });
+
+    const req = new Request('https://clawverify.com/v1/verify/bundle', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        envelope: bundleEnvelope,
+        work_policy_contract: makeWorkPolicyContractV2('enforce'),
+      }),
+    });
+
+    const env = {
+      ENVIRONMENT: 'test',
+      AUDIT_LOG_DB: undefined,
+      GATEWAY_RECEIPT_SIGNER_DIDS: gatewayDid,
+      COVERAGE_ATTESTATION_SIGNER_DIDS: sentinelDid,
+      COVERAGE_ENFORCEMENT_PHASE: 'observe',
+      COVERAGE_MAX_LIVENESS_GAP_MS: '1000',
+    };
+
+    const res = await worker.fetch(req, env as any, {} as any);
+    expect(res.status).toBe(422);
+
+    const json = await res.json();
+    expect(json?.result?.status).toBe('INVALID');
+    expect(json?.error?.code).toBe('EVIDENCE_MISMATCH');
+  });
+
+  it('WPC warn + failed coverage invariant => VALID with risk flag', async () => {
+    const { bundleEnvelope, gatewayDid, sentinelDid } = await makeGatewayBundleWithCoverage({
+      livenessMaxGapMs: 9_000,
+    });
+
+    const req = new Request('https://clawverify.com/v1/verify/bundle', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        envelope: bundleEnvelope,
+        work_policy_contract: makeWorkPolicyContractV2('warn'),
+      }),
+    });
+
+    const env = {
+      ENVIRONMENT: 'test',
+      AUDIT_LOG_DB: undefined,
+      GATEWAY_RECEIPT_SIGNER_DIDS: gatewayDid,
+      COVERAGE_ATTESTATION_SIGNER_DIDS: sentinelDid,
+      // Ensure WPC phase takes precedence over env fallback.
+      COVERAGE_ENFORCEMENT_PHASE: 'enforce',
+      COVERAGE_MAX_LIVENESS_GAP_MS: '1000',
+    };
+
+    const res = await worker.fetch(req, env as any, {} as any);
+    expect(res.status).toBe(200);
+
+    const json = await res.json();
+    expect(json?.result?.status).toBe('VALID');
+    expect(json?.result?.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
+    expect(json?.result?.proof_tier).toBe('gateway');
+  });
+
+  it('WPC absent + env fallback phase works', async () => {
+    const { bundleEnvelope, gatewayDid, sentinelDid } = await makeGatewayBundleWithCoverage({
+      includeCoverage: false,
+    });
+
+    const req = new Request('https://clawverify.com/v1/verify/bundle', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        envelope: bundleEnvelope,
+      }),
+    });
+
+    const env = {
+      ENVIRONMENT: 'test',
+      AUDIT_LOG_DB: undefined,
+      GATEWAY_RECEIPT_SIGNER_DIDS: gatewayDid,
+      COVERAGE_ATTESTATION_SIGNER_DIDS: sentinelDid,
+      COVERAGE_ENFORCEMENT_PHASE: 'enforce',
+      COVERAGE_MAX_LIVENESS_GAP_MS: '1000',
+    };
+
+    const res = await worker.fetch(req, env as any, {} as any);
+    expect(res.status).toBe(422);
+
+    const json = await res.json();
+    expect(json?.result?.status).toBe('INVALID');
+    expect(json?.error?.code).toBe('EVIDENCE_MISMATCH');
+  });
 });

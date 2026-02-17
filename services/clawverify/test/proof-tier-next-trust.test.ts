@@ -399,7 +399,7 @@ describe('P0 deterministic evidence firewall: web + tee core', () => {
     expect(out.error?.code).toBe('REVOKED');
   });
 
-  it('enforce phase downgrades gateway proof tier on coverage invariant failures', async () => {
+  it('enforce phase fails closed on coverage invariant failures', async () => {
     const { bundleEnvelope, gatewayDid, sentinelDid } =
       await makeGatewayBundleWithCoverageInvariantFailure();
 
@@ -410,10 +410,9 @@ describe('P0 deterministic evidence firewall: web + tee core', () => {
       maxCoverageLivenessGapMs: 1_000,
     });
 
-    expect(out.result.status).toBe('VALID');
-    expect(out.result.proof_tier).toBe('self');
-    expect(out.result.trust_tier).toBe('basic');
-    expect(out.result.risk_flags).toContain('COVERAGE_ENFORCEMENT_DOWNGRADE');
+    expect(out.result.status).toBe('INVALID');
+    expect(out.error?.code).toBe('EVIDENCE_MISMATCH');
+    expect(out.result.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
   });
 
   it.each(['observe', 'warn'] as const)(
@@ -431,7 +430,7 @@ describe('P0 deterministic evidence firewall: web + tee core', () => {
 
       expect(out.result.status).toBe('VALID');
       expect(out.result.proof_tier).toBe('gateway');
-      expect(out.result.risk_flags).not.toContain('COVERAGE_ENFORCEMENT_DOWNGRADE');
+      expect(out.result.risk_flags).toContain('COVERAGE_LIVENESS_GAP_EXCEEDED');
     }
   );
 });

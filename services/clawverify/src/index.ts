@@ -21,6 +21,7 @@ import { verifyScopedToken } from './verify-scoped-token';
 import { verifyControlChain } from './verify-control-chain';
 import { verifyTokenControl } from './verify-token-control';
 import { verifyExportBundle } from './verify-export-bundle';
+import { validateWorkPolicyContractV2 } from './schema-validation';
 import {
   writeAuditLogEntry,
   getAuditLogEntry,
@@ -709,6 +710,26 @@ function parseNonNegativeInteger(value: string | undefined): number | undefined 
   return parsed;
 }
 
+function getCoveragePhaseFromWorkPolicyContract(
+  workPolicyContract: unknown,
+): 'observe' | 'warn' | 'enforce' {
+  if (
+    typeof workPolicyContract !== 'object' ||
+    workPolicyContract === null ||
+    Array.isArray(workPolicyContract)
+  ) {
+    return 'observe';
+  }
+
+  const raw = (workPolicyContract as Record<string, unknown>).coverage_enforcement;
+  if (raw === 'observe' || raw === 'warn' || raw === 'enforce') {
+    return raw;
+  }
+
+  // Schema default for v2.
+  return 'observe';
+}
+
 /**
  * Handle POST /v1/introspect/scoped-token - Scoped token introspection
  */
@@ -1032,10 +1053,11 @@ async function handleVerifyBundle(
     return errorResponse('Request must contain an "envelope" field', 400);
   }
 
-  const { envelope, urm, execution_attestations } = body as {
+  const { envelope, urm, execution_attestations, work_policy_contract } = body as {
     envelope: unknown;
     urm?: unknown;
     execution_attestations?: unknown;
+    work_policy_contract?: unknown;
   };
 
   // Verify the proof bundle
@@ -1055,14 +1077,29 @@ async function handleVerifyBundle(
     env.COVERAGE_ATTESTATION_SIGNER_DIDS
   );
 
+  let effectiveCoverageEnforcementPhase = parseCoverageEnforcementPhase(
+    env.COVERAGE_ENFORCEMENT_PHASE
+  );
+
+  if (work_policy_contract !== undefined) {
+    const wpcValidation = validateWorkPolicyContractV2(work_policy_contract);
+    if (!wpcValidation.valid) {
+      return errorResponse(
+        `Invalid work_policy_contract: ${wpcValidation.message}`,
+        400
+      );
+    }
+
+    effectiveCoverageEnforcementPhase =
+      getCoveragePhaseFromWorkPolicyContract(work_policy_contract);
+  }
+
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
     allowlistedWitnessSignerDids: witnessSignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
     allowlistedCoverageAttestationSignerDids: coverageAttestationSignerAllowlist,
-    coverage_enforcement_phase: parseCoverageEnforcementPhase(
-      env.COVERAGE_ENFORCEMENT_PHASE
-    ),
+    coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
     maxCoverageLivenessGapMs: parseNonNegativeInteger(
       env.COVERAGE_MAX_LIVENESS_GAP_MS
     ),
