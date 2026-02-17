@@ -54,3 +54,15 @@ Started: 2026-02-17T18:30:00Z
   - S-run is donor-only and explicitly not a copy source for schema/code literals.
   - This entry is planning/intake only; no runtime implementation landed in this step.
 ---
+
+## 2026-02-17T20:05:00Z - CEC-US-004..006 shipped close-out
+- What was implemented
+  - Closed roadmap drift by marking runtime delivery complete in `docs/roadmaps/clawcompiler/prd.json`.
+  - Recorded shipped references:
+    - `CEC-US-004`: PR #274, merge `3737bfe`, feature `9ab4346`, proof `725cc2b`
+    - `CEC-US-005`: PR #275, merge `047b667`, feature `8ae9f26`, proof `2823141`
+    - `CEC-US-006`: PR #275, merge `047b667`
+- Notes
+  - CEC-US-001..006 are now fully shipped and auditable from roadmap tracker state.
+  - No runtime/schema changes in this close-out lane (docs-only hygiene).
+---

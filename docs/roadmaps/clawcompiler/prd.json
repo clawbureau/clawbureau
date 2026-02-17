@@ -2,7 +2,7 @@
   "name": "clawcompiler-bootstrap",
   "project": "clawbureau",
   "description": "Bootstrap deterministic Regulatory Evidence Compiler contracts (schemas + conformance) before runtime service implementation.",
-  "branchName": "feat/clawcompiler/CEC-US-004-006-r45-canonical-roadmap",
+  "branchName": "main",
   "userStories": [
     {
       "id": "CEC-US-001",
@@ -55,8 +55,8 @@
         "Reason-code registry for binary semantic evidence is explicitly enumerated and versioned"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": "R45 canonical intake source: docs/roadmaps/clawcompiler/oracle/2026-02-17/R45_BINARY_SEM_CANONICAL.md. S run contributes policy ordering only; malformed schema/code literals are excluded."
+      "passes": true,
+      "notes": "Shipped via PR #274 (merge 3737bfe) with feature commit 9ab434628fe8283aa65bd15675c1963ead976f2d and DID proof commit 725cc2b2503010908fddf84f266ed2fd270b400a."
     },
     {
       "id": "CEC-US-005",
@@ -69,8 +69,8 @@
         "Deterministic verdict + reason-code outputs are stable for identical inputs"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "Policy ordering and contradiction framing derived from R45 synthesis (A/C base + S policy donor)."
+      "passes": true,
+      "notes": "Shipped via PR #275 (merge 047b667) with deterministic runtime precedence state machine, feature commit 8ae9f26040973e09dc71c4b581afc9ece08ecfa8, proof commit 2823141efa71e5a6a816bf24945a3d65d773c9b4."
     },
     {
       "id": "CEC-US-006",
@@ -83,12 +83,12 @@
         "Fixtures and runner are scoped to this domain and do not depend on narrative interpretation"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "Derived from normalized R45 adversarial matrix in canonical synthesis doc."
+      "passes": true,
+      "notes": "Shipped via PR #275 (merge 047b667) with adversarial conformance fixture corpus + deterministic runner assertions for exact verdict/reason outputs."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-17T19:15:00Z",
-    "status": "bootstrap complete (CEC-US-001..003); R45 intake captured; CEC-US-004..006 planned"
+    "updatedAt": "2026-02-17T20:05:00Z",
+    "status": "CEC-US-001..006 shipped (bootstrap + R45 intake + runtime/conformance delivery)"
   }
 }
