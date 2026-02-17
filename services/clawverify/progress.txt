@@ -471,3 +471,25 @@ Started: 2026-02-02T03:08:26.937416
   - merge commits: `034b09ce91222d7a85fb50497cdebdbdc010fffd` (CVF-US-057 stack close-out), `ff2aa6f85bf152f1776d8fe04377fbf57a8a8062` (CVF-US-058)
   - proofs: `proofs/feat/clawverify/CVF-US-057-coverage-attestation-runtime-binding/commit.sig.json`, `proofs/feat/clawverify/CVF-US-058-coverage-enforcement-policy-coupling/commit.sig.json`
 ---
+
+## 2026-02-17 - CVF-US-059/060/062/063/064 (VIR corroboration + witnessed-web + tee nonce binding)
+- Shipped and merged to `main`:
+  - CVF-US-059: high-claim VIR corroboration gating.
+  - CVF-US-060: deterministic VIR conflict severity policy with same-event contradiction fail-closed handling.
+  - CVF-US-062: witnessed-web quorum (m-of-n) + split-view policy semantics (`warn` degrade, `enforce` INVALID).
+  - CVF-US-063: witnessed-web transparency policy hooks with deterministic receipt-leaf inclusion binding.
+  - CVF-US-064: TEE nonce/report-data binding + strict measured-identity requirements + explicit `proof_tier=tee` uplift path.
+- Merge refs:
+  - PR #267 -> `564608a` (contains feature/proof commits `c5978e3`, `ec801dc`)
+  - PR #268 -> `e59d25e` (contains feature/proof commits `0da5e66`, `a91e560`)
+  - PR #269 -> `2802d59` (contains feature/proof commits `1fa61f7`, `02421da`)
+- Proof refs:
+  - `proofs/feat/clawverify/CVF-US-059-060-vir-corroboration-severity/commit.sig.json`
+  - `proofs/feat/clawverify/CVF-US-062-063-witnessed-web-quorum-transparency/commit.sig.json`
+  - `proofs/feat/clawverify/CVF-US-064-tee-nonce-binding-tier/commit.sig.json`
+- Validation gates (merged lanes):
+  - `cd services/clawverify && npm run typecheck`
+  - `cd services/clawverify && npm test`
+  - `cd services/clawverify && npm run check:schema-runtime-sync`
+  - `node scripts/protocol/run-clawverify-firewall-conformance.mjs`
+---
