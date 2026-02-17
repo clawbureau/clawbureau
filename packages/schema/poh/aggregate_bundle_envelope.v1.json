@@ -1,9 +1,9 @@
 {
+  "$id": "https://schemas.clawbureau.org/claw.poh.aggregate_bundle_envelope.v1.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.clawbureau.com/poh/tool_receipt_envelope.v1.json",
-  "title": "Tool Receipt Envelope v1",
-  "description": "A signed envelope wrapping a tool receipt. Uses the same signed envelope pattern as gateway receipts.",
+  "title": "Aggregate Bundle Envelope v1",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "envelope_version",
     "envelope_type",
@@ -17,29 +17,27 @@
   ],
   "properties": {
     "envelope_version": {
-      "type": "string",
       "const": "1"
     },
     "envelope_type": {
-      "type": "string",
-      "const": "tool_receipt"
+      "const": "aggregate_bundle"
     },
     "payload": {
-      "$ref": "tool_receipt.v1.json"
+      "$ref": "https://schemas.clawbureau.org/claw.poh.aggregate_bundle.v1.json"
     },
     "payload_hash_b64u": {
       "type": "string",
-      "minLength": 1,
-      "description": "Base64url-encoded SHA-256 hash of JCS-canonicalized payload."
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
     },
     "hash_algorithm": {
       "type": "string",
-      "enum": ["SHA-256"]
+      "enum": ["SHA-256", "BLAKE3"]
     },
     "signature_b64u": {
       "type": "string",
-      "minLength": 1,
-      "description": "Base64url-encoded Ed25519 signature over JCS-canonicalized envelope (with signature_b64u set to empty string)."
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
     },
     "algorithm": {
       "type": "string",
@@ -47,8 +45,7 @@
     },
     "signer_did": {
       "type": "string",
-      "minLength": 1,
-      "description": "DID of the envelope signer."
+      "pattern": "^did:"
     },
     "issued_at": {
       "type": "string",
@@ -58,6 +55,5 @@
       "type": "string",
       "format": "date-time"
     }
-  },
-  "additionalProperties": false
+  }
 }

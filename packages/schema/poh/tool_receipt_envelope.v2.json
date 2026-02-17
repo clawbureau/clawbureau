@@ -1,9 +1,10 @@
 {
+  "$id": "https://schemas.clawbureau.org/claw.poh.tool_receipt_envelope.v2.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.clawbureau.com/poh/tool_receipt_envelope.v1.json",
-  "title": "Tool Receipt Envelope v1",
-  "description": "A signed envelope wrapping a tool receipt. Uses the same signed envelope pattern as gateway receipts.",
+  "title": "Tool Receipt Envelope v2",
+  "description": "Signed envelope for tool receipt v2 including additive co-signatures and optional expiry.",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "envelope_version",
     "envelope_type",
@@ -18,28 +19,28 @@
   "properties": {
     "envelope_version": {
       "type": "string",
-      "const": "1"
+      "const": "2"
     },
     "envelope_type": {
       "type": "string",
       "const": "tool_receipt"
     },
     "payload": {
-      "$ref": "tool_receipt.v1.json"
+      "$ref": "https://schemas.clawbureau.org/claw.poh.tool_receipt.v2.json"
     },
     "payload_hash_b64u": {
       "type": "string",
-      "minLength": 1,
-      "description": "Base64url-encoded SHA-256 hash of JCS-canonicalized payload."
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
     },
     "hash_algorithm": {
       "type": "string",
-      "enum": ["SHA-256"]
+      "enum": ["SHA-256", "BLAKE3"]
     },
     "signature_b64u": {
       "type": "string",
-      "minLength": 1,
-      "description": "Base64url-encoded Ed25519 signature over JCS-canonicalized envelope (with signature_b64u set to empty string)."
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
     },
     "algorithm": {
       "type": "string",
@@ -47,8 +48,7 @@
     },
     "signer_did": {
       "type": "string",
-      "minLength": 1,
-      "description": "DID of the envelope signer."
+      "pattern": "^did:"
     },
     "issued_at": {
       "type": "string",
@@ -57,7 +57,13 @@
     "expires_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "co_signatures": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "https://schemas.clawbureau.org/claw.poh.co_signature.v1.json"
+      }
     }
-  },
-  "additionalProperties": false
+  }
 }

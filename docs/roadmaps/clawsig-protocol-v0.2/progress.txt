@@ -10,3 +10,30 @@
 Notes:
 - This lane is docs-only and architecture-preserving.
 - Runtime/schema/conformance implementation follows in subsequent CPL-V2 execution lanes.
+
+---
+
+2026-02-17 — schema foundations lane (CPL-V2-005/006/010)
+
+- Added additive R48/R49 schema foundations under `packages/schema/poh/`:
+  - `selective_disclosure.v1.json`
+  - `co_signature.v1.json`
+  - `tool_receipt.v2.json`
+  - `tool_receipt_envelope.v2.json`
+  - `aggregate_bundle.v1.json`
+  - `aggregate_bundle_envelope.v1.json`
+- Extended `proof_bundle.v1.json` for additive compatibility:
+  - `tool_receipts[]` now accepts finite, explicit v1/v2 payload/envelope schema set
+  - receipt collection arrays bounded (`maxItems: 1000`) for deterministic verification limits
+  - inline receipt envelope surfaces now allow optional `expires_at`
+- Added optional `expires_at` to envelope schemas used by proof/export paths:
+  - `proof_bundle_envelope.v1.json`, `export_bundle.v1.json`, and receipt envelopes
+- Implemented fail-closed schema-ID normalization plumbing in both runtime registries:
+  - `services/clawverify/src/schema-registry.ts`
+  - `packages/clawverify-core/src/schema-registry.ts`
+  - Explicit finite alias map for legacy v1 tool URIs; unknown IDs remain `UNKNOWN_SCHEMA_ID`.
+- Regenerated schema validators (service + core) with new schema coverage and updated drift checks.
+
+Validation:
+- `services/clawverify`: `npm run check:schema-runtime-sync`, `npm run typecheck`, `npm test` ✅
+- `packages/clawverify-core`: `npm run typecheck` ✅

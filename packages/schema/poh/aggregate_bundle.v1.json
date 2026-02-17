@@ -1,0 +1,92 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.aggregate_bundle.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Aggregate Bundle Payload v1",
+  "description": "Fleet-level aggregate bundle composed of proof bundles/export bundles.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "aggregate_version",
+    "aggregate_id",
+    "created_at",
+    "issuer_did",
+    "manifest",
+    "artifacts",
+    "metadata"
+  ],
+  "properties": {
+    "aggregate_version": {
+      "const": "1"
+    },
+    "aggregate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "issuer_did": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "manifest": {
+      "$ref": "https://schemas.clawbureau.org/claw.poh.export_bundle_manifest.v1.json"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["member_bundles"],
+      "properties": {
+        "member_bundles": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "https://schemas.clawbureau.org/claw.poh.proof_bundle_envelope.v1.json"
+              },
+              {
+                "$ref": "https://schemas.clawbureau.org/claw.poh.export_bundle.v1.json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["fleet_summary"],
+      "properties": {
+        "fleet_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total_members", "unique_agents", "total_runs"],
+          "properties": {
+            "total_members": {
+              "type": "number",
+              "minimum": 1
+            },
+            "unique_agents": {
+              "type": "number",
+              "minimum": 1
+            },
+            "total_runs": {
+              "type": "number",
+              "minimum": 1
+            },
+            "fleet_proof_tier": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

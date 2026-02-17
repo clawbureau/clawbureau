@@ -1,14 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Generate standalone Ajv validators for Cloudflare Workers.
- *
- * Why?
- * - Ajv normally compiles schemas using `new Function(...)`, which is disallowed in Workers.
- * - Ajv standalone mode generates plain JS validation functions that do not require runtime
- *   code generation.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,27 +57,19 @@ const proofBundle = readJson('packages/schema/poh/proof_bundle.v1.json');
 const proofBundleEnvelope = readJson('packages/schema/poh/proof_bundle_envelope.v1.json');
 const urm = readJson('packages/schema/poh/urm.v1.json');
 
-// POH-US-017: prompt commitment schemas
 const promptPack = readJson('packages/schema/poh/prompt_pack.v1.json');
 const systemPromptReport = readJson('packages/schema/poh/system_prompt_report.v1.json');
 
-// WPC v2 policy schema
-const workPolicyContractV2 = readJson('packages/schema/policy/work_policy_contract.v2.json');
-
 const ajv = new Ajv2020({
   allErrors: true,
-  // This is about schema correctness warnings, not validation strictness.
-  // Some of our schemas use anyOf+required patterns that trip strictRequired.
   strict: false,
   code: {
     source: true,
     esm: true,
   },
 });
-
 addFormats(ajv);
 
-// Add referenced schemas first.
 ajv.addSchema(receiptBinding);
 ajv.addSchema(modelIdentity);
 ajv.addSchema(logInclusionProof);
@@ -101,7 +84,6 @@ ajv.addSchema(toolReceiptEnvelopeV2);
 ajv.addSchema(aggregateBundleV1);
 ajv.addSchema(aggregateBundleEnvelopeV1);
 
-// Add payload + envelope schemas.
 ajv.addSchema(gatewayReceipt);
 ajv.addSchema(gatewayReceiptEnvelope);
 ajv.addSchema(webReceipt);
@@ -117,7 +99,6 @@ ajv.addSchema(binarySemanticEvidenceEnvelope);
 ajv.addSchema(proofBundle);
 ajv.addSchema(proofBundleEnvelope);
 
-// Attestation payload + envelope schemas
 ajv.addSchema(derivationAttestation);
 ajv.addSchema(derivationAttestationEnvelope);
 ajv.addSchema(auditResultAttestation);
@@ -125,19 +106,11 @@ ajv.addSchema(auditResultAttestationEnvelope);
 ajv.addSchema(executionAttestation);
 ajv.addSchema(executionAttestationEnvelope);
 
-// Export bundle schemas
 ajv.addSchema(exportBundleManifest);
 ajv.addSchema(exportBundle);
-
-// PoH artifact schemas (URM materialization)
 ajv.addSchema(urm);
-
-// Prompt commitment schemas
 ajv.addSchema(promptPack);
 ajv.addSchema(systemPromptReport);
-
-// Policy schemas
-ajv.addSchema(workPolicyContractV2);
 
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
@@ -167,12 +140,10 @@ const code = standaloneCode(ajv, {
   validateUrmV1: urm.$id,
   validatePromptPackV1: promptPack.$id,
   validateSystemPromptReportV1: systemPromptReport.$id,
-  validateWorkPolicyContractV2: workPolicyContractV2.$id,
 });
 
-const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node services/clawverify/scripts/generate-schema-validators.mjs\n\n`;
+const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node packages/clawverify-core/scripts/generate-schema-validators.mjs\n\n`;
 
-const outPath = path.resolve(repoRoot, 'services/clawverify/src/schema-validators.generated.ts');
+const outPath = path.resolve(repoRoot, 'packages/clawverify-core/src/schema-validators.generated.ts');
 fs.writeFileSync(outPath, `${header}${code}\n`, 'utf8');
-
 console.log(`Wrote ${path.relative(repoRoot, outPath)}`);

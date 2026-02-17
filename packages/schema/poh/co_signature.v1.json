@@ -1,0 +1,37 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.co_signature.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Co-Signature v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "signature_b64u",
+    "algorithm",
+    "signer_did",
+    "issued_at",
+    "role"
+  ],
+  "properties": {
+    "signature_b64u": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 8
+    },
+    "algorithm": {
+      "type": "string",
+      "enum": ["Ed25519"]
+    },
+    "signer_did": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "role": {
+      "type": "string",
+      "enum": ["proxy", "approver", "auditor", "supervisor"]
+    }
+  }
+}

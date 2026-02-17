@@ -22,6 +22,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "generate:schema-validators": "node scripts/generate-schema-validators.mjs",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

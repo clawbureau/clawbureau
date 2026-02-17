@@ -45,6 +45,7 @@
       "pattern": "^did:",
       "description": "Witness signer DID. Must start with 'did:'."
     },
-    "issued_at": { "type": "string", "format": "date-time" }
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" }
   }
 }

@@ -82,6 +82,9 @@ const requiredGeneratedValidators = [
   'validateCoverageAttestationEnvelopeV1',
   'validateBinarySemanticEvidenceEnvelopeV1',
   'validateProofBundleEnvelopeV1',
+  'validateToolReceiptV2',
+  'validateToolReceiptEnvelopeV2',
+  'validateAggregateBundleEnvelopeV1',
 ];
 
 for (const symbol of requiredGeneratedValidators) {
@@ -111,6 +114,10 @@ const requiredAllowlistEntries = [
   "schema_id: 'coverage_attestation'",
   "schema_id: 'binary_semantic_evidence'",
   "schema_id: 'proof_bundle'",
+  "schema_id: 'tool_receipt'",
+  "schema_id: 'tool_receipt_envelope'",
+  "schema_id: 'aggregate_bundle'",
+  "schema_id: 'aggregate_bundle_envelope'",
 ];
 
 for (const snippet of requiredAllowlistEntries) {

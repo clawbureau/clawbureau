@@ -60,6 +60,48 @@ export const SCHEMA_ALLOWLIST: readonly SchemaAllowlistEntry[] = [
     added_at: '2026-01-01T00:00:00Z',
   },
   {
+    schema_id: 'tool_receipt',
+    version: '2',
+    supported_versions: ['1', '2'],
+    status: 'active',
+    added_at: '2026-02-17T00:00:00Z',
+  },
+  {
+    schema_id: 'tool_receipt_envelope',
+    version: '2',
+    supported_versions: ['1', '2'],
+    status: 'active',
+    added_at: '2026-02-17T00:00:00Z',
+  },
+  {
+    schema_id: 'co_signature',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-17T00:00:00Z',
+  },
+  {
+    schema_id: 'selective_disclosure',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-17T00:00:00Z',
+  },
+  {
+    schema_id: 'aggregate_bundle',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-17T00:00:00Z',
+  },
+  {
+    schema_id: 'aggregate_bundle_envelope',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-17T00:00:00Z',
+  },
+  {
     schema_id: 'web_receipt',
     version: '1',
     supported_versions: ['1'],
@@ -153,13 +195,60 @@ const SCHEMA_ALLOWLIST_MAP: Map<string, SchemaAllowlistEntry> = new Map(
 );
 
 /**
+ * Canonical schema URI mapping for resolver normalization.
+ *
+ * Policy:
+ * - Fully-qualified URI IDs only
+ * - Explicit finite alias map for legacy v1 tool schema URIs
+ * - Unknown schema URI => fail-closed (UNKNOWN_SCHEMA_ID)
+ */
+const CANONICAL_SCHEMA_URI_TO_ALLOWLIST_ID: Readonly<Record<string, string>> = {
+  'https://schemas.clawbureau.com/poh/tool_receipt.v1.json': 'tool_receipt',
+  'https://schemas.clawbureau.com/poh/tool_receipt_envelope.v1.json': 'tool_receipt_envelope',
+  'https://schemas.clawbureau.org/claw.poh.tool_receipt.v2.json': 'tool_receipt',
+  'https://schemas.clawbureau.org/claw.poh.tool_receipt_envelope.v2.json': 'tool_receipt_envelope',
+  'https://schemas.clawbureau.org/claw.poh.co_signature.v1.json': 'co_signature',
+  'https://schemas.clawbureau.org/claw.poh.selective_disclosure.v1.json': 'selective_disclosure',
+  'https://schemas.clawbureau.org/claw.poh.aggregate_bundle.v1.json': 'aggregate_bundle',
+  'https://schemas.clawbureau.org/claw.poh.aggregate_bundle_envelope.v1.json': 'aggregate_bundle_envelope',
+};
+
+const SCHEMA_URI_ALIAS_TO_CANONICAL: Readonly<Record<string, string>> = {
+  'https://schemas.clawbureau.org/claw.poh.tool_receipt.v1.json':
+    'https://schemas.clawbureau.com/poh/tool_receipt.v1.json',
+  'https://schemas.clawbureau.org/claw.poh.tool_receipt_envelope.v1.json':
+    'https://schemas.clawbureau.com/poh/tool_receipt_envelope.v1.json',
+};
+
+export function canonicalizeSchemaUri(schemaUri: unknown): string | null {
+  if (typeof schemaUri !== 'string') return null;
+  if (schemaUri in SCHEMA_URI_ALIAS_TO_CANONICAL) {
+    return SCHEMA_URI_ALIAS_TO_CANONICAL[schemaUri]!;
+  }
+  if (schemaUri in CANONICAL_SCHEMA_URI_TO_ALLOWLIST_ID) {
+    return schemaUri;
+  }
+  return null;
+}
+
+function resolveAllowlistSchemaId(schemaIdOrUri: string): string | null {
+  if (/^https?:\/\//.test(schemaIdOrUri)) {
+    const canonical = canonicalizeSchemaUri(schemaIdOrUri);
+    if (!canonical) return null;
+    return CANONICAL_SCHEMA_URI_TO_ALLOWLIST_ID[canonical] ?? null;
+  }
+  return schemaIdOrUri;
+}
+
+/**
  * Check if a schema ID is in the allowlist
  * @param schemaId - The schema ID to check
  * @returns true if the schema ID is allowlisted, false otherwise
  */
 export function isAllowlistedSchemaId(schemaId: unknown): schemaId is string {
   if (typeof schemaId !== 'string') return false;
-  return SCHEMA_ALLOWLIST_MAP.has(schemaId);
+  const resolved = resolveAllowlistSchemaId(schemaId);
+  return typeof resolved === 'string' && SCHEMA_ALLOWLIST_MAP.has(resolved);
 }
 
 /**
@@ -218,8 +307,10 @@ export function validateSchemaAllowlist(
   schemaId: string,
   version?: string
 ): SchemaValidationResult {
+  const resolvedSchemaId = resolveAllowlistSchemaId(schemaId);
+
   // Check if schema ID is allowlisted
-  if (!isAllowlistedSchemaId(schemaId)) {
+  if (!resolvedSchemaId || !SCHEMA_ALLOWLIST_MAP.has(resolvedSchemaId)) {
     return {
       valid: false,
       schema_id: schemaId,
@@ -228,14 +319,14 @@ export function validateSchemaAllowlist(
     };
   }
 
-  const entry = getSchemaAllowlistEntry(schemaId)!;
+  const entry = getSchemaAllowlistEntry(resolvedSchemaId)!;
 
   // Check if version is provided and valid
   if (version !== undefined) {
     if (!entry.supported_versions.includes(version)) {
       return {
         valid: false,
-        schema_id: schemaId,
+        schema_id: resolvedSchemaId,
         version: version,
         error_code: 'UNKNOWN_SCHEMA_VERSION',
         error_message: `Version '${version}' is not supported for schema '${schemaId}'. Supported versions: ${entry.supported_versions.join(', ')}`,
@@ -247,7 +338,7 @@ export function validateSchemaAllowlist(
   if (entry.status === 'deprecated') {
     return {
       valid: true,
-      schema_id: schemaId,
+      schema_id: resolvedSchemaId,
       version: version ?? entry.version,
       error_code: 'DEPRECATED_SCHEMA',
       error_message: `Schema '${schemaId}' is deprecated as of ${entry.deprecated_at}`,
@@ -256,7 +347,7 @@ export function validateSchemaAllowlist(
 
   return {
     valid: true,
-    schema_id: schemaId,
+    schema_id: resolvedSchemaId,
     version: version ?? entry.version,
   };
 }
