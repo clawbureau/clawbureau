@@ -1,0 +1,113 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.vir.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verifiable Inference Receipt v1",
+  "description": "Evidence-fused Verifiable Inference Receipt synthesized from transport, process, and semantic observations.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "receipt_version",
+    "receipt_id",
+    "source",
+    "provider",
+    "model",
+    "request_hash_b64u",
+    "response_hash_b64u",
+    "tokens_input",
+    "tokens_output",
+    "latency_ms",
+    "agent_did",
+    "timestamp"
+  ],
+  "properties": {
+    "receipt_version": { "const": "1" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "string",
+      "enum": ["tls_decrypt", "gateway", "interpose", "preload", "sni"]
+    },
+    "provider": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "model_claimed": { "type": "string" },
+    "model_observed": { "type": "string" },
+    "request_hash_b64u": { "type": "string" },
+    "response_hash_b64u": { "type": "string" },
+    "tokens_input": { "type": "number", "minimum": 0 },
+    "tokens_output": { "type": "number", "minimum": 0 },
+    "latency_ms": { "type": "number", "minimum": 0 },
+    "agent_did": { "type": "string", "pattern": "^did:" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "binding": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "event_hash_b64u": { "type": "string", "minLength": 8 },
+        "nonce": { "type": "string", "minLength": 1 }
+      }
+    },
+    "transport_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["tls_decrypt", "gateway", "interpose", "preload", "sni"]
+        },
+        "keylog_present": { "type": "boolean" },
+        "cipher_spool_present": { "type": "boolean" },
+        "decrypted_match": { "type": ["boolean", "null"] }
+      }
+    },
+    "process_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "harness_attestation_hash": { "type": ["string", "null"] },
+        "harness_recheck_match": { "type": "boolean" },
+        "interpose_active": { "type": "boolean" }
+      }
+    },
+    "semantic_attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_calls_count": { "type": "number", "minimum": 0 },
+        "side_effect_receipts_count": { "type": "number", "minimum": 0 },
+        "event_chain_len": { "type": "number", "minimum": 0 }
+      }
+    },
+    "selective_disclosure": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "merkle_root_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "minLength": 8
+        },
+        "leaf_hashes_b64u": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 8 }
+        },
+        "disclosed_leaves": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 8 }
+        },
+        "redacted_fields": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "merkle_disclosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chain_hash": { "type": "string", "minLength": 1 },
+        "event_count": { "type": "number", "minimum": 0 }
+      }
+    },
+    "metadata": { "type": "object" }
+  }
+}

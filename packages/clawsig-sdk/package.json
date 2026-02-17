@@ -1,6 +1,6 @@
 {
   "name": "@clawbureau/clawsig-sdk",
-  "version": "0.5.0",
+  "version": "0.11.0",
   "description": "Lightweight SDK for emitting verifiable proof bundles from any Node.js agent \u2014 model calls, tool receipts, side-effect receipts, human approvals, and capability negotiation.",
   "type": "module",
   "main": "./dist/index.js",
@@ -30,7 +30,6 @@
     "src/node-preload-sentinel.mjs",
     "src/sentinel-shell.sh",
     "src/sentinel-shell-policy.sh",
-    "src/sentinels/interpose/libclawsig_interpose.c",
     "src/sentinels/interpose/Makefile",
     "README.md",
     "LICENSE"

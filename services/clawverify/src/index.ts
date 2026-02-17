@@ -1009,8 +1009,13 @@ async function handleVerifyBundle(
     env.ATTESTATION_SIGNER_DIDS
   );
 
+  const witnessSignerAllowlist = parseCommaSeparatedAllowlist(
+    env.WEB_RECEIPT_SIGNER_DIDS
+  );
+
   const verification = await verifyProofBundle(envelope, {
     allowlistedReceiptSignerDids: gatewaySignerAllowlist,
+    allowlistedWitnessSignerDids: witnessSignerAllowlist,
     allowlistedAttesterDids: attesterAllowlist,
     urm,
   });
