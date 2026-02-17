@@ -276,6 +276,19 @@
       "priority": 19,
       "passes": true,
       "notes": "Implemented via shared helper adoption in `services/clawproxy/src/scoped-token.ts` and enforcement gates in `services/clawproxy/src/index.ts` (`STRICT_AUTH_HEADERS`, `PROXY_REQUIRE_CST`, `PROXY_REQUIRE_CANONICAL_CST`). Staging key alignment deploy: `e6d6aa64-983b-40ad-bf45-92db7b4ce975`; production enforcement deploy already active: `21044cf8-d891-45f4-a1ef-ba5f05164603`. Validated by M6 conformance matrices and hard-cutover reruns."
+    },
+    {
+      "id": "CPX-US-018",
+      "title": "x402 payment-auth hash emission contract for canonical gateway receipts",
+      "description": "As a proxy/verifier operator, I need canonical gateway receipt types to include x402 payment authorization hash metadata so payment authorization can be cryptographically linked to execution evidence.",
+      "acceptanceCriteria": [
+        "clawproxy GatewayReceipt metadata type explicitly includes x402_payment_auth_hash_b64u and related x402 fields",
+        "x402 metadata builder emits deterministic x402_payment_auth_hash_b64u from payment payload bytes",
+        "Typecheck/tests pass for clawproxy and integration surfaces remain additive"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Delivered in R47 lane branch feat/clawproxy-clawverify/R47-x402-atomic-binding. Added explicit x402 metadata typing and deterministic x402 metadata hash tests."
     }
   ]
 }

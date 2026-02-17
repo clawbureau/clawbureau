@@ -547,7 +547,7 @@
       ],
       "priority": 37,
       "passes": true,
-      "notes": "Shipped via PR #TBD (R46 lane). Added `CompletenessVerdict`/`CompletenessReasonCode` and `component_results.completeness_verdict/completeness_reason_code` in proof-bundle output."
+      "notes": "Shipped via PR #277 (merge 29913c4) with feature commit 25c8ea984d79b12a0dada47e9a49b31c3e46568a and proof commit f19afc17667ed1478386ca31c43fc5d666f4c8d9."
     },
     {
       "id": "CVF-US-066",
@@ -561,7 +561,7 @@
       ],
       "priority": 38,
       "passes": true,
-      "notes": "Shipped via PR #TBD (R46 lane). Added `verify-completeness.ts` policy evaluator and runtime coupling in `verify-proof-bundle.ts`."
+      "notes": "Shipped via PR #277 (merge 29913c4). Added verify-completeness state machine and deterministic fail-closed/constrained coupling in verify-proof-bundle."
     },
     {
       "id": "CVF-US-067",
@@ -575,7 +575,34 @@
       ],
       "priority": 39,
       "passes": true,
-      "notes": "Shipped via PR #TBD (R46 lane). Added `clawverify-completeness` fixture suite, `test/completeness-conformance.test.ts`, runner script, and CI workflow."
+      "notes": "Shipped via PR #277 (merge 29913c4). Added completeness conformance fixtures, deterministic runner, and CI workflow gate."
+    },
+    {
+      "id": "CVF-US-068",
+      "title": "x402 payment-auth schema/runtime coherence contract",
+      "description": "As maintainers, we need x402 payment authorization hash fields represented consistently across schema and verifier types so receipt semantics are deterministic and auditable.",
+      "acceptanceCriteria": [
+        "gateway_receipt.v1 schema explicitly defines metadata.x402_payment_auth_hash_b64u with deterministic format constraints",
+        "clawverify and clawproxy GatewayReceipt types expose x402 payment auth metadata fields consistently",
+        "Schema/runtime drift checks and tests cover x402 metadata contract behavior"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": "Delivered in R47 lane branch feat/clawproxy-clawverify/R47-x402-atomic-binding: explicit x402_payment_auth_hash_b64u schema field plus aligned clawverify/clawproxy receipt metadata typing."
+    },
+    {
+      "id": "CVF-US-069",
+      "title": "Deterministic x402 payment↔execution binding enforcement",
+      "description": "As a verifier, I want x402-claimed gateway receipts to fail closed on malformed or inconsistent payment/execution coupling so replay and binding attacks are rejected deterministically.",
+      "acceptanceCriteria": [
+        "Verifier enforces deterministic x402 metadata + binding coherence when x402 path is claimed",
+        "Proof-bundle verification fail-closes on x402 execution binding mismatch or payment-auth replay",
+        "Conformance corpus covers missing binding, mismatch, malformed auth hash, and replay cases with exact reason-code assertions",
+        "No string-parsed security decisions in x402 policy path"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": "Delivered in R47 lane branch feat/clawproxy-clawverify/R47-x402-atomic-binding: deterministic x402 binding validator, proof-bundle fail-closed coupling, and replay/mismatch conformance corpus."
     }
   ]
 }

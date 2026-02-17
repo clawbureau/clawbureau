@@ -531,3 +531,18 @@ Started: 2026-02-02T03:08:26.937763
 - Quality checks:
   - `cd services/clawproxy && npm run typecheck && npm test`
 ---
+
+## 2026-02-17 - CPX-US-018 (x402 payment-auth receipt contract alignment)
+- What was implemented
+  - Added explicit x402 metadata typing to canonical gateway receipt payloads:
+    - `GatewayReceiptX402Metadata`
+    - `GatewayReceiptMetadata`
+    - `metadata.x402_payment_auth_hash_b64u` and related x402 fields
+  - Aligned x402 metadata builder with canonical type surface:
+    - `services/clawproxy/src/x402.ts` now returns typed x402 metadata contract used by receipt emission path.
+  - Added deterministic unit tests for x402 metadata hashing behavior:
+    - `services/clawproxy/test/x402-metadata.test.ts`
+- Quality checks
+  - `cd services/clawproxy && npm run typecheck`
+  - `cd services/clawproxy && npm test`
+---

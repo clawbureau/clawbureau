@@ -1,0 +1,12 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-x402-binding",
+  "cases": [
+    "valid-x402-bound.v1.json",
+    "invalid-x402-metadata-partial.v1.json",
+    "invalid-x402-missing-binding.v1.json",
+    "invalid-x402-binding-mismatch.v1.json",
+    "invalid-x402-payment-auth-hash-invalid.v1.json",
+    "invalid-x402-payment-auth-replay.v1.json"
+  ]
+}

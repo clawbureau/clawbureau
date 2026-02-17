@@ -1,0 +1,9 @@
+{
+  "id": "invalid-x402-missing-binding",
+  "scenario": "x402_missing_binding",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "x402_reason_code": "X402_BINDING_MISSING"
+  }
+}

@@ -530,3 +530,29 @@ Started: 2026-02-02T03:08:26.937416
   - `node scripts/protocol/run-clawverify-binary-semantic-conformance.mjs`
   - `node scripts/protocol/run-clawverify-completeness-conformance.mjs`
 ---
+
+## 2026-02-17 - CVF-US-068/069 (x402 payment↔execution atomic binding)
+- What was implemented
+  - Reconciled x402 payment-auth hash contract across schema/runtime/types:
+    - `packages/schema/poh/gateway_receipt.v1.json` now explicitly defines `metadata.x402_payment_auth_hash_b64u`.
+    - clawverify/clawproxy gateway receipt metadata types now include explicit x402 fields.
+  - Added deterministic x402 binding policy helper:
+    - `services/clawverify/src/x402-binding.ts`
+    - enforces x402 metadata coherency + required receipt binding fields when x402 path is claimed.
+  - Wired deterministic fail-closed checks:
+    - `verify-receipt.ts` rejects malformed/incomplete x402 claims with deterministic reason codes.
+    - `verify-proof-bundle.ts` fail-closes on x402 execution-binding mismatch and payment-auth replay.
+  - Added deterministic conformance + CI gate:
+    - fixtures: `packages/schema/fixtures/protocol-conformance/clawverify-x402-binding/*`
+    - tests: `services/clawverify/test/x402-binding-conformance.test.ts`, `services/clawverify/test/x402-receipt-binding.test.ts`
+    - runner: `scripts/protocol/run-clawverify-x402-binding-conformance.mjs`
+    - workflow: `.github/workflows/clawverify-x402-binding-conformance.yml`
+- Quality checks
+  - `cd services/clawverify && npm run typecheck`
+  - `cd services/clawverify && npm test`
+  - `cd services/clawverify && npm run check:schema-runtime-sync`
+  - `node scripts/protocol/run-clawverify-firewall-conformance.mjs`
+  - `node scripts/protocol/run-clawverify-binary-semantic-conformance.mjs`
+  - `node scripts/protocol/run-clawverify-completeness-conformance.mjs`
+  - `node scripts/protocol/run-clawverify-x402-binding-conformance.mjs`
+---

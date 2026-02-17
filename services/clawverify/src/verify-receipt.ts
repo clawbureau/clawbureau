@@ -10,6 +10,7 @@ import type {
   ModelIdentityTier,
   VerificationResult,
   VerificationError,
+  X402BindingReasonCode,
 } from './types';
 import {
   isAllowedVersion,
@@ -36,6 +37,11 @@ import {
   type VirFailureCode,
   validateVirReceiptCore,
 } from './vir-core';
+import {
+  inspectX402Claim,
+  mapX402SchemaFieldToReasonCode,
+  validateX402ReceiptBinding,
+} from './x402-binding';
 
 export interface ReceiptVerifierOptions {
   /**
@@ -347,6 +353,9 @@ export async function verifyReceipt(
   gateway_id?: string;
   model_identity_tier?: ModelIdentityTier;
   risk_flags?: string[];
+  x402_claimed?: boolean;
+  x402_reason_code?: X402BindingReasonCode;
+  x402_payment_auth_hash_b64u?: string;
   error?: VerificationError;
 }> {
   const now = new Date().toISOString();
@@ -461,6 +470,11 @@ export async function verifyReceipt(
   })();
 
   if (!schemaResult.valid) {
+    const x402Inspection =
+      envelope.envelope_type === 'gateway_receipt'
+        ? inspectX402Claim(envelope.payload)
+        : { claimed: false as const };
+
     return {
       result: {
         status: 'INVALID',
@@ -469,6 +483,11 @@ export async function verifyReceipt(
         signer_did: envelope.signer_did,
         verified_at: now,
       },
+      x402_claimed: x402Inspection.claimed || undefined,
+      x402_reason_code: x402Inspection.claimed
+        ? mapX402SchemaFieldToReasonCode(schemaResult.field)
+        : undefined,
+      x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
       error: {
         code: 'SCHEMA_VALIDATION_FAILED',
         message: schemaResult.message,
@@ -593,6 +612,28 @@ export async function verifyReceipt(
           message:
             'Receipt payload is missing required fields or has invalid types',
           field: 'payload',
+        },
+      };
+    }
+
+    const x402Validation = validateX402ReceiptBinding(
+      envelope.payload as GatewayReceiptPayload,
+    );
+
+    if (x402Validation.claimed && !x402Validation.valid) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `x402 binding validation failed (${x402Validation.reason_code})`,
+          verified_at: now,
+        },
+        x402_claimed: true,
+        x402_reason_code: x402Validation.reason_code,
+        x402_payment_auth_hash_b64u: x402Validation.payment_auth_hash_b64u,
+        error: {
+          code: 'EVIDENCE_MISMATCH',
+          message: x402Validation.reason_code,
+          field: x402Validation.field,
         },
       };
     }
@@ -767,6 +808,11 @@ export async function verifyReceipt(
 
   const payload = envelope.payload as GatewayReceiptPayload | VirReceiptPayload;
 
+  const x402Inspection =
+    envelope.envelope_type === 'gateway_receipt'
+      ? inspectX402Claim(payload)
+      : { claimed: false as const };
+
   return {
     result: {
       status: 'VALID',
@@ -789,5 +835,11 @@ export async function verifyReceipt(
       const merged = [...modelIdentityRiskFlags, ...Array.from(virRiskFlags)];
       return merged.length > 0 ? [...new Set(merged)].sort() : undefined;
     })(),
+    x402_claimed: x402Inspection.claimed || undefined,
+    x402_reason_code:
+      x402Inspection.claimed && envelope.envelope_type === 'gateway_receipt'
+        ? 'X402_BOUND'
+        : undefined,
+    x402_payment_auth_hash_b64u: x402Inspection.payment_auth_hash_b64u,
   };
 }

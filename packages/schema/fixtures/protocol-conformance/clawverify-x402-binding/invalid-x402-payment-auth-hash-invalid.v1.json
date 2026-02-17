@@ -1,0 +1,9 @@
+{
+  "id": "invalid-x402-payment-auth-hash-invalid",
+  "scenario": "x402_payment_auth_hash_invalid",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "EVIDENCE_MISMATCH",
+    "x402_reason_code": "X402_PAYMENT_AUTH_HASH_INVALID"
+  }
+}
