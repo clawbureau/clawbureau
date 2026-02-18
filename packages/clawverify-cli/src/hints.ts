@@ -175,6 +175,10 @@ const HINTS: Record<string, string> = {
     'A side-effect receipt is not causally anchored to a known span lineage. Bind side-effect receipts to parent/tool/root span IDs from the same bundle.',
   CAUSAL_HUMAN_APPROVAL_ORPHANED:
     'A human-approval receipt is not causally anchored to a known span lineage. Bind approval receipts to parent/tool/root span IDs from the same bundle.',
+  CAUSAL_POLICY_PROFILE_INVALID:
+    'causal_policy_profile is invalid. Use one of: compat, strict.',
+  CAUSAL_POLICY_PROFILE_DOWNGRADE:
+    'Strict causal policy profile rejected weaker override modes. Remove downgrade overrides or use compat profile explicitly.',
   COVERAGE_CLDD_DISCREPANCY_ENFORCED:
     'CLDD runtime telemetry disagrees with coverage attestation under enforce mode. Reconcile sentinel telemetry with attested coverage metrics.',
 

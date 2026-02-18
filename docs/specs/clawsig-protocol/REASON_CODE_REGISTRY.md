@@ -199,6 +199,8 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `CAUSAL_GRAPH_DISCONNECTED` | Causal graph connectivity invariants fail in enforce mode (disconnected components or non-root spans without root lineage) |
 | `CAUSAL_SIDE_EFFECT_ORPHANED` | Side-effect receipt is not causally anchored to a known span lineage in the same bundle |
 | `CAUSAL_HUMAN_APPROVAL_ORPHANED` | Human-approval receipt is not causally anchored to a known span lineage in the same bundle |
+| `CAUSAL_POLICY_PROFILE_INVALID` | Requested causal policy profile is unknown or malformed |
+| `CAUSAL_POLICY_PROFILE_DOWNGRADE` | Strict causal policy profile rejected weaker causal enforcement mode overrides |
 
 ### COVERAGE_*
 

@@ -1,0 +1,10 @@
+{
+  "id": "valid-policy-profile-compat-override",
+  "scenario": "valid_policy_profile_compat_override",
+  "expected": {
+    "status": "VALID",
+    "policy_profile": "compat",
+    "causal_connectivity_mode": "observe",
+    "coverage_enforcement_phase": "warn"
+  }
+}

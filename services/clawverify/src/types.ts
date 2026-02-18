@@ -392,6 +392,8 @@ export type VerificationErrorCode =
   | 'CAUSAL_HUMAN_APPROVAL_ORPHANED'
   | 'CAUSAL_AGGREGATE_MEMBER_CONFLICT'
   | 'CAUSAL_AGGREGATE_RECEIPT_REPLAY'
+  | 'CAUSAL_POLICY_PROFILE_INVALID'
+  | 'CAUSAL_POLICY_PROFILE_DOWNGRADE'
   | 'COVERAGE_CLDD_DISCREPANCY_ENFORCED'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
@@ -1318,6 +1320,15 @@ export interface ProofBundleVerificationResult {
     event_chain_valid?: boolean;
     /** Root hash of the event chain (first event's hash) */
     chain_root_hash?: string;
+
+    /** Active causal policy profile (compat|strict) resolved for this verification. */
+    causal_policy_profile?: 'compat' | 'strict';
+    /** Resolved causal policy snapshot used for deterministic verification. */
+    causal_policy_snapshot?: {
+      profile: 'compat' | 'strict';
+      causal_connectivity_mode: 'observe' | 'warn' | 'enforce';
+      coverage_enforcement_phase: 'observe' | 'warn' | 'enforce';
+    };
 
     // POH-US-016/017 (optional prompt commitments; do not uplift tier)
     prompt_pack_valid?: boolean;

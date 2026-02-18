@@ -113,6 +113,12 @@ export interface Env {
   COVERAGE_ENFORCEMENT_PHASE?: string;
 
   /**
+   * Causal policy profile for anti-downgrade mode controls.
+   * Allowed values: compat | strict.
+   */
+  CAUSAL_POLICY_PROFILE?: string;
+
+  /**
    * Maximum tolerated coverage liveness gap (ms).
    * Used by proof-bundle coverage invariant checks.
    */
@@ -752,6 +758,17 @@ function parseVirConflictPolicyMode(
   return undefined;
 }
 
+function parseCausalPolicyProfile(
+  value: string | undefined,
+): 'compat' | 'strict' | undefined {
+  if (!value) return undefined;
+  const profile = value.trim().toLowerCase();
+  if (profile === 'compat' || profile === 'strict') {
+    return profile;
+  }
+  return undefined;
+}
+
 function parseWitnessedWebPolicyMode(
   value: string | undefined,
 ): 'warn' | 'enforce' | undefined {
@@ -1335,6 +1352,9 @@ async function handleVerifyBundle(
     allowlistedBinarySemanticEvidenceSignerDids:
       binarySemanticEvidenceSignerAllowlist,
     coverage_enforcement_phase: effectiveCoverageEnforcementPhase,
+    causal_policy_profile: parseCausalPolicyProfile(
+      env.CAUSAL_POLICY_PROFILE
+    ),
     vir_conflict_policy_mode: parseVirConflictPolicyMode(
       env.VIR_CONFLICT_POLICY_MODE
     ),
