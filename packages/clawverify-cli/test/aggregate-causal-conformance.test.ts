@@ -140,6 +140,7 @@ async function makeProofMember(args: {
   responseHash: string;
   spanId: string;
   phase: string;
+  attributionConfidence?: number;
   parentSpanId?: string;
   toolSpanId?: string;
 }): Promise<SignedEnvelope<ProofBundlePayload>> {
@@ -179,7 +180,7 @@ async function makeProofMember(args: {
         ...(args.parentSpanId ? { parent_span_id: args.parentSpanId } : {}),
         ...(args.toolSpanId ? { tool_span_id: args.toolSpanId } : {}),
         phase: args.phase,
-        attribution_confidence: 1,
+        attribution_confidence: args.attributionConfidence ?? 0.5,
       },
     },
     envelopeType: 'gateway_receipt',
