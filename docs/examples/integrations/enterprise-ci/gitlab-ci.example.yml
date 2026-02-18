@@ -1,0 +1,13 @@
+stages:
+  - verify
+
+clawsig_starter_pack:
+  stage: verify
+  image: node:20
+  script:
+    - node docs/examples/integrations/enterprise-ci/run.mjs
+  artifacts:
+    when: always
+    paths:
+      - artifacts/examples/integrations/enterprise-ci/
+    expire_in: 14 days

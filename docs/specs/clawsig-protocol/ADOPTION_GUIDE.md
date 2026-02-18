@@ -172,5 +172,6 @@ node scripts/protocol/run-clawsig-protocol-conformance.mjs
 - Protocol spec: `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md`
 - Reason codes: `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md`
 - Quickstart vectors: `docs/examples/clawsig-v0.2-quickstart/manifest.v1.json`
+- Integration starter packs: `docs/examples/integrations/README.md`
 - Full conformance manifest: `packages/schema/fixtures/protocol-conformance/manifest.v1.json`
 - Offline verifier runner: `scripts/protocol/run-clawsig-protocol-conformance.mjs`

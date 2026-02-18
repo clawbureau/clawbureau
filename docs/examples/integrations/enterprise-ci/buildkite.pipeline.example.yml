@@ -1,0 +1,6 @@
+steps:
+  - label: ":claw: Clawsig starter pack"
+    commands:
+      - node docs/examples/integrations/enterprise-ci/run.mjs
+    artifact_paths:
+      - "artifacts/examples/integrations/enterprise-ci/**"

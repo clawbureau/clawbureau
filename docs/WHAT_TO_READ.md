@@ -64,8 +64,9 @@
 6. `packages/clawsig-sdk/README.md` — SDK API reference + quickstart
 7. `packages/clawverify-cli/README.md` — offline verifier CLI
 8. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — error codes
-9. `packages/schema/fixtures/protocol-conformance/manifest.v1.json` — conformance vectors
-10. `docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md` — CI integration example
+9. `docs/examples/integrations/README.md` — copy/paste starter packs (Node/GitHub/Enterprise CI)
+10. `packages/schema/fixtures/protocol-conformance/manifest.v1.json` — conformance vectors
+11. `docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md` — CI integration example
 
 ## Economy / risk developer (clawsettle / clawdelegate / escrow)
 
