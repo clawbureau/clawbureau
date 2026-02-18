@@ -1,0 +1,33 @@
+name: clawsig-release-integrity-guardrail
+
+on:
+  pull_request:
+    paths:
+      - 'docs/releases/**'
+      - 'proofs/chore/release/**'
+      - 'scripts/release/**'
+      - '.github/workflows/clawsig-release-integrity-guardrail.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/releases/**'
+      - 'proofs/chore/release/**'
+      - 'scripts/release/**'
+      - '.github/workflows/clawsig-release-integrity-guardrail.yml'
+
+jobs:
+  release-integrity-guardrail:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify detached checklist integrity chain
+        run: node scripts/release/check-clawsig-v0.2-checklist-integrity.mjs

@@ -229,3 +229,24 @@ Validation:
 Validation:
 - `node scripts/release/run-clawsig-v0.2-package-prep.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — v0.2 release checklist integrity guardrail
+
+- Added deterministic detached-integrity checker:
+  - `scripts/release/check-clawsig-v0.2-checklist-integrity.mjs`
+  - enforces:
+    - `integrity_model: detached_signature_message`
+    - no self-referential `checklist_sha256`
+    - file SHA-256 == markdown digest == signature-message digest
+- Added CI gate for release docs/proofs changes:
+  - `.github/workflows/clawsig-release-integrity-guardrail.yml`
+  - triggers on PR/push touching:
+    - `docs/releases/**`
+    - `proofs/chore/release/**`
+    - `scripts/release/**`
+
+Validation:
+- `node scripts/release/check-clawsig-v0.2-checklist-integrity.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅
