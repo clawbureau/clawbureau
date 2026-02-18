@@ -671,3 +671,28 @@ Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
 - `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-024 deterministic service-core parity gate closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-024 on `main`.
+
+Shipped merge references:
+- CAV-US-024 — PR #327 (`a1bcd02f`)
+
+Deliverables:
+- Deterministic parity lane:
+  - `scripts/protocol/run-clawverify-service-core-causal-parity.mjs`
+  - `.github/workflows/clawverify-service-core-causal-parity.yml`
+- Burn-in/release gate integration:
+  - `scripts/protocol/run-causal-integrity-burnin.mjs`
+  - `scripts/release/check-causal-integrity-evidence-pack.mjs`
+  - `.github/workflows/release-e2e-guardrails.yml`
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
