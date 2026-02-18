@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. R48/R49 is shipped and CPL-V2-001 implementation is completed in the active rate-limit semantics lane.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -15,7 +15,7 @@
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Implemented in feat/protocol/CPL-V2-001-rate-limit-semantics: proof_bundle rate_limit_claims schema, deterministic proof/aggregate verifier checks, new reason codes, and executable conformance vectors."
+      "notes": "Shipped via PR #285 (merge 1b21d0cdb562e02347304451cc6edd137a5b99d2): proof_bundle rate_limit_claims schema, deterministic proof/aggregate verifier checks, reason-code wiring, and executable conformance vectors."
     },
     {
       "id": "CPL-V2-002",
@@ -71,8 +71,8 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T00:50:00Z",
-    "status": "implementation complete in lane branch — all CPL-V2-001..005 stories pass; pending merge of CPL-V2-001 lane",
+    "updatedAt": "2026-02-18T01:00:00Z",
+    "status": "shipped — CPL-V2-001..005 complete on main",
     "references": [
       {
         "pr": "#281",
@@ -87,8 +87,8 @@
         "merge_commit": "7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5"
       },
       {
-        "work_branch": "feat/protocol/CPL-V2-001-rate-limit-semantics",
-        "scope": "rate-limit-claims schema/verifier/conformance"
+        "pr": "#285",
+        "merge_commit": "1b21d0cdb562e02347304451cc6edd137a5b99d2"
       }
     ]
   }
