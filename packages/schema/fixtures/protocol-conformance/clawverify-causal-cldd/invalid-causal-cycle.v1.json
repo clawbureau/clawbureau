@@ -1,0 +1,8 @@
+{
+  "id": "invalid-causal-cycle",
+  "scenario": "invalid_causal_cycle",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "CAUSAL_CYCLE_DETECTED"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-linkage",
+  "scenario": "valid_causal_linkage",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

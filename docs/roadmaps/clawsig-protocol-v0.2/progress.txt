@@ -436,7 +436,7 @@ Validation:
 - Added fail-closed verifier checks in `services/clawverify/src/verify-proof-bundle.ts`:
   - `CAUSAL_REFERENCE_DANGLING`
   - `CAUSAL_CYCLE_DETECTED`
-  - `INVALID_ATTRIBUTION_CONFIDENCE`
+  - `CAUSAL_CONFIDENCE_OUT_OF_RANGE`
 - Preserved legacy behavior:
   - causal checks execute only when causal fields are present.
   - bundles without causal fields retain v0.2 validation path.
@@ -500,3 +500,43 @@ Validation:
 - SDK causal emission smoke:
   - local run emitted tool/side-effect causal bindings with deterministic spans/confidence ✅
   - concurrent window simulation emitted deterministic fallback marker (`attribution_confidence: 0.5`) ✅
+
+---
+
+2026-02-18 — CAV-US-004/005/006 CLDD enforcement + tracer delivery + CI guardrails
+
+- CAV-US-004 (verifier/runtime CLDD enforcement):
+  - `services/clawverify/src/verify-proof-bundle.ts`
+    - renamed causal confidence failure code to `CAUSAL_CONFIDENCE_OUT_OF_RANGE`
+    - added explicit `CAUSAL_PHASE_INVALID` mapping for schema/semantic phase failures
+    - added deterministic CLDD claimed-vs-attested comparison (`unmediated_connections`, `unmonitored_spawns`, `escapes_suspected`)
+    - enforce-mode fail-closed on CLDD discrepancy via `COVERAGE_CLDD_DISCREPANCY_ENFORCED`
+    - preserves observe/warn as non-blocking with explicit risk flags
+  - `packages/clawsig-sdk/src/interpose-state.ts`
+    - added deterministic CLDD metric derivation from network observations + interpose graph
+  - `packages/clawverify-cli/src/wrap.ts`
+    - emits CLDD telemetry under `payload.metadata.sentinels.interpose_state.cldd`
+- CAV-US-005 (artifact tracer delivery surface):
+  - `scripts/poh/trace-artifacts.mjs`
+    - adds causal confidence distribution summary
+    - adds hash-first low-confidence side-effect listing
+    - adds CLDD discrepancy section with enforcement-vs-informational finding split
+  - `scripts/poh/trace-artifacts.test.mjs`
+    - regression coverage for confidence + CLDD rendering contracts
+- CAV-US-006 (conformance + CI guardrails):
+  - added dedicated fixture pack: `packages/schema/fixtures/protocol-conformance/clawverify-causal-cldd/*`
+  - env-selectable fixture-suite support in `services/clawverify/test/firewall-conformance.test.ts`
+  - added runner: `scripts/protocol/run-clawverify-causal-cldd-conformance.mjs`
+  - added CI workflow: `.github/workflows/clawverify-causal-cldd-conformance.yml`
+
+Validation:
+- `cd services/clawverify && npm run typecheck` ✅
+- `cd services/clawverify && npm test` ✅ (199 tests)
+- `node services/clawverify/scripts/check-schema-runtime-sync.mjs` ✅
+- `node scripts/protocol/run-clawverify-firewall-conformance.mjs` ✅
+- `node scripts/protocol/run-clawverify-causal-cldd-conformance.mjs` ✅
+- `cd packages/clawsig-sdk && npm run typecheck && npm run build` ✅
+- `cd packages/clawverify-core && npm run build` ✅
+- `cd packages/clawverify-cli && npm install --no-save --no-package-lock ../clawverify-core ../clawsig-sdk && npm run typecheck && npm run build` ✅
+- `node --test scripts/poh/trace-artifacts.test.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

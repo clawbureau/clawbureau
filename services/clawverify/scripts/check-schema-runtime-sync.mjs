@@ -145,11 +145,16 @@ if (generatedBefore !== generatedAfter) {
   );
 }
 
-// If schema files changed, runtime/tests must also change in same patch.
+// If schema contract files changed (excluding fixture-only updates),
+// runtime/tests must also change in the same patch.
 const changedFiles = getChangedFiles();
-const schemaChanged = changedFiles.some((f) => f.startsWith('packages/schema/'));
+const schemaContractChanged = changedFiles.some(
+  (f) =>
+    f.startsWith('packages/schema/') &&
+    !f.startsWith('packages/schema/fixtures/')
+);
 
-if (schemaChanged) {
+if (schemaContractChanged) {
   const runtimeTouched = changedFiles.some(
     (f) =>
       f.startsWith('services/clawverify/src/') ||
@@ -161,7 +166,7 @@ if (schemaChanged) {
 
   if (!runtimeTouched) {
     fail(
-      'Schema files changed without corresponding clawverify runtime/test updates. Update schema validation/runtime/tests in the same PR.'
+      'Schema contract files changed without corresponding clawverify runtime/test updates. Update schema validation/runtime/tests in the same PR.'
     );
   }
 }
