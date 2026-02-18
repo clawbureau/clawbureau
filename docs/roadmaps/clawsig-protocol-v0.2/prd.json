@@ -79,9 +79,8 @@
         "Schema/runtime sync checks remain green"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": "Planned. Decision freeze contract captured in docs/specs/clawsig-protocol/CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md."
-    },
+      "passes": true,
+      "notes": "Shipped via CAV-US-001/002 vertical-slice lane: additive receipt_binding causal fields accepted with legacy-safe optional semantics; verifier/runtime schema sync + conformance checks updated. Refs: decision freeze PR #304 (merge 84ce196cc8e8bcbb126503e681f453bc758b5edb) + CAV-US-001/002 implementation lane."    },
     {
       "id": "CAV-US-002",
       "title": "Fail-closed causal DAG verifier checks",
@@ -92,8 +91,8 @@
         "Reject out-of-range attribution confidence values while preserving legacy bundle validity when fields are absent"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": "Planned vertical slice: schema -> verifier -> conformance fixtures."
+      "passes": true,
+      "notes": "Shipped via D2 vertical slice: fail-closed causal checks for dangling references, parent-span cycles, and attribution confidence bounds with deterministic reason codes + firewall conformance vectors."
     },
     {
       "id": "CAV-US-003",
@@ -123,8 +122,8 @@
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T15:49:17.704Z",
-    "status": "shipped v0.2 core + planned causal-attribution tranche (CAV-US-001..004)",
+    "updatedAt": "2026-02-18T16:42:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution schema/verifier vertical slice (CAV-US-001/002) with runtime/delivery lanes pending (CAV-US-003/004)",
     "references": [
       {
         "pr": "#281",

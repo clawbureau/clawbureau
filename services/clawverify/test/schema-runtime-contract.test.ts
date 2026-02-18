@@ -238,6 +238,41 @@ function makeRateLimitClaim() {
   };
 }
 
+function makeGatewayReceiptEnvelopeWithCausalBinding() {
+  return {
+    envelope_version: '1',
+    envelope_type: 'gateway_receipt',
+    payload: {
+      receipt_version: '1',
+      receipt_id: 'gateway_contract_causal_001',
+      gateway_id: 'gw_contract_causal_001',
+      provider: 'openai',
+      model: 'gpt-4',
+      request_hash_b64u: b64u(16),
+      response_hash_b64u: b64u(16),
+      tokens_input: 10,
+      tokens_output: 20,
+      latency_ms: 30,
+      timestamp: '2026-02-17T00:00:00Z',
+      binding: {
+        run_id: 'run_contract_001',
+        event_hash_b64u: b64u(16),
+        span_id: 'span_contract_root_001',
+        parent_span_id: 'span_contract_parent_001',
+        tool_span_id: 'span_contract_parent_001',
+        phase: 'execution',
+        attribution_confidence: 0.5,
+      },
+    },
+    payload_hash_b64u: b64u(16),
+    hash_algorithm: 'SHA-256',
+    signature_b64u: b64u(86),
+    algorithm: 'Ed25519',
+    signer_did: 'did:key:zSchemaContractGatewaySigner0001',
+    issued_at: '2026-02-17T00:00:00Z',
+  };
+}
+
 describe('schema/runtime contract wiring', () => {
   it('accepts proof bundles with vir_receipts carrying VIR v2 envelopes', () => {
     const envelope = makeProofBundleEnvelope({
@@ -298,6 +333,19 @@ describe('schema/runtime contract wiring', () => {
       agent_did: 'did:key:zSchemaContractSigner0001',
       event_chain: makeBaseEventChain(),
       rate_limit_claims: [makeRateLimitClaim()],
+    });
+
+    const out = validateProofBundleEnvelopeV1(envelope);
+    expect(out.valid).toBe(true);
+  });
+
+  it('accepts proof bundles with causal binding fields in receipt_binding.v1 schema', () => {
+    const envelope = makeProofBundleEnvelope({
+      bundle_version: '1',
+      bundle_id: 'bundle_contract_causal_binding_001',
+      agent_did: 'did:key:zSchemaContractSigner0001',
+      event_chain: makeBaseEventChain(),
+      receipts: [makeGatewayReceiptEnvelopeWithCausalBinding()],
     });
 
     const out = validateProofBundleEnvelopeV1(envelope);

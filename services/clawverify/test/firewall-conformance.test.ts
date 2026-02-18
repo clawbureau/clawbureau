@@ -28,6 +28,7 @@ type FixtureCase = {
     | 'valid_witnessed_web_transparency_pass'
     | 'valid_gateway'
     | 'valid_gateway_coverage'
+    | 'valid_causal_linkage'
     | 'valid_sandbox_tee'
     | 'valid_vir_uncorroborated_high_claim'
     | 'valid_vir_corroborated_high_claim'
@@ -39,6 +40,9 @@ type FixtureCase = {
     | 'invalid_vir_conflict_unreported'
     | 'invalid_vir_precedence_violation'
     | 'invalid_vir_event_contradiction'
+    | 'invalid_causal_dangling'
+    | 'invalid_causal_cycle'
+    | 'invalid_causal_confidence'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
@@ -516,46 +520,131 @@ async function buildFixtureScenario(spec: FixtureCase) {
   if (
     spec.scenario === 'valid_gateway' ||
     spec.scenario === 'valid_gateway_coverage' ||
+    spec.scenario === 'valid_causal_linkage' ||
+    spec.scenario === 'invalid_causal_dangling' ||
+    spec.scenario === 'invalid_causal_cycle' ||
+    spec.scenario === 'invalid_causal_confidence' ||
     spec.scenario === 'invalid_coverage_chain_root_enforce'
   ) {
     const gateway = await makeDidKeyEd25519();
 
-    const receiptPayload: Record<string, unknown> = {
-      receipt_version: '1',
-      receipt_id: `rcpt_${runId}`,
-      gateway_id: 'gw_firewall_001',
-      provider: 'openai',
-      model: 'gpt-4',
-      request_hash_b64u: 'req_gateway_firewall_001',
-      response_hash_b64u: 'res_gateway_firewall_001',
-      tokens_input: 10,
-      tokens_output: 20,
-      latency_ms: 50,
-      timestamp: '2026-02-17T00:00:00Z',
-      binding: {
-        run_id: runId,
-        event_hash_b64u: eventHash,
-      },
+    const makeGatewayReceiptEnvelope = async (args: {
+      receiptSuffix: string;
+      bindingExtras?: Record<string, unknown>;
+    }) => {
+      const receiptPayload: Record<string, unknown> = {
+        receipt_version: '1',
+        receipt_id: `rcpt_${runId}_${args.receiptSuffix}`,
+        gateway_id: 'gw_firewall_001',
+        provider: 'openai',
+        model: 'gpt-4',
+        request_hash_b64u: 'req_gateway_firewall_001',
+        response_hash_b64u: 'res_gateway_firewall_001',
+        tokens_input: 10,
+        tokens_output: 20,
+        latency_ms: 50,
+        timestamp: '2026-02-17T00:00:00Z',
+        binding: {
+          run_id: runId,
+          event_hash_b64u: eventHash,
+          ...(args.bindingExtras ?? {}),
+        },
+      };
+
+      return signEnvelope({
+        payload: receiptPayload,
+        envelopeType: 'gateway_receipt',
+        signerDid: gateway.did,
+        privateKey: gateway.privateKey,
+        issuedAt: '2026-02-17T00:00:00Z',
+      });
     };
 
-    const receiptEnvelope = await signEnvelope({
-      payload: receiptPayload,
-      envelopeType: 'gateway_receipt',
-      signerDid: gateway.did,
-      privateKey: gateway.privateKey,
-      issuedAt: '2026-02-17T00:00:00Z',
-    });
+    let receiptEnvelopes: unknown[] = [
+      await makeGatewayReceiptEnvelope({ receiptSuffix: 'base' }),
+    ];
+
+    if (spec.scenario === 'valid_causal_linkage') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'root',
+          bindingExtras: {
+            span_id: 'span_root_firewall_001',
+            phase: 'execution',
+            attribution_confidence: 1,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'child',
+          bindingExtras: {
+            span_id: 'span_child_firewall_001',
+            parent_span_id: 'span_root_firewall_001',
+            tool_span_id: 'span_root_firewall_001',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_dangling') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'dangling',
+          bindingExtras: {
+            span_id: 'span_child_firewall_002',
+            parent_span_id: 'span_missing_firewall_002',
+            tool_span_id: 'span_missing_firewall_002',
+            phase: 'execution',
+            attribution_confidence: 1,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_cycle') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'cycle_a',
+          bindingExtras: {
+            span_id: 'span_cycle_a_firewall_003',
+            parent_span_id: 'span_cycle_b_firewall_003',
+            phase: 'execution',
+            attribution_confidence: 1,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'cycle_b',
+          bindingExtras: {
+            span_id: 'span_cycle_b_firewall_003',
+            parent_span_id: 'span_cycle_a_firewall_003',
+            phase: 'execution',
+            attribution_confidence: 1,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_confidence') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'confidence',
+          bindingExtras: {
+            span_id: 'span_confidence_firewall_004',
+            phase: 'execution',
+            attribution_confidence: 1.5,
+          },
+        }),
+      ];
+    }
 
     const bundlePayloadWithGateway: Record<string, unknown> = {
       ...bundlePayload,
-      receipts: [receiptEnvelope],
+      receipts: receiptEnvelopes,
     };
 
     const options: Record<string, unknown> = {
       allowlistedReceiptSignerDids: [gateway.did],
     };
 
-    if (spec.scenario !== 'valid_gateway') {
+    if (
+      spec.scenario === 'valid_gateway_coverage' ||
+      spec.scenario === 'invalid_coverage_chain_root_enforce'
+    ) {
       const sentinel = await makeDidKeyEd25519();
       const coveragePayload: Record<string, unknown> = {
         attestation_version: '1',

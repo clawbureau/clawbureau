@@ -192,6 +192,13 @@ function jsonByteSize(value: unknown): number {
   }
 }
 
+function isCausalSchemaValidationField(field: string | undefined): boolean {
+  if (!field) return false;
+  return /(^|\.)binding\.(span_id|parent_span_id|tool_span_id|phase|attribution_confidence)(\.|$|\[)/.test(
+    field
+  );
+}
+
 /**
  * Validate envelope structure for proof bundle
  */
@@ -1134,6 +1141,215 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+interface CausalBindingEntry {
+  path: string;
+  spanId?: string;
+  parentSpanId?: string;
+  toolSpanId?: string;
+  attributionConfidence?: unknown;
+}
+
+function toCausalBindingEntry(
+  binding: Record<string, unknown>,
+  path: string
+): CausalBindingEntry | null {
+  const hasCausalField =
+    Object.prototype.hasOwnProperty.call(binding, 'span_id') ||
+    Object.prototype.hasOwnProperty.call(binding, 'parent_span_id') ||
+    Object.prototype.hasOwnProperty.call(binding, 'tool_span_id') ||
+    Object.prototype.hasOwnProperty.call(binding, 'attribution_confidence');
+
+  if (!hasCausalField) {
+    return null;
+  }
+
+  return {
+    path,
+    spanId:
+      typeof binding.span_id === 'string' && binding.span_id.trim().length > 0
+        ? binding.span_id
+        : undefined,
+    parentSpanId:
+      typeof binding.parent_span_id === 'string' &&
+      binding.parent_span_id.trim().length > 0
+        ? binding.parent_span_id
+        : undefined,
+    toolSpanId:
+      typeof binding.tool_span_id === 'string' &&
+      binding.tool_span_id.trim().length > 0
+        ? binding.tool_span_id
+        : undefined,
+    attributionConfidence: binding.attribution_confidence,
+  };
+}
+
+function collectCausalBindingEntries(
+  payload: ProofBundlePayload
+): CausalBindingEntry[] {
+  const out: CausalBindingEntry[] = [];
+
+  if (payload.receipts !== undefined) {
+    for (let i = 0; i < payload.receipts.length; i++) {
+      const binding = payload.receipts[i]?.payload?.binding;
+      if (!isObjectRecord(binding)) continue;
+      const entry = toCausalBindingEntry(
+        binding,
+        `payload.receipts[${i}].payload.binding`
+      );
+      if (entry) out.push(entry);
+    }
+  }
+
+  if (payload.web_receipts !== undefined) {
+    for (let i = 0; i < payload.web_receipts.length; i++) {
+      const binding = payload.web_receipts[i]?.payload?.binding;
+      if (!isObjectRecord(binding)) continue;
+      const entry = toCausalBindingEntry(
+        binding,
+        `payload.web_receipts[${i}].payload.binding`
+      );
+      if (entry) out.push(entry);
+    }
+  }
+
+  if (payload.vir_receipts !== undefined) {
+    for (let i = 0; i < payload.vir_receipts.length; i++) {
+      const raw = payload.vir_receipts[i] as unknown;
+      if (!isObjectRecord(raw)) continue;
+
+      const maybePayload = isObjectRecord(raw.payload) ? raw.payload : raw;
+      const binding = isObjectRecord(maybePayload.binding)
+        ? maybePayload.binding
+        : null;
+
+      if (!binding) continue;
+
+      const bindingPath = isObjectRecord(raw.payload)
+        ? `payload.vir_receipts[${i}].payload.binding`
+        : `payload.vir_receipts[${i}].binding`;
+
+      const entry = toCausalBindingEntry(binding, bindingPath);
+      if (entry) out.push(entry);
+    }
+  }
+
+  return out;
+}
+
+function validateCausalBindingEntries(
+  entries: CausalBindingEntry[]
+):
+  | { ok: true }
+  | {
+      ok: false;
+      code:
+        | 'CAUSAL_REFERENCE_DANGLING'
+        | 'CAUSAL_CYCLE_DETECTED'
+        | 'INVALID_ATTRIBUTION_CONFIDENCE';
+      message: string;
+      field: string;
+    } {
+  if (entries.length === 0) {
+    return { ok: true };
+  }
+
+  const knownSpanIds = new Set<string>();
+  for (const entry of entries) {
+    if (entry.spanId) knownSpanIds.add(entry.spanId);
+  }
+
+  for (const entry of entries) {
+    if (entry.attributionConfidence !== undefined) {
+      const confidence = entry.attributionConfidence;
+      if (
+        typeof confidence !== 'number' ||
+        !Number.isFinite(confidence) ||
+        confidence < 0 ||
+        confidence > 1
+      ) {
+        return {
+          ok: false,
+          code: 'INVALID_ATTRIBUTION_CONFIDENCE',
+          message:
+            'binding.attribution_confidence must be a finite number in inclusive range [0.0, 1.0]',
+          field: `${entry.path}.attribution_confidence`,
+        };
+      }
+    }
+
+    if (entry.parentSpanId && !knownSpanIds.has(entry.parentSpanId)) {
+      return {
+        ok: false,
+        code: 'CAUSAL_REFERENCE_DANGLING',
+        message: `binding.parent_span_id references unknown span_id: ${entry.parentSpanId}`,
+        field: `${entry.path}.parent_span_id`,
+      };
+    }
+
+    if (entry.toolSpanId && !knownSpanIds.has(entry.toolSpanId)) {
+      return {
+        ok: false,
+        code: 'CAUSAL_REFERENCE_DANGLING',
+        message: `binding.tool_span_id references unknown span_id: ${entry.toolSpanId}`,
+        field: `${entry.path}.tool_span_id`,
+      };
+    }
+  }
+
+  const parentBySpan = new Map<string, string>();
+  const parentFieldBySpan = new Map<string, string>();
+
+  for (const entry of entries) {
+    if (!entry.spanId || !entry.parentSpanId) continue;
+
+    if (!parentBySpan.has(entry.spanId)) {
+      parentBySpan.set(entry.spanId, entry.parentSpanId);
+      parentFieldBySpan.set(entry.spanId, `${entry.path}.parent_span_id`);
+    }
+  }
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+
+  const detectCycle = (spanId: string): string | null => {
+    if (visiting.has(spanId)) {
+      return spanId;
+    }
+
+    if (visited.has(spanId)) {
+      return null;
+    }
+
+    visiting.add(spanId);
+
+    const parent = parentBySpan.get(spanId);
+    if (parent) {
+      const cycleAt = detectCycle(parent);
+      if (cycleAt) {
+        return cycleAt;
+      }
+    }
+
+    visiting.delete(spanId);
+    visited.add(spanId);
+    return null;
+  };
+
+  for (const spanId of parentBySpan.keys()) {
+    const cycleAt = detectCycle(spanId);
+    if (!cycleAt) continue;
+
+    return {
+      ok: false,
+      code: 'CAUSAL_CYCLE_DETECTED',
+      message: `causal parent_span_id cycle detected at span_id: ${cycleAt}`,
+      field: parentFieldBySpan.get(cycleAt) ?? parentFieldBySpan.get(spanId) ?? 'payload',
+    };
+  }
+
+  return { ok: true };
+}
+
 interface ParsedVirReceipt {
   payload: VirReceiptPayload;
   envelope?: VirReceiptEnvelope;
@@ -1772,6 +1988,10 @@ export async function verifyProofBundle(
   // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
   const schemaResult = validateProofBundleEnvelopeV1(envelope);
   if (!schemaResult.valid) {
+    const schemaErrorCode = isCausalSchemaValidationField(schemaResult.field)
+      ? 'MALFORMED_ENVELOPE'
+      : 'SCHEMA_VALIDATION_FAILED';
+
     return {
       result: {
         status: 'INVALID',
@@ -1779,7 +1999,7 @@ export async function verifyProofBundle(
         verified_at: now,
       },
       error: {
-        code: 'SCHEMA_VALIDATION_FAILED',
+        code: schemaErrorCode,
         message: schemaResult.message,
         field: schemaResult.field,
       },
@@ -2798,6 +3018,26 @@ export async function verifyProofBundle(
       : metadataRecord && typeof metadataRecord.bounty_scope_hash_b64u === 'string'
         ? metadataRecord.bounty_scope_hash_b64u
         : null;
+
+  // CAV-US-002: fail-closed causal binding DAG checks (only when causal fields are present).
+  const causalBindingEntries = collectCausalBindingEntries(payload);
+  const causalValidation = validateCausalBindingEntries(causalBindingEntries);
+  if (!causalValidation.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: causalValidation.message,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+      },
+      error: {
+        code: causalValidation.code,
+        message: causalValidation.message,
+        field: causalValidation.field,
+      },
+    };
+  }
 
   // Verify VIR receipts (R43 evidence-fusion path).
   if (payload.vir_receipts !== undefined && payload.vir_receipts.length > 0) {
