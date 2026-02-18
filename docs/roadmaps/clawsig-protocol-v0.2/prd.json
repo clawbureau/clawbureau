@@ -68,11 +68,63 @@
       "priority": 5,
       "passes": true,
       "notes": "Shipped via aggregate verifier/runtime + executable aggregate vectors. Refs: PR #282 (merge 4199b2b80ea5e1993e9063b8408dd81b90757e74), PR #283 (merge 7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5)."
+    },
+    {
+      "id": "CAV-US-001",
+      "title": "Additive causal binding schema contract",
+      "description": "Add optional causal linkage fields to receipt binding schema with legacy-compatible behavior.",
+      "acceptanceCriteria": [
+        "Add optional span_id/parent_span_id/tool_span_id/phase/attribution_confidence fields to receipt_binding.v1 schema",
+        "No breaking changes for legacy bundles (fields remain optional)",
+        "Schema/runtime sync checks remain green"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Planned. Decision freeze contract captured in docs/specs/clawsig-protocol/CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md."
+    },
+    {
+      "id": "CAV-US-002",
+      "title": "Fail-closed causal DAG verifier checks",
+      "description": "Enforce deterministic causal linkage integrity when causal fields are present.",
+      "acceptanceCriteria": [
+        "Reject dangling parent/tool span references with deterministic reason code",
+        "Reject cyclic parent-span graphs with deterministic reason code",
+        "Reject out-of-range attribution confidence values while preserving legacy bundle validity when fields are absent"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Planned vertical slice: schema -> verifier -> conformance fixtures."
+    },
+    {
+      "id": "CAV-US-003",
+      "title": "Runtime tool-span emission wiring",
+      "description": "Emit deterministic span linkage fields from runtime wrappers without post-sign payload mutation.",
+      "acceptanceCriteria": [
+        "Runtime emits causal span fields in receipt bindings",
+        "Signature sequencing remains deterministic (stitch before sign, no post-sign mutation)",
+        "Concurrent tool windows produce deterministic attribution fallback markers"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Planned follow-up after CAV-US-001/002 contract merge."
+    },
+    {
+      "id": "CAV-US-004",
+      "title": "Coverage/label delivery and confidence rendering",
+      "description": "Expose causal confidence and degraded coverage posture in buyer-facing evidence and UI contracts.",
+      "acceptanceCriteria": [
+        "Tracer/evidence outputs include deterministic confidence provenance markers",
+        "Coverage-degraded posture is rendered explicitly in delivery artifacts",
+        "No weakening of verifier fail-closed semantics"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "Deferred in decision freeze: strict CLDD policy and UI polish follow runtime contract lanes."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T01:00:00Z",
-    "status": "shipped — CPL-V2-001..005 complete on main",
+    "updatedAt": "2026-02-18T15:49:17.704Z",
+    "status": "shipped v0.2 core + planned causal-attribution tranche (CAV-US-001..004)",
     "references": [
       {
         "pr": "#281",

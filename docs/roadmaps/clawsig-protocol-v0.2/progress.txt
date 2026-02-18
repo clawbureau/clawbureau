@@ -400,3 +400,25 @@ Validation:
 
 Validation:
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-000 decision freeze + tracker alignment
+
+- Added accepted implementation contract:
+  - `docs/specs/clawsig-protocol/CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md`
+- Contract freezes:
+  - accepted additive fields (`span_id`, `parent_span_id`, `tool_span_id`, `phase`, `attribution_confidence`)
+  - accepted fail-closed reason-code set
+  - legacy compatibility behavior (checks only when fields are present)
+  - deferred/non-goal scope boundaries (CLDD strict enforcement + UI polish deferred)
+- Tracker alignment:
+  - added planned stories in roadmap tracker:
+    - `CAV-US-001`
+    - `CAV-US-002`
+    - `CAV-US-003`
+    - `CAV-US-004`
+  - file: `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+
+Validation:
+- `node scripts/docs/lint-prds.mjs` ✅

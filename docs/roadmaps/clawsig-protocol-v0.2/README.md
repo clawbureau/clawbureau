@@ -40,6 +40,19 @@
 - machine-readable checklist: [`docs/releases/clawsig-v0.2-package-release-checklist.v1.json`](../../releases/clawsig-v0.2-package-release-checklist.v1.json)
 - release-prep pack/install runner: [`scripts/release/run-clawsig-v0.2-package-prep.mjs`](../../../scripts/release/run-clawsig-v0.2-package-prep.mjs)
 
+## Next tranche (planned)
+
+Decision freeze for causal attribution work is tracked in:
+
+- [`CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md`](../../specs/clawsig-protocol/CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md)
+
+Planned stories (not yet shipped):
+
+- `CAV-US-001` additive causal binding schema contract
+- `CAV-US-002` fail-closed causal DAG verifier checks
+- `CAV-US-003` runtime tool-span emission wiring
+- `CAV-US-004` coverage/label delivery and confidence rendering
+
 ## Prior art
 
 - v0.1 changelog: [`CHANGELOG.md`](../../specs/clawsig-protocol/CHANGELOG.md)
