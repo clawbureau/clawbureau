@@ -35,6 +35,16 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
       - name: Install clawverify-cli deps
         run: |
           cd packages/clawverify-cli
