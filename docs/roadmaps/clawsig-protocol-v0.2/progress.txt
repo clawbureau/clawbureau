@@ -566,3 +566,29 @@ Evidence/guardrail contract additions:
 Validation:
 - `node scripts/docs/lint-prds.mjs` ✅
 - `node scripts/release/check-causal-integrity-evidence-pack.mjs --summary <generated-summary> --max-age-minutes 60 --require-mode quick --require-mutation-subset quick` ✅
+
+---
+
+2026-02-18 — CAV-US-016/017/018 truth-sync closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-018 on `main`.
+
+Shipped merge references:
+- CAV-US-016 — PR #319 (`7a3bfc82`)
+- CAV-US-017 — PR #320 (`d2dc1bcd`)
+- CAV-US-018 — PR #321 (`145d0af7`)
+
+Deliverables:
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+- Added roadmap drift checker:
+  - `scripts/docs/check-cav-roadmap-sync.mjs`
+  - verifies merged CAV lanes (>= CAV-US-016) are represented in README/prd/progress with PR + merge evidence.
+- Added required CI workflow gate:
+  - `.github/workflows/cav-roadmap-sync.yml`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

@@ -1,0 +1,40 @@
+name: cav-roadmap-sync
+
+on:
+  pull_request:
+    paths:
+      - 'docs/roadmaps/clawsig-protocol-v0.2/**'
+      - 'docs/specs/clawsig-protocol/**'
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'scripts/docs/check-cav-roadmap-sync.mjs'
+      - '.github/workflows/cav-roadmap-sync.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/roadmaps/clawsig-protocol-v0.2/**'
+      - 'docs/specs/clawsig-protocol/**'
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'scripts/docs/check-cav-roadmap-sync.mjs'
+      - '.github/workflows/cav-roadmap-sync.yml'
+
+jobs:
+  cav-roadmap-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate CAV roadmap sync
+        run: |
+          node scripts/docs/check-cav-roadmap-sync.mjs

@@ -263,11 +263,50 @@
       "priority": 20,
       "passes": true,
       "notes": "Shipped via PR #318 (merge adfec1f3ad90ef3e18fba4d970975f1dd6a0afeb): burn-in meta-runner + CI jobs + artifact contract."
+    },
+    {
+      "id": "CAV-US-016",
+      "title": "Policy-profile lock (anti-downgrade)",
+      "description": "Prevent silent weakening of causal enforcement by introducing explicit policy profiles with strict anti-downgrade behavior.",
+      "acceptanceCriteria": [
+        "Verifier supports explicit causal policy profiles: compat and strict",
+        "Strict profile rejects weaker causal override modes with deterministic reason codes",
+        "Resolved policy snapshot is emitted in verifier output metadata for auditability"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Shipped via PR #319 (merge 7a3bfc8201e2a73c3c9298f894bd7dc679e46e75): strict profile lock, anti-downgrade enforcement, and profile-conformance lane."
+    },
+    {
+      "id": "CAV-US-017",
+      "title": "Cross-runtime causal determinism gate",
+      "description": "Guarantee deterministic causal verdict parity across Node and Bun runtimes.",
+      "acceptanceCriteria": [
+        "Cross-runtime runner executes causal conformance suites under Node and Bun",
+        "Fixture-level status + reason-code parity is compared deterministically",
+        "CI fails on any runtime divergence and emits cross-runtime summary artifact"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "Shipped via PR #320 (merge d2dc1bcd09f40292077e47892d57ed9f0b17ed3c): runtime parity runner, deterministic suite comparison, and required CI gate."
+    },
+    {
+      "id": "CAV-US-018",
+      "title": "Truth-sync + release causal evidence contract",
+      "description": "Close roadmap/docs drift and make causal integrity evidence a release-guarded contract.",
+      "acceptanceCriteria": [
+        "Roadmap docs track shipped CAV lanes through CAV-US-015+ with PR/merge evidence",
+        "Release checker validates burn-in artifact freshness and required causal step pass contract",
+        "Release guardrail workflow enforces causal evidence contract as required gate"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Shipped via PR #321 (merge 145d0af716130b2dbefc665d2ebd696a517d652d): roadmap truth-sync, release evidence checker, and release guardrail integration."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T20:45:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-015 (schema/verifier/runtime/conformance/guardrails/burn-in)",
+    "updatedAt": "2026-02-18T21:00:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-018 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -320,6 +359,18 @@
       {
         "pr": "#318",
         "merge_commit": "adfec1f3ad90ef3e18fba4d970975f1dd6a0afeb"
+      },
+      {
+        "pr": "#319",
+        "merge_commit": "7a3bfc8201e2a73c3c9298f894bd7dc679e46e75"
+      },
+      {
+        "pr": "#320",
+        "merge_commit": "d2dc1bcd09f40292077e47892d57ed9f0b17ed3c"
+      },
+      {
+        "pr": "#321",
+        "merge_commit": "145d0af716130b2dbefc665d2ebd696a517d652d"
       }
     ]
   }
