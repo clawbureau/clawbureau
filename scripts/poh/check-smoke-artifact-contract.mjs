@@ -34,7 +34,10 @@ function getChangedFiles() {
 }
 
 function isSmokeScript(filePath) {
-  return /^scripts\/poh\/smoke-.*\.mjs$/.test(filePath);
+  if (!/^scripts\/poh\/smoke-.*\.mjs$/.test(filePath)) return false;
+  if (filePath === 'scripts/poh/smoke-artifact-contract.mjs') return false;
+  if (filePath === 'scripts/poh/smoke-artifact-contract.test.mjs') return false;
+  return true;
 }
 
 function validateSmokeScript(filePath) {
