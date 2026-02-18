@@ -126,3 +126,30 @@ To enable: Settings → Branches → Branch protection rules → Require status 
 The `clawsig-verified-pr` workflow uses `actions/setup-node` with `cache: npm` to avoid cold `npm ci` on every push.
 
 Verify summaries are uploaded as GitHub artifacts (`clawsig-verified-pr-summary`) with 90-day retention, so evidence persists beyond ephemeral job logs.
+
+## 9) Artifact tracer CLI (ART-US-001)
+
+Use the canonical tracer entrypoint to turn raw JSON artifacts into a run-centric operator summary:
+
+```bash
+node scripts/poh/trace-artifacts.mjs --run-id <run_id>
+# or
+node scripts/poh/trace-artifacts.mjs --bundle artifacts/poh/<branch>/<run_id>-bundle.json --json
+```
+
+Output highlights include:
+- event timeline (`trace.bundle.event_timeline`)
+- tool usage summary (`trace.bundle.tool_summary`)
+- URM reference hash match (`trace.urm.hash_check_against_bundle_ref`)
+- verifier verdict surface (`trace.verification_results[*].status` + `code`)
+
+The tracer writes both:
+- JSON summary (machine-readable)
+- markdown summary (human scan)
+
+Default output location:
+
+```text
+artifacts/ops/artifact-trace/<timestamp>/summary.json
+artifacts/ops/artifact-trace/<timestamp>/summary.md
+```

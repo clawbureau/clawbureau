@@ -407,3 +407,21 @@ Started: 2026-02-05T21:49:28Z
   - Required lanes (`codex:mock:proxy`, `gemini:mock:proxy`) must pass.
   - Any required lane failure or adapter unavailability fails job deterministically with explicit code in strict summary artifact.
 ---
+
+## 2026-02-18T02:45:00Z - ART-US-001 artifact tracer CLI entrypoint
+- What was implemented
+  - Added canonical tracer CLI entrypoint:
+    - `scripts/poh/trace-artifacts.mjs`
+  - Tracer now produces run-centric summaries with first-class operator fields:
+    - event timeline (`trace.bundle.event_timeline`)
+    - tool usage summary (`trace.bundle.tool_summary`)
+    - URM hash match (`trace.urm.hash_check_against_bundle_ref`)
+    - verification verdict surface (`trace.verification_results[].status/code`)
+  - Added deterministic regression test:
+    - `scripts/poh/trace-artifacts.test.mjs`
+  - Added usage docs in:
+    - `docs/foundations/CLAW_VERIFIED_PR_PIPELINE.md`
+- Validation
+  - `node --test scripts/poh/trace-artifacts.test.mjs` ✅
+  - `node scripts/poh/trace-artifacts.mjs --help` ✅
+---
