@@ -27,6 +27,7 @@ const REQUIRED_STEP_IDS = [
   'causal-hardening-conformance',
   'causal-connectivity-conformance',
   'causal-clock-conformance',
+  'service-core-causal-parity',
   'aggregate-causal-conformance',
   'causal-mutation-guardrail',
 ];

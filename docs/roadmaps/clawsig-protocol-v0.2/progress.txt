@@ -642,3 +642,32 @@ Deliverables:
 
 Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-023 core/service causal parity uplift closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-023 on `main`.
+
+Shipped merge references:
+- CAV-US-023 — PR #326 (`578b0828`)
+
+Deliverables:
+- Core causal semantics parity uplift:
+  - `packages/clawverify-core/src/types.ts`
+  - `packages/clawverify-core/src/verify-proof-bundle.ts`
+- Core parity regression coverage:
+  - `packages/clawverify-cli/test/core-causal-parity.test.ts`
+  - `packages/clawverify-cli/test/aggregate-causal-conformance.test.ts`
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+
+Validation:
+- `cd packages/clawverify-core && npm run typecheck && npm run build` ✅
+- `cd packages/clawverify-cli && npm run typecheck && npm test -- --run test/core-causal-parity.test.ts test/aggregate-causal-conformance.test.ts` ✅
+- `node scripts/protocol/check-reason-code-parity.mjs` ✅
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅
+- `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅

@@ -84,6 +84,11 @@ function buildSteps(mutationSubset) {
       args: ['scripts/protocol/run-clawverify-causal-clock-conformance.mjs'],
     },
     {
+      id: 'service-core-causal-parity',
+      command: 'node',
+      args: ['scripts/protocol/run-clawverify-service-core-causal-parity.mjs'],
+    },
+    {
       id: 'aggregate-causal-conformance',
       command: 'node',
       args: ['scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'],
