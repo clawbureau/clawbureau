@@ -8,6 +8,8 @@
  * - summary.ok === true
  * - required mode + mutation_subset match requested values
  * - required burn-in steps are present and PASS (ok=true, exit_code=0)
+ * - summary signature exists and verifies (offline) unless --require-signed=false
+ * - signed summary hash + message binding must match summary bytes
  */
 
 import fs from 'node:fs';
@@ -16,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
+
+const MESSAGE_PREFIX = 'causal-integrity-evidence';
 
 const REQUIRED_STEP_IDS = [
   'reason-code-parity',
@@ -26,6 +30,9 @@ const REQUIRED_STEP_IDS = [
   'aggregate-causal-conformance',
   'causal-mutation-guardrail',
 ];
+
+const BASE58_ALPHABET =
+  '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function parseArgs(argv) {
   const getValue = (flag) => {
@@ -38,7 +45,16 @@ function parseArgs(argv) {
     return hit ? hit.slice(flag.length + 1) : undefined;
   };
 
+  const parseBoolean = (value, defaultValue) => {
+    if (value === undefined) return defaultValue;
+    const v = String(value).trim().toLowerCase();
+    if (v === 'true' || v === '1' || v === 'yes') return true;
+    if (v === 'false' || v === '0' || v === 'no') return false;
+    return defaultValue;
+  };
+
   const summary = getValue('--summary') ?? getValueEq('--summary');
+  const signature = getValue('--signature') ?? getValueEq('--signature');
   const maxAgeRaw =
     getValue('--max-age-minutes') ?? getValueEq('--max-age-minutes');
   const requireMode =
@@ -48,6 +64,11 @@ function parseArgs(argv) {
     getValueEq('--require-mutation-subset') ??
     'quick';
 
+  const requireSigned = parseBoolean(
+    getValue('--require-signed') ?? getValueEq('--require-signed'),
+    true
+  );
+
   const maxAgeMinutes =
     maxAgeRaw !== undefined && Number.isFinite(Number(maxAgeRaw))
       ? Number(maxAgeRaw)
@@ -55,9 +76,11 @@ function parseArgs(argv) {
 
   return {
     summary,
+    signature,
     maxAgeMinutes,
     requireMode,
     requireMutationSubset,
+    requireSigned,
   };
 }
 
@@ -89,7 +112,310 @@ function findLatestSummaryPath() {
   return fs.existsSync(path.resolve(ROOT, summaryPath)) ? summaryPath : null;
 }
 
-function validateSummary(summaryPath, opts) {
+function defaultSignaturePath(summaryPath) {
+  if (summaryPath.endsWith('.json')) {
+    return summaryPath.slice(0, -'.json'.length) + '.sig.json';
+  }
+  return `${summaryPath}.sig.json`;
+}
+
+function base64UrlEncode(bytes) {
+  return Buffer.from(bytes)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function toArrayBuffer(view) {
+  if (view instanceof Uint8Array) {
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+  }
+  if (view instanceof ArrayBuffer) {
+    return view;
+  }
+  throw new TypeError('Expected Uint8Array or ArrayBuffer');
+}
+
+function jcsCanonicalize(value) {
+  if (value === null) return 'null';
+
+  switch (typeof value) {
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Non-finite number not allowed in JCS');
+      }
+      return JSON.stringify(value);
+    case 'string':
+      return JSON.stringify(value);
+    case 'object': {
+      if (Array.isArray(value)) {
+        return `[${value.map(jcsCanonicalize).join(',')}]`;
+      }
+      const keys = Object.keys(value).sort();
+      return `{${keys
+        .map((k) => `${JSON.stringify(k)}:${jcsCanonicalize(value[k])}`)
+        .join(',')}}`;
+    }
+    default:
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
+function base58Decode(str) {
+  if (typeof str !== 'string' || str.length === 0) {
+    return new Uint8Array();
+  }
+
+  const bytes = [0];
+
+  for (const char of str) {
+    const value = BASE58_ALPHABET.indexOf(char);
+    if (value < 0) {
+      throw new Error(`Invalid base58 character: ${char}`);
+    }
+
+    let carry = value;
+    for (let i = 0; i < bytes.length; i += 1) {
+      const x = bytes[i] * 58 + carry;
+      bytes[i] = x & 0xff;
+      carry = x >> 8;
+    }
+
+    while (carry) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+
+  for (const char of str) {
+    if (char !== '1') break;
+    bytes.push(0);
+  }
+
+  return new Uint8Array(bytes.reverse());
+}
+
+function extractEd25519PublicKeyFromDidKey(did) {
+  if (typeof did !== 'string' || !did.startsWith('did:key:z')) {
+    return null;
+  }
+
+  try {
+    const decoded = base58Decode(did.slice('did:key:z'.length));
+    if (decoded.length !== 34) return null;
+    if (decoded[0] !== 0xed || decoded[1] !== 0x01) return null;
+    return decoded.slice(2);
+  } catch {
+    return null;
+  }
+}
+
+async function sha256FileB64u(relativePath) {
+  const bytes = fs.readFileSync(path.resolve(ROOT, relativePath));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return base64UrlEncode(new Uint8Array(digest));
+}
+
+async function verifyMessageSignatureEnvelope(envelope) {
+  const failures = [];
+
+  if (!envelope || typeof envelope !== 'object') {
+    failures.push('message_signature must be an object');
+    return { ok: false, failures };
+  }
+
+  const version = envelope.version;
+  const type = envelope.type;
+  const algo = envelope.algo;
+  const did = envelope.did;
+  const signature = envelope.signature;
+
+  if (version !== 'm1') failures.push(`message_signature.version must be m1 (got ${String(version)})`);
+  if (type !== 'message_signature') failures.push(`message_signature.type must be message_signature (got ${String(type)})`);
+  if (algo !== 'ed25519') failures.push(`message_signature.algo must be ed25519 (got ${String(algo)})`);
+
+  const publicKeyBytes = extractEd25519PublicKeyFromDidKey(did);
+  if (!publicKeyBytes) {
+    failures.push('message_signature.did must be did:key with Ed25519 multicodec prefix');
+  }
+
+  let signatureBytes = null;
+  if (typeof signature !== 'string' || signature.length === 0) {
+    failures.push('message_signature.signature must be a non-empty base64 string');
+  } else {
+    try {
+      signatureBytes = new Uint8Array(Buffer.from(signature, 'base64'));
+      if (signatureBytes.length !== 64) {
+        failures.push('message_signature.signature must decode to 64-byte Ed25519 signature');
+      }
+    } catch {
+      failures.push('message_signature.signature must be valid base64');
+    }
+  }
+
+  if (failures.length > 0) {
+    return { ok: false, failures };
+  }
+
+  let canonical;
+  try {
+    const forSigning = { ...envelope, signature: '' };
+    canonical = jcsCanonicalize(forSigning);
+  } catch (error) {
+    return {
+      ok: false,
+      failures: [
+        `failed to canonicalize message signature envelope: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ],
+    };
+  }
+
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      'raw',
+      toArrayBuffer(publicKeyBytes),
+      { name: 'Ed25519' },
+      false,
+      ['verify']
+    );
+
+    const verified = await crypto.subtle.verify(
+      { name: 'Ed25519' },
+      publicKey,
+      toArrayBuffer(signatureBytes),
+      toArrayBuffer(new TextEncoder().encode(canonical))
+    );
+
+    if (!verified) {
+      return {
+        ok: false,
+        failures: ['message signature verification failed'],
+      };
+    }
+
+    return {
+      ok: true,
+      signer_did: did,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      failures: [
+        `crypto verification error: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      ],
+    };
+  }
+}
+
+async function validateSignatureContract(summaryPath, signaturePath, requireSigned) {
+  const issues = [];
+  const fullSignaturePath = path.resolve(ROOT, signaturePath);
+  const signatureExists = fs.existsSync(fullSignaturePath);
+
+  if (!signatureExists) {
+    if (requireSigned) {
+      issues.push(
+        `missing signature file: ${signaturePath} (run scripts/release/sign-causal-integrity-evidence-pack.mjs)`
+      );
+    }
+
+    return {
+      ok: issues.length === 0,
+      issues,
+      signature_path: signaturePath,
+      signature_present: false,
+    };
+  }
+
+  let sigDoc;
+  try {
+    sigDoc = readJson(signaturePath);
+  } catch (error) {
+    issues.push(
+      `signature file is not valid JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+
+    return {
+      ok: false,
+      issues,
+      signature_path: signaturePath,
+      signature_present: true,
+    };
+  }
+
+  if (sigDoc.evidence_signature_version !== '1') {
+    issues.push(
+      `evidence_signature_version must be "1" (got ${String(
+        sigDoc.evidence_signature_version
+      )})`
+    );
+  }
+
+  const summaryPathNormalized = path.normalize(summaryPath);
+  const signedSummaryPath =
+    typeof sigDoc.summary_path === 'string' ? path.normalize(sigDoc.summary_path) : null;
+
+  if (!signedSummaryPath || signedSummaryPath !== summaryPathNormalized) {
+    issues.push(
+      `signature summary_path mismatch (expected ${summaryPathNormalized}, got ${String(
+        sigDoc.summary_path
+      )})`
+    );
+  }
+
+  const expectedSummaryHash = await sha256FileB64u(summaryPath);
+  if (sigDoc.summary_sha256_b64u !== expectedSummaryHash) {
+    issues.push(
+      `summary_sha256_b64u mismatch (expected ${expectedSummaryHash}, got ${String(
+        sigDoc.summary_sha256_b64u
+      )})`
+    );
+  }
+
+  const messagePrefix =
+    typeof sigDoc.message_prefix === 'string' && sigDoc.message_prefix.length > 0
+      ? sigDoc.message_prefix
+      : MESSAGE_PREFIX;
+
+  const expectedMessage = `${messagePrefix}:${expectedSummaryHash}`;
+  const actualMessage = sigDoc?.message_signature?.message;
+  if (actualMessage !== expectedMessage) {
+    issues.push(
+      `message signature binding mismatch (expected ${expectedMessage}, got ${String(actualMessage)})`
+    );
+  }
+
+  const signatureVerification = await verifyMessageSignatureEnvelope(
+    sigDoc.message_signature
+  );
+
+  if (!signatureVerification.ok) {
+    for (const failure of signatureVerification.failures) {
+      issues.push(failure);
+    }
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    signature_path: signaturePath,
+    signature_present: true,
+    signing_mode:
+      typeof sigDoc.signing_mode === 'string' ? sigDoc.signing_mode : undefined,
+    signer_did: signatureVerification.signer_did,
+  };
+}
+
+async function validateSummary(summaryPath, opts) {
   const issues = [];
   const summary = readJson(summaryPath);
 
@@ -136,6 +462,12 @@ function validateSummary(summaryPath, opts) {
       issues,
       summary,
       age_minutes: ageMs / 60_000,
+      signature: {
+        ok: false,
+        signature_path: opts.signature ?? defaultSignaturePath(summaryPath),
+        signature_present: false,
+        issues: ['summary.steps must be an array'],
+      },
     };
   }
 
@@ -168,15 +500,27 @@ function validateSummary(summaryPath, opts) {
     );
   }
 
+  const signaturePath = opts.signature ?? defaultSignaturePath(summaryPath);
+  const signatureValidation = await validateSignatureContract(
+    summaryPath,
+    signaturePath,
+    opts.requireSigned
+  );
+
+  for (const signatureIssue of signatureValidation.issues) {
+    issues.push(signatureIssue);
+  }
+
   return {
     ok: issues.length === 0,
     issues,
     summary,
     age_minutes: ageMs / 60_000,
+    signature: signatureValidation,
   };
 }
 
-function run() {
+async function run() {
   const opts = parseArgs(process.argv.slice(2));
   const summaryPath = opts.summary ?? findLatestSummaryPath();
 
@@ -184,7 +528,9 @@ function run() {
     const result = {
       ok: false,
       summary_path: null,
+      signature_path: opts.signature ?? null,
       checked_steps: REQUIRED_STEP_IDS,
+      require_signed: opts.requireSigned,
       issues: [
         'No causal-integrity burn-in summary found. Pass --summary <path> or generate artifacts/ops/causal-integrity-burnin/<timestamp>/summary.json',
       ],
@@ -194,15 +540,21 @@ function run() {
     return;
   }
 
-  const validation = validateSummary(summaryPath, opts);
+  const validation = await validateSummary(summaryPath, opts);
 
   const result = {
     ok: validation.ok,
     summary_path: summaryPath,
+    signature_path: validation.signature.signature_path,
+    signature_present: validation.signature.signature_present,
+    signature_ok: validation.signature.ok,
+    signing_mode: validation.signature.signing_mode,
+    signer_did: validation.signature.signer_did,
     max_age_minutes: opts.maxAgeMinutes,
     summary_age_minutes: Number(validation.age_minutes.toFixed(2)),
     required_mode: opts.requireMode,
     required_mutation_subset: opts.requireMutationSubset,
+    require_signed: opts.requireSigned,
     checked_steps: REQUIRED_STEP_IDS,
     issues: validation.issues,
   };
@@ -214,4 +566,13 @@ function run() {
   }
 }
 
-run();
+run().catch((error) => {
+  const result = {
+    ok: false,
+    summary_path: null,
+    signature_path: null,
+    issues: [error instanceof Error ? error.message : String(error)],
+  };
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  process.exitCode = 1;
+});
