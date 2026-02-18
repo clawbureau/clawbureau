@@ -248,6 +248,110 @@ function optionalLimitEqual(
   return a === b;
 }
 
+function deriveRunNamespace(runId: string): string {
+  const trimmed = runId.trim();
+  const separator = trimmed.indexOf('::');
+  if (separator > 0) {
+    return trimmed.slice(0, separator);
+  }
+  return trimmed;
+}
+
+function normalizeCausalIdentifier(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeCausalNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function canonicalizeAggregateFingerprint(value: unknown): string {
+  try {
+    return jcsCanonicalize(value);
+  } catch {
+    return JSON.stringify(value);
+  }
+}
+
+function collectAggregateCausalSemantics(args: {
+  payload: ProofBundlePayload;
+  runNamespace: string;
+  payloadPathPrefix: string;
+}): Array<{ key: string; fingerprint: string; field: string }> {
+  const out: Array<{ key: string; fingerprint: string; field: string }> = [];
+
+  const collectFromBinding = (binding: Record<string, unknown>, fieldPath: string) => {
+    const spanId =
+      normalizeCausalIdentifier(binding.span_id) ??
+      normalizeCausalIdentifier(binding.spanId);
+
+    if (!spanId) return;
+
+    const semantic = {
+      parent_span_id:
+        normalizeCausalIdentifier(binding.parent_span_id) ??
+        normalizeCausalIdentifier(binding.parentSpanId) ??
+        null,
+      tool_span_id:
+        normalizeCausalIdentifier(binding.tool_span_id) ??
+        normalizeCausalIdentifier(binding.toolSpanId) ??
+        null,
+      phase: normalizeCausalIdentifier(binding.phase) ?? null,
+      attribution_confidence:
+        normalizeCausalNumber(binding.attribution_confidence) ??
+        normalizeCausalNumber(binding.attributionConfidence) ??
+        null,
+    };
+
+    out.push({
+      key: `${args.runNamespace}|${spanId}`,
+      fingerprint: canonicalizeAggregateFingerprint(semantic),
+      field: fieldPath,
+    });
+  };
+
+  const receipts = args.payload.receipts ?? [];
+  for (let i = 0; i < receipts.length; i++) {
+    const binding = isRecord(receipts[i]?.payload?.binding)
+      ? (receipts[i].payload.binding as Record<string, unknown>)
+      : null;
+    if (!binding) continue;
+    collectFromBinding(
+      binding,
+      `${args.payloadPathPrefix}.receipts[${i}].payload.binding.span_id`
+    );
+  }
+
+  return out;
+}
+
+function collectAggregateReceiptFingerprints(args: {
+  payload: ProofBundlePayload;
+  payloadPathPrefix: string;
+}): Array<{ receiptId: string; fingerprint: string; field: string }> {
+  const out: Array<{ receiptId: string; fingerprint: string; field: string }> = [];
+
+  const receipts = args.payload.receipts ?? [];
+  for (let i = 0; i < receipts.length; i++) {
+    const receiptId = receipts[i]?.payload?.receipt_id;
+    if (typeof receiptId !== 'string' || receiptId.length === 0) continue;
+
+    out.push({
+      receiptId,
+      fingerprint: canonicalizeAggregateFingerprint({
+        receipt_type: 'gateway_receipt',
+        payload: receipts[i].payload,
+      }),
+      field: `${args.payloadPathPrefix}.receipts[${i}].payload.receipt_id`,
+    });
+  }
+
+  return out;
+}
+
 export async function verifyAggregateBundle(
   envelopeInput: unknown,
   options: VerifyAggregateBundleOptions = {}
@@ -505,6 +609,14 @@ export async function verifyAggregateBundle(
   const seenBundleIds = new Set<string>();
   const seenRunIds = new Set<string>();
   const uniqueAgents = new Set<string>();
+  const aggregateCausalSemantics = new Map<
+    string,
+    { fingerprint: string; field: string }
+  >();
+  const aggregateReceiptFingerprints = new Map<
+    string,
+    { fingerprint: string; field: string }
+  >();
   const aggregatedRateClaims = new Map<
     string,
     {
@@ -532,6 +644,8 @@ export async function verifyAggregateBundle(
     let childModelTier: ModelIdentityTier = 'unknown';
     let memberRateClaims: RateLimitClaim[] = [];
     let memberRateClaimsField = `payload.artifacts.member_bundles[${i}]`;
+    let memberProofPayload: ProofBundlePayload;
+    let memberPayloadPathPrefix: string;
 
     if (isProofBundleMember(member)) {
       memberBundleId = member.payload.bundle_id;
@@ -539,6 +653,8 @@ export async function verifyAggregateBundle(
       memberRateClaims = member.payload.rate_limit_claims ?? [];
       memberRateClaimsField =
         `payload.artifacts.member_bundles[${i}].payload.rate_limit_claims`;
+      memberProofPayload = member.payload;
+      memberPayloadPathPrefix = `payload.artifacts.member_bundles[${i}].payload`;
 
       const runInfo = extractRunIdFromProofEnvelope(member);
       if (!runInfo.ok) {
@@ -585,6 +701,9 @@ export async function verifyAggregateBundle(
       memberRateClaims = nestedProof.payload.rate_limit_claims ?? [];
       memberRateClaimsField =
         `payload.artifacts.member_bundles[${i}].artifacts.proof_bundle_envelope.payload.rate_limit_claims`;
+      memberProofPayload = nestedProof.payload;
+      memberPayloadPathPrefix =
+        `payload.artifacts.member_bundles[${i}].artifacts.proof_bundle_envelope.payload`;
 
       const runInfo = extractRunIdFromProofEnvelope(nestedProof);
       if (!runInfo.ok) {
@@ -636,6 +755,59 @@ export async function verifyAggregateBundle(
         message: `member[${i}] is neither proof_bundle_envelope.v1 nor export_bundle.v1`,
         field: `payload.artifacts.member_bundles[${i}]`,
       });
+    }
+
+    const runNamespace = deriveRunNamespace(memberRunId);
+
+    const causalSemantics = collectAggregateCausalSemantics({
+      payload: memberProofPayload,
+      runNamespace,
+      payloadPathPrefix: memberPayloadPathPrefix,
+    });
+
+    for (const semantic of causalSemantics) {
+      const existing = aggregateCausalSemantics.get(semantic.key);
+      if (!existing) {
+        aggregateCausalSemantics.set(semantic.key, {
+          fingerprint: semantic.fingerprint,
+          field: semantic.field,
+        });
+        continue;
+      }
+
+      if (existing.fingerprint !== semantic.fingerprint) {
+        return invalid(now, 'Aggregate causal member semantics conflict detected', {
+          code: 'CAUSAL_AGGREGATE_MEMBER_CONFLICT',
+          message:
+            `Conflicting causal span semantics for ${semantic.key} across aggregate members`,
+          field: semantic.field,
+        });
+      }
+    }
+
+    const receiptFingerprints = collectAggregateReceiptFingerprints({
+      payload: memberProofPayload,
+      payloadPathPrefix: memberPayloadPathPrefix,
+    });
+
+    for (const receipt of receiptFingerprints) {
+      const existing = aggregateReceiptFingerprints.get(receipt.receiptId);
+      if (!existing) {
+        aggregateReceiptFingerprints.set(receipt.receiptId, {
+          fingerprint: receipt.fingerprint,
+          field: receipt.field,
+        });
+        continue;
+      }
+
+      if (existing.fingerprint !== receipt.fingerprint) {
+        return invalid(now, 'Aggregate receipt replay with divergent content detected', {
+          code: 'CAUSAL_AGGREGATE_RECEIPT_REPLAY',
+          message:
+            `same receipt_id appears across aggregate members with divergent canonicalized content: ${receipt.receiptId}`,
+          field: receipt.field,
+        });
+      }
     }
 
     if (memberAgentDid === payload.issuer_did) {

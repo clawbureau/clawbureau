@@ -1,0 +1,9 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-aggregate-causal",
+  "cases": [
+    "valid-aggregate-causal-consistent.v1.json",
+    "invalid-aggregate-member-conflict.v1.json",
+    "invalid-aggregate-receipt-replay.v1.json"
+  ]
+}
