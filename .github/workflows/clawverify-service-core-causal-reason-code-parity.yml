@@ -1,0 +1,50 @@
+name: clawverify-service-core-causal-reason-code-parity
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/src/types.ts'
+      - 'packages/clawverify-core/src/types.ts'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/check-service-core-causal-reason-code-parity.mjs'
+      - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
+      - '.github/workflows/clawverify-service-core-causal-reason-code-parity.yml'
+      - '.github/workflows/clawverify-service-core-causal-parity.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/src/types.ts'
+      - 'packages/clawverify-core/src/types.ts'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/check-service-core-causal-reason-code-parity.mjs'
+      - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
+      - '.github/workflows/clawverify-service-core-causal-reason-code-parity.yml'
+      - '.github/workflows/clawverify-service-core-causal-parity.yml'
+
+jobs:
+  service-core-causal-reason-code-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate service/core causal reason-code parity
+        run: |
+          node scripts/protocol/check-service-core-causal-reason-code-parity.mjs
+
+      - name: Upload reason-code parity summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-core-causal-reason-code-parity-summary
+          path: artifacts/ops/service-core-causal-reason-code-parity/
+          if-no-files-found: ignore

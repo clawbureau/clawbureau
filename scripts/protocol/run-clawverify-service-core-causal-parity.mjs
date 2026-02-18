@@ -102,11 +102,65 @@ async function main() {
       suite_count_executed: 0,
       failure_suite_id: null,
       fixture_contract_summary_path: path.relative(repoRoot, fixtureContractSummaryPath),
+      reason_code_parity_summary_path: null,
       suites: [],
       failures: [
         {
           type: 'fixture_contract_failed',
           detail: `scripts/protocol/check-causal-fixture-contract.mjs exited with code ${fixtureContractExitCode}`,
+        },
+      ],
+    };
+
+    const outPath = path.join(outDir, 'summary.json');
+    await writeJson(outPath, summary);
+
+    console.error('[clawverify-service-core-causal-parity] FAIL');
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          failure_suite_id: null,
+          outPath: path.relative(repoRoot, outPath),
+        },
+        null,
+        2
+      )
+    );
+    process.exit(1);
+  }
+
+  const reasonCodeParitySummaryPath = path.join(
+    outDir,
+    'service-core-causal-reason-code-parity.summary.json'
+  );
+
+  const reasonCodeParityExitCode = runNodeScript(
+    'scripts/protocol/check-service-core-causal-reason-code-parity.mjs',
+    {
+      ...process.env,
+      SERVICE_CORE_CAUSAL_REASON_CODE_PARITY_SUMMARY_PATH:
+        reasonCodeParitySummaryPath,
+    }
+  );
+
+  if (reasonCodeParityExitCode !== 0) {
+    const summary = {
+      ok: false,
+      checked_at: new Date().toISOString(),
+      suite_count_expected: 0,
+      suite_count_executed: 0,
+      failure_suite_id: null,
+      fixture_contract_summary_path: path.relative(repoRoot, fixtureContractSummaryPath),
+      reason_code_parity_summary_path: path.relative(
+        repoRoot,
+        reasonCodeParitySummaryPath
+      ),
+      suites: [],
+      failures: [
+        {
+          type: 'reason_code_parity_failed',
+          detail: `scripts/protocol/check-service-core-causal-reason-code-parity.mjs exited with code ${reasonCodeParityExitCode}`,
         },
       ],
     };
@@ -319,6 +373,10 @@ async function main() {
     suite_count_executed: suiteResults.length,
     failure_suite_id: failureSuite?.suite_id ?? null,
     fixture_contract_summary_path: path.relative(repoRoot, fixtureContractSummaryPath),
+    reason_code_parity_summary_path: path.relative(
+      repoRoot,
+      reasonCodeParitySummaryPath
+    ),
     suites: suiteResults,
   };
 
