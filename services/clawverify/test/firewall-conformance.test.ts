@@ -47,6 +47,10 @@ type FixtureCase = {
     | 'invalid_causal_cycle'
     | 'invalid_causal_phase'
     | 'invalid_causal_confidence'
+    | 'valid_causal_binding_snake_only'
+    | 'valid_causal_binding_camel_only'
+    | 'invalid_causal_binding_field_conflict'
+    | 'invalid_causal_binding_normalization_failed'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
@@ -530,6 +534,10 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'invalid_causal_cycle' ||
     spec.scenario === 'invalid_causal_phase' ||
     spec.scenario === 'invalid_causal_confidence' ||
+    spec.scenario === 'valid_causal_binding_snake_only' ||
+    spec.scenario === 'valid_causal_binding_camel_only' ||
+    spec.scenario === 'invalid_causal_binding_field_conflict' ||
+    spec.scenario === 'invalid_causal_binding_normalization_failed' ||
     spec.scenario === 'invalid_coverage_chain_root_enforce' ||
     spec.scenario === 'invalid_cldd_discrepancy_enforce'
   ) {
@@ -645,6 +653,51 @@ async function buildFixtureScenario(spec: FixtureCase) {
             span_id: 'span_confidence_firewall_005',
             phase: 'execution',
             attribution_confidence: 1.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_binding_snake_only') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'snake_only',
+          bindingExtras: {
+            span_id: 'span_snake_only_firewall_006',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_binding_camel_only') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'camel_only',
+          bindingExtras: {
+            spanId: 'span_camel_only_firewall_007',
+            phase: 'execution',
+            attributionConfidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_binding_field_conflict') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'field_conflict',
+          bindingExtras: {
+            span_id: 'span_conflict_snake_firewall_008',
+            spanId: 'span_conflict_camel_firewall_008',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_binding_normalization_failed') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'normalization_failed',
+          bindingExtras: {
+            spanId: '   ',
+            phase: 'execution',
+            attributionConfidence: 0.5,
           },
         }),
       ];

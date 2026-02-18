@@ -36,17 +36,32 @@
     "span_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Optional causal span identifier for this receipt node."
+      "description": "Optional causal span identifier for this receipt node. Canonical key (preferred over spanId when both are present)."
+    },
+    "spanId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Legacy/compat alias for span_id. Verifier normalizes with snake_case precedence."
     },
     "parent_span_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Optional parent span identifier referencing another receipt binding span in the same bundle."
+      "description": "Optional parent span identifier referencing another receipt binding span in the same bundle. Canonical key (preferred over parentSpanId when both are present)."
+    },
+    "parentSpanId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Legacy/compat alias for parent_span_id. Verifier normalizes with snake_case precedence."
     },
     "tool_span_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Optional tool-root span identifier for side-effect and derived receipt linkage in the same bundle."
+      "description": "Optional tool-root span identifier for side-effect and derived receipt linkage in the same bundle. Canonical key (preferred over toolSpanId when both are present)."
+    },
+    "toolSpanId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Legacy/compat alias for tool_span_id. Verifier normalizes with snake_case precedence."
     },
     "phase": {
       "type": "string",
@@ -63,7 +78,11 @@
     },
     "attribution_confidence": {
       "type": "number",
-      "description": "Optional deterministic causal attribution confidence. Verifier enforces inclusive [0.0, 1.0] bounds when present."
+      "description": "Optional deterministic causal attribution confidence. Canonical key (preferred over attributionConfidence when both are present). Verifier enforces inclusive [0.0, 1.0] bounds when present."
+    },
+    "attributionConfidence": {
+      "type": "number",
+      "description": "Legacy/compat alias for attribution_confidence. Verifier normalizes with snake_case precedence."
     }
   }
 }

@@ -194,19 +194,27 @@ function jsonByteSize(value: unknown): number {
 
 function classifyCausalSchemaValidationCode(
   field: string | undefined
-): 'MALFORMED_ENVELOPE' | 'CAUSAL_PHASE_INVALID' | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE' | null {
+):
+  | 'CAUSAL_PHASE_INVALID'
+  | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
+  | 'CAUSAL_BINDING_NORMALIZATION_FAILED'
+  | null {
   if (!field) return null;
 
   if (/(^|\.)binding\.phase(\.|$|\[)/.test(field)) {
     return 'CAUSAL_PHASE_INVALID';
   }
 
-  if (/(^|\.)binding\.attribution_confidence(\.|$|\[)/.test(field)) {
+  if (/(^|\.)binding\.(attribution_confidence|attributionConfidence)(\.|$|\[)/.test(field)) {
     return 'CAUSAL_CONFIDENCE_OUT_OF_RANGE';
   }
 
-  if (/(^|\.)binding\.(span_id|parent_span_id|tool_span_id)(\.|$|\[)/.test(field)) {
-    return 'MALFORMED_ENVELOPE';
+  if (
+    /(^|\.)binding\.(span_id|spanId|parent_span_id|parentSpanId|tool_span_id|toolSpanId)(\.|$|\[)/.test(
+      field
+    )
+  ) {
+    return 'CAUSAL_BINDING_NORMALIZATION_FAILED';
   }
 
   return null;
@@ -1186,13 +1194,22 @@ const ALLOWED_CAUSAL_PHASES = new Set([
   'teardown',
 ]);
 
+type CausalBindingNormalizationCode =
+  | 'CAUSAL_BINDING_FIELD_CONFLICT'
+  | 'CAUSAL_BINDING_NORMALIZATION_FAILED';
+
 interface CausalBindingEntry {
   path: string;
   spanId?: string;
+  spanFieldPath: string;
   parentSpanId?: string;
+  parentSpanFieldPath: string;
   toolSpanId?: string;
+  toolSpanFieldPath: string;
   phase?: unknown;
+  phaseFieldPath: string;
   attributionConfidence?: unknown;
+  attributionConfidenceFieldPath: string;
 }
 
 function toNonNegativeInteger(value: unknown): number | null {
@@ -1368,45 +1385,270 @@ function evaluateClddDiscrepancy(
   };
 }
 
+function hasOwnField(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function normalizeCausalIdentifierField(args: {
+  binding: Record<string, unknown>;
+  path: string;
+  snakeKey: 'span_id' | 'parent_span_id' | 'tool_span_id';
+  camelKey: 'spanId' | 'parentSpanId' | 'toolSpanId';
+  label: 'span_id' | 'parent_span_id' | 'tool_span_id';
+}):
+  | { ok: true; value?: string; fieldPath: string }
+  | {
+      ok: false;
+      code: CausalBindingNormalizationCode;
+      message: string;
+      field: string;
+    } {
+  const snakeFieldPath = `${args.path}.${args.snakeKey}`;
+  const camelFieldPath = `${args.path}.${args.camelKey}`;
+  const hasSnake = hasOwnField(args.binding, args.snakeKey);
+  const hasCamel = hasOwnField(args.binding, args.camelKey);
+
+  const parse = (
+    raw: unknown,
+    fieldPath: string,
+    keyName: string
+  ):
+    | { ok: true; value: string }
+    | {
+        ok: false;
+        code: CausalBindingNormalizationCode;
+        message: string;
+        field: string;
+      } => {
+    if (typeof raw !== 'string') {
+      return {
+        ok: false,
+        code: 'CAUSAL_BINDING_NORMALIZATION_FAILED',
+        message: `${keyName} must be a string when present`,
+        field: fieldPath,
+      };
+    }
+
+    const normalized = raw.trim();
+    if (normalized.length === 0) {
+      return {
+        ok: false,
+        code: 'CAUSAL_BINDING_NORMALIZATION_FAILED',
+        message: `${keyName} must be a non-empty identifier after normalization`,
+        field: fieldPath,
+      };
+    }
+
+    return { ok: true, value: normalized };
+  };
+
+  let snakeValue: string | undefined;
+  if (hasSnake) {
+    const parsed = parse(args.binding[args.snakeKey], snakeFieldPath, args.label);
+    if (!parsed.ok) return parsed;
+    snakeValue = parsed.value;
+  }
+
+  let camelValue: string | undefined;
+  if (hasCamel) {
+    const parsed = parse(args.binding[args.camelKey], camelFieldPath, args.camelKey);
+    if (!parsed.ok) return parsed;
+    camelValue = parsed.value;
+  }
+
+  if (hasSnake && hasCamel && snakeValue !== camelValue) {
+    return {
+      ok: false,
+      code: 'CAUSAL_BINDING_FIELD_CONFLICT',
+      message: `${args.label} and ${args.camelKey} conflict after normalization`,
+      field: snakeFieldPath,
+    };
+  }
+
+  if (hasSnake) {
+    return { ok: true, value: snakeValue, fieldPath: snakeFieldPath };
+  }
+
+  if (hasCamel) {
+    return { ok: true, value: camelValue, fieldPath: camelFieldPath };
+  }
+
+  return { ok: true, value: undefined, fieldPath: snakeFieldPath };
+}
+
+function normalizeCausalNumericField(args: {
+  binding: Record<string, unknown>;
+  path: string;
+  snakeKey: 'attribution_confidence';
+  camelKey: 'attributionConfidence';
+  label: 'attribution_confidence';
+}):
+  | { ok: true; value?: number; fieldPath: string }
+  | {
+      ok: false;
+      code: CausalBindingNormalizationCode;
+      message: string;
+      field: string;
+    } {
+  const snakeFieldPath = `${args.path}.${args.snakeKey}`;
+  const camelFieldPath = `${args.path}.${args.camelKey}`;
+  const hasSnake = hasOwnField(args.binding, args.snakeKey);
+  const hasCamel = hasOwnField(args.binding, args.camelKey);
+
+  const parse = (
+    raw: unknown,
+    fieldPath: string,
+    keyName: string
+  ):
+    | { ok: true; value: number }
+    | {
+        ok: false;
+        code: CausalBindingNormalizationCode;
+        message: string;
+        field: string;
+      } => {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      return {
+        ok: false,
+        code: 'CAUSAL_BINDING_NORMALIZATION_FAILED',
+        message: `${keyName} must be a finite number when present`,
+        field: fieldPath,
+      };
+    }
+
+    return { ok: true, value: raw };
+  };
+
+  let snakeValue: number | undefined;
+  if (hasSnake) {
+    const parsed = parse(args.binding[args.snakeKey], snakeFieldPath, args.label);
+    if (!parsed.ok) return parsed;
+    snakeValue = parsed.value;
+  }
+
+  let camelValue: number | undefined;
+  if (hasCamel) {
+    const parsed = parse(args.binding[args.camelKey], camelFieldPath, args.camelKey);
+    if (!parsed.ok) return parsed;
+    camelValue = parsed.value;
+  }
+
+  if (
+    hasSnake &&
+    hasCamel &&
+    snakeValue !== undefined &&
+    camelValue !== undefined &&
+    !Object.is(snakeValue, camelValue)
+  ) {
+    return {
+      ok: false,
+      code: 'CAUSAL_BINDING_FIELD_CONFLICT',
+      message: `${args.label} and ${args.camelKey} conflict after normalization`,
+      field: snakeFieldPath,
+    };
+  }
+
+  if (hasSnake) {
+    return { ok: true, value: snakeValue, fieldPath: snakeFieldPath };
+  }
+
+  if (hasCamel) {
+    return { ok: true, value: camelValue, fieldPath: camelFieldPath };
+  }
+
+  return { ok: true, value: undefined, fieldPath: snakeFieldPath };
+}
+
 function toCausalBindingEntry(
   binding: Record<string, unknown>,
   path: string
-): CausalBindingEntry | null {
+):
+  | { ok: true; entry: CausalBindingEntry | null }
+  | {
+      ok: false;
+      code: CausalBindingNormalizationCode;
+      message: string;
+      field: string;
+    } {
   const hasCausalField =
-    Object.prototype.hasOwnProperty.call(binding, 'span_id') ||
-    Object.prototype.hasOwnProperty.call(binding, 'parent_span_id') ||
-    Object.prototype.hasOwnProperty.call(binding, 'tool_span_id') ||
-    Object.prototype.hasOwnProperty.call(binding, 'phase') ||
-    Object.prototype.hasOwnProperty.call(binding, 'attribution_confidence');
+    hasOwnField(binding, 'span_id') ||
+    hasOwnField(binding, 'spanId') ||
+    hasOwnField(binding, 'parent_span_id') ||
+    hasOwnField(binding, 'parentSpanId') ||
+    hasOwnField(binding, 'tool_span_id') ||
+    hasOwnField(binding, 'toolSpanId') ||
+    hasOwnField(binding, 'phase') ||
+    hasOwnField(binding, 'attribution_confidence') ||
+    hasOwnField(binding, 'attributionConfidence');
 
   if (!hasCausalField) {
-    return null;
+    return { ok: true, entry: null };
   }
 
-  return {
+  const span = normalizeCausalIdentifierField({
+    binding,
     path,
-    spanId:
-      typeof binding.span_id === 'string' && binding.span_id.trim().length > 0
-        ? binding.span_id
-        : undefined,
-    parentSpanId:
-      typeof binding.parent_span_id === 'string' &&
-      binding.parent_span_id.trim().length > 0
-        ? binding.parent_span_id
-        : undefined,
-    toolSpanId:
-      typeof binding.tool_span_id === 'string' &&
-      binding.tool_span_id.trim().length > 0
-        ? binding.tool_span_id
-        : undefined,
-    phase: binding.phase,
-    attributionConfidence: binding.attribution_confidence,
+    snakeKey: 'span_id',
+    camelKey: 'spanId',
+    label: 'span_id',
+  });
+  if (!span.ok) return span;
+
+  const parentSpan = normalizeCausalIdentifierField({
+    binding,
+    path,
+    snakeKey: 'parent_span_id',
+    camelKey: 'parentSpanId',
+    label: 'parent_span_id',
+  });
+  if (!parentSpan.ok) return parentSpan;
+
+  const toolSpan = normalizeCausalIdentifierField({
+    binding,
+    path,
+    snakeKey: 'tool_span_id',
+    camelKey: 'toolSpanId',
+    label: 'tool_span_id',
+  });
+  if (!toolSpan.ok) return toolSpan;
+
+  const confidence = normalizeCausalNumericField({
+    binding,
+    path,
+    snakeKey: 'attribution_confidence',
+    camelKey: 'attributionConfidence',
+    label: 'attribution_confidence',
+  });
+  if (!confidence.ok) return confidence;
+
+  return {
+    ok: true,
+    entry: {
+      path,
+      spanId: span.value,
+      spanFieldPath: span.fieldPath,
+      parentSpanId: parentSpan.value,
+      parentSpanFieldPath: parentSpan.fieldPath,
+      toolSpanId: toolSpan.value,
+      toolSpanFieldPath: toolSpan.fieldPath,
+      phase: binding.phase,
+      phaseFieldPath: `${path}.phase`,
+      attributionConfidence: confidence.value,
+      attributionConfidenceFieldPath: confidence.fieldPath,
+    },
   };
 }
 
 function collectCausalBindingEntries(
   payload: ProofBundlePayload
-): CausalBindingEntry[] {
+):
+  | { ok: true; entries: CausalBindingEntry[] }
+  | {
+      ok: false;
+      code: CausalBindingNormalizationCode;
+      message: string;
+      field: string;
+    } {
   const out: CausalBindingEntry[] = [];
 
   if (payload.receipts !== undefined) {
@@ -1417,7 +1659,8 @@ function collectCausalBindingEntries(
         binding,
         `payload.receipts[${i}].payload.binding`
       );
-      if (entry) out.push(entry);
+      if (!entry.ok) return entry;
+      if (entry.entry) out.push(entry.entry);
     }
   }
 
@@ -1429,7 +1672,8 @@ function collectCausalBindingEntries(
         binding,
         `payload.web_receipts[${i}].payload.binding`
       );
-      if (entry) out.push(entry);
+      if (!entry.ok) return entry;
+      if (entry.entry) out.push(entry.entry);
     }
   }
 
@@ -1450,11 +1694,12 @@ function collectCausalBindingEntries(
         : `payload.vir_receipts[${i}].binding`;
 
       const entry = toCausalBindingEntry(binding, bindingPath);
-      if (entry) out.push(entry);
+      if (!entry.ok) return entry;
+      if (entry.entry) out.push(entry.entry);
     }
   }
 
-  return out;
+  return { ok: true, entries: out };
 }
 
 function validateCausalBindingEntries(
@@ -1489,7 +1734,7 @@ function validateCausalBindingEntries(
           code: 'CAUSAL_PHASE_INVALID',
           message:
             'binding.phase must be one of setup|planning|reasoning|execution|observation|reflection|teardown',
-          field: `${entry.path}.phase`,
+          field: entry.phaseFieldPath,
         };
       }
     }
@@ -1507,7 +1752,7 @@ function validateCausalBindingEntries(
           code: 'CAUSAL_CONFIDENCE_OUT_OF_RANGE',
           message:
             'binding.attribution_confidence must be a finite number in inclusive range [0.0, 1.0]',
-          field: `${entry.path}.attribution_confidence`,
+          field: entry.attributionConfidenceFieldPath,
         };
       }
     }
@@ -1517,7 +1762,7 @@ function validateCausalBindingEntries(
         ok: false,
         code: 'CAUSAL_REFERENCE_DANGLING',
         message: `binding.parent_span_id references unknown span_id: ${entry.parentSpanId}`,
-        field: `${entry.path}.parent_span_id`,
+        field: entry.parentSpanFieldPath,
       };
     }
 
@@ -1526,7 +1771,7 @@ function validateCausalBindingEntries(
         ok: false,
         code: 'CAUSAL_REFERENCE_DANGLING',
         message: `binding.tool_span_id references unknown span_id: ${entry.toolSpanId}`,
-        field: `${entry.path}.tool_span_id`,
+        field: entry.toolSpanFieldPath,
       };
     }
   }
@@ -1539,7 +1784,7 @@ function validateCausalBindingEntries(
 
     if (!parentBySpan.has(entry.spanId)) {
       parentBySpan.set(entry.spanId, entry.parentSpanId);
-      parentFieldBySpan.set(entry.spanId, `${entry.path}.parent_span_id`);
+      parentFieldBySpan.set(entry.spanId, entry.parentSpanFieldPath);
     }
   }
 
@@ -3273,7 +3518,24 @@ export async function verifyProofBundle(
 
   // CAV-US-002: fail-closed causal binding DAG checks (only when causal fields are present).
   const causalBindingEntries = collectCausalBindingEntries(payload);
-  const causalValidation = validateCausalBindingEntries(causalBindingEntries);
+  if (!causalBindingEntries.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: causalBindingEntries.message,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+      },
+      error: {
+        code: causalBindingEntries.code,
+        message: causalBindingEntries.message,
+        field: causalBindingEntries.field,
+      },
+    };
+  }
+
+  const causalValidation = validateCausalBindingEntries(causalBindingEntries.entries);
   if (!causalValidation.ok) {
     return {
       result: {

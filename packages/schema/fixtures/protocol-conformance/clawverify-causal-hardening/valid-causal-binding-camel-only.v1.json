@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-binding-camel-only",
+  "scenario": "valid_causal_binding_camel_only",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

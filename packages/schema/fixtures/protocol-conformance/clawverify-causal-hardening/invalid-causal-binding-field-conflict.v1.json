@@ -1,0 +1,8 @@
+{
+  "id": "invalid-causal-binding-field-conflict",
+  "scenario": "invalid_causal_binding_field_conflict",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "CAUSAL_BINDING_FIELD_CONFLICT"
+  }
+}
