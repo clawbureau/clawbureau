@@ -1,0 +1,58 @@
+name: release-e2e-guardrails
+
+on:
+  pull_request:
+    paths:
+      - 'packages/clawverify-cli/**'
+      - 'packages/clawverify-core/**'
+      - 'scripts/release/run-clawsig-v0.2-package-prep.mjs'
+      - 'scripts/release/check-real-usecase-evidence-pack.mjs'
+      - 'scripts/poh/smoke-marketplace-e2e-settlement.mjs'
+      - 'artifacts/e2e/real-usecases/**'
+      - 'docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md'
+      - 'docs/releases/clawsig-v0.2-publish-log.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/clawverify-cli/**'
+      - 'packages/clawverify-core/**'
+      - 'scripts/release/run-clawsig-v0.2-package-prep.mjs'
+      - 'scripts/release/check-real-usecase-evidence-pack.mjs'
+      - 'scripts/poh/smoke-marketplace-e2e-settlement.mjs'
+      - 'artifacts/e2e/real-usecases/**'
+      - 'docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md'
+      - 'docs/releases/clawsig-v0.2-publish-log.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cli-release-closure:
+    name: cli-release-closure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run release-prep closure gate
+        run: node scripts/release/run-clawsig-v0.2-package-prep.mjs
+
+  release-e2e-evidence-contract:
+    name: release-e2e-evidence-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate real-usecase evidence contract
+        run: node scripts/release/check-real-usecase-evidence-pack.mjs
