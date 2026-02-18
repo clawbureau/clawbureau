@@ -26,6 +26,7 @@ import {
   exportKeyPairJWK,
   hashJsonB64u,
 } from '../../packages/clawsig-sdk/dist/index.js';
+import { writeSmokeArtifactContract } from './smoke-artifact-contract.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -357,16 +358,6 @@ async function main() {
     },
   });
 
-  // Write proof bundle
-  const bundlePath = path.join(outDir, 'proof-bundle.json');
-  await fs.writeFile(bundlePath, JSON.stringify(result.envelope, null, 2));
-  console.log(`[sdk] Bundle written: ${bundlePath}`);
-
-  // Write URM
-  const urmPath = path.join(outDir, 'urm.json');
-  await fs.writeFile(urmPath, JSON.stringify(result.urm, null, 2));
-  console.log(`[sdk] URM written: ${urmPath}`);
-
   // Count receipts
   const toolReceiptCount = result.envelope.payload.tool_receipts?.length ?? 0;
   const eventCount = result.envelope.payload.event_chain?.length ?? 0;
@@ -389,7 +380,27 @@ async function main() {
     generated_at: new Date().toISOString(),
   };
 
-  await fs.writeFile(path.join(outDir, 'smoke.json'), JSON.stringify(summary, null, 2));
+  const verify = {
+    kind: 'smoke_contract_verdict',
+    status: 'PASS',
+    reason_code: 'OK',
+    reason: 'Receipted loss-resolve smoke completed successfully',
+    verified_at: new Date().toISOString(),
+    run_id: run.runId,
+    bundle_id: result.envelope.payload.bundle_id,
+  };
+
+  await writeSmokeArtifactContract({
+    artifactDir: outDir,
+    proofBundle: result.envelope,
+    urm: result.urm,
+    verify,
+    smoke: summary,
+    requireProofBundle: true,
+    requireUrm: true,
+  });
+
+  const bundlePath = path.join(outDir, 'proof-bundle.json');
   console.log(`\n✅ ${env}: SDK integration complete — ${toolReceiptCount} tool receipts, ${eventCount} events`);
   console.log(`   Bundle: ${bundlePath}`);
 }

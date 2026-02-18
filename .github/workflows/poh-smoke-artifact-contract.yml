@@ -1,0 +1,42 @@
+name: poh-smoke-artifact-contract
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/poh/smoke-*.mjs'
+      - 'scripts/poh/smoke-artifact-contract.mjs'
+      - 'scripts/poh/check-smoke-artifact-contract.mjs'
+      - 'scripts/poh/smoke-artifact-contract.test.mjs'
+      - '.github/workflows/poh-smoke-artifact-contract.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/poh/smoke-*.mjs'
+      - 'scripts/poh/smoke-artifact-contract.mjs'
+      - 'scripts/poh/check-smoke-artifact-contract.mjs'
+      - 'scripts/poh/smoke-artifact-contract.test.mjs'
+      - '.github/workflows/poh-smoke-artifact-contract.yml'
+
+jobs:
+  smoke-artifact-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate changed smoke scripts use artifact contract helper
+        env:
+          SMOKE_CONTRACT_BASE: ${{ github.base_ref || 'main' }}
+        run: node scripts/poh/check-smoke-artifact-contract.mjs
+
+      - name: Run smoke artifact contract tests
+        run: node --test scripts/poh/smoke-artifact-contract.test.mjs

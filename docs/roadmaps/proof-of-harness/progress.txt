@@ -425,3 +425,28 @@ Started: 2026-02-05T21:49:28Z
   - `node --test scripts/poh/trace-artifacts.test.mjs` ✅
   - `node scripts/poh/trace-artifacts.mjs --help` ✅
 ---
+
+## 2026-02-18T03:20:00Z - ART-US-002 smoke artifact contract
+- What was implemented
+  - Added canonical smoke artifact contract helper:
+    - `scripts/poh/smoke-artifact-contract.mjs`
+  - Added diff-aware contract guard script:
+    - `scripts/poh/check-smoke-artifact-contract.mjs`
+  - Added CI gate to block changed PoH smoke scripts that skip contract helper wiring:
+    - `.github/workflows/poh-smoke-artifact-contract.yml`
+  - Updated representative PoH smoke scripts to emit canonical evidence set with `verify.json`:
+    - `scripts/poh/smoke-marketplace-e2e-settlement.mjs`
+    - `scripts/poh/smoke-marketplace-e2e-dispute.mjs`
+    - `scripts/poh/smoke-econ-risk-loss-resolve-loop-receipted.mjs`
+    - `scripts/poh/smoke-econ-settle-funded-lifecycle.mjs`
+    - `scripts/poh/smoke-econ-ops-v2.mjs`
+  - Added helper regression test:
+    - `scripts/poh/smoke-artifact-contract.test.mjs`
+- Contract surface
+  - required: `verify.json`, `smoke.json`
+  - required when PoH bundle emitted: `proof-bundle.json`, `urm.json`
+  - optional: `health-snapshot.json`
+- Validation
+  - `node --test scripts/poh/smoke-artifact-contract.test.mjs` ✅
+  - `node scripts/poh/check-smoke-artifact-contract.mjs` ✅
+---

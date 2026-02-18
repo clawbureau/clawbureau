@@ -153,3 +153,41 @@ Default output location:
 artifacts/ops/artifact-trace/<timestamp>/summary.json
 artifacts/ops/artifact-trace/<timestamp>/summary.md
 ```
+
+## 10) Smoke artifact contract (ART-US-002)
+
+PoH smoke scripts now have a canonical artifact contract helper:
+
+- `scripts/poh/smoke-artifact-contract.mjs`
+
+When a smoke run emits PoH evidence, the default contract is:
+
+- `proof-bundle.json`
+- `urm.json` (when PoH bundle emission is enabled)
+- `verify.json`
+- `smoke.json`
+- `health-snapshot.json` (optional)
+
+Use it from smoke scripts:
+
+```js
+import { writeSmokeArtifactContract } from './smoke-artifact-contract.mjs';
+
+await writeSmokeArtifactContract({
+  artifactDir: outDir,
+  proofBundle: envelope,
+  urm,
+  verify,
+  smoke,
+  healthSnapshot,
+  requireProofBundle: true,
+  requireUrm: true,
+});
+```
+
+CI guardrail for new/changed PoH smoke scripts:
+
+- `.github/workflows/poh-smoke-artifact-contract.yml`
+- `scripts/poh/check-smoke-artifact-contract.mjs`
+
+This blocks PRs where changed `scripts/poh/smoke-*.mjs` files skip the contract helper.
