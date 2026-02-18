@@ -1,0 +1,328 @@
+{
+  "generated_at": "2026-02-18T15:28:07.363Z",
+  "root": "/private/tmp/clawbureau-c2",
+  "scan": {
+    "scan_roots": [
+      "artifacts",
+      "proofs"
+    ],
+    "files_seen": 636,
+    "files_parsed": 635,
+    "parse_errors": 1,
+    "max_json_bytes": 3145728,
+    "max_files": 20000
+  },
+  "inventory": {
+    "kind_counts": [
+      {
+        "kind": "commit_signature",
+        "count": 239
+      },
+      {
+        "kind": "json",
+        "count": 162
+      },
+      {
+        "kind": "smoke_result",
+        "count": 80
+      },
+      {
+        "kind": "summary_json",
+        "count": 38
+      },
+      {
+        "kind": "proof_bundle_envelope",
+        "count": 36
+      },
+      {
+        "kind": "urm_document",
+        "count": 36
+      },
+      {
+        "kind": "verification_result",
+        "count": 22
+      },
+      {
+        "kind": "trust_pulse",
+        "count": 12
+      },
+      {
+        "kind": "conformance_summary",
+        "count": 10
+      },
+      {
+        "kind": "json_parse_error",
+        "count": 1
+      }
+    ],
+    "catalog": [
+      {
+        "kind": "proof_bundle_envelope",
+        "description": "Agent-signed run envelope (event chain + receipts + attestations + metadata).",
+        "typical_paths": [
+          ".clawsig/proof_bundle.json",
+          "artifacts/poh/**-bundle.json",
+          "*/proof-bundle.json"
+        ]
+      },
+      {
+        "kind": "urm_document",
+        "description": "Universal Run Manifest that binds run identity, inputs/outputs, harness metadata, and roots.",
+        "typical_paths": [
+          "*/*-urm.json",
+          "*/urm.json"
+        ]
+      },
+      {
+        "kind": "trust_pulse",
+        "description": "Self-reported UX summary (tools/files); explicitly non-tier-uplifting evidence.",
+        "typical_paths": [
+          "*/*-trust-pulse.json",
+          "*/trust-pulse.json"
+        ]
+      },
+      {
+        "kind": "verification_result",
+        "description": "Offline/online verifier response with deterministic status + reason/code.",
+        "typical_paths": [
+          "*/*-verify.json",
+          "*/verify.json"
+        ]
+      },
+      {
+        "kind": "conformance_summary",
+        "description": "Executable vector run summary for protocol/firewall/regression conformance suites.",
+        "typical_paths": [
+          "artifacts/conformance/**/summary.json"
+        ]
+      },
+      {
+        "kind": "smoke_result",
+        "description": "Scenario/e2e smoke evidence (simulation and service behavior snapshots).",
+        "typical_paths": [
+          "artifacts/smoke/**/result.json",
+          "artifacts/simulations/**/smoke.json"
+        ]
+      },
+      {
+        "kind": "ops_summary",
+        "description": "Operational gate/watch/deploy summaries produced by protocol and service ops runners.",
+        "typical_paths": [
+          "artifacts/ops/**/summary.json"
+        ]
+      },
+      {
+        "kind": "commit_signature",
+        "description": "DID-signed commit proof envelope used for lane provenance.",
+        "typical_paths": [
+          "proofs/**/commit.sig.json"
+        ]
+      },
+      {
+        "kind": "aggregate_bundle_envelope",
+        "description": "Fleet-level signed bundle-of-bundles envelope for aggregate verification.",
+        "typical_paths": [
+          "*aggregate*.json",
+          "artifacts/**/aggregate*.json"
+        ]
+      },
+      {
+        "kind": "export_bundle",
+        "description": "Content-addressed export manifest with attached artifacts for offline audit packages.",
+        "typical_paths": [
+          "*export*.json"
+        ]
+      }
+    ]
+  },
+  "trace": {
+    "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e",
+    "bundle": {
+      "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/proof-bundle.json",
+      "mtime": "2026-02-18T15:27:42.121Z",
+      "bundle_id": "bundle_d532447d-3461-4832-a0c6-bf5b44589d4b",
+      "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+      "signer_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+      "issued_at": "2026-02-18T15:27:42.121Z",
+      "run_ids": [
+        "run_1d10a54f-da33-402e-b230-22696a04646e"
+      ],
+      "array_counts": {
+        "event_chain": 9,
+        "tool_receipts": 7
+      },
+      "event_timeline": [
+        {
+          "timestamp": "2026-02-18T15:27:40.562Z",
+          "event_type": "run_start",
+          "event_id": "evt_e8b3257b-71f2-48cd-821c-fdcef3a6a470",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:40.942Z",
+          "event_type": "tool_call",
+          "event_id": "evt_7855f0e0-f169-4814-8229-889eb868ff97",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:41.623Z",
+          "event_type": "tool_call",
+          "event_id": "evt_8177f4fc-cb0e-4bfe-9cab-3f0b58fdd760",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:41.703Z",
+          "event_type": "tool_call",
+          "event_id": "evt_a5c2fdd8-144e-4b29-9654-71a1a19e2ecf",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:41.756Z",
+          "event_type": "tool_call",
+          "event_id": "evt_f3d78816-59b4-42e1-b8ab-291f7b21d232",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:41.804Z",
+          "event_type": "tool_call",
+          "event_id": "evt_33e48f6d-32fb-47db-b3b3-1fcb4e03bfa2",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:42.039Z",
+          "event_type": "tool_call",
+          "event_id": "evt_4a6041ce-0abc-4808-9787-478f01a4d303",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:42.120Z",
+          "event_type": "tool_call",
+          "event_id": "evt_5f4b39f8-19f8-4cfc-92ee-48537a7e6f09",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:42.120Z",
+          "event_type": "run_end",
+          "event_id": "evt_958059ac-feb0-40fc-bb4c-17a431fb381b",
+          "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e"
+        }
+      ],
+      "event_types": {
+        "run_start": 1,
+        "tool_call": 7,
+        "run_end": 1
+      },
+      "tool_summary": {
+        "by_tool_name": [
+          {
+            "tool_name": "http_fetch",
+            "count": 7
+          }
+        ],
+        "by_result_status": [
+          {
+            "result_status": "success",
+            "count": 7
+          }
+        ]
+      },
+      "gateway_receipt_summary": {
+        "total": 0,
+        "by_provider_model": []
+      },
+      "sentinels": null,
+      "urm_ref": {
+        "urm_id": "urm_53f9128d-936f-4a37-9d43-0641e9b60675",
+        "resource_hash_b64u": "AQ2X1qQoQgk10M3bsQLP6jBdYGrxAiRtoKskQbVfi5E"
+      }
+    },
+    "urm": {
+      "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/urm.json",
+      "mtime": "2026-02-18T15:27:42.121Z",
+      "urm_id": "urm_53f9128d-936f-4a37-9d43-0641e9b60675",
+      "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e",
+      "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+      "issued_at": "2026-02-18T15:27:42.120Z",
+      "trust_pulse_ref": null,
+      "hash_b64u": "AQ2X1qQoQgk10M3bsQLP6jBdYGrxAiRtoKskQbVfi5E",
+      "hash_check_against_bundle_ref": {
+        "expected": "AQ2X1qQoQgk10M3bsQLP6jBdYGrxAiRtoKskQbVfi5E",
+        "actual": "AQ2X1qQoQgk10M3bsQLP6jBdYGrxAiRtoKskQbVfi5E",
+        "match": true
+      }
+    },
+    "trust_pulse": null,
+    "verification_results": [
+      {
+        "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/verify.json",
+        "mtime": "2026-02-18T15:27:42.122Z",
+        "status": "PASS",
+        "reason": "All marketplace dispute smoke steps passed",
+        "envelope_type": "smoke_contract_verdict",
+        "code": "OK",
+        "verified_at": "2026-02-18T15:27:42.121Z"
+      }
+    ],
+    "related_artifacts": [
+      {
+        "kind": "json",
+        "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/health-snapshot.json",
+        "mtime": "2026-02-18T15:27:42.122Z",
+        "run_ids": [],
+        "bundle_ids": [],
+        "urm_ids": []
+      },
+      {
+        "kind": "smoke_result",
+        "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/smoke.json",
+        "mtime": "2026-02-18T15:27:42.122Z",
+        "run_ids": [
+          "run_1d10a54f-da33-402e-b230-22696a04646e"
+        ],
+        "bundle_ids": [
+          "bundle_d532447d-3461-4832-a0c6-bf5b44589d4b"
+        ],
+        "urm_ids": []
+      },
+      {
+        "kind": "verification_result",
+        "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/verify.json",
+        "mtime": "2026-02-18T15:27:42.122Z",
+        "run_ids": [
+          "run_1d10a54f-da33-402e-b230-22696a04646e"
+        ],
+        "bundle_ids": [
+          "bundle_d532447d-3461-4832-a0c6-bf5b44589d4b"
+        ],
+        "urm_ids": []
+      },
+      {
+        "kind": "proof_bundle_envelope",
+        "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/proof-bundle.json",
+        "mtime": "2026-02-18T15:27:42.121Z",
+        "run_ids": [
+          "run_1d10a54f-da33-402e-b230-22696a04646e"
+        ],
+        "bundle_ids": [
+          "bundle_d532447d-3461-4832-a0c6-bf5b44589d4b"
+        ],
+        "urm_ids": [
+          "urm_53f9128d-936f-4a37-9d43-0641e9b60675"
+        ]
+      },
+      {
+        "kind": "urm_document",
+        "path": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging/urm.json",
+        "mtime": "2026-02-18T15:27:42.121Z",
+        "run_ids": [
+          "run_1d10a54f-da33-402e-b230-22696a04646e"
+        ],
+        "bundle_ids": [],
+        "urm_ids": [
+          "urm_53f9128d-936f-4a37-9d43-0641e9b60675"
+        ]
+      }
+    ],
+    "notes": []
+  }
+}

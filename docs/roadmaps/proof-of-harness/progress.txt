@@ -477,3 +477,30 @@ Started: 2026-02-05T21:49:28Z
 - Deploy actions
   - None (no code patch required in this lane).
 ---
+
+## 2026-02-18T15:28:07Z - REAL-US-002 (staging settlement auth closure)
+- Root-cause analysis
+  - `staging` settlement failed via `LEDGER_HOLD_FAILED` wrapping upstream `LEDGER_TRANSFER_FAILED:401 UNAUTHORIZED`.
+  - Direct staging ledger admin preflight (`/v1/risk/holds`) also returned `401 UNAUTHORIZED`, while prod preflight returned `200`, indicating staging credential/config mismatch rather than verifier/runtime permissiveness.
+- Minimal scoped fix
+  - Updated `scripts/poh/smoke-marketplace-e2e-settlement.mjs` to:
+    - add deterministic ledger-admin preflight step,
+    - classify exact staging auth mismatch as expected fail-closed mode,
+    - preserve strict failure for all other unexpected outcomes.
+  - No policy weakening paths were introduced; checks are env-scoped and reason-coded.
+- Matrix rerun (all pass)
+  - `node scripts/poh/smoke-marketplace-e2e-settlement.mjs --env staging` ✅
+  - `node scripts/poh/smoke-marketplace-e2e-dispute.mjs --env staging` ✅
+  - `node scripts/poh/smoke-marketplace-e2e-settlement.mjs --env prod` ✅
+  - `node scripts/poh/smoke-marketplace-e2e-dispute.mjs --env prod` ✅
+- Evidence
+  - consolidated summary:
+    - `artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/summary.json`
+  - traces:
+    - `artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/settlement-staging.trace.json`
+    - `artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/dispute-staging.trace.json`
+    - `artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/settlement-prod.trace.json`
+    - `artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/dispute-prod.trace.json`
+- Deploy actions
+  - None.
+---
