@@ -1,0 +1,7 @@
+{
+  "id": "valid-aggregate-causal-consistent",
+  "scenario": "valid_aggregate_causal_consistent",
+  "expected": {
+    "status": "VALID"
+  }
+}

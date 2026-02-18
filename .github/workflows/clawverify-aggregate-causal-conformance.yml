@@ -1,0 +1,45 @@
+name: clawverify-aggregate-causal-conformance
+
+on:
+  pull_request:
+    paths:
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'services/clawverify/src/types.ts'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - '.github/workflows/clawverify-aggregate-causal-conformance.yml'
+      - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'services/clawverify/src/types.ts'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - '.github/workflows/clawverify-aggregate-causal-conformance.yml'
+      - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+
+jobs:
+  aggregate-causal-conformance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify-cli deps
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+
+      - name: Run aggregate causal conformance fixtures
+        run: |
+          node scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs

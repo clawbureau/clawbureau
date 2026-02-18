@@ -155,6 +155,8 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `AGGREGATE_DUPLICATE_BUNDLE_ID` | Duplicate nested `bundle_id` detected across aggregate members |
 | `AGGREGATE_DUPLICATE_RUN_ID` | Duplicate nested `run_id` detected across aggregate members |
 | `AGGREGATE_TTL_EXCEEDS_MEMBER` | Aggregate expiry exceeds a member expiry bound |
+| `CAUSAL_AGGREGATE_MEMBER_CONFLICT` | Aggregate members contain incompatible causal span semantics for the same run namespace/span lineage |
+| `CAUSAL_AGGREGATE_RECEIPT_REPLAY` | Same receipt identity appears across aggregate members with divergent canonicalized content |
 
 ### RECEIPT_*
 

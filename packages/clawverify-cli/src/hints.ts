@@ -121,6 +121,10 @@ const HINTS: Record<string, string> = {
     'Duplicate run_id detected across aggregate members. Each member must represent a distinct run.',
   AGGREGATE_TTL_EXCEEDS_MEMBER:
     'Aggregate expires_at exceeds at least one member expiry. Aggregate TTL cannot outlive member TTL.',
+  CAUSAL_AGGREGATE_MEMBER_CONFLICT:
+    'Aggregate members contain conflicting causal span semantics for the same run namespace/span_id lineage. Normalize cross-member causal bindings before aggregation.',
+  CAUSAL_AGGREGATE_RECEIPT_REPLAY:
+    'Aggregate members reuse the same receipt_id with divergent content. Ensure replayed receipt_ids are byte-identical or reissue unique IDs.',
   UNSORTED_MEMBER_ARRAY:
     'Aggregate member array is not lexicographically sorted by canonical hash. Reorder members deterministically before signing.',
   FLEET_SUMMARY_MISMATCH:
