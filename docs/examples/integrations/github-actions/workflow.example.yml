@@ -1,0 +1,29 @@
+name: clawsig-starter-pack
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/examples/integrations/github-actions/**'
+
+jobs:
+  starter-pack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run integration starter smoke
+        run: node docs/examples/integrations/github-actions/run.mjs
+
+      - name: Upload starter artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-actions-starter-pack
+          path: artifacts/examples/integrations/github-actions/

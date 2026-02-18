@@ -250,3 +250,40 @@ Validation:
 Validation:
 - `node scripts/release/check-clawsig-v0.2-checklist-integrity.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — ADP-US-002 integration starter packs
+
+- Added copy/paste starter pack index:
+  - `docs/examples/integrations/README.md`
+- Added runnable one-command packs:
+  - `docs/examples/integrations/node-minimal/`
+  - `docs/examples/integrations/github-actions/`
+  - `docs/examples/integrations/enterprise-ci/`
+- Added canonical shared pack runner:
+  - `docs/examples/integrations/_shared/run-pack.mjs`
+- Added CI/pipeline skeleton files for direct copy/paste:
+  - `docs/examples/integrations/github-actions/workflow.example.yml`
+  - `docs/examples/integrations/enterprise-ci/gitlab-ci.example.yml`
+  - `docs/examples/integrations/enterprise-ci/buildkite.pipeline.example.yml`
+- Updated adoption references:
+  - `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md`
+  - `docs/WHAT_TO_READ.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+
+Acceptance evidence:
+- each pack emits deterministic output directory under:
+  - `artifacts/examples/integrations/<pack>/`
+- each run writes:
+  - `proof-bundle.json`
+  - `urm.json`
+  - `verify.json`
+  - `smoke.json`
+
+Validation:
+- `node docs/examples/integrations/node-minimal/run.mjs` ✅
+- `node docs/examples/integrations/github-actions/run.mjs` ✅
+- `node docs/examples/integrations/enterprise-ci/run.mjs` ✅
+- `node scripts/protocol/run-clawsig-v0.2-quickstart.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅
