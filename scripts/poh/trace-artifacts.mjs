@@ -295,6 +295,241 @@ function classifyArtifact(doc, relPath) {
   return 'json';
 }
 
+function normalizeClddMetrics(value) {
+  if (!isRecord(value)) return null;
+  const unmediated = value.unmediated_connections;
+  const unmonitored = value.unmonitored_spawns;
+  const escapes = value.escapes_suspected;
+
+  if (
+    typeof unmediated !== 'number' ||
+    !Number.isInteger(unmediated) ||
+    unmediated < 0 ||
+    typeof unmonitored !== 'number' ||
+    !Number.isInteger(unmonitored) ||
+    unmonitored < 0 ||
+    typeof escapes !== 'boolean'
+  ) {
+    return null;
+  }
+
+  return {
+    unmediated_connections: unmediated,
+    unmonitored_spawns: unmonitored,
+    escapes_suspected: escapes,
+  };
+}
+
+function aggregateCoverageClddFromPayload(payload) {
+  const coverage = Array.isArray(payload.coverage_attestations)
+    ? payload.coverage_attestations
+    : [];
+
+  let aggregate = null;
+
+  for (const envelope of coverage) {
+    if (!isRecord(envelope) || !isRecord(envelope.payload)) continue;
+    const metrics = envelope.payload.metrics;
+    if (!isRecord(metrics)) continue;
+
+    const lineage = isRecord(metrics.lineage) ? metrics.lineage : null;
+    const egress = isRecord(metrics.egress) ? metrics.egress : null;
+    if (!lineage || !egress) continue;
+
+    const next = normalizeClddMetrics({
+      unmediated_connections: egress.unmediated_connections,
+      unmonitored_spawns: lineage.unmonitored_spawns,
+      escapes_suspected: lineage.escapes_suspected,
+    });
+
+    if (!next) continue;
+
+    if (!aggregate) {
+      aggregate = { ...next };
+      continue;
+    }
+
+    aggregate = {
+      unmediated_connections: Math.max(
+        aggregate.unmediated_connections,
+        next.unmediated_connections
+      ),
+      unmonitored_spawns: Math.max(
+        aggregate.unmonitored_spawns,
+        next.unmonitored_spawns
+      ),
+      escapes_suspected: aggregate.escapes_suspected || next.escapes_suspected,
+    };
+  }
+
+  return aggregate;
+}
+
+function summarizeClddDiscrepancy(claimed, attested) {
+  if (!claimed || !attested) {
+    return {
+      claimed,
+      attested,
+      mismatch_fields: [],
+      discrepancy: false,
+    };
+  }
+
+  const mismatchFields = [];
+
+  if (claimed.unmediated_connections !== attested.unmediated_connections) {
+    mismatchFields.push('unmediated_connections');
+  }
+  if (claimed.unmonitored_spawns !== attested.unmonitored_spawns) {
+    mismatchFields.push('unmonitored_spawns');
+  }
+  if (claimed.escapes_suspected !== attested.escapes_suspected) {
+    mismatchFields.push('escapes_suspected');
+  }
+
+  return {
+    claimed,
+    attested,
+    mismatch_fields: mismatchFields,
+    discrepancy: mismatchFields.length > 0,
+  };
+}
+
+function collectCausalConfidenceEntries(payload) {
+  const entries = [];
+
+  const readBinding = (source, index, binding, extra = {}) => {
+    if (!isRecord(binding)) return;
+    if (typeof binding.attribution_confidence !== 'number') return;
+
+    entries.push({
+      source,
+      index,
+      confidence: binding.attribution_confidence,
+      phase: typeof binding.phase === 'string' ? binding.phase : null,
+      ...extra,
+    });
+  };
+
+  const receipts = Array.isArray(payload.receipts) ? payload.receipts : [];
+  for (let i = 0; i < receipts.length; i++) {
+    const item = receipts[i];
+    if (!isRecord(item) || !isRecord(item.payload)) continue;
+    readBinding('receipts', i, item.payload.binding);
+  }
+
+  const webReceipts = Array.isArray(payload.web_receipts) ? payload.web_receipts : [];
+  for (let i = 0; i < webReceipts.length; i++) {
+    const item = webReceipts[i];
+    if (!isRecord(item) || !isRecord(item.payload)) continue;
+    readBinding('web_receipts', i, item.payload.binding);
+  }
+
+  const virReceipts = Array.isArray(payload.vir_receipts) ? payload.vir_receipts : [];
+  for (let i = 0; i < virReceipts.length; i++) {
+    const item = virReceipts[i];
+    if (!isRecord(item)) continue;
+
+    const maybePayload = isRecord(item.payload) ? item.payload : item;
+    readBinding('vir_receipts', i, maybePayload.binding);
+  }
+
+  const sideEffects = Array.isArray(payload.side_effect_receipts)
+    ? payload.side_effect_receipts
+    : [];
+
+  for (let i = 0; i < sideEffects.length; i++) {
+    const item = sideEffects[i];
+    if (!isRecord(item)) continue;
+
+    const hashFirst =
+      typeof item.target_digest === 'string' && item.target_digest.length > 0
+        ? item.target_digest
+        : typeof item.request_digest === 'string' && item.request_digest.length > 0
+          ? item.request_digest
+          : typeof item.response_digest === 'string' && item.response_digest.length > 0
+            ? item.response_digest
+            : typeof item.receipt_id === 'string'
+              ? item.receipt_id
+              : null;
+
+    readBinding('side_effect_receipts', i, item.binding, {
+      receipt_id: typeof item.receipt_id === 'string' ? item.receipt_id : null,
+      effect_class: typeof item.effect_class === 'string' ? item.effect_class : null,
+      hash_first: hashFirst,
+    });
+  }
+
+  const approvals = Array.isArray(payload.human_approval_receipts)
+    ? payload.human_approval_receipts
+    : [];
+
+  for (let i = 0; i < approvals.length; i++) {
+    const item = approvals[i];
+    if (!isRecord(item)) continue;
+    readBinding('human_approval_receipts', i, item.binding, {
+      receipt_id: typeof item.receipt_id === 'string' ? item.receipt_id : null,
+    });
+  }
+
+  return entries;
+}
+
+function summarizeConfidenceDistribution(entries) {
+  const summary = {
+    total: entries.length,
+    authoritative: 0,
+    inferred: 0,
+    low: 0,
+    unattributed: 0,
+    histogram: {},
+  };
+
+  for (const entry of entries) {
+    const confidence = entry.confidence;
+
+    if (!Number.isFinite(confidence)) continue;
+
+    if (confidence === 0) {
+      summary.unattributed += 1;
+    } else if (confidence >= 0.99) {
+      summary.authoritative += 1;
+    } else if (confidence >= 0.5) {
+      summary.inferred += 1;
+    } else {
+      summary.low += 1;
+    }
+
+    const bucket = confidence.toFixed(3);
+    summary.histogram[bucket] = (summary.histogram[bucket] ?? 0) + 1;
+  }
+
+  return summary;
+}
+
+function summarizeLowConfidenceSideEffects(entries) {
+  return entries
+    .filter(
+      (entry) =>
+        entry.source === 'side_effect_receipts' &&
+        Number.isFinite(entry.confidence) &&
+        entry.confidence <= 0.5
+    )
+    .sort((a, b) => {
+      if (a.confidence !== b.confidence) return a.confidence - b.confidence;
+      const ah = typeof a.hash_first === 'string' ? a.hash_first : '';
+      const bh = typeof b.hash_first === 'string' ? b.hash_first : '';
+      return ah.localeCompare(bh);
+    })
+    .map((entry) => ({
+      hash_first: entry.hash_first ?? 'n/a',
+      confidence: entry.confidence,
+      receipt_id: entry.receipt_id ?? null,
+      effect_class: entry.effect_class ?? null,
+      phase: entry.phase,
+    }));
+}
+
 function summarizeProofBundle(doc) {
   if (!isRecord(doc) || !isRecord(doc.payload)) return null;
 
@@ -341,6 +576,20 @@ function summarizeProofBundle(doc) {
   const metadata = isRecord(payload.metadata) ? payload.metadata : null;
   const sentinels = metadata && isRecord(metadata.sentinels) ? metadata.sentinels : null;
 
+  const interposeState = sentinels && isRecord(sentinels.interpose_state)
+    ? sentinels.interpose_state
+    : null;
+
+  const claimedCldd = interposeState
+    ? normalizeClddMetrics(interposeState.cldd)
+    : null;
+  const attestedCldd = aggregateCoverageClddFromPayload(payload);
+  const clddDiscrepancy = summarizeClddDiscrepancy(claimedCldd, attestedCldd);
+
+  const confidenceEntries = collectCausalConfidenceEntries(payload);
+  const confidenceDistribution = summarizeConfidenceDistribution(confidenceEntries);
+  const lowConfidenceSideEffects = summarizeLowConfidenceSideEffects(confidenceEntries);
+
   return {
     bundle_id: typeof payload.bundle_id === 'string' ? payload.bundle_id : undefined,
     agent_did: typeof payload.agent_did === 'string' ? payload.agent_did : undefined,
@@ -362,6 +611,9 @@ function summarizeProofBundle(doc) {
       total: gatewayReceipts.length,
       by_provider_model: [...gatewayProviderModel.entries()].map(([provider_model, count]) => ({ provider_model, count })),
     },
+    causal_confidence_distribution: confidenceDistribution,
+    low_confidence_side_effects: lowConfidenceSideEffects,
+    cldd_discrepancy: clddDiscrepancy,
     sentinels,
     urm_ref: isRecord(payload.urm)
       ? {
@@ -432,6 +684,24 @@ function summarizeVerificationResult(doc) {
       ? doc.verification.result
       : null;
   const error = isRecord(doc.error) ? doc.error : null;
+  const componentResults =
+    result && isRecord(result.component_results)
+      ? result.component_results
+      : isRecord(doc.component_results)
+        ? doc.component_results
+        : null;
+
+  const riskFlags = Array.isArray(result?.risk_flags)
+    ? result.risk_flags.filter((f) => typeof f === 'string')
+    : Array.isArray(doc.risk_flags)
+      ? doc.risk_flags.filter((f) => typeof f === 'string')
+      : [];
+
+  const mismatchFields = Array.isArray(componentResults?.coverage_cldd_mismatch_fields)
+    ? componentResults.coverage_cldd_mismatch_fields.filter(
+      (f) => typeof f === 'string'
+    )
+    : [];
 
   return {
     status:
@@ -464,6 +734,15 @@ function summarizeVerificationResult(doc) {
         : typeof result?.verified_at === 'string'
           ? result.verified_at
           : undefined,
+    risk_flags: riskFlags,
+    cldd_discrepancy: componentResults?.coverage_cldd_discrepancy === true,
+    cldd_mismatch_fields: mismatchFields,
+    cldd_claimed_metrics: normalizeClddMetrics(
+      componentResults?.coverage_cldd_claimed_metrics
+    ),
+    cldd_attested_metrics: normalizeClddMetrics(
+      componentResults?.coverage_cldd_attested_metrics
+    ),
   };
 }
 
@@ -736,6 +1015,53 @@ function buildTrace(records, targetBundle, explicitRunId) {
     notes.push('URM references trust_pulse metadata but no matching trust pulse artifact was found.');
   }
 
+  const verificationResults = verificationCandidates.map((r) => ({
+    path: r.rel_path,
+    mtime: r.mtime,
+    ...r.summary,
+  }));
+
+  const clddEnforcementFindings = [];
+  const clddInformationalFindings = [];
+
+  for (const vr of verificationResults) {
+    const status = typeof vr.status === 'string' ? vr.status.toUpperCase() : '';
+    const isFailure = status === 'FAIL' || status === 'INVALID';
+    const hasClddSignal =
+      vr.cldd_discrepancy === true ||
+      (Array.isArray(vr.risk_flags) && vr.risk_flags.includes('COVERAGE_CLDD_DISCREPANCY'));
+
+    if (!hasClddSignal && vr.code !== 'COVERAGE_CLDD_DISCREPANCY_ENFORCED') {
+      continue;
+    }
+
+    const finding = {
+      path: vr.path,
+      status: vr.status ?? 'n/a',
+      code: vr.code ?? 'n/a',
+      reason: vr.reason ?? 'n/a',
+    };
+
+    if (vr.code === 'COVERAGE_CLDD_DISCREPANCY_ENFORCED' || (isFailure && hasClddSignal)) {
+      clddEnforcementFindings.push(finding);
+    } else {
+      clddInformationalFindings.push(finding);
+    }
+  }
+
+  if (
+    bundleSummary?.cldd_discrepancy?.discrepancy === true &&
+    clddEnforcementFindings.length === 0 &&
+    clddInformationalFindings.length === 0
+  ) {
+    clddInformationalFindings.push({
+      path: targetBundle?.rel_path ?? 'bundle',
+      status: 'n/a',
+      code: 'COVERAGE_CLDD_DISCREPANCY',
+      reason: 'Bundle telemetry and coverage-attestation CLDD metrics differ',
+    });
+  }
+
   return {
     run_id: runId,
     bundle: targetBundle
@@ -761,11 +1087,21 @@ function buildTrace(records, targetBundle, explicitRunId) {
           hash_check_against_urm_ref: trustPulseHashCheck,
         }
       : null,
-    verification_results: verificationCandidates.map((r) => ({
-      path: r.rel_path,
-      mtime: r.mtime,
-      ...r.summary,
-    })),
+    delivery: {
+      confidence_distribution: bundleSummary?.causal_confidence_distribution ?? null,
+      low_confidence_side_effects: bundleSummary?.low_confidence_side_effects ?? [],
+      cldd_discrepancy: {
+        ...(bundleSummary?.cldd_discrepancy ?? {
+          claimed: null,
+          attested: null,
+          mismatch_fields: [],
+          discrepancy: false,
+        }),
+        enforcement_findings: clddEnforcementFindings,
+        informational_findings: clddInformationalFindings,
+      },
+    },
+    verification_results: verificationResults,
     related_artifacts: related.map((r) => ({
       kind: r.kind,
       path: r.rel_path,
@@ -847,6 +1183,76 @@ function renderMarkdownReport(report) {
     for (const item of report.trace.bundle.gateway_receipt_summary.by_provider_model) {
       lines.push(`- ${item.provider_model}: ${item.count}`);
     }
+    lines.push('');
+  }
+
+  if (report.trace.delivery?.confidence_distribution) {
+    const cd = report.trace.delivery.confidence_distribution;
+    lines.push('### Causal confidence distribution');
+    lines.push('');
+    lines.push(`- total: ${cd.total ?? 0}`);
+    lines.push(`- authoritative (>=0.99): ${cd.authoritative ?? 0}`);
+    lines.push(`- inferred (>=0.5,<0.99): ${cd.inferred ?? 0}`);
+    lines.push(`- low (>0,<0.5): ${cd.low ?? 0}`);
+    lines.push(`- unattributed (0.0): ${cd.unattributed ?? 0}`);
+
+    const histogram = cd.histogram && typeof cd.histogram === 'object'
+      ? Object.entries(cd.histogram).sort((a, b) => a[0].localeCompare(b[0]))
+      : [];
+    if (histogram.length > 0) {
+      lines.push('- histogram:');
+      for (const [bucket, count] of histogram) {
+        lines.push(`  - ${bucket}: ${count}`);
+      }
+    }
+    lines.push('');
+  }
+
+  if (Array.isArray(report.trace.delivery?.low_confidence_side_effects) && report.trace.delivery.low_confidence_side_effects.length > 0) {
+    lines.push('### Low-confidence side effects (hash-first)');
+    lines.push('');
+    for (const entry of report.trace.delivery.low_confidence_side_effects.slice(0, 50)) {
+      lines.push(
+        `- ${entry.hash_first}: confidence=${entry.confidence} effect=${entry.effect_class ?? 'n/a'} receipt=${entry.receipt_id ?? 'n/a'} phase=${entry.phase ?? 'n/a'}`
+      );
+    }
+    if (report.trace.delivery.low_confidence_side_effects.length > 50) {
+      lines.push(`- ... ${report.trace.delivery.low_confidence_side_effects.length - 50} additional low-confidence side effects omitted`);
+    }
+    lines.push('');
+  }
+
+  if (report.trace.delivery?.cldd_discrepancy) {
+    const cldd = report.trace.delivery.cldd_discrepancy;
+    lines.push('### CLDD discrepancy');
+    lines.push('');
+    lines.push(`- discrepancy: ${cldd.discrepancy === true ? 'true' : 'false'}`);
+    if (cldd.claimed) {
+      lines.push(`- claimed: unmediated=${cldd.claimed.unmediated_connections}, unmonitored=${cldd.claimed.unmonitored_spawns}, escapes=${cldd.claimed.escapes_suspected}`);
+    } else {
+      lines.push('- claimed: n/a');
+    }
+    if (cldd.attested) {
+      lines.push(`- attested: unmediated=${cldd.attested.unmediated_connections}, unmonitored=${cldd.attested.unmonitored_spawns}, escapes=${cldd.attested.escapes_suspected}`);
+    } else {
+      lines.push('- attested: n/a');
+    }
+    lines.push(`- mismatch_fields: ${Array.isArray(cldd.mismatch_fields) && cldd.mismatch_fields.length > 0 ? cldd.mismatch_fields.join(', ') : 'none'}`);
+
+    if (Array.isArray(cldd.enforcement_findings) && cldd.enforcement_findings.length > 0) {
+      lines.push('- enforcement_findings:');
+      for (const finding of cldd.enforcement_findings) {
+        lines.push(`  - ${finding.path}: status=${finding.status} code=${finding.code}`);
+      }
+    }
+
+    if (Array.isArray(cldd.informational_findings) && cldd.informational_findings.length > 0) {
+      lines.push('- informational_findings:');
+      for (const finding of cldd.informational_findings) {
+        lines.push(`  - ${finding.path}: status=${finding.status} code=${finding.code}`);
+      }
+    }
+
     lines.push('');
   }
 
