@@ -187,6 +187,7 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `CAUSAL_REFERENCE_DANGLING` | `parent_span_id` or `tool_span_id` references a span id not present in the same bundle causal index |
 | `CAUSAL_CYCLE_DETECTED` | Parent-span traversal detects a cycle in causal linkage |
 | `CAUSAL_PHASE_INVALID` | `binding.phase` is present but not one of the deterministic allowed lifecycle phases |
+| `CAUSAL_PHASE_TRANSITION_INVALID` | Causal phase transition between parent/tool lineage and child span violates deterministic transition automaton |
 | `CAUSAL_CONFIDENCE_OUT_OF_RANGE` | `attribution_confidence` is present but outside inclusive `[0.0, 1.0]` bounds |
 | `CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT` | Claimed attribution confidence exceeds the deterministic evidence class supported by emitted causal linkage |
 | `CAUSAL_BINDING_FIELD_CONFLICT` | Same causal field is present in both snake_case and camelCase forms with conflicting values |

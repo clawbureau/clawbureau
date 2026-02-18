@@ -1199,6 +1199,22 @@ const ALLOWED_CAUSAL_PHASES = new Set([
   'teardown',
 ]);
 
+const CAUSAL_PHASE_TRANSITIONS: Record<string, ReadonlySet<string>> = {
+  setup: new Set(['setup', 'planning']),
+  planning: new Set(['planning', 'reasoning', 'execution']),
+  reasoning: new Set(['reasoning', 'execution', 'observation']),
+  execution: new Set(['execution', 'observation', 'reflection', 'teardown']),
+  observation: new Set(['observation', 'reflection', 'teardown']),
+  reflection: new Set(['reflection', 'teardown']),
+  teardown: new Set(['teardown']),
+};
+
+function isAllowedCausalPhaseTransition(parentPhase: string, childPhase: string): boolean {
+  const allowedTargets = CAUSAL_PHASE_TRANSITIONS[parentPhase];
+  if (!allowedTargets) return false;
+  return allowedTargets.has(childPhase);
+}
+
 type CausalBindingNormalizationCode =
   | 'CAUSAL_BINDING_FIELD_CONFLICT'
   | 'CAUSAL_BINDING_NORMALIZATION_FAILED';
@@ -1215,6 +1231,10 @@ interface CausalBindingEntry {
   phaseFieldPath: string;
   attributionConfidence?: unknown;
   attributionConfidenceFieldPath: string;
+  payloadTimestamp?: unknown;
+  payloadTimestampFieldPath: string;
+  envelopeIssuedAt?: unknown;
+  envelopeIssuedAtFieldPath: string;
 }
 
 function toNonNegativeInteger(value: unknown): number | null {
@@ -1566,7 +1586,13 @@ function normalizeCausalNumericField(args: {
 
 function toCausalBindingEntry(
   binding: Record<string, unknown>,
-  path: string
+  path: string,
+  options: {
+    payloadTimestamp?: unknown;
+    payloadTimestampFieldPath?: string;
+    envelopeIssuedAt?: unknown;
+    envelopeIssuedAtFieldPath?: string;
+  } = {}
 ):
   | { ok: true; entry: CausalBindingEntry | null }
   | {
@@ -1640,6 +1666,12 @@ function toCausalBindingEntry(
       phaseFieldPath: `${path}.phase`,
       attributionConfidence: confidence.value,
       attributionConfidenceFieldPath: confidence.fieldPath,
+      payloadTimestamp: options.payloadTimestamp,
+      payloadTimestampFieldPath:
+        options.payloadTimestampFieldPath ?? `${path}.timestamp`,
+      envelopeIssuedAt: options.envelopeIssuedAt,
+      envelopeIssuedAtFieldPath:
+        options.envelopeIssuedAtFieldPath ?? `${path}.issued_at`,
     },
   };
 }
@@ -1658,11 +1690,19 @@ function collectCausalBindingEntries(
 
   if (payload.receipts !== undefined) {
     for (let i = 0; i < payload.receipts.length; i++) {
-      const binding = payload.receipts[i]?.payload?.binding;
+      const envelope = payload.receipts[i];
+      const binding = envelope?.payload?.binding;
       if (!isObjectRecord(binding)) continue;
+
       const entry = toCausalBindingEntry(
         binding,
-        `payload.receipts[${i}].payload.binding`
+        `payload.receipts[${i}].payload.binding`,
+        {
+          payloadTimestamp: envelope?.payload?.timestamp,
+          payloadTimestampFieldPath: `payload.receipts[${i}].payload.timestamp`,
+          envelopeIssuedAt: envelope?.issued_at,
+          envelopeIssuedAtFieldPath: `payload.receipts[${i}].issued_at`,
+        }
       );
       if (!entry.ok) return entry;
       if (entry.entry) out.push(entry.entry);
@@ -1671,11 +1711,19 @@ function collectCausalBindingEntries(
 
   if (payload.web_receipts !== undefined) {
     for (let i = 0; i < payload.web_receipts.length; i++) {
-      const binding = payload.web_receipts[i]?.payload?.binding;
+      const envelope = payload.web_receipts[i];
+      const binding = envelope?.payload?.binding;
       if (!isObjectRecord(binding)) continue;
+
       const entry = toCausalBindingEntry(
         binding,
-        `payload.web_receipts[${i}].payload.binding`
+        `payload.web_receipts[${i}].payload.binding`,
+        {
+          payloadTimestamp: envelope?.payload?.timestamp,
+          payloadTimestampFieldPath: `payload.web_receipts[${i}].payload.timestamp`,
+          envelopeIssuedAt: envelope?.issued_at,
+          envelopeIssuedAtFieldPath: `payload.web_receipts[${i}].issued_at`,
+        }
       );
       if (!entry.ok) return entry;
       if (entry.entry) out.push(entry.entry);
@@ -1687,18 +1735,29 @@ function collectCausalBindingEntries(
       const raw = payload.vir_receipts[i] as unknown;
       if (!isObjectRecord(raw)) continue;
 
-      const maybePayload = isObjectRecord(raw.payload) ? raw.payload : raw;
+      const hasEnvelopePayload = isObjectRecord(raw.payload);
+      const maybePayload = (hasEnvelopePayload ? raw.payload : raw) as Record<
+        string,
+        unknown
+      >;
       const binding = isObjectRecord(maybePayload.binding)
         ? maybePayload.binding
         : null;
 
       if (!binding) continue;
 
-      const bindingPath = isObjectRecord(raw.payload)
+      const bindingPath = hasEnvelopePayload
         ? `payload.vir_receipts[${i}].payload.binding`
         : `payload.vir_receipts[${i}].binding`;
 
-      const entry = toCausalBindingEntry(binding, bindingPath);
+      const entry = toCausalBindingEntry(binding, bindingPath, {
+        payloadTimestamp: maybePayload.timestamp,
+        payloadTimestampFieldPath: hasEnvelopePayload
+          ? `payload.vir_receipts[${i}].payload.timestamp`
+          : `payload.vir_receipts[${i}].timestamp`,
+        envelopeIssuedAt: hasEnvelopePayload ? raw.issued_at : undefined,
+        envelopeIssuedAtFieldPath: `payload.vir_receipts[${i}].issued_at`,
+      });
       if (!entry.ok) return entry;
       if (entry.entry) out.push(entry.entry);
     }
@@ -1851,6 +1910,8 @@ function validateCausalBindingEntries(
         | 'CAUSAL_REFERENCE_DANGLING'
         | 'CAUSAL_CYCLE_DETECTED'
         | 'CAUSAL_PHASE_INVALID'
+        | 'CAUSAL_PHASE_TRANSITION_INVALID'
+        | 'CAUSAL_CLOCK_CONTRADICTION'
         | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
         | 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT'
         | 'CAUSAL_SPAN_REUSE_CONFLICT'
@@ -1868,6 +1929,47 @@ function validateCausalBindingEntries(
   }
 
   for (const entry of entries) {
+    const payloadTimestamp = entry.payloadTimestamp;
+    const envelopeIssuedAt = entry.envelopeIssuedAt;
+
+    if (
+      payloadTimestamp !== undefined &&
+      (typeof payloadTimestamp !== 'string' || !isValidIsoDate(payloadTimestamp))
+    ) {
+      return {
+        ok: false,
+        code: 'CAUSAL_CLOCK_CONTRADICTION',
+        message: 'binding-coupled payload.timestamp must be a valid ISO-8601 date-time string',
+        field: entry.payloadTimestampFieldPath,
+      };
+    }
+
+    if (
+      envelopeIssuedAt !== undefined &&
+      (typeof envelopeIssuedAt !== 'string' || !isValidIsoDate(envelopeIssuedAt))
+    ) {
+      return {
+        ok: false,
+        code: 'CAUSAL_CLOCK_CONTRADICTION',
+        message: 'binding-coupled envelope.issued_at must be a valid ISO-8601 date-time string',
+        field: entry.envelopeIssuedAtFieldPath,
+      };
+    }
+
+    if (
+      typeof payloadTimestamp === 'string' &&
+      typeof envelopeIssuedAt === 'string' &&
+      Date.parse(payloadTimestamp) > Date.parse(envelopeIssuedAt)
+    ) {
+      return {
+        ok: false,
+        code: 'CAUSAL_CLOCK_CONTRADICTION',
+        message:
+          'binding-coupled payload.timestamp must be less than or equal to envelope.issued_at',
+        field: entry.payloadTimestampFieldPath,
+      };
+    }
+
     if (entry.phase !== undefined) {
       const phase = entry.phase;
       if (typeof phase !== 'string' || !ALLOWED_CAUSAL_PHASES.has(phase)) {
@@ -1924,8 +2026,11 @@ function validateCausalBindingEntries(
       parentSpanId?: string;
       toolSpanId?: string;
       phase?: string;
+      phaseFieldPath: string;
       attributionConfidence?: number;
       spanFieldPath: string;
+      timestampMs?: number;
+      timestampFieldPath: string;
     }
   >();
 
@@ -1938,14 +2043,32 @@ function validateCausalBindingEntries(
         ? entry.attributionConfidence
         : undefined;
 
+    const payloadTimestampMs =
+      typeof entry.payloadTimestamp === 'string'
+        ? Date.parse(entry.payloadTimestamp)
+        : undefined;
+    const envelopeIssuedAtMs =
+      typeof entry.envelopeIssuedAt === 'string'
+        ? Date.parse(entry.envelopeIssuedAt)
+        : undefined;
+
+    const causalTimestampMs = payloadTimestampMs ?? envelopeIssuedAtMs;
+    const causalTimestampFieldPath =
+      payloadTimestampMs !== undefined
+        ? entry.payloadTimestampFieldPath
+        : entry.envelopeIssuedAtFieldPath;
+
     const prev = spanSemanticBySpanId.get(entry.spanId);
     if (!prev) {
       spanSemanticBySpanId.set(entry.spanId, {
         parentSpanId: entry.parentSpanId,
         toolSpanId: entry.toolSpanId,
         phase,
+        phaseFieldPath: entry.phaseFieldPath,
         attributionConfidence,
         spanFieldPath: entry.spanFieldPath,
+        timestampMs: causalTimestampMs,
+        timestampFieldPath: causalTimestampFieldPath,
       });
       continue;
     }
@@ -1980,6 +2103,20 @@ function validateCausalBindingEntries(
       conflicts.push('attribution_confidence');
     }
 
+    if (
+      prev.timestampMs !== undefined &&
+      causalTimestampMs !== undefined &&
+      prev.timestampMs !== causalTimestampMs
+    ) {
+      return {
+        ok: false,
+        code: 'CAUSAL_CLOCK_CONTRADICTION',
+        message:
+          `span_id ${entry.spanId} has inconsistent causal timestamps across bindings`,
+        field: causalTimestampFieldPath,
+      };
+    }
+
     if (conflicts.length > 0) {
       return {
         ok: false,
@@ -1987,6 +2124,85 @@ function validateCausalBindingEntries(
         message: `span_id ${entry.spanId} reused with incompatible semantics for: ${conflicts.join(', ')}`,
         field: entry.spanFieldPath,
       };
+    }
+  }
+
+  for (const [spanId, semantic] of spanSemanticBySpanId.entries()) {
+    const childPhase = semantic.phase;
+
+    const checkTemporalAndPhase = (
+      relation:
+        | {
+            relationName: 'parent_span_id' | 'tool_span_id';
+            parentSpanId: string;
+          }
+        | null
+    ):
+      | { ok: true }
+      | {
+          ok: false;
+          code: 'CAUSAL_CLOCK_CONTRADICTION' | 'CAUSAL_PHASE_TRANSITION_INVALID';
+          message: string;
+          field: string;
+        } => {
+      if (!relation) return { ok: true };
+
+      const parentSemantic = spanSemanticBySpanId.get(relation.parentSpanId);
+      if (!parentSemantic) return { ok: true };
+
+      if (
+        semantic.timestampMs !== undefined &&
+        parentSemantic.timestampMs !== undefined &&
+        semantic.timestampMs < parentSemantic.timestampMs
+      ) {
+        return {
+          ok: false,
+          code: 'CAUSAL_CLOCK_CONTRADICTION',
+          message:
+            `span_id ${spanId} occurs before ${relation.relationName} ${relation.parentSpanId}`,
+          field: semantic.timestampFieldPath,
+        };
+      }
+
+      if (
+        childPhase !== undefined &&
+        parentSemantic.phase !== undefined &&
+        !isAllowedCausalPhaseTransition(parentSemantic.phase, childPhase)
+      ) {
+        return {
+          ok: false,
+          code: 'CAUSAL_PHASE_TRANSITION_INVALID',
+          message:
+            `invalid causal phase transition ${parentSemantic.phase} -> ${childPhase} for span_id ${spanId}`,
+          field: semantic.phaseFieldPath,
+        };
+      }
+
+      return { ok: true };
+    };
+
+    const parentCheck = checkTemporalAndPhase(
+      semantic.parentSpanId
+        ? {
+            relationName: 'parent_span_id',
+            parentSpanId: semantic.parentSpanId,
+          }
+        : null
+    );
+    if (!parentCheck.ok) {
+      return parentCheck;
+    }
+
+    const toolCheck = checkTemporalAndPhase(
+      semantic.toolSpanId
+        ? {
+            relationName: 'tool_span_id',
+            parentSpanId: semantic.toolSpanId,
+          }
+        : null
+    );
+    if (!toolCheck.ok) {
+      return toolCheck;
     }
   }
 

@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-clock-monotonic",
+  "scenario": "valid_causal_clock_monotonic",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

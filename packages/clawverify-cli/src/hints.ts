@@ -151,6 +151,8 @@ const HINTS: Record<string, string> = {
     'Causal graph contains a parent-span cycle. Break the cycle so lineage is a DAG.',
   CAUSAL_PHASE_INVALID:
     'binding.phase is invalid. Allowed phases: setup, planning, reasoning, execution, observation, reflection, teardown.',
+  CAUSAL_PHASE_TRANSITION_INVALID:
+    'Causal phase transition is invalid for the parent/tool lineage. Ensure child phases follow the deterministic automaton (setup→planning→reasoning→execution→observation→reflection→teardown).',
   CAUSAL_CONFIDENCE_OUT_OF_RANGE:
     'attribution_confidence must be a finite number in [0.0, 1.0]. Normalize confidence before signing.',
   CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT:
