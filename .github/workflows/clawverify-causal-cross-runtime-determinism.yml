@@ -1,0 +1,79 @@
+name: clawverify-causal-cross-runtime-determinism
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/poh/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-cross-runtime-determinism.mjs'
+      - '.github/workflows/clawverify-causal-cross-runtime-determinism.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/poh/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-cross-runtime-determinism.mjs'
+      - '.github/workflows/clawverify-causal-cross-runtime-determinism.yml'
+
+jobs:
+  causal-cross-runtime-determinism:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
+      - name: Install clawverify-cli deps
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+
+      - name: Run causal cross-runtime determinism gate
+        run: |
+          node scripts/protocol/run-clawverify-causal-cross-runtime-determinism.mjs
+
+      - name: Upload cross-runtime determinism summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-cross-runtime-determinism-summary
+          path: artifacts/ops/causal-cross-runtime-determinism/
+          if-no-files-found: ignore

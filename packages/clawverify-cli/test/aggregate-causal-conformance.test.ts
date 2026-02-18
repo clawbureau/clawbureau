@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import {
   base64UrlEncode,
@@ -413,10 +413,48 @@ const fixtures: FixtureCase[] = manifest.cases.map((name) =>
   JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'))
 );
 
+const summaryPath = process.env.CLAWVERIFY_AGGREGATE_CAUSAL_CONFORMANCE_SUMMARY_PATH?.trim();
+const summaryRows: Array<{
+  id: string;
+  scenario: FixtureCase['scenario'];
+  status: 'VALID' | 'INVALID';
+  error_code: string;
+  expected_status: 'VALID' | 'INVALID';
+  expected_error_code: string;
+}> = [];
+
+afterAll(() => {
+  if (!summaryPath) return;
+
+  fs.mkdirSync(path.dirname(summaryPath), { recursive: true });
+  fs.writeFileSync(
+    summaryPath,
+    `${JSON.stringify(
+      {
+        suite: manifest.suite,
+        generated_at: new Date().toISOString(),
+        fixtures: [...summaryRows].sort((a, b) => a.id.localeCompare(b.id)),
+      },
+      null,
+      2
+    )}\n`,
+    'utf8'
+  );
+});
+
 describe(`clawverify aggregate causal conformance (${manifest.suite})`, () => {
   it.each(fixtures)('validates fixture: $id', async (spec) => {
     const scenario = await buildFixtureScenario(spec);
     const out = await verifyAggregateBundle(scenario.envelope, scenario.options);
+
+    summaryRows.push({
+      id: spec.id,
+      scenario: spec.scenario,
+      status: out.result.status,
+      error_code: out.error?.code ?? 'OK',
+      expected_status: spec.expected.status,
+      expected_error_code: spec.expected.error_code ?? 'OK',
+    });
 
     expect(out.result.status).toBe(spec.expected.status);
 
