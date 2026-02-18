@@ -1,0 +1,13 @@
+{
+  "id": "valid-cldd-discrepancy-warn",
+  "scenario": "valid_cldd_discrepancy_warn",
+  "expected": {
+    "status": "VALID",
+    "risk_flags": [
+      "COVERAGE_CLDD_DISCREPANCY",
+      "COVERAGE_CLDD_UNMEDIATED_CONNECTIONS_MISMATCH",
+      "COVERAGE_CLDD_UNMONITORED_SPAWNS_MISMATCH",
+      "COVERAGE_CLDD_ESCAPES_SUSPECTED_MISMATCH"
+    ]
+  }
+}

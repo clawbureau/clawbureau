@@ -1,0 +1,8 @@
+{
+  "id": "invalid-causal-phase",
+  "scenario": "invalid_causal_phase",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "CAUSAL_PHASE_INVALID"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-causal-cldd",
+  "cases": [
+    "valid-causal-linkage.v1.json",
+    "invalid-causal-dangling.v1.json",
+    "invalid-causal-cycle.v1.json",
+    "invalid-causal-phase.v1.json",
+    "invalid-causal-confidence.v1.json",
+    "valid-cldd-discrepancy-warn.v1.json",
+    "invalid-cldd-discrepancy-enforce.v1.json"
+  ]
+}

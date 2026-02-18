@@ -117,13 +117,39 @@
         "No weakening of verifier fail-closed semantics"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": "Deferred in decision freeze: strict CLDD policy and UI polish follow runtime contract lanes."
+      "passes": true,
+      "notes": "Shipped via CLDD enforcement lane: deterministic CLDD metric extraction/comparison, explicit risk flags, and enforce-mode fail-closed reason code (`COVERAGE_CLDD_DISCREPANCY_ENFORCED`) were added without weakening legacy causal/coverage behavior."
+    },
+    {
+      "id": "CAV-US-005",
+      "title": "Causal confidence tracer delivery surface",
+      "description": "Extend artifact tracer outputs with deterministic confidence histogram, low-confidence side-effect listing, and CLDD discrepancy reporting.",
+      "acceptanceCriteria": [
+        "Tracer output includes confidence distribution and hash-first low-confidence side-effect list",
+        "Tracer includes CLDD discrepancy claimed-vs-attested section",
+        "Tracer separates enforcement findings from informational findings"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": "Shipped via `scripts/poh/trace-artifacts.mjs` + regression tests, adding causal confidence rendering and CLDD delivery diagnostics for ops evidence packs."
+    },
+    {
+      "id": "CAV-US-006",
+      "title": "Causal/CLDD conformance CI guardrails",
+      "description": "Add dedicated fixture pack and CI gate to keep causal + CLDD contracts regression-proof.",
+      "acceptanceCriteria": [
+        "Dedicated causal/CLDD fixture manifest with valid and adversarial vectors",
+        "One-command runner for causal/CLDD conformance",
+        "Required CI workflow executes the causal/CLDD conformance runner"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": "Shipped via `clawverify-causal-cldd` fixture pack, protocol runner, env-selectable fixture suite wiring, and dedicated GitHub Actions gate."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T17:32:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution runtime slice through CAV-US-003 (schema/verifier/runtime), with delivery lane CAV-US-004 pending",
+    "updatedAt": "2026-02-18T18:25:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution delivery slice through CAV-US-006 (schema/verifier/runtime/tracer/guardrails)",
     "references": [
       {
         "pr": "#281",
