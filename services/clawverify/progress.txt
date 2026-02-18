@@ -628,3 +628,18 @@ Started: 2026-02-02T03:08:26.937416
   - `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts`
   - `node scripts/protocol/run-clawsig-verified-pr.mjs`
 ---
+
+## 2026-02-18 - CVF-US-056 parity hardening (strict Linux codex/gemini lane)
+- What was implemented
+  - Hardened Linux harness strict gate output semantics in `scripts/e2e/linux-harness-smoke.mjs`.
+  - Added deterministic strict summary artifact:
+    - `.clawsig/e2e-linux-strict-summary.json`
+    - failure codes are explicit and finite: `AGENT_UNAVAILABLE`, `PARITY_FAILURE`.
+  - Added CI artifact upload for strict lane diagnostics:
+    - `.github/workflows/poh-harness-matrix-linux.yml`
+    - uploads matrix results, strict summary, and produced proof bundles.
+  - Updated CVF-US-056 tracker notes to remove outdated report-first/non-blocking language.
+- Quality checks
+  - `cd packages/clawsig-conformance && npm run build`
+  - `node scripts/e2e/linux-harness-smoke.mjs` (with deterministic codex/gemini shims)
+---

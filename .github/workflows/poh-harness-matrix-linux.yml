@@ -117,3 +117,14 @@ jobs:
           CLAWSIG_FORCE_BASE_URL_OVERRIDE: '1'
         run: |
           node scripts/e2e/linux-harness-smoke.mjs
+
+      - name: Upload Linux harness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: poh-harness-matrix-linux
+          path: |
+            .clawsig/e2e-linux-results.json
+            .clawsig/e2e-linux-strict-summary.json
+            .clawsig/e2e-workdir/**/.clawsig/proof_bundle.json
+          if-no-files-found: warn

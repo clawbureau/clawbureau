@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 const ROOT = resolve(new URL('../..', import.meta.url).pathname);
 
@@ -111,7 +112,21 @@ async function main() {
 
       return { id, code, reason };
     })
-    .filter(Boolean);
+    .filter((failure) => failure !== null);
+
+  const strictSummaryPath = resolve(ROOT, '.clawsig/e2e-linux-strict-summary.json');
+  const strictSummary = {
+    summary_version: '1',
+    generated_at: new Date().toISOString(),
+    matrix_results_path: run.results_path,
+    required_case_ids: requiredCaseIds,
+    ok: strictFailures.length === 0,
+    failures: strictFailures,
+  };
+
+  await mkdir(dirname(strictSummaryPath), { recursive: true });
+  await writeFile(strictSummaryPath, `${JSON.stringify(strictSummary, null, 2)}\n`, 'utf8');
+  process.stdout.write(`strict_artifact: ${strictSummaryPath}\n`);
 
   if (strictFailures.length > 0) {
     process.stdout.write('strict lane failures:\n');

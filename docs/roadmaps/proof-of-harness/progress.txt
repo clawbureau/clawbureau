@@ -382,13 +382,28 @@ Started: 2026-02-05T21:49:28Z
   - Expanded harness matrix with Gemini CLI lane:
     - `packages/clawsig-conformance/src/harness-matrix.ts`
     - agent set now includes `gemini` in matrix defaults and env wiring
-  - Added Linux-first harness reporting lane:
+  - Added Linux-first harness strict lane:
     - `scripts/e2e/linux-harness-smoke.mjs`
     - `.github/workflows/poh-harness-matrix-linux.yml`
 - Artifact paths + expected signals
   - Firewall conformance: test/runner passes when fixture assertions match expected `status/proof_tier/error_code`.
     - Runner: `node scripts/protocol/run-clawverify-firewall-conformance.mjs`
-  - Linux harness smoke artifact (always emitted):
+  - Linux harness smoke artifacts (always emitted):
     - `.clawsig/e2e-linux-results.json`
-    - expected signal: report contains per-agent pass/fail/skip rows; lane is currently reporting-mode (non-blocking) while adapter parity stabilizes.
+    - `.clawsig/e2e-linux-strict-summary.json`
+    - expected signal: strict summary `ok=true` for required lanes; failures are coded as `AGENT_UNAVAILABLE` or `PARITY_FAILURE` and fail CI deterministically.
+---
+
+## 2026-02-18T00:10:00Z - CVF-US-056 parity hardening closeout
+- What was implemented
+  - Promoted Linux codex+gemini lane from report-style output to deterministic strict gate semantics.
+  - Added structured strict summary artifact emission in `scripts/e2e/linux-harness-smoke.mjs`:
+    - `.clawsig/e2e-linux-strict-summary.json`
+    - includes per-required-lane fail codes (`AGENT_UNAVAILABLE`, `PARITY_FAILURE`).
+  - Added artifact retention in CI for matrix + strict outputs:
+    - `.github/workflows/poh-harness-matrix-linux.yml` now uploads
+      `.clawsig/e2e-linux-results.json`, `.clawsig/e2e-linux-strict-summary.json`, and produced proof bundles.
+- Expected signal
+  - Required lanes (`codex:mock:proxy`, `gemini:mock:proxy`) must pass.
+  - Any required lane failure or adapter unavailability fails job deterministically with explicit code in strict summary artifact.
 ---
