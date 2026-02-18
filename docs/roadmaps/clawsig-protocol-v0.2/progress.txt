@@ -313,3 +313,24 @@ Pilot contents include:
 Validation:
 - `node scripts/release/check-clawsig-v0.2-enterprise-pilot-pack-integrity.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — B1 npm publish mission (v0.2.0)
+
+- Re-ran integrity checks:
+  - `scripts/release/check-clawsig-v0.2-checklist-integrity.mjs`
+  - `scripts/release/check-clawsig-v0.2-enterprise-pilot-pack-integrity.mjs`
+- Re-ran package prep smoke:
+  - `scripts/release/run-clawsig-v0.2-package-prep.mjs`
+- Publish actions:
+  - `@clawbureau/schema@0.2.0` published
+  - `@clawbureau/clawverify-core@0.2.0` already existed (skipped)
+  - `@clawbureau/clawverify-cli@0.2.0` already existed (skipped)
+- Publish evidence:
+  - `docs/releases/clawsig-v0.2-publish-log.md`
+  - `artifacts/release/clawsig-v0.2-npm-publish/2026-02-18T14-26-39Z/summary.json`
+
+Validation findings:
+- exact triplet install currently does not satisfy CLI runtime (missing `@clawbureau/clawsig-sdk` transitive in install path)
+- with explicit sdk install, `clawverify version` prints `0.1.1` (expected `0.2.0`)

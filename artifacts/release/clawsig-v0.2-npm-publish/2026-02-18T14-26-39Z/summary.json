@@ -1,0 +1,69 @@
+{
+  "run_at": "2026-02-18T14:27:40Z",
+  "integrity_checks": {
+    "release_checklist": {
+      "script": "scripts/release/check-clawsig-v0.2-checklist-integrity.mjs",
+      "ok": true
+    },
+    "pilot_checklist": {
+      "script": "scripts/release/check-clawsig-v0.2-enterprise-pilot-pack-integrity.mjs",
+      "ok": true
+    }
+  },
+  "package_prep_smoke": {
+    "script": "scripts/release/run-clawsig-v0.2-package-prep.mjs",
+    "ok": true,
+    "out_dir": "artifacts/release/clawsig-v0.2-package-prep/2026-02-18T14-18-45-458Z"
+  },
+  "npm_publish": {
+    "mode": "publish-if-missing",
+    "requested": [
+      "@clawbureau/schema@0.2.0",
+      "@clawbureau/clawverify-core@0.2.0",
+      "@clawbureau/clawverify-cli@0.2.0"
+    ],
+    "results": [
+      {
+        "package": "@clawbureau/schema",
+        "version": "0.2.0",
+        "action": "published",
+        "provenance": {
+          "requested": true,
+          "status": "unsupported-local-provider",
+          "detail": "npm publish --provenance failed with EUSAGE: Automatic provenance generation not supported for provider: null; package then published with --access public"
+        },
+        "npm_ref": "https://www.npmjs.com/package/@clawbureau/schema/v/0.2.0"
+      },
+      {
+        "package": "@clawbureau/clawverify-core",
+        "version": "0.2.0",
+        "action": "already-exists",
+        "npm_ref": "https://www.npmjs.com/package/@clawbureau/clawverify-core/v/0.2.0"
+      },
+      {
+        "package": "@clawbureau/clawverify-cli",
+        "version": "0.2.0",
+        "action": "already-exists",
+        "npm_ref": "https://www.npmjs.com/package/@clawbureau/clawverify-cli/v/0.2.0"
+      }
+    ]
+  },
+  "clean_install_verification": {
+    "exact_three_packages": {
+      "temp_dir": "/tmp/clawsig-publish-check1-glNxAr",
+      "install_exit_code": 0,
+      "version_exit_code": 1,
+      "version_stdout": "",
+      "version_stderr_contains": "ERR_MODULE_NOT_FOUND: Cannot find package '@clawbureau/clawsig-sdk'"
+    },
+    "exact_three_plus_clawsig_sdk": {
+      "temp_dir": "/tmp/clawsig-publish-check2-CKbQKt",
+      "install_exit_code": 0,
+      "version_exit_code": 0,
+      "version_stdout": "clawverify 0.1.1",
+      "expected": "clawverify 0.2.0",
+      "match": false
+    }
+  },
+  "ok": false
+}
