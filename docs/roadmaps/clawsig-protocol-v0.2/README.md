@@ -32,6 +32,7 @@
 - v0.2 quickstart runner: [`scripts/protocol/run-clawsig-v0.2-quickstart.mjs`](../../../scripts/protocol/run-clawsig-v0.2-quickstart.mjs)
 - integration starter packs: [`docs/examples/integrations/README.md`](../../examples/integrations/README.md)
 - enterprise pilot pack: [`docs/pilot/clawsig-v0.2-enterprise-pilot-pack.md`](../../pilot/clawsig-v0.2-enterprise-pilot-pack.md)
+- real-usecase evidence pack: [`docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md`](../../pilot/clawsig-v0.2-real-usecase-evidence-pack.md)
 
 ## Release-prep assets (internal)
 

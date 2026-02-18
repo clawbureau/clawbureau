@@ -88,9 +88,10 @@
 
 1. `docs/prds/clawea-enterprise.md` — enterprise platform overview
 2. `docs/pilot/clawsig-v0.2-enterprise-pilot-pack.md` — 30-day pilot plan + evidence requirements
-3. `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md` §2 — security team guide
-4. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md` §5 — Claw Verified supply-chain trust
-5. `docs/foundations/ARCHITECTURE.md` — service topology
-6. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — fail-closed error contract
-7. `docs/foundations/DEPLOYMENT_RUNBOOK.md` — operational procedures
-8. Security Review Pack → [clawea.com/security](https://clawea.com/security) (external)
+3. `docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md` — published-package + real E2E evidence snapshot
+4. `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md` §2 — security team guide
+5. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md` §5 — Claw Verified supply-chain trust
+6. `docs/foundations/ARCHITECTURE.md` — service topology
+7. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — fail-closed error contract
+8. `docs/foundations/DEPLOYMENT_RUNBOOK.md` — operational procedures
+9. Security Review Pack → [clawea.com/security](https://clawea.com/security) (external)
