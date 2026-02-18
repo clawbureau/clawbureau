@@ -60,6 +60,48 @@ test('trace-artifacts reports timeline/tool summary + URM hash match + verify st
           event_hash_b64u: 'h_event_1',
         },
       ],
+      receipts: [
+        {
+          envelope_type: 'gateway_receipt',
+          payload: {
+            provider: 'openai',
+            model: 'gpt-4',
+            binding: {
+              attribution_confidence: 1.0,
+              phase: 'execution',
+            },
+          },
+        },
+      ],
+      coverage_attestations: [
+        {
+          payload: {
+            metrics: {
+              lineage: {
+                unmonitored_spawns: 0,
+                escapes_suspected: false,
+              },
+              egress: {
+                unmediated_connections: 0,
+              },
+            },
+          },
+        },
+      ],
+      side_effect_receipts: [
+        {
+          receipt_version: '1',
+          receipt_id: 'ser_1',
+          effect_class: 'network_egress',
+          target_digest: 'hash_side_effect_target',
+          agent_did: agentDid,
+          timestamp: '2026-02-18T00:00:01.200Z',
+          binding: {
+            attribution_confidence: 0.5,
+            phase: 'execution',
+          },
+        },
+      ],
       tool_receipts: [
         {
           receipt_version: '1',
@@ -71,6 +113,18 @@ test('trace-artifacts reports timeline/tool summary + URM hash match + verify st
           timestamp: '2026-02-18T00:00:01.100Z',
         },
       ],
+      metadata: {
+        sentinels: {
+          interpose_active: true,
+          interpose_state: {
+            cldd: {
+              unmediated_connections: 2,
+              unmonitored_spawns: 0,
+              escapes_suspected: false,
+            },
+          },
+        },
+      },
     },
     payload_hash_b64u: 'h_payload_bundle',
     hash_algorithm: 'SHA-256',
@@ -82,10 +136,30 @@ test('trace-artifacts reports timeline/tool summary + URM hash match + verify st
 
   const verify = {
     kind: 'proof_bundle',
-    status: 'PASS',
-    reason_code: 'OK',
-    reason: 'Proof bundle verified successfully',
-    verified_at: '2026-02-18T00:00:03.000Z',
+    result: {
+      status: 'INVALID',
+      reason: 'CLDD discrepancy enforced',
+      verified_at: '2026-02-18T00:00:03.000Z',
+      risk_flags: ['COVERAGE_CLDD_DISCREPANCY'],
+      component_results: {
+        coverage_cldd_discrepancy: true,
+        coverage_cldd_mismatch_fields: ['unmediated_connections'],
+        coverage_cldd_claimed_metrics: {
+          unmediated_connections: 2,
+          unmonitored_spawns: 0,
+          escapes_suspected: false,
+        },
+        coverage_cldd_attested_metrics: {
+          unmediated_connections: 0,
+          unmonitored_spawns: 0,
+          escapes_suspected: false,
+        },
+      },
+    },
+    error: {
+      code: 'COVERAGE_CLDD_DISCREPANCY_ENFORCED',
+      message: 'Coverage enforcement is set to enforce and CLDD discrepancy was detected',
+    },
   };
 
   const bundlePath = path.join(tempRoot, 'artifacts/poh/test-branch', `${runId}-bundle.json`);
@@ -124,7 +198,23 @@ test('trace-artifacts reports timeline/tool summary + URM hash match + verify st
 
   assert.equal(report.trace.urm.hash_check_against_bundle_ref.match, true);
 
+  const confidence = report.trace.delivery.confidence_distribution;
+  assert.equal(confidence.total, 2);
+  assert.equal(confidence.authoritative, 1);
+  assert.equal(confidence.inferred, 1);
+
+  const lowConfidence = report.trace.delivery.low_confidence_side_effects;
+  assert.equal(lowConfidence.length, 1);
+  assert.equal(lowConfidence[0].hash_first, 'hash_side_effect_target');
+  assert.equal(lowConfidence[0].confidence, 0.5);
+
+  const cldd = report.trace.delivery.cldd_discrepancy;
+  assert.equal(cldd.discrepancy, true);
+  assert.deepEqual(cldd.mismatch_fields, ['unmediated_connections']);
+  assert.equal(cldd.enforcement_findings.length, 1);
+  assert.equal(cldd.enforcement_findings[0].code, 'COVERAGE_CLDD_DISCREPANCY_ENFORCED');
+
   const verifyOut = report.trace.verification_results[0];
-  assert.equal(verifyOut.status, 'PASS');
-  assert.equal(verifyOut.code, 'OK');
+  assert.equal(verifyOut.status, 'INVALID');
+  assert.equal(verifyOut.code, 'COVERAGE_CLDD_DISCREPANCY_ENFORCED');
 });
