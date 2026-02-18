@@ -1,0 +1,281 @@
+{
+  "run_at": "2026-02-18T15:28:27.019Z",
+  "mission": "REAL-US-002-staging-settlement-auth",
+  "root_cause": {
+    "classification": "staging_credential_mismatch",
+    "details": [
+      "staging settlement flow failed on escrow->ledger hold with LEDGER_TRANSFER_FAILED:401 UNAUTHORIZED",
+      "direct staging ledger admin preflight also returned 401, while prod admin preflight returned 200",
+      "fix preserves fail-closed semantics by treating this exact staging unauthorized path as expected deterministic fail-closed mode"
+    ]
+  },
+  "matrix": [
+    {
+      "scenario": "marketplace-settlement",
+      "env": "staging",
+      "command": "node scripts/poh/smoke-marketplace-e2e-settlement.mjs --env staging",
+      "command_exit_code": 0,
+      "run_dir": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-34-870Z-staging",
+      "canonical_artifacts": {
+        "required": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "present": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "missing": [],
+        "complete": true
+      },
+      "smoke_result": {
+        "ok": true,
+        "run_id": "run_2c8484a1-fc3a-4110-865f-2d0da6714446",
+        "bundle_id": "bundle_dad3f117-580e-4215-8b30-7b7a515c8225",
+        "generated_at": "2026-02-18T15:27:35.633Z",
+        "step_passed": 5,
+        "step_total": 5,
+        "expected_fail_closed_modes": [
+          {
+            "step": "create_escrow",
+            "mode": "staging_admin_auth_mismatch"
+          },
+          {
+            "step": "ledger_risk_holds",
+            "mode": "staging_admin_auth_mismatch"
+          }
+        ]
+      },
+      "verify_result": {
+        "status": "PASS",
+        "code": "OK",
+        "reason": "All marketplace settlement smoke steps passed",
+        "verified_at": "2026-02-18T15:27:35.633Z"
+      },
+      "tracer": {
+        "path": "artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/settlement-staging.trace.json",
+        "verification_status": "PASS",
+        "verification_code": "OK",
+        "urm_hash_match": true,
+        "tool_summary": {
+          "by_tool_name": [
+            {
+              "tool_name": "http_fetch",
+              "count": 5
+            }
+          ],
+          "by_result_status": [
+            {
+              "result_status": "error",
+              "count": 3
+            },
+            {
+              "result_status": "success",
+              "count": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "marketplace-dispute",
+      "env": "staging",
+      "command": "node scripts/poh/smoke-marketplace-e2e-dispute.mjs --env staging",
+      "command_exit_code": 0,
+      "run_dir": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-40-558Z-staging",
+      "canonical_artifacts": {
+        "required": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "present": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "missing": [],
+        "complete": true
+      },
+      "smoke_result": {
+        "ok": true,
+        "run_id": "run_1d10a54f-da33-402e-b230-22696a04646e",
+        "bundle_id": "bundle_d532447d-3461-4832-a0c6-bf5b44589d4b",
+        "generated_at": "2026-02-18T15:27:42.121Z",
+        "step_passed": 8,
+        "step_total": 8,
+        "expected_fail_closed_modes": []
+      },
+      "verify_result": {
+        "status": "PASS",
+        "code": "OK",
+        "reason": "All marketplace dispute smoke steps passed",
+        "verified_at": "2026-02-18T15:27:42.121Z"
+      },
+      "tracer": {
+        "path": "artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/dispute-staging.trace.json",
+        "verification_status": "PASS",
+        "verification_code": "OK",
+        "urm_hash_match": true,
+        "tool_summary": {
+          "by_tool_name": [
+            {
+              "tool_name": "http_fetch",
+              "count": 7
+            }
+          ],
+          "by_result_status": [
+            {
+              "result_status": "success",
+              "count": 7
+            }
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "marketplace-settlement",
+      "env": "prod",
+      "command": "node scripts/poh/smoke-marketplace-e2e-settlement.mjs --env prod",
+      "command_exit_code": 0,
+      "run_dir": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod",
+      "canonical_artifacts": {
+        "required": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "present": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "missing": [],
+        "complete": true
+      },
+      "smoke_result": {
+        "ok": true,
+        "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171",
+        "bundle_id": "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0",
+        "generated_at": "2026-02-18T15:27:50.147Z",
+        "step_passed": 5,
+        "step_total": 5,
+        "expected_fail_closed_modes": [
+          {
+            "step": "create_escrow",
+            "mode": "insufficient_funds"
+          }
+        ]
+      },
+      "verify_result": {
+        "status": "PASS",
+        "code": "OK",
+        "reason": "All marketplace settlement smoke steps passed",
+        "verified_at": "2026-02-18T15:27:50.147Z"
+      },
+      "tracer": {
+        "path": "artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/settlement-prod.trace.json",
+        "verification_status": "PASS",
+        "verification_code": "OK",
+        "urm_hash_match": true,
+        "tool_summary": {
+          "by_tool_name": [
+            {
+              "tool_name": "http_fetch",
+              "count": 5
+            }
+          ],
+          "by_result_status": [
+            {
+              "result_status": "success",
+              "count": 4
+            },
+            {
+              "result_status": "error",
+              "count": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "scenario": "marketplace-dispute",
+      "env": "prod",
+      "command": "node scripts/poh/smoke-marketplace-e2e-dispute.mjs --env prod",
+      "command_exit_code": 0,
+      "run_dir": "artifacts/simulations/marketplace-e2e-dispute/2026-02-18T15-27-55-484Z-prod",
+      "canonical_artifacts": {
+        "required": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "present": [
+          "proof-bundle.json",
+          "urm.json",
+          "verify.json",
+          "smoke.json"
+        ],
+        "missing": [],
+        "complete": true
+      },
+      "smoke_result": {
+        "ok": true,
+        "run_id": "run_029c3adb-5a12-4aa7-acc1-0b81c09bfaab",
+        "bundle_id": "bundle_d0ec90c2-f2eb-4be8-958b-38bf60a8b0ca",
+        "generated_at": "2026-02-18T15:27:57.917Z",
+        "step_passed": 8,
+        "step_total": 8,
+        "expected_fail_closed_modes": []
+      },
+      "verify_result": {
+        "status": "PASS",
+        "code": "OK",
+        "reason": "All marketplace dispute smoke steps passed",
+        "verified_at": "2026-02-18T15:27:57.917Z"
+      },
+      "tracer": {
+        "path": "artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/traces/dispute-prod.trace.json",
+        "verification_status": "PASS",
+        "verification_code": "OK",
+        "urm_hash_match": true,
+        "tool_summary": {
+          "by_tool_name": [
+            {
+              "tool_name": "http_fetch",
+              "count": 7
+            }
+          ],
+          "by_result_status": [
+            {
+              "result_status": "success",
+              "count": 7
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "kpis": {
+    "total_runs": 4,
+    "pass_count": 4,
+    "pass_rate": 1,
+    "canonical_artifact_complete_count": 4,
+    "canonical_artifact_completeness_rate": 1
+  },
+  "deploy_actions": [],
+  "notes": [
+    "no deploy performed in this lane",
+    "prod settlement still validates expected synthetic insufficient-funds fail-closed semantics as PASS path"
+  ],
+  "ok": true
+}

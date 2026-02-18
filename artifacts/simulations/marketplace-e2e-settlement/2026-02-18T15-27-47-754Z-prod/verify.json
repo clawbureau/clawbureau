@@ -1,0 +1,9 @@
+{
+  "kind": "smoke_contract_verdict",
+  "status": "PASS",
+  "reason_code": "OK",
+  "reason": "All marketplace settlement smoke steps passed",
+  "verified_at": "2026-02-18T15:27:50.147Z",
+  "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171",
+  "bundle_id": "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0"
+}

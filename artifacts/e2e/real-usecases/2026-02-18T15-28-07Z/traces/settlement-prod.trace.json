@@ -1,0 +1,320 @@
+{
+  "generated_at": "2026-02-18T15:28:07.481Z",
+  "root": "/private/tmp/clawbureau-c2",
+  "scan": {
+    "scan_roots": [
+      "artifacts",
+      "proofs"
+    ],
+    "files_seen": 638,
+    "files_parsed": 637,
+    "parse_errors": 1,
+    "max_json_bytes": 3145728,
+    "max_files": 20000
+  },
+  "inventory": {
+    "kind_counts": [
+      {
+        "kind": "commit_signature",
+        "count": 239
+      },
+      {
+        "kind": "json",
+        "count": 163
+      },
+      {
+        "kind": "smoke_result",
+        "count": 80
+      },
+      {
+        "kind": "summary_json",
+        "count": 39
+      },
+      {
+        "kind": "proof_bundle_envelope",
+        "count": 36
+      },
+      {
+        "kind": "urm_document",
+        "count": 36
+      },
+      {
+        "kind": "verification_result",
+        "count": 22
+      },
+      {
+        "kind": "trust_pulse",
+        "count": 12
+      },
+      {
+        "kind": "conformance_summary",
+        "count": 10
+      },
+      {
+        "kind": "json_parse_error",
+        "count": 1
+      }
+    ],
+    "catalog": [
+      {
+        "kind": "proof_bundle_envelope",
+        "description": "Agent-signed run envelope (event chain + receipts + attestations + metadata).",
+        "typical_paths": [
+          ".clawsig/proof_bundle.json",
+          "artifacts/poh/**-bundle.json",
+          "*/proof-bundle.json"
+        ]
+      },
+      {
+        "kind": "urm_document",
+        "description": "Universal Run Manifest that binds run identity, inputs/outputs, harness metadata, and roots.",
+        "typical_paths": [
+          "*/*-urm.json",
+          "*/urm.json"
+        ]
+      },
+      {
+        "kind": "trust_pulse",
+        "description": "Self-reported UX summary (tools/files); explicitly non-tier-uplifting evidence.",
+        "typical_paths": [
+          "*/*-trust-pulse.json",
+          "*/trust-pulse.json"
+        ]
+      },
+      {
+        "kind": "verification_result",
+        "description": "Offline/online verifier response with deterministic status + reason/code.",
+        "typical_paths": [
+          "*/*-verify.json",
+          "*/verify.json"
+        ]
+      },
+      {
+        "kind": "conformance_summary",
+        "description": "Executable vector run summary for protocol/firewall/regression conformance suites.",
+        "typical_paths": [
+          "artifacts/conformance/**/summary.json"
+        ]
+      },
+      {
+        "kind": "smoke_result",
+        "description": "Scenario/e2e smoke evidence (simulation and service behavior snapshots).",
+        "typical_paths": [
+          "artifacts/smoke/**/result.json",
+          "artifacts/simulations/**/smoke.json"
+        ]
+      },
+      {
+        "kind": "ops_summary",
+        "description": "Operational gate/watch/deploy summaries produced by protocol and service ops runners.",
+        "typical_paths": [
+          "artifacts/ops/**/summary.json"
+        ]
+      },
+      {
+        "kind": "commit_signature",
+        "description": "DID-signed commit proof envelope used for lane provenance.",
+        "typical_paths": [
+          "proofs/**/commit.sig.json"
+        ]
+      },
+      {
+        "kind": "aggregate_bundle_envelope",
+        "description": "Fleet-level signed bundle-of-bundles envelope for aggregate verification.",
+        "typical_paths": [
+          "*aggregate*.json",
+          "artifacts/**/aggregate*.json"
+        ]
+      },
+      {
+        "kind": "export_bundle",
+        "description": "Content-addressed export manifest with attached artifacts for offline audit packages.",
+        "typical_paths": [
+          "*export*.json"
+        ]
+      }
+    ]
+  },
+  "trace": {
+    "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171",
+    "bundle": {
+      "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json",
+      "mtime": "2026-02-18T15:27:50.148Z",
+      "bundle_id": "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0",
+      "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+      "signer_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+      "issued_at": "2026-02-18T15:27:50.147Z",
+      "run_ids": [
+        "run_43fec9dc-359e-42a4-a824-db94148cf171"
+      ],
+      "array_counts": {
+        "event_chain": 7,
+        "tool_receipts": 5
+      },
+      "event_timeline": [
+        {
+          "timestamp": "2026-02-18T15:27:47.757Z",
+          "event_type": "run_start",
+          "event_id": "evt_14718abb-b2db-4bdd-8baa-3608bb46967b",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:47.932Z",
+          "event_type": "tool_call",
+          "event_id": "evt_ac606a6d-1576-48b6-a72a-ccc25f362f40",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:48.720Z",
+          "event_type": "tool_call",
+          "event_id": "evt_c070b094-71c6-4145-b366-e232e9a8c0c6",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:49.435Z",
+          "event_type": "tool_call",
+          "event_id": "evt_d058061b-3b54-4b5f-a9ca-b833d8e92e12",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:49.491Z",
+          "event_type": "tool_call",
+          "event_id": "evt_818a63de-5fa7-46d2-b0c4-747d90c902d2",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:50.147Z",
+          "event_type": "tool_call",
+          "event_id": "evt_1c070a20-c85d-4027-b538-5ca87cdde864",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        },
+        {
+          "timestamp": "2026-02-18T15:27:50.147Z",
+          "event_type": "run_end",
+          "event_id": "evt_ee957c1c-03c0-4312-aa8a-5dfec7aaf85a",
+          "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        }
+      ],
+      "event_types": {
+        "run_start": 1,
+        "tool_call": 5,
+        "run_end": 1
+      },
+      "tool_summary": {
+        "by_tool_name": [
+          {
+            "tool_name": "http_fetch",
+            "count": 5
+          }
+        ],
+        "by_result_status": [
+          {
+            "result_status": "success",
+            "count": 4
+          },
+          {
+            "result_status": "error",
+            "count": 1
+          }
+        ]
+      },
+      "gateway_receipt_summary": {
+        "total": 0,
+        "by_provider_model": []
+      },
+      "sentinels": null,
+      "urm_ref": {
+        "urm_id": "urm_544a3fa6-9cc2-4904-9094-dd7e19bfca03",
+        "resource_hash_b64u": "Ms5aFTLMZJuwEHkJzQq7raEl2YMbwfhhU451gwkE5tY"
+      }
+    },
+    "urm": {
+      "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/urm.json",
+      "mtime": "2026-02-18T15:27:50.148Z",
+      "urm_id": "urm_544a3fa6-9cc2-4904-9094-dd7e19bfca03",
+      "run_id": "run_43fec9dc-359e-42a4-a824-db94148cf171",
+      "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+      "issued_at": "2026-02-18T15:27:50.147Z",
+      "trust_pulse_ref": null,
+      "hash_b64u": "Ms5aFTLMZJuwEHkJzQq7raEl2YMbwfhhU451gwkE5tY",
+      "hash_check_against_bundle_ref": {
+        "expected": "Ms5aFTLMZJuwEHkJzQq7raEl2YMbwfhhU451gwkE5tY",
+        "actual": "Ms5aFTLMZJuwEHkJzQq7raEl2YMbwfhhU451gwkE5tY",
+        "match": true
+      }
+    },
+    "trust_pulse": null,
+    "verification_results": [
+      {
+        "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/verify.json",
+        "mtime": "2026-02-18T15:27:50.148Z",
+        "status": "PASS",
+        "reason": "All marketplace settlement smoke steps passed",
+        "envelope_type": "smoke_contract_verdict",
+        "code": "OK",
+        "verified_at": "2026-02-18T15:27:50.147Z"
+      }
+    ],
+    "related_artifacts": [
+      {
+        "kind": "json",
+        "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/health-snapshot.json",
+        "mtime": "2026-02-18T15:27:50.149Z",
+        "run_ids": [],
+        "bundle_ids": [],
+        "urm_ids": []
+      },
+      {
+        "kind": "smoke_result",
+        "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/smoke.json",
+        "mtime": "2026-02-18T15:27:50.149Z",
+        "run_ids": [
+          "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        ],
+        "bundle_ids": [
+          "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0"
+        ],
+        "urm_ids": []
+      },
+      {
+        "kind": "proof_bundle_envelope",
+        "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/proof-bundle.json",
+        "mtime": "2026-02-18T15:27:50.148Z",
+        "run_ids": [
+          "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        ],
+        "bundle_ids": [
+          "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0"
+        ],
+        "urm_ids": [
+          "urm_544a3fa6-9cc2-4904-9094-dd7e19bfca03"
+        ]
+      },
+      {
+        "kind": "urm_document",
+        "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/urm.json",
+        "mtime": "2026-02-18T15:27:50.148Z",
+        "run_ids": [
+          "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        ],
+        "bundle_ids": [],
+        "urm_ids": [
+          "urm_544a3fa6-9cc2-4904-9094-dd7e19bfca03"
+        ]
+      },
+      {
+        "kind": "verification_result",
+        "path": "artifacts/simulations/marketplace-e2e-settlement/2026-02-18T15-27-47-754Z-prod/verify.json",
+        "mtime": "2026-02-18T15:27:50.148Z",
+        "run_ids": [
+          "run_43fec9dc-359e-42a4-a824-db94148cf171"
+        ],
+        "bundle_ids": [
+          "bundle_20ada1c6-46af-4050-b7d1-a5393edc46b0"
+        ],
+        "urm_ids": []
+      }
+    ],
+    "notes": []
+  }
+}
