@@ -9,10 +9,12 @@ on:
       - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
       - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
       - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
       - 'scripts/protocol/run-clawverify-causal-*.mjs'
       - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-reason-code-stability.mjs'
       - '.github/workflows/clawverify-causal-reason-code-stability.yml'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
   push:
     branches:
       - main
@@ -23,10 +25,12 @@ on:
       - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
       - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
       - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
       - 'scripts/protocol/run-clawverify-causal-*.mjs'
       - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-reason-code-stability.mjs'
       - '.github/workflows/clawverify-causal-reason-code-stability.yml'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
 
 jobs:
   causal-reason-code-stability:

@@ -17,11 +17,13 @@ on:
       - 'scripts/protocol/run-clawverify-causal-hardening-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-connectivity-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-clock-conformance.mjs'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
       - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
       - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs'
       - '.github/workflows/causal-integrity-burnin.yml'
       - '.github/workflows/clawverify-service-core-causal-parity.yml'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
   push:
     branches:
       - main
@@ -40,11 +42,13 @@ on:
       - 'scripts/protocol/run-clawverify-causal-hardening-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-connectivity-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-clock-conformance.mjs'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
       - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
       - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
       - 'scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs'
       - '.github/workflows/causal-integrity-burnin.yml'
       - '.github/workflows/clawverify-service-core-causal-parity.yml'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
   schedule:
     - cron: '43 2 * * *'
   workflow_dispatch:

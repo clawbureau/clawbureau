@@ -81,6 +81,54 @@ async function main() {
     stamp
   );
 
+  const fixtureContractSummaryPath = path.join(
+    outDir,
+    'fixture-contract.summary.json'
+  );
+
+  const fixtureContractExitCode = runNodeScript(
+    'scripts/protocol/check-causal-fixture-contract.mjs',
+    {
+      ...process.env,
+      CAUSAL_FIXTURE_CONTRACT_SUMMARY_PATH: fixtureContractSummaryPath,
+    }
+  );
+
+  if (fixtureContractExitCode !== 0) {
+    const summary = {
+      ok: false,
+      checked_at: new Date().toISOString(),
+      suite_count_expected: 0,
+      suite_count_executed: 0,
+      failure_suite_id: null,
+      fixture_contract_summary_path: path.relative(repoRoot, fixtureContractSummaryPath),
+      suites: [],
+      failures: [
+        {
+          type: 'fixture_contract_failed',
+          detail: `scripts/protocol/check-causal-fixture-contract.mjs exited with code ${fixtureContractExitCode}`,
+        },
+      ],
+    };
+
+    const outPath = path.join(outDir, 'summary.json');
+    await writeJson(outPath, summary);
+
+    console.error('[clawverify-service-core-causal-parity] FAIL');
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          failure_suite_id: null,
+          outPath: path.relative(repoRoot, outPath),
+        },
+        null,
+        2
+      )
+    );
+    process.exit(1);
+  }
+
   const suites = [
     {
       id: 'clawverify-causal-cldd',
@@ -270,6 +318,7 @@ async function main() {
     suite_count_expected: suites.length,
     suite_count_executed: suiteResults.length,
     failure_suite_id: failureSuite?.suite_id ?? null,
+    fixture_contract_summary_path: path.relative(repoRoot, fixtureContractSummaryPath),
     suites: suiteResults,
   };
 

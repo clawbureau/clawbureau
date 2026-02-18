@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-024.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-025.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -380,11 +380,24 @@
       "priority": 29,
       "passes": true,
       "notes": "Shipped via PR #327 (merge a1bcd02f86bbf4412da2ba1cf3d47a381509edcc): deterministic parity runner + required workflow + burn-in/release integration."
+    },
+    {
+      "id": "CAV-US-025",
+      "title": "Roadmap sync continuity through CAV-US-024",
+      "description": "Update roadmap truth docs with explicit shipped evidence for CAV-US-024 and keep continuity checker/workflow green.",
+      "acceptanceCriteria": [
+        "README/prd/progress carry shipped evidence for CAV-US-024 with PR + merge commit references",
+        "Roadmap status windows declare through CAV-US-024 or newer with no stale-window failures",
+        "Roadmap sync checker and required workflow remain green on main"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": "Shipped via PR #328 (merge 3d70e40423dbce36840a05d4467e821ec28958f9): roadmap sync through CAV-US-024 with continuity gate green."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T23:20:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-024 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T23:35:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-025 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -473,6 +486,10 @@
       {
         "pr": "#327",
         "merge_commit": "a1bcd02f86bbf4412da2ba1cf3d47a381509edcc"
+      },
+      {
+        "pr": "#328",
+        "merge_commit": "3d70e40423dbce36840a05d4467e821ec28958f9"
       }
     ]
   }
