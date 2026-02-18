@@ -170,7 +170,7 @@ async function main() {
   const parsed = parseCliArgs(process.argv.slice(2));
 
   if (parsed.command === 'version') {
-    process.stdout.write('clawverify 0.1.1\n');
+    process.stdout.write('clawverify 0.2.0\n');
     return;
   }
 

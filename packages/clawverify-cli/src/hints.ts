@@ -28,13 +28,13 @@ const HINTS: Record<string, string> = {
 
   // ── Unknown ───────────────────────────────────────────
   UNKNOWN_VERSION:
-    'Envelope version not recognized. Ensure envelope_version is "1" for clawsig v0.1. If you are using a newer version, upgrade: npm install -g @clawbureau/clawverify-cli@latest',
+    'Envelope version not recognized. Ensure envelope_version is "1" for clawsig v0.2. If you are using a newer version, upgrade: npm install -g @clawbureau/clawverify-cli@latest',
   UNKNOWN_TYPE:
     'Envelope type not recognized. Supported types: proof_bundle, gateway_receipt, tool_receipt, side_effect_receipt, human_approval_receipt, export_bundle.',
   UNKNOWN_ALGORITHM:
-    'Hash or signature algorithm not recognized. Clawsig v0.1 supports Ed25519 for signatures and SHA-256 for hashing.',
+    'Hash or signature algorithm not recognized. Clawsig v0.2 supports Ed25519 for signatures and SHA-256 for hashing.',
   UNKNOWN_HASH_ALGORITHM:
-    'Hash algorithm not recognized. Use "SHA-256". BLAKE3 support is planned for v0.2.',
+    'Hash algorithm not recognized. Use "SHA-256". BLAKE3 inputs are currently fail-closed in this verifier runtime.',
   UNKNOWN_ENVELOPE_TYPE:
     'Envelope type not recognized. Check the envelope_type field matches a registered type.',
   UNKNOWN_ENVELOPE_VERSION:

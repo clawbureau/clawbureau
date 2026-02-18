@@ -31,6 +31,12 @@
 - v0.2 quickstart fixture manifest: [`docs/examples/clawsig-v0.2-quickstart/manifest.v1.json`](../../examples/clawsig-v0.2-quickstart/manifest.v1.json)
 - v0.2 quickstart runner: [`scripts/protocol/run-clawsig-v0.2-quickstart.mjs`](../../../scripts/protocol/run-clawsig-v0.2-quickstart.mjs)
 
+## Release-prep assets (internal)
+
+- package release checklist: [`docs/releases/clawsig-v0.2-package-release-checklist.md`](../../releases/clawsig-v0.2-package-release-checklist.md)
+- machine-readable checklist: [`docs/releases/clawsig-v0.2-package-release-checklist.v1.json`](../../releases/clawsig-v0.2-package-release-checklist.v1.json)
+- release-prep pack/install runner: [`scripts/release/run-clawsig-v0.2-package-prep.mjs`](../../../scripts/release/run-clawsig-v0.2-package-prep.mjs)
+
 ## Prior art
 
 - v0.1 changelog: [`CHANGELOG.md`](../../specs/clawsig-protocol/CHANGELOG.md)
