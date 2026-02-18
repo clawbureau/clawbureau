@@ -1,0 +1,240 @@
+{
+  "envelope_version": "1",
+  "envelope_type": "proof_bundle",
+  "payload": {
+    "bundle_version": "1",
+    "bundle_id": "bundle_b25f4494-2091-402d-8e13-f1317730ca39",
+    "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+    "urm": {
+      "urm_version": "1",
+      "urm_id": "urm_6da7964a-e970-4667-848a-23b604cc4df9",
+      "resource_type": "universal_run_manifest",
+      "resource_hash_b64u": "STYXvq9sHA2nRPfA8zZqIDPpdewdTmRj5XJH6n1Ioyg"
+    },
+    "event_chain": [
+      {
+        "event_id": "evt_4223eaa7-ad4e-4320-806c-4fcb40d2496c",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "run_start",
+        "timestamp": "2026-02-18T14:38:06.715Z",
+        "payload_hash_b64u": "qiRq43GNpfN0krIIKpE0MwmRveJaoalCVSmqW9us4EQ",
+        "prev_hash_b64u": null,
+        "event_hash_b64u": "KXu179E0ELAL4PTr6Hh85KZeC7IVbFDTqxm8radZPJA"
+      },
+      {
+        "event_id": "evt_da6895b6-b7e1-44d0-9d42-a0d8ce47feb0",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:07.357Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "KXu179E0ELAL4PTr6Hh85KZeC7IVbFDTqxm8radZPJA",
+        "event_hash_b64u": "2Hx3sRJgUTIpbGf_OHrnvLIlqfYxnoBaEJYPrAaIF30"
+      },
+      {
+        "event_id": "evt_7bee1dda-3eff-4a84-921d-f851826e9974",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:09.327Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "2Hx3sRJgUTIpbGf_OHrnvLIlqfYxnoBaEJYPrAaIF30",
+        "event_hash_b64u": "eeX5-A_F74qSLneJsnKvkmKO0ni6A-dyHabIMDyhk-M"
+      },
+      {
+        "event_id": "evt_b1c3870d-5617-487d-b5fa-400cdc0e4e28",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:09.389Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "eeX5-A_F74qSLneJsnKvkmKO0ni6A-dyHabIMDyhk-M",
+        "event_hash_b64u": "tscwuLwOXdRN0WxMavmnJwtXOswNhZQ_7QmeBj5LbJc"
+      },
+      {
+        "event_id": "evt_9ec7ba87-977a-4e93-ad27-18dd09664346",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:09.436Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "tscwuLwOXdRN0WxMavmnJwtXOswNhZQ_7QmeBj5LbJc",
+        "event_hash_b64u": "pM3jJAZqKQa6ZiRwtKLknlhXR6u3wSgpLpOshXU-O14"
+      },
+      {
+        "event_id": "evt_530665d5-ebab-4404-bcf4-b110b5276f92",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:09.485Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "pM3jJAZqKQa6ZiRwtKLknlhXR6u3wSgpLpOshXU-O14",
+        "event_hash_b64u": "ziw3CQnpRhnMyZbBqoH1sOJPSJcsMVBNpogTrYdzEHE"
+      },
+      {
+        "event_id": "evt_d43dfa9f-d1a7-4918-9016-74f46465f27b",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:09.699Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "ziw3CQnpRhnMyZbBqoH1sOJPSJcsMVBNpogTrYdzEHE",
+        "event_hash_b64u": "oZ0u5SGHYz8i-MANlgDWyqysIp94heiqbPm-H1Ai2TE"
+      },
+      {
+        "event_id": "evt_f1b20d37-b814-4096-870d-ba803d738897",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "tool_call",
+        "timestamp": "2026-02-18T14:38:09.760Z",
+        "payload_hash_b64u": "vKpL_pvocTI2zMvQ1d96ftP5Oz1Vqj0zm3aAZqYUeAU",
+        "prev_hash_b64u": "oZ0u5SGHYz8i-MANlgDWyqysIp94heiqbPm-H1Ai2TE",
+        "event_hash_b64u": "C6Q7iRmiCUM3TVq6VzHprYxyKWZ0Wn7QnSjwkpXDFc4"
+      },
+      {
+        "event_id": "evt_e44bd07b-c26b-4147-bec3-4deaf7f034d9",
+        "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+        "event_type": "run_end",
+        "timestamp": "2026-02-18T14:38:09.760Z",
+        "payload_hash_b64u": "am3iTzTVxrOWAq21CMQVBfBU7X3JCOmygyJymA86q1I",
+        "prev_hash_b64u": "C6Q7iRmiCUM3TVq6VzHprYxyKWZ0Wn7QnSjwkpXDFc4",
+        "event_hash_b64u": "UK41jbHXTFt3gUhuvJ-6Arj0oXRQL8-XsOK2tIKCxh8"
+      }
+    ],
+    "metadata": {
+      "harness": {
+        "id": "smoke-marketplace-e2e-dispute",
+        "version": "1.0.0",
+        "runtime": "node/v24.13.0",
+        "config_hash_b64u": "kohylwWwP4sTMJuBYByustH1xDs2OAmH2g0krJBV8zE"
+      }
+    },
+    "tool_receipts": [
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_a6a53e6a-6ef9-46ca-a368-69456e382038",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "rJtD-RPkve30MUf64F503aLQinczCmEVE9IUbg6ex6o",
+        "result_hash_b64u": "2Xo_-tdBLwv8H96MRfwp6meY8W_FhMhA5LBEImTU2Ss",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:07.357Z",
+        "latency_ms": 642,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "2Hx3sRJgUTIpbGf_OHrnvLIlqfYxnoBaEJYPrAaIF30",
+          "nonce": "nonce_8f8bcd39-9fe3-4dbc-a2f2-e85f163a2594"
+        }
+      },
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_24a98f89-f5cc-4b97-b6ec-d5d0d2066328",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "iDtGjcjxsiMZwpEHstcZZkEacUgANoI0ibLjrh6SE2I",
+        "result_hash_b64u": "fGGmittFKNM5FRBKcZhI1dtGT21cniSrWiS1FZtBnj8",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:09.327Z",
+        "latency_ms": 1970,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "eeX5-A_F74qSLneJsnKvkmKO0ni6A-dyHabIMDyhk-M",
+          "nonce": "nonce_0e17e9ee-29bb-497a-9680-a4bc527893df"
+        }
+      },
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_6e5a47fa-da46-4af2-aa2e-3e107034783d",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "sL_vLnK6eLi9KNSlF6VmMDjFO33pGe_yqorkSh6Gcbc",
+        "result_hash_b64u": "SisWrKIA5KbDJa9xLhT4EZBENPLyEY_d_Gwv7EqknLY",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:09.389Z",
+        "latency_ms": 62,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "tscwuLwOXdRN0WxMavmnJwtXOswNhZQ_7QmeBj5LbJc",
+          "nonce": "nonce_c9866068-7a2d-4b11-a9be-2fbfb525b079"
+        }
+      },
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_51c5cc3a-3016-48f0-991d-aee5cb536d87",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "D_yklwpqXMQi7QCt9yhD6gUhNhY9AOX_5kxjX9Gb3GI",
+        "result_hash_b64u": "0ujN_zuAprDDNm6aJ7jdwDsi9ETKtE3NmmaevxgL88o",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:09.436Z",
+        "latency_ms": 46,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "pM3jJAZqKQa6ZiRwtKLknlhXR6u3wSgpLpOshXU-O14",
+          "nonce": "nonce_225137df-8870-46ef-850c-e47d090e9f90"
+        }
+      },
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_0cb2415e-0ad6-4ab3-8adb-d7801d58948a",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "9yGftom1z4i5BseRsr_AQqgFODm2lrOUKPTd-OHzQBo",
+        "result_hash_b64u": "TXeGOkXGj5ETcnuCtfEVUFpGWvdGLwOVJfz5kn9Lipk",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:09.485Z",
+        "latency_ms": 49,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "ziw3CQnpRhnMyZbBqoH1sOJPSJcsMVBNpogTrYdzEHE",
+          "nonce": "nonce_ffe4cc9a-b514-4c3d-8e1e-346b885ef449"
+        }
+      },
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_09e8000d-9406-4560-bae2-8311482df5b0",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "irqPIig6uWeRb1-CX42bhRHU1aL3cqk3_po6vHceFFU",
+        "result_hash_b64u": "QxPfG45zarm49XR8CZLsq7NL3tcWJpscFzuw_m9rJLA",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:09.700Z",
+        "latency_ms": 214,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "oZ0u5SGHYz8i-MANlgDWyqysIp94heiqbPm-H1Ai2TE",
+          "nonce": "nonce_0ae6b804-d0b1-45b6-a4b6-b7c50247e5ed"
+        }
+      },
+      {
+        "receipt_version": "1",
+        "receipt_id": "tr_22506a8a-836f-4b35-8bdb-95b060596bca",
+        "tool_name": "http_fetch",
+        "tool_version": "1.0",
+        "args_hash_b64u": "LeFqWOsh7sPpdCiQsEgVImNqFipb5pnZg5Z0-QeVk84",
+        "result_hash_b64u": "pqvyZtWCnMLAnLof3uYVfQvTEjALNnbGHIpVg52Dvh4",
+        "result_status": "success",
+        "hash_algorithm": "SHA-256",
+        "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+        "timestamp": "2026-02-18T14:38:09.760Z",
+        "latency_ms": 60,
+        "binding": {
+          "run_id": "run_b2d71d34-ad77-4aa6-b2a4-22c867e2f53f",
+          "event_hash_b64u": "C6Q7iRmiCUM3TVq6VzHprYxyKWZ0Wn7QnSjwkpXDFc4",
+          "nonce": "nonce_18a7cf7f-90e0-42e8-ba65-5848414c90c4"
+        }
+      }
+    ]
+  },
+  "payload_hash_b64u": "9yyIlAr3kvSGBrZjvVrX8Jlx_QF8BzT8LlV71x1SANA",
+  "hash_algorithm": "SHA-256",
+  "signature_b64u": "KjYkVa4KSAWL2Qc6AQ7A2raMzZlhOoNKspmDtUFEGcn3FyntHZQ3azHy8zcg5tMdBIz1mmOAlRn7FicdSoVpBQ",
+  "algorithm": "Ed25519",
+  "signer_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+  "issued_at": "2026-02-18T14:38:09.761Z"
+}

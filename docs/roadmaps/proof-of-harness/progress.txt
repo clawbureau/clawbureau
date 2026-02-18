@@ -450,3 +450,30 @@ Started: 2026-02-05T21:49:28Z
   - `node --test scripts/poh/smoke-artifact-contract.test.mjs` ✅
   - `node scripts/poh/check-smoke-artifact-contract.mjs` ✅
 ---
+
+## 2026-02-18T14:38:26Z - REAL-US-001 (production-like validation matrix)
+- What was implemented
+  - Ran real-usecase matrix against staging + prod:
+    - `node scripts/poh/smoke-marketplace-e2e-settlement.mjs --env staging`
+    - `node scripts/poh/smoke-marketplace-e2e-dispute.mjs --env staging`
+    - `node scripts/poh/smoke-marketplace-e2e-settlement.mjs --env prod`
+    - `node scripts/poh/smoke-marketplace-e2e-dispute.mjs --env prod`
+  - Confirmed canonical artifact contract on every run dir:
+    - `proof-bundle.json`, `urm.json`, `verify.json`, `smoke.json`
+  - Ran artifact tracer for each proof bundle and captured machine-readable traces.
+  - Wrote consolidated matrix summary:
+    - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/summary.json`
+- Findings
+  - Staging settlement run failed fail-closed with `LEDGER_HOLD_FAILED` / upstream `UNAUTHORIZED` (`verify.code=SMOKE_STEP_FAILED`).
+  - Staging dispute passed.
+  - Prod settlement passed (including expected fail-closed `INSUFFICIENT_FUNDS` path for synthetic identities).
+  - Prod dispute passed.
+- Evidence
+  - Traces:
+    - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/traces/settlement-staging.trace.json`
+    - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/traces/dispute-staging.trace.json`
+    - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/traces/settlement-prod.trace.json`
+    - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/traces/dispute-prod.trace.json`
+- Deploy actions
+  - None (no code patch required in this lane).
+---
