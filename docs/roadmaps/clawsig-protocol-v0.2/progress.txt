@@ -334,3 +334,26 @@ Validation:
 Validation findings:
 - exact triplet install currently does not satisfy CLI runtime (missing `@clawbureau/clawsig-sdk` transitive in install path)
 - with explicit sdk install, `clawverify version` prints `0.1.1` (expected `0.2.0`)
+
+---
+
+2026-02-18 — ADP-US-004 GTM pilot proof pack refresh
+
+- Added buyer-facing real-usecase evidence pack:
+  - `docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md`
+- Linked package publish evidence:
+  - `docs/releases/clawsig-v0.2-publish-log.md`
+  - `artifacts/release/clawsig-v0.2-npm-publish/2026-02-18T14-26-39Z/summary.json`
+- Linked real-usecase E2E evidence + tracer outputs:
+  - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/summary.json`
+  - `artifacts/e2e/real-usecases/2026-02-18T14-38-26Z/traces/*.trace.json`
+- Added explicit buyer KPI snapshot:
+  - pass rate: `75%` (3/4)
+  - deterministic reason-code behavior: `100%` runs emitted deterministic verifier code (`OK` or `SMOKE_STEP_FAILED`)
+  - canonical artifact completeness: `100%` (4/4)
+- Updated reading paths:
+  - `docs/WHAT_TO_READ.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+
+Validation:
+- `node scripts/docs/lint-prds.mjs` ✅
