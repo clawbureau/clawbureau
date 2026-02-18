@@ -71,6 +71,8 @@ const HINTS: Record<string, string> = {
     'A required field is missing. Check the error message for which field. See the protocol spec for the full schema.',
   MISSING_EVENT_FIELD:
     'An event chain entry is missing required fields. Each event needs: event_id, run_id, event_type, timestamp, payload_hash_b64u, prev_hash_b64u, event_hash_b64u.',
+  MISSING_NONCE:
+    'A required nonce is missing from a binding or control-chain context. Provide a deterministic nonce and re-sign.',
 
   // ── Canonicalization ──────────────────────────────────
   CANONICALIZATION_ERROR:
@@ -93,6 +95,16 @@ const HINTS: Record<string, string> = {
     'Event chain has no entries. A proof bundle must have at least one event.',
   IDENTITY_CONFLICT:
     'A forbidden DID overlap was detected (for example, aggregate issuer equals member agent DID). Use distinct identities for orchestrator and members.',
+  URM_MISSING:
+    'A URM reference exists in the bundle but the materialized URM document was not provided to verifier options. Provide the exact URM JSON bytes for offline hash verification.',
+  URM_MISMATCH:
+    'The provided URM content hash does not match payload.urm.resource_hash_b64u. Regenerate or provide the correct URM artifact.',
+  PROMPT_COMMITMENT_MISMATCH:
+    'Prompt commitment hashes diverge from the declared prompt-pack/system prompt commitments. Recompute commitments deterministically and re-sign.',
+  EVIDENCE_MISMATCH:
+    'Deterministic evidence is contradictory for the same subject/event. Resolve conflicting receipts/attestations before signing.',
+  CLAIM_NOT_FOUND:
+    'A required signed claim or referenced claim path is missing. Ensure all required claims are embedded and referenced correctly.',
 
   // ── Aggregate ─────────────────────────────────────────
   AGGREGATE_BUNDLE_INVALID:
@@ -125,16 +137,44 @@ const HINTS: Record<string, string> = {
   // ── Time ──────────────────────────────────────────────
   EXPIRED_TTL:
     'A TTL-bound envelope or payload has expired for the verification timestamp. Re-sign with a fresh expires_at or verify at an archival timestamp.',
+  EXPIRED:
+    'The referenced artifact or attestation is expired for current verification context. Refresh/reissue the evidence with valid time bounds.',
   CAUSAL_CLOCK_CONTRADICTION:
     'Timestamp causality is broken (e.g., created_at > issued_at). Fix timestamps before signing.',
   FUTURE_TIMESTAMP_POISONING:
     'issued_at is too far in the future relative to verification time and skew allowance. Correct system clock or issued_at.',
+
+  // ── Causal / coverage hardening ──────────────────────
+  CAUSAL_REFERENCE_DANGLING:
+    'A causal parent/tool span reference points to a span_id that does not exist in this bundle. Ensure all causal references resolve inside the same bundle.',
+  CAUSAL_CYCLE_DETECTED:
+    'Causal graph contains a parent-span cycle. Break the cycle so lineage is a DAG.',
+  CAUSAL_PHASE_INVALID:
+    'binding.phase is invalid. Allowed phases: setup, planning, reasoning, execution, observation, reflection, teardown.',
+  CAUSAL_CONFIDENCE_OUT_OF_RANGE:
+    'attribution_confidence must be a finite number in [0.0, 1.0]. Normalize confidence before signing.',
+  CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT:
+    'attribution_confidence overclaims available evidence class. Use 1.0 only for provable direct lineage, 0.5 for inferred linkage, and 0.0 for unattributed fallback.',
+  CAUSAL_BINDING_FIELD_CONFLICT:
+    'Causal binding includes conflicting snake_case and camelCase values. Keep canonical snake_case or ensure both forms normalize to identical values.',
+  CAUSAL_BINDING_NORMALIZATION_FAILED:
+    'Causal binding normalization failed (empty/malformed canonical identifiers). Provide non-empty normalized span identifiers.',
+  CAUSAL_RECEIPT_REPLAY_DETECTED:
+    'Same receipt_id appears with divergent content. Use unique receipt_ids or exact-content replay only.',
+  CAUSAL_SPAN_REUSE_CONFLICT:
+    'Same span_id was reused with incompatible semantics (parent/tool/phase/confidence drift). Use one stable semantic definition per span_id.',
+  COVERAGE_CLDD_DISCREPANCY_ENFORCED:
+    'CLDD runtime telemetry disagrees with coverage attestation under enforce mode. Reconcile sentinel telemetry with attested coverage metrics.',
 
   // ── Receipt ───────────────────────────────────────────
   RECEIPT_BINDING_MISMATCH:
     'Receipt binding (run_id or event_hash) does not match the bundle. Check that the receipt was generated during the same run.',
   RECEIPT_VERIFICATION_FAILED:
     'A receipt envelope failed verification. Check the receipt\'s signature and signer_did against the config allowlist.',
+  INCLUSION_PROOF_INVALID:
+    'Transparency/log inclusion proof verification failed. Regenerate proof material and verify root signature + audit path against the referenced leaf hash.',
+  REVOKED:
+    'Evidence is explicitly revoked by policy or revocation list. Refresh with non-revoked attestations/keys.',
 
   // ── Side effect ───────────────────────────────────────
   SIDE_EFFECT_UNKNOWN_CLASS:
@@ -161,6 +201,38 @@ const HINTS: Record<string, string> = {
     'Invalid command usage. Run: clawverify --help',
   INTERNAL_ERROR:
     'An unexpected internal error occurred. This is a bug — please report it at https://github.com/clawbureau/clawbureau/issues',
+  PARSE_ERROR:
+    'Input parsing failed for a structured protocol artifact. Validate JSON shape/encoding and retry with canonical payload form.',
+
+  // ── Control chain ─────────────────────────────────────
+  CONTROL_CHAIN_NOT_FOUND:
+    'Required control chain entries are missing. Include the referenced chain for offline verification.',
+  CONTROL_CHAIN_CONTEXT_MISMATCH:
+    'Control chain context does not match the proof bundle context (subject/run/scope mismatch). Rebind control-chain evidence to the exact bundle context.',
+
+  // ── Token control ─────────────────────────────────────
+  TOKEN_CONTROL_SCOPE_HASH_MISMATCH:
+    'Token-control scope hash does not match expected canonical scope hash. Recompute scope hash from canonical claims.',
+  TOKEN_CONTROL_AUDIENCE_MISMATCH:
+    'Token-control audience does not match expected audience binding. Mint token for the correct verifier audience.',
+  TOKEN_CONTROL_SCOPE_MISSING:
+    'Token-control claims are missing required scope fields. Include scope claim and corresponding canonical hash.',
+  TOKEN_CONTROL_TRANSITION_FORBIDDEN:
+    'Token-control chain transition is forbidden by policy (invalid state transition).',
+  TOKEN_CONTROL_CHAIN_MISSING:
+    'Token-control chain evidence is missing. Provide the complete chain for offline verification.',
+  TOKEN_CONTROL_SUBJECT_MISMATCH:
+    'Token-control subject does not match expected DID/subject binding.',
+  TOKEN_CONTROL_KEY_UNKNOWN:
+    'Token-control key identifier is not in allowlisted key material. Add/rotate key metadata before issuing tokens.',
+  TOKEN_CONTROL_KEY_EXPIRED:
+    'Token-control signing key is expired. Reissue with an active key.',
+  TOKEN_CONTROL_TRANSPARENCY_STALE:
+    'Token-control transparency anchor is stale beyond freshness bound. Refresh transparency state before verification.',
+  TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN:
+    'Transparency key ID is unknown for token-control verification. Sync transparency keyset.',
+  TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED:
+    'Transparency key ID is expired for token-control verification. Rotate to active transparency key material.',
 
   // ── Model identity ────────────────────────────────────
   MODEL_IDENTITY_HASH_MISMATCH:

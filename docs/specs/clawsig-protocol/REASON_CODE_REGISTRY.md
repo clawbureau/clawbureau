@@ -116,6 +116,7 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `MALFORMED_ENVELOPE` | Envelope structure is incomplete or corrupt |
 | `MISSING_REQUIRED_FIELD` | Required field missing from envelope |
 | `MISSING_EVENT_FIELD` | Required field missing from event chain entry |
+| `MISSING_NONCE` | Required nonce is missing from binding or control-chain context |
 
 ### CANONICALIZATION_*
 
@@ -141,6 +142,7 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `INCONSISTENT_RUN_ID` | Run IDs across bundle elements are inconsistent |
 | `EMPTY_CHAIN` | Event chain has no entries |
 | `IDENTITY_CONFLICT` | Forbidden DID overlap detected across aggregate/member trust boundaries |
+| `CLAIM_NOT_FOUND` | Required signed claim or referenced claim path not found |
 
 ### AGGREGATE_*
 
@@ -174,6 +176,7 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | Code | Meaning |
 |------|---------|
 | `EXPIRED_TTL` | Verification time exceeded `expires_at` plus configured skew allowance |
+| `EXPIRED` | Referenced artifact/attestation is expired for verification context |
 | `CAUSAL_CLOCK_CONTRADICTION` | Temporal causality bounds are violated (e.g. created_at > issued_at) |
 | `FUTURE_TIMESTAMP_POISONING` | `issued_at` exceeds `verification_time + skew_allowance` |
 
@@ -278,12 +281,41 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 |------|---------|
 | `INCLUSION_PROOF_INVALID` | Log inclusion proof verification failed |
 
+### REVOCATION_*
+
+| Code | Meaning |
+|------|---------|
+| `REVOKED` | Evidence, attestation, or key was explicitly revoked |
+
 ### EVIDENCE_*
 
 | Code | Meaning |
 |------|---------|
 | `EVIDENCE_MISMATCH` | Deterministic evidence for the same subject/event is contradictory |
 | `PROMPT_COMMITMENT_MISMATCH` | Prompt commitment hashes diverge from declared prompt-pack commitments |
+
+### CONTROL_CHAIN_*
+
+| Code | Meaning |
+|------|---------|
+| `CONTROL_CHAIN_NOT_FOUND` | Required control-chain evidence is missing |
+| `CONTROL_CHAIN_CONTEXT_MISMATCH` | Control-chain evidence context does not match bundle subject/run/scope |
+
+### TOKEN_CONTROL_*
+
+| Code | Meaning |
+|------|---------|
+| `TOKEN_CONTROL_SCOPE_HASH_MISMATCH` | Token-control scope hash does not match canonical claims |
+| `TOKEN_CONTROL_AUDIENCE_MISMATCH` | Token-control audience claim does not match expected verifier audience |
+| `TOKEN_CONTROL_SCOPE_MISSING` | Token-control scope claims are missing required fields |
+| `TOKEN_CONTROL_TRANSITION_FORBIDDEN` | Token-control chain transition violates allowed state machine |
+| `TOKEN_CONTROL_CHAIN_MISSING` | Token-control chain evidence is missing |
+| `TOKEN_CONTROL_SUBJECT_MISMATCH` | Token-control subject does not match expected DID/subject binding |
+| `TOKEN_CONTROL_KEY_UNKNOWN` | Token-control key ID is not recognized in allowlisted key material |
+| `TOKEN_CONTROL_KEY_EXPIRED` | Token-control key ID is recognized but expired |
+| `TOKEN_CONTROL_TRANSPARENCY_STALE` | Token-control transparency anchor is stale beyond freshness policy |
+| `TOKEN_CONTROL_TRANSPARENCY_KID_UNKNOWN` | Token-control transparency key ID is unknown |
+| `TOKEN_CONTROL_TRANSPARENCY_KID_EXPIRED` | Token-control transparency key ID is expired |
 
 ---
 
