@@ -741,3 +741,27 @@ Deliverables:
 
 Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-027 signed causal evidence expansion closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-027 on `main`.
+
+Shipped merge references:
+- CAV-US-027 — PR #330 (`b61f7933`)
+
+Deliverables:
+- Signed parity evidence helper:
+  - `scripts/release/sign-causal-parity-evidence-pack.mjs`
+- Expanded release evidence verifier:
+  - `scripts/release/check-causal-integrity-evidence-pack.mjs`
+- Release guardrail workflow integration:
+  - `.github/workflows/release-e2e-guardrails.yml`
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅

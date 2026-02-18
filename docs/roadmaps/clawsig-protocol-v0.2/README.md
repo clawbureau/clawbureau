@@ -6,7 +6,7 @@
 
 # Clawsig Protocol v0.2
 
-**Status summary:** v0.2 core is fully shipped on `main`, and the causal attribution hardening tranche is shipped through `CAV-US-026` (merge PR #329).
+**Status summary:** v0.2 core is fully shipped on `main`, and the causal attribution hardening tranche is shipped through `CAV-US-027` (merge PR #330).
 
 ## Shipped stories
 
@@ -40,7 +40,7 @@
 - machine-readable checklist: [`docs/releases/clawsig-v0.2-package-release-checklist.v1.json`](../../releases/clawsig-v0.2-package-release-checklist.v1.json)
 - release-prep pack/install runner: [`scripts/release/run-clawsig-v0.2-package-prep.mjs`](../../../scripts/release/run-clawsig-v0.2-package-prep.mjs)
 
-## Causal attribution tranche (shipped through CAV-US-026)
+## Causal attribution tranche (shipped through CAV-US-027)
 
 Decision freeze for causal attribution work is tracked in:
 
@@ -74,6 +74,7 @@ Shipped causal lanes on `main`:
 - ✅ `CAV-US-024` deterministic service-vs-core causal parity gate + burn-in lane — PR #327 (`a1bcd02f`)
 - ✅ `CAV-US-025` roadmap sync continuity through CAV-US-024 — PR #328 (`3d70e404`)
 - ✅ `CAV-US-026` causal fixture contract unification across parity/stability lanes — PR #329 (`510d563e`)
+- ✅ `CAV-US-027` signed causal parity/stability evidence contract for release gate — PR #330 (`b61f7933`)
 
 ## Prior art
 

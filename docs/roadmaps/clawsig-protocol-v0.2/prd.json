@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-026.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-027.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -406,11 +406,24 @@
       "priority": 31,
       "passes": true,
       "notes": "Shipped via PR #329 (merge 510d563e719ccb8deb26b202e3b7ea13d457f083): causal fixture contract checker + parity/stability integration + required workflow."
+    },
+    {
+      "id": "CAV-US-027",
+      "title": "Signed causal evidence expansion for release gate",
+      "description": "Expand signed release evidence contract so parity and reason-code stability summaries are mandatory, fresh, and cryptographically verified.",
+      "acceptanceCriteria": [
+        "Release flow signs service-core parity and reason-code stability summaries with deterministic message-prefix binding",
+        "Release checker validates freshness, presence, and Ed25519 signature correctness for burn-in + parity + stability summaries",
+        "Release guardrail workflow fails closed when any required summary is missing, stale, unsigned, or mismatched"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Shipped via PR #330 (merge b61f79338aa263efe17c63e7f54ca1a6c5ca2598): signed parity/stability evidence and fail-closed release contract expansion."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T23:45:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-026 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T23:58:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-027 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -507,6 +520,10 @@
       {
         "pr": "#329",
         "merge_commit": "510d563e719ccb8deb26b202e3b7ea13d457f083"
+      },
+      {
+        "pr": "#330",
+        "merge_commit": "b61f79338aa263efe17c63e7f54ca1a6c5ca2598"
       }
     ]
   }
