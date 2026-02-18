@@ -463,6 +463,7 @@ export async function wrap(
   // Harvest Network Sentinel events
   const netEvents = netSentinel.getEvents();
   const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
+  const interposeSummary = interposeOracle.getSummary(netEvents);
 
   // Merge interpose network receipts into network receipts
   const allNetworkReceipts = [...networkReceipts, ...interposeReceipts.network];
@@ -487,8 +488,11 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m TLS SNI intercepts: ${sniEvents.length} connections → ${sniGatewayReceipts.length} LLM domains\n`);
   }
   if (interposeOracle.totalEvents > 0) {
-    const oState = interposeOracle.getSummary();
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${oState.pid_tree_size} PIDs, ${oState.bound_ports.length} server ports${oState.bound_ports.length > 0 ? ` (${oState.bound_ports.join(',')})` : ''}, ${oState.env_audits} credentials, ${oState.cred_leaks} leaks\n`);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${interposeSummary.pid_tree_size} PIDs, ${interposeSummary.bound_ports.length} server ports${interposeSummary.bound_ports.length > 0 ? ` (${interposeSummary.bound_ports.join(',')})` : ''}, ${interposeSummary.env_audits} credentials, ${interposeSummary.cred_leaks} leaks\n`);
+  }
+
+  if (interposeSummary.cldd.escapes_suspected) {
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m CLDD: unmediated_connections=${interposeSummary.cldd.unmediated_connections}, unmonitored_spawns=${interposeSummary.cldd.unmonitored_spawns}, escapes_suspected=${interposeSummary.cldd.escapes_suspected}\n`);
   }
 
   if (netSentinel.suspiciousCount > 0) {
@@ -596,7 +600,7 @@ export async function wrap(
     preload_llm_events: preloadGatewayReceipts.length,
     tls_sni_events: sniEvents.length,
     tls_sni_receipts: sniGatewayReceipts.length,
-    interpose_state: interposeOracle.getSummary(),
+    interpose_state: interposeSummary,
   } as Record<string, unknown>;
 
   bundle.payload.metadata = {

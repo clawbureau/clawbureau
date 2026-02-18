@@ -66,6 +66,12 @@ export interface GenealogyReceiptNode {
   children: GenealogyReceiptNode[];
 }
 
+export interface ClddMetrics {
+  unmediated_connections: number;
+  unmonitored_spawns: number;
+  escapes_suspected: boolean;
+}
+
 const LLM_DOMAIN_PATTERN = /openai|anthropic|googleapis|cohere|mistral|deepseek|groq|together|x\.ai|openrouter|github\.com/;
 
 export class InterposeState {
@@ -309,7 +315,69 @@ export class InterposeState {
   isAgentServerPort(port: number): boolean { return this.boundPorts.has(port); }
   getHostnames(ip: string): string[] { return Array.from(this.dnsCache.get(ip) ?? []); }
 
-  getSummary() {
+  private normalizeEndpoint(endpoint: string): string {
+    const trimmed = endpoint.trim();
+    if (!trimmed) return '';
+
+    const hasBracketedIpv6 = trimmed.startsWith('[') && trimmed.includes(']');
+    if (hasBracketedIpv6) {
+      const end = trimmed.indexOf(']');
+      const host = trimmed.slice(1, end).toLowerCase();
+      const rest = trimmed.slice(end + 1);
+      const port = rest.startsWith(':') ? rest.slice(1) : '';
+      return port ? `${host}:${port}` : host;
+    }
+
+    const idx = trimmed.lastIndexOf(':');
+    if (idx <= 0 || idx === trimmed.length - 1) {
+      return trimmed.toLowerCase();
+    }
+
+    const host = trimmed.slice(0, idx).toLowerCase();
+    const port = trimmed.slice(idx + 1);
+    return `${host}:${port}`;
+  }
+
+  public computeClddMetrics(
+    netEvents: Array<{ pid: number | null; remoteAddress: string }> = []
+  ): ClddMetrics {
+    const unmonitoredSpawnPids = new Set<number>();
+    const unmediatedConnectionKeys = new Set<string>();
+
+    for (const event of netEvents) {
+      const remote = this.normalizeEndpoint(event.remoteAddress);
+      if (!remote) continue;
+
+      const pid = typeof event.pid === 'number' ? event.pid : null;
+      if (pid !== null && !this.pidTree.has(pid)) {
+        unmonitoredSpawnPids.add(pid);
+      }
+
+      const node = pid !== null ? this.agentNodes.get(pid) : null;
+      const mediated =
+        !!node &&
+        Array.from(node._networkConns).some(
+          (candidate) => this.normalizeEndpoint(candidate) === remote
+        );
+
+      if (!mediated) {
+        const key = `${pid ?? 'unknown'}::${remote}`;
+        unmediatedConnectionKeys.add(key);
+      }
+    }
+
+    const unmediated_connections = unmediatedConnectionKeys.size;
+    const unmonitored_spawns = unmonitoredSpawnPids.size;
+
+    return {
+      unmediated_connections,
+      unmonitored_spawns,
+      escapes_suspected:
+        unmediated_connections > 0 || unmonitored_spawns > 0,
+    };
+  }
+
+  getSummary(netEvents: Array<{ pid: number | null; remoteAddress: string }> = []) {
     const tree = this.getGenealogyTree();
     const harnesses: Array<{ pid: number; harness: string; role: string }> = [];
     for (const [, node] of this.agentNodes) {
@@ -327,6 +395,7 @@ export class InterposeState {
       recv_samples: this.recvSamples.length,
       total_events: this.totalEvents,
       max_seq: this.maxSeq,
+      cldd: this.computeClddMetrics(netEvents),
       detected_harnesses: harnesses.length > 0 ? harnesses : undefined,
       genealogy_tree: tree ?? undefined,
     };

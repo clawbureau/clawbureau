@@ -370,7 +370,9 @@ export type VerificationErrorCode =
   | 'RATE_LIMIT_WINDOW_INVALID'
   | 'CAUSAL_REFERENCE_DANGLING'
   | 'CAUSAL_CYCLE_DETECTED'
-  | 'INVALID_ATTRIBUTION_CONFIDENCE'
+  | 'CAUSAL_PHASE_INVALID'
+  | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
+  | 'COVERAGE_CLDD_DISCREPANCY_ENFORCED'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
   | 'PROMPT_COMMITMENT_MISMATCH'
@@ -1042,7 +1044,22 @@ export interface SentinelTelemetry {
   tls_sni_receipts?: number;
   tls_decrypt_receipts?: number;
   vir_receipts?: number;
-  interpose_state?: Record<string, unknown>;
+  interpose_state?: {
+    pid_tree_size?: number;
+    bound_ports?: number[];
+    dns_entries?: number;
+    env_audits?: number;
+    cred_leaks?: number;
+    recv_samples?: number;
+    total_events?: number;
+    max_seq?: number;
+    cldd?: {
+      unmediated_connections: number;
+      unmonitored_spawns: number;
+      escapes_suspected: boolean;
+    };
+    [key: string]: unknown;
+  };
 }
 
 export interface CoverageAttestationPayload {
@@ -1275,6 +1292,24 @@ export interface ProofBundleVerificationResult {
     coverage_attestations_signature_verified_count?: number;
     /** Number of coverage attestations that passed verification + bundle binding + semantic invariants. */
     coverage_attestations_verified_count?: number;
+    /** Optional runtime-reported CLDD metrics from payload.metadata.sentinels.interpose_state.cldd. */
+    coverage_cldd_claimed_metrics?: {
+      unmediated_connections: number;
+      unmonitored_spawns: number;
+      escapes_suspected: boolean;
+    };
+    /** Aggregated CLDD metrics from verified coverage attestations (max counts + OR bool). */
+    coverage_cldd_attested_metrics?: {
+      unmediated_connections: number;
+      unmonitored_spawns: number;
+      escapes_suspected: boolean;
+    };
+    /** CLDD metric names that differ between runtime telemetry and attested coverage metrics. */
+    coverage_cldd_mismatch_fields?: Array<
+      'unmediated_connections' | 'unmonitored_spawns' | 'escapes_suspected'
+    >;
+    /** True when CLDD metrics mismatch between runtime telemetry and coverage attestation evidence. */
+    coverage_cldd_discrepancy?: boolean;
     /** Number of binary semantic evidence attestations that passed cryptographic signature+hash verification. */
     binary_semantic_evidence_signature_verified_count?: number;
     /** Number of binary semantic evidence attestations that passed deterministic policy evaluation (VALID/PARTIAL/INAPPLICABLE). */

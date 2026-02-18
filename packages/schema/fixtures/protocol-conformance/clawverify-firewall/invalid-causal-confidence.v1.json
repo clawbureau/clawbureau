@@ -3,6 +3,6 @@
   "scenario": "invalid_causal_confidence",
   "expected": {
     "status": "INVALID",
-    "error_code": "INVALID_ATTRIBUTION_CONFIDENCE"
+    "error_code": "CAUSAL_CONFIDENCE_OUT_OF_RANGE"
   }
 }

@@ -192,11 +192,24 @@ function jsonByteSize(value: unknown): number {
   }
 }
 
-function isCausalSchemaValidationField(field: string | undefined): boolean {
-  if (!field) return false;
-  return /(^|\.)binding\.(span_id|parent_span_id|tool_span_id|phase|attribution_confidence)(\.|$|\[)/.test(
-    field
-  );
+function classifyCausalSchemaValidationCode(
+  field: string | undefined
+): 'MALFORMED_ENVELOPE' | 'CAUSAL_PHASE_INVALID' | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE' | null {
+  if (!field) return null;
+
+  if (/(^|\.)binding\.phase(\.|$|\[)/.test(field)) {
+    return 'CAUSAL_PHASE_INVALID';
+  }
+
+  if (/(^|\.)binding\.attribution_confidence(\.|$|\[)/.test(field)) {
+    return 'CAUSAL_CONFIDENCE_OUT_OF_RANGE';
+  }
+
+  if (/(^|\.)binding\.(span_id|parent_span_id|tool_span_id)(\.|$|\[)/.test(field)) {
+    return 'MALFORMED_ENVELOPE';
+  }
+
+  return null;
 }
 
 /**
@@ -1045,6 +1058,7 @@ async function verifyCoverageAttestationEnvelope(
   sentinel_did?: string;
   error?: string;
   risk_flags?: string[];
+  cldd_metrics?: ClddMetrics;
 }> {
   const verification = await verifyCoverageAttestation(attestation, {
     allowlistedSignerDids,
@@ -1134,6 +1148,13 @@ async function verifyCoverageAttestationEnvelope(
         ? undefined
         : 'Coverage attestation failed bundle binding or coverage invariants',
     risk_flags: riskFlags.length > 0 ? riskFlags : undefined,
+    cldd_metrics: metrics
+      ? {
+          unmediated_connections: metrics.egress.unmediated_connections,
+          unmonitored_spawns: metrics.lineage.unmonitored_spawns,
+          escapes_suspected: metrics.lineage.escapes_suspected,
+        }
+      : undefined,
   };
 }
 
@@ -1141,12 +1162,210 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+interface ClddMetrics {
+  unmediated_connections: number;
+  unmonitored_spawns: number;
+  escapes_suspected: boolean;
+}
+
+interface ClddDiscrepancySummary {
+  claimed: ClddMetrics | null;
+  attested: ClddMetrics | null;
+  mismatch_fields: Array<keyof ClddMetrics>;
+  risk_flags: string[];
+  discrepancy: boolean;
+}
+
+const ALLOWED_CAUSAL_PHASES = new Set([
+  'setup',
+  'planning',
+  'reasoning',
+  'execution',
+  'observation',
+  'reflection',
+  'teardown',
+]);
+
 interface CausalBindingEntry {
   path: string;
   spanId?: string;
   parentSpanId?: string;
   toolSpanId?: string;
+  phase?: unknown;
   attributionConfidence?: unknown;
+}
+
+function toNonNegativeInteger(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function parseClddMetricsClaim(
+  metadataRecord: Record<string, unknown> | null
+):
+  | { ok: true; metrics: ClddMetrics | null }
+  | {
+      ok: false;
+      message: string;
+      field: string;
+    } {
+  if (!metadataRecord) {
+    return { ok: true, metrics: null };
+  }
+
+  const sentinels = isObjectRecord(metadataRecord.sentinels)
+    ? metadataRecord.sentinels
+    : null;
+
+  if (!sentinels) {
+    return { ok: true, metrics: null };
+  }
+
+  const interposeState = isObjectRecord(sentinels.interpose_state)
+    ? sentinels.interpose_state
+    : null;
+
+  if (!interposeState) {
+    return { ok: true, metrics: null };
+  }
+
+  const clddRaw = interposeState.cldd;
+  if (clddRaw === undefined) {
+    return { ok: true, metrics: null };
+  }
+
+  if (!isObjectRecord(clddRaw)) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.sentinels.interpose_state.cldd must be an object when present',
+      field: 'payload.metadata.sentinels.interpose_state.cldd',
+    };
+  }
+
+  const unmediatedConnections = toNonNegativeInteger(
+    clddRaw.unmediated_connections
+  );
+  if (unmediatedConnections === null) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.sentinels.interpose_state.cldd.unmediated_connections must be a non-negative integer',
+      field:
+        'payload.metadata.sentinels.interpose_state.cldd.unmediated_connections',
+    };
+  }
+
+  const unmonitoredSpawns = toNonNegativeInteger(clddRaw.unmonitored_spawns);
+  if (unmonitoredSpawns === null) {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.sentinels.interpose_state.cldd.unmonitored_spawns must be a non-negative integer',
+      field:
+        'payload.metadata.sentinels.interpose_state.cldd.unmonitored_spawns',
+    };
+  }
+
+  if (typeof clddRaw.escapes_suspected !== 'boolean') {
+    return {
+      ok: false,
+      message:
+        'payload.metadata.sentinels.interpose_state.cldd.escapes_suspected must be a boolean',
+      field:
+        'payload.metadata.sentinels.interpose_state.cldd.escapes_suspected',
+    };
+  }
+
+  return {
+    ok: true,
+    metrics: {
+      unmediated_connections: unmediatedConnections,
+      unmonitored_spawns: unmonitoredSpawns,
+      escapes_suspected: clddRaw.escapes_suspected,
+    },
+  };
+}
+
+function aggregateCoverageClddMetrics(
+  coverageResults: Array<{ cldd_metrics?: ClddMetrics }>
+): ClddMetrics | null {
+  let aggregate: ClddMetrics | null = null;
+
+  for (const result of coverageResults) {
+    if (!result.cldd_metrics) continue;
+
+    if (!aggregate) {
+      aggregate = {
+        unmediated_connections: result.cldd_metrics.unmediated_connections,
+        unmonitored_spawns: result.cldd_metrics.unmonitored_spawns,
+        escapes_suspected: result.cldd_metrics.escapes_suspected,
+      };
+      continue;
+    }
+
+    aggregate = {
+      unmediated_connections: Math.max(
+        aggregate.unmediated_connections,
+        result.cldd_metrics.unmediated_connections
+      ),
+      unmonitored_spawns: Math.max(
+        aggregate.unmonitored_spawns,
+        result.cldd_metrics.unmonitored_spawns
+      ),
+      escapes_suspected:
+        aggregate.escapes_suspected || result.cldd_metrics.escapes_suspected,
+    };
+  }
+
+  return aggregate;
+}
+
+function evaluateClddDiscrepancy(
+  claimed: ClddMetrics | null,
+  attested: ClddMetrics | null
+): ClddDiscrepancySummary {
+  if (!claimed || !attested) {
+    return {
+      claimed,
+      attested,
+      mismatch_fields: [],
+      risk_flags: [],
+      discrepancy: false,
+    };
+  }
+
+  const mismatchFields: Array<keyof ClddMetrics> = [];
+  const riskFlags: string[] = [];
+
+  if (claimed.unmediated_connections !== attested.unmediated_connections) {
+    mismatchFields.push('unmediated_connections');
+    riskFlags.push('COVERAGE_CLDD_UNMEDIATED_CONNECTIONS_MISMATCH');
+  }
+
+  if (claimed.unmonitored_spawns !== attested.unmonitored_spawns) {
+    mismatchFields.push('unmonitored_spawns');
+    riskFlags.push('COVERAGE_CLDD_UNMONITORED_SPAWNS_MISMATCH');
+  }
+
+  if (claimed.escapes_suspected !== attested.escapes_suspected) {
+    mismatchFields.push('escapes_suspected');
+    riskFlags.push('COVERAGE_CLDD_ESCAPES_SUSPECTED_MISMATCH');
+  }
+
+  if (mismatchFields.length > 0) {
+    riskFlags.unshift('COVERAGE_CLDD_DISCREPANCY');
+  }
+
+  return {
+    claimed,
+    attested,
+    mismatch_fields: mismatchFields,
+    risk_flags: riskFlags,
+    discrepancy: mismatchFields.length > 0,
+  };
 }
 
 function toCausalBindingEntry(
@@ -1157,6 +1376,7 @@ function toCausalBindingEntry(
     Object.prototype.hasOwnProperty.call(binding, 'span_id') ||
     Object.prototype.hasOwnProperty.call(binding, 'parent_span_id') ||
     Object.prototype.hasOwnProperty.call(binding, 'tool_span_id') ||
+    Object.prototype.hasOwnProperty.call(binding, 'phase') ||
     Object.prototype.hasOwnProperty.call(binding, 'attribution_confidence');
 
   if (!hasCausalField) {
@@ -1179,6 +1399,7 @@ function toCausalBindingEntry(
       binding.tool_span_id.trim().length > 0
         ? binding.tool_span_id
         : undefined,
+    phase: binding.phase,
     attributionConfidence: binding.attribution_confidence,
   };
 }
@@ -1245,7 +1466,8 @@ function validateCausalBindingEntries(
       code:
         | 'CAUSAL_REFERENCE_DANGLING'
         | 'CAUSAL_CYCLE_DETECTED'
-        | 'INVALID_ATTRIBUTION_CONFIDENCE';
+        | 'CAUSAL_PHASE_INVALID'
+        | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE';
       message: string;
       field: string;
     } {
@@ -1259,6 +1481,19 @@ function validateCausalBindingEntries(
   }
 
   for (const entry of entries) {
+    if (entry.phase !== undefined) {
+      const phase = entry.phase;
+      if (typeof phase !== 'string' || !ALLOWED_CAUSAL_PHASES.has(phase)) {
+        return {
+          ok: false,
+          code: 'CAUSAL_PHASE_INVALID',
+          message:
+            'binding.phase must be one of setup|planning|reasoning|execution|observation|reflection|teardown',
+          field: `${entry.path}.phase`,
+        };
+      }
+    }
+
     if (entry.attributionConfidence !== undefined) {
       const confidence = entry.attributionConfidence;
       if (
@@ -1269,7 +1504,7 @@ function validateCausalBindingEntries(
       ) {
         return {
           ok: false,
-          code: 'INVALID_ATTRIBUTION_CONFIDENCE',
+          code: 'CAUSAL_CONFIDENCE_OUT_OF_RANGE',
           message:
             'binding.attribution_confidence must be a finite number in inclusive range [0.0, 1.0]',
           field: `${entry.path}.attribution_confidence`,
@@ -1988,9 +2223,8 @@ export async function verifyProofBundle(
   // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
   const schemaResult = validateProofBundleEnvelopeV1(envelope);
   if (!schemaResult.valid) {
-    const schemaErrorCode = isCausalSchemaValidationField(schemaResult.field)
-      ? 'MALFORMED_ENVELOPE'
-      : 'SCHEMA_VALIDATION_FAILED';
+    const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
+    const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
 
     return {
       result: {
@@ -2995,6 +3229,24 @@ export async function verifyProofBundle(
 
   const metadataRecord = isObjectRecord(payload.metadata) ? payload.metadata : null;
 
+  const clddMetricsClaim = parseClddMetricsClaim(metadataRecord);
+  if (!clddMetricsClaim.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: clddMetricsClaim.message,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+      },
+      error: {
+        code: 'MALFORMED_ENVELOPE',
+        message: clddMetricsClaim.message,
+        field: clddMetricsClaim.field,
+      },
+    };
+  }
+
   const metadataBountyNonce =
     metadataRecord && typeof metadataRecord.bounty_nonce === 'string'
       ? metadataRecord.bounty_nonce
@@ -3646,6 +3898,8 @@ export async function verifyProofBundle(
       ? options.maxCoverageLivenessGapMs
       : 1_000;
 
+  let coverageAttestedClddMetrics: ClddMetrics | null = null;
+
   // Verify coverage attestations (CVF-US-057)
   if (payload.coverage_attestations !== undefined && payload.coverage_attestations.length > 0) {
     const coverageResults = await Promise.all(
@@ -3668,6 +3922,8 @@ export async function verifyProofBundle(
     componentResults.coverage_attestations_verified_count = verifiedCount;
     componentResults.coverage_attestations_valid =
       verifiedCount === payload.coverage_attestations.length;
+
+    coverageAttestedClddMetrics = aggregateCoverageClddMetrics(coverageResults);
 
     for (const r of coverageResults) {
       if (r.risk_flags) {
@@ -4069,6 +4325,25 @@ export async function verifyProofBundle(
   const coverageVerifiedCount = componentResults.coverage_attestations_verified_count ?? 0;
   const hasCoverageEvidence = coverageCount > 0;
 
+  const clddDiscrepancy = evaluateClddDiscrepancy(
+    clddMetricsClaim.metrics,
+    coverageAttestedClddMetrics
+  );
+
+  componentResults.coverage_cldd_claimed_metrics =
+    clddDiscrepancy.claimed ?? undefined;
+  componentResults.coverage_cldd_attested_metrics =
+    clddDiscrepancy.attested ?? undefined;
+  componentResults.coverage_cldd_mismatch_fields =
+    clddDiscrepancy.mismatch_fields.length > 0
+      ? [...clddDiscrepancy.mismatch_fields]
+      : undefined;
+  componentResults.coverage_cldd_discrepancy = clddDiscrepancy.discrepancy;
+
+  for (const flag of clddDiscrepancy.risk_flags) {
+    modelIdentityRiskFlags.add(flag);
+  }
+
   const coverageInvariantFailed =
     hasCoverageEvidence && coverageVerifiedCount < coverageCount;
 
@@ -4087,6 +4362,34 @@ export async function verifyProofBundle(
 
   if (requiredCoverageMissing) {
     modelIdentityRiskFlags.add('COVERAGE_REQUIRED_MISSING');
+  }
+
+  if (enforcementPhase === 'enforce' && clddDiscrepancy.discrepancy) {
+    const reason =
+      'Coverage enforcement is set to enforce and CLDD discrepancy was detected between runtime telemetry and coverage attestations';
+
+    return {
+      result: {
+        status: 'INVALID',
+        reason,
+        verified_at: now,
+        bundle_id: payload.bundle_id,
+        agent_did: payload.agent_did,
+        trust_tier: trustTier,
+        proof_tier: proofTier,
+        model_identity_tier: modelIdentityTier,
+        risk_flags:
+          modelIdentityRiskFlags.size > 0
+            ? [...modelIdentityRiskFlags].sort()
+            : undefined,
+        component_results: componentResults,
+      },
+      error: {
+        code: 'COVERAGE_CLDD_DISCREPANCY_ENFORCED',
+        message: reason,
+        field: 'payload.coverage_attestations',
+      },
+    };
   }
 
   if (enforcementPhase === 'enforce' && (requiredCoverageMissing || coverageInvariantFailed)) {
