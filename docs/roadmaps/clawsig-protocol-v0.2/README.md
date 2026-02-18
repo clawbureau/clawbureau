@@ -6,7 +6,7 @@
 
 # Clawsig Protocol v0.2
 
-**Status summary:** v0.2 is fully shipped on `main`. Final remaining lane (CPL-V2-001) merged via PR #285.
+**Status summary:** v0.2 core is fully shipped on `main`, and the causal attribution hardening tranche is shipped through `CAV-US-015` (merge PR #318).
 
 ## Shipped stories
 
@@ -40,20 +40,29 @@
 - machine-readable checklist: [`docs/releases/clawsig-v0.2-package-release-checklist.v1.json`](../../releases/clawsig-v0.2-package-release-checklist.v1.json)
 - release-prep pack/install runner: [`scripts/release/run-clawsig-v0.2-package-prep.mjs`](../../../scripts/release/run-clawsig-v0.2-package-prep.mjs)
 
-## Next tranche (planned)
+## Causal attribution tranche (shipped through CAV-US-015)
 
 Decision freeze for causal attribution work is tracked in:
 
 - [`CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md`](../../specs/clawsig-protocol/CAUSAL_ATTRIBUTION_IMPLEMENTATION_CONTRACT_v0.3.md)
 
-Current tranche status:
+Shipped causal lanes on `main`:
 
-- ✅ `CAV-US-001` additive causal binding schema contract (shipped)
-- ✅ `CAV-US-002` fail-closed causal DAG verifier checks (shipped)
-- ✅ `CAV-US-003` runtime tool-span emission wiring (shipped)
-- ✅ `CAV-US-004` CLDD discrepancy enforcement + reason-code closure (shipped)
-- ✅ `CAV-US-005` tracer confidence/CLDD delivery surface (shipped)
-- ✅ `CAV-US-006` causal/CLDD fixture + CI guardrails (shipped)
+- ✅ `CAV-US-001` additive causal binding schema contract — PR #305 (`9d9eb79a`)
+- ✅ `CAV-US-002` fail-closed causal DAG verifier checks — PR #305 (`9d9eb79a`)
+- ✅ `CAV-US-003` runtime tool-span emission wiring — PR #306 (`934bace6`)
+- ✅ `CAV-US-004` CLDD discrepancy enforcement + reason-code closure — PR #307 (`392162e8`)
+- ✅ `CAV-US-005` tracer confidence/CLDD delivery surface — PR #308 (`ec382f18`)
+- ✅ `CAV-US-006` causal/CLDD fixture + CI guardrails — PR #309 (`3c6db794`)
+- ✅ `CAV-US-007` causal binding normalization hardening — PR #310 (`7344fca0`)
+- ✅ `CAV-US-008` causal confidence overclaim enforcement — PR #311 (`8071fa99`)
+- ✅ `CAV-US-009` causal replay/span-reuse guardrails — PR #312 (`b4fafa2a`)
+- ✅ `CAV-US-010` reason-code parity + explain coverage closure — PR #313 (`2ac4ccd3`)
+- ✅ `CAV-US-011` causal connectivity/orphan enforcement — PR #314 (`6b543532`)
+- ✅ `CAV-US-012` causal mutation-evasion guardrails — PR #315 (`dae42d87`)
+- ✅ `CAV-US-013` causal clock monotonicity + phase transition automaton — PR #316 (`d708c4bd`)
+- ✅ `CAV-US-014` aggregate causal consistency — PR #317 (`b1b0e989`)
+- ✅ `CAV-US-015` causal integrity burn-in meta gate — PR #318 (`adfec1f3`)
 
 ## Prior art
 
