@@ -1,0 +1,141 @@
+name: causal-integrity-burnin
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-cldd/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-hardening/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-connectivity/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-clock/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/check-reason-code-parity.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - 'scripts/protocol/run-clawverify-causal-cldd-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-hardening-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-connectivity-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-clock-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs'
+      - '.github/workflows/causal-integrity-burnin.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-cldd/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-hardening/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-connectivity/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-clock/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/check-reason-code-parity.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - 'scripts/protocol/run-clawverify-causal-cldd-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-hardening-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-connectivity-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-clock-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs'
+      - '.github/workflows/causal-integrity-burnin.yml'
+  schedule:
+    - cron: '43 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  causal-integrity-burnin-quick:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
+      - name: Install clawverify-cli deps
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+
+      - name: Run causal integrity burn-in (quick)
+        run: |
+          node scripts/protocol/run-causal-integrity-burnin.mjs --mode quick --mutation-subset quick
+
+      - name: Upload burn-in summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-integrity-burnin-quick-summary
+          path: artifacts/ops/causal-integrity-burnin/
+          if-no-files-found: ignore
+
+  causal-integrity-nightly-matrix:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mutation_subset: [quick, full]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
+      - name: Install clawverify-cli deps
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+
+      - name: Run nightly burn-in matrix lane
+        run: |
+          node scripts/protocol/run-causal-integrity-burnin.mjs --mode nightly --mutation-subset ${{ matrix.mutation_subset }}
+
+      - name: Upload nightly burn-in summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-integrity-burnin-${{ matrix.mutation_subset }}-summary
+          path: artifacts/ops/causal-integrity-burnin/
+          if-no-files-found: ignore
