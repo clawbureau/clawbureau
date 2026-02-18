@@ -592,3 +592,32 @@ Deliverables:
 Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-019/020/021 continuity sync closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-021 on `main`.
+
+Shipped merge references:
+- CAV-US-019 — PR #322 (`ede03d37`)
+- CAV-US-020 — PR #323 (`75feadba`)
+- CAV-US-021 — PR #324 (`03c1a893`)
+
+Deliverables:
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+- Hardened roadmap drift checker:
+  - `scripts/docs/check-cav-roadmap-sync.mjs`
+  - enforces latest merged-lane window parity (`through CAV-US-XXX`) in README and `prd.json` metadata status.
+- Expanded required CI trigger coverage:
+  - `.github/workflows/cav-roadmap-sync.yml`
+  - now runs for CAV-relevant protocol runners, release evidence scripts, and causal/release workflow deltas (not only docs edits).
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+- `node scripts/protocol/check-reason-code-parity.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅
+- `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
