@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-025.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-026.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -393,11 +393,24 @@
       "priority": 30,
       "passes": true,
       "notes": "Shipped via PR #328 (merge 3d70e40423dbce36840a05d4467e821ec28958f9): roadmap sync through CAV-US-024 with continuity gate green."
+    },
+    {
+      "id": "CAV-US-026",
+      "title": "Causal fixture contract unification",
+      "description": "Introduce canonical fixture-contract validation and enforce it in parity + reason-code stability lanes with required CI gating.",
+      "acceptanceCriteria": [
+        "Fixture contract checker enforces manifest integrity, fixture id uniqueness, and invalid expected.error_code requirements across causal suites",
+        "Service-core parity and reason-code stability runners fail-closed when fixture contract check fails",
+        "Required CI workflow validates fixture contract and publishes contract summary artifact"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Shipped via PR #329 (merge 510d563e719ccb8deb26b202e3b7ea13d457f083): causal fixture contract checker + parity/stability integration + required workflow."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T23:35:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-025 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T23:45:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-026 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -490,6 +503,10 @@
       {
         "pr": "#328",
         "merge_commit": "3d70e40423dbce36840a05d4467e821ec28958f9"
+      },
+      {
+        "pr": "#329",
+        "merge_commit": "510d563e719ccb8deb26b202e3b7ea13d457f083"
       }
     ]
   }

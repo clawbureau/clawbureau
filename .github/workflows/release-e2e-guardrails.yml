@@ -9,6 +9,7 @@ on:
       - 'scripts/release/check-real-usecase-evidence-pack.mjs'
       - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
       - 'scripts/release/sign-causal-integrity-evidence-pack.mjs'
+      - 'scripts/release/sign-causal-parity-evidence-pack.mjs'
       - 'scripts/protocol/run-causal-integrity-burnin.mjs'
       - 'scripts/protocol/run-clawverify-causal-*.mjs'
       - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
@@ -28,6 +29,7 @@ on:
       - 'scripts/release/check-real-usecase-evidence-pack.mjs'
       - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
       - 'scripts/release/sign-causal-integrity-evidence-pack.mjs'
+      - 'scripts/release/sign-causal-parity-evidence-pack.mjs'
       - 'scripts/protocol/run-causal-integrity-burnin.mjs'
       - 'scripts/protocol/run-clawverify-causal-*.mjs'
       - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
@@ -106,18 +108,29 @@ jobs:
         run: |
           node scripts/protocol/run-causal-integrity-burnin.mjs --mode quick --mutation-subset quick
 
+      - name: Run causal reason-code stability lane
+        run: |
+          node scripts/protocol/run-clawverify-causal-reason-code-stability.mjs
+
       - name: Sign causal integrity evidence pack
         run: |
           node scripts/release/sign-causal-integrity-evidence-pack.mjs
 
+      - name: Sign causal parity evidence pack
+        run: |
+          node scripts/release/sign-causal-parity-evidence-pack.mjs
+
       - name: Validate causal integrity evidence contract
         run: |
-          node scripts/release/check-causal-integrity-evidence-pack.mjs --max-age-minutes 30 --require-mode quick --require-mutation-subset quick --require-signed true
+          node scripts/release/check-causal-integrity-evidence-pack.mjs --max-age-minutes 30 --require-mode quick --require-mutation-subset quick --require-signed true --require-signed-parity true --require-signed-stability true
 
       - name: Upload causal integrity evidence summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-causal-integrity-evidence-summary
-          path: artifacts/ops/causal-integrity-burnin/
+          path: |
+            artifacts/ops/causal-integrity-burnin/
+            artifacts/ops/causal-service-core-parity/
+            artifacts/ops/causal-reason-code-stability/
           if-no-files-found: ignore
