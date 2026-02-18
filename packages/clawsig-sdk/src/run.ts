@@ -71,6 +71,18 @@ async function computeEventHash(entry: {
   return hashJsonB64u(canonical);
 }
 
+function sanitizeSpanSeed(seed: string): string {
+  const normalized = seed
+    .replace(/[^A-Za-z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized.length > 0 ? normalized.slice(0, 64) : randomUUID().replace(/-/g, '');
+}
+
+function deriveSpanId(kind: 'llm' | 'tool' | 'side' | 'approval', seed: string): string {
+  return `span_${kind}_${sanitizeSpanSeed(seed)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Receipt bridging (camelCase → snake_case)
 // ---------------------------------------------------------------------------
@@ -103,6 +115,13 @@ function bridgeReceipt(
     if (r.binding.policyHash) payload.binding.policy_hash = r.binding.policyHash;
     if (r.binding.tokenScopeHashB64u)
       payload.binding.token_scope_hash_b64u = r.binding.tokenScopeHashB64u;
+    if (r.binding.spanId) payload.binding.span_id = r.binding.spanId;
+    if (r.binding.parentSpanId) payload.binding.parent_span_id = r.binding.parentSpanId;
+    if (r.binding.toolSpanId) payload.binding.tool_span_id = r.binding.toolSpanId;
+    if (r.binding.phase) payload.binding.phase = r.binding.phase;
+    if (r.binding.attributionConfidence !== undefined) {
+      payload.binding.attribution_confidence = r.binding.attributionConfidence;
+    }
   }
 
   return {
@@ -193,6 +212,10 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
   const sideEffectReceipts: SideEffectReceiptArtifact[] = [];
   const humanApprovalReceipts: HumanApprovalReceiptArtifact[] = [];
 
+  // Deterministic causal lineage pointers (CAV-US-003).
+  let lastLlmSpanId: string | undefined;
+  let lastToolSpanId: string | undefined;
+
   // Use closure-based methods to avoid `this` binding issues in object literals.
 
   async function recordEvent(input: RecordEventInput) {
@@ -239,13 +262,14 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
   }
 
   async function recordToolCall(params: ToolCallParams): Promise<ToolReceiptArtifact> {
-    const { binding } = await recordEvent({
+    const { event, binding } = await recordEvent({
       eventType: 'tool_call',
       payload: { tool_name: params.toolName, tool_version: params.toolVersion },
     });
 
     const argsHashB64u = await hashJsonB64u(params.args);
     const resultHashB64u = await hashJsonB64u(params.result);
+    const toolSpanId = deriveSpanId('tool', event.eventHashB64u);
 
     const receipt: ToolReceiptPayload = {
       receipt_version: '1',
@@ -263,6 +287,11 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
         run_id: binding.runId,
         event_hash_b64u: binding.eventHash,
         nonce: binding.nonce,
+        span_id: toolSpanId,
+        parent_span_id: lastLlmSpanId,
+        tool_span_id: toolSpanId,
+        phase: 'execution',
+        attribution_confidence: 1.0,
       },
     };
 
@@ -274,11 +303,12 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     };
 
     toolReceipts.push(artifact);
+    lastToolSpanId = toolSpanId;
     return artifact;
   }
 
   async function recordSideEffect(params: SideEffectParams): Promise<SideEffectReceiptArtifact> {
-    const { binding } = await recordEvent({
+    const { event, binding } = await recordEvent({
       eventType: 'side_effect',
       payload: { effect_class: params.effectClass, vendor_id: params.vendorId },
     });
@@ -286,6 +316,8 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
     const targetHashB64u = await hashJsonB64u(params.target);
     const requestHashB64u = await hashJsonB64u(params.request);
     const responseHashB64u = await hashJsonB64u(params.response);
+    const sideSpanId = deriveSpanId('side', event.eventHashB64u);
+    const confidence = lastToolSpanId ? 1.0 : 0.0;
 
     const receipt: SideEffectReceiptPayload = {
       receipt_version: '1',
@@ -305,6 +337,11 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
         run_id: binding.runId,
         event_hash_b64u: binding.eventHash,
         nonce: binding.nonce,
+        span_id: sideSpanId,
+        parent_span_id: lastToolSpanId,
+        tool_span_id: lastToolSpanId,
+        phase: lastToolSpanId ? 'observation' : 'execution',
+        attribution_confidence: confidence,
       },
     };
 
@@ -320,13 +357,14 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
   }
 
   async function recordHumanApproval(params: HumanApprovalParams): Promise<HumanApprovalReceiptArtifact> {
-    const { binding } = await recordEvent({
+    const { event, binding } = await recordEvent({
       eventType: 'human_approval',
       payload: { approval_type: params.approvalType, approver_subject: params.approverSubject },
     });
 
     const scopeHashB64u = await hashJsonB64u(params.scopeClaims);
     const planHashB64u = params.plan !== undefined ? await hashJsonB64u(params.plan) : undefined;
+    const approvalSpanId = deriveSpanId('approval', event.eventHashB64u);
 
     const receipt: HumanApprovalReceiptPayload = {
       receipt_version: '1',
@@ -348,6 +386,11 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
         run_id: binding.runId,
         event_hash_b64u: binding.eventHash,
         nonce: binding.nonce,
+        span_id: approvalSpanId,
+        parent_span_id: lastToolSpanId ?? lastLlmSpanId,
+        tool_span_id: lastToolSpanId,
+        phase: 'reflection',
+        attribution_confidence: 1.0,
       },
     };
 
@@ -363,11 +406,19 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
   }
 
   async function callLLM(params: LLMCallParams): Promise<LLMCallResult> {
-    // Record the LLM call event to get binding context
-    const { binding } = await recordEvent({
+    // Record the LLM call event to get binding context.
+    const { event, binding } = await recordEvent({
       eventType: 'llm_call',
       payload: { provider: params.provider, model: params.model },
     });
+
+    const llmSpanId = deriveSpanId('llm', event.eventHashB64u);
+    binding.spanId = llmSpanId;
+    binding.parentSpanId = lastToolSpanId;
+    binding.toolSpanId = lastToolSpanId;
+    binding.phase = 'observation';
+    binding.attributionConfidence = 1.0;
+    lastLlmSpanId = llmSpanId;
 
     // Build proxy URL (aligned with clawproxy: POST /v1/proxy/:provider)
     const proxyUrl = `${config.proxyBaseUrl.replace(/\/$/, '')}/v1/proxy/${params.provider}`;
@@ -378,6 +429,13 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
       'X-Run-Id': binding.runId,
       ...(binding.eventHash ? { 'X-Event-Hash': binding.eventHash } : {}),
       ...(binding.nonce ? { 'X-Idempotency-Key': binding.nonce } : {}),
+      ...(binding.spanId ? { 'X-Span-Id': binding.spanId } : {}),
+      ...(binding.parentSpanId ? { 'X-Parent-Span-Id': binding.parentSpanId } : {}),
+      ...(binding.toolSpanId ? { 'X-Tool-Span-Id': binding.toolSpanId } : {}),
+      ...(binding.phase ? { 'X-Causal-Phase': binding.phase } : {}),
+      ...(binding.attributionConfidence !== undefined
+        ? { 'X-Attribution-Confidence': String(binding.attributionConfidence) }
+        : {}),
     };
 
     const extra = params.headers ?? {};
@@ -430,14 +488,33 @@ export async function createRun(config: ClawproofConfig): Promise<ClawproofRun> 
 
     const receiptEnvelope = extractReceiptEnvelope(responseBody);
 
-    // Extract receipt from _receipt field
+    // Extract receipt from _receipt field.
+    // Legacy payloads may omit causal fields; when absent we attach deterministic
+    // runtime linkage in the legacy bridge object (never mutating signed envelopes).
     if (responseBody._receipt) {
       const rawReceipt = responseBody._receipt as ClawproxyReceipt;
+      const mergedBinding = {
+        ...(rawReceipt.binding ?? {}),
+        runId: rawReceipt.binding?.runId ?? binding.runId,
+        eventHash: rawReceipt.binding?.eventHash ?? binding.eventHash,
+        nonce: rawReceipt.binding?.nonce ?? binding.nonce,
+        spanId: rawReceipt.binding?.spanId ?? binding.spanId,
+        parentSpanId: rawReceipt.binding?.parentSpanId ?? binding.parentSpanId,
+        toolSpanId: rawReceipt.binding?.toolSpanId ?? binding.toolSpanId,
+        phase: rawReceipt.binding?.phase ?? binding.phase,
+        attributionConfidence:
+          rawReceipt.binding?.attributionConfidence ??
+          binding.attributionConfidence,
+      };
+
       receipt = {
         type: 'clawproxy_receipt',
         collectedAt: new Date().toISOString(),
         model: params.model,
-        receipt: rawReceipt,
+        receipt: {
+          ...rawReceipt,
+          binding: mergedBinding,
+        },
         receiptEnvelope,
       };
       addReceipt(receipt);

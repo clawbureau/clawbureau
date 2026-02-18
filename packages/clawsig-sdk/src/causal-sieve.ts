@@ -100,6 +100,46 @@ export interface LocalPolicy {
   statements: LocalPolicyStatement[];
 }
 
+type CausalPhase =
+  | 'setup'
+  | 'planning'
+  | 'reasoning'
+  | 'execution'
+  | 'observation'
+  | 'reflection'
+  | 'teardown';
+
+export interface CausalBindingFields {
+  spanId?: string;
+  parentSpanId?: string;
+  toolSpanId?: string;
+  phase?: CausalPhase;
+  attributionConfidence?: number;
+}
+
+interface ToolSpanContext {
+  spanId: string;
+  parentSpanId?: string;
+  openedAt: string;
+}
+
+function sanitizeSpanSeed(seed: string): string {
+  const normalized = seed
+    .replace(/[^A-Za-z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return normalized.length > 0 ? normalized.slice(0, 64) : randomUUID().replace(/-/g, '');
+}
+
+function deriveSpanId(kind: 'gateway' | 'tool' | 'side', seed: string): string {
+  return `span_${kind}_${sanitizeSpanSeed(seed)}`;
+}
+
+interface ProcessLLMResponseContext {
+  gatewaySpanId?: string;
+}
+
 // ---------------------------------------------------------------------------
 // LLM Response Parsing — Extract tool_calls from HTTP bodies
 // ---------------------------------------------------------------------------
@@ -484,6 +524,7 @@ export async function synthesizeToolReceipt(
   toolResult: ExtractedToolResult | undefined,
   agentDid: EphemeralDid,
   runId: string,
+  causal?: CausalBindingFields,
 ): Promise<SignedEnvelope<ToolReceiptPayload>> {
   const receiptId = `tr_${randomUUID()}`;
   const now = new Date().toISOString();
@@ -513,6 +554,11 @@ export async function synthesizeToolReceipt(
     latency_ms: latencyMs,
     binding: {
       run_id: runId,
+      span_id: causal?.spanId,
+      parent_span_id: causal?.parentSpanId,
+      tool_span_id: causal?.toolSpanId ?? causal?.spanId,
+      phase: causal?.phase,
+      attribution_confidence: causal?.attributionConfidence,
     },
   };
 
@@ -540,6 +586,7 @@ export async function synthesizeSideEffectReceipt(
   toolCallId: string,
   agentDid: EphemeralDid,
   runId: string,
+  causal?: CausalBindingFields,
 ): Promise<SignedEnvelope<SideEffectReceiptPayload>> {
   const receiptId = `se_${randomUUID()}`;
   const now = new Date().toISOString();
@@ -566,6 +613,11 @@ export async function synthesizeSideEffectReceipt(
     latency_ms: 0,
     binding: {
       run_id: runId,
+      span_id: causal?.spanId,
+      parent_span_id: causal?.parentSpanId,
+      tool_span_id: causal?.toolSpanId,
+      phase: causal?.phase,
+      attribution_confidence: causal?.attributionConfidence,
     },
   };
 
@@ -750,6 +802,9 @@ export class CausalSieve {
 
   // State: pending tool calls awaiting results
   private pendingToolCalls: Map<string, ExtractedToolCall> = new Map();
+  private pendingToolSpans: Map<string, ToolSpanContext> = new Map();
+  private latestGatewaySpanId: string | undefined;
+  private lastResolvedToolSpanId: string | undefined;
 
   // State: file snapshot for incremental diffing
   private fileSnapshot: Map<string, string> = new Map();
@@ -797,7 +852,15 @@ export class CausalSieve {
    * @returns Array of policy violations (empty if all tools are allowed).
    *          If non-empty, the caller should sever the connection.
    */
-  processLLMResponse(provider: 'openai' | 'anthropic', responseBody: string): PolicyViolation[] {
+  processLLMResponse(
+    provider: 'openai' | 'anthropic',
+    responseBody: string,
+    context?: ProcessLLMResponseContext,
+  ): PolicyViolation[] {
+    if (context?.gatewaySpanId) {
+      this.latestGatewaySpanId = context.gatewaySpanId;
+    }
+
     const toolCalls = provider === 'openai'
       ? extractToolCallsOpenAI(responseBody)
       : extractToolCallsAnthropic(responseBody);
@@ -814,8 +877,13 @@ export class CausalSieve {
         continue; // Don't track blocked tool calls
       }
 
-      // Track pending tool call
+      // Track pending tool call + deterministic span context.
       this.pendingToolCalls.set(tc.id, tc);
+      this.pendingToolSpans.set(tc.id, {
+        spanId: deriveSpanId('tool', tc.id),
+        parentSpanId: this.latestGatewaySpanId,
+        openedAt: tc.extractedAt,
+      });
     }
 
     return violations;
@@ -843,24 +911,72 @@ export class CausalSieve {
       this.fileSnapshot = result.currentFiles;
     }
 
+    const activeSpanEntries = Array.from(this.pendingToolSpans.entries())
+      .map(([id, span]) => ({ id, span }));
+
+    const hasConcurrentWindows = activeSpanEntries.length > 1;
+    const fallbackSpanId = hasConcurrentWindows
+      ? activeSpanEntries
+          .slice()
+          .sort((a, b) => {
+            const t = a.span.openedAt.localeCompare(b.span.openedAt);
+            return t !== 0 ? t : a.id.localeCompare(b.id);
+          })
+          .at(-1)?.span.spanId
+      : undefined;
+
     // Match tool results to pending tool calls and synthesize receipts
     for (const result of toolResults) {
       const toolCall = this.pendingToolCalls.get(result.toolCallId);
       if (!toolCall) continue; // Orphaned result, skip
 
+      const spanContext = this.pendingToolSpans.get(result.toolCallId);
+      const toolSpanId = spanContext?.spanId ?? deriveSpanId('tool', result.toolCallId);
+
       this.pendingToolCalls.delete(result.toolCallId);
+      this.pendingToolSpans.delete(result.toolCallId);
 
       // Synthesize tool receipt
       const toolReceipt = await synthesizeToolReceipt(
-        toolCall, result, this.agentDid, this.runId,
+        toolCall,
+        result,
+        this.agentDid,
+        this.runId,
+        {
+          spanId: toolSpanId,
+          parentSpanId: spanContext?.parentSpanId,
+          toolSpanId: toolSpanId,
+          phase: 'execution',
+          attributionConfidence: 1.0,
+        },
       );
       this._toolReceipts.push(toolReceipt);
+      this.lastResolvedToolSpanId = toolSpanId;
 
-      // Attribute file mutations to this tool call
-      // (All mutations since last check are attributed to the most recent tool)
-      for (const mutation of mutations) {
+      const sideEffectToolSpanId = hasConcurrentWindows
+        ? (fallbackSpanId ?? toolSpanId)
+        : toolSpanId;
+      const sideEffectConfidence = hasConcurrentWindows
+        ? 0.5
+        : 1.0;
+
+      // Attribute file mutations to this tool call.
+      // If multiple tool windows overlap, we mark side effects as inferred (0.5)
+      // and use a deterministic fallback tool span.
+      for (let i = 0; i < mutations.length; i++) {
+        const mutation = mutations[i]!;
         const seReceipt = await synthesizeSideEffectReceipt(
-          mutation, toolCall.id, this.agentDid, this.runId,
+          mutation,
+          toolCall.id,
+          this.agentDid,
+          this.runId,
+          {
+            spanId: deriveSpanId('side', `${toolCall.id}:${mutation.path}:${mutation.status}:${i}`),
+            parentSpanId: sideEffectToolSpanId,
+            toolSpanId: sideEffectToolSpanId,
+            phase: 'observation',
+            attributionConfidence: sideEffectConfidence,
+          },
         );
         this._sideEffectReceipts.push(seReceipt);
       }
@@ -879,25 +995,63 @@ export class CausalSieve {
 
     const { mutations } = await getIncrementalMutations(this.fileSnapshot, this.cwd);
 
-    // Find the last tool call for attribution
-    const lastToolCallId = this._toolReceipts.length > 0
-      ? this._toolReceipts[this._toolReceipts.length - 1]!.payload.receipt_id
-      : 'final_sweep';
+    const pendingSpanEntries = Array.from(this.pendingToolSpans.entries())
+      .sort((a, b) => {
+        const t = a[1].openedAt.localeCompare(b[1].openedAt);
+        return t !== 0 ? t : a[0].localeCompare(b[0]);
+      });
 
-    for (const mutation of mutations) {
+    const deterministicPendingSpanId = pendingSpanEntries.length > 0
+      ? pendingSpanEntries[pendingSpanEntries.length - 1]![1].spanId
+      : undefined;
+
+    const fallbackToolSpanId = this.lastResolvedToolSpanId ?? deterministicPendingSpanId;
+
+    const pendingOverlap = pendingSpanEntries.length > 1;
+    const finalSweepConfidence = fallbackToolSpanId
+      ? (pendingOverlap ? 0.5 : 1.0)
+      : 0.0;
+
+    for (let i = 0; i < mutations.length; i++) {
+      const mutation = mutations[i]!;
       const seReceipt = await synthesizeSideEffectReceipt(
-        mutation, lastToolCallId, this.agentDid, this.runId,
+        mutation,
+        fallbackToolSpanId ?? 'final_sweep',
+        this.agentDid,
+        this.runId,
+        {
+          spanId: deriveSpanId('side', `final:${mutation.path}:${mutation.status}:${i}`),
+          parentSpanId: fallbackToolSpanId,
+          toolSpanId: fallbackToolSpanId,
+          phase: 'observation',
+          attributionConfidence: finalSweepConfidence,
+        },
       );
       this._sideEffectReceipts.push(seReceipt);
     }
 
-    // Also resolve any pending tool calls that never got results
+    // Also resolve any pending tool calls that never got results.
     for (const [id, toolCall] of this.pendingToolCalls) {
+      const spanContext = this.pendingToolSpans.get(id);
+      const toolSpanId = spanContext?.spanId ?? deriveSpanId('tool', id);
+
       const toolReceipt = await synthesizeToolReceipt(
-        toolCall, undefined, this.agentDid, this.runId,
+        toolCall,
+        undefined,
+        this.agentDid,
+        this.runId,
+        {
+          spanId: toolSpanId,
+          parentSpanId: spanContext?.parentSpanId,
+          toolSpanId: toolSpanId,
+          phase: 'execution',
+          attributionConfidence: 1.0,
+        },
       );
       this._toolReceipts.push(toolReceipt);
       this.pendingToolCalls.delete(id);
+      this.pendingToolSpans.delete(id);
+      this.lastResolvedToolSpanId = toolSpanId;
     }
   }
 }

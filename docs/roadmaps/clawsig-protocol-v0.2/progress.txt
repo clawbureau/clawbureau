@@ -456,3 +456,47 @@ Validation:
 - `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
 - `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-003 runtime tool-span emission wiring
+
+- Runtime causal emission (SDK path):
+  - `packages/clawsig-sdk/src/types.ts`
+    - expanded receipt binding surfaces (camel + schema-facing snake) with additive causal fields:
+      - `span_id` / `spanId`
+      - `parent_span_id` / `parentSpanId`
+      - `tool_span_id` / `toolSpanId`
+      - `phase`
+      - `attribution_confidence` / `attributionConfidence`
+  - `packages/clawsig-sdk/src/run.ts`
+    - emits deterministic causal span linkage in runtime-generated receipts:
+      - tool receipts: authoritative tool-root span emission (`phase: execution`, confidence `1.0`)
+      - side-effect receipts: tool-linked child spans with fallback `0.0` when no tool lineage exists
+      - human-approval receipts: reflection-phase span linkage
+    - bridges legacy `_receipt` bindings to carry runtime causal fields without mutating signed gateway envelopes.
+- Runtime causal emission (wrap/proxy path):
+  - `packages/clawsig-sdk/src/causal-sieve.ts`
+    - added deterministic span context tracking for pending tool windows.
+    - emits causal fields on synthesized tool/side-effect receipts.
+    - concurrent tool windows now produce deterministic inferred attribution markers:
+      - deterministic fallback tool span selection (latest-opened, stable tie-break)
+      - `attribution_confidence: 0.5` on side-effect linkage when windows overlap.
+  - `packages/clawsig-sdk/src/local-proxy.ts`
+    - derives/propagates deterministic gateway span context into sieve response processing.
+- Deterministic signature sequencing (no post-sign drift):
+  - `packages/clawverify-cli/src/wrap.ts`
+    - proxy stop/finalize now occurs before bundle compilation, ensuring Causal Sieve final receipts are included pre-sign.
+    - added explicit final reseal step (`payload_hash_b64u` + signature recompute) after all payload mutations to eliminate post-sign mutation drift.
+
+Validation:
+- `cd packages/clawsig-sdk && npm run typecheck && npm run build` ✅
+- `cd packages/clawverify-core && npm run build` ✅
+- `cd packages/clawverify-cli && npm run typecheck && npm run build` ✅
+- `node --experimental-strip-types --no-warnings --test packages/clawverify-cli/test/cross-platform.test.ts` ✅ (85 tests)
+- wrap signature-sequence smoke:
+  - `CLAWSIG_DISABLE_INTERPOSE=1 node packages/clawverify-cli/dist/cli.js wrap --no-publish -- node -e "console.log('d3-smoke-2')"` ✅
+  - payload hash recompute matched recorded `payload_hash_b64u` (no post-sign drift) ✅
+- SDK causal emission smoke:
+  - local run emitted tool/side-effect causal bindings with deterministic spans/confidence ✅
+  - concurrent window simulation emitted deterministic fallback marker (`attribution_confidence: 0.5`) ✅

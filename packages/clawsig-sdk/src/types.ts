@@ -51,6 +51,23 @@ export interface BindingContext {
   runId: string;
   eventHash?: string;
   nonce?: string;
+  /** Optional causal span identifier for this call boundary. */
+  spanId?: string;
+  /** Optional parent span identifier for deterministic causal linkage. */
+  parentSpanId?: string;
+  /** Optional tool-root span identifier for derived side-effect linkage. */
+  toolSpanId?: string;
+  /** Optional deterministic lifecycle phase marker. */
+  phase?:
+    | 'setup'
+    | 'planning'
+    | 'reasoning'
+    | 'execution'
+    | 'observation'
+    | 'reflection'
+    | 'teardown';
+  /** Optional deterministic attribution confidence in inclusive [0.0, 1.0]. */
+  attributionConfidence?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +110,23 @@ export interface ReceiptBinding {
   nonce?: string;
   policyHash?: string;
   tokenScopeHashB64u?: string;
+  /** Optional causal span identifier for this receipt node. */
+  spanId?: string;
+  /** Optional parent span identifier referencing another span in the same bundle. */
+  parentSpanId?: string;
+  /** Optional tool-root span identifier for side-effect/derived linkage. */
+  toolSpanId?: string;
+  /** Optional deterministic lifecycle phase marker. */
+  phase?:
+    | 'setup'
+    | 'planning'
+    | 'reasoning'
+    | 'execution'
+    | 'observation'
+    | 'reflection'
+    | 'teardown';
+  /** Optional deterministic attribution confidence in inclusive [0.0, 1.0]. */
+  attributionConfidence?: number;
 }
 
 /** Receipt from clawproxy _receipt response field. */
@@ -155,6 +189,18 @@ export interface GatewayReceiptPayload {
     nonce?: string;
     policy_hash?: string;
     token_scope_hash_b64u?: string;
+    span_id?: string;
+    parent_span_id?: string;
+    tool_span_id?: string;
+    phase?:
+      | 'setup'
+      | 'planning'
+      | 'reasoning'
+      | 'execution'
+      | 'observation'
+      | 'reflection'
+      | 'teardown';
+    attribution_confidence?: number;
   };
 }
 
@@ -348,6 +394,18 @@ export interface ToolReceiptPayload {
     nonce?: string;
     policy_hash?: string;
     token_scope_hash_b64u?: string;
+    span_id?: string;
+    parent_span_id?: string;
+    tool_span_id?: string;
+    phase?:
+      | 'setup'
+      | 'planning'
+      | 'reasoning'
+      | 'execution'
+      | 'observation'
+      | 'reflection'
+      | 'teardown';
+    attribution_confidence?: number;
   };
 }
 
@@ -402,6 +460,18 @@ export interface SideEffectReceiptPayload {
     policy_hash?: string;
     token_scope_hash_b64u?: string;
     capability_id?: string;
+    span_id?: string;
+    parent_span_id?: string;
+    tool_span_id?: string;
+    phase?:
+      | 'setup'
+      | 'planning'
+      | 'reasoning'
+      | 'execution'
+      | 'observation'
+      | 'reflection'
+      | 'teardown';
+    attribution_confidence?: number;
   };
 }
 
@@ -456,6 +526,18 @@ export interface HumanApprovalReceiptPayload {
     nonce?: string;
     policy_hash?: string;
     token_scope_hash_b64u?: string;
+    span_id?: string;
+    parent_span_id?: string;
+    tool_span_id?: string;
+    phase?:
+      | 'setup'
+      | 'planning'
+      | 'reasoning'
+      | 'execution'
+      | 'observation'
+      | 'reflection'
+      | 'teardown';
+    attribution_confidence?: number;
   };
 }
 
