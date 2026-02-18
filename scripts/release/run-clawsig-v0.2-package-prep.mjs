@@ -96,6 +96,15 @@ async function readJson(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'));
 }
 
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function sha256Hex(filePath) {
   const data = await fs.readFile(filePath);
   return createHash('sha256').update(data).digest('hex');
@@ -132,9 +141,20 @@ function checkCliDependencyClosure(cliPackageJson) {
 async function packTarget(target, packDir, transcript) {
   const pkg = await readJson(path.join(ROOT, target.packageJson));
   const expectedVersion = String(pkg.version ?? '');
+  const packageDir = path.join(ROOT, target.dir);
 
   if (pkg?.scripts && typeof pkg.scripts.build === 'string') {
-    const buildRun = await run('npm', ['run', 'build'], path.join(ROOT, target.dir), transcript);
+    const lockPath = path.join(packageDir, 'package-lock.json');
+    if (await pathExists(lockPath)) {
+      const installRun = await run('npm', ['ci'], packageDir, transcript);
+      if (installRun.exit_code !== 0) {
+        throw new Error(
+          `npm ci failed for ${target.name}: ${installRun.stderr || installRun.stdout}`,
+        );
+      }
+    }
+
+    const buildRun = await run('npm', ['run', 'build'], packageDir, transcript);
     if (buildRun.exit_code !== 0) {
       throw new Error(
         `npm run build failed for ${target.name}: ${buildRun.stderr || buildRun.stdout}`,
@@ -145,7 +165,7 @@ async function packTarget(target, packDir, transcript) {
   const packRun = await run(
     'npm',
     ['pack', '--pack-destination', packDir],
-    path.join(ROOT, target.dir),
+    packageDir,
     transcript,
   );
 

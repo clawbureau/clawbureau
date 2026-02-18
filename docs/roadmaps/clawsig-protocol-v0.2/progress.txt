@@ -360,6 +360,26 @@ Validation:
 
 ---
 
+2026-02-18 — C3 CI/release guardrails (release + real-usecase evidence)
+
+- Added release evidence contract checker:
+  - `scripts/release/check-real-usecase-evidence-pack.mjs`
+  - validates required 4-scenario matrix (staging/prod settlement+dispute), PASS verdicts, canonical artifact completeness, tracer verdict parity, and URM hash match.
+- Hardened package closure gate for CI portability:
+  - `scripts/release/run-clawsig-v0.2-package-prep.mjs`
+  - now runs `npm ci` in package dirs before build when lockfiles are present.
+- Added CI workflow:
+  - `.github/workflows/release-e2e-guardrails.yml`
+  - jobs:
+    - `cli-release-closure` (runtime/version parity + dependency closure)
+    - `release-e2e-evidence-contract` (staging/prod matrix evidence contract)
+
+Validation:
+- `node scripts/release/run-clawsig-v0.2-package-prep.mjs` ✅
+- `node scripts/release/check-real-usecase-evidence-pack.mjs --summary artifacts/e2e/real-usecases/2026-02-18T15-28-07Z/summary.json` ✅
+
+---
+
 2026-02-18 — ADP-US-004 GTM pilot proof pack refresh
 
 - Added buyer-facing real-usecase evidence pack:
