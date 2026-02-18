@@ -337,6 +337,29 @@ Validation findings:
 
 ---
 
+2026-02-18 — C1 CLI runtime version + dependency closure fix
+
+- Root-cause closure delivered for v0.2 publish mismatch:
+  - runtime version output now derived from package metadata (not hardcoded literal)
+  - release-prep dependency closure guard added for CLI metadata (`file:/link:/workspace:` specs fail-closed)
+- Updated files:
+  - `packages/clawverify-cli/src/cli.ts`
+  - `packages/clawverify-cli/src/version.ts`
+  - `scripts/release/run-clawsig-v0.2-package-prep.mjs`
+  - `docs/releases/clawsig-v0.2-publish-log.md`
+- New guard behavior in release-prep runner:
+  - validates runtime dependency presence for `@clawbureau/clawsig-sdk` and `@clawbureau/clawverify-core`
+  - enforces `clawverify version` parity with packed CLI package version
+  - emits command transcript artifact (`commands.log`)
+
+Validation:
+- `cd packages/clawverify-core && npm run build` ✅
+- `cd packages/clawverify-cli && npm run typecheck && npm run build` ✅
+- `node scripts/release/run-clawsig-v0.2-package-prep.mjs` ✅
+  - artifact: `artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/{summary.json,commands.log}`
+
+---
+
 2026-02-18 — ADP-US-004 GTM pilot proof pack refresh
 
 - Added buyer-facing real-usecase evidence pack:

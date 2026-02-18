@@ -14,6 +14,7 @@ import { hintForReasonCode, explainReasonCode } from './hints.js';
 import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
+import { formatCliVersion } from './version.js';
 import type { CliOutput, CliKind } from './types.js';
 
 function nowIso(): string {
@@ -170,7 +171,7 @@ async function main() {
   const parsed = parseCliArgs(process.argv.slice(2));
 
   if (parsed.command === 'version') {
-    process.stdout.write('clawverify 0.2.0\n');
+    process.stdout.write(`${formatCliVersion()}\n`);
     return;
   }
 

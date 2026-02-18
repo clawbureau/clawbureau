@@ -1,0 +1,69 @@
+{
+  "run_at": "2026-02-18T15:21:32.124Z",
+  "out_dir": "/private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z",
+  "install_dir": "/var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ",
+  "command_transcript": "artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/commands.log",
+  "package_targets": [
+    {
+      "name": "@clawbureau/schema",
+      "expected_version": "0.2.0",
+      "tarball_name": "clawbureau-schema-0.2.0.tgz",
+      "sha256": "acde5a4d8c5424cfd399dd2131990675554b77d5a2228b15ecfed252c4b0b4f0"
+    },
+    {
+      "name": "@clawbureau/clawverify-core",
+      "expected_version": "0.2.0",
+      "tarball_name": "clawbureau-clawverify-core-0.2.0.tgz",
+      "sha256": "5ff0e6f458f185becfb8a7b577034f8714a9425905319e35cebf0817ea7e28d8"
+    },
+    {
+      "name": "@clawbureau/clawverify-cli",
+      "expected_version": "0.2.0",
+      "tarball_name": "clawbureau-clawverify-cli-0.2.0.tgz",
+      "sha256": "c112c82bbe42f000ba07e1f4c3564e258b3aac27ebca8c7afac3b440fca1a045"
+    }
+  ],
+  "dependency_closure_guard": {
+    "ok": true,
+    "issues": [],
+    "dependencies": {
+      "@clawbureau/clawsig-sdk": "^0.4.1",
+      "@clawbureau/clawverify-core": "^0.2.0"
+    },
+    "runtime_dependency_presence": {
+      "@clawbureau/clawsig-sdk": true,
+      "@clawbureau/clawverify-core": true
+    }
+  },
+  "install_from_tarball": {
+    "command_ok": true,
+    "installed": [
+      {
+        "name": "@clawbureau/schema",
+        "expected_version": "0.2.0",
+        "installed_version": "0.2.0",
+        "version_match": true
+      },
+      {
+        "name": "@clawbureau/clawverify-core",
+        "expected_version": "0.2.0",
+        "installed_version": "0.2.0",
+        "version_match": true
+      },
+      {
+        "name": "@clawbureau/clawverify-cli",
+        "expected_version": "0.2.0",
+        "installed_version": "0.2.0",
+        "version_match": true
+      }
+    ]
+  },
+  "cli_version_check": {
+    "ok": true,
+    "expected": "clawverify 0.2.0",
+    "exit_code": 0,
+    "stdout": "clawverify 0.2.0",
+    "stderr": ""
+  },
+  "ok": true
+}

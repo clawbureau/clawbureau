@@ -4,7 +4,9 @@
  *
  * - packs @clawbureau/schema, @clawbureau/clawverify-core, @clawbureau/clawverify-cli
  * - runs install-from-tarball sanity check in a clean temp project
- * - writes deterministic summary artifact
+ * - enforces dependency-closure guard for clawverify-cli release metadata
+ * - enforces CLI runtime version parity (clawverify version == package.json version)
+ * - writes deterministic summary + command transcript artifacts
  */
 
 import * as fs from 'node:fs/promises';
@@ -33,11 +35,28 @@ const TARGETS = [
   },
 ];
 
+const CLI_REQUIRED_DEPENDENCIES = [
+  '@clawbureau/clawverify-core',
+  '@clawbureau/clawsig-sdk',
+];
+
+const LOCAL_DEP_SPEC_RE = /^(?:file:|link:|workspace:|\.{1,2}[\\/]|[\\/]|~[\\/])/i;
+
 function isoStamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
-function run(command, args, cwd, env = process.env) {
+function toDisplayCommand(command, args) {
+  return [command, ...args].map((part) => {
+    if (/^[a-zA-Z0-9_./:@=-]+$/.test(part)) return part;
+    return JSON.stringify(part);
+  }).join(' ');
+}
+
+function run(command, args, cwd, transcript, env = process.env) {
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
@@ -57,7 +76,18 @@ function run(command, args, cwd, env = process.env) {
     });
 
     child.on('close', (code) => {
-      resolve({ code: code ?? 0, stdout, stderr });
+      const result = {
+        started_at: startedAt,
+        duration_ms: Date.now() - startedMs,
+        cwd,
+        command: toDisplayCommand(command, args),
+        exit_code: code ?? 0,
+        stdout,
+        stderr,
+      };
+
+      transcript.push(result);
+      resolve(result);
     });
   });
 }
@@ -71,13 +101,41 @@ async function sha256Hex(filePath) {
   return createHash('sha256').update(data).digest('hex');
 }
 
-async function packTarget(target, packDir) {
+function checkCliDependencyClosure(cliPackageJson) {
+  const deps = cliPackageJson?.dependencies ?? {};
+  const issues = [];
+
+  for (const required of CLI_REQUIRED_DEPENDENCIES) {
+    if (!Object.prototype.hasOwnProperty.call(deps, required)) {
+      issues.push(`missing required dependency: ${required}`);
+    }
+  }
+
+  for (const [name, spec] of Object.entries(deps)) {
+    if (typeof spec !== 'string' || spec.trim().length === 0) {
+      issues.push(`invalid dependency spec for ${name}`);
+      continue;
+    }
+
+    if (LOCAL_DEP_SPEC_RE.test(spec.trim())) {
+      issues.push(`forbidden local dependency spec for ${name}: ${spec}`);
+    }
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    dependencies: deps,
+  };
+}
+
+async function packTarget(target, packDir, transcript) {
   const pkg = await readJson(path.join(ROOT, target.packageJson));
   const expectedVersion = String(pkg.version ?? '');
 
   if (pkg?.scripts && typeof pkg.scripts.build === 'string') {
-    const buildRun = await run('npm', ['run', 'build'], path.join(ROOT, target.dir));
-    if (buildRun.code !== 0) {
+    const buildRun = await run('npm', ['run', 'build'], path.join(ROOT, target.dir), transcript);
+    if (buildRun.exit_code !== 0) {
       throw new Error(
         `npm run build failed for ${target.name}: ${buildRun.stderr || buildRun.stdout}`,
       );
@@ -88,9 +146,10 @@ async function packTarget(target, packDir) {
     'npm',
     ['pack', '--pack-destination', packDir],
     path.join(ROOT, target.dir),
+    transcript,
   );
 
-  if (packRun.code !== 0) {
+  if (packRun.exit_code !== 0) {
     throw new Error(
       `npm pack failed for ${target.name}: ${packRun.stderr || packRun.stdout}`,
     );
@@ -119,6 +178,51 @@ async function packTarget(target, packDir) {
   };
 }
 
+function hasDependencyInTree(tree, dependencyName) {
+  if (!tree || typeof tree !== 'object') return false;
+
+  const deps = tree.dependencies;
+  if (!deps || typeof deps !== 'object') return false;
+
+  if (Object.prototype.hasOwnProperty.call(deps, dependencyName)) {
+    return true;
+  }
+
+  return Object.values(deps).some((child) => hasDependencyInTree(child, dependencyName));
+}
+
+function extractDependencyPresentFlag(npmLsRun, dependencyName) {
+  try {
+    const parsed = JSON.parse(npmLsRun.stdout || '{}');
+    return hasDependencyInTree(parsed, dependencyName);
+  } catch {
+    return false;
+  }
+}
+
+function formatTranscript(transcript) {
+  const lines = [];
+
+  for (const entry of transcript) {
+    lines.push(`# ${entry.started_at}  (exit=${entry.exit_code}, duration_ms=${entry.duration_ms})`);
+    lines.push(`$ (cd ${entry.cwd} && ${entry.command})`);
+
+    if (entry.stdout?.trim()) {
+      lines.push('--- stdout ---');
+      lines.push(entry.stdout.trimEnd());
+    }
+
+    if (entry.stderr?.trim()) {
+      lines.push('--- stderr ---');
+      lines.push(entry.stderr.trimEnd());
+    }
+
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
 async function main() {
   const outDir = path.join(
     ROOT,
@@ -126,18 +230,24 @@ async function main() {
     isoStamp(),
   );
   const packDir = path.join(outDir, 'tarballs');
+  const transcriptPath = path.join(outDir, 'commands.log');
 
   await fs.mkdir(packDir, { recursive: true });
 
+  const transcript = [];
+
+  const cliPackage = await readJson(path.join(ROOT, 'packages/clawverify-cli/package.json'));
+  const closureGuard = checkCliDependencyClosure(cliPackage);
+
   const packed = [];
   for (const target of TARGETS) {
-    packed.push(await packTarget(target, packDir));
+    packed.push(await packTarget(target, packDir, transcript));
   }
 
   const installDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clawsig-v0-2-pack-smoke-'));
 
-  const npmInit = await run('npm', ['init', '-y'], installDir);
-  if (npmInit.code !== 0) {
+  const npmInit = await run('npm', ['init', '-y'], installDir, transcript);
+  if (npmInit.exit_code !== 0) {
     throw new Error(`npm init failed: ${npmInit.stderr || npmInit.stdout}`);
   }
 
@@ -148,11 +258,18 @@ async function main() {
       ...packed.map((p) => p.tarball_path),
     ],
     installDir,
+    transcript,
   );
 
-  if (installRun.code !== 0) {
+  if (installRun.exit_code !== 0) {
     throw new Error(`npm install tarballs failed: ${installRun.stderr || installRun.stdout}`);
   }
+
+  const npmLsSdkRun = await run('npm', ['ls', '@clawbureau/clawsig-sdk', '--json'], installDir, transcript);
+  const npmLsCoreRun = await run('npm', ['ls', '@clawbureau/clawverify-core', '--json'], installDir, transcript);
+
+  const sdkInstalled = extractDependencyPresentFlag(npmLsSdkRun, '@clawbureau/clawsig-sdk');
+  const coreInstalled = extractDependencyPresentFlag(npmLsCoreRun, '@clawbureau/clawverify-core');
 
   const installed = [];
   for (const item of packed) {
@@ -178,30 +295,41 @@ async function main() {
       'version',
     ],
     installDir,
+    transcript,
   );
 
   const expectedCliVersion = packed.find((p) => p.name === '@clawbureau/clawverify-cli')?.expected_version ?? '0.2.0';
+  const expectedVersionLine = `clawverify ${expectedCliVersion}`;
   const cliVersionOk =
-    cliVersionRun.code === 0 &&
-    cliVersionRun.stdout.includes(`clawverify ${expectedCliVersion}`);
+    cliVersionRun.exit_code === 0 &&
+    cliVersionRun.stdout.includes(expectedVersionLine);
 
   const summary = {
     run_at: new Date().toISOString(),
     out_dir: outDir,
     install_dir: installDir,
+    command_transcript: path.relative(ROOT, transcriptPath),
     package_targets: packed.map((p) => ({
       name: p.name,
       expected_version: p.expected_version,
       tarball_name: p.tarball_name,
       sha256: p.sha256,
     })),
+    dependency_closure_guard: {
+      ...closureGuard,
+      runtime_dependency_presence: {
+        '@clawbureau/clawsig-sdk': sdkInstalled,
+        '@clawbureau/clawverify-core': coreInstalled,
+      },
+    },
     install_from_tarball: {
-      command_ok: installRun.code === 0,
+      command_ok: installRun.exit_code === 0,
       installed,
     },
     cli_version_check: {
       ok: cliVersionOk,
-      exit_code: cliVersionRun.code,
+      expected: expectedVersionLine,
+      exit_code: cliVersionRun.exit_code,
       stdout: cliVersionRun.stdout.trim(),
       stderr: cliVersionRun.stderr.trim(),
     },
@@ -209,6 +337,9 @@ async function main() {
 
   const ok =
     summary.install_from_tarball.command_ok &&
+    closureGuard.ok &&
+    sdkInstalled &&
+    coreInstalled &&
     installed.every((entry) => entry.version_match) &&
     cliVersionOk;
 
@@ -219,6 +350,8 @@ async function main() {
     `${JSON.stringify(summary, null, 2)}\n`,
     'utf8',
   );
+
+  await fs.writeFile(transcriptPath, formatTranscript(transcript), 'utf8');
 
   process.stdout.write(
     `${JSON.stringify({ ok, out_dir: outDir }, null, 2)}\n`,
