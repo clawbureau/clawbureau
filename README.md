@@ -43,14 +43,17 @@ Cryptographically signed proof bundles for AI agent actions. Every receipt is ha
 | **MT** | + which tools were invoked | `recordToolCall()` |
 | **MTS** | + side-effects + human approvals | `recordSideEffect()` + `recordHumanApproval()` |
 
-**Current coverage: MTS** · 8 receipt schemas · 22 conformance vectors · 400+ reason codes
+**Current coverage: MTS** · v0.2 shipped on `main` · 40 conformance vectors · 400+ reason codes
 
 ### Key resources
 
-- **[Protocol spec](docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v0.1.md)** — normative definitions, 5 primitives, coverage matrix
-- **[Adoption guide](docs/specs/clawsig-protocol/ADOPTION_GUIDE.md)** — integrate in a day (agent authors, security teams, CI/CD)
+- **[Protocol spec (v1.0)](docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md)** — normative protocol definitions
+- **[Protocol changelog](docs/specs/clawsig-protocol/CHANGELOG.md)** — shipped deltas including `v0.2.0`
+- **[Clawsig Protocol v0.2 roadmap](docs/roadmaps/clawsig-protocol-v0.2/README.md)** — shipped execution tracker
+- **[Adoption guide](docs/specs/clawsig-protocol/ADOPTION_GUIDE.md)** — integration guidance for builders/security/CI
+- **[v0.2 quickstart runner](scripts/protocol/run-clawsig-v0.2-quickstart.mjs)** — compact executable smoke
 - **[Reason code registry](docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md)** — machine-readable error codes
-- **[Conformance suite](packages/schema/fixtures/protocol-conformance/manifest.v1.json)** — 22 test vectors
+- **[Conformance suite](packages/schema/fixtures/protocol-conformance/manifest.v1.json)** — 40 vectors
 
 ### npm packages
 
@@ -124,7 +127,8 @@ Full docs, implementation guides, and API reference:
 
 | Roadmap | Stories | Status |
 |---------|---------|--------|
-| [Clawsig Protocol](docs/roadmaps/clawsig-protocol/) | 12/12 | ✅ Complete |
+| [Clawsig Protocol v0.2](docs/roadmaps/clawsig-protocol-v0.2/) | 5/5 | ✅ Complete |
+| [Clawsig Protocol v0.1](docs/roadmaps/clawsig-protocol/) | 12/12 | ✅ Complete |
 | [Proof of Harness](docs/roadmaps/proof-of-harness/) | 20/20 | ✅ Complete |
 | [Trust vNext](docs/roadmaps/trust-vnext/) | 59/59 | ✅ Complete |
 | [Docs IA](docs/roadmaps/docs-ia/) | 4/4 | ✅ Complete |
