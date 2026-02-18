@@ -1,0 +1,75 @@
+{
+  "ok": true,
+  "env": "staging",
+  "run_id": "run_71e89720-66bf-4ee9-822e-414e2f3653b5",
+  "agent_did": "did:key:z6MkmkWSvrsFXJ1h342JP9KRSQhBjSPDAQvfpVqbX7bhjYPe",
+  "loss_event_id": "lse_13bef82bf5940de67dd8263f",
+  "sdk": {
+    "tool_receipts": 7,
+    "events": 9,
+    "bundle_id": "bundle_db13ff67-f4fa-4b22-9085-473af9f50918"
+  },
+  "steps": [
+    {
+      "step": "create_loss_event",
+      "status": 201,
+      "pass": "lse_13bef82bf5940de67dd8263f",
+      "loss_event_id": "lse_13bef82bf5940de67dd8263f",
+      "elapsed_ms": 752
+    },
+    {
+      "step": "retry_apply",
+      "status": 200,
+      "pass": true,
+      "forwarded": 0,
+      "elapsed_ms": 672
+    },
+    {
+      "step": "readback_event",
+      "status": 200,
+      "pass": true,
+      "event_status": "failed",
+      "elapsed_ms": 166
+    },
+    {
+      "step": "resolve",
+      "pass": true,
+      "note": "Skipped: event status failed (expected for synthetic DIDs)"
+    },
+    {
+      "step": "dispute_aging",
+      "status": 200,
+      "pass": true,
+      "buckets": [
+        "0-7d:0",
+        "7-30d:0",
+        "30-60d:0",
+        "60+d:0"
+      ],
+      "elapsed_ms": 46
+    },
+    {
+      "step": "reconciliation",
+      "status": 200,
+      "pass": true,
+      "mismatch_count": 0,
+      "elapsed_ms": 52
+    },
+    {
+      "step": "economy_health",
+      "status": 200,
+      "pass": true,
+      "overall": "degraded",
+      "services_up": 5,
+      "elapsed_ms": 252
+    },
+    {
+      "step": "idempotency_replay",
+      "status": 200,
+      "pass": true,
+      "deduped": true,
+      "elapsed_ms": 102
+    }
+  ],
+  "generated_at": "2026-02-18T14:37:41.392Z"
+}

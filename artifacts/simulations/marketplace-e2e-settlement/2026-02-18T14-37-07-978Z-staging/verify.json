@@ -1,0 +1,9 @@
+{
+  "kind": "smoke_contract_verdict",
+  "status": "FAIL",
+  "reason_code": "SMOKE_STEP_FAILED",
+  "reason": "One or more marketplace settlement smoke steps failed",
+  "verified_at": "2026-02-18T14:37:11.542Z",
+  "run_id": "run_3cc6181f-17c7-4818-b4eb-b2ded56550f8",
+  "bundle_id": "bundle_663daa3a-4348-4b13-b5fb-b2eff4a63095"
+}
