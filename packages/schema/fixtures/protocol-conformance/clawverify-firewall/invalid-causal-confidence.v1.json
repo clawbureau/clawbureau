@@ -1,0 +1,8 @@
+{
+  "id": "invalid-causal-confidence",
+  "scenario": "invalid_causal_confidence",
+  "expected": {
+    "status": "INVALID",
+    "error_code": "INVALID_ATTRIBUTION_CONFIDENCE"
+  }
+}

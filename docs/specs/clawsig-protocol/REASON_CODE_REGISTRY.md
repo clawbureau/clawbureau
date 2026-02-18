@@ -177,6 +177,14 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `CAUSAL_CLOCK_CONTRADICTION` | Temporal causality bounds are violated (e.g. created_at > issued_at) |
 | `FUTURE_TIMESTAMP_POISONING` | `issued_at` exceeds `verification_time + skew_allowance` |
 
+### CAUSAL_*
+
+| Code | Meaning |
+|------|---------|
+| `CAUSAL_REFERENCE_DANGLING` | `parent_span_id` or `tool_span_id` references a span id not present in the same bundle causal index |
+| `CAUSAL_CYCLE_DETECTED` | Parent-span traversal detects a cycle in causal linkage |
+| `INVALID_ATTRIBUTION_CONFIDENCE` | `attribution_confidence` is present but outside inclusive `[0.0, 1.0]` bounds |
+
 ### URM_*
 
 | Code | Meaning |

@@ -132,6 +132,7 @@ assertFileContains(contractTestPath, 'web_receipts', 'schema-runtime-contract.te
 assertFileContains(contractTestPath, 'coverage_attestations', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'binary_semantic_evidence_attestations', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'vir_receipts', 'schema-runtime-contract.test.ts');
+assertFileContains(contractTestPath, 'span_id', 'schema-runtime-contract.test.ts');
 
 // Regeneration guard: if running the generator mutates the generated file, fail.
 const generatedBefore = fs.readFileSync(generatedPath, 'utf8');

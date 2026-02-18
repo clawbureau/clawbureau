@@ -422,3 +422,37 @@ Validation:
 
 Validation:
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-001/002 schema + verifier vertical slice
+
+- Added additive causal linkage fields to `receipt_binding.v1`:
+  - `span_id`
+  - `parent_span_id`
+  - `tool_span_id`
+  - `phase`
+  - `attribution_confidence`
+- Added fail-closed verifier checks in `services/clawverify/src/verify-proof-bundle.ts`:
+  - `CAUSAL_REFERENCE_DANGLING`
+  - `CAUSAL_CYCLE_DETECTED`
+  - `INVALID_ATTRIBUTION_CONFIDENCE`
+- Preserved legacy behavior:
+  - causal checks execute only when causal fields are present.
+  - bundles without causal fields retain v0.2 validation path.
+- Added conformance vectors for causal path coverage:
+  - `valid-causal-linkage.v1.json`
+  - `invalid-causal-dangling.v1.json`
+  - `invalid-causal-cycle.v1.json`
+  - `invalid-causal-confidence.v1.json`
+- Updated reason-code registry and tracker status (`CAV-US-001/002 => passes:true`).
+
+Validation:
+- `node services/clawverify/scripts/check-schema-runtime-sync.mjs` ✅
+- `cd services/clawverify && npm run typecheck` ✅
+- `cd services/clawverify && npm test -- --run test/schema-runtime-contract.test.ts test/firewall-conformance.test.ts` ✅
+- `cd services/clawverify && npm test` ✅ (196 tests)
+- `node scripts/protocol/run-clawverify-firewall-conformance.mjs` ✅
+- `node scripts/protocol/run-clawsig-protocol-conformance.mjs` ✅
+- `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

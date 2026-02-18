@@ -181,6 +181,24 @@ export interface ReceiptBinding {
   policy_hash?: string;
   /** CST token scope hash injected by the proxy */
   token_scope_hash_b64u?: string;
+
+  /** Optional causal span identifier for this receipt node. */
+  span_id?: string;
+  /** Optional parent span identifier referencing another span in the same bundle. */
+  parent_span_id?: string;
+  /** Optional tool-root span identifier for derived side-effect linkage. */
+  tool_span_id?: string;
+  /** Optional deterministic lifecycle phase marker for the span. */
+  phase?:
+    | 'setup'
+    | 'planning'
+    | 'reasoning'
+    | 'execution'
+    | 'observation'
+    | 'reflection'
+    | 'teardown';
+  /** Optional deterministic causal attribution confidence in inclusive [0.0, 1.0]. */
+  attribution_confidence?: number;
 }
 
 /**
@@ -350,6 +368,9 @@ export type VerificationErrorCode =
   | 'RATE_LIMIT_EXCEEDED'
   | 'RATE_LIMIT_CLAIM_INCONSISTENT'
   | 'RATE_LIMIT_WINDOW_INVALID'
+  | 'CAUSAL_REFERENCE_DANGLING'
+  | 'CAUSAL_CYCLE_DETECTED'
+  | 'INVALID_ATTRIBUTION_CONFIDENCE'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
   | 'PROMPT_COMMITMENT_MISMATCH'

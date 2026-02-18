@@ -32,6 +32,38 @@
       "pattern": "^[A-Za-z0-9_-]+$",
       "minLength": 8,
       "description": "Hash of the scoped token (CST) claims, injected by the proxy when a CST is validated."
+    },
+    "span_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional causal span identifier for this receipt node."
+    },
+    "parent_span_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional parent span identifier referencing another receipt binding span in the same bundle."
+    },
+    "tool_span_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional tool-root span identifier for side-effect and derived receipt linkage in the same bundle."
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "setup",
+        "planning",
+        "reasoning",
+        "execution",
+        "observation",
+        "reflection",
+        "teardown"
+      ],
+      "description": "Optional deterministic lifecycle phase marker for the span."
+    },
+    "attribution_confidence": {
+      "type": "number",
+      "description": "Optional deterministic causal attribution confidence. Verifier enforces inclusive [0.0, 1.0] bounds when present."
     }
   }
 }
