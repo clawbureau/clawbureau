@@ -1712,7 +1712,8 @@ function validateCausalBindingEntries(
         | 'CAUSAL_REFERENCE_DANGLING'
         | 'CAUSAL_CYCLE_DETECTED'
         | 'CAUSAL_PHASE_INVALID'
-        | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE';
+        | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
+        | 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT';
       message: string;
       field: string;
     } {
@@ -1825,6 +1826,59 @@ function validateCausalBindingEntries(
       message: `causal parent_span_id cycle detected at span_id: ${cycleAt}`,
       field: parentFieldBySpan.get(cycleAt) ?? parentFieldBySpan.get(spanId) ?? 'payload',
     };
+  }
+
+  const inboundReferenceCountBySpan = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.parentSpanId) {
+      inboundReferenceCountBySpan.set(
+        entry.parentSpanId,
+        (inboundReferenceCountBySpan.get(entry.parentSpanId) ?? 0) + 1
+      );
+    }
+
+    if (entry.toolSpanId) {
+      inboundReferenceCountBySpan.set(
+        entry.toolSpanId,
+        (inboundReferenceCountBySpan.get(entry.toolSpanId) ?? 0) + 1
+      );
+    }
+  }
+
+  for (const entry of entries) {
+    if (entry.attributionConfidence === undefined) continue;
+
+    const confidence = entry.attributionConfidence;
+    if (typeof confidence !== 'number') continue;
+
+    const isDirectLineageProvable =
+      entry.parentSpanId !== undefined ||
+      entry.toolSpanId !== undefined ||
+      (entry.spanId !== undefined &&
+        (inboundReferenceCountBySpan.get(entry.spanId) ?? 0) > 0);
+
+    const evidenceClass = isDirectLineageProvable
+      ? 'direct'
+      : entry.spanId !== undefined
+        ? 'inferred'
+        : 'unattributed';
+
+    const maxAllowedConfidence =
+      evidenceClass === 'direct'
+        ? 1.0
+        : evidenceClass === 'inferred'
+          ? 0.5
+          : 0.0;
+
+    if (confidence > maxAllowedConfidence) {
+      return {
+        ok: false,
+        code: 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT',
+        message:
+          `binding.attribution_confidence=${confidence} exceeds max ${maxAllowedConfidence.toFixed(1)} for ${evidenceClass} causal evidence class`,
+        field: entry.attributionConfidenceFieldPath,
+      };
+    }
   }
 
   return { ok: true };
