@@ -63,6 +63,10 @@ type FixtureCase = {
     | 'invalid_causal_graph_disconnected'
     | 'invalid_causal_side_effect_orphaned'
     | 'invalid_causal_human_approval_orphaned'
+    | 'valid_causal_clock_monotonic'
+    | 'invalid_causal_clock_parent_after_child'
+    | 'invalid_causal_phase_transition'
+    | 'invalid_causal_clock_envelope_regression'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
@@ -562,6 +566,10 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'invalid_causal_graph_disconnected' ||
     spec.scenario === 'invalid_causal_side_effect_orphaned' ||
     spec.scenario === 'invalid_causal_human_approval_orphaned' ||
+    spec.scenario === 'valid_causal_clock_monotonic' ||
+    spec.scenario === 'invalid_causal_clock_parent_after_child' ||
+    spec.scenario === 'invalid_causal_phase_transition' ||
+    spec.scenario === 'invalid_causal_clock_envelope_regression' ||
     spec.scenario === 'invalid_coverage_chain_root_enforce' ||
     spec.scenario === 'invalid_cldd_discrepancy_enforce'
   ) {
@@ -572,6 +580,8 @@ async function buildFixtureScenario(spec: FixtureCase) {
       receiptId?: string;
       responseHashB64u?: string;
       bindingExtras?: Record<string, unknown>;
+      timestamp?: string;
+      issuedAt?: string;
     }) => {
       const receiptPayload: Record<string, unknown> = {
         receipt_version: '1',
@@ -585,7 +595,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
         tokens_input: 10,
         tokens_output: 20,
         latency_ms: 50,
-        timestamp: '2026-02-17T00:00:00Z',
+        timestamp: args.timestamp ?? '2026-02-17T00:00:00Z',
         binding: {
           run_id: runId,
           event_hash_b64u: eventHash,
@@ -598,7 +608,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
         envelopeType: 'gateway_receipt',
         signerDid: gateway.did,
         privateKey: gateway.privateKey,
-        issuedAt: '2026-02-17T00:00:00Z',
+        issuedAt: args.issuedAt ?? '2026-02-17T00:00:00Z',
       });
     };
 
@@ -928,6 +938,91 @@ async function buildFixtureScenario(spec: FixtureCase) {
           receiptSuffix: 'human_approval_root',
           bindingExtras: {
             span_id: 'span_human_approval_root_firewall_018',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_clock_monotonic') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'clock_root',
+          timestamp: '2026-02-17T00:00:00.000Z',
+          issuedAt: '2026-02-17T00:00:00.500Z',
+          bindingExtras: {
+            span_id: 'span_clock_root_firewall_020',
+            phase: 'setup',
+            attribution_confidence: 1.0,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'clock_child',
+          timestamp: '2026-02-17T00:00:01.000Z',
+          issuedAt: '2026-02-17T00:00:01.500Z',
+          bindingExtras: {
+            span_id: 'span_clock_child_firewall_020',
+            parent_span_id: 'span_clock_root_firewall_020',
+            phase: 'planning',
+            attribution_confidence: 1.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_clock_parent_after_child') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'clock_parent_late',
+          timestamp: '2026-02-17T00:00:03.000Z',
+          issuedAt: '2026-02-17T00:00:03.500Z',
+          bindingExtras: {
+            span_id: 'span_clock_parent_late_firewall_021',
+            phase: 'setup',
+            attribution_confidence: 1.0,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'clock_child_early',
+          timestamp: '2026-02-17T00:00:02.000Z',
+          issuedAt: '2026-02-17T00:00:02.500Z',
+          bindingExtras: {
+            span_id: 'span_clock_child_early_firewall_021',
+            parent_span_id: 'span_clock_parent_late_firewall_021',
+            phase: 'planning',
+            attribution_confidence: 1.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_phase_transition') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'phase_transition_parent',
+          timestamp: '2026-02-17T00:00:00.000Z',
+          issuedAt: '2026-02-17T00:00:00.500Z',
+          bindingExtras: {
+            span_id: 'span_phase_transition_parent_firewall_022',
+            phase: 'teardown',
+            attribution_confidence: 1.0,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'phase_transition_child',
+          timestamp: '2026-02-17T00:00:01.000Z',
+          issuedAt: '2026-02-17T00:00:01.500Z',
+          bindingExtras: {
+            span_id: 'span_phase_transition_child_firewall_022',
+            parent_span_id: 'span_phase_transition_parent_firewall_022',
+            phase: 'planning',
+            attribution_confidence: 1.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_clock_envelope_regression') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'clock_envelope_regression',
+          timestamp: '2026-02-17T00:00:05.000Z',
+          issuedAt: '2026-02-17T00:00:04.000Z',
+          bindingExtras: {
+            span_id: 'span_clock_envelope_regression_firewall_023',
             phase: 'execution',
             attribution_confidence: 0.5,
           },

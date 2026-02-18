@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-causal-clock",
+  "cases": [
+    "valid-causal-clock-monotonic.v1.json",
+    "invalid-causal-clock-parent-after-child.v1.json",
+    "invalid-causal-phase-transition.v1.json",
+    "invalid-causal-clock-envelope-regression.v1.json"
+  ]
+}

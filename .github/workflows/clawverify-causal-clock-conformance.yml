@@ -1,0 +1,41 @@
+name: clawverify-causal-clock-conformance
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-clock/**'
+      - 'services/clawverify/test/firewall-conformance.test.ts'
+      - 'scripts/protocol/run-clawverify-causal-clock-conformance.mjs'
+      - '.github/workflows/clawverify-causal-clock-conformance.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-clock/**'
+      - 'services/clawverify/test/firewall-conformance.test.ts'
+      - 'scripts/protocol/run-clawverify-causal-clock-conformance.mjs'
+      - '.github/workflows/clawverify-causal-clock-conformance.yml'
+
+jobs:
+  causal-clock-conformance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Run causal clock conformance fixtures
+        run: |
+          node scripts/protocol/run-clawverify-causal-clock-conformance.mjs
