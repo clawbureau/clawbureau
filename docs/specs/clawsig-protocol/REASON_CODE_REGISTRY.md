@@ -188,6 +188,8 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT` | Claimed attribution confidence exceeds the deterministic evidence class supported by emitted causal linkage |
 | `CAUSAL_BINDING_FIELD_CONFLICT` | Same causal field is present in both snake_case and camelCase forms with conflicting values |
 | `CAUSAL_BINDING_NORMALIZATION_FAILED` | Causal binding normalization fails due to malformed/empty identifier fields or invalid canonicalization inputs |
+| `CAUSAL_RECEIPT_REPLAY_DETECTED` | Same `receipt_id` appears multiple times in a bundle with divergent canonicalized content |
+| `CAUSAL_SPAN_REUSE_CONFLICT` | Same `span_id` is reused with incompatible causal semantics (parent/tool/phase/confidence disagreement) |
 
 ### COVERAGE_*
 

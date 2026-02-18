@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-no-replay-no-conflict",
+  "scenario": "valid_causal_no_replay_no_conflict",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

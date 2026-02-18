@@ -55,6 +55,9 @@ type FixtureCase = {
     | 'valid_causal_confidence_inferred'
     | 'valid_causal_confidence_unattributed'
     | 'invalid_causal_confidence_overclaim'
+    | 'invalid_causal_receipt_replay_detected'
+    | 'invalid_causal_span_reuse_conflict'
+    | 'valid_causal_no_replay_no_conflict'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
@@ -546,6 +549,9 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'valid_causal_confidence_inferred' ||
     spec.scenario === 'valid_causal_confidence_unattributed' ||
     spec.scenario === 'invalid_causal_confidence_overclaim' ||
+    spec.scenario === 'invalid_causal_receipt_replay_detected' ||
+    spec.scenario === 'invalid_causal_span_reuse_conflict' ||
+    spec.scenario === 'valid_causal_no_replay_no_conflict' ||
     spec.scenario === 'invalid_coverage_chain_root_enforce' ||
     spec.scenario === 'invalid_cldd_discrepancy_enforce'
   ) {
@@ -553,16 +559,19 @@ async function buildFixtureScenario(spec: FixtureCase) {
 
     const makeGatewayReceiptEnvelope = async (args: {
       receiptSuffix: string;
+      receiptId?: string;
+      responseHashB64u?: string;
       bindingExtras?: Record<string, unknown>;
     }) => {
       const receiptPayload: Record<string, unknown> = {
         receipt_version: '1',
-        receipt_id: `rcpt_${runId}_${args.receiptSuffix}`,
+        receipt_id: args.receiptId ?? `rcpt_${runId}_${args.receiptSuffix}`,
         gateway_id: 'gw_firewall_001',
         provider: 'openai',
         model: 'gpt-4',
         request_hash_b64u: 'req_gateway_firewall_001',
-        response_hash_b64u: 'res_gateway_firewall_001',
+        response_hash_b64u:
+          args.responseHashB64u ?? 'res_gateway_firewall_001',
         tokens_input: 10,
         tokens_output: 20,
         latency_ms: 50,
@@ -756,6 +765,78 @@ async function buildFixtureScenario(spec: FixtureCase) {
           receiptSuffix: 'confidence_overclaim',
           bindingExtras: {
             span_id: 'span_confidence_overclaim_firewall_011',
+            phase: 'execution',
+            attribution_confidence: 1.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_receipt_replay_detected') {
+      const replayReceiptId = `rcpt_${runId}_replay_target`;
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'replay_a',
+          receiptId: replayReceiptId,
+          responseHashB64u: 'res_gateway_replay_firewall_011a',
+          bindingExtras: {
+            span_id: 'span_replay_firewall_012',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'replay_b',
+          receiptId: replayReceiptId,
+          responseHashB64u: 'res_gateway_replay_firewall_011b',
+          bindingExtras: {
+            span_id: 'span_replay_firewall_012',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_span_reuse_conflict') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'span_reuse_root',
+          bindingExtras: {
+            span_id: 'span_reuse_conflict_firewall_013',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'span_reuse_conflict',
+          bindingExtras: {
+            span_id: 'span_reuse_conflict_firewall_013',
+            parent_span_id: 'span_parent_conflict_firewall_013',
+            phase: 'planning',
+            attribution_confidence: 0.5,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'span_parent_anchor',
+          bindingExtras: {
+            span_id: 'span_parent_conflict_firewall_013',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_no_replay_no_conflict') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'no_replay_root',
+          bindingExtras: {
+            span_id: 'span_no_replay_root_firewall_014',
+            phase: 'execution',
+            attribution_confidence: 1.0,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'no_replay_child',
+          bindingExtras: {
+            span_id: 'span_no_replay_child_firewall_014',
+            parent_span_id: 'span_no_replay_root_firewall_014',
             phase: 'execution',
             attribution_confidence: 1.0,
           },
