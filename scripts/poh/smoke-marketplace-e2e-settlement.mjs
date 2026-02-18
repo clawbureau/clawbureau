@@ -32,6 +32,7 @@ import {
   exportKeyPairJWK,
   hashJsonB64u,
 } from '../../packages/clawsig-sdk/dist/index.js';
+import { writeSmokeArtifactContract } from './smoke-artifact-contract.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -444,9 +445,6 @@ async function main() {
     urmMetadata: { task: 'ECON-E2E-001a', description: 'Full marketplace cycle: escrow → release → verify' },
   });
 
-  await fs.writeFile(path.join(outDir, 'proof-bundle.json'), JSON.stringify(result.envelope, null, 2));
-  await fs.writeFile(path.join(outDir, 'urm.json'), JSON.stringify(result.urm, null, 2));
-
   const toolReceiptCount = result.envelope.payload.tool_receipts?.length ?? 0;
   const eventCount = result.envelope.payload.event_chain?.length ?? 0;
 
@@ -465,12 +463,28 @@ async function main() {
     generated_at: new Date().toISOString(),
   };
 
-  await fs.writeFile(path.join(outDir, 'smoke.json'), JSON.stringify(summary, null, 2));
+  const verify = {
+    kind: 'smoke_contract_verdict',
+    status: allPass ? 'PASS' : 'FAIL',
+    reason_code: allPass ? 'OK' : 'SMOKE_STEP_FAILED',
+    reason: allPass
+      ? 'All marketplace settlement smoke steps passed'
+      : 'One or more marketplace settlement smoke steps failed',
+    verified_at: new Date().toISOString(),
+    run_id: run.runId,
+    bundle_id: result.envelope.payload.bundle_id,
+  };
 
-  // Health report if captured
-  if (healthRes.json) {
-    await fs.writeFile(path.join(outDir, 'health-snapshot.json'), JSON.stringify(healthRes.json, null, 2));
-  }
+  await writeSmokeArtifactContract({
+    artifactDir: outDir,
+    proofBundle: result.envelope,
+    urm: result.urm,
+    verify,
+    smoke: summary,
+    healthSnapshot: healthRes.json,
+    requireProofBundle: true,
+    requireUrm: true,
+  });
 
   console.log(`\n${allPass ? '✅' : '⚠️'} ${env}: ${steps.filter(s => s.pass).length}/${steps.length} passed`);
   console.log(`   SDK: ${toolReceiptCount} tool receipts, ${eventCount} events`);

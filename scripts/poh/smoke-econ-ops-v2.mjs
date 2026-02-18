@@ -6,9 +6,10 @@
  *   node scripts/poh/smoke-econ-ops-v2.mjs --env staging
  *   node scripts/poh/smoke-econ-ops-v2.mjs --env prod
  */
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeSmokeArtifactContract } from './smoke-artifact-contract.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -113,18 +114,22 @@ const legacyAlerts = await api('ops:alerts:list', `${BASE}/v1/ops/alerts?limit=5
 check('Legacy alerts 200', legacyAlerts.status === 200, `status=${legacyAlerts.status}`);
 
 // === Finalize ===
+let proofBundleEnvelope;
+let urmDocument;
+
 if (runRef) {
   console.log(`\n[sdk] Finalizing proof bundle...`);
   try {
-    const { envelope, urm } = runRef.finalize({
+    const finalized = runRef.finalize({
       inputs: [{ type: 'env', label: envArg }],
       outputs: [{ type: 'results', passed, total }],
     });
-    writeFileSync(resolve(outDir, 'proof-bundle.json'), JSON.stringify(envelope, null, 2));
-    writeFileSync(resolve(outDir, 'urm.json'), JSON.stringify(urm, null, 2));
-    console.log(`   Bundle: ${resolve(outDir, 'proof-bundle.json')}`);
+    proofBundleEnvelope = finalized.envelope;
+    urmDocument = finalized.urm;
   } catch (e) { console.log(`   ⚠️ SDK finalize: ${e.message}`); }
 }
+
+const allPass = passed === total;
 
 const smoke = {
   epic: 'ECON-OPS-002', env: envArg, timestamp: new Date().toISOString(), passed, total, results,
@@ -132,9 +137,30 @@ const smoke = {
     sla_deliveries: slaRes.json?.total_deliveries, failures: failRes.json?.count,
     active_alerts: alertsRes.json?.count, services_up: svcsUp },
 };
-writeFileSync(resolve(outDir, 'smoke.json'), JSON.stringify(smoke, null, 2));
 
-console.log(`\n${passed === total ? '✅' : '⚠️'} ${envArg}: ${passed}/${total} passed`);
+const verify = {
+  kind: 'smoke_contract_verdict',
+  status: allPass ? 'PASS' : 'FAIL',
+  reason_code: allPass ? 'OK' : 'SMOKE_STEP_FAILED',
+  reason: allPass
+    ? 'All econ-ops smoke steps passed'
+    : 'One or more econ-ops smoke steps failed',
+  verified_at: new Date().toISOString(),
+  proof_bundle_emitted: Boolean(proofBundleEnvelope),
+};
+
+await writeSmokeArtifactContract({
+  artifactDir: outDir,
+  proofBundle: proofBundleEnvelope,
+  urm: urmDocument,
+  verify,
+  smoke,
+  requireProofBundle: Boolean(proofBundleEnvelope),
+  requireUrm: Boolean(urmDocument),
+});
+
+console.log(`\n${allPass ? '✅' : '⚠️'} ${envArg}: ${passed}/${total} passed`);
 if (runRef) console.log(`   SDK: ${runRef.toolCalls?.length ?? 0} tool receipts`);
+if (proofBundleEnvelope) console.log(`   Bundle: ${resolve(outDir, 'proof-bundle.json')}`);
 console.log(`   Written to: ${outDir}`);
-process.exit(passed === total ? 0 : 1);
+process.exit(allPass ? 0 : 1);

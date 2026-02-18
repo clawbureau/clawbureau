@@ -18,9 +18,10 @@
  *   node scripts/poh/smoke-econ-settle-funded-lifecycle.mjs --env prod
  */
 
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeSmokeArtifactContract } from './smoke-artifact-contract.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -356,10 +357,13 @@ check('Escrow idempotency: consistent behavior',
 // ============================================================================
 // Finalize
 // ============================================================================
+let proofBundleEnvelope;
+let urmDocument;
+
 if (runRef) {
   console.log(`\n[sdk] Finalizing proof bundle...`);
   try {
-    const { envelope, urm } = runRef.finalize({
+    const finalized = runRef.finalize({
       inputs: [
         { type: 'env', label: envArg },
         { type: 'principal', value: PRINCIPAL },
@@ -371,13 +375,14 @@ if (runRef) {
         { type: 'fee_policy', id: feePolicy?.id, version: feePolicy?.version },
       ],
     });
-    writeFileSync(resolve(outDir, 'proof-bundle.json'), JSON.stringify(envelope, null, 2));
-    writeFileSync(resolve(outDir, 'urm.json'), JSON.stringify(urm, null, 2));
-    console.log(`   Bundle: ${resolve(outDir, 'proof-bundle.json')}`);
+    proofBundleEnvelope = finalized.envelope;
+    urmDocument = finalized.urm;
   } catch (e) {
     console.log(`   ⚠️ SDK finalize: ${e.message}`);
   }
 }
+
+const allPass = passed === total;
 
 const smoke = {
   epic: 'ECON-SETTLE-002',
@@ -394,14 +399,37 @@ const smoke = {
     ledger: LEDGER_BASE,
   },
 };
-writeFileSync(resolve(outDir, 'smoke.json'), JSON.stringify(smoke, null, 2));
 
-console.log(`\n${passed === total ? '✅' : '⚠️'} ${envArg}: ${passed}/${total} passed`);
+const verify = {
+  kind: 'smoke_contract_verdict',
+  status: allPass ? 'PASS' : 'FAIL',
+  reason_code: allPass ? 'OK' : 'SMOKE_STEP_FAILED',
+  reason: allPass
+    ? 'All funded-lifecycle smoke steps passed'
+    : 'One or more funded-lifecycle smoke steps failed',
+  verified_at: new Date().toISOString(),
+  proof_bundle_emitted: Boolean(proofBundleEnvelope),
+};
+
+await writeSmokeArtifactContract({
+  artifactDir: outDir,
+  proofBundle: proofBundleEnvelope,
+  urm: urmDocument,
+  verify,
+  smoke,
+  requireProofBundle: Boolean(proofBundleEnvelope),
+  requireUrm: Boolean(urmDocument),
+});
+
+console.log(`\n${allPass ? '✅' : '⚠️'} ${envArg}: ${passed}/${total} passed`);
 if (runRef) {
   const tc = runRef?.toolCalls?.length ?? 0;
   const ev = runRef?.events?.length ?? 0;
   console.log(`   SDK: ${tc} tool receipts, ${ev} events`);
 }
+if (proofBundleEnvelope) {
+  console.log(`   Bundle: ${resolve(outDir, 'proof-bundle.json')}`);
+}
 console.log(`   Written to: ${outDir}`);
 
-process.exit(passed === total ? 0 : 1);
+process.exit(allPass ? 0 : 1);
