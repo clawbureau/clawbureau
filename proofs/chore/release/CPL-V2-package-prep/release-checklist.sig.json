@@ -1,0 +1,9 @@
+{
+  "version": "m1",
+  "type": "message_signature",
+  "algo": "ed25519",
+  "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+  "message": "release-checklist:clawsig-v0.2.0:ca774ae95594110f659bcb9dd2d5ea65332d8491e45556ba5a206a1b58f9180c",
+  "createdAt": "2026-02-18T00:38:55.482Z",
+  "signature": "7qQfJ4xJ9kIhSxxK+XJiDjZnHSWHZ9StjUBYAQzo04dV6xfSBsEp22z2mbP9BKPdqUOGSXork3PGrkul4iG9CQ=="
+}

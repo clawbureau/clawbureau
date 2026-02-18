@@ -1,0 +1,69 @@
+{
+  "checklist_version": "1",
+  "prepared_at": "2026-02-18T00:34:30Z",
+  "release_line": "clawsig-v0.2.0",
+  "scope": {
+    "packages": [
+      "@clawbureau/schema",
+      "@clawbureau/clawverify-core",
+      "@clawbureau/clawverify-cli"
+    ],
+    "publish": "not executed",
+    "notes": "Release-prep lane only: version alignment + pack/install smoke"
+  },
+  "versions": {
+    "@clawbureau/schema": "0.2.0",
+    "@clawbureau/clawverify-core": "0.2.0",
+    "@clawbureau/clawverify-cli": "0.2.0"
+  },
+  "checklist_sha256": "ca774ae95594110f659bcb9dd2d5ea65332d8491e45556ba5a206a1b58f9180c",
+  "signature_artifact": "proofs/chore/release/CPL-V2-package-prep/release-checklist.sig.json",
+  "pack_smoke": {
+    "runner": "scripts/release/run-clawsig-v0.2-package-prep.mjs",
+    "summary_artifact": "artifacts/release/clawsig-v0.2-package-prep/2026-02-18T00-37-58-412Z/summary.json",
+    "ok": true,
+    "tarballs": [
+      {
+        "name": "@clawbureau/schema",
+        "filename": "clawbureau-schema-0.2.0.tgz",
+        "sha256": "acde5a4d8c5424cfd399dd2131990675554b77d5a2228b15ecfed252c4b0b4f0"
+      },
+      {
+        "name": "@clawbureau/clawverify-core",
+        "filename": "clawbureau-clawverify-core-0.2.0.tgz",
+        "sha256": "5ff0e6f458f185becfb8a7b577034f8714a9425905319e35cebf0817ea7e28d8"
+      },
+      {
+        "name": "@clawbureau/clawverify-cli",
+        "filename": "clawbureau-clawverify-cli-0.2.0.tgz",
+        "sha256": "a1e33bad4a1a71ec11eca64e7d35604cf14557c3987d14400e66a63255af03fe"
+      }
+    ],
+    "install_from_tarball": {
+      "ok": true,
+      "version_matches": true
+    },
+    "cli_version": {
+      "ok": true,
+      "stdout": "clawverify 0.2.0"
+    }
+  },
+  "checklist": [
+    {
+      "item": "Package versions aligned to 0.2.0",
+      "status": "done"
+    },
+    {
+      "item": "npm pack completed for schema/core/cli",
+      "status": "done"
+    },
+    {
+      "item": "Install-from-tarball sanity check passed",
+      "status": "done"
+    },
+    {
+      "item": "Signed checklist proof committed",
+      "status": "done"
+    }
+  ]
+}

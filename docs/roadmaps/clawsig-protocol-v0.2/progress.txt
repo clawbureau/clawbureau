@@ -209,3 +209,23 @@ Validation:
 - `cd packages/clawverify-cli && npm run build` ✅
 - `node scripts/protocol/run-clawsig-v0.2-quickstart.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — v0.2 package release-prep lane (no publish)
+
+- Version alignment prepared for:
+  - `@clawbureau/schema` → `0.2.0`
+  - `@clawbureau/clawverify-core` → `0.2.0`
+  - `@clawbureau/clawverify-cli` → `0.2.0`
+- Added release-prep smoke runner:
+  - `scripts/release/run-clawsig-v0.2-package-prep.mjs`
+  - packs target packages and validates install-from-tarball in a clean temp project.
+- Added signed release checklist artifacts:
+  - `docs/releases/clawsig-v0.2-package-release-checklist.md`
+  - `docs/releases/clawsig-v0.2-package-release-checklist.v1.json`
+  - `proofs/chore/release/CPL-V2-package-prep/release-checklist.sig.json`
+
+Validation:
+- `node scripts/release/run-clawsig-v0.2-package-prep.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

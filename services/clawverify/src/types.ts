@@ -1,6 +1,9 @@
 /**
  * Clawverify Types
- * Core types for the verification API
+ * Core types for the verification API.
+ *
+ * Note: package release-prep lanes may update tracker/metadata/version context
+ * without changing runtime behavior; keep this file as the canonical type surface.
  */
 
 // Allowlisted envelope versions
