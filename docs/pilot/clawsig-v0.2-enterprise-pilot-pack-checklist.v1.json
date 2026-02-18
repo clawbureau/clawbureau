@@ -1,0 +1,147 @@
+{
+  "checklist_version": "1",
+  "prepared_at": "2026-02-18T13:30:00Z",
+  "pilot_line": "clawsig-v0.2.0-enterprise-pilot",
+  "integrity_model": "detached_signature_message",
+  "signature_artifact": "proofs/docs/pilot/ADP-US-003-enterprise-pilot-pack/pilot-pack-checklist.sig.json",
+  "scope": {
+    "duration_days": 30,
+    "publish": "not executed",
+    "deploy": "not executed",
+    "audience": [
+      "security",
+      "engineering",
+      "audit"
+    ]
+  },
+  "pilot_plan": [
+    {
+      "phase": "week-1",
+      "goal": "Baseline integration and quickstart verification",
+      "deliverables": [
+        "run scripts/protocol/run-clawsig-v0.2-quickstart.mjs",
+        "run one integration starter pack in target CI",
+        "capture first proof/URM/verify artifacts"
+      ]
+    },
+    {
+      "phase": "week-2",
+      "goal": "Pipeline coverage and deterministic evidence flow",
+      "deliverables": [
+        "enable proof bundle verification in PR path",
+        "enforce commit proof checks for agent-generated lanes",
+        "collect artifact tracer outputs for representative runs"
+      ]
+    },
+    {
+      "phase": "week-3",
+      "goal": "Control mapping and exception handling",
+      "deliverables": [
+        "map fail-closed reason codes to internal controls",
+        "define escalation playbook for FAIL reason_code classes",
+        "review conformance vectors relevant to enterprise policy"
+      ]
+    },
+    {
+      "phase": "week-4",
+      "goal": "Pilot closeout and go/no-go recommendation",
+      "deliverables": [
+        "compile pilot evidence bundle",
+        "score success metrics",
+        "produce decision memo for rollout"
+      ]
+    }
+  ],
+  "success_metrics": {
+    "security": [
+      {
+        "metric": "fail_closed_verification_rate",
+        "target": ">= 99% deterministic PASS/FAIL outcomes for evaluated artifacts"
+      },
+      {
+        "metric": "unknown_input_policy",
+        "target": "0 unknown schema/algorithm bypasses accepted"
+      }
+    ],
+    "engineering": [
+      {
+        "metric": "starter_pack_reproducibility",
+        "target": "3/3 starter packs runnable from clean clone"
+      },
+      {
+        "metric": "artifact_contract_compliance",
+        "target": "100% changed PoH smoke scripts pass contract CI gate"
+      }
+    ],
+    "audit": [
+      {
+        "metric": "evidence_completeness",
+        "target": "Each sampled run has proof-bundle + URM + verify artifacts"
+      },
+      {
+        "metric": "control_mapping_coverage",
+        "target": "Reason-code mappings documented for pilot control set"
+      }
+    ]
+  },
+  "evidence_requirements": [
+    {
+      "name": "protocol_quickstart_summary",
+      "path": "artifacts/examples/clawsig-v0.2-quickstart/<timestamp>/summary.json",
+      "required": true
+    },
+    {
+      "name": "integration_pack_artifacts",
+      "path": "artifacts/examples/integrations/<pack>/{proof-bundle.json,urm.json,verify.json,smoke.json}",
+      "required": true
+    },
+    {
+      "name": "artifact_trace_summary",
+      "path": "artifacts/ops/artifact-trace/<timestamp>/{summary.json,summary.md}",
+      "required": true
+    },
+    {
+      "name": "conformance_summary",
+      "path": "artifacts/conformance/clawsig-protocol/<timestamp>/summary.json",
+      "required": true
+    }
+  ],
+  "control_mapping_references": [
+    {
+      "control_area": "schema_and_integrity_fail_closed",
+      "reason_codes": [
+        "SCHEMA_VALIDATION_FAILED",
+        "UNKNOWN_SCHEMA_ID",
+        "UNKNOWN_SCHEMA_VERSION",
+        "HASH_MISMATCH"
+      ],
+      "spec_refs": [
+        "docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md",
+        "docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md"
+      ]
+    },
+    {
+      "control_area": "receipt_and_binding_integrity",
+      "reason_codes": [
+        "SIGNATURE_INVALID",
+        "RECEIPT_BINDING_MISMATCH",
+        "DEPENDENCY_NOT_CONFIGURED"
+      ],
+      "conformance_refs": [
+        "packages/schema/fixtures/protocol-conformance/manifest.v1.json",
+        "scripts/protocol/run-clawsig-protocol-conformance.mjs"
+      ]
+    },
+    {
+      "control_area": "v0.2_rate_limit_semantics",
+      "reason_codes": [
+        "RATE_LIMIT_WINDOW_INVALID",
+        "RATE_LIMIT_CLAIM_INCONSISTENT",
+        "RATE_LIMIT_EXCEEDED"
+      ],
+      "conformance_refs": [
+        "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/*"
+      ]
+    }
+  ]
+}
