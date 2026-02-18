@@ -182,12 +182,18 @@ export interface ReceiptBinding {
   /** CST token scope hash injected by the proxy */
   token_scope_hash_b64u?: string;
 
-  /** Optional causal span identifier for this receipt node. */
+  /** Optional causal span identifier for this receipt node (canonical key). */
   span_id?: string;
-  /** Optional parent span identifier referencing another span in the same bundle. */
+  /** Optional camelCase alias for span_id (normalized with snake_case precedence). */
+  spanId?: string;
+  /** Optional parent span identifier referencing another span in the same bundle (canonical key). */
   parent_span_id?: string;
-  /** Optional tool-root span identifier for derived side-effect linkage. */
+  /** Optional camelCase alias for parent_span_id (normalized with snake_case precedence). */
+  parentSpanId?: string;
+  /** Optional tool-root span identifier for derived side-effect linkage (canonical key). */
   tool_span_id?: string;
+  /** Optional camelCase alias for tool_span_id (normalized with snake_case precedence). */
+  toolSpanId?: string;
   /** Optional deterministic lifecycle phase marker for the span. */
   phase?:
     | 'setup'
@@ -197,8 +203,10 @@ export interface ReceiptBinding {
     | 'observation'
     | 'reflection'
     | 'teardown';
-  /** Optional deterministic causal attribution confidence in inclusive [0.0, 1.0]. */
+  /** Optional deterministic causal attribution confidence in inclusive [0.0, 1.0] (canonical key). */
   attribution_confidence?: number;
+  /** Optional camelCase alias for attribution_confidence (normalized with snake_case precedence). */
+  attributionConfidence?: number;
 }
 
 /**
@@ -372,6 +380,8 @@ export type VerificationErrorCode =
   | 'CAUSAL_CYCLE_DETECTED'
   | 'CAUSAL_PHASE_INVALID'
   | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
+  | 'CAUSAL_BINDING_FIELD_CONFLICT'
+  | 'CAUSAL_BINDING_NORMALIZATION_FAILED'
   | 'COVERAGE_CLDD_DISCREPANCY_ENFORCED'
   | 'URM_MISSING'
   | 'URM_MISMATCH'

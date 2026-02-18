@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-causal-hardening",
+  "cases": [
+    "valid-causal-binding-snake-only.v1.json",
+    "valid-causal-binding-camel-only.v1.json",
+    "invalid-causal-binding-field-conflict.v1.json",
+    "invalid-causal-binding-normalization-failed.v1.json"
+  ]
+}

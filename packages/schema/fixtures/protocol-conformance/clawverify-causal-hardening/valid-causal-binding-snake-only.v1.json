@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-binding-snake-only",
+  "scenario": "valid_causal_binding_snake_only",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

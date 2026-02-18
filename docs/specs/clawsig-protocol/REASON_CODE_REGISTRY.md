@@ -185,6 +185,8 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `CAUSAL_CYCLE_DETECTED` | Parent-span traversal detects a cycle in causal linkage |
 | `CAUSAL_PHASE_INVALID` | `binding.phase` is present but not one of the deterministic allowed lifecycle phases |
 | `CAUSAL_CONFIDENCE_OUT_OF_RANGE` | `attribution_confidence` is present but outside inclusive `[0.0, 1.0]` bounds |
+| `CAUSAL_BINDING_FIELD_CONFLICT` | Same causal field is present in both snake_case and camelCase forms with conflicting values |
+| `CAUSAL_BINDING_NORMALIZATION_FAILED` | Causal binding normalization fails due to malformed/empty identifier fields or invalid canonicalization inputs |
 
 ### COVERAGE_*
 
