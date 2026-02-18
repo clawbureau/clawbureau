@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-022.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-023.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -354,11 +354,24 @@
       "priority": 27,
       "passes": true,
       "notes": "Shipped via PR #325 (merge b9ab26fc14ab50167de81e5f60683cd0fee7aa90): roadmap continuity hardening and expanded cav-roadmap-sync trigger coverage."
+    },
+    {
+      "id": "CAV-US-023",
+      "title": "Core/service causal semantics parity uplift",
+      "description": "Bring @clawbureau/clawverify-core proof-bundle causal semantics to service parity with fail-closed reason-code consistency across reference/cycle/phase/confidence/connectivity/profile/replay paths.",
+      "acceptanceCriteria": [
+        "Core verifier ports missing fail-closed causal checks and reason codes from service verifier",
+        "Core causal policy-profile lock and connectivity/orphan behavior matches service outcomes",
+        "Deterministic parity tests cover reference/cycle/phase/confidence/connectivity/profile/replay conflicts"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "Shipped via PR #326 (merge 578b08284f9a1b9fbc6f5480eec0e23acef82379): core causal semantics + parity regressions."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T23:40:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-022 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T23:58:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-023 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -439,6 +452,10 @@
       {
         "pr": "#325",
         "merge_commit": "b9ab26fc14ab50167de81e5f60683cd0fee7aa90"
+      },
+      {
+        "pr": "#326",
+        "merge_commit": "578b08284f9a1b9fbc6f5480eec0e23acef82379"
       }
     ]
   }

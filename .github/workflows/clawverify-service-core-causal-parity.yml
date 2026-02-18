@@ -1,0 +1,67 @@
+name: clawverify-service-core-causal-parity
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - '.github/workflows/clawverify-service-core-causal-parity.yml'
+      - '.github/workflows/causal-integrity-burnin.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - '.github/workflows/clawverify-service-core-causal-parity.yml'
+      - '.github/workflows/causal-integrity-burnin.yml'
+
+jobs:
+  service-core-causal-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
+      - name: Run service-vs-core causal parity gate
+        run: |
+          node scripts/protocol/run-clawverify-service-core-causal-parity.mjs
+
+      - name: Upload service-core parity summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-service-core-parity-summary
+          path: artifacts/ops/causal-service-core-parity/
+          if-no-files-found: ignore

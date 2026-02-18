@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { base64UrlEncode, computeHash } from '../src/crypto';
-import { verifyProofBundle } from '../src/verify-proof-bundle';
+import { verifyProofBundle as verifyProofBundleService } from '../src/verify-proof-bundle';
 
 const BASE58_ALPHABET =
   '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -27,6 +27,30 @@ type FixtureCase = {
     | 'valid_policy_profile_strict_lock';
   expected: FixtureExpected;
 };
+
+const verifierImplPromise: Promise<typeof verifyProofBundleService> = (async () => {
+  const mode = process.env.CLAWVERIFY_POLICY_PROFILE_VERIFIER_IMPL?.trim() || 'service';
+  if (mode !== 'core') {
+    return verifyProofBundleService;
+  }
+
+  const coreDistPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../packages/clawverify-core/dist/index.js'
+  );
+
+  const coreModule = (await import(coreDistPath)) as {
+    verifyProofBundle?: typeof verifyProofBundleService;
+  };
+
+  if (typeof coreModule.verifyProofBundle !== 'function') {
+    throw new Error(
+      `CLAWVERIFY_POLICY_PROFILE_VERIFIER_IMPL=core requires built core dist at ${coreDistPath}`
+    );
+  }
+
+  return coreModule.verifyProofBundle;
+})();
 
 function base58Encode(bytes: Uint8Array): string {
   if (bytes.length === 0) return '';
@@ -407,7 +431,8 @@ afterAll(() => {
 describe(`clawverify causal policy profile conformance (${manifest.suite})`, () => {
   it.each(fixtures)('validates fixture: $id', async (spec) => {
     const scenario = await buildFixtureScenario(spec);
-    const out = await verifyProofBundle(scenario.envelope, scenario.options as any);
+    const verifyProofBundleImpl = await verifierImplPromise;
+    const out = await verifyProofBundleImpl(scenario.envelope, scenario.options as any);
 
     summaryRows.push({
       id: spec.id,
