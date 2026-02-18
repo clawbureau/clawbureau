@@ -50,7 +50,7 @@ Current tranche status:
 
 - ✅ `CAV-US-001` additive causal binding schema contract (shipped)
 - ✅ `CAV-US-002` fail-closed causal DAG verifier checks (shipped)
-- ⏳ `CAV-US-003` runtime tool-span emission wiring (planned)
+- ✅ `CAV-US-003` runtime tool-span emission wiring (shipped)
 - ⏳ `CAV-US-004` coverage/label delivery and confidence rendering (planned)
 
 ## Prior art

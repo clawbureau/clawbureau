@@ -392,6 +392,32 @@ function extractReceiptFromStream(body: Buffer): {
   return { provider: 'unknown', model: 'unknown' };
 }
 
+function sanitizeSpanSeed(seed: string): string {
+  const normalized = seed
+    .replace(/[^A-Za-z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return normalized.length > 0 ? normalized.slice(0, 64) : randomUUID().replace(/-/g, '');
+}
+
+function deriveGatewaySpanId(
+  envelope: SignedEnvelope<GatewayReceiptPayload> | undefined,
+  fallbackSeed: string,
+): string {
+  const explicit = envelope?.payload?.binding?.span_id;
+  if (typeof explicit === 'string' && explicit.trim().length > 0) {
+    return explicit;
+  }
+
+  const fromReceiptId = envelope?.payload?.receipt_id;
+  if (typeof fromReceiptId === 'string' && fromReceiptId.trim().length > 0) {
+    return `span_gateway_${sanitizeSpanSeed(fromReceiptId)}`;
+  }
+
+  return `span_gateway_${sanitizeSpanSeed(fallbackSeed)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -558,6 +584,11 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         });
       }
 
+      const gatewaySpanId = deriveGatewaySpanId(
+        receiptInfo.envelope,
+        `${provider}:${idempotencyKey}`,
+      );
+
       // CAUSAL SIEVE: Process LLM response for tool_calls.
       // The TCP Guillotine evaluates these against the local WPC policy.
       let guillotineViolations: PolicyViolation[] = [];
@@ -565,6 +596,7 @@ export async function startLocalProxy(options: ProxyOptions): Promise<LocalProxy
         guillotineViolations = sieve.processLLMResponse(
           providerType,
           upstream.body.toString('utf-8'),
+          { gatewaySpanId },
         );
       } catch {
         // Sieve errors must not break the proxy pipeline

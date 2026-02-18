@@ -26,6 +26,7 @@ import {
   analyzeCommand,
   compilePolicyToBash,
   InterposeState,
+  hashJsonB64u,
 } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
@@ -198,6 +199,16 @@ async function ensureMinimalHarnessEvidence(args: {
       },
     ];
   }
+}
+
+async function resealProofBundleEnvelope(
+  bundle: SignedEnvelope<ProofBundlePayload>,
+  signer: FallbackSigner,
+): Promise<void> {
+  const payloadHash = await hashJsonB64u(bundle.payload);
+  const signature = await signer.sign(new TextEncoder().encode(payloadHash));
+  bundle.payload_hash_b64u = payloadHash;
+  bundle.signature_b64u = signature;
 }
 
 // ---------------------------------------------------------------------------
@@ -487,8 +498,10 @@ export async function wrap(
     }
   }
 
-  const bundle = await proxy.compileProofBundle();
+  // Stop proxy first so the Causal Sieve can flush/finalize all pending
+  // tool + side-effect receipts before bundle compilation/signing.
   await proxy.stop();
+  const bundle = await proxy.compileProofBundle();
 
   // Inject sentinel receipts into the bundle
   if (allExecutionReceipts.length > 0) {
@@ -600,6 +613,13 @@ export async function wrap(
     runId,
     commandName,
     exitCode,
+  });
+
+  // Final seal happens after all payload mutation. This preserves deterministic
+  // signature sequencing and avoids post-sign envelope drift.
+  await resealProofBundleEnvelope(bundle, {
+    did: agentDid.did,
+    sign: (data) => agentDid.sign(data),
   });
 
   // Print summary
