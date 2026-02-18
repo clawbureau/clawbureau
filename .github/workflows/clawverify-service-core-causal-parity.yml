@@ -7,10 +7,12 @@ on:
       - 'packages/clawverify-core/**'
       - 'packages/clawverify-cli/**'
       - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
       - 'scripts/protocol/run-clawverify-causal-*.mjs'
       - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
       - 'scripts/protocol/run-causal-integrity-burnin.mjs'
       - '.github/workflows/clawverify-service-core-causal-parity.yml'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
       - '.github/workflows/causal-integrity-burnin.yml'
   push:
     branches:
@@ -20,10 +22,12 @@ on:
       - 'packages/clawverify-core/**'
       - 'packages/clawverify-cli/**'
       - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
       - 'scripts/protocol/run-clawverify-causal-*.mjs'
       - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
       - 'scripts/protocol/run-causal-integrity-burnin.mjs'
       - '.github/workflows/clawverify-service-core-causal-parity.yml'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
       - '.github/workflows/causal-integrity-burnin.yml'
 
 jobs:

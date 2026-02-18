@@ -1,0 +1,46 @@
+name: clawverify-causal-fixture-contract
+
+on:
+  pull_request:
+    paths:
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
+      - 'scripts/protocol/run-clawverify-causal-reason-code-stability.mjs'
+      - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'scripts/protocol/check-causal-fixture-contract.mjs'
+      - 'scripts/protocol/run-clawverify-causal-reason-code-stability.mjs'
+      - 'scripts/protocol/run-clawverify-service-core-causal-parity.mjs'
+      - '.github/workflows/clawverify-causal-fixture-contract.yml'
+
+jobs:
+  causal-fixture-contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate causal fixture contract
+        run: |
+          node scripts/protocol/check-causal-fixture-contract.mjs
+
+      - name: Upload causal fixture contract summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-fixture-contract-summary
+          path: artifacts/ops/causal-fixture-contract/
+          if-no-files-found: ignore
