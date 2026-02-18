@@ -22,6 +22,8 @@ import type {
   ProofBundleVerificationResult,
   VerificationError,
   RateLimitClaim,
+  SideEffectReceiptPayload,
+  HumanApprovalReceiptPayload,
   TrustTier,
   ProofTier,
   ModelIdentityTier,
@@ -125,6 +127,9 @@ export interface ProofBundleVerifierOptions {
 
   /** Phase gate for deterministic coverage invariants. Defaults to 'observe'. */
   coverage_enforcement_phase?: 'observe' | 'warn' | 'enforce';
+
+  /** Causal graph connectivity/orphan enforcement mode. Defaults to 'enforce'. */
+  causal_connectivity_mode?: 'observe' | 'warn' | 'enforce';
 
   /** Optional strict VIR binding checks (non-transferability). */
   expectedVirNonce?: string;
@@ -1702,10 +1707,144 @@ function collectCausalBindingEntries(
   return { ok: true, entries: out };
 }
 
-function validateCausalBindingEntries(
-  entries: CausalBindingEntry[]
+interface CausalSupportBindingEntry {
+  spanId?: string;
+  spanFieldPath: string;
+  parentSpanId?: string;
+  parentSpanFieldPath: string;
+  toolSpanId?: string;
+  toolSpanFieldPath: string;
+}
+
+function normalizeCausalSupportBinding(
+  binding: Record<string, unknown>,
+  path: string
 ):
+  | { ok: true; entry: CausalSupportBindingEntry }
+  | {
+      ok: false;
+      code: CausalBindingNormalizationCode;
+      message: string;
+      field: string;
+    } {
+  const span = normalizeCausalIdentifierField({
+    binding,
+    path,
+    snakeKey: 'span_id',
+    camelKey: 'spanId',
+    label: 'span_id',
+  });
+  if (!span.ok) return span;
+
+  const parentSpan = normalizeCausalIdentifierField({
+    binding,
+    path,
+    snakeKey: 'parent_span_id',
+    camelKey: 'parentSpanId',
+    label: 'parent_span_id',
+  });
+  if (!parentSpan.ok) return parentSpan;
+
+  const toolSpan = normalizeCausalIdentifierField({
+    binding,
+    path,
+    snakeKey: 'tool_span_id',
+    camelKey: 'toolSpanId',
+    label: 'tool_span_id',
+  });
+  if (!toolSpan.ok) return toolSpan;
+
+  return {
+    ok: true,
+    entry: {
+      spanId: span.value,
+      spanFieldPath: span.fieldPath,
+      parentSpanId: parentSpan.value,
+      parentSpanFieldPath: parentSpan.fieldPath,
+      toolSpanId: toolSpan.value,
+      toolSpanFieldPath: toolSpan.fieldPath,
+    },
+  };
+}
+
+function validateCausalAnchoredSupportReceipts(args: {
+  receipts: Array<SideEffectReceiptPayload | HumanApprovalReceiptPayload> | undefined;
+  knownSpanIds: Set<string>;
+  pathPrefix: 'payload.side_effect_receipts' | 'payload.human_approval_receipts';
+  orphanCode: 'CAUSAL_SIDE_EFFECT_ORPHANED' | 'CAUSAL_HUMAN_APPROVAL_ORPHANED';
+}):
   | { ok: true }
+  | {
+      ok: false;
+      code:
+        | 'CAUSAL_SIDE_EFFECT_ORPHANED'
+        | 'CAUSAL_HUMAN_APPROVAL_ORPHANED'
+        | CausalBindingNormalizationCode;
+      message: string;
+      field: string;
+    } {
+  if (!args.receipts || args.receipts.length === 0) {
+    return { ok: true };
+  }
+
+  for (let i = 0; i < args.receipts.length; i++) {
+    const record = args.receipts[i] as unknown;
+    if (!isObjectRecord(record)) {
+      return {
+        ok: false,
+        code: args.orphanCode,
+        message: `${args.pathPrefix}[${i}] is malformed and cannot be causally anchored`,
+        field: `${args.pathPrefix}[${i}]`,
+      };
+    }
+
+    const binding = isObjectRecord(record.binding) ? record.binding : null;
+    if (!binding) {
+      return {
+        ok: false,
+        code: args.orphanCode,
+        message: `${args.pathPrefix}[${i}] missing binding object for causal anchoring`,
+        field: `${args.pathPrefix}[${i}].binding`,
+      };
+    }
+
+    const normalized = normalizeCausalSupportBinding(
+      binding,
+      `${args.pathPrefix}[${i}].binding`
+    );
+    if (!normalized.ok) {
+      return normalized;
+    }
+
+    const anchorCandidate =
+      normalized.entry.toolSpanId ??
+      normalized.entry.parentSpanId ??
+      normalized.entry.spanId;
+
+    if (!anchorCandidate || !args.knownSpanIds.has(anchorCandidate)) {
+      return {
+        ok: false,
+        code: args.orphanCode,
+        message:
+          `${args.pathPrefix}[${i}] is not anchored to a known causal span lineage`,
+        field:
+          normalized.entry.toolSpanId !== undefined
+            ? normalized.entry.toolSpanFieldPath
+            : normalized.entry.parentSpanId !== undefined
+              ? normalized.entry.parentSpanFieldPath
+              : normalized.entry.spanFieldPath,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+function validateCausalBindingEntries(
+  entries: CausalBindingEntry[],
+  connectivityMode: 'observe' | 'warn' | 'enforce'
+):
+  | { ok: true; knownSpanIds: Set<string> }
   | {
       ok: false;
       code:
@@ -1714,12 +1853,13 @@ function validateCausalBindingEntries(
         | 'CAUSAL_PHASE_INVALID'
         | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
         | 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT'
-        | 'CAUSAL_SPAN_REUSE_CONFLICT';
+        | 'CAUSAL_SPAN_REUSE_CONFLICT'
+        | 'CAUSAL_GRAPH_DISCONNECTED';
       message: string;
       field: string;
     } {
   if (entries.length === 0) {
-    return { ok: true };
+    return { ok: true, knownSpanIds: new Set<string>() };
   }
 
   const knownSpanIds = new Set<string>();
@@ -1954,7 +2094,134 @@ function validateCausalBindingEntries(
     }
   }
 
-  return { ok: true };
+  if (connectivityMode === 'enforce' && knownSpanIds.size > 0) {
+    const semanticBySpan = new Map<
+      string,
+      {
+        parentSpanId?: string;
+        toolSpanId?: string;
+        fieldPath: string;
+      }
+    >();
+
+    for (const entry of entries) {
+      if (!entry.spanId) continue;
+      if (!semanticBySpan.has(entry.spanId)) {
+        semanticBySpan.set(entry.spanId, {
+          parentSpanId: entry.parentSpanId,
+          toolSpanId: entry.toolSpanId,
+          fieldPath: entry.spanFieldPath,
+        });
+      }
+    }
+
+    const roots = new Set<string>();
+    for (const [spanId, semantic] of semanticBySpan.entries()) {
+      if (semantic.parentSpanId === undefined && semantic.toolSpanId === undefined) {
+        roots.add(spanId);
+      }
+    }
+
+    if (roots.size === 0) {
+      const firstField = semanticBySpan.values().next().value?.fieldPath ?? 'payload';
+      return {
+        ok: false,
+        code: 'CAUSAL_GRAPH_DISCONNECTED',
+        message: 'causal graph has no valid root lineage in enforce mode',
+        field: firstField,
+      };
+    }
+
+    const reachesRootMemo = new Map<string, boolean>();
+    const reachesRoot = (spanId: string, visiting = new Set<string>()): boolean => {
+      if (roots.has(spanId)) return true;
+      if (reachesRootMemo.has(spanId)) return reachesRootMemo.get(spanId) === true;
+      if (visiting.has(spanId)) return false;
+
+      visiting.add(spanId);
+      const semantic = semanticBySpan.get(spanId);
+      if (!semantic) {
+        reachesRootMemo.set(spanId, false);
+        return false;
+      }
+
+      const parentOk =
+        semantic.parentSpanId !== undefined
+          ? reachesRoot(semantic.parentSpanId, new Set(visiting))
+          : false;
+      const toolOk =
+        semantic.toolSpanId !== undefined
+          ? reachesRoot(semantic.toolSpanId, new Set(visiting))
+          : false;
+
+      const ok = parentOk || toolOk;
+      reachesRootMemo.set(spanId, ok);
+      return ok;
+    };
+
+    for (const [spanId, semantic] of semanticBySpan.entries()) {
+      if (roots.has(spanId)) continue;
+      if (!reachesRoot(spanId)) {
+        return {
+          ok: false,
+          code: 'CAUSAL_GRAPH_DISCONNECTED',
+          message: `non-root span_id ${spanId} does not connect to a valid root lineage`,
+          field: semantic.fieldPath,
+        };
+      }
+    }
+
+    const neighbors = new Map<string, Set<string>>();
+    for (const spanId of semanticBySpan.keys()) {
+      neighbors.set(spanId, new Set<string>());
+    }
+
+    for (const [spanId, semantic] of semanticBySpan.entries()) {
+      if (semantic.parentSpanId && semanticBySpan.has(semantic.parentSpanId)) {
+        neighbors.get(spanId)?.add(semantic.parentSpanId);
+        neighbors.get(semantic.parentSpanId)?.add(spanId);
+      }
+
+      if (semantic.toolSpanId && semanticBySpan.has(semantic.toolSpanId)) {
+        neighbors.get(spanId)?.add(semantic.toolSpanId);
+        neighbors.get(semantic.toolSpanId)?.add(spanId);
+      }
+    }
+
+    const first = semanticBySpan.keys().next().value as string | undefined;
+    if (first) {
+      const visitedComponent = new Set<string>();
+      const stack = [first];
+
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (!current || visitedComponent.has(current)) continue;
+        visitedComponent.add(current);
+
+        const next = neighbors.get(current);
+        if (!next) continue;
+        for (const n of next) {
+          if (!visitedComponent.has(n)) stack.push(n);
+        }
+      }
+
+      if (visitedComponent.size !== semanticBySpan.size) {
+        const disconnectedSpanId = [...semanticBySpan.keys()].find(
+          (id) => !visitedComponent.has(id)
+        );
+        return {
+          ok: false,
+          code: 'CAUSAL_GRAPH_DISCONNECTED',
+          message: 'causal graph contains disconnected components in enforce mode',
+          field:
+            (disconnectedSpanId && semanticBySpan.get(disconnectedSpanId)?.fieldPath) ||
+            'payload',
+        };
+      }
+    }
+  }
+
+  return { ok: true, knownSpanIds };
 }
 
 interface ParsedVirReceipt {
@@ -2097,6 +2364,15 @@ function normalizeIsoTimestampToMs(value: string | undefined): number | undefine
 
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : undefined;
+}
+
+function normalizeCausalConnectivityMode(
+  mode: ProofBundleVerifierOptions['causal_connectivity_mode']
+): 'observe' | 'warn' | 'enforce' {
+  if (mode === 'observe' || mode === 'warn' || mode === 'enforce') {
+    return mode;
+  }
+  return 'enforce';
 }
 
 function extractWebReceiptInclusionProof(payload: WebReceiptPayload): unknown {
@@ -3730,7 +4006,14 @@ export async function verifyProofBundle(
     };
   }
 
-  const causalValidation = validateCausalBindingEntries(causalBindingEntries.entries);
+  const causalConnectivityMode = normalizeCausalConnectivityMode(
+    options.causal_connectivity_mode
+  );
+
+  const causalValidation = validateCausalBindingEntries(
+    causalBindingEntries.entries,
+    causalConnectivityMode
+  );
   if (!causalValidation.ok) {
     return {
       result: {
@@ -3746,6 +4029,56 @@ export async function verifyProofBundle(
         field: causalValidation.field,
       },
     };
+  }
+
+  if (causalConnectivityMode === 'enforce') {
+    const sideEffectAnchoring = validateCausalAnchoredSupportReceipts({
+      receipts: payload.side_effect_receipts,
+      knownSpanIds: causalValidation.knownSpanIds,
+      pathPrefix: 'payload.side_effect_receipts',
+      orphanCode: 'CAUSAL_SIDE_EFFECT_ORPHANED',
+    });
+
+    if (!sideEffectAnchoring.ok) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: sideEffectAnchoring.message,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: sideEffectAnchoring.code,
+          message: sideEffectAnchoring.message,
+          field: sideEffectAnchoring.field,
+        },
+      };
+    }
+
+    const humanApprovalAnchoring = validateCausalAnchoredSupportReceipts({
+      receipts: payload.human_approval_receipts,
+      knownSpanIds: causalValidation.knownSpanIds,
+      pathPrefix: 'payload.human_approval_receipts',
+      orphanCode: 'CAUSAL_HUMAN_APPROVAL_ORPHANED',
+    });
+
+    if (!humanApprovalAnchoring.ok) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: humanApprovalAnchoring.message,
+          verified_at: now,
+          bundle_id: payload.bundle_id,
+          agent_did: payload.agent_did,
+        },
+        error: {
+          code: humanApprovalAnchoring.code,
+          message: humanApprovalAnchoring.message,
+          field: humanApprovalAnchoring.field,
+        },
+      };
+    }
   }
 
   // Verify VIR receipts (R43 evidence-fusion path).

@@ -163,6 +163,12 @@ const HINTS: Record<string, string> = {
     'Same receipt_id appears with divergent content. Use unique receipt_ids or exact-content replay only.',
   CAUSAL_SPAN_REUSE_CONFLICT:
     'Same span_id was reused with incompatible semantics (parent/tool/phase/confidence drift). Use one stable semantic definition per span_id.',
+  CAUSAL_GRAPH_DISCONNECTED:
+    'Causal graph is disconnected in enforce mode. Ensure all non-root spans are connected to a single valid root lineage.',
+  CAUSAL_SIDE_EFFECT_ORPHANED:
+    'A side-effect receipt is not causally anchored to a known span lineage. Bind side-effect receipts to parent/tool/root span IDs from the same bundle.',
+  CAUSAL_HUMAN_APPROVAL_ORPHANED:
+    'A human-approval receipt is not causally anchored to a known span lineage. Bind approval receipts to parent/tool/root span IDs from the same bundle.',
   COVERAGE_CLDD_DISCREPANCY_ENFORCED:
     'CLDD runtime telemetry disagrees with coverage attestation under enforce mode. Reconcile sentinel telemetry with attested coverage metrics.',
 
