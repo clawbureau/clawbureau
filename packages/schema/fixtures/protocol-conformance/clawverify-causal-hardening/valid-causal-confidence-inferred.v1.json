@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-confidence-inferred",
+  "scenario": "valid_causal_confidence_inferred",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}

@@ -51,6 +51,10 @@ type FixtureCase = {
     | 'valid_causal_binding_camel_only'
     | 'invalid_causal_binding_field_conflict'
     | 'invalid_causal_binding_normalization_failed'
+    | 'valid_causal_confidence_authoritative'
+    | 'valid_causal_confidence_inferred'
+    | 'valid_causal_confidence_unattributed'
+    | 'invalid_causal_confidence_overclaim'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
@@ -538,6 +542,10 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'valid_causal_binding_camel_only' ||
     spec.scenario === 'invalid_causal_binding_field_conflict' ||
     spec.scenario === 'invalid_causal_binding_normalization_failed' ||
+    spec.scenario === 'valid_causal_confidence_authoritative' ||
+    spec.scenario === 'valid_causal_confidence_inferred' ||
+    spec.scenario === 'valid_causal_confidence_unattributed' ||
+    spec.scenario === 'invalid_causal_confidence_overclaim' ||
     spec.scenario === 'invalid_coverage_chain_root_enforce' ||
     spec.scenario === 'invalid_cldd_discrepancy_enforce'
   ) {
@@ -698,6 +706,58 @@ async function buildFixtureScenario(spec: FixtureCase) {
             spanId: '   ',
             phase: 'execution',
             attributionConfidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_confidence_authoritative') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'confidence_auth_root',
+          bindingExtras: {
+            span_id: 'span_confidence_auth_root_firewall_009',
+            phase: 'execution',
+            attribution_confidence: 1.0,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'confidence_auth_child',
+          bindingExtras: {
+            span_id: 'span_confidence_auth_child_firewall_009',
+            parent_span_id: 'span_confidence_auth_root_firewall_009',
+            phase: 'execution',
+            attribution_confidence: 1.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_confidence_inferred') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'confidence_inferred',
+          bindingExtras: {
+            span_id: 'span_confidence_inferred_firewall_010',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'valid_causal_confidence_unattributed') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'confidence_unattributed',
+          bindingExtras: {
+            phase: 'execution',
+            attribution_confidence: 0.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_confidence_overclaim') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'confidence_overclaim',
+          bindingExtras: {
+            span_id: 'span_confidence_overclaim_firewall_011',
+            phase: 'execution',
+            attribution_confidence: 1.0,
           },
         }),
       ];

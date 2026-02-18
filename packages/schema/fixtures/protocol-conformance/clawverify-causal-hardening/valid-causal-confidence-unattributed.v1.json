@@ -1,0 +1,8 @@
+{
+  "id": "valid-causal-confidence-unattributed",
+  "scenario": "valid_causal_confidence_unattributed",
+  "expected": {
+    "status": "VALID",
+    "proof_tier": "gateway"
+  }
+}
