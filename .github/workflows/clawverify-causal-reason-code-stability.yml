@@ -1,0 +1,74 @@
+name: clawverify-causal-reason-code-stability
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-reason-code-stability.mjs'
+      - '.github/workflows/clawverify-causal-reason-code-stability.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'packages/clawverify-core/**'
+      - 'packages/clawverify-cli/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-*/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-aggregate-causal/**'
+      - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/protocol/run-clawverify-causal-reason-code-stability.mjs'
+      - '.github/workflows/clawverify-causal-reason-code-stability.yml'
+
+jobs:
+  causal-reason-code-stability:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
+      - name: Install clawverify-cli deps
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+
+      - name: Run causal reason-code stability gate
+        run: |
+          node scripts/protocol/run-clawverify-causal-reason-code-stability.mjs
+
+      - name: Upload reason-code stability summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-reason-code-stability-summary
+          path: artifacts/ops/causal-reason-code-stability/
+          if-no-files-found: ignore
