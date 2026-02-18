@@ -1,0 +1,110 @@
+# 2026-02-18T15:21:27.237Z  (exit=0, duration_ms=227)
+$ (cd /private/tmp/clawbureau-c1/packages/schema && npm pack --pack-destination /private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs)
+--- stdout ---
+clawbureau-schema-0.2.0.tgz
+
+# 2026-02-18T15:21:27.464Z  (exit=0, duration_ms=2447)
+$ (cd /private/tmp/clawbureau-c1/packages/clawverify-core && npm run build)
+--- stdout ---
+
+> @clawbureau/clawverify-core@0.2.0 build
+> tsc
+
+# 2026-02-18T15:21:29.911Z  (exit=0, duration_ms=299)
+$ (cd /private/tmp/clawbureau-c1/packages/clawverify-core && npm pack --pack-destination /private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs)
+--- stdout ---
+clawbureau-clawverify-core-0.2.0.tgz
+
+# 2026-02-18T15:21:30.210Z  (exit=0, duration_ms=549)
+$ (cd /private/tmp/clawbureau-c1/packages/clawverify-cli && npm run build)
+--- stdout ---
+
+> @clawbureau/clawverify-cli@0.2.0 build
+> tsc
+
+# 2026-02-18T15:21:30.759Z  (exit=0, duration_ms=197)
+$ (cd /private/tmp/clawbureau-c1/packages/clawverify-cli && npm pack --pack-destination /private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs)
+--- stdout ---
+clawbureau-clawverify-cli-0.2.0.tgz
+
+# 2026-02-18T15:21:30.956Z  (exit=0, duration_ms=157)
+$ (cd /var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ && npm init -y)
+--- stdout ---
+Wrote to /private/var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ/package.json:
+
+{
+  "name": "clawsig-v0-2-pack-smoke-y6pzkq",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "gwelinder <gwelinder@gmail.com> (http://tilpas.app/)",
+  "license": "ISC",
+  "type": "commonjs"
+}
+
+# 2026-02-18T15:21:31.113Z  (exit=0, duration_ms=646)
+$ (cd /var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ && npm install /private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs/clawbureau-schema-0.2.0.tgz /private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs/clawbureau-clawverify-core-0.2.0.tgz /private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs/clawbureau-clawverify-cli-0.2.0.tgz)
+--- stdout ---
+
+added 10 packages, and audited 11 packages in 591ms
+
+2 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+
+# 2026-02-18T15:21:31.759Z  (exit=0, duration_ms=157)
+$ (cd /var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ && npm ls @clawbureau/clawsig-sdk --json)
+--- stdout ---
+{
+  "version": "1.0.0",
+  "name": "clawsig-v0-2-pack-smoke-y6pzkq",
+  "dependencies": {
+    "@clawbureau/clawverify-cli": {
+      "version": "0.2.0",
+      "resolved": "file:/private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs/clawbureau-clawverify-cli-0.2.0.tgz",
+      "overridden": false,
+      "dependencies": {
+        "@clawbureau/clawsig-sdk": {
+          "version": "0.4.1",
+          "resolved": "https://registry.npmjs.org/@clawbureau/clawsig-sdk/-/clawsig-sdk-0.4.1.tgz",
+          "overridden": false
+        }
+      }
+    }
+  }
+}
+
+# 2026-02-18T15:21:31.916Z  (exit=0, duration_ms=150)
+$ (cd /var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ && npm ls @clawbureau/clawverify-core --json)
+--- stdout ---
+{
+  "version": "1.0.0",
+  "name": "clawsig-v0-2-pack-smoke-y6pzkq",
+  "dependencies": {
+    "@clawbureau/clawverify-cli": {
+      "version": "0.2.0",
+      "resolved": "file:/private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs/clawbureau-clawverify-cli-0.2.0.tgz",
+      "overridden": false,
+      "dependencies": {
+        "@clawbureau/clawverify-core": {
+          "version": "0.2.0"
+        }
+      }
+    },
+    "@clawbureau/clawverify-core": {
+      "version": "0.2.0",
+      "resolved": "file:/private/tmp/clawbureau-c1/artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/tarballs/clawbureau-clawverify-core-0.2.0.tgz",
+      "overridden": false
+    }
+  }
+}
+
+# 2026-02-18T15:21:32.066Z  (exit=0, duration_ms=58)
+$ (cd /var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ && /Users/gfw/.nvm/versions/node/v24.13.0/bin/node /var/folders/rn/qm_08hkx4k14fp7k6tq3g3ym0000gn/T/clawsig-v0-2-pack-smoke-Y6pZKQ/node_modules/@clawbureau/clawverify-cli/dist/cli.js version)
+--- stdout ---
+clawverify 0.2.0

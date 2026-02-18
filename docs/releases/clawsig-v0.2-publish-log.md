@@ -65,6 +65,32 @@ npm install @clawbureau/schema@0.2.0 @clawbureau/clawverify-core@0.2.0 @clawbure
 
 - `artifacts/release/clawsig-v0.2-npm-publish/2026-02-18T14-26-39Z/summary.json`
 
+## Post-publish closure fix (C1)
+
+Date: 2026-02-18
+
+Root cause confirmed:
+
+1. `clawverify version` was hardcoded in CLI source instead of deriving from package metadata, allowing runtime drift when release versions changed.
+2. Prior published CLI metadata contained local (`file:`) dependency specs for transitive packages, causing clean install closure breaks.
+
+Fix delivered:
+
+- `packages/clawverify-cli/src/cli.ts`
+  - version command now uses runtime package version helper (`formatCliVersion()`), not a hardcoded literal.
+- `packages/clawverify-cli/src/version.ts`
+  - reads `../package.json` at runtime and emits deterministic `clawverify <version>`.
+- `scripts/release/run-clawsig-v0.2-package-prep.mjs`
+  - added dependency-closure guard (fails on local `file:/link:/workspace:` dependency specs)
+  - added runtime dependency presence checks for `@clawbureau/clawsig-sdk` + `@clawbureau/clawverify-core`
+  - added command transcript output (`commands.log`)
+  - preserved fail-closed version parity gate (`clawverify version` must equal package version)
+
+Validation evidence:
+
+- `artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/summary.json`
+- `artifacts/release/clawsig-v0.2-package-prep/2026-02-18T15-21-27-235Z/commands.log`
+
 ## Notes
 
 - No deploy actions in this lane.
