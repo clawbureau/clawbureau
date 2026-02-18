@@ -301,6 +301,11 @@ export interface ProofBundlePayload {
         recv_samples?: number;
         total_events?: number;
         max_seq?: number;
+        cldd?: {
+          unmediated_connections: number;
+          unmonitored_spawns: number;
+          escapes_suspected: boolean;
+        };
       };
     };
     [key: string]: unknown;

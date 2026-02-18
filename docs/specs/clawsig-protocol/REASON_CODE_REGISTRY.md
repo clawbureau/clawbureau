@@ -183,7 +183,14 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 |------|---------|
 | `CAUSAL_REFERENCE_DANGLING` | `parent_span_id` or `tool_span_id` references a span id not present in the same bundle causal index |
 | `CAUSAL_CYCLE_DETECTED` | Parent-span traversal detects a cycle in causal linkage |
-| `INVALID_ATTRIBUTION_CONFIDENCE` | `attribution_confidence` is present but outside inclusive `[0.0, 1.0]` bounds |
+| `CAUSAL_PHASE_INVALID` | `binding.phase` is present but not one of the deterministic allowed lifecycle phases |
+| `CAUSAL_CONFIDENCE_OUT_OF_RANGE` | `attribution_confidence` is present but outside inclusive `[0.0, 1.0]` bounds |
+
+### COVERAGE_*
+
+| Code | Meaning |
+|------|---------|
+| `COVERAGE_CLDD_DISCREPANCY_ENFORCED` | Coverage enforcement mode is `enforce` and runtime CLDD telemetry disagrees with coverage attestation CLDD metrics |
 
 ### URM_*
 

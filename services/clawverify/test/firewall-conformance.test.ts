@@ -16,6 +16,7 @@ type FixtureExpected = {
   proof_tier?: string;
   error_code?: string;
   model_identity_tier?: string;
+  risk_flags?: string[];
 };
 
 type FixtureCase = {
@@ -29,10 +30,12 @@ type FixtureCase = {
     | 'valid_gateway'
     | 'valid_gateway_coverage'
     | 'valid_causal_linkage'
+    | 'valid_cldd_discrepancy_warn'
     | 'valid_sandbox_tee'
     | 'valid_vir_uncorroborated_high_claim'
     | 'valid_vir_corroborated_high_claim'
     | 'invalid_coverage_chain_root_enforce'
+    | 'invalid_cldd_discrepancy_enforce'
     | 'invalid_witnessed_web_quorum_fail_enforce'
     | 'invalid_witnessed_web_split_view_enforce'
     | 'invalid_witnessed_web_transparency_enforce_missing'
@@ -42,6 +45,7 @@ type FixtureCase = {
     | 'invalid_vir_event_contradiction'
     | 'invalid_causal_dangling'
     | 'invalid_causal_cycle'
+    | 'invalid_causal_phase'
     | 'invalid_causal_confidence'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
@@ -521,10 +525,13 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'valid_gateway' ||
     spec.scenario === 'valid_gateway_coverage' ||
     spec.scenario === 'valid_causal_linkage' ||
+    spec.scenario === 'valid_cldd_discrepancy_warn' ||
     spec.scenario === 'invalid_causal_dangling' ||
     spec.scenario === 'invalid_causal_cycle' ||
+    spec.scenario === 'invalid_causal_phase' ||
     spec.scenario === 'invalid_causal_confidence' ||
-    spec.scenario === 'invalid_coverage_chain_root_enforce'
+    spec.scenario === 'invalid_coverage_chain_root_enforce' ||
+    spec.scenario === 'invalid_cldd_discrepancy_enforce'
   ) {
     const gateway = await makeDidKeyEd25519();
 
@@ -619,12 +626,23 @@ async function buildFixtureScenario(spec: FixtureCase) {
           },
         }),
       ];
+    } else if (spec.scenario === 'invalid_causal_phase') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'phase',
+          bindingExtras: {
+            span_id: 'span_phase_firewall_004',
+            phase: 'invalid-phase',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
     } else if (spec.scenario === 'invalid_causal_confidence') {
       receiptEnvelopes = [
         await makeGatewayReceiptEnvelope({
           receiptSuffix: 'confidence',
           bindingExtras: {
-            span_id: 'span_confidence_firewall_004',
+            span_id: 'span_confidence_firewall_005',
             phase: 'execution',
             attribution_confidence: 1.5,
           },
@@ -643,7 +661,9 @@ async function buildFixtureScenario(spec: FixtureCase) {
 
     if (
       spec.scenario === 'valid_gateway_coverage' ||
-      spec.scenario === 'invalid_coverage_chain_root_enforce'
+      spec.scenario === 'invalid_coverage_chain_root_enforce' ||
+      spec.scenario === 'valid_cldd_discrepancy_warn' ||
+      spec.scenario === 'invalid_cldd_discrepancy_enforce'
     ) {
       const sentinel = await makeDidKeyEd25519();
       const coveragePayload: Record<string, unknown> = {
@@ -689,7 +709,26 @@ async function buildFixtureScenario(spec: FixtureCase) {
 
       bundlePayloadWithGateway.coverage_attestations = [coverageEnvelope];
       options.allowlistedCoverageAttestationSignerDids = [sentinel.did];
-      options.coverage_enforcement_phase = 'enforce';
+
+      if (spec.scenario === 'valid_cldd_discrepancy_warn' || spec.scenario === 'invalid_cldd_discrepancy_enforce') {
+        bundlePayloadWithGateway.metadata = {
+          sentinels: {
+            interpose_active: true,
+            interpose_state: {
+              cldd: {
+                unmediated_connections: 2,
+                unmonitored_spawns: 1,
+                escapes_suspected: true,
+              },
+            },
+          },
+        };
+      }
+
+      options.coverage_enforcement_phase =
+        spec.scenario === 'valid_cldd_discrepancy_warn'
+          ? 'warn'
+          : 'enforce';
     }
 
     const bundleEnvelope = await signEnvelope({
@@ -908,9 +947,11 @@ async function buildFixtureScenario(spec: FixtureCase) {
   };
 }
 
+const fixtureSuite = process.env.CLAWVERIFY_FIREWALL_FIXTURE_SUITE?.trim() || 'clawverify-firewall';
+
 const FIXTURE_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../../../packages/schema/fixtures/protocol-conformance/clawverify-firewall'
+  `../../../packages/schema/fixtures/protocol-conformance/${fixtureSuite}`
 );
 
 const manifest = JSON.parse(
@@ -925,7 +966,7 @@ const fixtures: FixtureCase[] = manifest.cases.map((name) =>
   JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, name), 'utf8'))
 );
 
-describe('clawverify firewall conformance fixtures', () => {
+describe(`clawverify conformance fixtures (${manifest.suite})`, () => {
   it.each(fixtures)('validates fixture: $id', async (spec) => {
     const scenario = await buildFixtureScenario(spec);
     const out = await verifyProofBundle(scenario.envelope, scenario.options as any);
@@ -942,6 +983,13 @@ describe('clawverify firewall conformance fixtures', () => {
 
     if (spec.expected.model_identity_tier) {
       expect(out.result.model_identity_tier).toBe(spec.expected.model_identity_tier);
+    }
+
+    if (spec.expected.risk_flags && spec.expected.risk_flags.length > 0) {
+      const outRiskFlags = out.result.risk_flags ?? [];
+      for (const riskFlag of spec.expected.risk_flags) {
+        expect(outRiskFlags).toContain(riskFlag);
+      }
     }
   });
 });

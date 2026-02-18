@@ -55,10 +55,12 @@ Accepted fail reasons:
   - when `parent_span_id` or `tool_span_id` references a span id not present in the same bundle causal index.
 - `CAUSAL_CYCLE_DETECTED`
   - when parent-span traversal produces a cycle.
-- `INVALID_ATTRIBUTION_CONFIDENCE`
+- `CAUSAL_PHASE_INVALID`
+  - when `binding.phase` exists but is outside the deterministic allowed phase set.
+- `CAUSAL_CONFIDENCE_OUT_OF_RANGE`
   - when confidence exists but is outside `[0.0, 1.0]`.
 - `MALFORMED_ENVELOPE`
-  - schema-level invalid phase/shape failures.
+  - schema-level invalid causal shape failures (excluding explicit phase/confidence code mappings).
 
 ## Compatibility contract (legacy bundles)
 

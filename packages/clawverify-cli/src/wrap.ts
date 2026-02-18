@@ -464,6 +464,53 @@ export async function wrap(
   const netEvents = netSentinel.getEvents();
   const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
 
+  const fallbackClddMetrics = (() => {
+    const unmonitoredSpawnPids = new Set<number>();
+
+    for (const event of netEvents) {
+      if (typeof event.pid !== 'number') continue;
+      if (!interposeOracle.isAgentPid(event.pid)) {
+        unmonitoredSpawnPids.add(event.pid);
+      }
+    }
+
+    const unmediatedConnections =
+      netEvents.length > 0
+        ? netEvents.filter(
+            (event) =>
+              typeof event.pid !== 'number' ||
+              !interposeOracle.isAgentPid(event.pid)
+          ).length
+        : 0;
+
+    return {
+      unmediated_connections: unmediatedConnections,
+      unmonitored_spawns: unmonitoredSpawnPids.size,
+      escapes_suspected:
+        unmediatedConnections > 0 || unmonitoredSpawnPids.size > 0,
+    };
+  })();
+
+  const computeClddMetrics = (
+    interposeOracle as unknown as {
+      computeClddMetrics?: (
+        events: Array<{ pid: number | null; remoteAddress: string }>
+      ) => {
+        unmediated_connections: number;
+        unmonitored_spawns: number;
+        escapes_suspected: boolean;
+      };
+    }
+  ).computeClddMetrics;
+
+  const interposeSummary = {
+    ...interposeOracle.getSummary(),
+    cldd:
+      typeof computeClddMetrics === 'function'
+        ? computeClddMetrics.call(interposeOracle, netEvents)
+        : fallbackClddMetrics,
+  };
+
   // Merge interpose network receipts into network receipts
   const allNetworkReceipts = [...networkReceipts, ...interposeReceipts.network];
   const allExecutionReceipts = [...executionReceipts, ...interposeReceipts.execution];
@@ -487,8 +534,11 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m TLS SNI intercepts: ${sniEvents.length} connections → ${sniGatewayReceipts.length} LLM domains\n`);
   }
   if (interposeOracle.totalEvents > 0) {
-    const oState = interposeOracle.getSummary();
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${oState.pid_tree_size} PIDs, ${oState.bound_ports.length} server ports${oState.bound_ports.length > 0 ? ` (${oState.bound_ports.join(',')})` : ''}, ${oState.env_audits} credentials, ${oState.cred_leaks} leaks\n`);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${interposeSummary.pid_tree_size} PIDs, ${interposeSummary.bound_ports.length} server ports${interposeSummary.bound_ports.length > 0 ? ` (${interposeSummary.bound_ports.join(',')})` : ''}, ${interposeSummary.env_audits} credentials, ${interposeSummary.cred_leaks} leaks\n`);
+  }
+
+  if (interposeSummary.cldd.escapes_suspected) {
+    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m CLDD: unmediated_connections=${interposeSummary.cldd.unmediated_connections}, unmonitored_spawns=${interposeSummary.cldd.unmonitored_spawns}, escapes_suspected=${interposeSummary.cldd.escapes_suspected}\n`);
   }
 
   if (netSentinel.suspiciousCount > 0) {
@@ -596,7 +646,7 @@ export async function wrap(
     preload_llm_events: preloadGatewayReceipts.length,
     tls_sni_events: sniEvents.length,
     tls_sni_receipts: sniGatewayReceipts.length,
-    interpose_state: interposeOracle.getSummary(),
+    interpose_state: interposeSummary,
   } as Record<string, unknown>;
 
   bundle.payload.metadata = {
