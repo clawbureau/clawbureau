@@ -1,0 +1,89 @@
+name: clawverify-causal-mutation-guardrail
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/**'
+      - 'services/clawverify/test/firewall-conformance.test.ts'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-hardening/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-connectivity/**'
+      - 'scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs'
+      - '.github/workflows/clawverify-causal-mutation-guardrail.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/**'
+      - 'services/clawverify/test/firewall-conformance.test.ts'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-hardening/**'
+      - 'packages/schema/fixtures/protocol-conformance/clawverify-causal-connectivity/**'
+      - 'scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs'
+      - '.github/workflows/clawverify-causal-mutation-guardrail.yml'
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  causal-mutation-quick:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Run quick mutation guardrail
+        run: |
+          node scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs --subset quick
+
+      - name: Upload quick guardrail summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-mutation-guardrail-quick-summary
+          path: artifacts/ops/causal-mutation-guardrail/
+          if-no-files-found: ignore
+
+  causal-mutation-nightly-full:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        subset: [full]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Run nightly mutation guardrail
+        run: |
+          node scripts/protocol/run-clawverify-causal-mutation-guardrail.mjs --subset ${{ matrix.subset }}
+
+      - name: Upload nightly guardrail summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: causal-mutation-guardrail-${{ matrix.subset }}-summary
+          path: artifacts/ops/causal-mutation-guardrail/
+          if-no-files-found: ignore

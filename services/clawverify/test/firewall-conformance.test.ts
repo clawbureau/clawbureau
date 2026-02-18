@@ -51,6 +51,7 @@ type FixtureCase = {
     | 'valid_causal_binding_camel_only'
     | 'invalid_causal_binding_field_conflict'
     | 'invalid_causal_binding_normalization_failed'
+    | 'invalid_causal_unicode_confusable_dangling'
     | 'valid_causal_confidence_authoritative'
     | 'valid_causal_confidence_inferred'
     | 'valid_causal_confidence_unattributed'
@@ -549,6 +550,7 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'valid_causal_binding_camel_only' ||
     spec.scenario === 'invalid_causal_binding_field_conflict' ||
     spec.scenario === 'invalid_causal_binding_normalization_failed' ||
+    spec.scenario === 'invalid_causal_unicode_confusable_dangling' ||
     spec.scenario === 'valid_causal_confidence_authoritative' ||
     spec.scenario === 'valid_causal_confidence_inferred' ||
     spec.scenario === 'valid_causal_confidence_unattributed' ||
@@ -723,6 +725,26 @@ async function buildFixtureScenario(spec: FixtureCase) {
             spanId: '   ',
             phase: 'execution',
             attributionConfidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_unicode_confusable_dangling') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'unicode_confusable_root',
+          bindingExtras: {
+            span_id: 'span_root_firewall_\u200B019',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'unicode_confusable_child',
+          bindingExtras: {
+            span_id: 'span_child_firewall_019',
+            parent_span_id: 'span_root_firewall_019',
+            phase: 'execution',
+            attribution_confidence: 0.5,
           },
         }),
       ];
