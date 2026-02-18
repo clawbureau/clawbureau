@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-023.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-024.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -367,11 +367,24 @@
       "priority": 28,
       "passes": true,
       "notes": "Shipped via PR #326 (merge 578b08284f9a1b9fbc6f5480eec0e23acef82379): core causal semantics + parity regressions."
+    },
+    {
+      "id": "CAV-US-024",
+      "title": "Deterministic service-vs-core causal parity gate",
+      "description": "Add deterministic parity runner/workflow and burn-in integration so service and core causal conformance outcomes stay locked across shared fixture suites.",
+      "acceptanceCriteria": [
+        "Service-vs-core parity runner emits deterministic artifact summary for causal suites",
+        "Required CI workflow gates parity on causal fixture/runners/workflow deltas",
+        "Causal integrity burn-in and release evidence contract require parity lane success"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "Shipped via PR #327 (merge a1bcd02f86bbf4412da2ba1cf3d47a381509edcc): deterministic parity runner + required workflow + burn-in/release integration."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T23:58:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-023 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T23:20:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-024 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -456,6 +469,10 @@
       {
         "pr": "#326",
         "merge_commit": "578b08284f9a1b9fbc6f5480eec0e23acef82379"
+      },
+      {
+        "pr": "#327",
+        "merge_commit": "a1bcd02f86bbf4412da2ba1cf3d47a381509edcc"
       }
     ]
   }
