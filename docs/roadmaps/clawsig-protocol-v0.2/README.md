@@ -25,6 +25,12 @@
 - PR #283 (`7c81b6c45cf1a59fbcf157e99940ce4c09ffa4c5`) — executable R48/R49 vectors
 - PR #285 (`1b21d0cdb562e02347304451cc6edd137a5b99d2`) — CPL-V2-001 rate-limit semantics
 
+## Integrator adoption assets
+
+- v0.2 adoption guide: [`ADOPTION_GUIDE.md`](../../specs/clawsig-protocol/ADOPTION_GUIDE.md)
+- v0.2 quickstart fixture manifest: [`packages/schema/fixtures/quickstart/v0.2/manifest.v1.json`](../../../packages/schema/fixtures/quickstart/v0.2/manifest.v1.json)
+- v0.2 quickstart runner: [`scripts/protocol/run-clawsig-v0.2-quickstart.mjs`](../../../scripts/protocol/run-clawsig-v0.2-quickstart.mjs)
+
 ## Prior art
 
 - v0.1 changelog: [`CHANGELOG.md`](../../specs/clawsig-protocol/CHANGELOG.md)
