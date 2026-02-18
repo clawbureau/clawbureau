@@ -19,22 +19,22 @@ function makeEvent(overrides: Partial<any> = {}): any {
   };
 }
 
-function makeReceiptEnvelope(receiptId: string): any {
+function makeReceiptEnvelope(receiptId: string, overrides: Partial<any> = {}): any {
   return {
     envelope_version: '1',
     envelope_type: 'gateway_receipt',
     payload: {
       receipt_version: '1',
       receipt_id: receiptId,
-      gateway_id: 'gw_001',
-      provider: 'anthropic',
-      model: 'claude-test',
-      request_hash_b64u: b64u(16),
-      response_hash_b64u: b64u(16),
-      tokens_input: 0,
-      tokens_output: 0,
-      latency_ms: 1,
-      timestamp: '2026-02-07T00:00:00Z',
+      gateway_id: overrides.gateway_id ?? 'gw_001',
+      provider: overrides.provider ?? 'anthropic',
+      model: overrides.model ?? 'claude-test',
+      request_hash_b64u: overrides.request_hash_b64u ?? b64u(16),
+      response_hash_b64u: overrides.response_hash_b64u ?? b64u(16),
+      tokens_input: overrides.tokens_input ?? 0,
+      tokens_output: overrides.tokens_output ?? 0,
+      latency_ms: overrides.latency_ms ?? 1,
+      timestamp: overrides.timestamp ?? '2026-02-07T00:00:00Z',
     },
     payload_hash_b64u: b64u(16),
     hash_algorithm: 'SHA-256',
@@ -76,7 +76,7 @@ describe('CVF-US-025: proof bundle size/uniqueness hardening', () => {
     expect(out.error?.code).toBe('MALFORMED_ENVELOPE');
   });
 
-  it('rejects duplicate receipt_id in payload.receipts', async () => {
+  it('rejects divergent replayed receipt_id in payload.receipts', async () => {
     const envelope: any = {
       envelope_version: '1',
       envelope_type: 'proof_bundle',
@@ -85,8 +85,12 @@ describe('CVF-US-025: proof bundle size/uniqueness hardening', () => {
         bundle_id: 'bundle_dupe_receipt',
         agent_did: 'did:key:abc123',
         receipts: [
-          makeReceiptEnvelope('rcpt_dupe'),
-          makeReceiptEnvelope('rcpt_dupe'),
+          makeReceiptEnvelope('rcpt_dupe', {
+            response_hash_b64u: 'aaaaaaaaaaaaaaaa',
+          }),
+          makeReceiptEnvelope('rcpt_dupe', {
+            response_hash_b64u: 'bbbbbbbbbbbbbbbb',
+          }),
         ],
       },
       payload_hash_b64u: b64u(16),
@@ -99,7 +103,7 @@ describe('CVF-US-025: proof bundle size/uniqueness hardening', () => {
 
     const out = await verifyProofBundle(envelope);
     expect(out.result.status).toBe('INVALID');
-    expect(out.error?.code).toBe('MALFORMED_ENVELOPE');
+    expect(out.error?.code).toBe('CAUSAL_RECEIPT_REPLAY_DETECTED');
   });
 
   it('rejects oversized payload.metadata', async () => {

@@ -9,6 +9,9 @@
     "valid-causal-confidence-authoritative.v1.json",
     "valid-causal-confidence-inferred.v1.json",
     "valid-causal-confidence-unattributed.v1.json",
-    "invalid-causal-confidence-overclaim.v1.json"
+    "invalid-causal-confidence-overclaim.v1.json",
+    "invalid-causal-receipt-replay-detected.v1.json",
+    "invalid-causal-span-reuse-conflict.v1.json",
+    "valid-causal-no-replay-no-conflict.v1.json"
   ]
 }

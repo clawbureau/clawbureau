@@ -1713,7 +1713,8 @@ function validateCausalBindingEntries(
         | 'CAUSAL_CYCLE_DETECTED'
         | 'CAUSAL_PHASE_INVALID'
         | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
-        | 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT';
+        | 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT'
+        | 'CAUSAL_SPAN_REUSE_CONFLICT';
       message: string;
       field: string;
     } {
@@ -1773,6 +1774,78 @@ function validateCausalBindingEntries(
         code: 'CAUSAL_REFERENCE_DANGLING',
         message: `binding.tool_span_id references unknown span_id: ${entry.toolSpanId}`,
         field: entry.toolSpanFieldPath,
+      };
+    }
+  }
+
+  const spanSemanticBySpanId = new Map<
+    string,
+    {
+      parentSpanId?: string;
+      toolSpanId?: string;
+      phase?: string;
+      attributionConfidence?: number;
+      spanFieldPath: string;
+    }
+  >();
+
+  for (const entry of entries) {
+    if (!entry.spanId) continue;
+
+    const phase = typeof entry.phase === 'string' ? entry.phase : undefined;
+    const attributionConfidence =
+      typeof entry.attributionConfidence === 'number'
+        ? entry.attributionConfidence
+        : undefined;
+
+    const prev = spanSemanticBySpanId.get(entry.spanId);
+    if (!prev) {
+      spanSemanticBySpanId.set(entry.spanId, {
+        parentSpanId: entry.parentSpanId,
+        toolSpanId: entry.toolSpanId,
+        phase,
+        attributionConfidence,
+        spanFieldPath: entry.spanFieldPath,
+      });
+      continue;
+    }
+
+    const conflicts: string[] = [];
+
+    if (
+      prev.parentSpanId !== undefined &&
+      entry.parentSpanId !== undefined &&
+      prev.parentSpanId !== entry.parentSpanId
+    ) {
+      conflicts.push('parent_span_id');
+    }
+
+    if (
+      prev.toolSpanId !== undefined &&
+      entry.toolSpanId !== undefined &&
+      prev.toolSpanId !== entry.toolSpanId
+    ) {
+      conflicts.push('tool_span_id');
+    }
+
+    if (prev.phase !== undefined && phase !== undefined && prev.phase !== phase) {
+      conflicts.push('phase');
+    }
+
+    if (
+      prev.attributionConfidence !== undefined &&
+      attributionConfidence !== undefined &&
+      !Object.is(prev.attributionConfidence, attributionConfidence)
+    ) {
+      conflicts.push('attribution_confidence');
+    }
+
+    if (conflicts.length > 0) {
+      return {
+        ok: false,
+        code: 'CAUSAL_SPAN_REUSE_CONFLICT',
+        message: `span_id ${entry.spanId} reused with incompatible semantics for: ${conflicts.join(', ')}`,
+        field: entry.spanFieldPath,
       };
     }
   }
@@ -2742,61 +2815,120 @@ export async function verifyProofBundle(
     }
   }
 
+  const seenReceiptFingerprints = new Map<
+    string,
+    { fingerprint: string; field: string }
+  >();
+
+  const registerReceiptReplayFingerprint = (args: {
+    receiptId: string;
+    receiptType: 'gateway_receipt' | 'web_receipt' | 'vir_receipt';
+    payload: unknown;
+    field: string;
+  }): { ok: true } | { ok: false; field: string } => {
+    let fingerprint: string;
+
+    try {
+      fingerprint = jcsCanonicalize({
+        receipt_type: args.receiptType,
+        payload: args.payload,
+      });
+    } catch {
+      fingerprint = JSON.stringify({
+        receipt_type: args.receiptType,
+        payload: args.payload,
+      });
+    }
+
+    const existing = seenReceiptFingerprints.get(args.receiptId);
+    if (!existing) {
+      seenReceiptFingerprints.set(args.receiptId, {
+        fingerprint,
+        field: args.field,
+      });
+      return { ok: true };
+    }
+
+    if (existing.fingerprint === fingerprint) {
+      return { ok: true };
+    }
+
+    return { ok: false, field: args.field };
+  };
+
   if (p.receipts) {
-    const seenReceiptIds = new Set<string>();
     for (let i = 0; i < p.receipts.length; i++) {
       const rid = p.receipts[i].payload.receipt_id;
-      if (seenReceiptIds.has(rid)) {
+      const field = `payload.receipts[${i}].payload.receipt_id`;
+      const replay = registerReceiptReplayFingerprint({
+        receiptId: rid,
+        receiptType: 'gateway_receipt',
+        payload: p.receipts[i].payload,
+        field,
+      });
+
+      if (!replay.ok) {
         return {
           result: {
             status: 'INVALID',
-            reason: 'Duplicate receipt_id in payload.receipts',
+            reason: `receipt_id replay detected with divergent content: ${rid}`,
             verified_at: now,
           },
           error: {
-            code: 'MALFORMED_ENVELOPE',
-            message: 'receipt_id must be unique within payload.receipts',
-            field: `payload.receipts[${i}].payload.receipt_id`,
+            code: 'CAUSAL_RECEIPT_REPLAY_DETECTED',
+            message:
+              'same receipt_id appears multiple times with divergent canonicalized content',
+            field: replay.field,
           },
         };
       }
-      seenReceiptIds.add(rid);
     }
   }
 
   if (p.web_receipts) {
-    const seenWebReceiptIds = new Set<string>();
     for (let i = 0; i < p.web_receipts.length; i++) {
       const rid = p.web_receipts[i].payload.receipt_id;
-      if (seenWebReceiptIds.has(rid)) {
+      const field = `payload.web_receipts[${i}].payload.receipt_id`;
+      const replay = registerReceiptReplayFingerprint({
+        receiptId: rid,
+        receiptType: 'web_receipt',
+        payload: p.web_receipts[i].payload,
+        field,
+      });
+
+      if (!replay.ok) {
         return {
           result: {
             status: 'INVALID',
-            reason: 'Duplicate receipt_id in payload.web_receipts',
+            reason: `receipt_id replay detected with divergent content: ${rid}`,
             verified_at: now,
           },
           error: {
-            code: 'MALFORMED_ENVELOPE',
-            message: 'receipt_id must be unique within payload.web_receipts',
-            field: `payload.web_receipts[${i}].payload.receipt_id`,
+            code: 'CAUSAL_RECEIPT_REPLAY_DETECTED',
+            message:
+              'same receipt_id appears multiple times with divergent canonicalized content',
+            field: replay.field,
           },
         };
       }
-      seenWebReceiptIds.add(rid);
     }
   }
 
   if (p.vir_receipts) {
-    const seenVirIds = new Set<string>();
     for (let i = 0; i < p.vir_receipts.length; i++) {
       const entry = p.vir_receipts[i];
       const record = isObjectRecord(entry) ? entry : null;
-      const payloadRecord = record && isObjectRecord(record.payload) ? record.payload : null;
+      const payloadRecord =
+        record && isObjectRecord(record.payload) ? record.payload : null;
       const rid =
-        (record && typeof record.receipt_id === 'string' && record.receipt_id.length > 0
+        (record &&
+        typeof record.receipt_id === 'string' &&
+        record.receipt_id.length > 0
           ? record.receipt_id
           : undefined) ??
-        (payloadRecord && typeof payloadRecord.receipt_id === 'string' && payloadRecord.receipt_id.length > 0
+        (payloadRecord &&
+        typeof payloadRecord.receipt_id === 'string' &&
+        payloadRecord.receipt_id.length > 0
           ? payloadRecord.receipt_id
           : undefined);
 
@@ -2809,27 +2941,36 @@ export async function verifyProofBundle(
           },
           error: {
             code: 'MALFORMED_ENVELOPE',
-            message: 'receipt_id must be present for each payload.vir_receipts entry',
+            message:
+              'receipt_id must be present for each payload.vir_receipts entry',
             field: `payload.vir_receipts[${i}]`,
           },
         };
       }
 
-      if (seenVirIds.has(rid)) {
+      const field = `payload.vir_receipts[${i}]`;
+      const replay = registerReceiptReplayFingerprint({
+        receiptId: rid,
+        receiptType: 'vir_receipt',
+        payload: payloadRecord ?? record,
+        field,
+      });
+
+      if (!replay.ok) {
         return {
           result: {
             status: 'INVALID',
-            reason: 'Duplicate receipt_id in payload.vir_receipts',
+            reason: `receipt_id replay detected with divergent content: ${rid}`,
             verified_at: now,
           },
           error: {
-            code: 'MALFORMED_ENVELOPE',
-            message: 'receipt_id must be unique within payload.vir_receipts',
-            field: `payload.vir_receipts[${i}]`,
+            code: 'CAUSAL_RECEIPT_REPLAY_DETECTED',
+            message:
+              'same receipt_id appears multiple times with divergent canonicalized content',
+            field: replay.field,
           },
         };
       }
-      seenVirIds.add(rid);
     }
   }
 
