@@ -25,9 +25,10 @@ Target alignment: `0.2.0` for all three packages.
 - `docs/releases/clawsig-v0.2-package-release-checklist.v1.json`
 - Signature envelope: `proofs/chore/release/CPL-V2-package-prep/release-checklist.sig.json`
 
-Checklist JSON digest:
+Checklist JSON digest (detached):
 
-- `sha256: ca774ae95594110f659bcb9dd2d5ea65332d8491e45556ba5a206a1b58f9180c`
+- `sha256: 0fbd419eda127fe8299e02f220420afdf146ca423ac4a5099a18547ebb74bfe4`
+- source of truth: signature message in `proofs/chore/release/CPL-V2-package-prep/release-checklist.sig.json`
 
 ## Pack/install smoke evidence
 

@@ -16,7 +16,7 @@
     "@clawbureau/clawverify-core": "0.2.0",
     "@clawbureau/clawverify-cli": "0.2.0"
   },
-  "checklist_sha256": "ca774ae95594110f659bcb9dd2d5ea65332d8491e45556ba5a206a1b58f9180c",
+  "integrity_model": "detached_signature_message",
   "signature_artifact": "proofs/chore/release/CPL-V2-package-prep/release-checklist.sig.json",
   "pack_smoke": {
     "runner": "scripts/release/run-clawsig-v0.2-package-prep.mjs",
