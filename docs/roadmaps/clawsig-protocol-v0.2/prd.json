@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-021.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-022.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -341,11 +341,24 @@
       "priority": 26,
       "passes": true,
       "notes": "Shipped via PR #324 (merge 03c1a893015f2bf9508f74813976382ed831864c): signed causal evidence pack generation and verification in release guardrails."
+    },
+    {
+      "id": "CAV-US-022",
+      "title": "Roadmap continuity hardening against post-merge drift",
+      "description": "Harden CAV roadmap sync checks and CI triggers so roadmap truth remains current after causal CI/release lane merges.",
+      "acceptanceCriteria": [
+        "Roadmap docs track shipped causal lanes through CAV-US-021 with PR + merge evidence",
+        "Roadmap sync checker validates latest merged-lane window in README + prd metadata status",
+        "CI workflow triggers roadmap sync gate on causal CI/release workflow and runner deltas"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "Shipped via PR #325 (merge b9ab26fc14ab50167de81e5f60683cd0fee7aa90): roadmap continuity hardening and expanded cav-roadmap-sync trigger coverage."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T21:30:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-021 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T23:40:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-022 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -422,6 +435,10 @@
       {
         "pr": "#324",
         "merge_commit": "03c1a893015f2bf9508f74813976382ed831864c"
+      },
+      {
+        "pr": "#325",
+        "merge_commit": "b9ab26fc14ab50167de81e5f60683cd0fee7aa90"
       }
     ]
   }

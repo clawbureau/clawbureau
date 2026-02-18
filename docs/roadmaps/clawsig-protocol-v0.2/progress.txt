@@ -621,3 +621,24 @@ Validation:
 - `node scripts/protocol/check-reason-code-parity.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
 - `node scripts/protocol/run-clawsig-verified-pr.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-022 roadmap continuity hardening closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-022 on `main`.
+
+Shipped merge references:
+- CAV-US-022 — PR #325 (`b9ab26fc`)
+
+Deliverables:
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+- Continuity hardening remains active via:
+  - `scripts/docs/check-cav-roadmap-sync.mjs`
+  - `.github/workflows/cav-roadmap-sync.yml`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
