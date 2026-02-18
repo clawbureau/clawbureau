@@ -717,3 +717,27 @@ Deliverables:
 
 Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-026 causal fixture contract unification closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-026 on `main`.
+
+Shipped merge references:
+- CAV-US-026 — PR #329 (`510d563e`)
+
+Deliverables:
+- Causal fixture contract checker + artifact emission:
+  - `scripts/protocol/check-causal-fixture-contract.mjs`
+  - `.github/workflows/clawverify-causal-fixture-contract.yml`
+- Contract wiring into deterministic lanes:
+  - `scripts/protocol/run-clawverify-service-core-causal-parity.mjs`
+  - `scripts/protocol/run-clawverify-causal-reason-code-stability.mjs`
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅

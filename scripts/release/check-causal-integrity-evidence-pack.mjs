@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 /**
- * Guardrail: validate causal-integrity burn-in evidence contract.
+ * Guardrail: validate causal-integrity release evidence contract.
  *
  * Contract:
- * - summary exists (explicit --summary or latest under artifacts/ops/causal-integrity-burnin)
- * - summary freshness <= max-age-minutes
- * - summary.ok === true
- * - required mode + mutation_subset match requested values
- * - required burn-in steps are present and PASS (ok=true, exit_code=0)
- * - summary signature exists and verifies (offline) unless --require-signed=false
- * - signed summary hash + message binding must match summary bytes
+ * - burn-in summary exists (explicit --summary or latest under artifacts/ops/causal-integrity-burnin)
+ * - burn-in summary freshness <= max-age-minutes
+ * - burn-in summary.ok === true
+ * - required burn-in mode + mutation subset match expected values
+ * - required burn-in steps are present and PASS
+ * - burn-in summary signature exists and verifies unless --require-signed=false
+ * - signed burn-in summary hash + message binding matches summary bytes
+ *
+ * Additional parity contract (CAV-US-027):
+ * - service-core parity summary exists and is fresh + ok=true
+ * - reason-code stability summary exists and is fresh + ok=true
+ * - both summaries are signed and signatures verify unless explicitly disabled
  */
 
 import fs from 'node:fs';
@@ -19,7 +24,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
 
-const MESSAGE_PREFIX = 'causal-integrity-evidence';
+const BURNIN_MESSAGE_PREFIX = 'causal-integrity-evidence';
+const PARITY_MESSAGE_PREFIX = 'causal-service-core-parity-evidence';
+const STABILITY_MESSAGE_PREFIX = 'causal-reason-code-stability-evidence';
 
 const REQUIRED_STEP_IDS = [
   'reason-code-parity',
@@ -54,43 +61,53 @@ function parseArgs(argv) {
     return defaultValue;
   };
 
-  const summary = getValue('--summary') ?? getValueEq('--summary');
-  const signature = getValue('--signature') ?? getValueEq('--signature');
   const maxAgeRaw =
     getValue('--max-age-minutes') ?? getValueEq('--max-age-minutes');
-  const requireMode =
-    getValue('--require-mode') ?? getValueEq('--require-mode') ?? 'quick';
-  const requireMutationSubset =
-    getValue('--require-mutation-subset') ??
-    getValueEq('--require-mutation-subset') ??
-    'quick';
-
-  const requireSigned = parseBoolean(
-    getValue('--require-signed') ?? getValueEq('--require-signed'),
-    true
-  );
-
-  const maxAgeMinutes =
-    maxAgeRaw !== undefined && Number.isFinite(Number(maxAgeRaw))
-      ? Number(maxAgeRaw)
-      : 180;
 
   return {
-    summary,
-    signature,
-    maxAgeMinutes,
-    requireMode,
-    requireMutationSubset,
-    requireSigned,
+    summary: getValue('--summary') ?? getValueEq('--summary') ?? null,
+    signature: getValue('--signature') ?? getValueEq('--signature') ?? null,
+    paritySummary:
+      getValue('--parity-summary') ?? getValueEq('--parity-summary') ?? null,
+    paritySignature:
+      getValue('--parity-signature') ?? getValueEq('--parity-signature') ?? null,
+    stabilitySummary:
+      getValue('--stability-summary') ?? getValueEq('--stability-summary') ?? null,
+    stabilitySignature:
+      getValue('--stability-signature') ?? getValueEq('--stability-signature') ?? null,
+    requireMode:
+      getValue('--require-mode') ?? getValueEq('--require-mode') ?? 'quick',
+    requireMutationSubset:
+      getValue('--require-mutation-subset') ??
+      getValueEq('--require-mutation-subset') ??
+      'quick',
+    requireSigned: parseBoolean(
+      getValue('--require-signed') ?? getValueEq('--require-signed'),
+      true
+    ),
+    requireSignedParity: parseBoolean(
+      getValue('--require-signed-parity') ??
+        getValueEq('--require-signed-parity'),
+      true
+    ),
+    requireSignedStability: parseBoolean(
+      getValue('--require-signed-stability') ??
+        getValueEq('--require-signed-stability'),
+      true
+    ),
+    maxAgeMinutes:
+      maxAgeRaw !== undefined && Number.isFinite(Number(maxAgeRaw))
+        ? Number(maxAgeRaw)
+        : 180,
   };
 }
 
-function readJson(relativePath) {
-  return JSON.parse(fs.readFileSync(path.resolve(ROOT, relativePath), 'utf8'));
+function readJson(relPath) {
+  return JSON.parse(fs.readFileSync(path.resolve(ROOT, relPath), 'utf8'));
 }
 
-function findLatestSummaryPath() {
-  const root = path.resolve(ROOT, 'artifacts/ops/causal-integrity-burnin');
+function findLatestSummaryPath(relativeRootDir) {
+  const root = path.resolve(ROOT, relativeRootDir);
   if (!fs.existsSync(root)) {
     return null;
   }
@@ -104,12 +121,7 @@ function findLatestSummaryPath() {
   const latest = dirs.at(-1);
   if (!latest) return null;
 
-  const summaryPath = path.join(
-    'artifacts/ops/causal-integrity-burnin',
-    latest,
-    'summary.json'
-  );
-
+  const summaryPath = path.join(relativeRootDir, latest, 'summary.json');
   return fs.existsSync(path.resolve(ROOT, summaryPath)) ? summaryPath : null;
 }
 
@@ -315,16 +327,20 @@ async function verifyMessageSignatureEnvelope(envelope) {
   }
 }
 
-async function validateSignatureContract(summaryPath, signaturePath, requireSigned) {
+async function validateSignatureContract({
+  summaryPath,
+  signaturePath,
+  requireSigned,
+  expectedMessagePrefix,
+  signingHint,
+}) {
   const issues = [];
   const fullSignaturePath = path.resolve(ROOT, signaturePath);
   const signatureExists = fs.existsSync(fullSignaturePath);
 
   if (!signatureExists) {
     if (requireSigned) {
-      issues.push(
-        `missing signature file: ${signaturePath} (run scripts/release/sign-causal-integrity-evidence-pack.mjs)`
-      );
+      issues.push(`missing signature file: ${signaturePath} (run ${signingHint})`);
     }
 
     return {
@@ -382,12 +398,13 @@ async function validateSignatureContract(summaryPath, signaturePath, requireSign
     );
   }
 
-  const messagePrefix =
-    typeof sigDoc.message_prefix === 'string' && sigDoc.message_prefix.length > 0
-      ? sigDoc.message_prefix
-      : MESSAGE_PREFIX;
+  if (sigDoc.message_prefix !== expectedMessagePrefix) {
+    issues.push(
+      `message_prefix must be ${expectedMessagePrefix} (got ${String(sigDoc.message_prefix)})`
+    );
+  }
 
-  const expectedMessage = `${messagePrefix}:${expectedSummaryHash}`;
+  const expectedMessage = `${expectedMessagePrefix}:${expectedSummaryHash}`;
   const actualMessage = sigDoc?.message_signature?.message;
   if (actualMessage !== expectedMessage) {
     issues.push(
@@ -416,22 +433,34 @@ async function validateSignatureContract(summaryPath, signaturePath, requireSign
   };
 }
 
-async function validateSummary(summaryPath, opts) {
+function validateSummaryFreshness(summaryPath, maxAgeMinutes) {
   const issues = [];
-  const summary = readJson(summaryPath);
 
   const fullSummaryPath = path.resolve(ROOT, summaryPath);
   const stat = fs.statSync(fullSummaryPath);
   const ageMs = Date.now() - stat.mtimeMs;
-  const maxAgeMs = opts.maxAgeMinutes * 60_000;
+  const maxAgeMs = maxAgeMinutes * 60_000;
 
-  if (!Number.isFinite(opts.maxAgeMinutes) || opts.maxAgeMinutes <= 0) {
+  if (!Number.isFinite(maxAgeMinutes) || maxAgeMinutes <= 0) {
     issues.push('max-age-minutes must be a positive number');
   } else if (ageMs > maxAgeMs) {
     issues.push(
       `summary is stale: age ${Math.round(ageMs / 1000)}s exceeds max ${Math.round(maxAgeMs / 1000)}s`
     );
   }
+
+  return {
+    issues,
+    age_minutes: ageMs / 60_000,
+  };
+}
+
+async function validateBurnInSummary(summaryPath, opts) {
+  const issues = [];
+  const summary = readJson(summaryPath);
+
+  const freshness = validateSummaryFreshness(summaryPath, opts.maxAgeMinutes);
+  issues.push(...freshness.issues);
 
   if (summary.ok !== true) {
     issues.push(`summary.ok must be true (got ${String(summary.ok)})`);
@@ -458,106 +487,220 @@ async function validateSummary(summaryPath, opts) {
 
   if (!Array.isArray(summary.steps)) {
     issues.push('summary.steps must be an array');
-    return {
-      ok: false,
-      issues,
-      summary,
-      age_minutes: ageMs / 60_000,
-      signature: {
-        ok: false,
-        signature_path: opts.signature ?? defaultSignaturePath(summaryPath),
-        signature_present: false,
-        issues: ['summary.steps must be an array'],
-      },
-    };
-  }
+  } else {
+    const byId = new Map(summary.steps.map((step) => [step?.id, step]));
 
-  const byId = new Map(summary.steps.map((step) => [step?.id, step]));
+    for (const stepId of REQUIRED_STEP_IDS) {
+      const step = byId.get(stepId);
+      if (!step) {
+        issues.push(`missing required burn-in step: ${stepId}`);
+        continue;
+      }
 
-  for (const stepId of REQUIRED_STEP_IDS) {
-    const step = byId.get(stepId);
-    if (!step) {
-      issues.push(`missing required burn-in step: ${stepId}`);
-      continue;
+      if (step.ok !== true) {
+        issues.push(`required step ${stepId} did not pass (ok=${String(step.ok)})`);
+      }
+
+      if (step.exit_code !== 0) {
+        issues.push(
+          `required step ${stepId} exit_code must be 0 (got ${String(step.exit_code)})`
+        );
+      }
     }
 
-    if (step.ok !== true) {
-      issues.push(`required step ${stepId} did not pass (ok=${String(step.ok)})`);
-    }
-
-    if (step.exit_code !== 0) {
+    if (
+      typeof summary.step_count_expected === 'number' &&
+      summary.step_count_expected < REQUIRED_STEP_IDS.length
+    ) {
       issues.push(
-        `required step ${stepId} exit_code must be 0 (got ${String(step.exit_code)})`
+        `summary.step_count_expected must be >= ${REQUIRED_STEP_IDS.length} (got ${summary.step_count_expected})`
       );
     }
   }
 
-  if (
-    typeof summary.step_count_expected === 'number' &&
-    summary.step_count_expected < REQUIRED_STEP_IDS.length
-  ) {
-    issues.push(
-      `summary.step_count_expected must be >= ${REQUIRED_STEP_IDS.length} (got ${summary.step_count_expected})`
-    );
-  }
-
   const signaturePath = opts.signature ?? defaultSignaturePath(summaryPath);
-  const signatureValidation = await validateSignatureContract(
+  const signatureValidation = await validateSignatureContract({
     summaryPath,
     signaturePath,
-    opts.requireSigned
-  );
+    requireSigned: opts.requireSigned,
+    expectedMessagePrefix: BURNIN_MESSAGE_PREFIX,
+    signingHint: 'scripts/release/sign-causal-integrity-evidence-pack.mjs',
+  });
 
-  for (const signatureIssue of signatureValidation.issues) {
-    issues.push(signatureIssue);
-  }
+  issues.push(...signatureValidation.issues);
 
   return {
     ok: issues.length === 0,
     issues,
     summary,
-    age_minutes: ageMs / 60_000,
+    age_minutes: freshness.age_minutes,
     signature: signatureValidation,
   };
 }
 
-async function run() {
-  const opts = parseArgs(process.argv.slice(2));
-  const summaryPath = opts.summary ?? findLatestSummaryPath();
+async function validateAuxSummary({
+  summaryPath,
+  signaturePath,
+  maxAgeMinutes,
+  requireSigned,
+  expectedMessagePrefix,
+  signingHint,
+}) {
+  const issues = [];
+  const summary = readJson(summaryPath);
 
-  if (!summaryPath) {
-    const result = {
-      ok: false,
-      summary_path: null,
-      signature_path: opts.signature ?? null,
-      checked_steps: REQUIRED_STEP_IDS,
-      require_signed: opts.requireSigned,
-      issues: [
-        'No causal-integrity burn-in summary found. Pass --summary <path> or generate artifacts/ops/causal-integrity-burnin/<timestamp>/summary.json',
-      ],
-    };
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    process.exitCode = 1;
-    return;
+  const freshness = validateSummaryFreshness(summaryPath, maxAgeMinutes);
+  issues.push(...freshness.issues);
+
+  if (summary.ok !== true) {
+    issues.push(`summary.ok must be true (got ${String(summary.ok)})`);
   }
 
-  const validation = await validateSummary(summaryPath, opts);
+  if (!Array.isArray(summary.suites)) {
+    issues.push('summary.suites must be an array');
+  }
+
+  if (
+    typeof summary.suite_count_executed === 'number' &&
+    summary.suite_count_executed <= 0
+  ) {
+    issues.push(
+      `summary.suite_count_executed must be > 0 (got ${summary.suite_count_executed})`
+    );
+  }
+
+  const signatureValidation = await validateSignatureContract({
+    summaryPath,
+    signaturePath,
+    requireSigned,
+    expectedMessagePrefix,
+    signingHint,
+  });
+
+  issues.push(...signatureValidation.issues);
+
+  return {
+    ok: issues.length === 0,
+    issues,
+    summary,
+    age_minutes: freshness.age_minutes,
+    signature: signatureValidation,
+  };
+}
+
+function prefixIssues(prefix, issues) {
+  return issues.map((issue) => `${prefix}: ${issue}`);
+}
+
+async function run() {
+  const opts = parseArgs(process.argv.slice(2));
+
+  const burninSummaryPath =
+    opts.summary ?? findLatestSummaryPath('artifacts/ops/causal-integrity-burnin');
+  const paritySummaryPath =
+    opts.paritySummary ??
+    findLatestSummaryPath('artifacts/ops/causal-service-core-parity');
+  const stabilitySummaryPath =
+    opts.stabilitySummary ??
+    findLatestSummaryPath('artifacts/ops/causal-reason-code-stability');
+
+  const issues = [];
+
+  if (!burninSummaryPath) {
+    issues.push(
+      'burnin: no causal-integrity burn-in summary found. Pass --summary <path> or generate artifacts/ops/causal-integrity-burnin/<timestamp>/summary.json'
+    );
+  }
+
+  if (!paritySummaryPath) {
+    issues.push(
+      'parity: no service-core parity summary found. Pass --parity-summary <path> or generate artifacts/ops/causal-service-core-parity/<timestamp>/summary.json'
+    );
+  }
+
+  if (!stabilitySummaryPath) {
+    issues.push(
+      'stability: no reason-code stability summary found. Pass --stability-summary <path> or generate artifacts/ops/causal-reason-code-stability/<timestamp>/summary.json'
+    );
+  }
+
+  let burninValidation = null;
+  let parityValidation = null;
+  let stabilityValidation = null;
+
+  if (burninSummaryPath) {
+    burninValidation = await validateBurnInSummary(burninSummaryPath, opts);
+    issues.push(...prefixIssues('burnin', burninValidation.issues));
+  }
+
+  if (paritySummaryPath) {
+    const paritySignaturePath =
+      opts.paritySignature ?? defaultSignaturePath(paritySummaryPath);
+    parityValidation = await validateAuxSummary({
+      summaryPath: paritySummaryPath,
+      signaturePath: paritySignaturePath,
+      maxAgeMinutes: opts.maxAgeMinutes,
+      requireSigned: opts.requireSignedParity,
+      expectedMessagePrefix: PARITY_MESSAGE_PREFIX,
+      signingHint: 'scripts/release/sign-causal-parity-evidence-pack.mjs',
+    });
+    issues.push(...prefixIssues('parity', parityValidation.issues));
+  }
+
+  if (stabilitySummaryPath) {
+    const stabilitySignaturePath =
+      opts.stabilitySignature ?? defaultSignaturePath(stabilitySummaryPath);
+    stabilityValidation = await validateAuxSummary({
+      summaryPath: stabilitySummaryPath,
+      signaturePath: stabilitySignaturePath,
+      maxAgeMinutes: opts.maxAgeMinutes,
+      requireSigned: opts.requireSignedStability,
+      expectedMessagePrefix: STABILITY_MESSAGE_PREFIX,
+      signingHint: 'scripts/release/sign-causal-parity-evidence-pack.mjs',
+    });
+    issues.push(...prefixIssues('stability', stabilityValidation.issues));
+  }
 
   const result = {
-    ok: validation.ok,
-    summary_path: summaryPath,
-    signature_path: validation.signature.signature_path,
-    signature_present: validation.signature.signature_present,
-    signature_ok: validation.signature.ok,
-    signing_mode: validation.signature.signing_mode,
-    signer_did: validation.signature.signer_did,
+    ok: issues.length === 0,
+    summary_path: burninSummaryPath,
+    signature_path: burninValidation?.signature.signature_path ?? null,
+    signature_present: burninValidation?.signature.signature_present ?? false,
+    signature_ok: burninValidation?.signature.ok ?? false,
+    signing_mode: burninValidation?.signature.signing_mode,
+    signer_did: burninValidation?.signature.signer_did,
     max_age_minutes: opts.maxAgeMinutes,
-    summary_age_minutes: Number(validation.age_minutes.toFixed(2)),
+    summary_age_minutes: burninValidation
+      ? Number(burninValidation.age_minutes.toFixed(2))
+      : null,
     required_mode: opts.requireMode,
     required_mutation_subset: opts.requireMutationSubset,
     require_signed: opts.requireSigned,
     checked_steps: REQUIRED_STEP_IDS,
-    issues: validation.issues,
+
+    parity_summary_path: paritySummaryPath,
+    parity_signature_path: parityValidation?.signature.signature_path ?? null,
+    parity_signature_present: parityValidation?.signature.signature_present ?? false,
+    parity_signature_ok: parityValidation?.signature.ok ?? false,
+    parity_signing_mode: parityValidation?.signature.signing_mode,
+    parity_signer_did: parityValidation?.signature.signer_did,
+    parity_summary_age_minutes: parityValidation
+      ? Number(parityValidation.age_minutes.toFixed(2))
+      : null,
+    require_signed_parity: opts.requireSignedParity,
+
+    stability_summary_path: stabilitySummaryPath,
+    stability_signature_path: stabilityValidation?.signature.signature_path ?? null,
+    stability_signature_present: stabilityValidation?.signature.signature_present ?? false,
+    stability_signature_ok: stabilityValidation?.signature.ok ?? false,
+    stability_signing_mode: stabilityValidation?.signature.signing_mode,
+    stability_signer_did: stabilityValidation?.signature.signer_did,
+    stability_summary_age_minutes: stabilityValidation
+      ? Number(stabilityValidation.age_minutes.toFixed(2))
+      : null,
+    require_signed_stability: opts.requireSignedStability,
+
+    issues,
   };
 
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -572,6 +715,10 @@ run().catch((error) => {
     ok: false,
     summary_path: null,
     signature_path: null,
+    parity_summary_path: null,
+    parity_signature_path: null,
+    stability_summary_path: null,
+    stability_signature_path: null,
     issues: [error instanceof Error ? error.message : String(error)],
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
