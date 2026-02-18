@@ -1,13 +1,13 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-021.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
       "id": "CPL-V2-001",
       "title": "Protocol-level rate limiting semantics",
-      "description": "Define how proof bundles express and verify rate limits \u2014 per-agent, per-model, per-tool. Allows verifiers to detect burst abuse without online state.",
+      "description": "Define how proof bundles express and verify rate limits — per-agent, per-model, per-tool. Allows verifiers to detect burst abuse without online state.",
       "acceptanceCriteria": [
         "Rate limit claims in proof bundle metadata",
         "Verifier checks claim consistency across bundles from same agent",
@@ -20,7 +20,7 @@
     {
       "id": "CPL-V2-002",
       "title": "Multi-party receipt co-signing",
-      "description": "Allow receipts to carry multiple signatures \u2014 agent + proxy + human approver. Enables multi-party attestation without central trust.",
+      "description": "Allow receipts to carry multiple signatures — agent + proxy + human approver. Enables multi-party attestation without central trust.",
       "acceptanceCriteria": [
         "Co-signature schema extension (additive, backward compatible)",
         "Verifier validates all co-signatures",
@@ -59,7 +59,7 @@
     {
       "id": "CPL-V2-005",
       "title": "Aggregate proof bundles (bundle-of-bundles)",
-      "description": "Define a composition format for fleet-level verification \u2014 a single signed envelope containing multiple proof bundles from different agents.",
+      "description": "Define a composition format for fleet-level verification — a single signed envelope containing multiple proof bundles from different agents.",
       "acceptanceCriteria": [
         "Aggregate bundle schema with member bundle references",
         "Verifier validates aggregate signature + each member",
@@ -302,11 +302,50 @@
       "priority": 23,
       "passes": true,
       "notes": "Shipped via PR #321 (merge 145d0af716130b2dbefc665d2ebd696a517d652d): roadmap truth-sync, release evidence checker, and release guardrail integration."
+    },
+    {
+      "id": "CAV-US-019",
+      "title": "Roadmap truth-sync closure + continuity checker gate",
+      "description": "Sync roadmap truth through CAV-US-018 and introduce a deterministic checker/workflow to keep CAV roadmap artifacts aligned with merged history.",
+      "acceptanceCriteria": [
+        "Roadmap docs include shipped causal lanes through CAV-US-018 with PR and merge evidence",
+        "Deterministic checker verifies merged CAV lanes are represented across README/prd/progress",
+        "Required CI workflow runs checker on CAV-relevant roadmap/protocol/verifier deltas"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Shipped via PR #322 (merge ede03d377f6f06e20ce688f2ab81f278a30e656b): roadmap truth-sync through CAV-US-018 and cav-roadmap-sync checker/workflow."
+    },
+    {
+      "id": "CAV-US-020",
+      "title": "Deterministic causal reason-code stability contract",
+      "description": "Enforce fixture-level reason-code stability across causal conformance suites with a deterministic CI gate and artifact output.",
+      "acceptanceCriteria": [
+        "Runner compares fixture-level expected vs actual status/reason-code across causal suites",
+        "Gate fails on generic fallback reason codes or unregistered codes",
+        "Required CI workflow runs and uploads deterministic stability summary artifact"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Shipped via PR #323 (merge 75feadba7678e3044f6d2a38d72590fb99104334): causal reason-code stability runner + required CI gate."
+    },
+    {
+      "id": "CAV-US-021",
+      "title": "Signed causal evidence contract for release gating",
+      "description": "Require causal burn-in evidence packs to be signed and cryptographically verified before release guardrails pass.",
+      "acceptanceCriteria": [
+        "Release flow signs causal burn-in summary with deterministic message-signature envelope",
+        "Evidence checker validates summary hash binding + Ed25519 signature offline",
+        "Release causal integrity workflow requires signed evidence contract pass"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Shipped via PR #324 (merge 03c1a893015f2bf9508f74813976382ed831864c): signed causal evidence pack generation and verification in release guardrails."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T21:00:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-018 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-18T21:30:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-021 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -371,6 +410,18 @@
       {
         "pr": "#321",
         "merge_commit": "145d0af716130b2dbefc665d2ebd696a517d652d"
+      },
+      {
+        "pr": "#322",
+        "merge_commit": "ede03d377f6f06e20ce688f2ab81f278a30e656b"
+      },
+      {
+        "pr": "#323",
+        "merge_commit": "75feadba7678e3044f6d2a38d72590fb99104334"
+      },
+      {
+        "pr": "#324",
+        "merge_commit": "03c1a893015f2bf9508f74813976382ed831864c"
       }
     ]
   }

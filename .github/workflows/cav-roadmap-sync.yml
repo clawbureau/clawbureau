@@ -9,6 +9,16 @@ on:
       - 'packages/clawverify-core/**'
       - 'packages/clawverify-cli/**'
       - 'scripts/docs/check-cav-roadmap-sync.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
+      - 'scripts/release/sign-causal-integrity-evidence-pack.mjs'
+      - '.github/workflows/causal-integrity-burnin.yml'
+      - '.github/workflows/clawverify-causal-*.yml'
+      - '.github/workflows/clawverify-aggregate-causal-conformance.yml'
+      - '.github/workflows/reason-code-parity.yml'
+      - '.github/workflows/release-e2e-guardrails.yml'
       - '.github/workflows/cav-roadmap-sync.yml'
   push:
     branches:
@@ -20,6 +30,16 @@ on:
       - 'packages/clawverify-core/**'
       - 'packages/clawverify-cli/**'
       - 'scripts/docs/check-cav-roadmap-sync.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
+      - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
+      - 'scripts/release/sign-causal-integrity-evidence-pack.mjs'
+      - '.github/workflows/causal-integrity-burnin.yml'
+      - '.github/workflows/clawverify-causal-*.yml'
+      - '.github/workflows/clawverify-aggregate-causal-conformance.yml'
+      - '.github/workflows/reason-code-parity.yml'
+      - '.github/workflows/release-e2e-guardrails.yml'
       - '.github/workflows/cav-roadmap-sync.yml'
 
 jobs:
