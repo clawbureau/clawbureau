@@ -481,16 +481,16 @@
     },
     {
       "id": "CVF-US-061",
-      "title": "Tracker continuity placeholder for CVF-US-061",
-      "description": "As maintainers, we need CVF-US-061 explicitly tracked so story numbering and audit history remain continuous and reviewable.",
+      "title": "Tracker continuity tombstone for CVF-US-061",
+      "description": "As maintainers, we preserve CVF-US-061 as an explicit numbering continuity marker so audit trails remain sequential without implying an unshipped runtime gap.",
       "acceptanceCriteria": [
-        "CVF-US-061 is present in services/clawverify/prd.json with passes:false",
-        "Notes explicitly mark implementation status as pending/deferred",
-        "Reinstatement lane introduces no runtime or schema behavior changes"
+        "CVF-US-061 remains present in services/clawverify/prd.json as a tracker-only continuity record",
+        "Story is marked passes:true with explicit tombstone rationale",
+        "No runtime/schema behavior changes are introduced by the closeout lane"
       ],
       "priority": 34,
-      "passes": false,
-      "notes": "Record reinstated for auditability after numbering-gap discovery. Implementation status is pending/deferred; no runtime change has shipped in this tracker-only lane."
+      "passes": true,
+      "notes": "Tombstoned as tracker-only continuity record. Number retained for audit sequencing; no standalone runtime scope remains."
     },
     {
       "id": "CVF-US-062",

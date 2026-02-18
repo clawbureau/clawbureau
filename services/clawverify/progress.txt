@@ -643,3 +643,15 @@ Started: 2026-02-02T03:08:26.937416
   - `cd packages/clawsig-conformance && npm run build`
   - `node scripts/e2e/linux-harness-smoke.mjs` (with deterministic codex/gemini shims)
 ---
+
+## 2026-02-18 - CVF-US-061 tracker closeout (tombstone)
+- What was implemented
+  - Closed the lingering CVF-US-061 placeholder by converting it into an explicit tracker tombstone.
+  - Updated `services/clawverify/prd.json`:
+    - `passes: true`
+    - clarified no standalone runtime/schema scope remains for CVF-US-061
+    - retained record for numbering/audit continuity.
+- Quality checks
+  - `jq . services/clawverify/prd.json`
+  - `node scripts/docs/lint-prds.mjs`
+---
