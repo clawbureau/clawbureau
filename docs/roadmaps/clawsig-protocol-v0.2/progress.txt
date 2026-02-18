@@ -196,8 +196,8 @@ Validation:
   - `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md`
   - now covers co-signatures, selective disclosure, aggregate bundles, temporal guards, and rate-limit claims.
 - Added minimal v0.2 integrator quickstart fixture set:
-  - `packages/schema/fixtures/quickstart/v0.2/manifest.v1.json`
-  - `packages/schema/fixtures/quickstart/v0.2/README.md`
+  - `docs/examples/clawsig-v0.2-quickstart/manifest.v1.json`
+  - `docs/examples/clawsig-v0.2-quickstart/README.md`
 - Added deterministic quickstart runner:
   - `scripts/protocol/run-clawsig-v0.2-quickstart.mjs`
   - output: `artifacts/examples/clawsig-v0.2-quickstart/<timestamp>/summary.json`

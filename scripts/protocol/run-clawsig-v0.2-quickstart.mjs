@@ -76,7 +76,7 @@ async function ensureCliBuilt(cliPath) {
 async function main() {
   const manifestPath = path.join(
     ROOT,
-    'packages/schema/fixtures/quickstart/v0.2/manifest.v1.json',
+    'docs/examples/clawsig-v0.2-quickstart/manifest.v1.json',
   );
   const configPath = path.join(
     ROOT,
@@ -161,7 +161,7 @@ async function main() {
 
   const summary = {
     manifest: {
-      path: 'packages/schema/fixtures/quickstart/v0.2/manifest.v1.json',
+      path: 'docs/examples/clawsig-v0.2-quickstart/manifest.v1.json',
       manifest_version: manifest.manifest_version,
       vector_count: results.length,
     },
