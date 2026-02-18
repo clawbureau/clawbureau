@@ -385,6 +385,9 @@ export type VerificationErrorCode =
   | 'CAUSAL_BINDING_NORMALIZATION_FAILED'
   | 'CAUSAL_RECEIPT_REPLAY_DETECTED'
   | 'CAUSAL_SPAN_REUSE_CONFLICT'
+  | 'CAUSAL_GRAPH_DISCONNECTED'
+  | 'CAUSAL_SIDE_EFFECT_ORPHANED'
+  | 'CAUSAL_HUMAN_APPROVAL_ORPHANED'
   | 'COVERAGE_CLDD_DISCREPANCY_ENFORCED'
   | 'URM_MISSING'
   | 'URM_MISMATCH'
@@ -1211,6 +1214,33 @@ export interface RateLimitClaim {
   run_id?: string;
 }
 
+/** Side-effect receipt payload (proof-bundle embedded, not envelope-wrapped). */
+export interface SideEffectReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  effect_class: 'network_egress' | 'filesystem_write' | 'external_api_write';
+  hash_algorithm: HashAlgorithm;
+  agent_did: string;
+  timestamp: string;
+  binding?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Human approval receipt payload (proof-bundle embedded, not envelope-wrapped). */
+export interface HumanApprovalReceiptPayload {
+  receipt_version: '1';
+  receipt_id: string;
+  approval_type:
+    | 'explicit_approve'
+    | 'explicit_deny'
+    | 'auto_approve'
+    | 'timeout_deny';
+  agent_did: string;
+  timestamp: string;
+  binding?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 /** Proof bundle payload structure */
 export interface ProofBundlePayload {
   bundle_version: '1';
@@ -1223,6 +1253,8 @@ export interface ProofBundlePayload {
   web_receipts?: SignedEnvelope<WebReceiptPayload>[];
   coverage_attestations?: SignedEnvelope<CoverageAttestationPayload>[];
   binary_semantic_evidence_attestations?: SignedEnvelope<BinarySemanticEvidencePayload>[];
+  side_effect_receipts?: SideEffectReceiptPayload[];
+  human_approval_receipts?: HumanApprovalReceiptPayload[];
   rate_limit_claims?: RateLimitClaim[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;

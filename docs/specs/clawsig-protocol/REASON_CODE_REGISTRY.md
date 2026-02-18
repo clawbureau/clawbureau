@@ -193,6 +193,9 @@ These codes are emitted by the protocol's verification layer (clawverify, clawve
 | `CAUSAL_BINDING_NORMALIZATION_FAILED` | Causal binding normalization fails due to malformed/empty identifier fields or invalid canonicalization inputs |
 | `CAUSAL_RECEIPT_REPLAY_DETECTED` | Same `receipt_id` appears multiple times in a bundle with divergent canonicalized content |
 | `CAUSAL_SPAN_REUSE_CONFLICT` | Same `span_id` is reused with incompatible causal semantics (parent/tool/phase/confidence disagreement) |
+| `CAUSAL_GRAPH_DISCONNECTED` | Causal graph connectivity invariants fail in enforce mode (disconnected components or non-root spans without root lineage) |
+| `CAUSAL_SIDE_EFFECT_ORPHANED` | Side-effect receipt is not causally anchored to a known span lineage in the same bundle |
+| `CAUSAL_HUMAN_APPROVAL_ORPHANED` | Human-approval receipt is not causally anchored to a known span lineage in the same bundle |
 
 ### COVERAGE_*
 

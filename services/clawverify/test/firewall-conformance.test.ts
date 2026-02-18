@@ -58,6 +58,10 @@ type FixtureCase = {
     | 'invalid_causal_receipt_replay_detected'
     | 'invalid_causal_span_reuse_conflict'
     | 'valid_causal_no_replay_no_conflict'
+    | 'valid_causal_connected'
+    | 'invalid_causal_graph_disconnected'
+    | 'invalid_causal_side_effect_orphaned'
+    | 'invalid_causal_human_approval_orphaned'
     | 'invalid_tee_nonce_binding_mismatch'
     | 'invalid_tee_revoked';
   expected: FixtureExpected;
@@ -552,6 +556,10 @@ async function buildFixtureScenario(spec: FixtureCase) {
     spec.scenario === 'invalid_causal_receipt_replay_detected' ||
     spec.scenario === 'invalid_causal_span_reuse_conflict' ||
     spec.scenario === 'valid_causal_no_replay_no_conflict' ||
+    spec.scenario === 'valid_causal_connected' ||
+    spec.scenario === 'invalid_causal_graph_disconnected' ||
+    spec.scenario === 'invalid_causal_side_effect_orphaned' ||
+    spec.scenario === 'invalid_causal_human_approval_orphaned' ||
     spec.scenario === 'invalid_coverage_chain_root_enforce' ||
     spec.scenario === 'invalid_cldd_discrepancy_enforce'
   ) {
@@ -842,6 +850,67 @@ async function buildFixtureScenario(spec: FixtureCase) {
           },
         }),
       ];
+    } else if (spec.scenario === 'valid_causal_connected') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'connected_root',
+          bindingExtras: {
+            span_id: 'span_connected_root_firewall_015',
+            phase: 'execution',
+            attribution_confidence: 1.0,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'connected_child',
+          bindingExtras: {
+            span_id: 'span_connected_child_firewall_015',
+            parent_span_id: 'span_connected_root_firewall_015',
+            phase: 'execution',
+            attribution_confidence: 1.0,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_graph_disconnected') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'disc_root_a',
+          bindingExtras: {
+            span_id: 'span_disconnected_root_a_firewall_016',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'disc_root_b',
+          bindingExtras: {
+            span_id: 'span_disconnected_root_b_firewall_016',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_side_effect_orphaned') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'side_effect_root',
+          bindingExtras: {
+            span_id: 'span_side_effect_root_firewall_017',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
+    } else if (spec.scenario === 'invalid_causal_human_approval_orphaned') {
+      receiptEnvelopes = [
+        await makeGatewayReceiptEnvelope({
+          receiptSuffix: 'human_approval_root',
+          bindingExtras: {
+            span_id: 'span_human_approval_root_firewall_018',
+            phase: 'execution',
+            attribution_confidence: 0.5,
+          },
+        }),
+      ];
     }
 
     const bundlePayloadWithGateway: Record<string, unknown> = {
@@ -852,6 +921,37 @@ async function buildFixtureScenario(spec: FixtureCase) {
     const options: Record<string, unknown> = {
       allowlistedReceiptSignerDids: [gateway.did],
     };
+
+    if (spec.scenario === 'invalid_causal_side_effect_orphaned') {
+      bundlePayloadWithGateway.side_effect_receipts = [
+        {
+          receipt_version: '1',
+          receipt_id: `se_${runId}`,
+          effect_class: 'external_api_write',
+          hash_algorithm: 'SHA-256',
+          agent_did: agent.did,
+          timestamp: '2026-02-17T00:00:00Z',
+          binding: {
+            tool_span_id: 'span_missing_side_effect_firewall_017',
+          },
+        },
+      ];
+    }
+
+    if (spec.scenario === 'invalid_causal_human_approval_orphaned') {
+      bundlePayloadWithGateway.human_approval_receipts = [
+        {
+          receipt_version: '1',
+          receipt_id: `ha_${runId}`,
+          approval_type: 'explicit_approve',
+          agent_did: agent.did,
+          timestamp: '2026-02-17T00:00:00Z',
+          binding: {
+            parent_span_id: 'span_missing_human_approval_firewall_018',
+          },
+        },
+      ];
+    }
 
     if (
       spec.scenario === 'valid_gateway_coverage' ||

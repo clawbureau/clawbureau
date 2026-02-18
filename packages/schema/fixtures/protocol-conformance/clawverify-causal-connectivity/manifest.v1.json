@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-causal-connectivity",
+  "cases": [
+    "valid-causal-connected.v1.json",
+    "invalid-causal-graph-disconnected.v1.json",
+    "invalid-causal-side-effect-orphaned.v1.json",
+    "invalid-causal-human-approval-orphaned.v1.json"
+  ]
+}
