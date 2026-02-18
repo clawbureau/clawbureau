@@ -463,7 +463,53 @@ export async function wrap(
   // Harvest Network Sentinel events
   const netEvents = netSentinel.getEvents();
   const networkReceipts = await synthesizeNetworkReceipts(netEvents, agentDid.did, runId);
-  const interposeSummary = interposeOracle.getSummary(netEvents);
+
+  const fallbackClddMetrics = (() => {
+    const unmonitoredSpawnPids = new Set<number>();
+
+    for (const event of netEvents) {
+      if (typeof event.pid !== 'number') continue;
+      if (!interposeOracle.isAgentPid(event.pid)) {
+        unmonitoredSpawnPids.add(event.pid);
+      }
+    }
+
+    const unmediatedConnections =
+      netEvents.length > 0
+        ? netEvents.filter(
+            (event) =>
+              typeof event.pid !== 'number' ||
+              !interposeOracle.isAgentPid(event.pid)
+          ).length
+        : 0;
+
+    return {
+      unmediated_connections: unmediatedConnections,
+      unmonitored_spawns: unmonitoredSpawnPids.size,
+      escapes_suspected:
+        unmediatedConnections > 0 || unmonitoredSpawnPids.size > 0,
+    };
+  })();
+
+  const computeClddMetrics = (
+    interposeOracle as unknown as {
+      computeClddMetrics?: (
+        events: Array<{ pid: number | null; remoteAddress: string }>
+      ) => {
+        unmediated_connections: number;
+        unmonitored_spawns: number;
+        escapes_suspected: boolean;
+      };
+    }
+  ).computeClddMetrics;
+
+  const interposeSummary = {
+    ...interposeOracle.getSummary(),
+    cldd:
+      typeof computeClddMetrics === 'function'
+        ? computeClddMetrics.call(interposeOracle, netEvents)
+        : fallbackClddMetrics,
+  };
 
   // Merge interpose network receipts into network receipts
   const allNetworkReceipts = [...networkReceipts, ...interposeReceipts.network];
