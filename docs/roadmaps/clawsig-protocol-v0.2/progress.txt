@@ -287,3 +287,29 @@ Validation:
 - `node docs/examples/integrations/enterprise-ci/run.mjs` ✅
 - `node scripts/protocol/run-clawsig-v0.2-quickstart.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — ADP-US-003 enterprise pilot pack
+
+- Added buyer/security handoff pilot bundle docs:
+  - `docs/pilot/clawsig-v0.2-enterprise-pilot-pack.md`
+- Added machine-readable pilot checklist:
+  - `docs/pilot/clawsig-v0.2-enterprise-pilot-pack-checklist.v1.json`
+- Added detached signature envelope:
+  - `proofs/docs/pilot/ADP-US-003-enterprise-pilot-pack/pilot-pack-checklist.sig.json`
+- Added deterministic integrity checker for pilot checklist chain:
+  - `scripts/release/check-clawsig-v0.2-enterprise-pilot-pack-integrity.mjs`
+- Linked pilot assets in adoption references:
+  - `docs/WHAT_TO_READ.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+
+Pilot contents include:
+- 30-day plan
+- success metrics (security, engineering, audit)
+- required evidence pack definitions
+- control mapping anchors to reason codes and conformance artifacts
+
+Validation:
+- `node scripts/release/check-clawsig-v0.2-enterprise-pilot-pack-integrity.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

@@ -31,6 +31,7 @@
 - v0.2 quickstart fixture manifest: [`docs/examples/clawsig-v0.2-quickstart/manifest.v1.json`](../../examples/clawsig-v0.2-quickstart/manifest.v1.json)
 - v0.2 quickstart runner: [`scripts/protocol/run-clawsig-v0.2-quickstart.mjs`](../../../scripts/protocol/run-clawsig-v0.2-quickstart.mjs)
 - integration starter packs: [`docs/examples/integrations/README.md`](../../examples/integrations/README.md)
+- enterprise pilot pack: [`docs/pilot/clawsig-v0.2-enterprise-pilot-pack.md`](../../pilot/clawsig-v0.2-enterprise-pilot-pack.md)
 
 ## Release-prep assets (internal)
 
