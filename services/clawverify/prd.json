@@ -417,7 +417,7 @@
       ],
       "priority": 29,
       "passes": true,
-      "notes": "Expanded harness matrix agent set to include Gemini CLI lane in `packages/clawsig-conformance/src/harness-matrix.ts` (agent enum/default matrix/env wiring). Added Linux-first harness smoke path `scripts/e2e/linux-harness-smoke.mjs` with deterministic artifact output (`.clawsig/e2e-linux-results.json`) and CI workflow `.github/workflows/poh-harness-matrix-linux.yml` to run codex+gemini lanes as reporting smoke in Linux. Current smoke is report-first (non-blocking) and surfaces adapter parity failures (event_chain/receipt gaps) for codex/gemini pending follow-up fixes."
+      "notes": "Expanded harness matrix agent set to include Gemini CLI lane in `packages/clawsig-conformance/src/harness-matrix.ts` (agent enum/default matrix/env wiring). Linux lane is now strict-gated in `.github/workflows/poh-harness-matrix-linux.yml` with deterministic CI shims for required codex+gemini mock lanes. `scripts/e2e/linux-harness-smoke.mjs` emits both `.clawsig/e2e-linux-results.json` and `.clawsig/e2e-linux-strict-summary.json` with explicit failure codes (`AGENT_UNAVAILABLE`, `PARITY_FAILURE`) and blocks CI when required lanes fail."
     },
     {
       "id": "CVF-US-057",
