@@ -187,3 +187,25 @@ Validation:
 Validation:
 - `jq . docs/roadmaps/clawsig-protocol-v0.2/prd.json` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — v0.2 adoption/productization docs + quickstart fixtures
+
+- Refreshed adoption guide from legacy v0.1 framing to v0.2 shipped semantics:
+  - `docs/specs/clawsig-protocol/ADOPTION_GUIDE.md`
+  - now covers co-signatures, selective disclosure, aggregate bundles, temporal guards, and rate-limit claims.
+- Added minimal v0.2 integrator quickstart fixture set:
+  - `docs/examples/clawsig-v0.2-quickstart/manifest.v1.json`
+  - `docs/examples/clawsig-v0.2-quickstart/README.md`
+- Added deterministic quickstart runner:
+  - `scripts/protocol/run-clawsig-v0.2-quickstart.mjs`
+  - output: `artifacts/examples/clawsig-v0.2-quickstart/<timestamp>/summary.json`
+- Linked adoption assets from roadmap README:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+
+Validation:
+- `cd packages/clawverify-core && npm run build` ✅
+- `cd packages/clawverify-cli && npm run build` ✅
+- `node scripts/protocol/run-clawsig-v0.2-quickstart.mjs` ✅
+- `node scripts/docs/lint-prds.mjs` ✅

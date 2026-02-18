@@ -1,0 +1,54 @@
+{
+  "manifest_version": "1",
+  "name": "clawsig-v0.2-quickstart",
+  "description": "Minimal verifier quickstart vectors for Clawsig Protocol v0.2 adoption.",
+  "vectors": [
+    {
+      "name": "proof_bundle.baseline.pass",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/proof_bundle_pass.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "proof_bundle.v0_2.cosig.pass",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/proof_bundle/v2_tool_receipt_cosig_valid.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "aggregate_bundle.v0_2.pass",
+      "kind": "aggregate_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/r48-r49-v02/aggregate_bundle/aggregate_pass_golden.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "proof_bundle.v0_2.rate_limit.pass",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/proof_bundle_rate_limit_pass.v1.json",
+      "expected": {
+        "valid": true,
+        "reason_code": "OK"
+      }
+    },
+    {
+      "name": "proof_bundle.v0_2.rate_limit.fail.exceeded",
+      "kind": "proof_bundle",
+      "path": "packages/schema/fixtures/protocol-conformance/cpl-v2-rate-limit/proof_bundle_rate_limit_fail_exceeded.v1.json",
+      "expected": {
+        "valid": false,
+        "reason_code": [
+          "RATE_LIMIT_EXCEEDED"
+        ]
+      }
+    }
+  ]
+}
