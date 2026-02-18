@@ -131,6 +131,13 @@ export interface ProofBundleVerifierOptions {
   /** Causal graph connectivity/orphan enforcement mode. Defaults to 'enforce'. */
   causal_connectivity_mode?: 'observe' | 'warn' | 'enforce';
 
+  /**
+   * Causal policy profile for anti-downgrade enforcement.
+   * - compat: preserve legacy option override behavior.
+   * - strict: lock causal-relevant enforcement modes to enforce.
+   */
+  causal_policy_profile?: 'compat' | 'strict';
+
   /** Optional strict VIR binding checks (non-transferability). */
   expectedVirNonce?: string;
   expectedVirSubject?: string;
@@ -2591,6 +2598,106 @@ function normalizeCausalConnectivityMode(
   return 'enforce';
 }
 
+function normalizeCoverageEnforcementPhase(
+  phase: ProofBundleVerifierOptions['coverage_enforcement_phase']
+): 'observe' | 'warn' | 'enforce' {
+  if (phase === 'observe' || phase === 'warn' || phase === 'enforce') {
+    return phase;
+  }
+  return 'observe';
+}
+
+type ResolvedCausalPolicySnapshot = {
+  profile: 'compat' | 'strict';
+  causal_connectivity_mode: 'observe' | 'warn' | 'enforce';
+  coverage_enforcement_phase: 'observe' | 'warn' | 'enforce';
+};
+
+type CausalPolicyResolution =
+  | { ok: true; snapshot: ResolvedCausalPolicySnapshot }
+  | {
+      ok: false;
+      code: 'CAUSAL_POLICY_PROFILE_INVALID' | 'CAUSAL_POLICY_PROFILE_DOWNGRADE';
+      message: string;
+      field: string;
+      snapshot?: ResolvedCausalPolicySnapshot;
+    };
+
+function resolveCausalPolicySnapshot(
+  options: ProofBundleVerifierOptions
+): CausalPolicyResolution {
+  const rawProfile =
+    options.causal_policy_profile === undefined
+      ? 'compat'
+      : options.causal_policy_profile;
+
+  if (rawProfile !== 'compat' && rawProfile !== 'strict') {
+    return {
+      ok: false,
+      code: 'CAUSAL_POLICY_PROFILE_INVALID',
+      message:
+        'causal_policy_profile must be one of: compat, strict',
+      field: 'options.causal_policy_profile',
+    };
+  }
+
+  const requestedConnectivity = normalizeCausalConnectivityMode(
+    options.causal_connectivity_mode
+  );
+  const requestedCoverage = normalizeCoverageEnforcementPhase(
+    options.coverage_enforcement_phase
+  );
+
+  if (rawProfile === 'strict') {
+    const downgradeFields: string[] = [];
+
+    if (
+      options.causal_connectivity_mode !== undefined &&
+      requestedConnectivity !== 'enforce'
+    ) {
+      downgradeFields.push('causal_connectivity_mode');
+    }
+
+    if (
+      options.coverage_enforcement_phase !== undefined &&
+      requestedCoverage !== 'enforce'
+    ) {
+      downgradeFields.push('coverage_enforcement_phase');
+    }
+
+    const lockedSnapshot: ResolvedCausalPolicySnapshot = {
+      profile: 'strict',
+      causal_connectivity_mode: 'enforce',
+      coverage_enforcement_phase: 'enforce',
+    };
+
+    if (downgradeFields.length > 0) {
+      return {
+        ok: false,
+        code: 'CAUSAL_POLICY_PROFILE_DOWNGRADE',
+        message:
+          `strict causal policy profile rejects downgrade override(s): ${downgradeFields.join(', ')}`,
+        field: `options.${downgradeFields[0]}`,
+        snapshot: lockedSnapshot,
+      };
+    }
+
+    return {
+      ok: true,
+      snapshot: lockedSnapshot,
+    };
+  }
+
+  return {
+    ok: true,
+    snapshot: {
+      profile: 'compat',
+      causal_connectivity_mode: requestedConnectivity,
+      coverage_enforcement_phase: requestedCoverage,
+    },
+  };
+}
+
 function extractWebReceiptInclusionProof(payload: WebReceiptPayload): unknown {
   if (isObjectRecord(payload.transparency) && payload.transparency.inclusion_proof !== undefined) {
     return payload.transparency.inclusion_proof;
@@ -2938,6 +3045,29 @@ export async function verifyProofBundle(
       },
     };
   }
+
+  const causalPolicy = resolveCausalPolicySnapshot(options);
+  if (!causalPolicy.ok) {
+    return {
+      result: {
+        status: 'INVALID',
+        reason: causalPolicy.message,
+        verified_at: now,
+        component_results: {
+          envelope_valid: false,
+          causal_policy_profile: causalPolicy.snapshot?.profile ?? 'compat',
+          causal_policy_snapshot: causalPolicy.snapshot,
+        },
+      },
+      error: {
+        code: causalPolicy.code,
+        message: causalPolicy.message,
+        field: causalPolicy.field,
+      },
+    };
+  }
+
+  const resolvedCausalPolicy = causalPolicy.snapshot;
 
   // 2. Fail-closed: reject unknown envelope version
   if (!isAllowedVersion(envelope.envelope_version)) {
@@ -3637,6 +3767,12 @@ export async function verifyProofBundle(
   const payload = envelope.payload;
   const componentResults: NonNullable<ProofBundleVerificationResult['component_results']> = {
     envelope_valid: true,
+    causal_policy_profile: resolvedCausalPolicy.profile,
+    causal_policy_snapshot: {
+      profile: resolvedCausalPolicy.profile,
+      causal_connectivity_mode: resolvedCausalPolicy.causal_connectivity_mode,
+      coverage_enforcement_phase: resolvedCausalPolicy.coverage_enforcement_phase,
+    },
   };
 
   // CVF-US-016: model identity is an orthogonal axis to PoH tiers.
@@ -4222,9 +4358,8 @@ export async function verifyProofBundle(
     };
   }
 
-  const causalConnectivityMode = normalizeCausalConnectivityMode(
-    options.causal_connectivity_mode
-  );
+  const causalConnectivityMode =
+    resolvedCausalPolicy.causal_connectivity_mode;
 
   const causalValidation = validateCausalBindingEntries(
     causalBindingEntries.entries,
@@ -5315,7 +5450,7 @@ export async function verifyProofBundle(
   }
 
   // CVF-US-057: coverage attestation phase-gating (deterministic, fail-closed semantics)
-  const enforcementPhase = options.coverage_enforcement_phase ?? 'observe';
+  const enforcementPhase = resolvedCausalPolicy.coverage_enforcement_phase;
 
   const sentinels = metadataRecord?.sentinels;
   const claimedInterpose =

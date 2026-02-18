@@ -1,0 +1,10 @@
+{
+  "id": "valid-policy-profile-strict-lock",
+  "scenario": "valid_policy_profile_strict_lock",
+  "expected": {
+    "status": "VALID",
+    "policy_profile": "strict",
+    "causal_connectivity_mode": "enforce",
+    "coverage_enforcement_phase": "enforce"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "manifest_version": "1",
+  "suite": "clawverify-causal-policy-profile",
+  "cases": [
+    "valid-policy-profile-compat-override.v1.json",
+    "invalid-policy-profile-strict-downgrade.v1.json",
+    "invalid-policy-profile-invalid.v1.json",
+    "valid-policy-profile-strict-lock.v1.json"
+  ]
+}
