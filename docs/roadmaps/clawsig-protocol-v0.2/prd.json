@@ -7,7 +7,7 @@
     {
       "id": "CPL-V2-001",
       "title": "Protocol-level rate limiting semantics",
-      "description": "Define how proof bundles express and verify rate limits — per-agent, per-model, per-tool. Allows verifiers to detect burst abuse without online state.",
+      "description": "Define how proof bundles express and verify rate limits \u2014 per-agent, per-model, per-tool. Allows verifiers to detect burst abuse without online state.",
       "acceptanceCriteria": [
         "Rate limit claims in proof bundle metadata",
         "Verifier checks claim consistency across bundles from same agent",
@@ -20,7 +20,7 @@
     {
       "id": "CPL-V2-002",
       "title": "Multi-party receipt co-signing",
-      "description": "Allow receipts to carry multiple signatures — agent + proxy + human approver. Enables multi-party attestation without central trust.",
+      "description": "Allow receipts to carry multiple signatures \u2014 agent + proxy + human approver. Enables multi-party attestation without central trust.",
       "acceptanceCriteria": [
         "Co-signature schema extension (additive, backward compatible)",
         "Verifier validates all co-signatures",
@@ -59,7 +59,7 @@
     {
       "id": "CPL-V2-005",
       "title": "Aggregate proof bundles (bundle-of-bundles)",
-      "description": "Define a composition format for fleet-level verification — a single signed envelope containing multiple proof bundles from different agents.",
+      "description": "Define a composition format for fleet-level verification \u2014 a single signed envelope containing multiple proof bundles from different agents.",
       "acceptanceCriteria": [
         "Aggregate bundle schema with member bundle references",
         "Verifier validates aggregate signature + each member",
@@ -80,7 +80,8 @@
       ],
       "priority": 6,
       "passes": true,
-      "notes": "Shipped via CAV-US-001/002 vertical-slice lane: additive receipt_binding causal fields accepted with legacy-safe optional semantics; verifier/runtime schema sync + conformance checks updated. Refs: decision freeze PR #304 (merge 84ce196cc8e8bcbb126503e681f453bc758b5edb) + CAV-US-001/002 implementation lane."    },
+      "notes": "Shipped via CAV-US-001/002 vertical-slice lane: additive receipt_binding causal fields accepted with legacy-safe optional semantics; verifier/runtime schema sync + conformance checks updated. Refs: decision freeze PR #304 (merge 84ce196cc8e8bcbb126503e681f453bc758b5edb) + CAV-US-001/002 implementation lane."
+    },
     {
       "id": "CAV-US-002",
       "title": "Fail-closed causal DAG verifier checks",
@@ -145,11 +146,128 @@
       "priority": 11,
       "passes": true,
       "notes": "Shipped via `clawverify-causal-cldd` fixture pack, protocol runner, env-selectable fixture suite wiring, and dedicated GitHub Actions gate."
+    },
+    {
+      "id": "CAV-US-007",
+      "title": "Causal binding normalization hardening",
+      "description": "Harden binding normalization across snake_case/camelCase aliases and malformed identifier edge cases.",
+      "acceptanceCriteria": [
+        "Reject conflicting snake_case vs camelCase causal binding field values",
+        "Reject malformed/empty normalized span identifiers",
+        "Conformance fixtures cover canonical + adversarial normalization cases"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": "Shipped via PR #310 (merge 7344fca0d8d2b8a2b5ce602e444a4caebc47a0b9): deterministic normalization hardening + fixture coverage."
+    },
+    {
+      "id": "CAV-US-008",
+      "title": "Causal confidence overclaim enforcement",
+      "description": "Fail-close when attribution confidence exceeds deterministic evidence class bounds.",
+      "acceptanceCriteria": [
+        "Reject overclaimed attribution_confidence against emitted causal evidence class",
+        "Preserve deterministic confidence bounds for authoritative/inferred/unattributed classes",
+        "Conformance fixtures exercise overclaim fail path"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": "Shipped via PR #311 (merge 8071fa99ee3c509cc6de16eeaa0057ec6c684360): confidence class policy checks + reason-code enforcement."
+    },
+    {
+      "id": "CAV-US-009",
+      "title": "Causal replay + span-reuse guardrails",
+      "description": "Detect receipt replay and semantic span reuse drift within proof bundles.",
+      "acceptanceCriteria": [
+        "Reject same receipt_id with divergent canonicalized content",
+        "Reject same span_id reused with semantic parent/tool/phase/confidence drift",
+        "Guardrail fixtures + CI lane prevent regressions"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": "Shipped via PR #312 (merge b4fafa2a8646f6bb4fd6d55b2a2820e17f7f1f69): replay/span-reuse fail-closed checks and guardrails."
+    },
+    {
+      "id": "CAV-US-010",
+      "title": "Reason-code parity + explain coverage closure",
+      "description": "Close drift between verifier reason codes, CLI hints, and protocol registry.",
+      "acceptanceCriteria": [
+        "Automated parity check fails when verifier codes are missing from registry/hints",
+        "CLI explain coverage includes causal hardening codes",
+        "CI required check enforces parity contract"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Shipped via PR #313 (merge 2ac4ccd3135dc24c135670022f6407eb2fa605f5): reason-code parity automation + hint coverage closure."
+    },
+    {
+      "id": "CAV-US-011",
+      "title": "Causal connectivity + orphan enforcement",
+      "description": "Enforce connected causal lineage and orphan receipt anchoring semantics.",
+      "acceptanceCriteria": [
+        "Reject disconnected causal graphs in enforce mode",
+        "Reject unanchored side-effect and human-approval receipts in enforce mode",
+        "Dedicated connectivity conformance fixtures + CI gate"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Shipped via PR #314 (merge 6b54353230889d5fd8e10b75ec3532ce76f4f182): connectivity/orphan fail-closed enforcement with conformance gating."
+    },
+    {
+      "id": "CAV-US-012",
+      "title": "Causal mutation-evasion guardrails",
+      "description": "Add deterministic mutation-lane guardrails to catch causal evasion regressions.",
+      "acceptanceCriteria": [
+        "Mutation guardrail runner emits deterministic summary artifacts",
+        "Quick + scheduled full mutation lanes in CI",
+        "Guardrail checks fail-closed on missing seed fixtures or reason-code drift"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Shipped via PR #315 (merge dae42d871a28d0f7dba95f643067bb0b5096e44e): mutation guardrail runner + CI schedule + artifact contract."
+    },
+    {
+      "id": "CAV-US-013",
+      "title": "Causal clock monotonicity + phase transition automaton",
+      "description": "Enforce causal timestamp monotonicity and deterministic phase transition invariants.",
+      "acceptanceCriteria": [
+        "Reject parent/tool causal ordering contradictions",
+        "Reject invalid deterministic phase transitions",
+        "Dedicated causal-clock conformance fixtures + CI workflow"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": "Shipped via PR #316 (merge d708c4bdef061b6c4ebeaef342323ce4238a91e2): causal clock and phase automaton enforcement + conformance lane."
+    },
+    {
+      "id": "CAV-US-014",
+      "title": "Aggregate causal consistency",
+      "description": "Enforce cross-member causal semantic consistency and receipt replay invariants in aggregate bundles.",
+      "acceptanceCriteria": [
+        "Reject cross-member span semantic conflicts for shared run namespace/span lineage",
+        "Reject cross-member receipt replay divergence",
+        "Dedicated aggregate-causal conformance fixtures + CI lane"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": "Shipped via PR #317 (merge b1b0e9894b602c2e45c21b5d22228fa237ce083f): aggregate causal consistency fail-closed checks and executable conformance."
+    },
+    {
+      "id": "CAV-US-015",
+      "title": "Causal integrity burn-in meta gate",
+      "description": "Compose all causal guardrails into a deterministic burn-in gate with summary artifacts and CI automation.",
+      "acceptanceCriteria": [
+        "Burn-in runner executes required causal conformance + mutation guardrail steps",
+        "Runner emits deterministic summary artifact under artifacts/ops/causal-integrity-burnin",
+        "PR/push + nightly CI lanes gate causal integrity burn-in"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Shipped via PR #318 (merge adfec1f3ad90ef3e18fba4d970975f1dd6a0afeb): burn-in meta-runner + CI jobs + artifact contract."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T18:25:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution delivery slice through CAV-US-006 (schema/verifier/runtime/tracer/guardrails)",
+    "updatedAt": "2026-02-18T20:45:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-015 (schema/verifier/runtime/conformance/guardrails/burn-in)",
     "references": [
       {
         "pr": "#281",
@@ -166,6 +284,42 @@
       {
         "pr": "#285",
         "merge_commit": "1b21d0cdb562e02347304451cc6edd137a5b99d2"
+      },
+      {
+        "pr": "#310",
+        "merge_commit": "7344fca0d8d2b8a2b5ce602e444a4caebc47a0b9"
+      },
+      {
+        "pr": "#311",
+        "merge_commit": "8071fa99ee3c509cc6de16eeaa0057ec6c684360"
+      },
+      {
+        "pr": "#312",
+        "merge_commit": "b4fafa2a8646f6bb4fd6d55b2a2820e17f7f1f69"
+      },
+      {
+        "pr": "#313",
+        "merge_commit": "2ac4ccd3135dc24c135670022f6407eb2fa605f5"
+      },
+      {
+        "pr": "#314",
+        "merge_commit": "6b54353230889d5fd8e10b75ec3532ce76f4f182"
+      },
+      {
+        "pr": "#315",
+        "merge_commit": "dae42d871a28d0f7dba95f643067bb0b5096e44e"
+      },
+      {
+        "pr": "#316",
+        "merge_commit": "d708c4bdef061b6c4ebeaef342323ce4238a91e2"
+      },
+      {
+        "pr": "#317",
+        "merge_commit": "b1b0e9894b602c2e45c21b5d22228fa237ce083f"
+      },
+      {
+        "pr": "#318",
+        "merge_commit": "adfec1f3ad90ef3e18fba4d970975f1dd6a0afeb"
       }
     ]
   }

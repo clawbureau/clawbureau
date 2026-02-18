@@ -7,10 +7,15 @@ on:
       - 'packages/clawverify-core/**'
       - 'scripts/release/run-clawsig-v0.2-package-prep.mjs'
       - 'scripts/release/check-real-usecase-evidence-pack.mjs'
+      - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
       - 'scripts/poh/smoke-marketplace-e2e-settlement.mjs'
       - 'artifacts/e2e/real-usecases/**'
       - 'docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md'
       - 'docs/releases/clawsig-v0.2-publish-log.md'
+      - '.github/workflows/release-e2e-guardrails.yml'
   push:
     branches:
       - main
@@ -19,10 +24,15 @@ on:
       - 'packages/clawverify-core/**'
       - 'scripts/release/run-clawsig-v0.2-package-prep.mjs'
       - 'scripts/release/check-real-usecase-evidence-pack.mjs'
+      - 'scripts/release/check-causal-integrity-evidence-pack.mjs'
+      - 'scripts/protocol/run-causal-integrity-burnin.mjs'
+      - 'scripts/protocol/run-clawverify-causal-*.mjs'
+      - 'scripts/protocol/run-clawverify-aggregate-causal-conformance.mjs'
       - 'scripts/poh/smoke-marketplace-e2e-settlement.mjs'
       - 'artifacts/e2e/real-usecases/**'
       - 'docs/pilot/clawsig-v0.2-real-usecase-evidence-pack.md'
       - 'docs/releases/clawsig-v0.2-publish-log.md'
+      - '.github/workflows/release-e2e-guardrails.yml'
   workflow_dispatch:
 
 permissions:
@@ -56,3 +66,50 @@ jobs:
 
       - name: Validate real-usecase evidence contract
         run: node scripts/release/check-real-usecase-evidence-pack.mjs
+
+  release-causal-integrity-evidence-contract:
+    name: release-causal-integrity-evidence-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawverify deps
+        run: |
+          cd services/clawverify
+          npm ci
+
+      - name: Install clawverify-core deps
+        run: |
+          cd packages/clawverify-core
+          npm ci
+
+      - name: Build clawverify-core
+        run: |
+          cd packages/clawverify-core
+          npm run build
+
+      - name: Install clawverify-cli deps
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+
+      - name: Run causal integrity burn-in quick lane
+        run: |
+          node scripts/protocol/run-causal-integrity-burnin.mjs --mode quick --mutation-subset quick
+
+      - name: Validate causal integrity evidence contract
+        run: |
+          node scripts/release/check-causal-integrity-evidence-pack.mjs --max-age-minutes 30 --require-mode quick --require-mutation-subset quick
+
+      - name: Upload causal integrity evidence summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-causal-integrity-evidence-summary
+          path: artifacts/ops/causal-integrity-burnin/
+          if-no-files-found: ignore

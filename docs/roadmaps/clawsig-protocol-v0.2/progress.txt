@@ -540,3 +540,29 @@ Validation:
 - `cd packages/clawverify-cli && npm install --no-save --no-package-lock ../clawverify-core ../clawsig-sdk && npm run typecheck && npm run build` ✅
 - `node --test scripts/poh/trace-artifacts.test.mjs` ✅
 - `node scripts/docs/lint-prds.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-007..015 truth-sync closeout (roadmap alignment)
+
+Roadmap/docs were updated to reflect shipped causal hardening lanes through CAV-US-015 on `main`.
+
+Shipped merge references:
+- CAV-US-007 — PR #310 (`7344fca0`)
+- CAV-US-008 — PR #311 (`8071fa99`)
+- CAV-US-009 — PR #312 (`b4fafa2a`)
+- CAV-US-010 — PR #313 (`2ac4ccd3`)
+- CAV-US-011 — PR #314 (`6b543532`)
+- CAV-US-012 — PR #315 (`dae42d87`)
+- CAV-US-013 — PR #316 (`d708c4bd`)
+- CAV-US-014 — PR #317 (`b1b0e989`)
+- CAV-US-015 — PR #318 (`adfec1f3`)
+
+Evidence/guardrail contract additions:
+- Added release evidence checker for causal-integrity burn-in artifacts:
+  - `scripts/release/check-causal-integrity-evidence-pack.mjs`
+- Wired release workflow gate to run burn-in quick lane and validate freshness + required-step pass contract.
+
+Validation:
+- `node scripts/docs/lint-prds.mjs` ✅
+- `node scripts/release/check-causal-integrity-evidence-pack.mjs --summary <generated-summary> --max-age-minutes 60 --require-mode quick --require-mutation-subset quick` ✅
