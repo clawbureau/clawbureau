@@ -1,0 +1,44 @@
+name: reason-code-parity
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawverify/src/types.ts'
+      - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+      - 'packages/clawverify-cli/src/hints.ts'
+      - 'packages/clawverify-cli/test/reason-code-parity.test.ts'
+      - 'scripts/protocol/check-reason-code-parity.mjs'
+      - '.github/workflows/reason-code-parity.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawverify/src/types.ts'
+      - 'docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md'
+      - 'packages/clawverify-cli/src/hints.ts'
+      - 'packages/clawverify-cli/test/reason-code-parity.test.ts'
+      - 'scripts/protocol/check-reason-code-parity.mjs'
+      - '.github/workflows/reason-code-parity.yml'
+
+jobs:
+  reason-code-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check verifier/registry/hints parity
+        run: |
+          node scripts/protocol/check-reason-code-parity.mjs
+
+      - name: Run clawverify-cli parity test
+        run: |
+          cd packages/clawverify-cli
+          npm ci
+          npm test -- --run test/reason-code-parity.test.ts
