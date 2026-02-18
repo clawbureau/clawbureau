@@ -163,6 +163,20 @@ export interface ReceiptBinding {
   policy_hash?: string;
   /** CST token scope hash injected by the proxy */
   token_scope_hash_b64u?: string;
+
+  /** Causal span linkage (snake_case canonical form). */
+  span_id?: string;
+  parent_span_id?: string;
+  tool_span_id?: string;
+  /** Causal span linkage (camelCase alias form). */
+  spanId?: string;
+  parentSpanId?: string;
+  toolSpanId?: string;
+  /** Causal execution phase. */
+  phase?: string;
+  /** Causal attribution confidence in [0, 1] (snake/camel aliases). */
+  attribution_confidence?: number;
+  attributionConfidence?: number;
 }
 
 /**
@@ -231,6 +245,23 @@ export type VerificationErrorCode =
   | 'RATE_LIMIT_EXCEEDED'
   | 'RATE_LIMIT_CLAIM_INCONSISTENT'
   | 'RATE_LIMIT_WINDOW_INVALID'
+  | 'CAUSAL_REFERENCE_DANGLING'
+  | 'CAUSAL_CYCLE_DETECTED'
+  | 'CAUSAL_PHASE_INVALID'
+  | 'CAUSAL_PHASE_TRANSITION_INVALID'
+  | 'CAUSAL_CLOCK_CONTRADICTION'
+  | 'CAUSAL_CONFIDENCE_OUT_OF_RANGE'
+  | 'CAUSAL_CONFIDENCE_EVIDENCE_INCONSISTENT'
+  | 'CAUSAL_BINDING_FIELD_CONFLICT'
+  | 'CAUSAL_BINDING_NORMALIZATION_FAILED'
+  | 'CAUSAL_RECEIPT_REPLAY_DETECTED'
+  | 'CAUSAL_SPAN_REUSE_CONFLICT'
+  | 'CAUSAL_GRAPH_DISCONNECTED'
+  | 'CAUSAL_SIDE_EFFECT_ORPHANED'
+  | 'CAUSAL_HUMAN_APPROVAL_ORPHANED'
+  | 'CAUSAL_POLICY_PROFILE_INVALID'
+  | 'CAUSAL_POLICY_PROFILE_DOWNGRADE'
+  | 'COVERAGE_CLDD_DISCREPANCY_ENFORCED'
   | 'AGGREGATE_BUNDLE_INVALID'
   | 'AGGREGATE_SIGNER_MISMATCH'
   | 'AGGREGATE_MEMBER_INVALID'
@@ -242,7 +273,6 @@ export type VerificationErrorCode =
   | 'CAUSAL_AGGREGATE_RECEIPT_REPLAY'
   | 'UNSORTED_MEMBER_ARRAY'
   | 'FLEET_SUMMARY_MISMATCH'
-  | 'CAUSAL_CLOCK_CONTRADICTION'
   | 'FUTURE_TIMESTAMP_POISONING'
   | 'IDENTITY_CONFLICT'
   | 'EXPIRED_TTL'
@@ -1077,6 +1107,8 @@ export interface ProofBundlePayload {
   side_effect_receipts?: SideEffectReceiptPayload[];
   human_approval_receipts?: HumanApprovalReceiptPayload[];
   delegation_receipts?: DelegationReceiptPayload[];
+  /** Optional sentinel coverage attestations (schema-validated by verifier runtime). */
+  coverage_attestations?: SignedEnvelope<Record<string, unknown>>[];
   rate_limit_claims?: RateLimitClaim[];
   attestations?: AttestationReference[];
   metadata?: ProofBundleMetadata;
@@ -1132,6 +1164,15 @@ export interface ProofBundleVerificationResult {
   risk_flags?: string[];
   component_results?: {
     envelope_valid: boolean;
+
+    /** Causal policy-profile resolution snapshot (CAV-US-016+). */
+    causal_policy_profile?: 'compat' | 'strict';
+    causal_policy_snapshot?: {
+      profile: 'compat' | 'strict';
+      causal_connectivity_mode: 'observe' | 'warn' | 'enforce';
+      coverage_enforcement_phase: 'observe' | 'warn' | 'enforce';
+    };
+
     urm_valid?: boolean;
     event_chain_valid?: boolean;
     /** Root hash of the event chain (first event's hash) */
@@ -1162,6 +1203,22 @@ export interface ProofBundleVerificationResult {
     rate_limit_claims_valid?: boolean;
     rate_limit_claims_count?: number;
 
+    /** CAV-US-004: CLDD claimed-vs-attested discrepancy diagnostics. */
+    coverage_cldd_claimed_metrics?: {
+      unmediated_connections: number;
+      unmonitored_spawns: number;
+      escapes_suspected: boolean;
+    };
+    coverage_cldd_attested_metrics?: {
+      unmediated_connections: number;
+      unmonitored_spawns: number;
+      escapes_suspected: boolean;
+    };
+    coverage_cldd_mismatch_fields?: Array<
+      'unmediated_connections' | 'unmonitored_spawns' | 'escapes_suspected'
+    >;
+    coverage_cldd_discrepancy?: boolean;
+
     /** CPL-US-007: side-effect receipt validation results. */
     side_effect_receipts_valid?: boolean;
     side_effect_receipts_count?: number;
@@ -1169,6 +1226,12 @@ export interface ProofBundleVerificationResult {
     /** CPL-US-008: human approval receipt validation results. */
     human_approval_receipts_valid?: boolean;
     human_approval_receipts_count?: number;
+
+    /** Optional coverage attestation verification stats. */
+    coverage_attestations_valid?: boolean;
+    coverage_attestations_count?: number;
+    coverage_attestations_signature_verified_count?: number;
+    coverage_attestations_verified_count?: number;
 
     /** CEA-US-010: optional execution attestation evidence (outside the proof bundle). */
     execution_attestations_valid?: boolean;
