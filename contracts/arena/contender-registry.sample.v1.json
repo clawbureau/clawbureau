@@ -1,0 +1,94 @@
+{
+  "schema_version": "contender_registry.v1",
+  "registry_version": "2026-02-19",
+  "contenders": [
+    {
+      "contender_id": "contender_codex_pi",
+      "version_pin": "codex-pi-2026-02-19.1",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "tools": ["bash", "read", "edit", "wrangler"],
+      "skills": ["cloudflare", "wrangler"],
+      "plugins": ["did-work"],
+      "prompt_template": "arena/codex-pi/api-hardening.v3"
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "version_pin": "claude-codex-cli-2026-02-19.1",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "tools": ["bash", "read", "edit"],
+      "skills": ["ai-sdk"],
+      "plugins": ["did-work"],
+      "prompt_template": "arena/claude-codex/fast-delivery.v2"
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "version_pin": "gemini-swarm-2026-02-19.1",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "tools": ["bash", "read", "edit", "parallel"],
+      "skills": ["deep-think-swarm", "swarm-orchestrator"],
+      "plugins": ["did-work", "artifact-tracer"],
+      "prompt_template": "arena/gemini-swarm/broad-explore.v2"
+    }
+  ],
+  "objective_profiles": [
+    {
+      "name": "balanced",
+      "weights": {
+        "quality": 0.35,
+        "speed": 0.25,
+        "cost": 0.2,
+        "safety": 0.2
+      },
+      "tie_breakers": [
+        "mandatory_passed",
+        "quality_score",
+        "risk_score_low",
+        "cost_low",
+        "latency_low",
+        "contender_id"
+      ]
+    },
+    {
+      "name": "quality-first",
+      "weights": {
+        "quality": 0.5,
+        "speed": 0.15,
+        "cost": 0.1,
+        "safety": 0.25
+      },
+      "tie_breakers": [
+        "mandatory_passed",
+        "quality_score",
+        "risk_score_low",
+        "contender_id"
+      ]
+    }
+  ],
+  "experiments": [
+    {
+      "experiment_id": "exp_api_hardening_ab_v1",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": "balanced",
+      "arms": [
+        {
+          "arm_id": "A",
+          "contender_ids": ["contender_codex_pi", "contender_claude_codex_cli"]
+        },
+        {
+          "arm_id": "B",
+          "contender_ids": ["contender_codex_pi", "contender_gemini_swarm"]
+        }
+      ],
+      "allocation": {
+        "A": 0.5,
+        "B": 0.5
+      }
+    }
+  ]
+}

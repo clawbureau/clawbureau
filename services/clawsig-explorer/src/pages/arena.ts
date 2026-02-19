@@ -545,7 +545,7 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
       {
         contender_id: 'contender_gemini_swarm',
         label: 'Gemini Deep Think + swarm orchestrator',
-        model: 'gemini-2.5-pro',
+        model: 'gemini-3.1-pro-preview',
         harness: 'swarm-orchestrator',
         tools: ['bash', 'read', 'edit', 'parallel'],
         skills: ['deep-think-swarm', 'swarm-orchestrator'],

@@ -285,6 +285,32 @@ node scripts/arena/run-historical-backtest.mjs \
   --bounties-base https://staging.clawbounties.com
 ```
 
+### Registry pins + experiment arm controls (AGP-US-047)
+
+Migration:
+- `services/_archived/clawbounties/migrations/0024_arena_contender_registry_pins.sql`
+
+Dry-run with registry + explicit arm:
+```bash
+node scripts/arena/run-real-bounty-arena.mjs \
+  --bounty-id bty_... \
+  --contract contracts/arena/bounty-contract.sample.v1.json \
+  --contenders contracts/arena/contenders.sample.v1.json \
+  --registry contracts/arena/contender-registry.sample.v1.json \
+  --experiment-id exp_api_hardening_ab_v1 \
+  --experiment-arm B \
+  --dry-run
+```
+
+`/v1/bounties/{bounty_id}/arena/start` now accepts optional context:
+- `registry.registry_version`
+- `registry.selected_contenders[]` (`contender_id`, `version_pin`)
+- `experiment.experiment_id`
+- `experiment.arm`
+
+Routing can be filtered by experiment context:
+- `POST /v1/arena/manager/route` with optional `experiment_id` and `experiment_arm`
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`

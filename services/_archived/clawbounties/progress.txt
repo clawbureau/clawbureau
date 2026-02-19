@@ -764,3 +764,22 @@ Started: 2026-02-02T03:08:26.937005
 - Added `GET /v1/arena/backtesting` (admin) for historical predicted-vs-actual winner analysis.
 - Backtesting now reports hit/miss rates, average calibration drift, top miss reasons, and weight-update suggestions.
 - Added `scripts/arena/run-historical-backtest.mjs` to emit JSON + markdown backtest artifacts for operators.
+
+## 2026-02-19 - AGP-US-047 contender registry pins + A/B arm controls
+- Added migration `migrations/0024_arena_contender_registry_pins.sql`.
+  - `bounty_arena_runs`: `registry_version`, `experiment_id`, `experiment_arm`
+  - `bounty_arena_contenders`: `version_pin`, `prompt_template`, `experiment_arm`
+- Added registry resolver library `scripts/arena/lib/contender-registry.mjs`.
+  - Loads canonical contender registry config.
+  - Applies version pins + prompt templates.
+  - Supports deterministic experiment arm selection by seed.
+- Updated arena runner outputs and persistence wiring:
+  - contender-level `version_pin`, `prompt_template`, `experiment_arm` now flow through report ingestion and D1 storage.
+  - `/v1/bounties/{bounty_id}/arena/start` now validates/persists optional `registry` + `experiment` context.
+  - idempotency conflict checks include registry/experiment dimensions.
+- Updated manager routing API (`POST /v1/arena/manager/route`) with optional experiment filters:
+  - `experiment_id`
+  - `experiment_arm`
+- Added tests:
+  - `scripts/arena/contender-registry.test.mjs`
+  - registry arm-control coverage in `scripts/arena/run-real-bounty-arena.test.mjs`

@@ -58,7 +58,7 @@ const COUNCIL_RESUME = process.env.COUNCIL_RESUME === "1";
 // Review council (model IDs are stored privately; reviewers are anonymized in outputs)
 const COUNCIL_MODELS = [
   "anthropic/claude-opus-4.6",
-  "google/gemini-3-pro-preview",
+  "google/gemini-3.1-pro-preview",
   "openai/gpt-5.2",
 ] as const;
 

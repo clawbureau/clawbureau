@@ -598,9 +598,16 @@ function buildReportScoreExplain(sortedContenders, objective) {
   };
 }
 
-export function runArena({ contract, contenders, outputDir, generatedAt, arenaIdOverride }) {
-  if (!Array.isArray(contenders) || contenders.length < 3) {
-    throw new Error('Arena runner requires at least 3 contenders');
+export function runArena({
+  contract,
+  contenders,
+  outputDir,
+  generatedAt,
+  arenaIdOverride,
+  registryContext = null,
+}) {
+  if (!Array.isArray(contenders) || contenders.length < 2) {
+    throw new Error('Arena runner requires at least 2 contenders');
   }
 
   const objective = normalizeObjectiveProfile(contract.objective_profile);
@@ -693,6 +700,9 @@ export function runArena({ contract, contenders, outputDir, generatedAt, arenaId
     contenderResults.push({
       contender_id,
       label: proofPack.contender.label,
+      version_pin: typeof contenderInput?.version_pin === 'string' ? contenderInput.version_pin.trim() : null,
+      prompt_template: typeof contenderInput?.prompt_template === 'string' ? contenderInput.prompt_template.trim() : null,
+      experiment_arm: typeof contenderInput?.experiment_arm === 'string' ? contenderInput.experiment_arm.trim() : null,
       hard_gate_pass,
       mandatory_failed,
       mandatory_passed,
@@ -739,6 +749,9 @@ export function runArena({ contract, contenders, outputDir, generatedAt, arenaId
     contenders: sorted.map((row) => ({
       contender_id: row.contender_id,
       label: row.label,
+      version_pin: row.version_pin,
+      prompt_template: row.prompt_template,
+      experiment_arm: row.experiment_arm,
       hard_gate_pass: row.hard_gate_pass,
       mandatory_failed: row.mandatory_failed,
       score: row.score,

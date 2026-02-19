@@ -103,13 +103,13 @@ const TEST_CASES: TestCase[] = [
     mustIncludeTemplates: true,
   },
   {
-    slug: "models/gemini-3-pro",
-    title: "Gemini 3 Pro Enterprise Deployment | Managed Google AI | Claw EA",
+    slug: "models/gemini-3-1-pro-preview",
+    title: "Gemini 3.1 Pro Preview Enterprise Deployment | Managed Google AI | Claw EA",
     intent: "model",
-    primaryQuery: "Gemini 3 Pro enterprise deployment",
+    primaryQuery: "Gemini 3.1 Pro Preview enterprise deployment",
     audience: "AI platform teams evaluating Gemini for enterprise workloads",
     providerSlug: "google",
-    exaQuery: "Gemini 3 Pro enterprise pricing security features 2026",
+    exaQuery: "Gemini 3.1 Pro Preview enterprise pricing security features 2026",
   },
   {
     slug: "guides/configure-work-policy-contract",

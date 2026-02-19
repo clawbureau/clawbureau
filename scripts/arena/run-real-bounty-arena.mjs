@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { runArena } from './lib/arena-runner.mjs';
+import { loadContenderRegistry, resolveRegistryArenaInput } from './lib/contender-registry.mjs';
 import { buildDecisionPastePayload } from './lib/decision-paste.mjs';
 import { stableJson } from './lib/proof-pack-v3.mjs';
 
@@ -24,6 +25,10 @@ function parseArgs(argv) {
     startIdempotencyKey: null,
     resultIdempotencyKey: null,
     dryRun: false,
+    registryPath: null,
+    objectiveProfileName: null,
+    experimentId: null,
+    experimentArm: null,
     prNumber: null,
     postBountyThread: true,
     arenaBaseUrl: '',
@@ -84,6 +89,26 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === '--registry') {
+      args.registryPath = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
+    if (arg === '--objective-profile-name') {
+      args.objectiveProfileName = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
+    if (arg === '--experiment-id') {
+      args.experimentId = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
+    if (arg === '--experiment-arm') {
+      args.experimentArm = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
     if (arg === '--dry-run') {
       args.dryRun = true;
       continue;
@@ -119,7 +144,7 @@ function parseArgs(argv) {
   }
 
   if (!args.bountyId || !args.contractPath || !args.contendersPath) {
-    throw new Error('Usage: node scripts/arena/run-real-bounty-arena.mjs --bounty-id <bty_...> --contract <json> --contenders <json> [--output-root <dir>] [--arena-id <id>] [--generated-at <iso>] [--bounties-base <url>] [--admin-key <key>] [--start-idempotency-key <key>] [--result-idempotency-key <key>] [--pr-number <num>] [--no-post-bounty-thread] [--arena-base-url <url>] [--artifacts-base-url <url>] [--decision-source <name>] [--dry-run]');
+    throw new Error('Usage: node scripts/arena/run-real-bounty-arena.mjs --bounty-id <bty_...> --contract <json> --contenders <json> [--output-root <dir>] [--arena-id <id>] [--generated-at <iso>] [--bounties-base <url>] [--admin-key <key>] [--start-idempotency-key <key>] [--result-idempotency-key <key>] [--registry <json>] [--objective-profile-name <name>] [--experiment-id <id>] [--experiment-arm <arm>] [--pr-number <num>] [--no-post-bounty-thread] [--arena-base-url <url>] [--artifacts-base-url <url>] [--decision-source <name>] [--dry-run]');
   }
 
   return args;
@@ -283,8 +308,8 @@ async function main() {
     throw new Error('admin key is required unless --dry-run is set (provide --admin-key or BOUNTIES_ADMIN_KEY env)');
   }
 
-  const contract = loadJson(args.contractPath);
-  const contenders = loadJson(args.contendersPath);
+  let contract = loadJson(args.contractPath);
+  const baseContenders = loadJson(args.contendersPath);
 
   if (String(contract.bounty_id ?? '').trim() !== args.bountyId.trim()) {
     throw new Error(`Contract bounty_id (${contract.bounty_id}) does not match --bounty-id (${args.bountyId})`);
@@ -294,12 +319,39 @@ async function main() {
   const outputDir = path.join(args.outputRoot, arenaId);
   mkdirSync(outputDir, { recursive: true });
 
+  let contenders = baseContenders;
+  let registryContext = null;
+
+  if (args.registryPath) {
+    const registry = loadContenderRegistry(args.registryPath);
+    const resolved = resolveRegistryArenaInput({
+      registry,
+      baseContenders,
+      taskFingerprint: contract?.task_fingerprint ?? null,
+      objectiveProfileName: args.objectiveProfileName,
+      experimentId: args.experimentId,
+      experimentArm: args.experimentArm,
+      arenaSeed: arenaId,
+    });
+
+    contenders = resolved.contenders;
+    registryContext = resolved.registry_context;
+
+    if (resolved.objective_profile) {
+      contract = {
+        ...contract,
+        objective_profile: resolved.objective_profile,
+      };
+    }
+  }
+
   const report = runArena({
     contract,
     contenders,
     outputDir,
     generatedAt: args.generatedAt ?? undefined,
     arenaIdOverride: arenaId,
+    registryContext,
   });
 
   const startIdempotencyKey = args.startIdempotencyKey
@@ -330,6 +382,24 @@ async function main() {
     arena_id: report.arena_id,
     output_dir: outputDir,
     winner: report.winner,
+    registry: registryContext
+      ? {
+        registry_version: registryContext.registry_version,
+        objective_profile_name: registryContext.objective_profile_name,
+        selected_contenders: registryContext.selected_contenders,
+      }
+      : null,
+    experiment: registryContext
+      ? {
+        experiment_id: registryContext.experiment_id,
+        arm: registryContext.experiment_arm,
+      }
+      : null,
+    contender_versions: report.contenders.map((row) => ({
+      contender_id: row.contender_id,
+      version_pin: row.version_pin ?? null,
+      experiment_arm: row.experiment_arm ?? null,
+    })),
     start_idempotency_key: startIdempotencyKey,
     result_idempotency_key: resultIdempotencyKey,
     decision_paste: decision
@@ -369,6 +439,19 @@ async function main() {
     arena_id: report.arena_id,
     contract: report.contract,
     objective_profile: report.objective_profile,
+    registry: registryContext
+      ? {
+        registry_version: registryContext.registry_version,
+        objective_profile_name: registryContext.objective_profile_name,
+        selected_contenders: registryContext.selected_contenders,
+      }
+      : undefined,
+    experiment: registryContext
+      ? {
+        experiment_id: registryContext.experiment_id,
+        arm: registryContext.experiment_arm,
+      }
+      : undefined,
   };
 
   const startResponse = await requestJson(
