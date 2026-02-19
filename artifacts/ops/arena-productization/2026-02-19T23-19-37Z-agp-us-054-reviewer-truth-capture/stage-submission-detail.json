@@ -1,0 +1,793 @@
+{
+  "submission": {
+    "submission_id": "sub_5319a23c-ae8e-4bb4-af91-3a5d51cd778a",
+    "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+    "worker_did": "did:key:z6MkhTrMNfHd74nALbNtdAMy9196H5QE3Q9nZW62BoZXE63C",
+    "status": "invalid",
+    "idempotency_key": "submit-a1-1770605696.736491",
+    "verification": {
+      "proof_bundle": {
+        "status": "invalid",
+        "reason": "proof tier 'gateway' does not meet min_proof_tier 'sandbox'",
+        "verified_at": "2026-02-09T02:54:56.926Z",
+        "proof_tier": "gateway",
+        "proof_bundle_hash_b64u": "xvPWArq2l3hntb8LtvQxWpvN-nGZHfGatG9ySd-iKy8"
+      },
+      "commit_proof": {
+        "status": null,
+        "reason": null,
+        "verified_at": null,
+        "commit_proof_hash_b64u": null
+      }
+    },
+    "source": {
+      "commit_sha": null,
+      "repo_url": null,
+      "repo_claim_id": null
+    },
+    "output": {
+      "result_summary": null,
+      "artifacts": null,
+      "agent_pack": null,
+      "execution_attestations": null
+    },
+    "latest_test_result": null,
+    "arena_review_flow": {
+      "start_arena": {
+        "endpoint": "/v1/bounties/bty_5c048032-1c54-4db5-947e-b82f68ddaa96/arena/start",
+        "method": "POST",
+        "payload_template": {
+          "idempotency_key": "arena-review:sub_5319a23c-ae8e-4bb4-af91-3a5d51cd778a",
+          "arena_id": "arena_bty_5c048032-1c54-4db5-947e-b82f68ddaa96_review_sub_5319a23c-ae8e-4bb4-af91-3a5d51cd778a",
+          "contract": {
+            "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+            "contract_id": "contract_bty_5c048032-1c54-4db5-947e-b82f68ddaa96_sub_5319a23c-ae8e-4bb4-af91-3a5d51cd778a",
+            "contract_hash_b64u": "zRRwLkjrk8ObGdPZtcmsIkj8sMO_5ScJFw03B-AWEek",
+            "task_fingerprint": "requester:sandbox:replay"
+          },
+          "objective_profile": {
+            "name": "safety-first",
+            "weights": {
+              "quality": 0.4,
+              "speed": 0.15,
+              "cost": 0.1,
+              "safety": 0.35
+            },
+            "tie_breakers": [
+              "hard_gate_pass",
+              "risk_score",
+              "cost_usd"
+            ]
+          }
+        }
+      },
+      "latest_arena": {
+        "arena_id": "arena_bty_5c048032_stage_053_002",
+        "status": "completed",
+        "winner_contender_id": "contender_claude_codex_cli",
+        "winner_reason": "Winner contender_claude_codex_cli passed all mandatory checks and achieved top weighted score (97.9145).",
+        "winner_confidence": 0.9791,
+        "tradeoffs": [
+          "contender_claude_codex_cli dominates runner-up contender_codex_pi on score and tie-breakers."
+        ],
+        "review_links": {
+          "review_paste": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_053_002?contender=contender_claude_codex_cli#review-paste-contender_claude_codex_cli",
+          "manager_review": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_053_002?contender=contender_claude_codex_cli#manager-review-contender_claude_codex_cli"
+        }
+      },
+      "decision_capture": {
+        "outcome_endpoint": {
+          "endpoint": "/v1/bounties/bty_5c048032-1c54-4db5-947e-b82f68ddaa96/arena/outcome",
+          "method": "POST",
+          "payload_template": {
+            "idempotency_key": "arena-outcome:sub_5319a23c-ae8e-4bb4-af91-3a5d51cd778a:arena_bty_5c048032_stage_053_002",
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "contender_id": "contender_claude_codex_cli",
+            "outcome_status": "ACCEPTED",
+            "recommendation": "APPROVE",
+            "reviewer_decision": "approve",
+            "rework_required": false,
+            "reviewer_rationale": "",
+            "decision_taxonomy_tags": [
+              "arena-review"
+            ],
+            "predicted_confidence": 0.9791,
+            "review_time_minutes": 0,
+            "time_to_accept_minutes": null,
+            "override_reason_code": null,
+            "notes": "",
+            "source": "bounty-review-ui",
+            "metadata": {
+              "decision_rationale": "",
+              "override_rationale": "",
+              "calibration_signal_tags": [
+                "arena-review"
+              ]
+            }
+          }
+        },
+        "outcome_status_options": [
+          {
+            "value": "ACCEPTED",
+            "requires_override_reason": false,
+            "calibration_impact": "Improves empirical accept rate for selected contender."
+          },
+          {
+            "value": "OVERRIDDEN",
+            "requires_override_reason": true,
+            "calibration_impact": "Increases override rate and applies override reason weighting in policy-learning."
+          },
+          {
+            "value": "REWORK",
+            "requires_override_reason": false,
+            "calibration_impact": "Increases rework rate for selected contender."
+          },
+          {
+            "value": "REJECTED",
+            "requires_override_reason": false,
+            "calibration_impact": "Counts as non-accept and raises calibration gap when confidence was high."
+          },
+          {
+            "value": "DISPUTED",
+            "requires_override_reason": false,
+            "calibration_impact": "Marks outcome as disputed for risk tracking and review-depth analytics."
+          }
+        ],
+        "reviewer_decision_options": [
+          {
+            "value": "approve",
+            "recommendation": "APPROVE",
+            "default_outcome_status": "ACCEPTED",
+            "calibration_impact": "Improves accept-rate and low-friction routing confidence for this contender."
+          },
+          {
+            "value": "request_changes",
+            "recommendation": "REQUEST_CHANGES",
+            "default_outcome_status": "REWORK",
+            "calibration_impact": "Increases rework and iterative feedback signals for policy adaptation."
+          },
+          {
+            "value": "reject",
+            "recommendation": "REJECT",
+            "default_outcome_status": "REJECTED",
+            "calibration_impact": "Counts as failed selection signal and increases risk-aware downweighting."
+          }
+        ],
+        "override_reason_options": [
+          {
+            "code": "ARENA_OVERRIDE_POLICY_RISK",
+            "weight": 1,
+            "contract_rewrite": "Raise safety and policy constraints to mandatory hard-gate checks.",
+            "prompt_rewrite": "Insert explicit policy-risk self-audit and fail-closed escalation path."
+          },
+          {
+            "code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "weight": 0.9,
+            "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+            "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+          },
+          {
+            "code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "weight": 0.8,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          },
+          {
+            "code": "ARENA_OVERRIDE_OTHER",
+            "weight": 0.7,
+            "contract_rewrite": "Review override notes and encode recurring blockers into explicit acceptance checks.",
+            "prompt_rewrite": "Add a post-mortem checklist seeded from recent override notes."
+          },
+          {
+            "code": "ARENA_OVERRIDE_COST_TOO_HIGH",
+            "weight": 0.6,
+            "contract_rewrite": "Set stricter max-cost / max-latency targets in objective profile.",
+            "prompt_rewrite": "Prioritize cost-efficient plans and include tradeoff justification."
+          },
+          {
+            "code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+            "weight": 0.5,
+            "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+            "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+          }
+        ],
+        "calibration_bindings": {
+          "notes_path": "notes",
+          "rationale_path": "metadata.decision_rationale",
+          "override_reason_path": "override_reason_code",
+          "reviewer_decision_path": "reviewer_decision",
+          "reviewer_rationale_path": "reviewer_rationale",
+          "decision_taxonomy_tags_path": "decision_taxonomy_tags"
+        }
+      }
+    },
+    "created_at": "2026-02-09T02:54:56.868Z",
+    "updated_at": "2026-02-09T02:54:56.868Z",
+    "arena": {
+      "run_id": "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "status": "completed",
+      "generated_at": "2026-02-19T22:50:24.229Z",
+      "contract": {
+        "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+        "contract_id": "contract_arena_bty_5c048032_stage_053_001",
+        "contract_hash_b64u": "ca5wgzPnJuvz963Xc-33w3e_O1lkwCRRMQjoqZCsfUg",
+        "task_fingerprint": "typescript:worker:api-hardening"
+      },
+      "objective_profile": {
+        "name": "balanced",
+        "tie_breakers": [
+          "mandatory_passed",
+          "quality_score",
+          "risk_score_low",
+          "cost_low",
+          "latency_low",
+          "contender_id"
+        ],
+        "weights": {
+          "cost": 0.2,
+          "quality": 0.35,
+          "safety": 0.2,
+          "speed": 0.25
+        }
+      },
+      "registry": {
+        "registry_version": "2026-02-19",
+        "objective_profile_name": "balanced"
+      },
+      "experiment": {
+        "experiment_id": "exp_api_hardening_live_v1",
+        "arm": "LIVE"
+      },
+      "score_explain": {
+        "contender_breakdown": [
+          {
+            "contender_id": "contender_claude_codex_cli",
+            "evidence_links": [
+              {
+                "label": "Dispatch cost estimate (contender_claude_codex_cli)",
+                "source": "cost",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json"
+              },
+              {
+                "label": "Dispatch trace (contender_claude_codex_cli)",
+                "source": "execution",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json"
+              },
+              {
+                "label": "Git diff (contender_claude_codex_cli)",
+                "source": "git",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt"
+              },
+              {
+                "label": "Test run (contender_claude_codex_cli)",
+                "source": "ci",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log"
+              },
+              {
+                "label": "Typecheck (contender_claude_codex_cli)",
+                "source": "ci",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log"
+              }
+            ],
+            "final_score": 97.9145,
+            "reason_codes": [
+              "ARENA_SCORE_EVIDENCE_GROUNDED"
+            ]
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "evidence_links": [
+              {
+                "label": "Dispatch cost estimate (contender_codex_pi)",
+                "source": "cost",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json"
+              },
+              {
+                "label": "Dispatch trace (contender_codex_pi)",
+                "source": "execution",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json"
+              },
+              {
+                "label": "Git diff (contender_codex_pi)",
+                "source": "git",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt"
+              },
+              {
+                "label": "Test run (contender_codex_pi)",
+                "source": "ci",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/arena-tests.attempt-1.log"
+              },
+              {
+                "label": "Typecheck (contender_codex_pi)",
+                "source": "ci",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/cb-typecheck.attempt-1.log"
+              }
+            ],
+            "final_score": 97.86,
+            "reason_codes": [
+              "ARENA_SCORE_EVIDENCE_GROUNDED"
+            ]
+          },
+          {
+            "contender_id": "contender_gemini_swarm",
+            "evidence_links": [
+              {
+                "label": "Dispatch cost estimate (contender_gemini_swarm)",
+                "source": "cost",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json"
+              },
+              {
+                "label": "Dispatch trace (contender_gemini_swarm)",
+                "source": "execution",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json"
+              },
+              {
+                "label": "Git diff (contender_gemini_swarm)",
+                "source": "git",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt"
+              },
+              {
+                "label": "Test run (contender_gemini_swarm)",
+                "source": "ci",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-tests.attempt-1.log"
+              },
+              {
+                "label": "Typecheck (contender_gemini_swarm)",
+                "source": "ci",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-typecheck.attempt-1.log"
+              }
+            ],
+            "final_score": 97.003,
+            "reason_codes": [
+              "ARENA_SCORE_EVIDENCE_GROUNDED"
+            ]
+          }
+        ],
+        "formula": {
+          "components": [
+            "quality/risk/efficiency are derived from CI + git + execution traces",
+            "speed is normalized from latency_ms",
+            "cost is normalized from cost_usd",
+            "safety is normalized from risk_score"
+          ],
+          "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+        },
+        "weights": {
+          "cost": 0.2,
+          "quality": 0.35,
+          "safety": 0.2,
+          "speed": 0.25
+        }
+      },
+      "contenders": [
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "label": "Claude Opus + Codex CLI blend",
+          "model": "claude-opus-4.5",
+          "harness": "codex-cli",
+          "tools": [
+            "bash",
+            "edit",
+            "read"
+          ],
+          "skills": [
+            "ai-sdk"
+          ],
+          "plugins": [
+            "did-work"
+          ],
+          "version_pin": "claude-codex-cli-2026-02-19.1",
+          "prompt_template": "arena/claude-codex/fast-delivery.v2",
+          "experiment_arm": "LIVE",
+          "score": 97.9145,
+          "hard_gate_pass": true,
+          "mandatory_failed": 0,
+          "metrics": {
+            "quality_score": 100,
+            "risk_score": 8,
+            "efficiency_score": 98.79,
+            "latency_ms": 2053,
+            "cost_usd": 0.0146,
+            "autonomy_score": 100
+          },
+          "check_results": [
+            {
+              "criterion_id": "ac_contract_binding",
+              "required": true,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            },
+            {
+              "criterion_id": "ac_reason_codes",
+              "required": true,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            },
+            {
+              "criterion_id": "ac_test_coverage",
+              "required": false,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            }
+          ],
+          "score_explain": {
+            "final_score": 97.9145,
+            "reason_codes": [
+              "ARENA_SCORE_EVIDENCE_GROUNDED"
+            ],
+            "evidence_links": [
+              {
+                "label": "Dispatch cost estimate (contender_claude_codex_cli)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json",
+                "source": "cost"
+              },
+              {
+                "label": "Dispatch trace (contender_claude_codex_cli)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json",
+                "source": "execution"
+              },
+              {
+                "label": "Git diff (contender_claude_codex_cli)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt",
+                "source": "git"
+              },
+              {
+                "label": "Test run (contender_claude_codex_cli)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log",
+                "source": "ci"
+              },
+              {
+                "label": "Typecheck (contender_claude_codex_cli)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log",
+                "source": "ci"
+              }
+            ]
+          },
+          "insights": {
+            "bottlenecks": [
+              "dispatch completed without command failures"
+            ],
+            "contract_improvements": [
+              "encode successful dispatch checklist as explicit acceptance criteria"
+            ],
+            "next_delegation_hints": [
+              "eligible for autonomous routing when calibration remains stable"
+            ]
+          },
+          "review_paste": "Decision Summary: APPROVE (97.9% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=98.79, cost=$0.0146, latency=2053ms\nScore Explain: final=97.9145 | weighted=97.9145 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json | Dispatch cost estimate (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json | Dispatch trace (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json | Git diff (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt | Test run (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log | Typecheck (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+          "manager_review_json": {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "confidence": 0.9791,
+            "contender_id": "contender_claude_codex_cli",
+            "decision": "promote",
+            "failed_checks": [],
+            "metrics": {
+              "autonomy_score": 100,
+              "cost_usd": 0.0146,
+              "efficiency_score": 98.79,
+              "latency_ms": 2053,
+              "quality_score": 100,
+              "risk_score": 8
+            },
+            "reason_codes": [
+              "ARENA_READY_TO_PROMOTE"
+            ],
+            "recommended_next_action": "Promote as default contender for this task fingerprint.",
+            "schema_version": "manager_review.v1"
+          }
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "label": "Codex + Pi + cloudflare skill",
+          "model": "gpt-5.2-codex",
+          "harness": "pi",
+          "tools": [
+            "bash",
+            "edit",
+            "read",
+            "wrangler"
+          ],
+          "skills": [
+            "cloudflare",
+            "wrangler"
+          ],
+          "plugins": [
+            "did-work"
+          ],
+          "version_pin": "codex-pi-2026-02-19.1",
+          "prompt_template": "arena/codex-pi/api-hardening.v3",
+          "experiment_arm": "LIVE",
+          "score": 97.86,
+          "hard_gate_pass": true,
+          "mandatory_failed": 0,
+          "metrics": {
+            "quality_score": 100,
+            "risk_score": 8,
+            "efficiency_score": 98.74,
+            "latency_ms": 2307,
+            "cost_usd": 0.0148,
+            "autonomy_score": 100
+          },
+          "check_results": [
+            {
+              "criterion_id": "ac_contract_binding",
+              "required": true,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            },
+            {
+              "criterion_id": "ac_reason_codes",
+              "required": true,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            },
+            {
+              "criterion_id": "ac_test_coverage",
+              "required": false,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            }
+          ],
+          "score_explain": {
+            "final_score": 97.86,
+            "reason_codes": [
+              "ARENA_SCORE_EVIDENCE_GROUNDED"
+            ],
+            "evidence_links": [
+              {
+                "label": "Dispatch cost estimate (contender_codex_pi)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json",
+                "source": "cost"
+              },
+              {
+                "label": "Dispatch trace (contender_codex_pi)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json",
+                "source": "execution"
+              },
+              {
+                "label": "Git diff (contender_codex_pi)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt",
+                "source": "git"
+              },
+              {
+                "label": "Test run (contender_codex_pi)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/arena-tests.attempt-1.log",
+                "source": "ci"
+              },
+              {
+                "label": "Typecheck (contender_codex_pi)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/cb-typecheck.attempt-1.log",
+                "source": "ci"
+              }
+            ]
+          },
+          "insights": {
+            "bottlenecks": [
+              "dispatch completed without command failures"
+            ],
+            "contract_improvements": [
+              "encode successful dispatch checklist as explicit acceptance criteria"
+            ],
+            "next_delegation_hints": [
+              "eligible for autonomous routing when calibration remains stable"
+            ]
+          },
+          "review_paste": "Decision Summary: APPROVE (97.9% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=98.74, cost=$0.0148, latency=2307ms\nScore Explain: final=97.8600 | weighted=97.8600 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json | Dispatch cost estimate (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json | Dispatch trace (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json | Git diff (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt | Test run (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/arena-tests.attempt-1.log | Typecheck (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/cb-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+          "manager_review_json": {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "confidence": 0.9786,
+            "contender_id": "contender_codex_pi",
+            "decision": "promote",
+            "failed_checks": [],
+            "metrics": {
+              "autonomy_score": 100,
+              "cost_usd": 0.0148,
+              "efficiency_score": 98.74,
+              "latency_ms": 2307,
+              "quality_score": 100,
+              "risk_score": 8
+            },
+            "reason_codes": [
+              "ARENA_READY_TO_PROMOTE"
+            ],
+            "recommended_next_action": "Promote as default contender for this task fingerprint.",
+            "schema_version": "manager_review.v1"
+          }
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "label": "Gemini Deep Think + swarm orchestrator",
+          "model": "gemini-3.1-pro-preview",
+          "harness": "swarm-orchestrator",
+          "tools": [
+            "bash",
+            "edit",
+            "parallel",
+            "read"
+          ],
+          "skills": [
+            "deep-think-swarm",
+            "swarm-orchestrator"
+          ],
+          "plugins": [
+            "artifact-tracer",
+            "did-work"
+          ],
+          "version_pin": "gemini-swarm-2026-02-19.1",
+          "prompt_template": "arena/gemini-swarm/broad-explore.v2",
+          "experiment_arm": "LIVE",
+          "score": 97.003,
+          "hard_gate_pass": true,
+          "mandatory_failed": 0,
+          "metrics": {
+            "quality_score": 100,
+            "risk_score": 8,
+            "efficiency_score": 97.93,
+            "latency_ms": 6359,
+            "cost_usd": 0.0181,
+            "autonomy_score": 100
+          },
+          "check_results": [
+            {
+              "criterion_id": "ac_contract_binding",
+              "required": true,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            },
+            {
+              "criterion_id": "ac_reason_codes",
+              "required": true,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            },
+            {
+              "criterion_id": "ac_test_coverage",
+              "required": false,
+              "status": "PASS",
+              "reason_code": "CHECK_OK"
+            }
+          ],
+          "score_explain": {
+            "final_score": 97.003,
+            "reason_codes": [
+              "ARENA_SCORE_EVIDENCE_GROUNDED"
+            ],
+            "evidence_links": [
+              {
+                "label": "Dispatch cost estimate (contender_gemini_swarm)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json",
+                "source": "cost"
+              },
+              {
+                "label": "Dispatch trace (contender_gemini_swarm)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json",
+                "source": "execution"
+              },
+              {
+                "label": "Git diff (contender_gemini_swarm)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt",
+                "source": "git"
+              },
+              {
+                "label": "Test run (contender_gemini_swarm)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-tests.attempt-1.log",
+                "source": "ci"
+              },
+              {
+                "label": "Typecheck (contender_gemini_swarm)",
+                "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-typecheck.attempt-1.log",
+                "source": "ci"
+              }
+            ]
+          },
+          "insights": {
+            "bottlenecks": [
+              "dispatch completed without command failures"
+            ],
+            "contract_improvements": [
+              "encode successful dispatch checklist as explicit acceptance criteria"
+            ],
+            "next_delegation_hints": [
+              "eligible for autonomous routing when calibration remains stable"
+            ]
+          },
+          "review_paste": "Decision Summary: APPROVE (97.0% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=97.93, cost=$0.0181, latency=6359ms\nScore Explain: final=97.0030 | weighted=97.0030 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json | Dispatch cost estimate (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json | Dispatch trace (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json | Git diff (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt | Test run (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-tests.attempt-1.log | Typecheck (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+          "manager_review_json": {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "confidence": 0.97,
+            "contender_id": "contender_gemini_swarm",
+            "decision": "promote",
+            "failed_checks": [],
+            "metrics": {
+              "autonomy_score": 100,
+              "cost_usd": 0.0181,
+              "efficiency_score": 97.93,
+              "latency_ms": 6359,
+              "quality_score": 100,
+              "risk_score": 8
+            },
+            "reason_codes": [
+              "ARENA_READY_TO_PROMOTE"
+            ],
+            "recommended_next_action": "Promote as default contender for this task fingerprint.",
+            "schema_version": "manager_review.v1"
+          }
+        }
+      ],
+      "winner": {
+        "contender_id": "contender_claude_codex_cli",
+        "reason": "Winner contender_claude_codex_cli passed all mandatory checks and achieved top weighted score (97.9145)."
+      },
+      "tradeoffs": [
+        "contender_claude_codex_cli dominates runner-up contender_codex_pi on score and tie-breakers."
+      ],
+      "reason_codes": [
+        "ARENA_WINNER_SELECTED",
+        "ARENA_HARD_GATES_PASSED"
+      ],
+      "delegation_insights": {
+        "winner_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ],
+        "winner_bottlenecks": [
+          "dispatch completed without command failures"
+        ],
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ],
+        "contract_improvements": [
+          "encode successful dispatch checklist as explicit acceptance criteria"
+        ],
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ],
+        "manager_routing": {
+          "default_contender_id": "contender_claude_codex_cli",
+          "backup_contenders": [
+            "contender_codex_pi",
+            "contender_gemini_swarm"
+          ]
+        },
+        "contenders": [
+          {
+            "contender_id": "contender_claude_codex_cli",
+            "score": 97.9145,
+            "hard_gate_pass": true,
+            "mandatory_failed": 0,
+            "next_delegation_hints": [
+              "eligible for autonomous routing when calibration remains stable"
+            ],
+            "bottlenecks": [
+              "dispatch completed without command failures"
+            ]
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "score": 97.86,
+            "hard_gate_pass": true,
+            "mandatory_failed": 0,
+            "next_delegation_hints": [
+              "eligible for autonomous routing when calibration remains stable"
+            ],
+            "bottlenecks": [
+              "dispatch completed without command failures"
+            ]
+          },
+          {
+            "contender_id": "contender_gemini_swarm",
+            "score": 97.003,
+            "hard_gate_pass": true,
+            "mandatory_failed": 0,
+            "next_delegation_hints": [
+              "eligible for autonomous routing when calibration remains stable"
+            ],
+            "bottlenecks": [
+              "dispatch completed without command failures"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

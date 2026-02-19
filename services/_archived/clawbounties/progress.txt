@@ -937,3 +937,46 @@ Started: 2026-02-02T03:08:26.937005
 - Verified manager route/autopilot deterministic behavior against real LIVE-arm records in staging + prod.
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/summary.json`
+
+## 2026-02-19 - AGP-US-054 reviewer truth-capture normalization
+- Added migration:
+  - `services/_archived/clawbounties/migrations/0026_arena_reviewer_decision_capture.sql`
+  - new persisted fields on `bounty_arena_outcomes`:
+    - `reviewer_decision` (`approve|request_changes|reject`)
+    - `reviewer_rationale`
+    - `decision_taxonomy_json`
+- `POST /v1/bounties/{bounty_id}/arena/outcome` now enforces structured reviewer decision capture:
+  - normalized reviewer decision + recommendation parity
+  - normalized rework-required semantics
+  - optional reviewer rationale text
+  - decision taxonomy tags persisted as first-class payload field
+- Outcome payloads now expose:
+  - `reviewer_decision`
+  - `rework_required`
+  - `reviewer_rationale`
+  - `decision_taxonomy_tags`
+- Calibration summary now promotes reviewer decision capture as first-class signal:
+  - totals reviewer decision counts (`approve/request_changes/reject`)
+  - contender-level reviewer decision breakdown
+  - global + contender decision taxonomy tag breakdowns
+- Bounty submission decision-capture surfaces now include:
+  - `reviewer_decision_options`
+  - calibration bindings for reviewer decision/rationale/taxonomy paths
+- Explorer arena page updates:
+  - outcome table now shows reviewer decision, rework flag, override reason, taxonomy tags, rationale
+  - calibration card now includes reviewer decision counts + top decision taxonomy tags
+- Deployed services:
+  - `clawbounties-staging` version `b0c97528-c4a7-424d-9ccc-22d2d414a8dd`
+  - `clawsig-explorer-staging` version `5b12ad50-94b8-4cf6-a4c4-f0e3eb4dacf5`
+  - `clawbounties` version `286ee311-268b-464d-9d1f-877f2c41cdb1`
+  - `clawsig-explorer` version `1794a3a6-5ba1-4240-aee9-f48304f1f9c8`
+- Applied migration `0026` in staging + prod D1.
+- Real-data capture gate completed:
+  - posted 10 real outcome events with structured reviewer decision + taxonomy tags
+  - persisted rows verified (`idempotency_key` prefix `agp054-*`) with non-empty `reviewer_decision` + `decision_taxonomy_tags`
+  - calibration endpoints reflect reviewer decision/taxonomy aggregates
+- Endpoint regression checks (staging + prod):
+  - `POST /v1/arena/manager/route` => `200`
+  - `POST /v1/arena/manager/autopilot` => `200`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T23-19-37Z-agp-us-054-reviewer-truth-capture/summary.json`

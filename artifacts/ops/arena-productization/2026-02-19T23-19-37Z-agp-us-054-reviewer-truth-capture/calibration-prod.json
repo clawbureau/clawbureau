@@ -1,0 +1,888 @@
+{
+  "calibration": {
+    "totals": {
+      "samples": 8,
+      "accepted": 4,
+      "overridden": 3,
+      "rework": 0,
+      "disputed": 0,
+      "review_time_avg_minutes": 17.125,
+      "time_to_accept_avg_minutes": 49.75,
+      "cost_per_accepted_bounty_usd": 0.205925,
+      "override_rate": 0.375,
+      "rework_rate": 0,
+      "reviewer_decisions": {
+        "approve": 2,
+        "request_changes": 5,
+        "reject": 1
+      }
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_codex_pi",
+        "samples": 6,
+        "average_predicted_confidence": 0.8862500000000001,
+        "empirical_accept_rate": 0.6666666666666666,
+        "calibration_gap": 0.21958333333333346,
+        "override_rate": 0.3333333333333333,
+        "rework_rate": 0,
+        "average_review_time_minutes": 16.333333333333332,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 5,
+            "share": 0.8333
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "decision:request_changes",
+            "count": 5,
+            "share": 0.8333
+          },
+          {
+            "tag": "outcome:accepted",
+            "count": 3,
+            "share": 0.5
+          },
+          {
+            "tag": "outcome:overridden",
+            "count": 2,
+            "share": 0.3333
+          },
+          {
+            "tag": "override:arena_override_scope_mismatch",
+            "count": 2,
+            "share": 0.3333
+          },
+          {
+            "tag": "policy-pass",
+            "count": 1,
+            "share": 0.1667
+          }
+        ],
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 2,
+            "share": 0.3333,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          }
+        ],
+        "rationale_samples": 6,
+        "top_rationale_tags": [
+          {
+            "tag": "scope-boundary",
+            "count": 2,
+            "share": 0.3333
+          },
+          {
+            "tag": "contract-language",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "fallback-guard",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "human-checkpoint",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "policy-pass",
+            "count": 1,
+            "share": 0.1667
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "All production policy checks passed.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-accept",
+              "prod-a",
+              "policy-pass"
+            ],
+            "updated_at": "2026-02-19T23:20:51.449Z"
+          },
+          {
+            "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Real reviewer decision: accepted with deterministic evidence links.",
+            "override_rationale": null,
+            "tags": [
+              "decision:request_changes",
+              "outcome:accepted"
+            ],
+            "updated_at": "2026-02-19T22:51:17.730Z"
+          },
+          {
+            "outcome_id": "aot_d9826f7a-45b1-4f7e-bfcf-50a611a270a5",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Real reviewer decision: accepted after verification pass.",
+            "override_rationale": null,
+            "tags": [
+              "decision:request_changes",
+              "outcome:accepted"
+            ],
+            "updated_at": "2026-02-19T22:46:08.442Z"
+          }
+        ]
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "samples": 1,
+        "average_predicted_confidence": 0.9797,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.9797,
+        "override_rate": 1,
+        "rework_rate": 0,
+        "average_review_time_minutes": 23,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "human-context",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+            "count": 1,
+            "share": 1,
+            "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+            "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+          }
+        ],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "human-context",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_f00c9e3d-87da-4b96-8bb9-79929dd57ef2",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+            "rationale": "Human context changed final selection rationale.",
+            "override_rationale": "Context added post-run by requester.",
+            "tags": [
+              "reviewer-override",
+              "prod-a",
+              "human-context"
+            ],
+            "updated_at": "2026-02-19T23:20:52.078Z"
+          }
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "samples": 1,
+        "average_predicted_confidence": 0.972,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.972,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "average_review_time_minutes": 16,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "policy-risk",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-reject",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "policy-risk",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-reject",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_7bf35661-701f-42fe-aed0-4d87b037ce20",
+            "outcome_status": "REJECTED",
+            "override_reason_code": null,
+            "rationale": "Policy-risk mismatch requires rejection.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-reject",
+              "prod-a",
+              "policy-risk"
+            ],
+            "updated_at": "2026-02-19T23:20:52.651Z"
+          }
+        ]
+      }
+    ],
+    "override_taxonomy": {
+      "reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 2,
+          "share": 0.25,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+          "priority_score": 1.6
+        },
+        {
+          "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+          "count": 1,
+          "share": 0.125,
+          "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+          "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing.",
+          "priority_score": 0.5
+        }
+      ]
+    },
+    "reviewer_decision_capture": {
+      "decision_breakdown": [
+        {
+          "reviewer_decision": "approve",
+          "count": 2,
+          "share": 0.25
+        },
+        {
+          "reviewer_decision": "request_changes",
+          "count": 5,
+          "share": 0.625
+        },
+        {
+          "reviewer_decision": "reject",
+          "count": 1,
+          "share": 0.125
+        }
+      ],
+      "decision_taxonomy_tags": [
+        {
+          "tag": "decision:request_changes",
+          "count": 5,
+          "share": 0.625
+        },
+        {
+          "tag": "outcome:accepted",
+          "count": 3,
+          "share": 0.375
+        },
+        {
+          "tag": "prod-a",
+          "count": 3,
+          "share": 0.375
+        },
+        {
+          "tag": "outcome:overridden",
+          "count": 2,
+          "share": 0.25
+        },
+        {
+          "tag": "override:arena_override_scope_mismatch",
+          "count": 2,
+          "share": 0.25
+        },
+        {
+          "tag": "human-context",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "policy-pass",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "policy-risk",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "reviewer-accept",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "reviewer-reject",
+          "count": 1,
+          "share": 0.125
+        }
+      ]
+    },
+    "rationale_signals": {
+      "top_tags": [
+        {
+          "tag": "prod-a",
+          "count": 3,
+          "share": 0.375
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 2,
+          "share": 0.25
+        },
+        {
+          "tag": "scope-boundary",
+          "count": 2,
+          "share": 0.25
+        },
+        {
+          "tag": "contract-language",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "fallback-guard",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "human-checkpoint",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "human-context",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "policy-pass",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "policy-risk",
+          "count": 1,
+          "share": 0.125
+        },
+        {
+          "tag": "reviewer-accept",
+          "count": 1,
+          "share": 0.125
+        }
+      ],
+      "recent_decisions": [
+        {
+          "contender_id": "contender_gemini_swarm",
+          "outcome_id": "aot_7bf35661-701f-42fe-aed0-4d87b037ce20",
+          "outcome_status": "REJECTED",
+          "override_reason_code": null,
+          "rationale": "Policy-risk mismatch requires rejection.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-reject",
+            "prod-a",
+            "policy-risk"
+          ],
+          "updated_at": "2026-02-19T23:20:52.651Z"
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "outcome_id": "aot_f00c9e3d-87da-4b96-8bb9-79929dd57ef2",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+          "rationale": "Human context changed final selection rationale.",
+          "override_rationale": "Context added post-run by requester.",
+          "tags": [
+            "reviewer-override",
+            "prod-a",
+            "human-context"
+          ],
+          "updated_at": "2026-02-19T23:20:52.078Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "All production policy checks passed.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-accept",
+            "prod-a",
+            "policy-pass"
+          ],
+          "updated_at": "2026-02-19T23:20:51.449Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "Real reviewer decision: accepted with deterministic evidence links.",
+          "override_rationale": null,
+          "tags": [
+            "decision:request_changes",
+            "outcome:accepted"
+          ],
+          "updated_at": "2026-02-19T22:51:17.730Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_d9826f7a-45b1-4f7e-bfcf-50a611a270a5",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "Real reviewer decision: accepted after verification pass.",
+          "override_rationale": null,
+          "tags": [
+            "decision:request_changes",
+            "outcome:accepted"
+          ],
+          "updated_at": "2026-02-19T22:46:08.442Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_1bfc99a9-7e6a-4115-8d50-05a37ee874d7",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Top scorer accepted conditionally; reviewer needs explicit scope guardrails.",
+          "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits.",
+          "tags": [
+            "decision:request_changes",
+            "outcome:overridden",
+            "override:arena_override_scope_mismatch",
+            "scope-boundary",
+            "fallback-guard",
+            "reviewer-override"
+          ],
+          "updated_at": "2026-02-19T21:24:55.590Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_3dff3403-c4c8-455b-9c4f-a1aaba9117b1",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Strong winner, but acceptance blocked until scope lock language is explicit.",
+          "override_rationale": "Scope boundary language missing for fallback behavior.",
+          "tags": [
+            "decision:request_changes",
+            "outcome:overridden",
+            "override:arena_override_scope_mismatch",
+            "scope-boundary",
+            "human-checkpoint",
+            "contract-language"
+          ],
+          "updated_at": "2026-02-19T21:23:05.439Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_887f8378-334f-45f0-98c0-0bbf20b4a433",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "prod seed acceptance",
+          "override_rationale": null,
+          "tags": [
+            "decision:request_changes",
+            "outcome:accepted"
+          ],
+          "updated_at": "2026-02-19T18:44:53.939Z"
+        }
+      ]
+    },
+    "winner_stability": [
+      {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "top_winner_contender_id": "contender_claude_codex_cli",
+        "stability_ratio": 0.5,
+        "sample_runs": 8
+      }
+    ]
+  },
+  "outcomes": [
+    {
+      "outcome_id": "aot_7bf35661-701f-42fe-aed0-4d87b037ce20",
+      "idempotency_key": "agp054-prod-a-03",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "contender_id": "contender_gemini_swarm",
+      "outcome_status": "REJECTED",
+      "accepted": false,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 16,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.972,
+      "recommendation": "REJECT",
+      "reviewer_decision": "reject",
+      "reviewer_rationale": "Rejected due to policy-risk deviations in verification summary.",
+      "decision_taxonomy_tags": [
+        "reviewer-reject",
+        "prod-a",
+        "policy-risk"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-reject",
+          "prod-a",
+          "policy-risk"
+        ],
+        "decision_rationale": "Policy-risk mismatch requires rejection.",
+        "decision_taxonomy_tags": [
+          "reviewer-reject",
+          "prod-a",
+          "policy-risk"
+        ],
+        "reviewer_decision": "reject",
+        "reviewer_rationale": "Rejected due to policy-risk deviations in verification summary.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:52.651Z",
+      "updated_at": "2026-02-19T23:20:52.651Z"
+    },
+    {
+      "outcome_id": "aot_f00c9e3d-87da-4b96-8bb9-79929dd57ef2",
+      "idempotency_key": "agp054-prod-a-02",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "contender_id": "contender_claude_codex_cli",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 23,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.9797,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Override accepted due to newly provided human-only context.",
+      "decision_taxonomy_tags": [
+        "reviewer-override",
+        "prod-a",
+        "human-context"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-override",
+          "prod-a",
+          "human-context"
+        ],
+        "decision_rationale": "Human context changed final selection rationale.",
+        "decision_taxonomy_tags": [
+          "reviewer-override",
+          "prod-a",
+          "human-context"
+        ],
+        "override_rationale": "Context added post-run by requester.",
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Override accepted due to newly provided human-only context.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:52.078Z",
+      "updated_at": "2026-02-19T23:20:52.078Z"
+    },
+    {
+      "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+      "idempotency_key": "agp054-prod-a-01",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 17,
+      "time_to_accept_minutes": 17,
+      "predicted_confidence": 0.9791,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Production approval with complete evidence package.",
+      "decision_taxonomy_tags": [
+        "reviewer-accept",
+        "prod-a",
+        "policy-pass"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-accept",
+          "prod-a",
+          "policy-pass"
+        ],
+        "decision_rationale": "All production policy checks passed.",
+        "decision_taxonomy_tags": [
+          "reviewer-accept",
+          "prod-a",
+          "policy-pass"
+        ],
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Production approval with complete evidence package.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:51.449Z",
+      "updated_at": "2026-02-19T23:20:51.449Z"
+    },
+    {
+      "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+      "idempotency_key": "arena-outcome:GeKyIDP-Kkqge9_p6J9qUnJFt6_Rrqy2USf6aJVT6qU",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 19,
+      "time_to_accept_minutes": 58,
+      "predicted_confidence": 0.82,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:accepted"
+      ],
+      "override_reason_code": null,
+      "notes": "Real reviewer decision: accepted with deterministic evidence links.",
+      "source": "human-review",
+      "metadata": null,
+      "created_at": "2026-02-19T22:51:17.730Z",
+      "updated_at": "2026-02-19T22:51:17.730Z"
+    },
+    {
+      "outcome_id": "aot_d9826f7a-45b1-4f7e-bfcf-50a611a270a5",
+      "idempotency_key": "arena-outcome:1NQ7YeIdt7TsHmBavORcw4lbNSd9dhlcOX-2rggs8qk",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_001",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 18,
+      "time_to_accept_minutes": 61,
+      "predicted_confidence": 0.84,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:accepted"
+      ],
+      "override_reason_code": null,
+      "notes": "Real reviewer decision: accepted after verification pass.",
+      "source": "human-review",
+      "metadata": null,
+      "created_at": "2026-02-19T22:46:08.442Z",
+      "updated_at": "2026-02-19T22:46:08.442Z"
+    },
+    {
+      "outcome_id": "aot_1bfc99a9-7e6a-4115-8d50-05a37ee874d7",
+      "idempotency_key": "agp-us-050-prod-override-002",
+      "bounty_id": "bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f",
+      "arena_id": "arena_bty_836a4e15_prod_050_001",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 10,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.8928,
+      "recommendation": "REQUEST_CHANGES",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:overridden",
+        "override:arena_override_scope_mismatch"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "notes": "Reviewer requested stronger fallback scope lock before approval.",
+      "source": "arena-review-ui",
+      "metadata": {
+        "calibration_signal_tags": [
+          "scope-boundary",
+          "fallback-guard",
+          "reviewer-override"
+        ],
+        "decision_rationale": "Top scorer accepted conditionally; reviewer needs explicit scope guardrails.",
+        "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits."
+      },
+      "created_at": "2026-02-19T21:24:55.590Z",
+      "updated_at": "2026-02-19T21:24:55.590Z"
+    },
+    {
+      "outcome_id": "aot_3dff3403-c4c8-455b-9c4f-a1aaba9117b1",
+      "idempotency_key": "agp-us-050-prod-override-001",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_seed_003",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 13,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.8928,
+      "recommendation": "REQUEST_CHANGES",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:overridden",
+        "override:arena_override_scope_mismatch"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "notes": "Requester required additional scope boundaries in final patch.",
+      "source": "arena-review-ui",
+      "metadata": {
+        "calibration_signal_tags": [
+          "scope-boundary",
+          "human-checkpoint",
+          "contract-language"
+        ],
+        "decision_rationale": "Strong winner, but acceptance blocked until scope lock language is explicit.",
+        "override_rationale": "Scope boundary language missing for fallback behavior."
+      },
+      "created_at": "2026-02-19T21:23:05.439Z",
+      "updated_at": "2026-02-19T21:23:05.439Z"
+    },
+    {
+      "outcome_id": "aot_887f8378-334f-45f0-98c0-0bbf20b4a433",
+      "idempotency_key": "arena-outcome:F1dDGiVbqVnCe97af3qJgm4JWDLy7sbRMORpbPJl6ao",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_seed_001",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 21,
+      "time_to_accept_minutes": 63,
+      "predicted_confidence": 0.8928,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:accepted"
+      ],
+      "override_reason_code": null,
+      "notes": "prod seed acceptance",
+      "source": "prod-seed",
+      "metadata": null,
+      "created_at": "2026-02-19T18:44:53.939Z",
+      "updated_at": "2026-02-19T18:44:53.939Z"
+    }
+  ]
+}

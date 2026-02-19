@@ -528,6 +528,9 @@ interface ArenaOutcomeRecord {
   time_to_accept_minutes: number | null;
   predicted_confidence: number;
   recommendation: 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT';
+  reviewer_decision: 'approve' | 'request_changes' | 'reject';
+  reviewer_rationale: string | null;
+  decision_taxonomy_json: string;
   override_reason_code: string | null;
   notes: string | null;
   source: string;
@@ -728,6 +731,7 @@ interface ArenaInlineReviewSummaryView {
 
 type ArenaOutcomeStatusView = 'ACCEPTED' | 'OVERRIDDEN' | 'REWORK' | 'REJECTED' | 'DISPUTED';
 type ArenaRecommendationView = 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT';
+type ArenaReviewerDecisionView = 'approve' | 'request_changes' | 'reject';
 
 interface ArenaDecisionCaptureActionTemplateView {
   endpoint: string;
@@ -738,6 +742,10 @@ interface ArenaDecisionCaptureActionTemplateView {
     contender_id: string | null;
     outcome_status: ArenaOutcomeStatusView;
     recommendation: ArenaRecommendationView;
+    reviewer_decision: ArenaReviewerDecisionView;
+    rework_required: boolean;
+    reviewer_rationale: string;
+    decision_taxonomy_tags: string[];
     predicted_confidence: number;
     review_time_minutes: number;
     time_to_accept_minutes: number | null;
@@ -758,6 +766,13 @@ interface ArenaOutcomeStatusOptionView {
   calibration_impact: string;
 }
 
+interface ArenaReviewerDecisionOptionView {
+  value: ArenaReviewerDecisionView;
+  recommendation: ArenaRecommendationView;
+  default_outcome_status: ArenaOutcomeStatusView;
+  calibration_impact: string;
+}
+
 interface ArenaOverrideReasonOptionView {
   code: ArenaOverrideReasonCode;
   weight: number;
@@ -768,11 +783,15 @@ interface ArenaOverrideReasonOptionView {
 interface ArenaDecisionCaptureView {
   outcome_endpoint: ArenaDecisionCaptureActionTemplateView;
   outcome_status_options: ArenaOutcomeStatusOptionView[];
+  reviewer_decision_options: ArenaReviewerDecisionOptionView[];
   override_reason_options: ArenaOverrideReasonOptionView[];
   calibration_bindings: {
     notes_path: string;
     rationale_path: string;
     override_reason_path: string;
+    reviewer_decision_path: string;
+    reviewer_rationale_path: string;
+    decision_taxonomy_tags_path: string;
   };
 }
 
@@ -5496,6 +5515,29 @@ function buildArenaOutcomeStatusOptions(): ArenaOutcomeStatusOptionView[] {
   ];
 }
 
+function buildArenaReviewerDecisionOptions(): ArenaReviewerDecisionOptionView[] {
+  return [
+    {
+      value: 'approve',
+      recommendation: 'APPROVE',
+      default_outcome_status: 'ACCEPTED',
+      calibration_impact: 'Improves accept-rate and low-friction routing confidence for this contender.',
+    },
+    {
+      value: 'request_changes',
+      recommendation: 'REQUEST_CHANGES',
+      default_outcome_status: 'REWORK',
+      calibration_impact: 'Increases rework and iterative feedback signals for policy adaptation.',
+    },
+    {
+      value: 'reject',
+      recommendation: 'REJECT',
+      default_outcome_status: 'REJECTED',
+      calibration_impact: 'Counts as failed selection signal and increases risk-aware downweighting.',
+    },
+  ];
+}
+
 function buildArenaOverrideReasonOptions(): ArenaOverrideReasonOptionView[] {
   return (Object.entries(ARENA_OVERRIDE_REASON_REGISTRY) as [ArenaOverrideReasonCode, (typeof ARENA_OVERRIDE_REASON_REGISTRY)[ArenaOverrideReasonCode]][])
     .map(([code, info]) => ({
@@ -5532,6 +5574,13 @@ function buildArenaDecisionCaptureView(
       ? 0.5
       : Math.max(0, Math.min(1, managerConfidence));
 
+  const reviewerDecision = recommendationToReviewerDecision(recommendation);
+  const defaultOutcomeStatus: ArenaOutcomeStatusView = reviewerDecision === 'approve'
+    ? 'ACCEPTED'
+    : reviewerDecision === 'request_changes'
+      ? 'REWORK'
+      : 'REJECTED';
+
   return {
     outcome_endpoint: {
       endpoint: `/v1/bounties/${submission.bounty_id}/arena/outcome`,
@@ -5540,8 +5589,12 @@ function buildArenaDecisionCaptureView(
         idempotency_key: `arena-outcome:${submission.submission_id}:${run.arena_id}`.slice(0, 128),
         arena_id: run.arena_id,
         contender_id: winnerContenderId,
-        outcome_status: 'ACCEPTED',
+        outcome_status: defaultOutcomeStatus,
         recommendation,
+        reviewer_decision: reviewerDecision,
+        rework_required: defaultOutcomeStatus === 'REWORK',
+        reviewer_rationale: '',
+        decision_taxonomy_tags: ['arena-review'],
         predicted_confidence: Number(predictedConfidence.toFixed(4)),
         review_time_minutes: 0,
         time_to_accept_minutes: null,
@@ -5556,11 +5609,15 @@ function buildArenaDecisionCaptureView(
       },
     },
     outcome_status_options: buildArenaOutcomeStatusOptions(),
+    reviewer_decision_options: buildArenaReviewerDecisionOptions(),
     override_reason_options: buildArenaOverrideReasonOptions(),
     calibration_bindings: {
       notes_path: 'notes',
       rationale_path: 'metadata.decision_rationale',
       override_reason_path: 'override_reason_code',
+      reviewer_decision_path: 'reviewer_decision',
+      reviewer_rationale_path: 'reviewer_rationale',
+      decision_taxonomy_tags_path: 'decision_taxonomy_tags',
     },
   };
 }
@@ -7024,6 +7081,9 @@ function parseArenaOutcomeRow(row: unknown): ArenaOutcomeRecord | null {
   const time_to_accept_minutes = d1Number(row.time_to_accept_minutes);
   const predicted_confidence = d1Number(row.predicted_confidence);
   const recommendation = d1String(row.recommendation);
+  const reviewer_decision_raw = d1String(row.reviewer_decision);
+  const reviewer_rationale = d1String(row.reviewer_rationale);
+  const decision_taxonomy_json_raw = d1String(row.decision_taxonomy_json);
   const override_reason_code = d1String(row.override_reason_code);
   const notes = d1String(row.notes);
   const source = d1String(row.source);
@@ -7066,6 +7126,18 @@ function parseArenaOutcomeRow(row: unknown): ArenaOutcomeRecord | null {
     return null;
   }
 
+  const recommendationValue = recommendation as ArenaRecommendationView;
+  const reviewer_decision = normalizeArenaReviewerDecision(reviewer_decision_raw)
+    ?? recommendationToReviewerDecision(recommendationValue);
+
+  let decision_taxonomy_json = '[]';
+  if (decision_taxonomy_json_raw) {
+    const parsedTags = parseJsonUnknownArray(decision_taxonomy_json_raw);
+    if (!parsedTags) return null;
+    const normalizedTags = parseStringList(parsedTags, 30, 64, true) ?? [];
+    decision_taxonomy_json = stableStringify(normalizedTags);
+  }
+
   const normalizedOverrideReason = normalizeArenaOverrideReasonCode(override_reason_code);
 
   return {
@@ -7082,7 +7154,10 @@ function parseArenaOutcomeRow(row: unknown): ArenaOutcomeRecord | null {
     review_time_minutes,
     time_to_accept_minutes,
     predicted_confidence,
-    recommendation,
+    recommendation: recommendationValue,
+    reviewer_decision,
+    reviewer_rationale,
+    decision_taxonomy_json,
     override_reason_code: overridden
       ? (normalizedOverrideReason ?? 'ARENA_OVERRIDE_OTHER')
       : (normalizedOverrideReason ?? null),
@@ -7158,13 +7233,16 @@ async function writeArenaOutcome(
         time_to_accept_minutes,
         predicted_confidence,
         recommendation,
+        reviewer_decision,
+        reviewer_rationale,
+        decision_taxonomy_json,
         override_reason_code,
         notes,
         source,
         metadata_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       outcome.outcome_id,
@@ -7181,6 +7259,9 @@ async function writeArenaOutcome(
       outcome.time_to_accept_minutes,
       outcome.predicted_confidence,
       outcome.recommendation,
+      outcome.reviewer_decision,
+      outcome.reviewer_rationale,
+      outcome.decision_taxonomy_json,
       outcome.override_reason_code,
       outcome.notes,
       outcome.source,
@@ -7912,6 +7993,9 @@ function buildArenaOutcomePayload(outcome: ArenaOutcomeRecord): Record<string, u
     time_to_accept_minutes: outcome.time_to_accept_minutes,
     predicted_confidence: outcome.predicted_confidence,
     recommendation: outcome.recommendation,
+    reviewer_decision: outcome.reviewer_decision,
+    reviewer_rationale: outcome.reviewer_rationale,
+    decision_taxonomy_tags: parseJsonStringArray(outcome.decision_taxonomy_json) ?? [],
     override_reason_code: outcome.override_reason_code,
     notes: outcome.notes,
     source: outcome.source,
@@ -7956,6 +8040,12 @@ function parseArenaOutcomeMetadata(
   };
 }
 
+function parseArenaOutcomeDecisionTaxonomyTags(outcome: ArenaOutcomeRecord): string[] {
+  const parsed = parseJsonStringArray(outcome.decision_taxonomy_json);
+  if (!parsed) return [];
+  return dedupeStrings(parsed.map((tag) => tag.trim()).filter((tag) => tag.length > 0));
+}
+
 function buildArenaCalibrationSummary(
   outcomes: ArenaOutcomeRecord[],
   runByArenaId: Map<string, ArenaRunRecord>,
@@ -7965,6 +8055,16 @@ function buildArenaCalibrationSummary(
   const overridden = outcomes.filter((row) => row.overridden).length;
   const rework = outcomes.filter((row) => row.rework_required).length;
   const disputed = outcomes.filter((row) => row.disputed).length;
+
+  const reviewerDecisionOrder: ArenaReviewerDecisionView[] = ['approve', 'request_changes', 'reject'];
+  const reviewerDecisionCounts = new Map<ArenaReviewerDecisionView, number>();
+  for (const decision of reviewerDecisionOrder) reviewerDecisionCounts.set(decision, 0);
+  for (const row of outcomes) {
+    reviewerDecisionCounts.set(
+      row.reviewer_decision,
+      (reviewerDecisionCounts.get(row.reviewer_decision) ?? 0) + 1,
+    );
+  }
 
   const reviewTimeSum = outcomes.reduce((sum, row) => sum + row.review_time_minutes, 0);
   const reviewTimeAvg = total > 0 ? reviewTimeSum / total : 0;
@@ -8007,6 +8107,7 @@ function buildArenaCalibrationSummary(
   }
 
   const globalTagCounts = new Map<string, number>();
+  const globalDecisionTaxonomyCounts = new Map<string, number>();
   const globalOverrideReasonCounts = new Map<ArenaOverrideReasonCode, number>();
   const globalRationaleRows: Array<{
     outcome_id: string;
@@ -8029,6 +8130,9 @@ function buildArenaCalibrationSummary(
       const meanReviewTime = rows.reduce((sum, row) => sum + row.review_time_minutes, 0) / count;
 
       const tagCounts = new Map<string, number>();
+      const decisionTaxonomyCounts = new Map<string, number>();
+      const reviewerDecisionCountsForContender = new Map<ArenaReviewerDecisionView, number>();
+      for (const decision of reviewerDecisionOrder) reviewerDecisionCountsForContender.set(decision, 0);
       const overrideReasonCounts = new Map<ArenaOverrideReasonCode, number>();
       const rationaleRows: Array<{
         outcome_id: string;
@@ -8048,10 +8152,21 @@ function buildArenaCalibrationSummary(
         const overrideReasonCode = row.overridden
           ? (normalizeArenaOverrideReasonCode(row.override_reason_code) ?? 'ARENA_OVERRIDE_OTHER')
           : null;
+        const decisionTaxonomyTags = parseArenaOutcomeDecisionTaxonomyTags(row);
+
+        reviewerDecisionCountsForContender.set(
+          row.reviewer_decision,
+          (reviewerDecisionCountsForContender.get(row.reviewer_decision) ?? 0) + 1,
+        );
 
         if (overrideReasonCode) {
           overrideReasonCounts.set(overrideReasonCode, (overrideReasonCounts.get(overrideReasonCode) ?? 0) + 1);
           globalOverrideReasonCounts.set(overrideReasonCode, (globalOverrideReasonCounts.get(overrideReasonCode) ?? 0) + 1);
+        }
+
+        for (const decisionTag of decisionTaxonomyTags) {
+          decisionTaxonomyCounts.set(decisionTag, (decisionTaxonomyCounts.get(decisionTag) ?? 0) + 1);
+          globalDecisionTaxonomyCounts.set(decisionTag, (globalDecisionTaxonomyCounts.get(decisionTag) ?? 0) + 1);
         }
 
         for (const tag of metadata.calibration_signal_tags) {
@@ -8066,7 +8181,7 @@ function buildArenaCalibrationSummary(
             override_reason_code: overrideReasonCode,
             rationale: decisionRationale,
             override_rationale: overrideRationale,
-            tags: metadata.calibration_signal_tags,
+            tags: dedupeStrings([...decisionTaxonomyTags, ...metadata.calibration_signal_tags]),
             updated_at: row.updated_at,
           };
           rationaleRows.push(rationaleEntry);
@@ -8097,6 +8212,24 @@ function buildArenaCalibrationSummary(
         .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
         .slice(0, 3);
 
+      const reviewerDecisionBreakdown = reviewerDecisionOrder.map((decision) => {
+        const decisionCount = reviewerDecisionCountsForContender.get(decision) ?? 0;
+        return {
+          reviewer_decision: decision,
+          count: decisionCount,
+          share: Number((decisionCount / count).toFixed(4)),
+        };
+      });
+
+      const topDecisionTaxonomyTags = [...decisionTaxonomyCounts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 5)
+        .map(([tag, tagCount]) => ({
+          tag,
+          count: tagCount,
+          share: Number((tagCount / count).toFixed(4)),
+        }));
+
       return {
         contender_id: contenderId,
         samples: count,
@@ -8106,6 +8239,8 @@ function buildArenaCalibrationSummary(
         override_rate: overrideRate,
         rework_rate: reworkRate,
         average_review_time_minutes: meanReviewTime,
+        reviewer_decision_breakdown: reviewerDecisionBreakdown,
+        top_decision_taxonomy_tags: topDecisionTaxonomyTags,
         top_override_reason_code: overrideReasonBreakdown[0]?.reason_code ?? null,
         override_reason_breakdown: overrideReasonBreakdown,
         rationale_samples: rationaleRows.length,
@@ -8167,6 +8302,24 @@ function buildArenaCalibrationSummary(
       .slice(0, 8),
   };
 
+  const reviewerDecisionBreakdown = reviewerDecisionOrder.map((decision) => {
+    const decisionCount = reviewerDecisionCounts.get(decision) ?? 0;
+    return {
+      reviewer_decision: decision,
+      count: decisionCount,
+      share: total > 0 ? Number((decisionCount / total).toFixed(4)) : 0,
+    };
+  });
+
+  const decisionTaxonomyBreakdown = [...globalDecisionTaxonomyCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 12)
+    .map(([tag, tagCount]) => ({
+      tag,
+      count: tagCount,
+      share: total > 0 ? Number((tagCount / total).toFixed(4)) : 0,
+    }));
+
   return {
     totals: {
       samples: total,
@@ -8179,10 +8332,19 @@ function buildArenaCalibrationSummary(
       cost_per_accepted_bounty_usd: costPerAccepted,
       override_rate: total > 0 ? overridden / total : 0,
       rework_rate: total > 0 ? rework / total : 0,
+      reviewer_decisions: {
+        approve: reviewerDecisionCounts.get('approve') ?? 0,
+        request_changes: reviewerDecisionCounts.get('request_changes') ?? 0,
+        reject: reviewerDecisionCounts.get('reject') ?? 0,
+      },
     },
     contenders,
     override_taxonomy: {
       reason_breakdown: overrideTaxonomy,
+    },
+    reviewer_decision_capture: {
+      decision_breakdown: reviewerDecisionBreakdown,
+      decision_taxonomy_tags: decisionTaxonomyBreakdown,
     },
     rationale_signals: rationaleSignals,
     winner_stability: winnerStability,
@@ -13999,6 +14161,49 @@ function mapManagerDecisionToArenaRecommendation(value: unknown): 'APPROVE' | 'R
   return 'REJECT';
 }
 
+function recommendationToReviewerDecision(
+  recommendation: ArenaRecommendationView,
+): ArenaReviewerDecisionView {
+  if (recommendation === 'APPROVE') return 'approve';
+  if (recommendation === 'REQUEST_CHANGES') return 'request_changes';
+  return 'reject';
+}
+
+function reviewerDecisionToRecommendation(
+  reviewerDecision: ArenaReviewerDecisionView,
+): ArenaRecommendationView {
+  if (reviewerDecision === 'approve') return 'APPROVE';
+  if (reviewerDecision === 'request_changes') return 'REQUEST_CHANGES';
+  return 'REJECT';
+}
+
+function outcomeStatusToReviewerDecision(
+  outcomeStatus: ArenaOutcomeStatusView,
+): ArenaReviewerDecisionView {
+  if (outcomeStatus === 'ACCEPTED') return 'approve';
+  if (outcomeStatus === 'REWORK' || outcomeStatus === 'OVERRIDDEN') return 'request_changes';
+  return 'reject';
+}
+
+function normalizeArenaReviewerDecision(value: unknown): ArenaReviewerDecisionView | null {
+  const normalized = d1String(value)?.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (normalized === 'approve' || normalized === 'approved') return 'approve';
+  if (
+    normalized === 'request_changes' ||
+    normalized === 'request-changes' ||
+    normalized === 'requestchanges' ||
+    normalized === 'revise' ||
+    normalized === 'iterate'
+  ) {
+    return 'request_changes';
+  }
+  if (normalized === 'reject' || normalized === 'rejected') return 'reject';
+
+  return null;
+}
+
 async function buildArenaRunMap(
   db: D1Database,
   arenaIds: Iterable<string>,
@@ -14035,6 +14240,11 @@ async function handlePostArenaOutcome(
   const source = d1String(body.source)?.trim() ?? 'human-review';
   const overrideReasonRaw = d1String(body.override_reason_code)?.trim() ?? null;
   const notes = d1String(body.notes)?.trim() ?? null;
+  const reviewerDecisionRaw = body.reviewer_decision;
+  const reviewerRationale = d1String(body.reviewer_rationale)?.trim() ?? null;
+  const decisionTaxonomyTagsRaw = body.decision_taxonomy_tags;
+  const hasReworkRequiredField = Object.prototype.hasOwnProperty.call(body, 'rework_required');
+  const reworkRequiredRaw = hasReworkRequiredField ? d1Boolean(body.rework_required) : null;
   const metadata = isRecord(body.metadata) ? body.metadata : null;
 
   if (!idempotencyKey || idempotencyKey.length > 128) {
@@ -14110,6 +14320,14 @@ async function handlePostArenaOutcome(
     return errorResponse('INVALID_REQUEST', 'notes must be <=4000 chars', 400, { field: 'notes' }, version);
   }
 
+  if (reviewerRationale && reviewerRationale.length > 4000) {
+    return errorResponse('INVALID_REQUEST', 'reviewer_rationale must be <=4000 chars', 400, { field: 'reviewer_rationale' }, version);
+  }
+
+  if (hasReworkRequiredField && reworkRequiredRaw === null) {
+    return errorResponse('INVALID_REQUEST', 'rework_required must be a boolean', 400, { field: 'rework_required' }, version);
+  }
+
   const run = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
   if (!run || run.bounty_id !== bountyId) {
     return errorResponse('NOT_FOUND', 'Arena run not found for bounty', 404, { bounty_id: bountyId, arena_id: arenaId }, version);
@@ -14152,10 +14370,83 @@ async function handlePostArenaOutcome(
   const recommendationRaw = d1String(body.recommendation)?.trim();
   const predictedConfidenceRaw = d1Number(body.predicted_confidence);
 
-  const recommendation =
-    recommendationRaw === 'APPROVE' || recommendationRaw === 'REQUEST_CHANGES' || recommendationRaw === 'REJECT'
-      ? recommendationRaw
-      : defaultRecommendation;
+  if (
+    recommendationRaw &&
+    recommendationRaw !== 'APPROVE' &&
+    recommendationRaw !== 'REQUEST_CHANGES' &&
+    recommendationRaw !== 'REJECT'
+  ) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'recommendation must be APPROVE | REQUEST_CHANGES | REJECT',
+      400,
+      { field: 'recommendation' },
+      version,
+    );
+  }
+
+  const recommendationFromInput = recommendationRaw
+    ? (recommendationRaw as ArenaRecommendationView)
+    : null;
+
+  const reviewerDecisionFromInput = normalizeArenaReviewerDecision(reviewerDecisionRaw);
+  if (reviewerDecisionRaw !== undefined && reviewerDecisionFromInput === null) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'reviewer_decision must be approve | request_changes | reject',
+      400,
+      { field: 'reviewer_decision' },
+      version,
+    );
+  }
+
+  const reviewerDecision = reviewerDecisionFromInput
+    ?? (recommendationFromInput ? recommendationToReviewerDecision(recommendationFromInput) : null)
+    ?? outcomeStatusToReviewerDecision(outcomeStatusValue)
+    ?? recommendationToReviewerDecision(defaultRecommendation);
+
+  const recommendation = recommendationFromInput
+    ?? reviewerDecisionToRecommendation(reviewerDecision);
+
+  if (recommendation !== reviewerDecisionToRecommendation(reviewerDecision)) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'recommendation must align with reviewer_decision',
+      400,
+      { field: 'recommendation' },
+      version,
+    );
+  }
+
+  if (outcomeStatusValue === 'ACCEPTED' && reviewerDecision !== 'approve') {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'reviewer_decision=approve is required when outcome_status=ACCEPTED',
+      400,
+      { field: 'reviewer_decision' },
+      version,
+    );
+  }
+
+  if (outcomeStatusValue === 'REWORK' && reviewerDecision !== 'request_changes') {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'reviewer_decision=request_changes is required when outcome_status=REWORK',
+      400,
+      { field: 'reviewer_decision' },
+      version,
+    );
+  }
+
+  if (outcomeStatusValue === 'REJECTED' && reviewerDecision !== 'reject') {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'reviewer_decision=reject is required when outcome_status=REJECTED',
+      400,
+      { field: 'reviewer_decision' },
+      version,
+    );
+  }
 
   const predictedConfidence = predictedConfidenceRaw === null
     ? defaultConfidence
@@ -14165,13 +14456,67 @@ async function handlePostArenaOutcome(
     return errorResponse('INVALID_REQUEST', 'predicted_confidence must be within [0,1]', 400, { field: 'predicted_confidence' }, version);
   }
 
+  let decisionTaxonomyTags: string[] = [];
+  if (decisionTaxonomyTagsRaw !== undefined) {
+    const parsedTags = parseStringList(decisionTaxonomyTagsRaw, 20, 64, true);
+    if (!parsedTags) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'decision_taxonomy_tags must be a string array (<=20 items, each <=64 chars)',
+        400,
+        { field: 'decision_taxonomy_tags' },
+        version,
+      );
+    }
+    decisionTaxonomyTags = parsedTags;
+  }
+
+  if (decisionTaxonomyTags.length === 0) {
+    const metadataTags = parseStringList(metadata?.calibration_signal_tags, 20, 64, true) ?? [];
+    const derivedTags = [
+      ...metadataTags,
+      `decision:${reviewerDecision}`,
+      `outcome:${outcomeStatusValue.toLowerCase()}`,
+    ];
+    if (overrideReasonCode) {
+      derivedTags.push(`override:${overrideReasonCode.toLowerCase()}`);
+    }
+    decisionTaxonomyTags = dedupeStrings(
+      derivedTags
+        .map((tag) => tag.trim().toLowerCase())
+        .filter((tag) => tag.length > 0),
+    ).slice(0, 20);
+  }
+
+  const decisionTaxonomyJson = stableStringify(decisionTaxonomyTags);
+
   const accepted = outcomeStatusValue === 'ACCEPTED';
   const overridden = outcomeStatusValue === 'OVERRIDDEN';
-  const reworkRequired = outcomeStatusValue === 'REWORK';
+  const derivedReworkRequired = outcomeStatusValue === 'REWORK' || reviewerDecision === 'request_changes';
+  const reworkRequired = hasReworkRequiredField ? (reworkRequiredRaw as boolean) : derivedReworkRequired;
+
+  if (hasReworkRequiredField && reworkRequired !== derivedReworkRequired) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'rework_required must align with outcome_status/reviewer_decision',
+      400,
+      { field: 'rework_required' },
+      version,
+    );
+  }
+
   const disputed = outcomeStatusValue === 'DISPUTED';
   const timeToAccept = accepted ? (timeToAcceptRaw ?? reviewTime) : null;
 
-  const metadataJson = metadata ? stableStringify(metadata) : null;
+  const metadataWithDecisionCapture = {
+    ...(metadata ?? {}),
+    reviewer_decision: reviewerDecision,
+    reviewer_rationale: reviewerRationale,
+    decision_taxonomy_tags: decisionTaxonomyTags,
+    rework_required: reworkRequired,
+  };
+
+  const metadataJson = stableStringify(metadataWithDecisionCapture);
 
   if (existing) {
     const samePayload =
@@ -14187,6 +14532,9 @@ async function handlePostArenaOutcome(
       (existing.time_to_accept_minutes ?? null) === timeToAccept &&
       existing.predicted_confidence === predictedConfidence &&
       existing.recommendation === recommendation &&
+      existing.reviewer_decision === reviewerDecision &&
+      (existing.reviewer_rationale ?? null) === (reviewerRationale ?? null) &&
+      existing.decision_taxonomy_json === decisionTaxonomyJson &&
       (existing.override_reason_code ?? null) === (overrideReasonCode ?? null) &&
       (existing.notes ?? null) === notes &&
       existing.source === source &&
@@ -14229,6 +14577,9 @@ async function handlePostArenaOutcome(
     time_to_accept_minutes: timeToAccept,
     predicted_confidence: predictedConfidence,
     recommendation,
+    reviewer_decision: reviewerDecision,
+    reviewer_rationale: reviewerRationale,
+    decision_taxonomy_json: decisionTaxonomyJson,
     override_reason_code: overrideReasonCode,
     notes,
     source,

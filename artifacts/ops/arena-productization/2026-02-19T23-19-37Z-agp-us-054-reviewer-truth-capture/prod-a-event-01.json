@@ -1,0 +1,717 @@
+{
+  "ok": true,
+  "response": {
+    "ok": true,
+    "replay": false,
+    "outcome": {
+      "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+      "idempotency_key": "agp054-prod-a-01",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 17,
+      "time_to_accept_minutes": 17,
+      "predicted_confidence": 0.9791,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Production approval with complete evidence package.",
+      "decision_taxonomy_tags": [
+        "reviewer-accept",
+        "prod-a",
+        "policy-pass"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-accept",
+          "prod-a",
+          "policy-pass"
+        ],
+        "decision_rationale": "All production policy checks passed.",
+        "decision_taxonomy_tags": [
+          "reviewer-accept",
+          "prod-a",
+          "policy-pass"
+        ],
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Production approval with complete evidence package.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:51.449Z",
+      "updated_at": "2026-02-19T23:20:51.449Z"
+    },
+    "calibration": {
+      "totals": {
+        "samples": 6,
+        "accepted": 4,
+        "overridden": 2,
+        "rework": 0,
+        "disputed": 0,
+        "review_time_avg_minutes": 16.333333333333332,
+        "time_to_accept_avg_minutes": 49.75,
+        "cost_per_accepted_bounty_usd": 0.205925,
+        "override_rate": 0.3333333333333333,
+        "rework_rate": 0,
+        "reviewer_decisions": {
+          "approve": 1,
+          "request_changes": 5,
+          "reject": 0
+        }
+      },
+      "contenders": [
+        {
+          "contender_id": "contender_codex_pi",
+          "samples": 6,
+          "average_predicted_confidence": 0.8862500000000001,
+          "empirical_accept_rate": 0.6666666666666666,
+          "calibration_gap": 0.21958333333333346,
+          "override_rate": 0.3333333333333333,
+          "rework_rate": 0,
+          "average_review_time_minutes": 16.333333333333332,
+          "reviewer_decision_breakdown": [
+            {
+              "reviewer_decision": "approve",
+              "count": 1,
+              "share": 0.1667
+            },
+            {
+              "reviewer_decision": "request_changes",
+              "count": 5,
+              "share": 0.8333
+            },
+            {
+              "reviewer_decision": "reject",
+              "count": 0,
+              "share": 0
+            }
+          ],
+          "top_decision_taxonomy_tags": [
+            {
+              "tag": "decision:request_changes",
+              "count": 5,
+              "share": 0.8333
+            },
+            {
+              "tag": "outcome:accepted",
+              "count": 3,
+              "share": 0.5
+            },
+            {
+              "tag": "outcome:overridden",
+              "count": 2,
+              "share": 0.3333
+            },
+            {
+              "tag": "override:arena_override_scope_mismatch",
+              "count": 2,
+              "share": 0.3333
+            },
+            {
+              "tag": "policy-pass",
+              "count": 1,
+              "share": 0.1667
+            }
+          ],
+          "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "override_reason_breakdown": [
+            {
+              "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+              "count": 2,
+              "share": 0.3333,
+              "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+              "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+            }
+          ],
+          "rationale_samples": 6,
+          "top_rationale_tags": [
+            {
+              "tag": "scope-boundary",
+              "count": 2,
+              "share": 0.3333
+            },
+            {
+              "tag": "contract-language",
+              "count": 1,
+              "share": 0.1667
+            },
+            {
+              "tag": "fallback-guard",
+              "count": 1,
+              "share": 0.1667
+            },
+            {
+              "tag": "human-checkpoint",
+              "count": 1,
+              "share": 0.1667
+            },
+            {
+              "tag": "policy-pass",
+              "count": 1,
+              "share": 0.1667
+            }
+          ],
+          "recent_rationales": [
+            {
+              "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+              "outcome_status": "ACCEPTED",
+              "override_reason_code": null,
+              "rationale": "All production policy checks passed.",
+              "override_rationale": null,
+              "tags": [
+                "reviewer-accept",
+                "prod-a",
+                "policy-pass"
+              ],
+              "updated_at": "2026-02-19T23:20:51.449Z"
+            },
+            {
+              "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+              "outcome_status": "ACCEPTED",
+              "override_reason_code": null,
+              "rationale": "Real reviewer decision: accepted with deterministic evidence links.",
+              "override_rationale": null,
+              "tags": [
+                "decision:request_changes",
+                "outcome:accepted"
+              ],
+              "updated_at": "2026-02-19T22:51:17.730Z"
+            },
+            {
+              "outcome_id": "aot_d9826f7a-45b1-4f7e-bfcf-50a611a270a5",
+              "outcome_status": "ACCEPTED",
+              "override_reason_code": null,
+              "rationale": "Real reviewer decision: accepted after verification pass.",
+              "override_rationale": null,
+              "tags": [
+                "decision:request_changes",
+                "outcome:accepted"
+              ],
+              "updated_at": "2026-02-19T22:46:08.442Z"
+            }
+          ]
+        }
+      ],
+      "override_taxonomy": {
+        "reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 2,
+            "share": 0.3333,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+            "priority_score": 1.6
+          }
+        ]
+      },
+      "reviewer_decision_capture": {
+        "decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 5,
+            "share": 0.8333
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "decision_taxonomy_tags": [
+          {
+            "tag": "decision:request_changes",
+            "count": 5,
+            "share": 0.8333
+          },
+          {
+            "tag": "outcome:accepted",
+            "count": 3,
+            "share": 0.5
+          },
+          {
+            "tag": "outcome:overridden",
+            "count": 2,
+            "share": 0.3333
+          },
+          {
+            "tag": "override:arena_override_scope_mismatch",
+            "count": 2,
+            "share": 0.3333
+          },
+          {
+            "tag": "policy-pass",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.1667
+          }
+        ]
+      },
+      "rationale_signals": {
+        "top_tags": [
+          {
+            "tag": "scope-boundary",
+            "count": 2,
+            "share": 0.3333
+          },
+          {
+            "tag": "contract-language",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "fallback-guard",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "human-checkpoint",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "policy-pass",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.1667
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 0.1667
+          }
+        ],
+        "recent_decisions": [
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "All production policy checks passed.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-accept",
+              "prod-a",
+              "policy-pass"
+            ],
+            "updated_at": "2026-02-19T23:20:51.449Z"
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Real reviewer decision: accepted with deterministic evidence links.",
+            "override_rationale": null,
+            "tags": [
+              "decision:request_changes",
+              "outcome:accepted"
+            ],
+            "updated_at": "2026-02-19T22:51:17.730Z"
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_d9826f7a-45b1-4f7e-bfcf-50a611a270a5",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Real reviewer decision: accepted after verification pass.",
+            "override_rationale": null,
+            "tags": [
+              "decision:request_changes",
+              "outcome:accepted"
+            ],
+            "updated_at": "2026-02-19T22:46:08.442Z"
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_1bfc99a9-7e6a-4115-8d50-05a37ee874d7",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Top scorer accepted conditionally; reviewer needs explicit scope guardrails.",
+            "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits.",
+            "tags": [
+              "decision:request_changes",
+              "outcome:overridden",
+              "override:arena_override_scope_mismatch",
+              "scope-boundary",
+              "fallback-guard",
+              "reviewer-override"
+            ],
+            "updated_at": "2026-02-19T21:24:55.590Z"
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_3dff3403-c4c8-455b-9c4f-a1aaba9117b1",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Strong winner, but acceptance blocked until scope lock language is explicit.",
+            "override_rationale": "Scope boundary language missing for fallback behavior.",
+            "tags": [
+              "decision:request_changes",
+              "outcome:overridden",
+              "override:arena_override_scope_mismatch",
+              "scope-boundary",
+              "human-checkpoint",
+              "contract-language"
+            ],
+            "updated_at": "2026-02-19T21:23:05.439Z"
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_887f8378-334f-45f0-98c0-0bbf20b4a433",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "prod seed acceptance",
+            "override_rationale": null,
+            "tags": [
+              "decision:request_changes",
+              "outcome:accepted"
+            ],
+            "updated_at": "2026-02-19T18:44:53.939Z"
+          }
+        ]
+      },
+      "winner_stability": [
+        {
+          "task_fingerprint": "typescript:worker:api-hardening",
+          "top_winner_contender_id": "contender_codex_pi",
+          "stability_ratio": 0.6666666666666666,
+          "sample_runs": 6
+        }
+      ]
+    }
+  },
+  "arena_outcomes": {
+    "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+    "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    "outcomes": [
+      {
+        "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+        "idempotency_key": "agp054-prod-a-01",
+        "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+        "contender_id": "contender_codex_pi",
+        "outcome_status": "ACCEPTED",
+        "accepted": true,
+        "overridden": false,
+        "rework_required": false,
+        "disputed": false,
+        "review_time_minutes": 17,
+        "time_to_accept_minutes": 17,
+        "predicted_confidence": 0.9791,
+        "recommendation": "APPROVE",
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Production approval with complete evidence package.",
+        "decision_taxonomy_tags": [
+          "reviewer-accept",
+          "prod-a",
+          "policy-pass"
+        ],
+        "override_reason_code": null,
+        "notes": null,
+        "source": "human-review",
+        "metadata": {
+          "calibration_signal_tags": [
+            "reviewer-accept",
+            "prod-a",
+            "policy-pass"
+          ],
+          "decision_rationale": "All production policy checks passed.",
+          "decision_taxonomy_tags": [
+            "reviewer-accept",
+            "prod-a",
+            "policy-pass"
+          ],
+          "reviewer_decision": "approve",
+          "reviewer_rationale": "Production approval with complete evidence package.",
+          "rework_required": false
+        },
+        "created_at": "2026-02-19T23:20:51.449Z",
+        "updated_at": "2026-02-19T23:20:51.449Z"
+      },
+      {
+        "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+        "idempotency_key": "arena-outcome:GeKyIDP-Kkqge9_p6J9qUnJFt6_Rrqy2USf6aJVT6qU",
+        "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+        "contender_id": "contender_codex_pi",
+        "outcome_status": "ACCEPTED",
+        "accepted": true,
+        "overridden": false,
+        "rework_required": false,
+        "disputed": false,
+        "review_time_minutes": 19,
+        "time_to_accept_minutes": 58,
+        "predicted_confidence": 0.82,
+        "recommendation": "APPROVE",
+        "reviewer_decision": "request_changes",
+        "reviewer_rationale": null,
+        "decision_taxonomy_tags": [
+          "decision:request_changes",
+          "outcome:accepted"
+        ],
+        "override_reason_code": null,
+        "notes": "Real reviewer decision: accepted with deterministic evidence links.",
+        "source": "human-review",
+        "metadata": null,
+        "created_at": "2026-02-19T22:51:17.730Z",
+        "updated_at": "2026-02-19T22:51:17.730Z"
+      }
+    ],
+    "calibration": {
+      "totals": {
+        "samples": 2,
+        "accepted": 2,
+        "overridden": 0,
+        "rework": 0,
+        "disputed": 0,
+        "review_time_avg_minutes": 18,
+        "time_to_accept_avg_minutes": 37.5,
+        "cost_per_accepted_bounty_usd": 0.0147,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "reviewer_decisions": {
+          "approve": 1,
+          "request_changes": 1,
+          "reject": 0
+        }
+      },
+      "contenders": [
+        {
+          "contender_id": "contender_codex_pi",
+          "samples": 2,
+          "average_predicted_confidence": 0.89955,
+          "empirical_accept_rate": 1,
+          "calibration_gap": -0.10045000000000004,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "average_review_time_minutes": 18,
+          "reviewer_decision_breakdown": [
+            {
+              "reviewer_decision": "approve",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "reviewer_decision": "request_changes",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "reviewer_decision": "reject",
+              "count": 0,
+              "share": 0
+            }
+          ],
+          "top_decision_taxonomy_tags": [
+            {
+              "tag": "decision:request_changes",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "tag": "outcome:accepted",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "tag": "policy-pass",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "tag": "prod-a",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "tag": "reviewer-accept",
+              "count": 1,
+              "share": 0.5
+            }
+          ],
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "rationale_samples": 2,
+          "top_rationale_tags": [
+            {
+              "tag": "policy-pass",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "tag": "prod-a",
+              "count": 1,
+              "share": 0.5
+            },
+            {
+              "tag": "reviewer-accept",
+              "count": 1,
+              "share": 0.5
+            }
+          ],
+          "recent_rationales": [
+            {
+              "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+              "outcome_status": "ACCEPTED",
+              "override_reason_code": null,
+              "rationale": "All production policy checks passed.",
+              "override_rationale": null,
+              "tags": [
+                "reviewer-accept",
+                "prod-a",
+                "policy-pass"
+              ],
+              "updated_at": "2026-02-19T23:20:51.449Z"
+            },
+            {
+              "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+              "outcome_status": "ACCEPTED",
+              "override_reason_code": null,
+              "rationale": "Real reviewer decision: accepted with deterministic evidence links.",
+              "override_rationale": null,
+              "tags": [
+                "decision:request_changes",
+                "outcome:accepted"
+              ],
+              "updated_at": "2026-02-19T22:51:17.730Z"
+            }
+          ]
+        }
+      ],
+      "override_taxonomy": {
+        "reason_breakdown": []
+      },
+      "reviewer_decision_capture": {
+        "decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "decision_taxonomy_tags": [
+          {
+            "tag": "decision:request_changes",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "tag": "outcome:accepted",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "tag": "policy-pass",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.5
+          }
+        ]
+      },
+      "rationale_signals": {
+        "top_tags": [
+          {
+            "tag": "policy-pass",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "tag": "prod-a",
+            "count": 1,
+            "share": 0.5
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.5
+          }
+        ],
+        "recent_decisions": [
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_9efddc4b-c939-4f31-8b7e-c8c2edea99db",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "All production policy checks passed.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-accept",
+              "prod-a",
+              "policy-pass"
+            ],
+            "updated_at": "2026-02-19T23:20:51.449Z"
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "outcome_id": "aot_f60410ee-6b32-4341-bccf-d1094fc300c1",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Real reviewer decision: accepted with deterministic evidence links.",
+            "override_rationale": null,
+            "tags": [
+              "decision:request_changes",
+              "outcome:accepted"
+            ],
+            "updated_at": "2026-02-19T22:51:17.730Z"
+          }
+        ]
+      },
+      "winner_stability": [
+        {
+          "task_fingerprint": "typescript:worker:api-hardening",
+          "top_winner_contender_id": "contender_claude_codex_cli",
+          "stability_ratio": 1,
+          "sample_runs": 2
+        }
+      ]
+    }
+  }
+}
