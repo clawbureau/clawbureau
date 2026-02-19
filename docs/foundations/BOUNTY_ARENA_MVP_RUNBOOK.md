@@ -311,6 +311,46 @@ node scripts/arena/run-real-bounty-arena.mjs \
 Routing can be filtered by experiment context:
 - `POST /v1/arena/manager/route` with optional `experiment_id` and `experiment_arm`
 
+### Live enablement + seeded adoption loop (AGP-US-048)
+
+Apply migration + deploy staging:
+```bash
+cd services/_archived/clawbounties
+wrangler d1 migrations apply clawbounties-staging --env staging --remote
+wrangler deploy --env staging
+
+cd ../../services/clawsig-explorer
+wrangler deploy --env staging
+```
+
+Seed a real arena run with registry + experiment metadata:
+```bash
+node scripts/arena/run-real-bounty-arena.mjs \
+  --bounty-id bty_... \
+  --contract artifacts/ops/arena-productization/staging-contract-agp-us-048.json \
+  --contenders contracts/arena/contenders.sample.v1.json \
+  --registry contracts/arena/contender-registry.sample.v1.json \
+  --experiment-id exp_api_hardening_ab_v1 \
+  --experiment-arm B \
+  --bounties-base https://staging.clawbounties.com
+```
+
+Validate manager route filtering by experiment arm:
+```bash
+curl -sS https://staging.clawbounties.com/v1/arena/manager/route \
+  -H "Authorization: Bearer $BOUNTIES_ADMIN_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"task_fingerprint":"typescript:worker:api-hardening","objective_profile_name":"balanced","experiment_id":"exp_api_hardening_ab_v1","experiment_arm":"B","max_runs":20}'
+
+# Fail-closed arm with no matching run should return 404 ARENA_ROUTE_NOT_FOUND:
+curl -sS https://staging.clawbounties.com/v1/arena/manager/route \
+  -H "Authorization: Bearer $BOUNTIES_ADMIN_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"task_fingerprint":"typescript:worker:api-hardening","objective_profile_name":"balanced","experiment_id":"exp_api_hardening_ab_v1","experiment_arm":"A","max_runs":20}'
+```
+
+If staging checks are green, repeat migration/deploy/seed/route checks on production.
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`

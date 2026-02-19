@@ -1,0 +1,10 @@
+{
+  "error": "ARENA_ROUTE_NOT_FOUND",
+  "message": "No completed arena runs matched the routing query",
+  "details": {
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "objective_profile_name": "balanced",
+    "experiment_id": "exp_api_hardening_ab_v1",
+    "experiment_arm": "A"
+  }
+}
