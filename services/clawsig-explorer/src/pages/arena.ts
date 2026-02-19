@@ -193,6 +193,77 @@ function renderReviewThreadCard(report: ArenaReportView): string {
   `;
 }
 
+function renderCalibrationCard(report: ArenaReportView): string {
+  const totals = report.calibration?.totals;
+  if (!totals || totals.samples <= 0) {
+    return `
+      <div class="card">
+        <p class="section-title">Outcome calibration</p>
+        <p class="dim" style="font-size:0.82rem">No outcome feedback recorded yet.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="card">
+      <p class="section-title">Outcome calibration</p>
+      <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(140px, 1fr)); gap:0.4rem">
+        ${renderMetricCell('samples', String(totals.samples))}
+        ${renderMetricCell('override rate', `${(totals.override_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('rework rate', `${(totals.rework_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('avg review min', totals.review_time_avg_minutes.toFixed(1))}
+        ${renderMetricCell('avg accept min', totals.time_to_accept_avg_minutes.toFixed(1))}
+        ${renderMetricCell('cost/accepted', `$${totals.cost_per_accepted_bounty_usd.toFixed(4)}`)}
+      </div>
+    </div>
+  `;
+}
+
+function renderOutcomeFeedCard(report: ArenaReportView): string {
+  if (!Array.isArray(report.outcomes) || report.outcomes.length === 0) {
+    return `
+      <div class="card">
+        <p class="section-title">Outcome feedback feed</p>
+        <p class="dim" style="font-size:0.82rem">No recorded outcomes for this arena yet.</p>
+      </div>
+    `;
+  }
+
+  const rows = report.outcomes
+    .map((outcome) => `
+      <tr>
+        <td class="mono">${esc(outcome.contender_id)}</td>
+        <td class="mono">${esc(outcome.outcome_status)}</td>
+        <td class="mono">${esc(outcome.recommendation)}</td>
+        <td class="mono">${(outcome.predicted_confidence * 100).toFixed(1)}%</td>
+        <td class="mono">${outcome.review_time_minutes.toFixed(1)}</td>
+        <td class="mono">${relativeTime(outcome.created_at)}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <div class="card">
+      <p class="section-title">Outcome feedback feed</p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Contender</th>
+              <th>Outcome</th>
+              <th>Recommendation</th>
+              <th>Predicted conf.</th>
+              <th>Review min</th>
+              <th>Recorded</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 export function arenaComparePage(report: ArenaReportView): string {
   const meta: PageMeta = {
     title: `Arena ${report.arena_id}`,
@@ -249,6 +320,10 @@ export function arenaComparePage(report: ArenaReportView): string {
     ` : ''}
 
     ${renderReviewThreadCard(report)}
+
+    ${renderCalibrationCard(report)}
+
+    ${renderOutcomeFeedCard(report)}
 
     <div class="card">
       <p class="section-title">Contract binding</p>
@@ -539,5 +614,31 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         created_at: '2026-02-19T15:12:00.000Z',
       },
     ],
+    outcomes: [
+      {
+        outcome_id: 'aot_sample_001',
+        contender_id: 'contender_codex_pi',
+        outcome_status: 'ACCEPTED',
+        review_time_minutes: 18,
+        time_to_accept_minutes: 55,
+        predicted_confidence: 0.782,
+        recommendation: 'APPROVE',
+        created_at: '2026-02-19T16:00:00.000Z',
+      },
+    ],
+    calibration: {
+      totals: {
+        samples: 1,
+        accepted: 1,
+        overridden: 0,
+        rework: 0,
+        disputed: 0,
+        review_time_avg_minutes: 18,
+        time_to_accept_avg_minutes: 55,
+        cost_per_accepted_bounty_usd: 0.78,
+        override_rate: 0,
+        rework_rate: 0,
+      },
+    },
   };
 }
