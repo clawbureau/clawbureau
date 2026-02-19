@@ -1,0 +1,65 @@
+{
+  "schema_version": "arena_contract_language_optimizer_store.v1",
+  "computed_at": "2026-02-19T22:00:11.655Z",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "contender_id": null,
+  "totals": {
+    "suggestions": 2
+  },
+  "suggestions": [
+    {
+      "suggestion_id": "acls_XkYHtDjhYVbhUI3_kmlugFmydA-wAG1B",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "scope": "global",
+      "contender_id": null,
+      "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "failures": 2,
+      "overrides": 2,
+      "share": 1,
+      "priority_score": 2.3,
+      "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+      "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+      "contract_language_patch": "Observed 2 failed/overridden outcomes (OVERRIDDEN=2) tied to ARENA_OVERRIDE_SCOPE_MISMATCH. Contract rewrite: Tighten acceptance criteria and explicit out-of-scope boundaries in the contract. Explicitly encode reviewer checks for: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. Fail closed: unresolved checklist items must require manual reviewer approval.",
+      "prompt_language_patch": "Prompt rewrite: Add a scope-check checklist before final answer generation. Require explicit self-check against: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. If any mandatory check fails, emit REQUEST_CHANGES with concrete remediation steps.",
+      "sample_notes": [
+        "Contract lacked strict out-of-scope behavior for fallback edits.",
+        "Scope boundary language missing for fallback behavior."
+      ],
+      "top_tags": [
+        "scope-boundary",
+        "contract-language",
+        "fallback-guard",
+        "human-checkpoint",
+        "reviewer-override"
+      ],
+      "computed_at": "2026-02-19T22:00:11.177Z"
+    },
+    {
+      "suggestion_id": "acls_wO3301zR7Eth9TbBv-UP3YS54P4JlCow",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "scope": "contender",
+      "contender_id": "contender_codex_pi",
+      "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "failures": 2,
+      "overrides": 2,
+      "share": 1,
+      "priority_score": 2.3,
+      "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+      "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+      "contract_language_patch": "Observed 2 failed/overridden outcomes (OVERRIDDEN=2) tied to ARENA_OVERRIDE_SCOPE_MISMATCH. Contract rewrite: Tighten acceptance criteria and explicit out-of-scope boundaries in the contract. Explicitly encode reviewer checks for: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. Fail closed: unresolved checklist items must require manual reviewer approval.",
+      "prompt_language_patch": "Prompt rewrite: Add a scope-check checklist before final answer generation. Require explicit self-check against: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. If any mandatory check fails, emit REQUEST_CHANGES with concrete remediation steps.",
+      "sample_notes": [
+        "Contract lacked strict out-of-scope behavior for fallback edits.",
+        "Scope boundary language missing for fallback behavior."
+      ],
+      "top_tags": [
+        "scope-boundary",
+        "contract-language",
+        "fallback-guard",
+        "human-checkpoint",
+        "reviewer-override"
+      ],
+      "computed_at": "2026-02-19T22:00:11.177Z"
+    }
+  ]
+}

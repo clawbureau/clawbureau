@@ -536,6 +536,27 @@ interface ArenaOutcomeRecord {
   updated_at: string;
 }
 
+interface ArenaContractLanguageSuggestionRecord {
+  suggestion_id: string;
+  task_fingerprint: string;
+  scope: 'global' | 'contender';
+  contender_id: string;
+  reason_code: ArenaOverrideReasonCode;
+  failures: number;
+  overrides: number;
+  share: number;
+  priority_score: number;
+  contract_rewrite: string;
+  prompt_rewrite: string;
+  contract_language_patch: string;
+  prompt_language_patch: string;
+  sample_notes_json: string;
+  tags_json: string;
+  computed_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -7168,6 +7189,182 @@ async function writeArenaOutcome(
       outcome.updated_at,
     )
     .run();
+}
+
+function parseArenaContractLanguageSuggestionRow(row: unknown): ArenaContractLanguageSuggestionRecord | null {
+  if (!isRecord(row)) return null;
+
+  const suggestion_id = d1String(row.suggestion_id);
+  const task_fingerprint = d1String(row.task_fingerprint);
+  const scope = d1String(row.scope);
+  const contender_id = d1String(row.contender_id);
+  const reason_code_raw = d1String(row.reason_code);
+  const failures = d1Number(row.failures);
+  const overrides = d1Number(row.overrides);
+  const share = d1Number(row.share);
+  const priority_score = d1Number(row.priority_score);
+  const contract_rewrite = d1String(row.contract_rewrite);
+  const prompt_rewrite = d1String(row.prompt_rewrite);
+  const contract_language_patch = d1String(row.contract_language_patch);
+  const prompt_language_patch = d1String(row.prompt_language_patch);
+  const sample_notes_json = d1String(row.sample_notes_json);
+  const tags_json = d1String(row.tags_json);
+  const computed_at = d1String(row.computed_at);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !suggestion_id ||
+    !task_fingerprint ||
+    !scope ||
+    contender_id === null ||
+    !reason_code_raw ||
+    failures === null ||
+    overrides === null ||
+    share === null ||
+    priority_score === null ||
+    !contract_rewrite ||
+    !prompt_rewrite ||
+    !contract_language_patch ||
+    !prompt_language_patch ||
+    !sample_notes_json ||
+    !tags_json ||
+    !computed_at ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  if (scope !== 'global' && scope !== 'contender') return null;
+
+  const reason_code = normalizeArenaOverrideReasonCode(reason_code_raw);
+  if (!reason_code) return null;
+
+  return {
+    suggestion_id,
+    task_fingerprint,
+    scope,
+    contender_id,
+    reason_code,
+    failures,
+    overrides,
+    share,
+    priority_score,
+    contract_rewrite,
+    prompt_rewrite,
+    contract_language_patch,
+    prompt_language_patch,
+    sample_notes_json,
+    tags_json,
+    computed_at,
+    created_at,
+    updated_at,
+  };
+}
+
+async function listArenaContractLanguageSuggestions(
+  db: D1Database,
+  params: {
+    taskFingerprint?: string | null;
+    contenderId?: string | null;
+    limit: number;
+  },
+): Promise<ArenaContractLanguageSuggestionRecord[]> {
+  const taskFingerprint = params.taskFingerprint?.trim() ?? null;
+  const contenderId = params.contenderId?.trim() ?? null;
+
+  let sql = 'SELECT * FROM bounty_arena_contract_language_suggestions';
+  const binds: Array<string | number> = [];
+  const where: string[] = [];
+
+  if (taskFingerprint) {
+    where.push('task_fingerprint = ?');
+    binds.push(taskFingerprint);
+  }
+
+  if (contenderId) {
+    where.push('contender_id = ?');
+    binds.push(contenderId);
+  }
+
+  if (where.length > 0) {
+    sql += ` WHERE ${where.join(' AND ')}`;
+  }
+
+  sql += ' ORDER BY priority_score DESC, failures DESC, updated_at DESC, suggestion_id ASC LIMIT ?';
+  binds.push(params.limit);
+
+  const rows = await db
+    .prepare(sql)
+    .bind(...binds)
+    .all<Record<string, unknown>>();
+
+  const out: ArenaContractLanguageSuggestionRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaContractLanguageSuggestionRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
+async function replaceArenaContractLanguageSuggestions(
+  db: D1Database,
+  taskFingerprint: string,
+  suggestions: ArenaContractLanguageSuggestionRecord[],
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM bounty_arena_contract_language_suggestions WHERE task_fingerprint = ?')
+    .bind(taskFingerprint)
+    .run();
+
+  for (const suggestion of suggestions) {
+    await db
+      .prepare(
+        `INSERT INTO bounty_arena_contract_language_suggestions (
+          suggestion_id,
+          task_fingerprint,
+          scope,
+          contender_id,
+          reason_code,
+          failures,
+          overrides,
+          share,
+          priority_score,
+          contract_rewrite,
+          prompt_rewrite,
+          contract_language_patch,
+          prompt_language_patch,
+          sample_notes_json,
+          tags_json,
+          computed_at,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        suggestion.suggestion_id,
+        suggestion.task_fingerprint,
+        suggestion.scope,
+        suggestion.contender_id,
+        suggestion.reason_code,
+        suggestion.failures,
+        suggestion.overrides,
+        suggestion.share,
+        suggestion.priority_score,
+        suggestion.contract_rewrite,
+        suggestion.prompt_rewrite,
+        suggestion.contract_language_patch,
+        suggestion.prompt_language_patch,
+        suggestion.sample_notes_json,
+        suggestion.tags_json,
+        suggestion.computed_at,
+        suggestion.created_at,
+        suggestion.updated_at,
+      )
+      .run();
+  }
 }
 
 async function writeArenaContenderRecords(
@@ -14164,6 +14361,7 @@ async function handleGetArena(
   const calibration = buildArenaCalibrationSummary(outcomes, new Map([[arenaId, run]]));
 
   const autopilot = buildArenaAutopilotPreview(run, payload, calibration);
+  const contractLanguageOptimizer = await buildArenaContractLanguageOptimizerPreview(env.BOUNTIES_DB, run.task_fingerprint);
 
   return jsonResponse(
     {
@@ -14172,6 +14370,7 @@ async function handleGetArena(
       outcomes: outcomes.map((row) => buildArenaOutcomePayload(row)),
       calibration,
       autopilot,
+      contract_language_optimizer: contractLanguageOptimizer,
     },
     200,
     version,
@@ -14371,6 +14570,441 @@ async function handleArenaPolicyLearning(
     200,
     version,
   );
+}
+
+function isArenaFailedOutcome(row: ArenaOutcomeRecord): boolean {
+  return row.overridden || row.rework_required || row.disputed || row.outcome_status === 'REJECTED';
+}
+
+function deriveArenaContractLanguageReasonCode(row: ArenaOutcomeRecord): ArenaOverrideReasonCode {
+  const explicit = normalizeArenaOverrideReasonCode(row.override_reason_code);
+  if (explicit) return explicit;
+
+  const metadata = parseArenaOutcomeMetadata(row.metadata_json);
+  for (const tag of metadata.calibration_signal_tags) {
+    const normalized = normalizeArenaOverrideReasonCode(tag);
+    if (normalized) return normalized;
+  }
+
+  if (row.rework_required) return 'ARENA_OVERRIDE_TEST_FAILURE';
+  if (row.disputed) return 'ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT';
+  if (row.outcome_status === 'REJECTED') return 'ARENA_OVERRIDE_POLICY_RISK';
+  return 'ARENA_OVERRIDE_OTHER';
+}
+
+function parseStringArrayJson(input: string): string[] {
+  try {
+    const parsed = JSON.parse(input);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is string => typeof entry === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function buildArenaContractLanguageSuggestionPayload(
+  suggestion: ArenaContractLanguageSuggestionRecord,
+): Record<string, unknown> {
+  return {
+    suggestion_id: suggestion.suggestion_id,
+    task_fingerprint: suggestion.task_fingerprint,
+    scope: suggestion.scope,
+    contender_id: suggestion.scope === 'global' ? null : suggestion.contender_id,
+    reason_code: suggestion.reason_code,
+    failures: suggestion.failures,
+    overrides: suggestion.overrides,
+    share: Number(suggestion.share.toFixed(4)),
+    priority_score: Number(suggestion.priority_score.toFixed(4)),
+    contract_rewrite: suggestion.contract_rewrite,
+    prompt_rewrite: suggestion.prompt_rewrite,
+    contract_language_patch: suggestion.contract_language_patch,
+    prompt_language_patch: suggestion.prompt_language_patch,
+    sample_notes: parseStringArrayJson(suggestion.sample_notes_json),
+    top_tags: parseStringArrayJson(suggestion.tags_json),
+    computed_at: suggestion.computed_at,
+  };
+}
+
+function buildArenaContractLanguagePatch(params: {
+  reasonCode: ArenaOverrideReasonCode;
+  failures: number;
+  topTags: string[];
+  statusBreakdown: Array<{ status: ArenaOutcomeRecord['outcome_status']; count: number }>;
+}): string {
+  const reasonInfo = ARENA_OVERRIDE_REASON_REGISTRY[params.reasonCode];
+  const statusSummary = params.statusBreakdown
+    .map((entry) => `${entry.status}=${entry.count}`)
+    .join(', ');
+  const tagsSummary = params.topTags.length > 0 ? params.topTags.join(', ') : 'contract acceptance criteria';
+
+  return [
+    `Observed ${params.failures} failed/overridden outcomes (${statusSummary || 'mixed'}) tied to ${params.reasonCode}.`,
+    `Contract rewrite: ${reasonInfo.contract_rewrite}`,
+    `Explicitly encode reviewer checks for: ${tagsSummary}.`,
+    'Fail closed: unresolved checklist items must require manual reviewer approval.',
+  ].join(' ');
+}
+
+function buildArenaPromptLanguagePatch(params: {
+  reasonCode: ArenaOverrideReasonCode;
+  topTags: string[];
+}): string {
+  const reasonInfo = ARENA_OVERRIDE_REASON_REGISTRY[params.reasonCode];
+  const tagsSummary = params.topTags.length > 0 ? params.topTags.join(', ') : 'acceptance checklist';
+
+  return [
+    `Prompt rewrite: ${reasonInfo.prompt_rewrite}`,
+    `Require explicit self-check against: ${tagsSummary}.`,
+    'If any mandatory check fails, emit REQUEST_CHANGES with concrete remediation steps.',
+  ].join(' ');
+}
+
+async function buildArenaContractLanguageSuggestionId(params: {
+  taskFingerprint: string;
+  scope: 'global' | 'contender';
+  contenderId: string;
+  reasonCode: ArenaOverrideReasonCode;
+}): Promise<string> {
+  const material = stableStringify({
+    task_fingerprint: params.taskFingerprint,
+    scope: params.scope,
+    contender_id: params.contenderId,
+    reason_code: params.reasonCode,
+  });
+  return `acls_${(await sha256B64uUtf8(material)).slice(0, 32)}`;
+}
+
+async function computeArenaContractLanguageOptimizer(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    limit: number;
+  },
+): Promise<{
+  payload: Record<string, unknown>;
+  suggestions: ArenaContractLanguageSuggestionRecord[];
+}> {
+  const outcomes = await listArenaOutcomes(db, params.limit);
+  const runMap = await buildArenaRunMap(db, outcomes.map((row) => row.arena_id));
+
+  const filtered = outcomes.filter((row) => {
+    const run = runMap.get(row.arena_id);
+    return Boolean(run && run.task_fingerprint === params.taskFingerprint);
+  });
+
+  const failed = filtered.filter((row) => isArenaFailedOutcome(row));
+
+  type Aggregate = {
+    failures: number;
+    overrides: number;
+    statusCounts: Map<ArenaOutcomeRecord['outcome_status'], number>;
+    tagCounts: Map<string, number>;
+    noteSamples: string[];
+  };
+
+  const ensureAggregate = (): Aggregate => ({
+    failures: 0,
+    overrides: 0,
+    statusCounts: new Map(),
+    tagCounts: new Map(),
+    noteSamples: [],
+  });
+
+  const globalAggregates = new Map<ArenaOverrideReasonCode, Aggregate>();
+  const contenderAggregates = new Map<string, Map<ArenaOverrideReasonCode, Aggregate>>();
+
+  for (const row of failed) {
+    const reasonCode = deriveArenaContractLanguageReasonCode(row);
+    const metadata = parseArenaOutcomeMetadata(row.metadata_json);
+
+    const note = metadata.override_rationale
+      ?? metadata.decision_rationale
+      ?? (row.notes?.trim() && row.notes.trim().length > 0 ? row.notes.trim() : null);
+
+    const updateAggregate = (aggregate: Aggregate) => {
+      aggregate.failures += 1;
+      if (row.overridden) aggregate.overrides += 1;
+      aggregate.statusCounts.set(row.outcome_status, (aggregate.statusCounts.get(row.outcome_status) ?? 0) + 1);
+
+      for (const tag of metadata.calibration_signal_tags) {
+        aggregate.tagCounts.set(tag, (aggregate.tagCounts.get(tag) ?? 0) + 1);
+      }
+
+      if (note && !aggregate.noteSamples.includes(note) && aggregate.noteSamples.length < 4) {
+        aggregate.noteSamples.push(note);
+      }
+    };
+
+    const global = globalAggregates.get(reasonCode) ?? ensureAggregate();
+    updateAggregate(global);
+    globalAggregates.set(reasonCode, global);
+
+    const contenderMap = contenderAggregates.get(row.contender_id) ?? new Map<ArenaOverrideReasonCode, Aggregate>();
+    const contenderAggregate = contenderMap.get(reasonCode) ?? ensureAggregate();
+    updateAggregate(contenderAggregate);
+    contenderMap.set(reasonCode, contenderAggregate);
+    contenderAggregates.set(row.contender_id, contenderMap);
+  }
+
+  const computedAt = new Date().toISOString();
+  const createdAt = computedAt;
+
+  const totalFailed = failed.length;
+
+  const toStatusBreakdown = (aggregate: Aggregate) => [...aggregate.statusCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([status, count]) => ({ status, count }));
+
+  const toTopTags = (aggregate: Aggregate) => [...aggregate.tagCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([tag]) => tag);
+
+  const suggestions: ArenaContractLanguageSuggestionRecord[] = [];
+
+  for (const [reasonCode, aggregate] of [...globalAggregates.entries()].sort((a, b) => b[1].failures - a[1].failures || a[0].localeCompare(b[0]))) {
+    const topTags = toTopTags(aggregate);
+    const statusBreakdown = toStatusBreakdown(aggregate);
+    const share = totalFailed > 0 ? aggregate.failures / totalFailed : 0;
+    const priorityScore = Number((aggregate.failures * ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].weight + aggregate.overrides * 0.35).toFixed(4));
+
+    suggestions.push({
+      suggestion_id: await buildArenaContractLanguageSuggestionId({
+        taskFingerprint: params.taskFingerprint,
+        scope: 'global',
+        contenderId: '__global__',
+        reasonCode,
+      }),
+      task_fingerprint: params.taskFingerprint,
+      scope: 'global',
+      contender_id: '__global__',
+      reason_code: reasonCode,
+      failures: aggregate.failures,
+      overrides: aggregate.overrides,
+      share: Number(share.toFixed(4)),
+      priority_score: priorityScore,
+      contract_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].contract_rewrite,
+      prompt_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].prompt_rewrite,
+      contract_language_patch: buildArenaContractLanguagePatch({
+        reasonCode,
+        failures: aggregate.failures,
+        topTags,
+        statusBreakdown,
+      }),
+      prompt_language_patch: buildArenaPromptLanguagePatch({ reasonCode, topTags }),
+      sample_notes_json: stableStringify(aggregate.noteSamples),
+      tags_json: stableStringify(topTags),
+      computed_at: computedAt,
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+  }
+
+  for (const [contenderId, reasonMap] of [...contenderAggregates.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const contenderFailures = [...reasonMap.values()].reduce((sum, aggregate) => sum + aggregate.failures, 0);
+    const rankedReasons = [...reasonMap.entries()]
+      .sort((a, b) => b[1].failures - a[1].failures || a[0].localeCompare(b[0]))
+      .slice(0, 3);
+
+    for (const [reasonCode, aggregate] of rankedReasons) {
+      const topTags = toTopTags(aggregate);
+      const statusBreakdown = toStatusBreakdown(aggregate);
+      const share = contenderFailures > 0 ? aggregate.failures / contenderFailures : 0;
+      const priorityScore = Number((aggregate.failures * ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].weight + aggregate.overrides * 0.35).toFixed(4));
+
+      suggestions.push({
+        suggestion_id: await buildArenaContractLanguageSuggestionId({
+          taskFingerprint: params.taskFingerprint,
+          scope: 'contender',
+          contenderId,
+          reasonCode,
+        }),
+        task_fingerprint: params.taskFingerprint,
+        scope: 'contender',
+        contender_id: contenderId,
+        reason_code: reasonCode,
+        failures: aggregate.failures,
+        overrides: aggregate.overrides,
+        share: Number(share.toFixed(4)),
+        priority_score: priorityScore,
+        contract_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].contract_rewrite,
+        prompt_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].prompt_rewrite,
+        contract_language_patch: buildArenaContractLanguagePatch({
+          reasonCode,
+          failures: aggregate.failures,
+          topTags,
+          statusBreakdown,
+        }),
+        prompt_language_patch: buildArenaPromptLanguagePatch({ reasonCode, topTags }),
+        sample_notes_json: stableStringify(aggregate.noteSamples),
+        tags_json: stableStringify(topTags),
+        computed_at: computedAt,
+        created_at: createdAt,
+        updated_at: createdAt,
+      });
+    }
+  }
+
+  const globalSuggestions = suggestions
+    .filter((entry) => entry.scope === 'global')
+    .sort((a, b) => b.priority_score - a.priority_score || b.failures - a.failures)
+    .map((entry) => buildArenaContractLanguageSuggestionPayload(entry));
+
+  const contenderSuggestions = suggestions
+    .filter((entry) => entry.scope === 'contender')
+    .sort((a, b) => b.priority_score - a.priority_score || b.failures - a.failures)
+    .map((entry) => buildArenaContractLanguageSuggestionPayload(entry));
+
+  return {
+    payload: {
+      schema_version: 'arena_contract_language_optimizer.v1',
+      computed_at: computedAt,
+      task_fingerprint: params.taskFingerprint,
+      totals: {
+        outcomes: filtered.length,
+        failed_or_overridden_outcomes: totalFailed,
+        overridden_outcomes: failed.filter((row) => row.overridden).length,
+        suggestions: suggestions.length,
+      },
+      global_suggestions: globalSuggestions,
+      contender_suggestions: contenderSuggestions,
+    },
+    suggestions,
+  };
+}
+
+async function computeAndPersistArenaContractLanguageOptimizer(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    limit: number;
+  },
+): Promise<Record<string, unknown>> {
+  const optimizer = await computeArenaContractLanguageOptimizer(db, params);
+  await replaceArenaContractLanguageSuggestions(db, params.taskFingerprint, optimizer.suggestions);
+
+  return {
+    ...optimizer.payload,
+    persistence: {
+      table: 'bounty_arena_contract_language_suggestions',
+      rows_written: optimizer.suggestions.length,
+      mode: 'replace_by_task_fingerprint',
+    },
+  };
+}
+
+async function buildArenaContractLanguageOptimizerPreview(
+  db: D1Database,
+  taskFingerprint: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const rows = await listArenaContractLanguageSuggestions(db, {
+      taskFingerprint,
+      limit: 12,
+    });
+
+    const globalSuggestions = rows
+      .filter((entry) => entry.scope === 'global')
+      .map((entry) => buildArenaContractLanguageSuggestionPayload(entry));
+    const contenderSuggestions = rows
+      .filter((entry) => entry.scope === 'contender')
+      .map((entry) => buildArenaContractLanguageSuggestionPayload(entry));
+
+    return {
+      schema_version: 'arena_contract_language_optimizer_preview.v1',
+      task_fingerprint: taskFingerprint,
+      status: rows.length > 0 ? 'available' : 'empty',
+      global_suggestions: globalSuggestions,
+      contender_suggestions: contenderSuggestions,
+    };
+  } catch {
+    return {
+      schema_version: 'arena_contract_language_optimizer_preview.v1',
+      task_fingerprint: taskFingerprint,
+      status: 'unavailable',
+      global_suggestions: [],
+      contender_suggestions: [],
+    };
+  }
+}
+
+async function handleGetArenaContractLanguageOptimizer(
+  request: Request,
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const taskFingerprint = d1String(url.searchParams.get('task_fingerprint'))?.trim() ?? null;
+  const contenderId = d1String(url.searchParams.get('contender_id'))?.trim() ?? null;
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 100;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 500);
+  }
+
+  const rows = await listArenaContractLanguageSuggestions(env.BOUNTIES_DB, {
+    taskFingerprint,
+    contenderId,
+    limit,
+  });
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_contract_language_optimizer_store.v1',
+      computed_at: new Date().toISOString(),
+      task_fingerprint: taskFingerprint,
+      contender_id: contenderId,
+      totals: {
+        suggestions: rows.length,
+      },
+      suggestions: rows.map((row) => buildArenaContractLanguageSuggestionPayload(row)),
+    },
+    200,
+    version,
+  );
+}
+
+async function handlePostArenaContractLanguageOptimizer(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const limitRaw = d1Number(body.limit);
+  let limit = 500;
+  if (limitRaw !== null) {
+    if (!Number.isInteger(limitRaw) || limitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(limitRaw, 5000);
+  }
+
+  const optimizer = await computeAndPersistArenaContractLanguageOptimizer(env.BOUNTIES_DB, {
+    taskFingerprint,
+    limit,
+  });
+
+  return jsonResponse(optimizer, 200, version);
 }
 
 async function handleArenaBacktesting(
@@ -15607,6 +16241,14 @@ export default {
 
       if (path === '/v1/arena/policy-learning' && method === 'GET') {
         return handleArenaPolicyLearning(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/contract-language-optimizer' && method === 'GET') {
+        return handleGetArenaContractLanguageOptimizer(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/contract-language-optimizer' && method === 'POST') {
+        return handlePostArenaContractLanguageOptimizer(request, env, version);
       }
 
       if (path === '/v1/arena/backtesting' && method === 'GET') {

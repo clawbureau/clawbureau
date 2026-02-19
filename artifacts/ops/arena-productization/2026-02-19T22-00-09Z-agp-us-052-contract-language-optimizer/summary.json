@@ -1,0 +1,84 @@
+{
+  "story": "AGP-US-052",
+  "title": "contract language optimizer + persisted suggestions",
+  "generated_at": "2026-02-19T22:00:56.865Z",
+  "migrations": {
+    "staging": [
+      "0025_arena_contract_language_optimizer.sql"
+    ],
+    "production": [
+      "0025_arena_contract_language_optimizer.sql"
+    ]
+  },
+  "deploys": {
+    "staging": {
+      "clawbounties": {
+        "version_id": "9a6ff198-c9d2-456e-8bb6-e773083e3da8"
+      },
+      "clawsig_explorer": {
+        "version_id": "a0d7858e-eec0-464b-b35d-fb328a28dc5b"
+      }
+    },
+    "production": {
+      "clawbounties": {
+        "version_id": "8621dc5a-8b64-47ba-9e5f-cd0749d6d80b"
+      },
+      "clawsig_explorer": {
+        "version_id": "47012fb3-affe-4fd0-abcb-e99e88e24613"
+      }
+    }
+  },
+  "contract_language_optimizer_api": {
+    "endpoint": "POST /v1/arena/contract-language-optimizer",
+    "staging": {
+      "post_status": 200,
+      "suggestions": 2,
+      "rows_written": 2,
+      "top_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+    },
+    "production": {
+      "post_status": 200,
+      "suggestions": 2,
+      "rows_written": 2,
+      "top_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+    },
+    "store_reads": {
+      "staging_status": 200,
+      "staging_rows": 2,
+      "production_status": 200,
+      "production_rows": 2
+    }
+  },
+  "arena_preview_contract_optimizer": {
+    "staging": {
+      "arena_id": "arena_bty_5c048032_stage_050_001",
+      "status": "available",
+      "global_suggestions": 1,
+      "contender_suggestions": 1
+    },
+    "production": {
+      "arena_id": "arena_bty_836a4e15_prod_050_001",
+      "status": "available",
+      "global_suggestions": 1,
+      "contender_suggestions": 1
+    }
+  },
+  "explorer_panel_checks": {
+    "staging_has_optimizer_card": true,
+    "production_has_optimizer_card": true,
+    "staging_has_global_table": true,
+    "production_has_global_table": true
+  },
+  "fail_closed_route_check": {
+    "staging": {
+      "arm_B_status": 200,
+      "arm_A_status": 404,
+      "arm_A_error": "ARENA_ROUTE_NOT_FOUND"
+    },
+    "production": {
+      "arm_B_status": 200,
+      "arm_A_status": 404,
+      "arm_A_error": "ARENA_ROUTE_NOT_FOUND"
+    }
+  }
+}

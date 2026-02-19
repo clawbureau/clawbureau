@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..046)
+> **Scope:** Bounty Arena MVP (AGP-US-031..052)
 
 # Bounty Arena MVP Runbook
 
@@ -43,6 +43,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/lib/arena-runner.mjs`
 - `scripts/arena/lib/proof-pack-v3.mjs`
 - `scripts/arena/generate-policy-learning-report.mjs`
+- `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
 
 ### Arena schemas
@@ -54,6 +55,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `services/_archived/clawbounties/migrations/0019_bounty_arena_runs.sql`
 - `services/_archived/clawbounties/migrations/0022_bounty_arena_live_lifecycle.sql`
 - `services/_archived/clawbounties/migrations/0023_arena_outcome_override_reasons.sql`
+- `services/_archived/clawbounties/migrations/0024_arena_contender_registry_pins.sql`
+- `services/_archived/clawbounties/migrations/0025_arena_contract_language_optimizer.sql`
 - `services/_archived/clawbounties/src/index.ts`
 
 ### Explorer routes
@@ -74,11 +77,18 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 ### Manager route API
 - `POST /v1/arena/manager/route` (admin)
 - `POST /v1/arena/manager/coach` (admin)
+- `POST /v1/arena/manager/autopilot` (admin)
 
 ### Policy learning API
 - `GET /v1/arena/policy-learning` (admin)
   - supports `task_fingerprint` and `limit`
   - returns override reason breakdown + contract/prompt rewrite recommendations
+- `POST /v1/arena/contract-language-optimizer` (admin)
+  - body: `task_fingerprint`, optional `limit`
+  - computes + persists contract/prompt rewrite suggestions for failed/overridden outcomes
+- `GET /v1/arena/contract-language-optimizer` (admin)
+  - supports `task_fingerprint`, `contender_id`, `limit`
+  - returns persisted optimizer suggestions
 
 ### Backtesting API
 - `GET /v1/arena/backtesting` (admin)
@@ -115,6 +125,8 @@ Required migrations for Arena MVP:
 - `0019_bounty_arena_runs.sql`
 - `0022_bounty_arena_live_lifecycle.sql`
 - `0023_arena_outcome_override_reasons.sql`
+- `0024_arena_contender_registry_pins.sql`
+- `0025_arena_contract_language_optimizer.sql`
 
 ## 6. End-to-end operator flow
 
@@ -279,6 +291,11 @@ node scripts/arena/generate-policy-learning-report.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
   --bounties-base https://staging.clawbounties.com
 
+# Compute + persist contract/prompt rewrite suggestions:
+node scripts/arena/generate-contract-language-optimizer.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --bounties-base https://staging.clawbounties.com
+
 # Backtest historical winner accuracy + calibration drift:
 node scripts/arena/run-historical-backtest.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
@@ -412,6 +429,30 @@ Rollout evidence (AGP-US-051):
 - staging deploys: `clawbounties-staging` `678d049e-9586-4963-8aca-94301c0db094`, `clawsig-explorer-staging` `c6260209-dfd1-492f-94b1-338ed6f731ca`
 - production deploys: `clawbounties` `950b78b8-2ce8-42af-8375-a917a3f0c23f`, `clawsig-explorer` `d520225a-8c90-4757-959b-a95ec482b90e`
 - evidence summary: `artifacts/ops/arena-productization/2026-02-19T21-39-33Z-agp-us-051-routing-autopilot/summary.json`
+
+### Contract language optimizer + persisted rewrite store (AGP-US-052)
+
+Added migration:
+- `services/_archived/clawbounties/migrations/0025_arena_contract_language_optimizer.sql`
+
+Added API endpoints:
+- `POST /v1/arena/contract-language-optimizer` (admin) — compute + persist suggestions for a task fingerprint
+- `GET /v1/arena/contract-language-optimizer` (admin) — list persisted suggestions
+
+Optimizer behavior:
+- learns from failed/overridden outcomes
+- derives reason-code-specific contract + prompt rewrites
+- persists deterministic suggestions keyed by task fingerprint/scope/reason code
+- surfaces preview in `GET /v1/arena/{arena_id}` as `contract_language_optimizer`
+
+Explorer now renders a **Contract language optimizer** card on arena pages.
+
+Rollout evidence (AGP-US-052):
+- staging deploys: `clawbounties-staging` `9a6ff198-c9d2-456e-8bb6-e773083e3da8`, `clawsig-explorer-staging` `a0d7858e-eec0-464b-b35d-fb328a28dc5b`
+- production deploys: `clawbounties` `8621dc5a-8b64-47ba-9e5f-cd0749d6d80b`, `clawsig-explorer` `47012fb3-affe-4fd0-abcb-e99e88e24613`
+- optimizer API checks: stage/prod `POST /v1/arena/contract-language-optimizer` => `200` with persisted rows
+- fail-closed route check preserved: arm `B` => `200`, arm `A` => `404 ARENA_ROUTE_NOT_FOUND`
+- evidence summary: `artifacts/ops/arena-productization/2026-02-19T22-00-09Z-agp-us-052-contract-language-optimizer/summary.json`
 
 ## 7. Fail-closed behavior checklist
 
