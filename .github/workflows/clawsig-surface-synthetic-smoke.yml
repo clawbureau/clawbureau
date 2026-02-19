@@ -12,6 +12,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SYNTHETIC_ALERT_SLACK_WEBHOOK: ${{ secrets.SYNTHETIC_ALERT_SLACK_WEBHOOK }}
+      SYNTHETIC_ALERT_DISCORD_WEBHOOK: ${{ secrets.SYNTHETIC_ALERT_DISCORD_WEBHOOK }}
 
     steps:
       - name: Checkout
@@ -26,7 +28,28 @@ jobs:
         run: node scripts/ops/seed-clawsig-canary-run.mjs --env all
 
       - name: Run strict synthetic surface smoke
+        id: smoke
+        continue-on-error: true
         run: node scripts/ops/smoke-clawsig-surface.mjs --max-run-ref-age-minutes 180
+
+      - name: Route synthetic failure alerts (Slack/Discord)
+        if: steps.smoke.outcome == 'failure'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_SYNTH_DIR="$(ls -1dt artifacts/ops/clawsig-synthetic/* | head -n 1)"
+          SUMMARY_PATH="$LATEST_SYNTH_DIR/summary.json"
+          CHECKS_PATH="$LATEST_SYNTH_DIR/checks.json"
+
+          node scripts/ops/route-clawsig-synthetic-alert.mjs \
+            --summary "$SUMMARY_PATH" \
+            --checks "$CHECKS_PATH" \
+            --workflow-file "clawsig-surface-synthetic-smoke.yml"
+
+      - name: Enforce fail-closed smoke result
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
 
       - name: Upload synthetic smoke artifacts
         if: always()

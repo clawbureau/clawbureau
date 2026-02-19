@@ -27,6 +27,8 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SYNTHETIC_ALERT_SLACK_WEBHOOK: ${{ secrets.SYNTHETIC_ALERT_SLACK_WEBHOOK }}
+      SYNTHETIC_ALERT_DISCORD_WEBHOOK: ${{ secrets.SYNTHETIC_ALERT_DISCORD_WEBHOOK }}
 
     steps:
       - name: Checkout
@@ -38,6 +40,8 @@ jobs:
           node-version: '20'
 
       - name: Guarded deploy (staging -> strict smoke -> prod -> strict smoke -> rollback on failure)
+        id: guarded
+        continue-on-error: true
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.max_run_ref_age_minutes }}" ]; then
             MAX_AGE="${{ github.event.inputs.max_run_ref_age_minutes }}"
@@ -46,6 +50,30 @@ jobs:
           fi
 
           node scripts/ops/run-clawsig-guarded-deploy.mjs --max-run-ref-age-minutes "$MAX_AGE"
+
+      - name: Route synthetic failure alerts (guarded deploy)
+        if: steps.guarded.outcome == 'failure'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_SYNTH_DIR="$(ls -1dt artifacts/ops/clawsig-guarded-deploy/*/synthetic-prod/* 2>/dev/null | head -n 1)"
+          if [ -z "$LATEST_SYNTH_DIR" ]; then
+            LATEST_SYNTH_DIR="$(ls -1dt artifacts/ops/clawsig-guarded-deploy/*/synthetic-staging/* 2>/dev/null | head -n 1)"
+          fi
+
+          if [ -n "$LATEST_SYNTH_DIR" ]; then
+            node scripts/ops/route-clawsig-synthetic-alert.mjs \
+              --summary "$LATEST_SYNTH_DIR/summary.json" \
+              --checks "$LATEST_SYNTH_DIR/checks.json" \
+              --workflow-file "clawsig-guarded-deploy.yml"
+          else
+            echo "No synthetic summary found for guarded deploy alert routing"
+          fi
+
+      - name: Enforce fail-closed guarded deploy outcome
+        if: steps.guarded.outcome == 'failure'
+        run: exit 1
 
       - name: Upload guarded deploy artifacts
         if: always()
