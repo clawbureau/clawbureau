@@ -28,6 +28,10 @@ describe('runDetailPage', () => {
     expect(html).toContain('Next Step Snippet');
     expect(html).toContain('Copy next step');
     expect(html).toContain('View similar failures');
+    expect(html).toContain('Share this Run');
+    expect(html).toContain('Copy embed snippet');
+    expect(html).toContain('twitter:description');
+    expect(html).toContain('Clawsig Run');
   });
 
   it('renders fallback triage card for unknown reason codes', () => {

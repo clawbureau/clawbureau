@@ -10,6 +10,11 @@ export interface PageMeta {
   description: string;
   path: string;
   ogType?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterCard?: 'summary' | 'summary_large_image';
 }
 
 function css(): string {
@@ -519,6 +524,11 @@ function css(): string {
 export function layout(meta: PageMeta, body: string): string {
   const siteUrl = "https://explorer.clawsig.com";
   const fullUrl = `${siteUrl}${meta.path}`;
+  const ogTitle = meta.ogTitle ?? meta.title;
+  const ogDescription = meta.ogDescription ?? meta.description;
+  const twitterTitle = meta.twitterTitle ?? ogTitle;
+  const twitterDescription = meta.twitterDescription ?? ogDescription;
+  const twitterCard = meta.twitterCard ?? 'summary';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -531,14 +541,14 @@ export function layout(meta: PageMeta, body: string): string {
   <link rel="canonical" href="${fullUrl}">
 
   <meta property="og:type" content="${meta.ogType ?? "website"}">
-  <meta property="og:title" content="${esc(meta.title)}">
-  <meta property="og:description" content="${esc(meta.description)}">
+  <meta property="og:title" content="${esc(ogTitle)}">
+  <meta property="og:description" content="${esc(ogDescription)}">
   <meta property="og:url" content="${fullUrl}">
   <meta property="og:site_name" content="Clawsig Explorer">
 
-  <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="${esc(meta.title)}">
-  <meta name="twitter:description" content="${esc(meta.description)}">
+  <meta name="twitter:card" content="${esc(twitterCard)}">
+  <meta name="twitter:title" content="${esc(twitterTitle)}">
+  <meta name="twitter:description" content="${esc(twitterDescription)}">
 
   <style>${css()}</style>
 </head>

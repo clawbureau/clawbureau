@@ -33,11 +33,21 @@ export interface RunData {
 }
 
 export function runDetailPage(run: RunData): string {
+  const runIdShort = run.run_id.slice(0, 12);
+  const reasonLabel = run.reason_code ?? 'NO_REASON_CODE';
+  const shareTitle = `Clawsig Run ${runIdShort} · ${run.status} · ${run.proof_tier}`;
+  const shareDescription = `Reason ${reasonLabel}. Agent ${run.agent_did.slice(0, 24)}... Verification source ${run.verification_source ?? 'n/a'}.`;
+
   const meta: PageMeta = {
-    title: `Run ${run.run_id.slice(0, 12)}... - ${run.status}`,
-    description: `Verification run ${run.run_id} by agent ${run.agent_did.slice(0, 24)}... Status: ${run.status}, Tier: ${run.proof_tier}`,
+    title: `Run ${runIdShort}... - ${run.status}`,
+    description: shareDescription,
     path: `/run/${run.run_id}`,
     ogType: "article",
+    ogTitle: shareTitle,
+    ogDescription: shareDescription,
+    twitterTitle: shareTitle,
+    twitterDescription: shareDescription,
+    twitterCard: 'summary',
   };
 
   const modelsHtml = run.models.length > 0
@@ -145,12 +155,56 @@ export function runDetailPage(run: RunData): string {
       </dl>
     </div>
 
+    ${shareRunCard(run)}
+
     ${reasonExplanationCard(reasonExplanation, run.failure_class, run.reason_code, run.run_id)}
 
     ${clientVerifyPanel(run)}
   `;
 
   return layout(meta, body);
+}
+
+function shareRunCard(run: RunData): string {
+  const shareUrl = `https://explorer.clawsig.com/run/${encodeURIComponent(run.run_id)}`;
+  const reasonLabel = run.reason_code ?? 'NO_REASON_CODE';
+  const shareText = `Clawsig run ${run.run_id} · ${run.status} · ${run.proof_tier} · ${reasonLabel}`;
+  const shareMarkdown = `[${shareText}](${shareUrl})`;
+  const embedSnippet = `<a href="${shareUrl}" target="_blank" rel="noopener" data-clawsig-run="${run.run_id}">${shareText}</a>`;
+
+  const shareUrlLiteral = JSON.stringify(shareUrl);
+  const shareMarkdownLiteral = JSON.stringify(shareMarkdown);
+  const embedSnippetLiteral = JSON.stringify(embedSnippet);
+  const twitterIntent = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+
+  return `
+    <div class="card">
+      <p class="section-title">Share this Run</p>
+
+      <p class="dim" style="font-size:0.8125rem; margin-bottom:0.65rem">
+        Shareable cards include fail-closed status, proof tier, and reason code context.
+      </p>
+
+      <div style="display:grid; gap:0.65rem">
+        <div>
+          <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Direct Link</p>
+          <pre class="mono" style="margin-top:0.35rem; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.55rem; overflow-x:auto">${esc(shareUrl)}</pre>
+        </div>
+
+        <div>
+          <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Embed Snippet</p>
+          <pre class="mono" style="margin-top:0.35rem; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.55rem; overflow-x:auto">${esc(embedSnippet)}</pre>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.75rem">
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(${shareUrlLiteral}); this.textContent='Copied';">Copy link</button>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(${shareMarkdownLiteral}); this.textContent='Copied';">Copy markdown</button>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(${embedSnippetLiteral}); this.textContent='Copied';">Copy embed snippet</button>
+        <a href="${esc(twitterIntent)}" target="_blank" rel="noopener" style="font-size:0.8125rem">Share on X &rarr;</a>
+      </div>
+    </div>
+  `;
 }
 
 function failureClassTone(failureClass: string | null | undefined): {
