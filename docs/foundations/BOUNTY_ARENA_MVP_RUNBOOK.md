@@ -143,6 +143,21 @@ curl -sS -X POST "$BOUNTIES_BASE/v1/arena/manager/route" \
     "allow_fallback": true,
     "max_runs": 50
   }' | jq .
+
+# Coaching-enhanced route output:
+curl -sS -X POST "$BOUNTIES_BASE/v1/arena/manager/coach" \
+  -H "x-admin-key: $BOUNTIES_ADMIN_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "objective_profile_name": "balanced"
+  }' | jq .
+
+# CLI helper:
+node scripts/arena/get-manager-coach.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --objective-profile-name balanced \
+  --mode coach
 ```
 
 ### Step F — Explorer UI check
