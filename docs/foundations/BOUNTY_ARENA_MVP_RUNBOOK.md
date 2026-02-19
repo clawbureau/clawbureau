@@ -131,6 +131,7 @@ Required migrations for Arena MVP:
 - `0023_arena_outcome_override_reasons.sql`
 - `0024_arena_contender_registry_pins.sql`
 - `0025_arena_contract_language_optimizer.sql`
+- `0026_arena_reviewer_decision_capture.sql`
 
 ## 6. End-to-end operator flow
 
@@ -497,6 +498,36 @@ Gate checks passed:
 
 Rollout evidence (AGP-US-053):
 - evidence summary: `artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/summary.json`
+
+### Reviewer truth-capture normalization (AGP-US-054)
+
+Added migration:
+- `services/_archived/clawbounties/migrations/0026_arena_reviewer_decision_capture.sql`
+
+Normalized outcome decision capture now persists and returns:
+- `reviewer_decision` (`approve|request_changes|reject`)
+- `rework_required`
+- `reviewer_rationale`
+- `decision_taxonomy_tags`
+
+Calibration payload adds first-class reviewer decision/taxonomy analytics:
+- `totals.reviewer_decisions`
+- `reviewer_decision_capture.decision_breakdown`
+- `reviewer_decision_capture.decision_taxonomy_tags`
+
+Bounty review decision-capture templates now include:
+- `reviewer_decision_options`
+- calibration bindings for `reviewer_decision`, `reviewer_rationale`, and `decision_taxonomy_tags`
+
+Explorer arena page now renders:
+- reviewer decision fields in outcome feed
+- reviewer decision totals + top decision taxonomy tags in calibration card
+
+Rollout evidence (AGP-US-054):
+- staging deploys: `clawbounties-staging` `b0c97528-c4a7-424d-9ccc-22d2d414a8dd`, `clawsig-explorer-staging` `5b12ad50-94b8-4cf6-a4c4-f0e3eb4dacf5`
+- production deploys: `clawbounties` `286ee311-268b-464d-9d1f-877f2c41cdb1`, `clawsig-explorer` `1794a3a6-5ba1-4240-aee9-f48304f1f9c8`
+- real reviewer-event gate: 10/10 structured events persisted with taxonomy tags populated
+- evidence summary: `artifacts/ops/arena-productization/2026-02-19T23-19-37Z-agp-us-054-reviewer-truth-capture/summary.json`
 
 ## 7. Fail-closed behavior checklist
 

@@ -194,7 +194,8 @@ function renderReviewThreadCard(report: ArenaReportView): string {
 }
 
 function renderCalibrationCard(report: ArenaReportView): string {
-  const totals = report.calibration?.totals;
+  const calibration = report.calibration;
+  const totals = calibration?.totals;
   if (!totals || totals.samples <= 0) {
     return `
       <div class="card">
@@ -204,6 +205,12 @@ function renderCalibrationCard(report: ArenaReportView): string {
     `;
   }
 
+  const reviewerDecisions = totals.reviewer_decisions;
+  const topDecisionTags = calibration?.reviewer_decision_capture?.decision_taxonomy_tags ?? [];
+  const topDecisionTagLine = topDecisionTags.length > 0
+    ? topDecisionTags.slice(0, 4).map((entry) => `${entry.tag} (${entry.count})`).join(', ')
+    : 'none';
+
   return `
     <div class="card">
       <p class="section-title">Outcome calibration</p>
@@ -211,10 +218,14 @@ function renderCalibrationCard(report: ArenaReportView): string {
         ${renderMetricCell('samples', String(totals.samples))}
         ${renderMetricCell('override rate', `${(totals.override_rate * 100).toFixed(1)}%`)}
         ${renderMetricCell('rework rate', `${(totals.rework_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('approve decisions', String(reviewerDecisions.approve))}
+        ${renderMetricCell('request changes', String(reviewerDecisions.request_changes))}
+        ${renderMetricCell('reject decisions', String(reviewerDecisions.reject))}
         ${renderMetricCell('avg review min', totals.review_time_avg_minutes.toFixed(1))}
         ${renderMetricCell('avg accept min', totals.time_to_accept_avg_minutes.toFixed(1))}
         ${renderMetricCell('cost/accepted', `$${totals.cost_per_accepted_bounty_usd.toFixed(4)}`)}
       </div>
+      <p class="dim" style="font-size:0.78rem; margin-top:0.55rem"><strong>Top decision taxonomy tags:</strong> ${esc(topDecisionTagLine)}</p>
     </div>
   `;
 }
@@ -360,16 +371,25 @@ function renderOutcomeFeedCard(report: ArenaReportView): string {
   }
 
   const rows = report.outcomes
-    .map((outcome) => `
-      <tr>
-        <td class="mono">${esc(outcome.contender_id)}</td>
-        <td class="mono">${esc(outcome.outcome_status)}</td>
-        <td class="mono">${esc(outcome.recommendation)}</td>
-        <td class="mono">${(outcome.predicted_confidence * 100).toFixed(1)}%</td>
-        <td class="mono">${outcome.review_time_minutes.toFixed(1)}</td>
-        <td class="mono">${relativeTime(outcome.created_at)}</td>
-      </tr>
-    `)
+    .map((outcome) => {
+      const taxonomy = outcome.decision_taxonomy_tags.length > 0
+        ? outcome.decision_taxonomy_tags.slice(0, 3).join(', ')
+        : 'none';
+
+      return `
+        <tr>
+          <td class="mono">${esc(outcome.contender_id)}</td>
+          <td class="mono">${esc(outcome.outcome_status)}</td>
+          <td class="mono">${esc(outcome.reviewer_decision)}</td>
+          <td class="mono">${esc(outcome.recommendation)}</td>
+          <td class="mono">${outcome.rework_required ? 'yes' : 'no'}</td>
+          <td class="mono">${esc(outcome.override_reason_code ?? '—')}</td>
+          <td class="mono">${esc(taxonomy)}</td>
+          <td>${esc(outcome.reviewer_rationale ?? '—')}</td>
+          <td class="mono">${relativeTime(outcome.created_at)}</td>
+        </tr>
+      `;
+    })
     .join('');
 
   return `
@@ -381,9 +401,12 @@ function renderOutcomeFeedCard(report: ArenaReportView): string {
             <tr>
               <th>Contender</th>
               <th>Outcome</th>
+              <th>Reviewer decision</th>
               <th>Recommendation</th>
-              <th>Predicted conf.</th>
-              <th>Review min</th>
+              <th>Rework?</th>
+              <th>Override reason</th>
+              <th>Decision tags</th>
+              <th>Reviewer rationale</th>
               <th>Recorded</th>
             </tr>
           </thead>
@@ -758,6 +781,11 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         time_to_accept_minutes: 55,
         predicted_confidence: 0.782,
         recommendation: 'APPROVE',
+        reviewer_decision: 'approve',
+        rework_required: false,
+        override_reason_code: null,
+        reviewer_rationale: 'All acceptance checks passed with sufficient evidence.',
+        decision_taxonomy_tags: ['decision:approve', 'outcome:accepted', 'arena-review'],
         created_at: '2026-02-19T16:00:00.000Z',
       },
     ],
@@ -773,6 +801,22 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         cost_per_accepted_bounty_usd: 0.78,
         override_rate: 0,
         rework_rate: 0,
+        reviewer_decisions: {
+          approve: 1,
+          request_changes: 0,
+          reject: 0,
+        },
+      },
+      reviewer_decision_capture: {
+        decision_breakdown: [
+          { reviewer_decision: 'approve', count: 1, share: 1 },
+          { reviewer_decision: 'request_changes', count: 0, share: 0 },
+          { reviewer_decision: 'reject', count: 0, share: 0 },
+        ],
+        decision_taxonomy_tags: [
+          { tag: 'decision:approve', count: 1, share: 1 },
+          { tag: 'outcome:accepted', count: 1, share: 1 },
+        ],
       },
     },
     autopilot: {

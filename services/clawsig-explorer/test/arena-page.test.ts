@@ -29,6 +29,8 @@ describe('arena pages', () => {
     expect(html).toContain('Contract language optimizer');
     expect(html).toContain('Global contract rewrites');
     expect(html).toContain('Outcome feedback feed');
+    expect(html).toContain('Reviewer decision');
+    expect(html).toContain('Top decision taxonomy tags');
   });
 
   it('renders arena index rows and fallback empty state', () => {

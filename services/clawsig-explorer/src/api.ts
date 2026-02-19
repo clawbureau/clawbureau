@@ -755,6 +755,11 @@ export interface ArenaOutcomeView {
   time_to_accept_minutes: number | null;
   predicted_confidence: number;
   recommendation: 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT';
+  reviewer_decision: 'approve' | 'request_changes' | 'reject';
+  rework_required: boolean;
+  override_reason_code: string | null;
+  reviewer_rationale: string | null;
+  decision_taxonomy_tags: string[];
   created_at: string;
 }
 
@@ -770,6 +775,23 @@ export interface ArenaCalibrationView {
     cost_per_accepted_bounty_usd: number;
     override_rate: number;
     rework_rate: number;
+    reviewer_decisions: {
+      approve: number;
+      request_changes: number;
+      reject: number;
+    };
+  };
+  reviewer_decision_capture?: {
+    decision_breakdown: Array<{
+      reviewer_decision: 'approve' | 'request_changes' | 'reject';
+      count: number;
+      share: number;
+    }>;
+    decision_taxonomy_tags: Array<{
+      tag: string;
+      count: number;
+      share: number;
+    }>;
   };
 }
 
@@ -930,6 +952,11 @@ interface ArenaReportResponse {
     time_to_accept_minutes?: unknown;
     predicted_confidence?: unknown;
     recommendation?: unknown;
+    reviewer_decision?: unknown;
+    rework_required?: unknown;
+    override_reason_code?: unknown;
+    reviewer_rationale?: unknown;
+    decision_taxonomy_tags?: unknown;
     created_at?: unknown;
   }>;
   calibration?: {
@@ -944,6 +971,15 @@ interface ArenaReportResponse {
       cost_per_accepted_bounty_usd?: unknown;
       override_rate?: unknown;
       rework_rate?: unknown;
+      reviewer_decisions?: {
+        approve?: unknown;
+        request_changes?: unknown;
+        reject?: unknown;
+      };
+    };
+    reviewer_decision_capture?: {
+      decision_breakdown?: unknown;
+      decision_taxonomy_tags?: unknown;
     };
   };
   autopilot?: {
@@ -1139,6 +1175,7 @@ function parseOutcomeEntries(input: unknown): ArenaOutcomeView[] {
       const contenderId = asString(rec.contender_id);
       const outcomeStatus = asString(rec.outcome_status);
       const recommendation = asString(rec.recommendation);
+      const reviewerDecision = asString(rec.reviewer_decision);
       const createdAt = asString(rec.created_at);
       if (!outcomeId || !contenderId || !outcomeStatus || !recommendation || !createdAt) return null;
       if (
@@ -1150,6 +1187,14 @@ function parseOutcomeEntries(input: unknown): ArenaOutcomeView[] {
       ) return null;
       if (recommendation !== 'APPROVE' && recommendation !== 'REQUEST_CHANGES' && recommendation !== 'REJECT') return null;
 
+      const normalizedReviewerDecision = reviewerDecision === 'approve' || reviewerDecision === 'request_changes' || reviewerDecision === 'reject'
+        ? reviewerDecision
+        : recommendation === 'APPROVE'
+          ? 'approve'
+          : recommendation === 'REQUEST_CHANGES'
+            ? 'request_changes'
+            : 'reject';
+
       return {
         outcome_id: outcomeId,
         contender_id: contenderId,
@@ -1158,6 +1203,13 @@ function parseOutcomeEntries(input: unknown): ArenaOutcomeView[] {
         time_to_accept_minutes: rec.time_to_accept_minutes === null ? null : asNumber(rec.time_to_accept_minutes, 0),
         predicted_confidence: asNumber(rec.predicted_confidence, 0),
         recommendation,
+        reviewer_decision: normalizedReviewerDecision,
+        rework_required: rec.rework_required === true,
+        override_reason_code: asString(rec.override_reason_code),
+        reviewer_rationale: asString(rec.reviewer_rationale),
+        decision_taxonomy_tags: Array.isArray(rec.decision_taxonomy_tags)
+          ? rec.decision_taxonomy_tags.filter((entry): entry is string => typeof entry === 'string')
+          : [],
         created_at: createdAt,
       } as ArenaOutcomeView;
     })
@@ -1170,6 +1222,47 @@ function parseCalibration(input: unknown): ArenaCalibrationView | undefined {
   const totalsRaw = rec.totals;
   if (!totalsRaw || typeof totalsRaw !== 'object') return undefined;
   const totals = totalsRaw as Record<string, unknown>;
+  const reviewerDecisionsRaw = totals.reviewer_decisions;
+  const reviewerDecisions = reviewerDecisionsRaw && typeof reviewerDecisionsRaw === 'object'
+    ? reviewerDecisionsRaw as Record<string, unknown>
+    : {};
+
+  const captureRaw = rec.reviewer_decision_capture;
+  const capture = captureRaw && typeof captureRaw === 'object'
+    ? captureRaw as Record<string, unknown>
+    : null;
+
+  const decisionBreakdown = Array.isArray(capture?.decision_breakdown)
+    ? capture?.decision_breakdown
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const row = entry as Record<string, unknown>;
+        const decision = asString(row.reviewer_decision);
+        if (decision !== 'approve' && decision !== 'request_changes' && decision !== 'reject') return null;
+        return {
+          reviewer_decision: decision,
+          count: asNumber(row.count, 0),
+          share: asNumber(row.share, 0),
+        };
+      })
+      .filter((entry): entry is { reviewer_decision: 'approve' | 'request_changes' | 'reject'; count: number; share: number } => entry !== null)
+    : [];
+
+  const taxonomyTags = Array.isArray(capture?.decision_taxonomy_tags)
+    ? capture?.decision_taxonomy_tags
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const row = entry as Record<string, unknown>;
+        const tag = asString(row.tag);
+        if (!tag) return null;
+        return {
+          tag,
+          count: asNumber(row.count, 0),
+          share: asNumber(row.share, 0),
+        };
+      })
+      .filter((entry): entry is { tag: string; count: number; share: number } => entry !== null)
+    : [];
 
   return {
     totals: {
@@ -1183,7 +1276,18 @@ function parseCalibration(input: unknown): ArenaCalibrationView | undefined {
       cost_per_accepted_bounty_usd: asNumber(totals.cost_per_accepted_bounty_usd, 0),
       override_rate: asNumber(totals.override_rate, 0),
       rework_rate: asNumber(totals.rework_rate, 0),
+      reviewer_decisions: {
+        approve: asNumber(reviewerDecisions.approve, 0),
+        request_changes: asNumber(reviewerDecisions.request_changes, 0),
+        reject: asNumber(reviewerDecisions.reject, 0),
+      },
     },
+    reviewer_decision_capture: capture
+      ? {
+        decision_breakdown: decisionBreakdown,
+        decision_taxonomy_tags: taxonomyTags,
+      }
+      : undefined,
   };
 }
 

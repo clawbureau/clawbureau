@@ -14,6 +14,11 @@ test('outcome feedback script dry-run builds payload and endpoint', () => {
     '--outcome-status', 'ACCEPTED',
     '--review-time-minutes', '22',
     '--time-to-accept-minutes', '75',
+    '--reviewer-decision', 'approve',
+    '--reviewer-rationale', 'All acceptance gates passed with clean evidence.',
+    '--decision-tag', 'ui-review',
+    '--decision-tag', 'taxonomy-acceptance',
+    '--decision-rationale', 'Evidence aligns with policy contract.',
     '--dry-run',
   ], { encoding: 'utf8' });
 
@@ -23,6 +28,9 @@ test('outcome feedback script dry-run builds payload and endpoint', () => {
   assert.equal(json.ok, true);
   assert.equal(json.mode, 'dry-run');
   assert.equal(json.payload.outcome_status, 'ACCEPTED');
+  assert.equal(json.payload.reviewer_decision, 'approve');
+  assert.equal(Array.isArray(json.payload.decision_taxonomy_tags), true);
+  assert.equal(json.payload.decision_taxonomy_tags.length, 2);
   assert.equal(typeof json.payload.idempotency_key, 'string');
   assert.equal(String(json.endpoint).includes('/v1/bounties/bty_arena_001/arena/outcome'), true);
 });
@@ -38,4 +46,18 @@ test('outcome feedback script requires override reason for OVERRIDDEN status', (
 
   assert.notEqual(proc.status, 0);
   assert.equal((proc.stderr + proc.stdout).includes('--override-reason-code is required'), true);
+});
+
+test('outcome feedback script rejects invalid rework-required flag', () => {
+  const proc = spawnSync(process.execPath, [
+    scriptPath,
+    '--bounty-id', 'bty_arena_001',
+    '--arena-id', 'arena_bty_arena_001',
+    '--outcome-status', 'REWORK',
+    '--rework-required', 'sometimes',
+    '--dry-run',
+  ], { encoding: 'utf8' });
+
+  assert.notEqual(proc.status, 0);
+  assert.equal((proc.stderr + proc.stdout).includes('--rework-required must be true|false|1|0|yes|no'), true);
 });

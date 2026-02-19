@@ -1,0 +1,761 @@
+{
+  "arena_id": "arena_bty_5c048032_stage_053_002",
+  "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+  "outcomes": [
+    {
+      "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+      "idempotency_key": "agp054-stage-a-04",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 26,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.9786,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Override recorded after human context narrowed scope mid-review.",
+      "decision_taxonomy_tags": [
+        "reviewer-override",
+        "stage-a",
+        "scope-mismatch"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-override",
+          "stage-a",
+          "scope-mismatch"
+        ],
+        "decision_rationale": "Human narrowed scope; outcome captured as override for calibration.",
+        "decision_taxonomy_tags": [
+          "reviewer-override",
+          "stage-a",
+          "scope-mismatch"
+        ],
+        "override_rationale": "Scope mismatch with latest requester clarification.",
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Override recorded after human context narrowed scope mid-review.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:49.298Z",
+      "updated_at": "2026-02-19T23:20:49.298Z"
+    },
+    {
+      "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+      "idempotency_key": "agp054-stage-a-03",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_gemini_swarm",
+      "outcome_status": "REJECTED",
+      "accepted": false,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 14,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.97,
+      "recommendation": "REJECT",
+      "reviewer_decision": "reject",
+      "reviewer_rationale": "Rejected due to mandatory-check failures and missing proof links.",
+      "decision_taxonomy_tags": [
+        "reviewer-reject",
+        "stage-a",
+        "evidence-gap"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-reject",
+          "stage-a",
+          "evidence-gap"
+        ],
+        "decision_rationale": "Mandatory failures require rejection until resolved.",
+        "decision_taxonomy_tags": [
+          "reviewer-reject",
+          "stage-a",
+          "evidence-gap"
+        ],
+        "reviewer_decision": "reject",
+        "reviewer_rationale": "Rejected due to mandatory-check failures and missing proof links.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:48.782Z",
+      "updated_at": "2026-02-19T23:20:48.782Z"
+    },
+    {
+      "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+      "idempotency_key": "agp054-stage-a-02",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_claude_codex_cli",
+      "outcome_status": "REWORK",
+      "accepted": false,
+      "overridden": false,
+      "rework_required": true,
+      "disputed": false,
+      "review_time_minutes": 22,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.9791,
+      "recommendation": "REQUEST_CHANGES",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": "Request changes: tests passed but contract scope notes were incomplete.",
+      "decision_taxonomy_tags": [
+        "reviewer-rework",
+        "stage-a",
+        "scope-clarity"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-rework",
+          "stage-a",
+          "scope-clarity"
+        ],
+        "decision_rationale": "Need explicit out-of-scope constraints before approval.",
+        "decision_taxonomy_tags": [
+          "reviewer-rework",
+          "stage-a",
+          "scope-clarity"
+        ],
+        "reviewer_decision": "request_changes",
+        "reviewer_rationale": "Request changes: tests passed but contract scope notes were incomplete.",
+        "rework_required": true
+      },
+      "created_at": "2026-02-19T23:20:48.240Z",
+      "updated_at": "2026-02-19T23:20:48.240Z"
+    },
+    {
+      "outcome_id": "aot_cc98f761-ca10-4bec-9ece-cd55891e0bae",
+      "idempotency_key": "agp054-stage-a-01",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 18,
+      "time_to_accept_minutes": 18,
+      "predicted_confidence": 0.9786,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Approved after mandatory gates and review thread evidence.",
+      "decision_taxonomy_tags": [
+        "reviewer-accept",
+        "stage-a",
+        "scope-pass"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-accept",
+          "stage-a",
+          "scope-pass"
+        ],
+        "decision_rationale": "Acceptance criteria satisfied with deterministic evidence links.",
+        "decision_taxonomy_tags": [
+          "reviewer-accept",
+          "stage-a",
+          "scope-pass"
+        ],
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Approved after mandatory gates and review thread evidence.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:47.608Z",
+      "updated_at": "2026-02-19T23:20:47.608Z"
+    },
+    {
+      "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+      "idempotency_key": "arena-outcome:loIO_JWnwwsYtcrm2tPJPh8H9ZT9LMZiUbZk0O6tUtc",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 28,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.81,
+      "recommendation": "REQUEST_CHANGES",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:overridden",
+        "override:arena_override_test_failure"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+      "notes": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+      "source": "human-review",
+      "metadata": null,
+      "created_at": "2026-02-19T22:51:16.517Z",
+      "updated_at": "2026-02-19T22:51:16.517Z"
+    }
+  ],
+  "calibration": {
+    "totals": {
+      "samples": 5,
+      "accepted": 1,
+      "overridden": 2,
+      "rework": 1,
+      "disputed": 0,
+      "review_time_avg_minutes": 21.6,
+      "time_to_accept_avg_minutes": 18,
+      "cost_per_accepted_bounty_usd": 0.0148,
+      "override_rate": 0.4,
+      "rework_rate": 0.2,
+      "reviewer_decisions": {
+        "approve": 2,
+        "request_changes": 2,
+        "reject": 1
+      }
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_codex_pi",
+        "samples": 3,
+        "average_predicted_confidence": 0.9224,
+        "empirical_accept_rate": 0.3333333333333333,
+        "calibration_gap": 0.5890666666666666,
+        "override_rate": 0.6666666666666666,
+        "rework_rate": 0,
+        "average_review_time_minutes": 24,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "stage-a",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "tag": "decision:request_changes",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "outcome:overridden",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "override:arena_override_test_failure",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.3333
+          }
+        ],
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 1,
+            "share": 0.3333,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          },
+          {
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "count": 1,
+            "share": 0.3333,
+            "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+            "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+          }
+        ],
+        "rationale_samples": 3,
+        "top_rationale_tags": [
+          {
+            "tag": "stage-a",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "scope-mismatch",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "scope-pass",
+            "count": 1,
+            "share": 0.3333
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Human narrowed scope; outcome captured as override for calibration.",
+            "override_rationale": "Scope mismatch with latest requester clarification.",
+            "tags": [
+              "reviewer-override",
+              "stage-a",
+              "scope-mismatch"
+            ],
+            "updated_at": "2026-02-19T23:20:49.298Z"
+          },
+          {
+            "outcome_id": "aot_cc98f761-ca10-4bec-9ece-cd55891e0bae",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Acceptance criteria satisfied with deterministic evidence links.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-accept",
+              "stage-a",
+              "scope-pass"
+            ],
+            "updated_at": "2026-02-19T23:20:47.608Z"
+          },
+          {
+            "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+            "override_rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+            "tags": [
+              "decision:request_changes",
+              "outcome:overridden",
+              "override:arena_override_test_failure"
+            ],
+            "updated_at": "2026-02-19T22:51:16.517Z"
+          }
+        ]
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "samples": 1,
+        "average_predicted_confidence": 0.9791,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.9791,
+        "override_rate": 0,
+        "rework_rate": 1,
+        "average_review_time_minutes": 22,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "reviewer-rework",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "scope-clarity",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "reviewer-rework",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "scope-clarity",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+            "outcome_status": "REWORK",
+            "override_reason_code": null,
+            "rationale": "Need explicit out-of-scope constraints before approval.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-rework",
+              "stage-a",
+              "scope-clarity"
+            ],
+            "updated_at": "2026-02-19T23:20:48.240Z"
+          }
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "samples": 1,
+        "average_predicted_confidence": 0.97,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.97,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "average_review_time_minutes": 14,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "evidence-gap",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-reject",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "evidence-gap",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-reject",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+            "outcome_status": "REJECTED",
+            "override_reason_code": null,
+            "rationale": "Mandatory failures require rejection until resolved.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-reject",
+              "stage-a",
+              "evidence-gap"
+            ],
+            "updated_at": "2026-02-19T23:20:48.782Z"
+          }
+        ]
+      }
+    ],
+    "override_taxonomy": {
+      "reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 1,
+          "share": 0.2,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+          "priority_score": 0.8
+        },
+        {
+          "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "count": 1,
+          "share": 0.2,
+          "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+          "prompt_rewrite": "Force candidate to run and summarize failing tests before final output.",
+          "priority_score": 0.9
+        }
+      ]
+    },
+    "reviewer_decision_capture": {
+      "decision_breakdown": [
+        {
+          "reviewer_decision": "approve",
+          "count": 2,
+          "share": 0.4
+        },
+        {
+          "reviewer_decision": "request_changes",
+          "count": 2,
+          "share": 0.4
+        },
+        {
+          "reviewer_decision": "reject",
+          "count": 1,
+          "share": 0.2
+        }
+      ],
+      "decision_taxonomy_tags": [
+        {
+          "tag": "stage-a",
+          "count": 4,
+          "share": 0.8
+        },
+        {
+          "tag": "decision:request_changes",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "evidence-gap",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "outcome:overridden",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "override:arena_override_test_failure",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-accept",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-reject",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-rework",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-clarity",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-mismatch",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-pass",
+          "count": 1,
+          "share": 0.2
+        }
+      ]
+    },
+    "rationale_signals": {
+      "top_tags": [
+        {
+          "tag": "stage-a",
+          "count": 4,
+          "share": 0.8
+        },
+        {
+          "tag": "evidence-gap",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-accept",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-reject",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-rework",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-clarity",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-mismatch",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-pass",
+          "count": 1,
+          "share": 0.2
+        }
+      ],
+      "recent_decisions": [
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Human narrowed scope; outcome captured as override for calibration.",
+          "override_rationale": "Scope mismatch with latest requester clarification.",
+          "tags": [
+            "reviewer-override",
+            "stage-a",
+            "scope-mismatch"
+          ],
+          "updated_at": "2026-02-19T23:20:49.298Z"
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+          "outcome_status": "REJECTED",
+          "override_reason_code": null,
+          "rationale": "Mandatory failures require rejection until resolved.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-reject",
+            "stage-a",
+            "evidence-gap"
+          ],
+          "updated_at": "2026-02-19T23:20:48.782Z"
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+          "outcome_status": "REWORK",
+          "override_reason_code": null,
+          "rationale": "Need explicit out-of-scope constraints before approval.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-rework",
+            "stage-a",
+            "scope-clarity"
+          ],
+          "updated_at": "2026-02-19T23:20:48.240Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_cc98f761-ca10-4bec-9ece-cd55891e0bae",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "Acceptance criteria satisfied with deterministic evidence links.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-accept",
+            "stage-a",
+            "scope-pass"
+          ],
+          "updated_at": "2026-02-19T23:20:47.608Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+          "override_rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+          "tags": [
+            "decision:request_changes",
+            "outcome:overridden",
+            "override:arena_override_test_failure"
+          ],
+          "updated_at": "2026-02-19T22:51:16.517Z"
+        }
+      ]
+    },
+    "winner_stability": [
+      {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "top_winner_contender_id": "contender_claude_codex_cli",
+        "stability_ratio": 1,
+        "sample_runs": 5
+      }
+    ]
+  }
+}
