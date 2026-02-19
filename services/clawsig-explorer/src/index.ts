@@ -34,6 +34,7 @@ import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
 import { opsDashboardPage } from './pages/ops.js';
+import { deriveOpsSloHealth } from './slo.js';
 
 export interface Env {
   ENVIRONMENT: string;
@@ -77,6 +78,47 @@ function parseCursorHistory(raw: string | null): string[] {
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
     .slice(0, 50);
+}
+
+async function loadOpsDashboardData(apiOpts: { vaasBase: string; cache: Cache }) {
+  const [
+    statsData,
+    domainHealth,
+    syntheticStatuses,
+    syntheticHistory,
+    canaryHistory,
+    guardedDeployHistory,
+    recentFailedRuns,
+  ] = await Promise.all([
+    fetchGlobalStats(apiOpts),
+    fetchOpsDomainHealth(),
+    fetchSyntheticWorkflowStatuses(),
+    fetchWorkflowRunHistory('clawsig-surface-synthetic-smoke.yml', 8),
+    fetchWorkflowRunHistory('clawsig-canary-seed.yml', 8),
+    fetchWorkflowRunHistory('clawsig-guarded-deploy.yml', 8),
+    fetchRecentFailedRuns(apiOpts, 8),
+  ]);
+
+  if (!statsData) {
+    return null;
+  }
+
+  const sloHealth = deriveOpsSloHealth({
+    stats: statsData.stats,
+    domainHealth,
+    syntheticStatuses,
+  });
+
+  return {
+    stats: statsData.stats,
+    domain_health: domainHealth,
+    synthetic_statuses: syntheticStatuses,
+    synthetic_history: syntheticHistory,
+    canary_history: canaryHistory,
+    guarded_deploy_history: guardedDeployHistory,
+    recent_failed_runs: recentFailedRuns,
+    slo_health: sloHealth,
+  };
 }
 
 export default {
@@ -125,39 +167,30 @@ export default {
       return html(statsPage(data), 200, 30);
     }
 
+    // -- Ops SLO health JSON --
+    if (path === '/ops/slo-health.json') {
+      const opsData = await loadOpsDashboardData(apiOpts);
+      if (!opsData) {
+        return json({
+          error: {
+            code: 'OPS_DATA_UNAVAILABLE',
+            message: 'Unable to compute SLO health because stats data is unavailable.',
+          },
+        }, 503);
+      }
+
+      return json(opsData.slo_health, 200);
+    }
+
     // -- Ops dashboard --
     if (path === '/ops') {
-      const [
-        statsData,
-        domainHealth,
-        syntheticStatuses,
-        syntheticHistory,
-        canaryHistory,
-        guardedDeployHistory,
-        recentFailedRuns,
-      ] = await Promise.all([
-        fetchGlobalStats(apiOpts),
-        fetchOpsDomainHealth(),
-        fetchSyntheticWorkflowStatuses(),
-        fetchWorkflowRunHistory('clawsig-surface-synthetic-smoke.yml', 8),
-        fetchWorkflowRunHistory('clawsig-canary-seed.yml', 8),
-        fetchWorkflowRunHistory('clawsig-guarded-deploy.yml', 8),
-        fetchRecentFailedRuns(apiOpts, 8),
-      ]);
+      const opsData = await loadOpsDashboardData(apiOpts);
 
-      if (!statsData) {
+      if (!opsData) {
         return html(fallbackHomePage(), 200, 10);
       }
 
-      return html(opsDashboardPage({
-        stats: statsData.stats,
-        domain_health: domainHealth,
-        synthetic_statuses: syntheticStatuses,
-        synthetic_history: syntheticHistory,
-        canary_history: canaryHistory,
-        guarded_deploy_history: guardedDeployHistory,
-        recent_failed_runs: recentFailedRuns,
-      }), 200, 15);
+      return html(opsDashboardPage(opsData), 200, 15);
     }
 
     // -- Runs feed / triage mode --

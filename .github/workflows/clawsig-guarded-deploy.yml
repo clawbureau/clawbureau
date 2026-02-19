@@ -51,8 +51,8 @@ jobs:
 
           node scripts/ops/run-clawsig-guarded-deploy.mjs --max-run-ref-age-minutes "$MAX_AGE"
 
-      - name: Route synthetic failure alerts (guarded deploy)
-        if: steps.guarded.outcome == 'failure'
+      - name: Route synthetic alerts (guarded deploy warn/critical)
+        if: always()
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
