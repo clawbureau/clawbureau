@@ -51,7 +51,7 @@ function css(): string {
     .warn { color: var(--warn); }
 
     .container {
-      max-width: 960px;
+      max-width: 1080px;
       margin: 0 auto;
       padding: 0 1.5rem;
       width: 100%;
@@ -96,8 +96,14 @@ function css(): string {
       font-weight: 900;
     }
 
-    nav { display: flex; gap: 1.5rem; font-size: 0.875rem; }
-    nav a { color: var(--text-dim); }
+    nav {
+      display: flex;
+      gap: 1rem 1.25rem;
+      font-size: 0.875rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    nav a { color: var(--text-dim); white-space: nowrap; }
     nav a:hover, nav a.active { color: var(--text); text-decoration: none; }
 
     footer {
@@ -362,6 +368,13 @@ function css(): string {
 
     .run-item:last-child { border-bottom: none; }
 
+    .run-item-fail {
+      background: rgba(255, 68, 68, 0.03);
+      border-left: 2px solid rgba(255, 68, 68, 0.4);
+      padding-left: 0.65rem;
+      border-radius: 6px;
+    }
+
     .run-item .run-id {
       font-family: var(--font-mono);
       font-size: 0.8125rem;
@@ -379,11 +392,89 @@ function css(): string {
       font-size: 0.75rem;
     }
 
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      background: var(--bg-card);
+      font-size: 0.75rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .filter-chip:hover {
+      border-color: var(--text-dim);
+      text-decoration: none;
+    }
+
+    .diag-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.4rem;
+    }
+
+    .diag-chip {
+      display: flex;
+      flex-direction: column;
+      gap: 0.12rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.38rem 0.45rem;
+      background: var(--bg);
+      min-width: 0;
+    }
+
+    .diag-chip-muted {
+      border-style: dashed;
+      opacity: 0.8;
+    }
+
+    .diag-chip-label {
+      font-size: 0.68rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .diag-chip-value {
+      font-size: 0.76rem;
+      font-family: var(--font-mono);
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .runs-empty {
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.01);
+    }
+
     @media (max-width: 640px) {
+      header .container {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.9rem;
+      }
+      .hero {
+        padding: 2.5rem 0 2rem;
+      }
       .hero h1 { font-size: 1.75rem; }
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .detail-grid { grid-template-columns: 1fr; }
-      nav { gap: 0.75rem; }
+      nav {
+        gap: 0.65rem 0.85rem;
+        justify-content: flex-start;
+      }
+      .run-item {
+        gap: 0.55rem;
+      }
+      .diag-grid {
+        grid-template-columns: 1fr 1fr;
+      }
     }
   `;
 }
@@ -467,7 +558,12 @@ export function didDisplay(did: string): string {
 
 /** Format a status badge */
 export function statusBadge(status: string): string {
-  const cls = status === "PASS" ? "pass" : status === "POLICY_VIOLATION" ? "fail" : "warn";
+  const normalized = status.toUpperCase();
+  const cls = normalized === 'PASS'
+    ? 'pass'
+    : (normalized === 'FAIL' || normalized === 'POLICY_VIOLATION')
+      ? 'fail'
+      : 'warn';
   return `<span class="status-badge ${cls}"><span class="dot"></span>${esc(status)}</span>`;
 }
 

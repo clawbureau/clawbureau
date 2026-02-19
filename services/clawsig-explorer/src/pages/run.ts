@@ -164,24 +164,37 @@ function reasonExplanationCard(
     .map((step) => `<li>${esc(step)}</li>`)
     .join('');
 
+  const reasonFilterHref = `/runs?status=FAIL&reason_code=${encodeURIComponent(explanation.reason_code)}`;
+
   return `
-    <div class="card" style="border-color: rgba(255, 170, 0, 0.45)">
+    <div class="card" style="border-color: rgba(255, 170, 0, 0.5)">
       <p class="section-title">Failure Triage</p>
-      <h3 style="margin-bottom:0.5rem">${esc(explanation.title)}</h3>
-      <p style="margin-bottom:0.75rem">${esc(explanation.plain_language)}</p>
+
+      <div style="display:flex; justify-content:space-between; gap:0.75rem; align-items:flex-start; flex-wrap:wrap; margin-bottom:0.65rem">
+        <div>
+          <h3 style="margin-bottom:0.35rem">${esc(explanation.title)}</h3>
+          <p class="dim" style="font-size:0.875rem">${esc(explanation.plain_language)}</p>
+        </div>
+        <span class="hash">${esc(explanation.reason_code)}</span>
+      </div>
 
       <div style="display:grid; gap:0.75rem">
-        <div>
+        <div style="border:1px solid var(--border); border-radius:8px; padding:0.75rem">
           <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Likely Root Cause</p>
-          <p>${esc(explanation.likely_root_cause)}</p>
+          <p style="margin-top:0.35rem">${esc(explanation.likely_root_cause)}</p>
         </div>
 
-        <div>
+        <div style="border:1px solid var(--border); border-radius:8px; padding:0.75rem">
           <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Recommended Remediation</p>
-          <ol style="padding-left:1.25rem; margin-top:0.25rem; display:grid; gap:0.25rem">
+          <ol style="padding-left:1.25rem; margin-top:0.45rem; display:grid; gap:0.3rem">
             ${remediationList}
           </ol>
         </div>
+      </div>
+
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.9rem">
+        <a href="${reasonFilterHref}" style="font-size:0.875rem">View similar failures &rarr;</a>
+        <a href="/runs?status=FAIL" style="font-size:0.875rem">Open full fail feed &rarr;</a>
       </div>
     </div>
   `;

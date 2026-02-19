@@ -27,4 +27,4 @@ workers_dev = true
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-VAAS_API_BASE = "https://staging.api.clawverify.com"
+VAAS_API_BASE = "https://staging-api.clawverify.com"
