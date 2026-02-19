@@ -17,6 +17,7 @@ routes = [
 [vars]
 ENVIRONMENT = "production"
 VAAS_API_BASE = "https://api.clawverify.com"
+ARENA_API_BASE = "https://clawbounties.com"
 
 [env.staging]
 name = "clawsig-explorer-staging"
@@ -28,3 +29,4 @@ workers_dev = true
 [env.staging.vars]
 ENVIRONMENT = "staging"
 VAAS_API_BASE = "https://staging-api.clawverify.com"
+ARENA_API_BASE = "https://staging.clawbounties.com"
