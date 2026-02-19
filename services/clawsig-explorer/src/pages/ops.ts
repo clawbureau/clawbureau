@@ -182,6 +182,37 @@ function latestArtifactLinks(data: OpsPageData): string {
   return `<div style="display:flex; gap:0.75rem; flex-wrap:wrap">${links.join('')}</div>`;
 }
 
+function incidentReasonBuckets(data: OpsPageData): string {
+  const buckets = new Map<string, number>();
+
+  for (const run of data.recent_failed_runs) {
+    const reasonCode = run.reason_code ?? 'UNKNOWN_REASON';
+    buckets.set(reasonCode, (buckets.get(reasonCode) ?? 0) + 1);
+  }
+
+  if (buckets.size === 0) {
+    for (const row of data.stats.top_fail_reason_codes.slice(0, 5)) {
+      buckets.set(row.reason_code, row.count);
+    }
+  }
+
+  if (buckets.size === 0) {
+    return '<p class="dim">No active failure buckets available.</p>';
+  }
+
+  return [...buckets.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([reasonCode, count]) => `
+      <div class="run-item" style="align-items:center">
+        <a class="hash" href="/runs?status=FAIL&reason_code=${encodeURIComponent(reasonCode)}">${esc(reasonCode)}</a>
+        <span class="run-meta dim">${fmtNum(count)} hit(s)</span>
+        <a href="/runs?status=FAIL&reason_code=${encodeURIComponent(reasonCode)}" style="margin-left:auto; font-size:0.8125rem">Open bucket &rarr;</a>
+      </div>
+    `)
+    .join('');
+}
+
 export function opsDashboardPage(data: OpsPageData): string {
   const meta: PageMeta = {
     title: 'Ops Dashboard',
@@ -191,10 +222,34 @@ export function opsDashboardPage(data: OpsPageData): string {
 
   const failRate24h = data.stats.fail_rate_24h;
   const failRate7d = data.stats.diagnostics_7d.fail_rate_7d;
+  const incidentMode = data.slo_health.severity !== 'ok';
+
+  const incidentBanner = incidentMode
+    ? `
+      <div class="card" style="border-color:rgba(255, 68, 68, 0.55)">
+        <p class="section-title">Incident Mode</p>
+        <div style="display:flex; gap:0.65rem; align-items:center; flex-wrap:wrap; margin-bottom:0.55rem">
+          ${sloSeverityBadge(data.slo_health)}
+          <span class="hash">${esc(data.slo_health.reason_code)}</span>
+          <span class="dim" style="font-size:0.8125rem">Compact triage layout is active.</span>
+        </div>
+        <div style="display:grid; gap:0.5rem">
+          ${incidentReasonBuckets(data)}
+        </div>
+        <div style="margin-top:0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap">
+          <a href="/runs?status=FAIL">Fail feed &rarr;</a>
+          <a href="/ops/slo-health.json" target="_blank" rel="noopener">SLO JSON &rarr;</a>
+        </div>
+        <div style="margin-top:0.65rem">${latestArtifactLinks(data)}</div>
+      </div>
+    `
+    : '';
 
   const body = `
     <h1 class="page-title">Operations Dashboard</h1>
     <p class="page-subtitle">Domain health, synthetic checks, and fail diagnostics in one place.</p>
+
+    ${incidentBanner}
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -243,6 +298,20 @@ export function opsDashboardPage(data: OpsPageData): string {
       <p class="dim" style="font-size:0.8125rem">Thresholds: warn(24h ${data.slo_health.thresholds.warn_burn_rate_24h.toFixed(2)}x / 7d ${data.slo_health.thresholds.warn_burn_rate_7d.toFixed(2)}x), critical(24h ${data.slo_health.thresholds.critical_burn_rate_24h.toFixed(2)}x / 7d ${data.slo_health.thresholds.critical_burn_rate_7d.toFixed(2)}x).</p>
     </div>
 
+    ${incidentMode
+      ? `
+      <div class="card" style="border-color:rgba(255, 68, 68, 0.4)">
+        <p class="section-title">Incident Priority: Failing Routes + Reason Buckets</p>
+        ${recentFailedRunsRows(data.recent_failed_runs)}
+      </div>
+
+      <div class="card" style="border-color:rgba(255, 68, 68, 0.25)">
+        <p class="section-title">Incident Priority: Latest Artifact Bundles</p>
+        ${latestArtifactLinks(data)}
+      </div>
+      `
+      : ''}
+
     <div class="card">
       <p class="section-title">Domain Health</p>
       ${data.domain_health.map((row) => `
@@ -283,30 +352,38 @@ export function opsDashboardPage(data: OpsPageData): string {
       </div>
     </div>
 
-    <div class="card">
-      <p class="section-title">Synthetic Run History</p>
-      ${workflowHistoryRows(data.synthetic_history, 'No synthetic workflow history available.')}
-    </div>
+    ${!incidentMode
+      ? `
+      <div class="card">
+        <p class="section-title">Synthetic Run History</p>
+        ${workflowHistoryRows(data.synthetic_history, 'No synthetic workflow history available.')}
+      </div>
 
-    <div class="card">
-      <p class="section-title">Canary Seed History</p>
-      ${workflowHistoryRows(data.canary_history, 'No canary history available.')}
-    </div>
+      <div class="card">
+        <p class="section-title">Canary Seed History</p>
+        ${workflowHistoryRows(data.canary_history, 'No canary history available.')}
+      </div>
 
-    <div class="card">
-      <p class="section-title">Guarded Deploy History</p>
-      ${workflowHistoryRows(data.guarded_deploy_history, 'No guarded deploy history available.')}
-    </div>
+      <div class="card">
+        <p class="section-title">Guarded Deploy History</p>
+        ${workflowHistoryRows(data.guarded_deploy_history, 'No guarded deploy history available.')}
+      </div>
+      `
+      : ''}
 
-    <div class="card">
-      <p class="section-title">Recent Failed Routes + Reason Codes</p>
-      ${recentFailedRunsRows(data.recent_failed_runs)}
-    </div>
+    ${!incidentMode
+      ? `
+      <div class="card">
+        <p class="section-title">Recent Failed Routes + Reason Codes</p>
+        ${recentFailedRunsRows(data.recent_failed_runs)}
+      </div>
 
-    <div class="card">
-      <p class="section-title">Latest Artifact Bundles</p>
-      ${latestArtifactLinks(data)}
-    </div>
+      <div class="card">
+        <p class="section-title">Latest Artifact Bundles</p>
+        ${latestArtifactLinks(data)}
+      </div>
+      `
+      : ''}
 
     <div class="card">
       <p class="section-title">Top Fail Reasons (24h)</p>
