@@ -52,6 +52,7 @@ describe('runsFeedPage', () => {
 
     expect(html).toContain('Runs Feed Error');
     expect(html).toContain('Runs feed is temporarily unavailable');
-    expect(html).toContain('No runs match these filters.');
+    expect(html).toContain('No public runs indexed yet');
+    expect(html).toContain('Copy quickstart command');
   });
 });

@@ -76,9 +76,30 @@ function formatPct(value: number): string {
   return `${(value * 100).toFixed(2)}%`;
 }
 
+function quickstartCard(title: string, description: string): string {
+  const command = 'npx clawsig wrap -- your-agent-command';
+  const commandLiteral = JSON.stringify(command);
+
+  return `
+    <div class="runs-empty" style="display:grid; gap:0.6rem">
+      <p style="font-weight:600">${esc(title)}</p>
+      <p class="dim" style="font-size:0.875rem">${esc(description)}</p>
+      <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto">${esc(command)}</pre>
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center">
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(${commandLiteral}); this.textContent='Copied';">Copy quickstart command</button>
+        <a href="https://docs.clawsig.com/quickstart" target="_blank" rel="noopener">Open quickstart docs &rarr;</a>
+        <a href="/runs">Browse runs feed &rarr;</a>
+      </div>
+    </div>
+  `;
+}
+
 function runsFeed(runs: RecentRun[], options?: { title?: string; empty?: string }): string {
   if (runs.length === 0) {
-    return `<p class="dim">${esc(options?.empty ?? 'No runs recorded yet.')}</p>`;
+    return quickstartCard(
+      options?.title ?? 'No runs yet',
+      options?.empty ?? 'No runs recorded yet.'
+    );
   }
 
   return runs.map((r) => {
@@ -199,11 +220,21 @@ export function homePage(data: HomePageData): string {
       </div>
     </div>
 
+    ${data.stats.total_runs === 0
+      ? quickstartCard(
+          'Ledger is live, but no public runs are indexed yet',
+          'Operational truth: the runs table is currently empty. Seed a canary run or publish your first wrapped execution to activate /run and /agent drilldowns.'
+        )
+      : ''}
+
     ${operationsSnapshot(data)}
 
     <div class="card">
       <p class="section-title">Recent Failures</p>
-      ${runsFeed(recentFailures, { empty: 'No recent failures. Great stability signal.' })}
+      ${runsFeed(recentFailures, {
+        title: 'No recent failures',
+        empty: 'No recent failures. Great stability signal.',
+      })}
       <div style="margin-top:0.75rem; display:flex; justify-content:flex-end">
         <a href="/runs?status=FAIL" style="font-size:0.875rem">Open failure triage feed &rarr;</a>
       </div>
@@ -211,7 +242,10 @@ export function homePage(data: HomePageData): string {
 
     <div class="card">
       <p class="section-title">Recent Verified Runs</p>
-      ${runsFeed(data.recent_runs, { empty: 'No runs recorded yet. Be the first.' })}
+      ${runsFeed(data.recent_runs, {
+        title: 'No recent runs yet',
+        empty: 'No runs recorded yet. Be the first.',
+      })}
       <div style="margin-top:0.75rem; display:flex; justify-content:flex-end">
         <a href="/runs" style="font-size:0.875rem">Open full runs feed &rarr;</a>
       </div>
@@ -275,6 +309,13 @@ export function statsPage(data: HomePageData): string {
       </div>
     </div>
 
+    ${data.stats.total_runs === 0
+      ? quickstartCard(
+          'No network activity captured yet',
+          'Stats are truthful and currently empty. Use the quickstart command below to produce the first verifiable run.'
+        )
+      : ''}
+
     <div class="card">
       <p class="section-title">Reliability Status</p>
       <p class="${state.tone}" style="font-size:1.15rem; font-weight:700">${esc(state.label)}</p>
@@ -287,7 +328,10 @@ export function statsPage(data: HomePageData): string {
 
     <div class="card">
       <p class="section-title">Recent Failures</p>
-      ${runsFeed(recentFailures, { empty: 'No failed runs in the recent feed window.' })}
+      ${runsFeed(recentFailures, {
+        title: 'No failures in recent feed window',
+        empty: 'No failed runs in the recent feed window.',
+      })}
     </div>
 
     <div class="card">
@@ -297,7 +341,10 @@ export function statsPage(data: HomePageData): string {
 
     <div class="card">
       <p class="section-title">Recent Activity</p>
-      ${runsFeed(data.recent_runs, { empty: 'No recent activity.' })}
+      ${runsFeed(data.recent_runs, {
+        title: 'No recent activity',
+        empty: 'No recent activity.',
+      })}
     </div>
   `;
 

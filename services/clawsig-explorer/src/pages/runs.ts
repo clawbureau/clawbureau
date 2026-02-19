@@ -119,6 +119,37 @@ function summarize(rows: RunsFeedRun[]): { total: number; pass: number; fail: nu
   };
 }
 
+function runsEmptyState(filters: RunsFeedFilters): string {
+  const hasFilters = Boolean(filters.status || filters.tier || filters.reason_code || filters.agent_did);
+  const command = 'npx clawsig wrap -- your-agent-command';
+  const commandLiteral = JSON.stringify(command);
+
+  if (hasFilters) {
+    return `
+      <div class="runs-empty" style="display:grid; gap:0.5rem">
+        <p class="dim" style="margin-bottom:0.1rem">No runs match these filters.</p>
+        <p class="dim" style="font-size:0.8125rem">Try removing one filter, broadening the tier, or resetting pagination.</p>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap">
+          <a href="/runs">Clear all filters</a>
+          <a href="https://docs.clawsig.com/quickstart" target="_blank" rel="noopener">Quickstart docs &rarr;</a>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="runs-empty" style="display:grid; gap:0.6rem">
+      <p style="font-weight:600">No public runs indexed yet</p>
+      <p class="dim" style="font-size:0.8125rem">Operational truth: this feed is empty. Seed a canary run or publish your first wrapped run to activate live triage.</p>
+      <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto">${esc(command)}</pre>
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center">
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(${commandLiteral}); this.textContent='Copied';">Copy quickstart command</button>
+        <a href="https://docs.clawsig.com/quickstart" target="_blank" rel="noopener">Open quickstart docs &rarr;</a>
+      </div>
+    </div>
+  `;
+}
+
 function runsRows(rows: RunsFeedRun[]): string {
   return rows
     .map((run) => {
@@ -313,10 +344,7 @@ export function runsFeedPage(data: RunsFeedPageData): string {
       <p class="section-title">Runs</p>
       ${data.runs.length > 0
         ? runsRows(data.runs)
-        : `<div class="runs-empty">
-            <p class="dim" style="margin-bottom:0.4rem">No runs match these filters.</p>
-            <p class="dim" style="font-size:0.8125rem">Try removing one filter or increasing the page limit.</p>
-          </div>`}
+        : runsEmptyState(data.filters)}
     </div>
 
     <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; margin-top:1rem; flex-wrap:wrap">

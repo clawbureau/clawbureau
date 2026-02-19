@@ -31,6 +31,18 @@ const sampleData: HomePageData = {
   ],
 };
 
+const emptyData: HomePageData = {
+  stats: {
+    total_runs: 0,
+    total_agents: 0,
+    runs_24h: 0,
+    fail_runs_24h: 0,
+    fail_rate_24h: 0,
+    top_fail_reason_codes: [],
+  },
+  recent_runs: [],
+};
+
 describe('home/stats pages', () => {
   it('renders reliability ops snapshot and triage links', () => {
     const html = homePage(sampleData);
@@ -47,5 +59,15 @@ describe('home/stats pages', () => {
     expect(html).toContain('Reliability Status');
     expect(html).toContain('Open failure feed');
     expect(html).toContain('Top Failure Reason Codes (24h)');
+  });
+
+  it('renders conversion-focused empty states for zero-data scenarios', () => {
+    const homeHtml = homePage(emptyData);
+    const statsHtml = statsPage(emptyData);
+
+    expect(homeHtml).toContain('Ledger is live, but no public runs are indexed yet');
+    expect(homeHtml).toContain('Copy quickstart command');
+    expect(statsHtml).toContain('No network activity captured yet');
+    expect(statsHtml).toContain('Open quickstart docs');
   });
 });
