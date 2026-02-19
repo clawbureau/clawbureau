@@ -3,7 +3,7 @@
   "type": "message_signature",
   "algo": "ed25519",
   "did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
-  "message": "commit:d50e72e152cfb9fe835531a34cbe2e2ef53027d3",
-  "createdAt": "2026-02-19T14:29:27.033Z",
-  "signature": "LNtF0FO0DvTd60hswH3N7/qMJt1xQ2TjZLTYt9JN7W60UYLhAarUpGp1flAtLYJSrvaRQlKJrFqK2U0Zv94WBw=="
+  "message": "commit:91bd67a1e2a434ca8274b33542e7e8cb64d29d59",
+  "createdAt": "2026-02-19T14:35:16.162Z",
+  "signature": "ZAZqosCfA0OuBVoQVObQSAG/2uy22hxj+5KbOqyh2NMQ+2PN8tNujdLSBU1Wn0fZVsp5uA/BOmUVtylQcTSkAg=="
 }
