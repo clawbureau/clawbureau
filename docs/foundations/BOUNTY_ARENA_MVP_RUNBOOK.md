@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..045)
+> **Scope:** Bounty Arena MVP (AGP-US-031..046)
 
 # Bounty Arena MVP Runbook
 
@@ -33,6 +33,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: pending
 - AGP-US-045 — override-driven policy learning + routing feedback loop
   - merge: pending
+- AGP-US-046 — historical backtesting + calibration drift analytics
+  - merge: pending
 
 ## 2. Key files
 
@@ -41,6 +43,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/lib/arena-runner.mjs`
 - `scripts/arena/lib/proof-pack-v3.mjs`
 - `scripts/arena/generate-policy-learning-report.mjs`
+- `scripts/arena/run-historical-backtest.mjs`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -76,6 +79,11 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `GET /v1/arena/policy-learning` (admin)
   - supports `task_fingerprint` and `limit`
   - returns override reason breakdown + contract/prompt rewrite recommendations
+
+### Backtesting API
+- `GET /v1/arena/backtesting` (admin)
+  - supports `task_fingerprint` and `limit`
+  - returns predicted-winner hit/miss metrics, calibration drift, and weight-update suggestions
 
 ### Existing reads now enriched
 - `GET /v1/bounties/{bounty_id}` includes `arena` + `arena_lifecycle`
@@ -268,6 +276,11 @@ Read calibration + policy-learning metrics:
 Emit policy-learning artifacts:
 ```bash
 node scripts/arena/generate-policy-learning-report.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --bounties-base https://staging.clawbounties.com
+
+# Backtest historical winner accuracy + calibration drift:
+node scripts/arena/run-historical-backtest.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
   --bounties-base https://staging.clawbounties.com
 ```
