@@ -89,6 +89,24 @@
         "A": 0.5,
         "B": 0.5
       }
+    },
+    {
+      "experiment_id": "exp_api_hardening_live_v1",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": "balanced",
+      "arms": [
+        {
+          "arm_id": "LIVE",
+          "contender_ids": [
+            "contender_codex_pi",
+            "contender_claude_codex_cli",
+            "contender_gemini_swarm"
+          ]
+        }
+      ],
+      "allocation": {
+        "LIVE": 1
+      }
     }
   ]
 }

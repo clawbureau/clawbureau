@@ -40,11 +40,15 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 
 ### Arena generators
 - `scripts/arena/run-bounty-arena.mjs`
+- `scripts/arena/run-real-contender-dispatch.mjs`
 - `scripts/arena/lib/arena-runner.mjs`
 - `scripts/arena/lib/proof-pack-v3.mjs`
 - `scripts/arena/generate-policy-learning-report.mjs`
 - `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
+
+### Real contender dispatch config
+- `contracts/arena/real-contender-dispatch.sample.v1.json`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -133,10 +137,22 @@ Required migrations for Arena MVP:
 ### Step A — Generate arena artifacts
 
 ```bash
+# deterministic local arena generation (non-dispatch)
 node scripts/arena/run-bounty-arena.mjs \
   --contract contracts/arena/bounty-contract.sample.v1.json \
   --contenders contracts/arena/contenders.sample.v1.json \
   --out artifacts/arena
+
+# AGP-US-053 real contender dispatch (live command execution + API persistence)
+node scripts/arena/run-real-contender-dispatch.mjs \
+  --bounty-id bty_... \
+  --contract contracts/arena/bounty-contract.sample.v1.json \
+  --contenders contracts/arena/contenders.sample.v1.json \
+  --dispatch-config contracts/arena/real-contender-dispatch.sample.v1.json \
+  --registry contracts/arena/contender-registry.sample.v1.json \
+  --experiment-id exp_api_hardening_live_v1 \
+  --experiment-arm LIVE \
+  --bounties-base https://staging.clawbounties.com
 ```
 
 Expected output directory (example):
@@ -453,6 +469,34 @@ Rollout evidence (AGP-US-052):
 - optimizer API checks: stage/prod `POST /v1/arena/contract-language-optimizer` => `200` with persisted rows
 - fail-closed route check preserved: arm `B` => `200`, arm `A` => `404 ARENA_ROUTE_NOT_FOUND`
 - evidence summary: `artifacts/ops/arena-productization/2026-02-19T22-00-09Z-agp-us-052-contract-language-optimizer/summary.json`
+
+### Real contender dispatch orchestrator + real-data bootstrap (AGP-US-053)
+
+Added dispatch runner:
+- `scripts/arena/run-real-contender-dispatch.mjs`
+
+Dispatch guarantees:
+- executes real contender command plans per contender stack
+- derives runtime signals from actual execution (`latency_ms`, `retries`, `tool_calls`)
+- emits fail-closed error if required evidence categories (typecheck/test + artifacts) are missing
+- forwards generated contender evidence into live arena start/result/review thread APIs
+
+Phase-0 real-data bootstrap completed using live bounties:
+- staging bounties: `bty_5c048032-1c54-4db5-947e-b82f68ddaa96`, `bty_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab`
+- production bounty: `bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb`
+- completed arenas with >=3 contenders each:
+  - `arena_bty_5c048032_stage_053_002`
+  - `arena_bty_aaaaaaaa_stage_053_002`
+  - `arena_bty_bbbbbbbb_prod_053_002`
+
+Gate checks passed:
+- `GET /v1/arena` non-empty
+- `GET /v1/arena/calibration` non-empty
+- `GET /v1/arena/{arena_id}/outcomes` non-empty (staging)
+- manager route/autopilot endpoints return deterministic `200` responses for LIVE-arm real records
+
+Rollout evidence (AGP-US-053):
+- evidence summary: `artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/summary.json`
 
 ## 7. Fail-closed behavior checklist
 

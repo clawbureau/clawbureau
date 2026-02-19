@@ -1,0 +1,54 @@
+{
+  "schema_version": "arena_real_dispatch.v1",
+  "defaults": {
+    "max_retries": 1,
+    "timeout_ms": 900000
+  },
+  "contenders": [
+    {
+      "contender_id": "contender_codex_pi",
+      "commands": [
+        {
+          "id": "cb-typecheck",
+          "category": "typecheck",
+          "run": "npm --prefix services/_archived/clawbounties run typecheck"
+        },
+        {
+          "id": "arena-tests",
+          "category": "test",
+          "run": "node --test scripts/arena/*.test.mjs"
+        }
+      ]
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "commands": [
+        {
+          "id": "explorer-typecheck",
+          "category": "typecheck",
+          "run": "npm --prefix services/clawsig-explorer run typecheck"
+        },
+        {
+          "id": "explorer-tests",
+          "category": "test",
+          "run": "npm --prefix services/clawsig-explorer test"
+        }
+      ]
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "commands": [
+        {
+          "id": "clawverify-typecheck",
+          "category": "typecheck",
+          "run": "npm --prefix services/clawverify run typecheck"
+        },
+        {
+          "id": "clawverify-tests",
+          "category": "test",
+          "run": "npm --prefix services/clawverify test"
+        }
+      ]
+    }
+  ]
+}
