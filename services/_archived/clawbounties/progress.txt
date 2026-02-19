@@ -907,3 +907,33 @@ Started: 2026-02-02T03:08:26.937005
   - route fail-closed behavior preserved (`arm B=200`, `arm A=404 ARENA_ROUTE_NOT_FOUND`)
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T22-00-09Z-agp-us-052-contract-language-optimizer/summary.json`
+
+## 2026-02-19 - AGP-US-053 real contender dispatch orchestrator + real-data bootstrap
+- Added real contender dispatch runner:
+  - `scripts/arena/run-real-contender-dispatch.mjs`
+  - fail-closed dispatch config contract: `contracts/arena/real-contender-dispatch.sample.v1.json`
+  - dry-run regression test: `scripts/arena/run-real-contender-dispatch.test.mjs`
+- Dispatch runner executes contender command plans and derives runtime evidence directly from live command execution:
+  - latency, retries, tool calls
+  - CI/test booleans + counts
+  - git diff/churn signals
+  - deterministic local execution/cost artifacts per contender
+- Runner then launches live arena start/result/review thread flow through existing clawbounties APIs.
+- Registry/experiment persistence now exercised with 3-contender live arm:
+  - `experiment_id=exp_api_hardening_live_v1`
+  - `experiment_arm=LIVE`
+- Real-data bootstrap completed:
+  - staging bounties: `bty_5c048032-1c54-4db5-947e-b82f68ddaa96`, `bty_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab`
+  - production bounty: `bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb`
+  - completed arenas with >=3 real contenders each:
+    - `arena_bty_5c048032_stage_053_002`
+    - `arena_bty_aaaaaaaa_stage_053_002`
+    - `arena_bty_bbbbbbbb_prod_053_002`
+- Posted real reviewer outcomes for the bootstrap arenas (staging + prod) to ensure calibration/policy loops are populated.
+- Phase-0 gate checks passed:
+  - `/v1/arena` non-empty
+  - `/v1/arena/calibration` non-empty
+  - `/v1/arena/{arena_id}/outcomes` non-empty on staging
+- Verified manager route/autopilot deterministic behavior against real LIVE-arm records in staging + prod.
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/summary.json`

@@ -1,0 +1,1125 @@
+{
+  "story": "AGP-US-053",
+  "title": "real contender dispatch orchestrator + live arena persistence",
+  "generated_at": "2026-02-19T22:52:30.707Z",
+  "phase0_bootstrap_gate": {
+    "staging_bounties_identified": [
+      "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "bty_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab"
+    ],
+    "production_bounties_identified": [
+      "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    ],
+    "staging_arenas_completed": 2,
+    "production_arenas_completed": 1,
+    "per_arena_three_contenders": true,
+    "gate_checks": {
+      "arena_list_non_empty": true,
+      "calibration_non_empty": true,
+      "staging_arena_outcomes_non_empty": true
+    }
+  },
+  "runs": [
+    {
+      "file": "stage-bounty-a2.dispatch.json",
+      "environment": "staging",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "executed_contenders": 3,
+      "contender_ids": [
+        "contender_claude_codex_cli",
+        "contender_codex_pi",
+        "contender_gemini_swarm"
+      ],
+      "winner": "contender_claude_codex_cli",
+      "winner_score": 97.9145,
+      "winner_hard_gate_pass": true,
+      "registry_version": "2026-02-19",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "runtime_signals": [
+        {
+          "contender_id": "contender_codex_pi",
+          "latency_ms": 2307,
+          "retries": 0,
+          "tool_calls": 2
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "latency_ms": 2053,
+          "retries": 0,
+          "tool_calls": 2
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "latency_ms": 6359,
+          "retries": 0,
+          "tool_calls": 2
+        }
+      ]
+    },
+    {
+      "file": "stage-bounty-b2.dispatch.json",
+      "environment": "staging",
+      "bounty_id": "bty_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab",
+      "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+      "executed_contenders": 3,
+      "contender_ids": [
+        "contender_claude_codex_cli",
+        "contender_codex_pi",
+        "contender_gemini_swarm"
+      ],
+      "winner": "contender_claude_codex_cli",
+      "winner_score": 97.957,
+      "winner_hard_gate_pass": true,
+      "registry_version": "2026-02-19",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "runtime_signals": [
+        {
+          "contender_id": "contender_codex_pi",
+          "latency_ms": 2188,
+          "retries": 0,
+          "tool_calls": 2
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "latency_ms": 1852,
+          "retries": 0,
+          "tool_calls": 2
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "latency_ms": 5962,
+          "retries": 0,
+          "tool_calls": 2
+        }
+      ]
+    },
+    {
+      "file": "prod-bounty-a2.dispatch.json",
+      "environment": "production",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "executed_contenders": 3,
+      "contender_ids": [
+        "contender_claude_codex_cli",
+        "contender_codex_pi",
+        "contender_gemini_swarm"
+      ],
+      "winner": "contender_claude_codex_cli",
+      "winner_score": 97.9695,
+      "winner_hard_gate_pass": true,
+      "registry_version": "2026-02-19",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "runtime_signals": [
+        {
+          "contender_id": "contender_codex_pi",
+          "latency_ms": 2090,
+          "retries": 0,
+          "tool_calls": 2
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "latency_ms": 1784,
+          "retries": 0,
+          "tool_calls": 2
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "latency_ms": 5415,
+          "retries": 0,
+          "tool_calls": 2
+        }
+      ]
+    }
+  ],
+  "endpoint_checks": {
+    "health_stage": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "staging"
+    },
+    "health_prod": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "production"
+    },
+    "route_stage_status": 200,
+    "route_prod_status": 200,
+    "route_stage": {
+      "schema_version": "arena_manager_route.v2",
+      "computed_at": "2026-02-19T22:51:48.031Z",
+      "mode": "route",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": null,
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "analyzed_runs": 4,
+      "winner_stability_ratio": 0.5,
+      "policy": {
+        "require_hard_gate_pass": true,
+        "allow_fallback": true,
+        "max_runs": 50,
+        "experiment_id": "exp_api_hardening_live_v1",
+        "experiment_arm": "LIVE"
+      },
+      "recommended": {
+        "contender_id": "contender_claude_codex_cli",
+        "label": "Claude Opus + Codex CLI blend",
+        "model": "claude-opus-4.5",
+        "harness": "codex-cli",
+        "routing_score": 79.718513,
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_ANY",
+          "ARENA_ROUTING_STANDARD_MODE"
+        ],
+        "rationale": "Selected contender_claude_codex_cli with routing_score=79.718513 from 4 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=0).",
+        "evidence": {
+          "appearances": 4,
+          "wins": 2,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 89.2593,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:36.460Z",
+          "sample_run_ids": [
+            "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+            "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+            "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+            "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+          ]
+        }
+      },
+      "backups": [
+        {
+          "contender_id": "contender_gemini_swarm",
+          "label": "Gemini Deep Think + swarm orchestrator",
+          "model": "gemini-3.1-pro-preview",
+          "harness": "swarm-orchestrator",
+          "appearances": 4,
+          "wins": 0,
+          "win_rate": 0,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 88.5215,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 66.738975,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:36.460Z",
+          "sample_run_ids": [
+            "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+            "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+            "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+            "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+          ]
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "label": "Codex + Pi + cloudflare skill",
+          "model": "gpt-5.2-codex",
+          "harness": "pi",
+          "appearances": 4,
+          "wins": 2,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 97.949,
+          "avg_risk": 8,
+          "avg_quality": 100,
+          "latest_hard_gate_pass": true,
+          "routing_score": 62.89685,
+          "outcome_samples": 4,
+          "empirical_accept_rate": 0,
+          "override_rate": 0.5,
+          "rework_rate": 0.25,
+          "avg_predicted_confidence": 0.7775,
+          "calibration_gap": 0.7775,
+          "override_reason_penalty": 0.425,
+          "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "override_reason_breakdown": [
+            {
+              "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+              "count": 1,
+              "share": 0.25,
+              "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+              "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+            },
+            {
+              "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+              "count": 1,
+              "share": 0.25,
+              "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+              "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+            }
+          ],
+          "coaching_recommendations": [
+            "High override rate; add human checkpoint before auto-route.",
+            "Frequent rework; tighten task decomposition and acceptance criteria.",
+            "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+            "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+            "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+          ],
+          "last_seen_at": "2026-02-19T22:50:36.460Z",
+          "sample_run_ids": [
+            "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+            "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+            "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+            "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+          ]
+        }
+      ],
+      "contenders_ranked": [
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "label": "Claude Opus + Codex CLI blend",
+          "model": "claude-opus-4.5",
+          "harness": "codex-cli",
+          "appearances": 4,
+          "wins": 2,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 89.2593,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 79.718513,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:36.460Z",
+          "sample_run_ids": [
+            "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+            "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+            "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+            "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+          ]
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "label": "Gemini Deep Think + swarm orchestrator",
+          "model": "gemini-3.1-pro-preview",
+          "harness": "swarm-orchestrator",
+          "appearances": 4,
+          "wins": 0,
+          "win_rate": 0,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 88.5215,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 66.738975,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:36.460Z",
+          "sample_run_ids": [
+            "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+            "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+            "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+            "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+          ]
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "label": "Codex + Pi + cloudflare skill",
+          "model": "gpt-5.2-codex",
+          "harness": "pi",
+          "appearances": 4,
+          "wins": 2,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 97.949,
+          "avg_risk": 8,
+          "avg_quality": 100,
+          "latest_hard_gate_pass": true,
+          "routing_score": 62.89685,
+          "outcome_samples": 4,
+          "empirical_accept_rate": 0,
+          "override_rate": 0.5,
+          "rework_rate": 0.25,
+          "avg_predicted_confidence": 0.7775,
+          "calibration_gap": 0.7775,
+          "override_reason_penalty": 0.425,
+          "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "override_reason_breakdown": [
+            {
+              "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+              "count": 1,
+              "share": 0.25,
+              "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+              "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+            },
+            {
+              "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+              "count": 1,
+              "share": 0.25,
+              "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+              "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+            }
+          ],
+          "coaching_recommendations": [
+            "High override rate; add human checkpoint before auto-route.",
+            "Frequent rework; tighten task decomposition and acceptance criteria.",
+            "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+            "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+            "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+          ],
+          "last_seen_at": "2026-02-19T22:50:36.460Z",
+          "sample_run_ids": [
+            "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+            "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+            "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+            "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+          ]
+        }
+      ],
+      "delegation_coach": {
+        "primary_contender_id": "contender_claude_codex_cli",
+        "backup_contenders": [
+          "contender_gemini_swarm",
+          "contender_codex_pi"
+        ],
+        "global_recommendations": [
+          "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes."
+        ],
+        "contender_cards": [
+          {
+            "contender_id": "contender_claude_codex_cli",
+            "routing_score": 79.718513,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "calibration_gap": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ]
+          },
+          {
+            "contender_id": "contender_gemini_swarm",
+            "routing_score": 66.738975,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "calibration_gap": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ]
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "routing_score": 62.89685,
+            "override_rate": 0.5,
+            "rework_rate": 0.25,
+            "calibration_gap": 0.7775,
+            "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "override_reason_breakdown": [
+              {
+                "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+                "count": 1,
+                "share": 0.25,
+                "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+                "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+              },
+              {
+                "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+                "count": 1,
+                "share": 0.25,
+                "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+                "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+              }
+            ],
+            "coaching_recommendations": [
+              "High override rate; add human checkpoint before auto-route.",
+              "Frequent rework; tighten task decomposition and acceptance criteria.",
+              "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+              "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+              "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+            ]
+          }
+        ]
+      }
+    },
+    "route_prod": {
+      "schema_version": "arena_manager_route.v2",
+      "computed_at": "2026-02-19T22:51:48.272Z",
+      "mode": "route",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": null,
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "analyzed_runs": 2,
+      "winner_stability_ratio": 0.5,
+      "policy": {
+        "require_hard_gate_pass": true,
+        "allow_fallback": true,
+        "max_runs": 50,
+        "experiment_id": "exp_api_hardening_live_v1",
+        "experiment_arm": "LIVE"
+      },
+      "recommended": {
+        "contender_id": "contender_codex_pi",
+        "label": "Codex + Pi + cloudflare skill",
+        "model": "gpt-5.2-codex",
+        "harness": "pi",
+        "routing_score": 96.010425,
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_ANY",
+          "ARENA_ROUTING_STANDARD_MODE"
+        ],
+        "rationale": "Selected contender_codex_pi with routing_score=96.010425 from 2 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=-0.17).",
+        "evidence": {
+          "appearances": 2,
+          "wins": 1,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 97.9545,
+          "avg_risk": 8,
+          "avg_quality": 100,
+          "latest_hard_gate_pass": true,
+          "outcome_samples": 2,
+          "empirical_accept_rate": 1,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0.83,
+          "calibration_gap": -0.17,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        }
+      },
+      "backups": [
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "label": "Claude Opus + Codex CLI blend",
+          "model": "claude-opus-4.5",
+          "harness": "codex-cli",
+          "appearances": 2,
+          "wins": 1,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 89.222,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 79.6943,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "label": "Gemini Deep Think + swarm orchestrator",
+          "model": "gemini-3.1-pro-preview",
+          "harness": "swarm-orchestrator",
+          "appearances": 2,
+          "wins": 0,
+          "win_rate": 0,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 88.6243,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 66.805763,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        }
+      ],
+      "contenders_ranked": [
+        {
+          "contender_id": "contender_codex_pi",
+          "label": "Codex + Pi + cloudflare skill",
+          "model": "gpt-5.2-codex",
+          "harness": "pi",
+          "appearances": 2,
+          "wins": 1,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 97.9545,
+          "avg_risk": 8,
+          "avg_quality": 100,
+          "latest_hard_gate_pass": true,
+          "routing_score": 96.010425,
+          "outcome_samples": 2,
+          "empirical_accept_rate": 1,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0.83,
+          "calibration_gap": -0.17,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "label": "Claude Opus + Codex CLI blend",
+          "model": "claude-opus-4.5",
+          "harness": "codex-cli",
+          "appearances": 2,
+          "wins": 1,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 89.222,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 79.6943,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "label": "Gemini Deep Think + swarm orchestrator",
+          "model": "gemini-3.1-pro-preview",
+          "harness": "swarm-orchestrator",
+          "appearances": 2,
+          "wins": 0,
+          "win_rate": 0,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 88.6243,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 66.805763,
+          "outcome_samples": 0,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0,
+          "calibration_gap": 0,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        }
+      ],
+      "delegation_coach": {
+        "primary_contender_id": "contender_codex_pi",
+        "backup_contenders": [
+          "contender_claude_codex_cli",
+          "contender_gemini_swarm"
+        ],
+        "global_recommendations": [
+          "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes."
+        ],
+        "contender_cards": [
+          {
+            "contender_id": "contender_codex_pi",
+            "routing_score": 96.010425,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "calibration_gap": -0.17,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ]
+          },
+          {
+            "contender_id": "contender_claude_codex_cli",
+            "routing_score": 79.6943,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "calibration_gap": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ]
+          },
+          {
+            "contender_id": "contender_gemini_swarm",
+            "routing_score": 66.805763,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "calibration_gap": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ]
+          }
+        ]
+      }
+    },
+    "autopilot_stage_status": 200,
+    "autopilot_prod_status": 200,
+    "autopilot_stage": {
+      "schema_version": "arena_manager_autopilot.v1",
+      "computed_at": "2026-02-19T22:51:48.582Z",
+      "mode": "autopilot",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": null,
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "analyzed_runs": 4,
+      "winner_stability_ratio": 0.5,
+      "route": {
+        "recommended": {
+          "contender_id": "contender_claude_codex_cli",
+          "label": "Claude Opus + Codex CLI blend",
+          "model": "claude-opus-4.5",
+          "harness": "codex-cli",
+          "routing_score": 79.718513,
+          "reason_codes": [
+            "ARENA_ROUTING_SELECTED",
+            "ARENA_ROUTING_OBJECTIVE_ANY",
+            "ARENA_ROUTING_STANDARD_MODE"
+          ],
+          "rationale": "Selected contender_claude_codex_cli with routing_score=79.718513 from 4 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=0).",
+          "evidence": {
+            "appearances": 4,
+            "wins": 2,
+            "win_rate": 0.5,
+            "hard_gate_pass_rate": 1,
+            "avg_score": 89.2593,
+            "avg_risk": 8,
+            "avg_quality": 75,
+            "latest_hard_gate_pass": true,
+            "outcome_samples": 0,
+            "empirical_accept_rate": 0,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "avg_predicted_confidence": 0,
+            "calibration_gap": 0,
+            "override_reason_penalty": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ],
+            "last_seen_at": "2026-02-19T22:50:36.460Z",
+            "sample_run_ids": [
+              "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+              "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+              "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+              "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+            ]
+          }
+        },
+        "backups": [
+          {
+            "contender_id": "contender_gemini_swarm",
+            "label": "Gemini Deep Think + swarm orchestrator",
+            "model": "gemini-3.1-pro-preview",
+            "harness": "swarm-orchestrator",
+            "appearances": 4,
+            "wins": 0,
+            "win_rate": 0,
+            "hard_gate_pass_rate": 1,
+            "avg_score": 88.5215,
+            "avg_risk": 8,
+            "avg_quality": 75,
+            "latest_hard_gate_pass": true,
+            "routing_score": 66.738975,
+            "outcome_samples": 0,
+            "empirical_accept_rate": 0,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "avg_predicted_confidence": 0,
+            "calibration_gap": 0,
+            "override_reason_penalty": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ],
+            "last_seen_at": "2026-02-19T22:50:36.460Z",
+            "sample_run_ids": [
+              "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+              "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+              "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+              "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+            ]
+          },
+          {
+            "contender_id": "contender_codex_pi",
+            "label": "Codex + Pi + cloudflare skill",
+            "model": "gpt-5.2-codex",
+            "harness": "pi",
+            "appearances": 4,
+            "wins": 2,
+            "win_rate": 0.5,
+            "hard_gate_pass_rate": 1,
+            "avg_score": 97.949,
+            "avg_risk": 8,
+            "avg_quality": 100,
+            "latest_hard_gate_pass": true,
+            "routing_score": 62.89685,
+            "outcome_samples": 4,
+            "empirical_accept_rate": 0,
+            "override_rate": 0.5,
+            "rework_rate": 0.25,
+            "avg_predicted_confidence": 0.7775,
+            "calibration_gap": 0.7775,
+            "override_reason_penalty": 0.425,
+            "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "override_reason_breakdown": [
+              {
+                "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+                "count": 1,
+                "share": 0.25,
+                "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+                "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+              },
+              {
+                "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+                "count": 1,
+                "share": 0.25,
+                "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+                "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+              }
+            ],
+            "coaching_recommendations": [
+              "High override rate; add human checkpoint before auto-route.",
+              "Frequent rework; tighten task decomposition and acceptance criteria.",
+              "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+              "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+              "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+            ],
+            "last_seen_at": "2026-02-19T22:50:36.460Z",
+            "sample_run_ids": [
+              "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+              "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+              "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+              "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+            ]
+          }
+        ],
+        "reason_codes": []
+      },
+      "autopilot": {
+        "status": "manual_review_required",
+        "default_contender_id": "contender_claude_codex_cli",
+        "backup_contenders": [
+          "contender_gemini_swarm",
+          "contender_codex_pi"
+        ],
+        "guardrails": {
+          "min_runs": 2,
+          "min_winner_stability_ratio": 0.6,
+          "min_win_rate": 0.5,
+          "max_override_rate": 0.3,
+          "max_rework_rate": 0.2,
+          "max_abs_calibration_gap": 0.2,
+          "require_latest_hard_gate_pass": true
+        },
+        "violations": [
+          {
+            "code": "ARENA_AUTOPILOT_LOW_WINNER_STABILITY",
+            "message": "Winner stability is below autopilot threshold.",
+            "value": 0.5,
+            "threshold": 0.6
+          }
+        ],
+        "reason_codes": [
+          "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED"
+        ],
+        "recommendations": [
+          "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes."
+        ],
+        "policy_template": {
+          "route_policy_id": "arp_5wqgOoeVkuvKpfQmNso67LwSCgCNVp9t",
+          "task_fingerprint": "typescript:worker:api-hardening",
+          "default_contender_id": "contender_claude_codex_cli",
+          "backup_contenders": [
+            "contender_gemini_swarm",
+            "contender_codex_pi"
+          ],
+          "require_manual_approval": true,
+          "generated_at": "2026-02-19T22:51:48.582Z"
+        }
+      }
+    },
+    "autopilot_prod": {
+      "schema_version": "arena_manager_autopilot.v1",
+      "computed_at": "2026-02-19T22:51:48.824Z",
+      "mode": "autopilot",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": null,
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "analyzed_runs": 2,
+      "winner_stability_ratio": 0.5,
+      "route": {
+        "recommended": {
+          "contender_id": "contender_codex_pi",
+          "label": "Codex + Pi + cloudflare skill",
+          "model": "gpt-5.2-codex",
+          "harness": "pi",
+          "routing_score": 96.010425,
+          "reason_codes": [
+            "ARENA_ROUTING_SELECTED",
+            "ARENA_ROUTING_OBJECTIVE_ANY",
+            "ARENA_ROUTING_STANDARD_MODE"
+          ],
+          "rationale": "Selected contender_codex_pi with routing_score=96.010425 from 2 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=-0.17).",
+          "evidence": {
+            "appearances": 2,
+            "wins": 1,
+            "win_rate": 0.5,
+            "hard_gate_pass_rate": 1,
+            "avg_score": 97.9545,
+            "avg_risk": 8,
+            "avg_quality": 100,
+            "latest_hard_gate_pass": true,
+            "outcome_samples": 2,
+            "empirical_accept_rate": 1,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "avg_predicted_confidence": 0.83,
+            "calibration_gap": -0.17,
+            "override_reason_penalty": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ],
+            "last_seen_at": "2026-02-19T22:50:47.268Z",
+            "sample_run_ids": [
+              "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+              "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+            ]
+          }
+        },
+        "backups": [
+          {
+            "contender_id": "contender_claude_codex_cli",
+            "label": "Claude Opus + Codex CLI blend",
+            "model": "claude-opus-4.5",
+            "harness": "codex-cli",
+            "appearances": 2,
+            "wins": 1,
+            "win_rate": 0.5,
+            "hard_gate_pass_rate": 1,
+            "avg_score": 89.222,
+            "avg_risk": 8,
+            "avg_quality": 75,
+            "latest_hard_gate_pass": true,
+            "routing_score": 79.6943,
+            "outcome_samples": 0,
+            "empirical_accept_rate": 0,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "avg_predicted_confidence": 0,
+            "calibration_gap": 0,
+            "override_reason_penalty": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ],
+            "last_seen_at": "2026-02-19T22:50:47.268Z",
+            "sample_run_ids": [
+              "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+              "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+            ]
+          },
+          {
+            "contender_id": "contender_gemini_swarm",
+            "label": "Gemini Deep Think + swarm orchestrator",
+            "model": "gemini-3.1-pro-preview",
+            "harness": "swarm-orchestrator",
+            "appearances": 2,
+            "wins": 0,
+            "win_rate": 0,
+            "hard_gate_pass_rate": 1,
+            "avg_score": 88.6243,
+            "avg_risk": 8,
+            "avg_quality": 75,
+            "latest_hard_gate_pass": true,
+            "routing_score": 66.805763,
+            "outcome_samples": 0,
+            "empirical_accept_rate": 0,
+            "override_rate": 0,
+            "rework_rate": 0,
+            "avg_predicted_confidence": 0,
+            "calibration_gap": 0,
+            "override_reason_penalty": 0,
+            "top_override_reason_code": null,
+            "override_reason_breakdown": [],
+            "coaching_recommendations": [
+              "Stable performer; keep as primary route for matching fingerprint."
+            ],
+            "last_seen_at": "2026-02-19T22:50:47.268Z",
+            "sample_run_ids": [
+              "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+              "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+            ]
+          }
+        ],
+        "reason_codes": []
+      },
+      "autopilot": {
+        "status": "manual_review_required",
+        "default_contender_id": "contender_codex_pi",
+        "backup_contenders": [
+          "contender_claude_codex_cli",
+          "contender_gemini_swarm"
+        ],
+        "guardrails": {
+          "min_runs": 2,
+          "min_winner_stability_ratio": 0.6,
+          "min_win_rate": 0.5,
+          "max_override_rate": 0.3,
+          "max_rework_rate": 0.2,
+          "max_abs_calibration_gap": 0.2,
+          "require_latest_hard_gate_pass": true
+        },
+        "violations": [
+          {
+            "code": "ARENA_AUTOPILOT_LOW_WINNER_STABILITY",
+            "message": "Winner stability is below autopilot threshold.",
+            "value": 0.5,
+            "threshold": 0.6
+          }
+        ],
+        "reason_codes": [
+          "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED"
+        ],
+        "recommendations": [
+          "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes."
+        ],
+        "policy_template": {
+          "route_policy_id": "arp_bnRKuYtkrDXw3zf6T_40VzoUHELNwAGc",
+          "task_fingerprint": "typescript:worker:api-hardening",
+          "default_contender_id": "contender_codex_pi",
+          "backup_contenders": [
+            "contender_claude_codex_cli",
+            "contender_gemini_swarm"
+          ],
+          "require_manual_approval": true,
+          "generated_at": "2026-02-19T22:51:48.824Z"
+        }
+      }
+    },
+    "calibration_stage_samples": 7,
+    "calibration_prod_samples": 5
+  },
+  "artifacts": {
+    "operations_dir": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch",
+    "dispatch_summaries": [
+      "stage-bounty-a2.dispatch.json",
+      "stage-bounty-b2.dispatch.json",
+      "prod-bounty-a2.dispatch.json"
+    ],
+    "stage_arena_outcomes": "outcomes-stage-arena-053-a.json"
+  }
+}
