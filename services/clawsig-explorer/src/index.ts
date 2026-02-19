@@ -45,10 +45,32 @@ function html(body: string, status = 200, cacheSeconds = 60): Response {
   return new Response(body, {
     status,
     headers: {
-      "Content-Type": "text/html;charset=utf-8",
-      "Cache-Control": `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds * 10}`,
+      'Content-Type': 'text/html;charset=utf-8',
+      'Cache-Control': `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds * 10}`,
     },
   });
+}
+
+function normalizeQueryValue(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function parseRunsLimit(raw: string | null): number {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 20;
+  return Math.min(parsed, 100);
+}
+
+function parseCursorHistory(raw: string | null): string[] {
+  if (!raw) return [];
+
+  return raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+    .slice(0, 50);
 }
 
 export default {
@@ -99,15 +121,25 @@ export default {
 
     // -- Runs feed / triage mode --
     if (path === '/runs') {
-      const limit = Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20);
+      const limit = parseRunsLimit(url.searchParams.get('limit'));
+      const cursor = normalizeQueryValue(url.searchParams.get('cursor'));
+      const cursorHistory = parseCursorHistory(url.searchParams.get('history'));
+
+      const filters = {
+        status: normalizeQueryValue(url.searchParams.get('status')),
+        tier: normalizeQueryValue(url.searchParams.get('tier')),
+        reason_code: normalizeQueryValue(url.searchParams.get('reason_code')),
+        agent_did: normalizeQueryValue(url.searchParams.get('agent_did')),
+      };
+
       const data = await fetchRunsFeed(
         {
           limit,
-          cursor: url.searchParams.get('cursor') ?? undefined,
-          status: url.searchParams.get('status') ?? undefined,
-          tier: url.searchParams.get('tier') ?? undefined,
-          reason_code: url.searchParams.get('reason_code') ?? undefined,
-          agent_did: url.searchParams.get('agent_did') ?? undefined,
+          cursor,
+          status: filters.status,
+          tier: filters.tier,
+          reason_code: filters.reason_code,
+          agent_did: filters.agent_did,
         },
         apiOpts,
       );
@@ -115,19 +147,21 @@ export default {
       if (!data) {
         return html(runsFeedPage({
           runs: [],
-          filters: {
-            status: url.searchParams.get('status') ?? undefined,
-            tier: url.searchParams.get('tier') ?? undefined,
-            reason_code: url.searchParams.get('reason_code') ?? undefined,
-            agent_did: url.searchParams.get('agent_did') ?? undefined,
-          },
+          filters,
           limit,
           has_next: false,
           next_cursor: null,
-        }), 200, 10);
+          current_cursor: cursor,
+          cursor_history: cursorHistory,
+          fetch_error: 'Runs feed is temporarily unavailable. Retry in a moment.',
+        }), 200, 5);
       }
 
-      return html(runsFeedPage(data), 200, 20);
+      return html(runsFeedPage({
+        ...data,
+        current_cursor: cursor,
+        cursor_history: cursorHistory,
+      }), 200, 20);
     }
 
     // -- Agents listing (redirect to runs feed for now) --
@@ -179,24 +213,28 @@ export default {
 
 function fallbackHomePage(): string {
   const meta: PageMeta = {
-    title: "Clawsig Explorer",
-    description: "Explore the public ledger of verified AI agent executions.",
-    path: "/",
+    title: 'Clawsig Explorer',
+    description: 'Explore the public ledger of verified AI agent executions.',
+    path: '/',
   };
 
   return layout(meta, `
     <div class="hero">
       <h1>Cryptographic Proof for Every Agent Run</h1>
       <p>
-        Explore the public ledger of verified AI agent executions.
-        Every proof is independently verifiable in your browser.
+        Ledger telemetry is temporarily unavailable. Explorer stays in safe degraded mode until API fetch succeeds.
       </p>
       <div class="cta-box">
         <span class="prompt">$</span> <span class="cmd">npx clawsig wrap -- your-agent</span>
       </div>
     </div>
-    <div class="card" style="text-align: center">
-      <p class="dim">Ledger data is currently loading. Check back shortly.</p>
+    <div class="card" style="text-align: center; border-color: rgba(255, 170, 0, 0.45)">
+      <p class="warn" style="margin-bottom:0.4rem">Data source unavailable</p>
+      <p class="dim" style="font-size:0.875rem">Retry soon or confirm API health from the reliability feed.</p>
+      <div style="margin-top:0.75rem; display:flex; justify-content:center; gap:1rem; flex-wrap:wrap">
+        <a href="/runs?status=FAIL">Open fail feed</a>
+        <a href="https://api.clawverify.com/health" target="_blank" rel="noopener">API health &rarr;</a>
+      </div>
     </div>
   `);
 }
