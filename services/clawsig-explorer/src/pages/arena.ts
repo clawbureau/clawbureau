@@ -256,6 +256,99 @@ function renderAutopilotCard(report: ArenaReportView): string {
   `;
 }
 
+function renderContractLanguageOptimizerCard(report: ArenaReportView): string {
+  const optimizer = report.contract_language_optimizer;
+  if (!optimizer) {
+    return `
+      <div class="card">
+        <p class="section-title">Contract language optimizer</p>
+        <p class="dim" style="font-size:0.82rem">No contract-language optimizer preview available.</p>
+      </div>
+    `;
+  }
+
+  if (optimizer.status === 'empty') {
+    return `
+      <div class="card">
+        <p class="section-title">Contract language optimizer</p>
+        <p class="dim" style="font-size:0.82rem">No failed/overridden outcomes yet for optimizer suggestions.</p>
+      </div>
+    `;
+  }
+
+  if (optimizer.status !== 'available') {
+    return `
+      <div class="card">
+        <p class="section-title">Contract language optimizer</p>
+        <p class="dim" style="font-size:0.82rem">Optimizer suggestions are temporarily unavailable.</p>
+      </div>
+    `;
+  }
+
+  const globalRows = optimizer.global_suggestions
+    .slice(0, 4)
+    .map((entry) => `
+      <tr>
+        <td class="mono">${esc(entry.reason_code)}</td>
+        <td class="mono">${entry.failures}</td>
+        <td class="mono">${(entry.share * 100).toFixed(1)}%</td>
+        <td>${esc(entry.contract_language_patch)}</td>
+      </tr>
+    `)
+    .join('');
+
+  const contenderRows = optimizer.contender_suggestions
+    .slice(0, 6)
+    .map((entry) => `
+      <tr>
+        <td class="mono">${esc(entry.contender_id ?? 'n/a')}</td>
+        <td class="mono">${esc(entry.reason_code)}</td>
+        <td class="mono">${entry.failures}</td>
+        <td>${esc(entry.prompt_language_patch)}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <div class="card">
+      <p class="section-title">Contract language optimizer</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:0.55rem">Persisted rewrite suggestions distilled from failed/overridden outcomes.</p>
+
+      <p class="dim" style="font-size:0.78rem; margin-bottom:0.35rem"><strong>Task fingerprint:</strong> <span class="mono">${esc(optimizer.task_fingerprint ?? 'unknown')}</span></p>
+
+      <p style="font-size:0.82rem; font-weight:600; margin:0.45rem 0 0.25rem">Global contract rewrites</p>
+      <div style="overflow-x:auto; margin-bottom:0.6rem">
+        <table>
+          <thead>
+            <tr>
+              <th>Reason code</th>
+              <th>Failures</th>
+              <th>Share</th>
+              <th>Contract patch</th>
+            </tr>
+          </thead>
+          <tbody>${globalRows || '<tr><td colspan="4" class="dim">No global suggestions.</td></tr>'}</tbody>
+        </table>
+      </div>
+
+      <p style="font-size:0.82rem; font-weight:600; margin:0.45rem 0 0.25rem">Contender prompt rewrites</p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Contender</th>
+              <th>Reason code</th>
+              <th>Failures</th>
+              <th>Prompt patch</th>
+            </tr>
+          </thead>
+          <tbody>${contenderRows || '<tr><td colspan="4" class="dim">No contender-specific suggestions.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 function renderOutcomeFeedCard(report: ArenaReportView): string {
   if (!Array.isArray(report.outcomes) || report.outcomes.length === 0) {
     return `
@@ -361,6 +454,8 @@ export function arenaComparePage(report: ArenaReportView): string {
     ${renderCalibrationCard(report)}
 
     ${renderAutopilotCard(report)}
+
+    ${renderContractLanguageOptimizerCard(report)}
 
     ${renderOutcomeFeedCard(report)}
 
@@ -692,6 +787,46 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         rework_rate: 0,
         winner_stability_ratio: 1,
       },
+    },
+    contract_language_optimizer: {
+      status: 'available',
+      task_fingerprint: 'typescript:worker:api-hardening',
+      global_suggestions: [
+        {
+          suggestion_id: 'acls_sample_global_001',
+          scope: 'global',
+          contender_id: null,
+          reason_code: 'ARENA_OVERRIDE_SCOPE_MISMATCH',
+          failures: 3,
+          overrides: 2,
+          share: 0.5,
+          priority_score: 3.15,
+          contract_rewrite: 'Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.',
+          prompt_rewrite: 'Add a scope-check checklist before final answer generation.',
+          contract_language_patch: 'Observed 3 failed/overridden outcomes tied to scope mismatch. Add explicit acceptance checklist and out-of-scope boundaries.',
+          prompt_language_patch: 'Add a scope-check checklist before final answer generation and fail closed on unmet criteria.',
+          sample_notes: ['Winner missed explicit out-of-scope checklist item.'],
+          top_tags: ['scope-check', 'acceptance-criteria'],
+        },
+      ],
+      contender_suggestions: [
+        {
+          suggestion_id: 'acls_sample_contender_001',
+          scope: 'contender',
+          contender_id: 'contender_codex_pi',
+          reason_code: 'ARENA_OVERRIDE_SCOPE_MISMATCH',
+          failures: 2,
+          overrides: 2,
+          share: 1,
+          priority_score: 2.1,
+          contract_rewrite: 'Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.',
+          prompt_rewrite: 'Add a scope-check checklist before final answer generation.',
+          contract_language_patch: 'Add contender-specific acceptance checklist for scope-sensitive tasks.',
+          prompt_language_patch: 'Require contender to enumerate acceptance criteria and scope exclusions before final output.',
+          sample_notes: ['Scope ambiguity caused override for this contender.'],
+          top_tags: ['scope-check'],
+        },
+      ],
     },
   };
 }

@@ -787,6 +787,30 @@ export interface ArenaAutopilotView {
   };
 }
 
+export interface ArenaContractLanguageSuggestionView {
+  suggestion_id: string;
+  scope: 'global' | 'contender';
+  contender_id: string | null;
+  reason_code: string;
+  failures: number;
+  overrides: number;
+  share: number;
+  priority_score: number;
+  contract_rewrite: string;
+  prompt_rewrite: string;
+  contract_language_patch: string;
+  prompt_language_patch: string;
+  sample_notes: string[];
+  top_tags: string[];
+}
+
+export interface ArenaContractLanguageOptimizerView {
+  status: string;
+  task_fingerprint: string | null;
+  global_suggestions: ArenaContractLanguageSuggestionView[];
+  contender_suggestions: ArenaContractLanguageSuggestionView[];
+}
+
 export interface ArenaReportView {
   arena_id: string;
   generated_at: string;
@@ -818,6 +842,7 @@ export interface ArenaReportView {
   outcomes: ArenaOutcomeView[];
   calibration?: ArenaCalibrationView;
   autopilot?: ArenaAutopilotView;
+  contract_language_optimizer?: ArenaContractLanguageOptimizerView;
 }
 
 interface ArenaIndexResponse {
@@ -933,6 +958,12 @@ interface ArenaReportResponse {
       rework_rate?: unknown;
       winner_stability_ratio?: unknown;
     };
+  };
+  contract_language_optimizer?: {
+    status?: unknown;
+    task_fingerprint?: unknown;
+    global_suggestions?: unknown;
+    contender_suggestions?: unknown;
   };
 }
 
@@ -1181,6 +1212,63 @@ function parseAutopilot(input: unknown): ArenaAutopilotView | undefined {
   };
 }
 
+function parseContractLanguageSuggestion(input: unknown): ArenaContractLanguageSuggestionView | null {
+  if (!input || typeof input !== 'object') return null;
+  const rec = input as Record<string, unknown>;
+
+  const suggestionId = asString(rec.suggestion_id);
+  const scope = asString(rec.scope);
+  const reasonCode = asString(rec.reason_code);
+
+  if (!suggestionId || !scope || !reasonCode) return null;
+  if (scope !== 'global' && scope !== 'contender') return null;
+
+  return {
+    suggestion_id: suggestionId,
+    scope,
+    contender_id: asString(rec.contender_id),
+    reason_code: reasonCode,
+    failures: asNumber(rec.failures, 0),
+    overrides: asNumber(rec.overrides, 0),
+    share: asNumber(rec.share, 0),
+    priority_score: asNumber(rec.priority_score, 0),
+    contract_rewrite: asString(rec.contract_rewrite) ?? '',
+    prompt_rewrite: asString(rec.prompt_rewrite) ?? '',
+    contract_language_patch: asString(rec.contract_language_patch) ?? '',
+    prompt_language_patch: asString(rec.prompt_language_patch) ?? '',
+    sample_notes: Array.isArray(rec.sample_notes)
+      ? rec.sample_notes.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    top_tags: Array.isArray(rec.top_tags)
+      ? rec.top_tags.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+  };
+}
+
+function parseContractLanguageOptimizer(input: unknown): ArenaContractLanguageOptimizerView | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+
+  const globalSuggestions = Array.isArray(rec.global_suggestions)
+    ? rec.global_suggestions
+      .map((entry) => parseContractLanguageSuggestion(entry))
+      .filter((entry): entry is ArenaContractLanguageSuggestionView => entry !== null)
+    : [];
+
+  const contenderSuggestions = Array.isArray(rec.contender_suggestions)
+    ? rec.contender_suggestions
+      .map((entry) => parseContractLanguageSuggestion(entry))
+      .filter((entry): entry is ArenaContractLanguageSuggestionView => entry !== null)
+    : [];
+
+  return {
+    status: asString(rec.status) ?? 'unknown',
+    task_fingerprint: asString(rec.task_fingerprint),
+    global_suggestions: globalSuggestions,
+    contender_suggestions: contenderSuggestions,
+  };
+}
+
 export async function fetchArenaIndex(
   opts: FetchOptions,
 ): Promise<Array<{
@@ -1309,5 +1397,6 @@ export async function fetchArenaReport(
     outcomes: parseOutcomeEntries(data.outcomes),
     calibration: parseCalibration(data.calibration),
     autopilot: parseAutopilot(data.autopilot),
+    contract_language_optimizer: parseContractLanguageOptimizer(data.contract_language_optimizer),
   };
 }

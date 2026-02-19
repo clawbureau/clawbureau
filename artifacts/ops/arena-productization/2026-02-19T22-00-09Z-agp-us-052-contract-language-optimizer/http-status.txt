@@ -1,0 +1,8 @@
+optimizer-prod-get.headers 200
+optimizer-prod-post.headers 200
+optimizer-stage-get.headers 200
+optimizer-stage-post.headers 200
+route-prod-armA.headers 404
+route-prod-armB.headers 200
+route-stage-armA.headers 404
+route-stage-armB.headers 200

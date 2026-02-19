@@ -879,3 +879,31 @@ Started: 2026-02-02T03:08:26.937005
   - `https://explorer.clawsig.com/arena/arena_bty_836a4e15_prod_050_001`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T21-39-33Z-agp-us-051-routing-autopilot/summary.json`
+
+## 2026-02-19 - AGP-US-052 contract language optimizer + persisted rewrite suggestions
+- Added migration:
+  - `services/_archived/clawbounties/migrations/0025_arena_contract_language_optimizer.sql`
+  - new table: `bounty_arena_contract_language_suggestions` (deterministic task/scope/reason keyed suggestions).
+- Added optimizer APIs:
+  - `POST /v1/arena/contract-language-optimizer` (admin) — compute + persist suggestions
+  - `GET /v1/arena/contract-language-optimizer` (admin) — read persisted suggestion store
+- Optimizer derives contract/prompt rewrites from failed/overridden outcomes and persists:
+  - reason-code weighting
+  - failure/override counts + share
+  - contract language patch + prompt language patch
+  - sample notes + tag signals
+- `GET /v1/arena/{arena_id}` now surfaces `contract_language_optimizer` preview (`arena_contract_language_optimizer_preview.v1`).
+- Clawsig explorer arena page now renders a **Contract language optimizer** panel with global + contender rewrite tables.
+- Deployed services:
+  - `clawbounties-staging` version `9a6ff198-c9d2-456e-8bb6-e773083e3da8`
+  - `clawsig-explorer-staging` version `a0d7858e-eec0-464b-b35d-fb328a28dc5b`
+  - `clawbounties` version `8621dc5a-8b64-47ba-9e5f-cd0749d6d80b`
+  - `clawsig-explorer` version `47012fb3-affe-4fd0-abcb-e99e88e24613`
+- Applied migration `0025` in staging + prod D1.
+- Live verification:
+  - optimizer POST (stage/prod) returned `200` with persisted rows (`rows_written=2`)
+  - optimizer GET (stage/prod) returned stored suggestions (`2` rows each)
+  - arena detail payload preview status `available` on seeded runs
+  - route fail-closed behavior preserved (`arm B=200`, `arm A=404 ARENA_ROUTE_NOT_FOUND`)
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T22-00-09Z-agp-us-052-contract-language-optimizer/summary.json`
