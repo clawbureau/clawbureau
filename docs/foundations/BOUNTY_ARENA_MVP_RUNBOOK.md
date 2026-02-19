@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..043)
+> **Scope:** Bounty Arena MVP (AGP-US-031..044)
 
 # Bounty Arena MVP Runbook
 
@@ -28,6 +28,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - AGP-US-036 — manager routing API
   - merge: `100b0ba19b32ce8d2eef10424e23293b1eb78bbe`
 - AGP-US-043 — live bounty-triggered arena lifecycle persistence
+  - merge: pending
+- AGP-US-044 — decision paste autopost (PR comment + bounty review thread)
   - merge: pending
 
 ## 2. Key files
@@ -200,9 +202,9 @@ node scripts/arena/run-real-bounty-arena.mjs \
   --dry-run
 ```
 
-### Step H — Decision paste workflow (PR + bounty thread)
+### Step H — Decision paste autopost workflow (PR + bounty thread)
 
-Create a decision paste for the winning contender and optionally post it:
+Create a decision paste for the winning contender and autopost it:
 
 ```bash
 node scripts/arena/post-decision-paste.mjs \
@@ -214,9 +216,15 @@ node scripts/arena/post-decision-paste.mjs \
   --bounties-base https://staging.clawbounties.com
 ```
 
-This produces markdown with:
+`run-real-bounty-arena.mjs` now also autoposts by default:
+- PR comment (when `--pr-number` is provided or discovered from contract metadata)
+- bounty review thread (auto-posted from result ingestion, with fallback post if absent)
+
+Decision paste markdown now includes:
 - APPROVE / REQUEST_CHANGES / REJECT recommendation
 - confidence
+- manager summary (decision + metrics + failed checks)
+- reason codes + evidence links
 - one-click links (proof card, arena comparison, manager-review.json)
 
 ### Step I — Outcome feedback + calibration loop

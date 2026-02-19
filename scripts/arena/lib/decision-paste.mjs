@@ -3,7 +3,7 @@ import path from 'node:path';
 export function mapManagerDecisionToRecommendation(decision) {
   const normalized = String(decision ?? '').trim().toLowerCase();
   if (normalized === 'promote') return 'APPROVE';
-  if (normalized === 'iterate') return 'REQUEST_CHANGES';
+  if (normalized === 'conditional' || normalized === 'iterate') return 'REQUEST_CHANGES';
   return 'REJECT';
 }
 
@@ -70,6 +70,35 @@ export function buildDecisionPastePayload({
     ? managerReview.recommended_next_action.trim()
     : '';
 
+  const managerDecision = typeof managerReview.decision === 'string'
+    ? managerReview.decision.trim()
+    : '';
+
+  const metrics = managerReview && typeof managerReview.metrics === 'object' && managerReview.metrics !== null
+    ? managerReview.metrics
+    : null;
+
+  const failedChecks = Array.isArray(managerReview.failed_checks)
+    ? managerReview.failed_checks
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        criterion_id: typeof item.criterion_id === 'string' ? item.criterion_id.trim() : '',
+        reason_code: typeof item.reason_code === 'string' ? item.reason_code.trim() : '',
+      }))
+      .filter((item) => item.criterion_id && item.reason_code)
+    : [];
+
+  const evidenceLinks = Array.isArray(contender?.score_explain?.evidence_links)
+    ? contender.score_explain.evidence_links
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        label: typeof item.label === 'string' ? item.label.trim() : '',
+        url: typeof item.url === 'string' ? item.url.trim() : '',
+      }))
+      .filter((item) => item.label && item.url)
+      .slice(0, 8)
+    : [];
+
   const header = [
     `## Arena Decision — ${contender.label} (${contenderId})`,
     '',
@@ -78,10 +107,33 @@ export function buildDecisionPastePayload({
     '',
     '### One-click links',
     ...links.map((entry) => `- [${entry.label}](${entry.url})`),
+    '',
+    '### Manager summary',
+    managerDecision ? `- decision: \`${managerDecision}\`` : '- decision: `unknown`',
   ];
+
+  if (metrics) {
+    const quality = Number(metrics.quality_score ?? 0);
+    const risk = Number(metrics.risk_score ?? 0);
+    const efficiency = Number(metrics.efficiency_score ?? 0);
+    const latency = Number(metrics.latency_ms ?? 0);
+    const cost = Number(metrics.cost_usd ?? 0);
+
+    header.push(
+      `- metrics: quality=${quality.toFixed(2)}, risk=${risk.toFixed(2)}, efficiency=${efficiency.toFixed(2)}, latency=${Math.round(latency)}ms, cost=$${cost.toFixed(4)}`,
+    );
+  }
+
+  if (failedChecks.length > 0) {
+    header.push('- failed checks:', ...failedChecks.map((item) => `  - \`${item.criterion_id}\` -> \`${item.reason_code}\``));
+  }
 
   if (reasonCodes.length > 0) {
     header.push('', '### Reason codes', ...reasonCodes.map((code) => `- \`${code}\``));
+  }
+
+  if (evidenceLinks.length > 0) {
+    header.push('', '### Evidence links', ...evidenceLinks.map((entry) => `- [${entry.label}](${entry.url})`));
   }
 
   if (nextAction) {
@@ -97,5 +149,7 @@ export function buildDecisionPastePayload({
     links,
     reasonCodes,
     nextAction,
+    managerDecision,
+    evidenceLinks,
   };
 }

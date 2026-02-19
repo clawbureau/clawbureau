@@ -746,3 +746,9 @@ Started: 2026-02-02T03:08:26.937005
 - `POST /v1/bounties/{bounty_id}/submit` now auto-triggers a deterministic started arena run when a valid submission is accepted for review.
 - `POST /v1/bounties/{bounty_id}/arena/start` and `POST /v1/bounties/{bounty_id}/arena/result` now synchronize bounty lifecycle state (`started`/`completed`) fail-closed.
 - `GET /v1/bounties/{bounty_id}` and `GET /v1/bounties/{bounty_id}/arena` now expose `arena_lifecycle` summary.
+
+## 2026-02-19 - AGP-US-044 decision-paste autopost + manager summary
+- `POST /v1/bounties/{bounty_id}/arena/result` now auto-posts winner review paste into bounty review thread (`source=arena-result-autopost`) with deterministic idempotency.
+- Auto-posted thread body includes manager summary, confidence, reason codes, and evidence links.
+- `scripts/arena/run-real-bounty-arena.mjs` now auto-posts PR comments when PR number is provided/discovered, and skips duplicate bounty-thread posts when service autopost already exists.
+- Decision paste payload now includes richer manager summary and evidence-link sections in generated markdown.
