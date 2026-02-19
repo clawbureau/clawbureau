@@ -47,7 +47,7 @@
       "cost_usd_per_1m_output_tokens": 30
     },
     {
-      "id": "google/gemini-3-pro-preview",
+      "id": "google/gemini-3.1-pro-preview",
       "enabled": true,
       "cost_usd_per_1m_input_tokens": 7,
       "cost_usd_per_1m_output_tokens": 21

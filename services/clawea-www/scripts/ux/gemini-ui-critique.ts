@@ -29,7 +29,7 @@ const screenshotsDir = path.resolve(
 const outFile = path.resolve(
   getArg("output") ?? path.resolve(import.meta.dirname ?? ".", "../../artifacts/ops/clawea-www/gemini-critique.json"),
 );
-const model = getArg("model") ?? "gemini-3-pro-preview";
+const model = getArg("model") ?? "gemini-3.1-pro-preview";
 const failOnP0P1 = hasFlag("fail-on-p0p1");
 
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;

@@ -423,6 +423,9 @@ interface ArenaContenderResult {
     contract_improvements: string[];
     next_delegation_hints: string[];
   };
+  version_pin: string | null;
+  prompt_template: string | null;
+  experiment_arm: string | null;
   proof_pack: Record<string, unknown> | null;
   manager_review: Record<string, unknown> | null;
   review_paste: string;
@@ -442,6 +445,9 @@ interface ArenaRunRecord {
   winner_reason: string | null;
   reason_codes_json: string | null;
   tradeoffs_json: string | null;
+  registry_version: string | null;
+  experiment_id: string | null;
+  experiment_arm: string | null;
   start_idempotency_key: string;
   result_idempotency_key: string | null;
   report_hash_b64u: string | null;
@@ -449,6 +455,22 @@ interface ArenaRunRecord {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface ArenaRegistrySelection {
+  contender_id: string;
+  version_pin: string | null;
+}
+
+interface ArenaRegistryContext {
+  registry_version: string;
+  objective_profile_name: string | null;
+  selected_contenders: ArenaRegistrySelection[];
+}
+
+interface ArenaExperimentContext {
+  experiment_id: string;
+  arm: string | null;
 }
 
 interface ArenaContenderRecord {
@@ -460,6 +482,9 @@ interface ArenaContenderRecord {
   tools_json: string;
   skills_json: string;
   plugins_json: string;
+  version_pin: string | null;
+  prompt_template: string | null;
+  experiment_arm: string | null;
   score: number;
   hard_gate_pass: boolean;
   mandatory_failed: number;
@@ -6157,6 +6182,9 @@ function parseArenaRunRow(row: unknown): ArenaRunRecord | null {
   const winner_reason = d1String(row.winner_reason);
   const reason_codes_json = d1String(row.reason_codes_json);
   const tradeoffs_json = d1String(row.tradeoffs_json);
+  const registry_version = d1String(row.registry_version);
+  const experiment_id = d1String(row.experiment_id);
+  const experiment_arm = d1String(row.experiment_arm);
   const start_idempotency_key = d1String(row.start_idempotency_key);
   const result_idempotency_key = d1String(row.result_idempotency_key);
   const report_hash_b64u = d1String(row.report_hash_b64u);
@@ -6196,6 +6224,9 @@ function parseArenaRunRow(row: unknown): ArenaRunRecord | null {
     winner_reason,
     reason_codes_json,
     tradeoffs_json,
+    registry_version: registry_version ? registry_version.trim() : null,
+    experiment_id: experiment_id ? experiment_id.trim() : null,
+    experiment_arm: experiment_arm ? experiment_arm.trim() : null,
     start_idempotency_key,
     result_idempotency_key,
     report_hash_b64u,
@@ -6217,6 +6248,9 @@ function parseArenaContenderRow(row: unknown): ArenaContenderRecord | null {
   const tools_json = d1String(row.tools_json);
   const skills_json = d1String(row.skills_json);
   const plugins_json = d1String(row.plugins_json);
+  const version_pin = d1String(row.version_pin);
+  const prompt_template = d1String(row.prompt_template);
+  const experiment_arm = d1String(row.experiment_arm);
   const score = d1Number(row.score);
   const hard_gate_pass_num = d1Number(row.hard_gate_pass);
   const mandatory_failed = d1Number(row.mandatory_failed);
@@ -6258,6 +6292,9 @@ function parseArenaContenderRow(row: unknown): ArenaContenderRecord | null {
     tools_json,
     skills_json,
     plugins_json,
+    version_pin: version_pin ? version_pin.trim() : null,
+    prompt_template: prompt_template ? prompt_template.trim() : null,
+    experiment_arm: experiment_arm ? experiment_arm.trim() : null,
     score,
     hard_gate_pass: hard_gate_pass_num !== 0,
     mandatory_failed,
@@ -6405,6 +6442,9 @@ function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContender
     tools,
     skills,
     plugins,
+    version_pin: record.version_pin,
+    prompt_template: record.prompt_template,
+    experiment_arm: record.experiment_arm,
     score: record.score,
     hard_gate_pass: record.hard_gate_pass,
     mandatory_failed: record.mandatory_failed,
@@ -6847,6 +6887,9 @@ async function writeArenaContenderRecords(
           tools_json,
           skills_json,
           plugins_json,
+          version_pin,
+          prompt_template,
+          experiment_arm,
           score,
           hard_gate_pass,
           mandatory_failed,
@@ -6857,7 +6900,7 @@ async function writeArenaContenderRecords(
           review_paste,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         runId,
@@ -6868,6 +6911,9 @@ async function writeArenaContenderRecords(
         stableStringify(contender.tools),
         stableStringify(contender.skills),
         stableStringify(contender.plugins),
+        contender.version_pin,
+        contender.prompt_template,
+        contender.experiment_arm,
         contender.score,
         contender.hard_gate_pass ? 1 : 0,
         contender.mandatory_failed,
@@ -6985,6 +7031,9 @@ function buildLiveArenaBaselineContender(bounty: BountyV2, submission: Submissio
     tools,
     skills,
     plugins,
+    version_pin: null,
+    prompt_template: null,
+    experiment_arm: null,
     score: 0,
     hard_gate_pass: false,
     mandatory_failed: 0,
@@ -7546,6 +7595,18 @@ async function buildArenaPayloadFromRun(
       task_fingerprint: run.task_fingerprint,
     },
     objective_profile: objectiveProfile,
+    registry: run.registry_version
+      ? {
+        registry_version: run.registry_version,
+        objective_profile_name: getArenaObjectiveProfileNameFromRun(run),
+      }
+      : null,
+    experiment: run.experiment_id
+      ? {
+        experiment_id: run.experiment_id,
+        arm: run.experiment_arm,
+      }
+      : null,
     score_explain: reportScoreExplain ?? {
       formula: {
         summary: 'final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty',
@@ -7567,6 +7628,9 @@ async function buildArenaPayloadFromRun(
       tools: contender.tools,
       skills: contender.skills,
       plugins: contender.plugins,
+      version_pin: contender.version_pin,
+      prompt_template: contender.prompt_template,
+      experiment_arm: contender.experiment_arm,
       score: contender.score,
       hard_gate_pass: contender.hard_gate_pass,
       mandatory_failed: contender.mandatory_failed,
@@ -7627,6 +7691,57 @@ function getArenaObjectiveProfileNameFromRun(run: ArenaRunRecord): string | null
   const profile = parseJsonObject(run.objective_profile_json);
   const name = profile ? d1String(profile.name) : null;
   return name ? name.trim() : null;
+}
+
+function parseArenaRegistryContext(input: unknown): ArenaRegistryContext | null {
+  if (!isRecord(input)) return null;
+
+  const registryVersion = d1String(input.registry_version)?.trim() ?? null;
+  if (!registryVersion || registryVersion.length > 128) return null;
+
+  const objectiveProfileNameRaw = d1String(input.objective_profile_name)?.trim() ?? null;
+  const objective_profile_name = objectiveProfileNameRaw && objectiveProfileNameRaw.length > 0
+    ? objectiveProfileNameRaw.slice(0, 64)
+    : null;
+
+  const selectedRaw = Array.isArray(input.selected_contenders) ? input.selected_contenders : [];
+  const selected_contenders: ArenaRegistrySelection[] = [];
+  const seen = new Set<string>();
+
+  for (const row of selectedRaw) {
+    if (!isRecord(row)) return null;
+    const contenderId = d1String(row.contender_id)?.trim();
+    if (!contenderId || contenderId.length > 128 || seen.has(contenderId)) continue;
+
+    const versionPinRaw = d1String(row.version_pin)?.trim() ?? null;
+    const version_pin = versionPinRaw && versionPinRaw.length > 0
+      ? versionPinRaw.slice(0, 128)
+      : null;
+
+    selected_contenders.push({ contender_id: contenderId, version_pin });
+    seen.add(contenderId);
+  }
+
+  return {
+    registry_version: registryVersion,
+    objective_profile_name,
+    selected_contenders,
+  };
+}
+
+function parseArenaExperimentContext(input: unknown): ArenaExperimentContext | null {
+  if (!isRecord(input)) return null;
+
+  const experimentId = d1String(input.experiment_id)?.trim() ?? null;
+  if (!experimentId || experimentId.length > 128) return null;
+
+  const armRaw = d1String(input.arm)?.trim() ?? null;
+  const arm = armRaw && armRaw.length > 0 ? armRaw.slice(0, 64) : null;
+
+  return {
+    experiment_id: experimentId,
+    arm,
+  };
 }
 
 function parseArenaContract(
@@ -7806,6 +7921,10 @@ function parseArenaContenderFromReportRow(
     review_paste: null,
   };
 
+  const versionPinRaw = d1String(row.version_pin);
+  const promptTemplateRaw = d1String(row.prompt_template);
+  const experimentArmRaw = d1String(row.experiment_arm);
+
   const config = parseArenaContenderConfigFromProofPack(artifact.proof_pack);
 
   const directCheckResults = parseArenaCheckResults(row.check_results);
@@ -7820,6 +7939,9 @@ function parseArenaContenderFromReportRow(
     tools: config.tools,
     skills: config.skills,
     plugins: config.plugins,
+    version_pin: versionPinRaw ? versionPinRaw.trim() : null,
+    prompt_template: promptTemplateRaw ? promptTemplateRaw.trim() : null,
+    experiment_arm: experimentArmRaw ? experimentArmRaw.trim() : null,
     score,
     hard_gate_pass,
     mandatory_failed,
@@ -7849,6 +7971,9 @@ function buildArenaRunSummary(run: ArenaRunRecord): {
   winner_contender_id: string;
   reason_code: string;
   status: ArenaRunStatus;
+  registry_version: string | null;
+  experiment_id: string | null;
+  experiment_arm: string | null;
 } {
   const reasonCodes = run.reason_codes_json ? parseJsonStringArray(run.reason_codes_json) : [];
   const reason_code = reasonCodes && reasonCodes.length > 0
@@ -7865,6 +7990,9 @@ function buildArenaRunSummary(run: ArenaRunRecord): {
     winner_contender_id: run.winner_contender_id ?? 'pending',
     reason_code,
     status: run.status,
+    registry_version: run.registry_version,
+    experiment_id: run.experiment_id,
+    experiment_arm: run.experiment_arm,
   };
 }
 
@@ -12468,6 +12596,36 @@ async function handleStartBountyArena(
     return errorResponse('INVALID_REQUEST', 'objective_profile is invalid', 400, { field: 'objective_profile' }, version);
   }
 
+  const registryContext = body.registry === undefined
+    ? null
+    : parseArenaRegistryContext(body.registry);
+  if (body.registry !== undefined && !registryContext) {
+    return errorResponse('INVALID_REQUEST', 'registry is invalid', 400, { field: 'registry' }, version);
+  }
+
+  const experimentContext = body.experiment === undefined
+    ? null
+    : parseArenaExperimentContext(body.experiment);
+  if (body.experiment !== undefined && !experimentContext) {
+    return errorResponse('INVALID_REQUEST', 'experiment is invalid', 400, { field: 'experiment' }, version);
+  }
+
+  const objectiveProfileName = d1String(objectiveProfile.name)?.trim() ?? null;
+  if (registryContext?.objective_profile_name && objectiveProfileName && registryContext.objective_profile_name !== objectiveProfileName) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'registry.objective_profile_name must match objective_profile.name',
+      400,
+      { field: 'registry.objective_profile_name' },
+      version,
+    );
+  }
+
+  const registryVersionByContender = new Map<string, string | null>();
+  for (const selection of registryContext?.selected_contenders ?? []) {
+    registryVersionByContender.set(selection.contender_id, selection.version_pin);
+  }
+
   const baselineContenders: ArenaContenderResult[] = [];
   if (body.contenders !== undefined) {
     if (!Array.isArray(body.contenders)) {
@@ -12486,6 +12644,9 @@ async function handleStartBountyArena(
       const tools = parseStringList(contenderRaw.tools, 64, 120, true);
       const skills = parseStringList(contenderRaw.skills, 64, 120, true);
       const plugins = parseStringList(contenderRaw.plugins, 64, 120, true);
+      const versionPinRaw = d1String(contenderRaw.version_pin)?.trim() ?? null;
+      const promptTemplateRaw = d1String(contenderRaw.prompt_template)?.trim() ?? null;
+      const contenderArmRaw = d1String(contenderRaw.experiment_arm)?.trim() ?? null;
 
       if (!contenderId || !label || !model || !harness || !tools || !skills || !plugins) {
         return errorResponse('INVALID_REQUEST', 'contender entry is invalid', 400, { contender: contenderRaw }, version);
@@ -12499,6 +12660,15 @@ async function handleStartBountyArena(
         tools,
         skills,
         plugins,
+        version_pin: versionPinRaw && versionPinRaw.length > 0
+          ? versionPinRaw.slice(0, 128)
+          : (registryVersionByContender.get(contenderId) ?? null),
+        prompt_template: promptTemplateRaw && promptTemplateRaw.length > 0
+          ? promptTemplateRaw.slice(0, 256)
+          : null,
+        experiment_arm: contenderArmRaw && contenderArmRaw.length > 0
+          ? contenderArmRaw.slice(0, 64)
+          : (experimentContext?.arm ?? null),
         score: 0,
         hard_gate_pass: false,
         mandatory_failed: 0,
@@ -12541,7 +12711,10 @@ async function handleStartBountyArena(
       existingByIdempotency.contract_id === contract.contract_id &&
       existingByIdempotency.contract_hash_b64u === contract.contract_hash_b64u &&
       existingByIdempotency.task_fingerprint === contract.task_fingerprint &&
-      existingByIdempotency.objective_profile_json === stableStringify(objectiveProfile);
+      existingByIdempotency.objective_profile_json === stableStringify(objectiveProfile) &&
+      (existingByIdempotency.registry_version ?? null) === (registryContext?.registry_version ?? null) &&
+      (existingByIdempotency.experiment_id ?? null) === (experimentContext?.experiment_id ?? null) &&
+      (existingByIdempotency.experiment_arm ?? null) === (experimentContext?.arm ?? null);
 
     if (!samePayload) {
       return errorResponse(
@@ -12606,6 +12779,9 @@ async function handleStartBountyArena(
           winner_reason,
           reason_codes_json,
           tradeoffs_json,
+          registry_version,
+          experiment_id,
+          experiment_arm,
           start_idempotency_key,
           result_idempotency_key,
           report_hash_b64u,
@@ -12613,7 +12789,7 @@ async function handleStartBountyArena(
           completed_at,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, 'started', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, ?, NULL, ?, ?)`
+        ) VALUES (?, ?, ?, 'started', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`
       )
       .bind(
         runId,
@@ -12623,6 +12799,9 @@ async function handleStartBountyArena(
         contract.contract_hash_b64u,
         contract.task_fingerprint,
         stableStringify(objectiveProfile),
+        registryContext?.registry_version ?? null,
+        experimentContext?.experiment_id ?? null,
+        experimentContext?.arm ?? null,
         idempotencyKey,
         now,
         now,
@@ -13870,6 +14049,16 @@ async function handleArenaManagerRoute(
   }
 
   const objectiveProfileName = d1String(body.objective_profile_name)?.trim() ?? null;
+  const experimentIdFilter = d1String(body.experiment_id)?.trim() ?? null;
+  const experimentArmFilter = d1String(body.experiment_arm)?.trim() ?? null;
+
+  if (experimentIdFilter && experimentIdFilter.length > 128) {
+    return errorResponse('INVALID_REQUEST', 'experiment_id must be <=128 chars', 400, { field: 'experiment_id' }, version);
+  }
+
+  if (experimentArmFilter && experimentArmFilter.length > 64) {
+    return errorResponse('INVALID_REQUEST', 'experiment_arm must be <=64 chars', 400, { field: 'experiment_arm' }, version);
+  }
 
   const maxRunsRaw = body.max_runs;
   let maxRuns = 50;
@@ -13885,9 +14074,10 @@ async function handleArenaManagerRoute(
   const allowFallback = body.allow_fallback !== false;
 
   const runsRaw = await listCompletedArenaRunsByTaskFingerprint(env.BOUNTIES_DB, taskFingerprint, maxRuns);
-  const runs = objectiveProfileName
-    ? runsRaw.filter((run) => getArenaObjectiveProfileNameFromRun(run) === objectiveProfileName)
-    : runsRaw;
+  const runs = runsRaw
+    .filter((run) => (objectiveProfileName ? getArenaObjectiveProfileNameFromRun(run) === objectiveProfileName : true))
+    .filter((run) => (experimentIdFilter ? run.experiment_id === experimentIdFilter : true))
+    .filter((run) => (experimentArmFilter ? run.experiment_arm === experimentArmFilter : true));
 
   if (runs.length === 0) {
     return errorResponse(
@@ -13897,6 +14087,8 @@ async function handleArenaManagerRoute(
       {
         task_fingerprint: taskFingerprint,
         objective_profile_name: objectiveProfileName,
+        experiment_id: experimentIdFilter,
+        experiment_arm: experimentArmFilter,
       },
       version,
     );
@@ -14128,6 +14320,8 @@ async function handleArenaManagerRoute(
       {
         task_fingerprint: taskFingerprint,
         objective_profile_name: objectiveProfileName,
+        experiment_id: experimentIdFilter,
+        experiment_arm: experimentArmFilter,
       },
       version,
     );
@@ -14181,12 +14375,16 @@ async function handleArenaManagerRoute(
       mode,
       task_fingerprint: taskFingerprint,
       objective_profile_name: objectiveProfileName,
+      experiment_id: experimentIdFilter,
+      experiment_arm: experimentArmFilter,
       analyzed_runs: runs.length,
       winner_stability_ratio: Number(winnerStabilityRatio.toFixed(4)),
       policy: {
         require_hard_gate_pass: requireHardGatePass,
         allow_fallback: allowFallback,
         max_runs: maxRuns,
+        experiment_id: experimentIdFilter,
+        experiment_arm: experimentArmFilter,
       },
       recommended: {
         contender_id: recommended.contender_id,

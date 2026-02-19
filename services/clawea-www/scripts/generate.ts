@@ -2,7 +2,7 @@
 /**
  * Parallel Gemini content generator for clawea.com programmatic SEO.
  *
- * Uses gemini-2.5-flash with Google Search grounding to generate
+ * Uses Gemini models with Google Search grounding to generate
  * 10k+ articles from the taxonomy. Writes JSON files to ./articles/.
  *
  * Usage:
@@ -27,9 +27,9 @@ if (!API_KEY) {
 }
 
 // gemini-3-flash-preview is the fast default for bulk generation
-// gemini-3-pro-preview for higher quality on landing pages
+// gemini-3.1-pro-preview for higher quality on landing pages
 const FAST_MODEL = "gemini-3-flash-preview";
-const QUALITY_MODEL = "gemini-3-pro-preview";
+const QUALITY_MODEL = "gemini-3.1-pro-preview";
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 const ARTICLES_DIR = path.resolve(
