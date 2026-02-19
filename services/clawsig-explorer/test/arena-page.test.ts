@@ -16,6 +16,8 @@ describe('arena pages', () => {
     expect(html).toContain('contender_codex_pi');
     expect(html).toContain('ac_contract_binding');
     expect(html).toContain('Winner rationale + tradeoffs');
+    expect(html).toContain('Delegation insights');
+    expect(html).toContain('Default route');
   });
 
   it('renders arena index rows and fallback empty state', () => {

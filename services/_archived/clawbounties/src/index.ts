@@ -391,6 +391,11 @@ interface ArenaContenderResult {
     autonomy_score: number;
   };
   check_results: ArenaCheckResult[];
+  insights: {
+    bottlenecks: string[];
+    contract_improvements: string[];
+    next_delegation_hints: string[];
+  };
   proof_pack: Record<string, unknown> | null;
   manager_review: Record<string, unknown> | null;
   review_paste: string;
@@ -6149,6 +6154,8 @@ function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContender
   const proofPack = record.proof_pack_json ? parseJsonObject(record.proof_pack_json) : null;
   const managerReview = record.manager_review_json ? parseJsonObject(record.manager_review_json) : null;
 
+  const proofPackConfig = parseArenaContenderConfigFromProofPack(proofPack);
+
   return {
     contender_id: record.contender_id,
     label: record.label,
@@ -6162,6 +6169,7 @@ function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContender
     mandatory_failed: record.mandatory_failed,
     metrics,
     check_results: parseArenaCheckResults(checkResultsRaw),
+    insights: proofPackConfig.insights,
     proof_pack: proofPack,
     manager_review: managerReview,
     review_paste: record.review_paste,
@@ -6281,6 +6289,62 @@ async function writeArenaContenderRecords(
   }
 }
 
+function dedupeStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const item of items) {
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+
+  return out;
+}
+
+function buildArenaDelegationInsights(
+  contenders: ArenaContenderResult[],
+  winnerContenderId: string | null,
+): Record<string, unknown> {
+  const winner = winnerContenderId
+    ? contenders.find((contender) => contender.contender_id === winnerContenderId) ?? null
+    : null;
+
+  const allBottlenecks = dedupeStrings(contenders.flatMap((contender) => contender.insights.bottlenecks));
+  const allContractImprovements = dedupeStrings(contenders.flatMap((contender) => contender.insights.contract_improvements));
+  const allNextHints = dedupeStrings(contenders.flatMap((contender) => contender.insights.next_delegation_hints));
+
+  const eligibleBackups = contenders
+    .filter((contender) => contender.hard_gate_pass)
+    .sort((a, b) => b.score - a.score)
+    .map((contender) => contender.contender_id)
+    .filter((contenderId) => contenderId !== winnerContenderId)
+    .slice(0, 3);
+
+  return {
+    winner_hints: winner ? winner.insights.next_delegation_hints : [],
+    winner_bottlenecks: winner ? winner.insights.bottlenecks : [],
+    bottlenecks: allBottlenecks,
+    contract_improvements: allContractImprovements,
+    next_delegation_hints: allNextHints,
+    manager_routing: {
+      default_contender_id: winnerContenderId,
+      backup_contenders: eligibleBackups,
+    },
+    contenders: contenders
+      .sort((a, b) => b.score - a.score)
+      .map((contender) => ({
+        contender_id: contender.contender_id,
+        score: contender.score,
+        hard_gate_pass: contender.hard_gate_pass,
+        mandatory_failed: contender.mandatory_failed,
+        next_delegation_hints: contender.insights.next_delegation_hints,
+        bottlenecks: contender.insights.bottlenecks,
+      })),
+  };
+}
+
 async function buildArenaPayloadFromRun(
   db: D1Database,
   run: ArenaRunRecord,
@@ -6332,6 +6396,7 @@ async function buildArenaPayloadFromRun(
       mandatory_failed: contender.mandatory_failed,
       metrics: contender.metrics,
       check_results: contender.check_results,
+      insights: contender.insights,
       review_paste: contender.review_paste,
       manager_review_json: contender.manager_review,
     })),
@@ -6341,6 +6406,7 @@ async function buildArenaPayloadFromRun(
     },
     tradeoffs,
     reason_codes: reasonCodes,
+    delegation_insights: buildArenaDelegationInsights(contenderViews, run.winner_contender_id),
   };
 }
 
@@ -6464,6 +6530,11 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
   skills: string[];
   plugins: string[];
   check_results: ArenaCheckResult[];
+  insights: {
+    bottlenecks: string[];
+    contract_improvements: string[];
+    next_delegation_hints: string[];
+  };
 } {
   if (!proofPack) {
     return {
@@ -6473,6 +6544,11 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
       skills: [],
       plugins: [],
       check_results: [],
+      insights: {
+        bottlenecks: [],
+        contract_improvements: [],
+        next_delegation_hints: [],
+      },
     };
   }
 
@@ -6488,6 +6564,11 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
   const compliance = isRecord(proofPack.compliance) ? proofPack.compliance : null;
   const checks = compliance ? parseArenaCheckResults(compliance.checks) : [];
 
+  const insightsRaw = isRecord(proofPack.insights) ? proofPack.insights : null;
+  const bottlenecks = insightsRaw ? parseStringList(insightsRaw.bottlenecks, 30, 300, true) : [];
+  const contractImprovements = insightsRaw ? parseStringList(insightsRaw.contract_improvements, 30, 300, true) : [];
+  const nextDelegationHints = insightsRaw ? parseStringList(insightsRaw.next_delegation_hints, 30, 300, true) : [];
+
   return {
     model: model?.trim() ?? 'unknown-model',
     harness: harness?.trim() ?? 'unknown-harness',
@@ -6495,6 +6576,11 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
     skills: skills ?? [],
     plugins: plugins ?? [],
     check_results: checks,
+    insights: {
+      bottlenecks: bottlenecks ?? [],
+      contract_improvements: contractImprovements ?? [],
+      next_delegation_hints: nextDelegationHints ?? [],
+    },
   };
 }
 
@@ -6546,6 +6632,7 @@ function parseArenaContenderFromReportRow(
     mandatory_failed,
     metrics,
     check_results,
+    insights: config.insights,
     proof_pack: artifact.proof_pack,
     manager_review: artifact.manager_review,
     review_paste: artifact.review_paste ?? '',
@@ -11183,6 +11270,11 @@ async function handleStartBountyArena(
           autonomy_score: 0,
         },
         check_results: [],
+        insights: {
+          bottlenecks: [],
+          contract_improvements: [],
+          next_delegation_hints: [],
+        },
         proof_pack: null,
         manager_review: null,
         review_paste: 'Arena run started; result payload pending.',
@@ -11549,6 +11641,33 @@ async function handleGetArena(
   return jsonResponse(payload, 200, version);
 }
 
+async function handleGetArenaDelegationInsights(
+  arenaId: string,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const run = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
+  if (!run) {
+    return errorResponse('NOT_FOUND', 'Arena run not found', 404, { arena_id: arenaId }, version);
+  }
+
+  const payload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+  if (!payload || !isRecord(payload)) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Arena payload could not be rendered', 500, { run_id: run.run_id }, version);
+  }
+
+  const insights = payload.delegation_insights;
+  if (!isRecord(insights)) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Delegation insights are unavailable', 500, { run_id: run.run_id }, version);
+  }
+
+  return jsonResponse({
+    arena_id: run.arena_id,
+    winner_contender_id: run.winner_contender_id,
+    delegation_insights: insights,
+  }, 200, version);
+}
+
 async function handleListArena(
   url: URL,
   env: Env,
@@ -11912,6 +12031,15 @@ export default {
 
       if (path === '/v1/arena' && method === 'GET') {
         return handleListArena(url, env, version);
+      }
+
+      const arenaDelegationInsightsMatch = path.match(/^\/v1\/arena\/([^/]+)\/delegation-insights$/);
+      if (arenaDelegationInsightsMatch && method === 'GET') {
+        const arenaId = decodeURIComponent(arenaDelegationInsightsMatch[1] ?? '');
+        if (!arenaId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleGetArenaDelegationInsights(arenaId, env, version);
       }
 
       const arenaMatch = path.match(/^\/v1\/arena\/([^/]+)$/);
