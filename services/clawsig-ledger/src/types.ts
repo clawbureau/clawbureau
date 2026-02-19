@@ -68,7 +68,18 @@ export interface AgentPassportVC {
   proof: { type: string; verificationMethod: string; created: string; signatureValue: string };
 }
 
+export interface FailReasonCodeStat {
+  reason_code: string;
+  count: number;
+}
+
 export interface GlobalStatsResponse {
-  total_agents: number; total_runs: number;
-  total_gateway_runs: number; total_violations: number;
+  total_agents: number;
+  total_runs: number;
+  total_gateway_runs: number;
+  total_violations: number;
+  runs_24h: number;
+  fail_runs_24h: number;
+  fail_rate_24h: number;
+  top_fail_reason_codes: FailReasonCodeStat[];
 }

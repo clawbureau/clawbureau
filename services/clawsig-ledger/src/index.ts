@@ -270,11 +270,55 @@ async function handleRunDetail(runId: string, env: Env): Promise<Response> {
 
 // GET /v1/ledger/stats
 async function handleGlobalStats(env: Env): Promise<Response> {
-  const stats = await env.LEDGER_DB.prepare(`SELECT
-    (SELECT COUNT(*) FROM agents) AS total_agents, (SELECT COUNT(*) FROM runs) AS total_runs,
-    (SELECT COALESCE(SUM(gateway_tier_runs),0) FROM agents) AS total_gateway_runs,
-    (SELECT COALESCE(SUM(policy_violations),0) FROM agents) AS total_violations`).first<GlobalStatsResponse>();
-  return json(stats ?? { total_agents: 0, total_runs: 0, total_gateway_runs: 0, total_violations: 0 });
+  const asNumber = (value: unknown): number => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+
+  const base = await env.LEDGER_DB.prepare(`SELECT
+    (SELECT COUNT(*) FROM agents) AS total_agents,
+    (SELECT COUNT(*) FROM runs) AS total_runs,
+    (SELECT COALESCE(SUM(gateway_tier_runs), 0) FROM agents) AS total_gateway_runs,
+    (SELECT COALESCE(SUM(policy_violations), 0) FROM agents) AS total_violations,
+    (SELECT COUNT(*) FROM runs WHERE created_at >= datetime('now', '-24 hours')) AS runs_24h,
+    (SELECT COUNT(*) FROM runs WHERE status = 'FAIL' AND created_at >= datetime('now', '-24 hours')) AS fail_runs_24h
+  `).first<Record<string, unknown>>();
+
+  const topFailRows = await env.LEDGER_DB.prepare(`
+    SELECT reason_code, COUNT(*) AS count
+    FROM runs
+    WHERE status = 'FAIL'
+      AND reason_code IS NOT NULL
+      AND reason_code != ''
+      AND created_at >= datetime('now', '-24 hours')
+    GROUP BY reason_code
+    ORDER BY count DESC, reason_code ASC
+    LIMIT 5
+  `).all<{ reason_code: string; count: number | string }>();
+
+  const runs24h = asNumber(base?.runs_24h);
+  const failRuns24h = asNumber(base?.fail_runs_24h);
+  const failRate24h = runs24h > 0 ? Number((failRuns24h / runs24h).toFixed(6)) : 0;
+
+  const stats: GlobalStatsResponse = {
+    total_agents: asNumber(base?.total_agents),
+    total_runs: asNumber(base?.total_runs),
+    total_gateway_runs: asNumber(base?.total_gateway_runs),
+    total_violations: asNumber(base?.total_violations),
+    runs_24h: runs24h,
+    fail_runs_24h: failRuns24h,
+    fail_rate_24h: failRate24h,
+    top_fail_reason_codes: (topFailRows.results ?? []).map((row) => ({
+      reason_code: row.reason_code,
+      count: asNumber(row.count),
+    })),
+  };
+
+  return json(stats);
 }
 
 export default {
