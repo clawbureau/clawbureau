@@ -122,7 +122,6 @@ function summarize(rows: RunsFeedRun[]): { total: number; pass: number; fail: nu
 function runsEmptyState(filters: RunsFeedFilters): string {
   const hasFilters = Boolean(filters.status || filters.tier || filters.reason_code || filters.agent_did);
   const command = 'npx clawsig wrap -- your-agent-command';
-  const commandLiteral = JSON.stringify(command);
 
   if (hasFilters) {
     return `
@@ -137,13 +136,29 @@ function runsEmptyState(filters: RunsFeedFilters): string {
     `;
   }
 
+  const deepLinkSnippet = [
+    'RUN_ID="<run_id_from_verify_response>"',
+    'echo "https://explorer.clawsig.com/run/${RUN_ID}"',
+  ].join('\n');
+
   return `
     <div class="runs-empty" style="display:grid; gap:0.6rem">
       <p style="font-weight:600">No public runs indexed yet</p>
-      <p class="dim" style="font-size:0.8125rem">Operational truth: this feed is empty. Seed a canary run or publish your first wrapped run to activate live triage.</p>
-      <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto">${esc(command)}</pre>
+      <p class="dim" style="font-size:0.8125rem">Operational truth: this feed is empty. Verify your first run, then deep-link directly into /run for transparent inspection.</p>
+
+      <div>
+        <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Verify your first run</p>
+        <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto; margin-top:0.35rem">${esc(command)}</pre>
+      </div>
+
+      <div>
+        <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Post-run deep-link pattern</p>
+        <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto; margin-top:0.35rem">${esc(deepLinkSnippet)}</pre>
+      </div>
+
       <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center">
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(${commandLiteral}); this.textContent='Copied';">Copy quickstart command</button>
+        <button class="copy-btn" data-copy="${esc(command)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy verify command</button>
+        <button class="copy-btn" data-copy="${esc(deepLinkSnippet)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy deep-link snippet</button>
         <a href="https://docs.clawsig.com/quickstart" target="_blank" rel="noopener">Open quickstart docs &rarr;</a>
       </div>
     </div>
@@ -256,7 +271,7 @@ export function runsFeedPage(data: RunsFeedPageData): string {
 
   const body = `
     <h1 class="page-title">Runs Feed (Triage Mode)</h1>
-    <p class="page-subtitle">Filter, page, and isolate repeated failures without leaving the explorer.</p>
+    <p class="page-subtitle">Filter, page, and isolate repeated failures. New users can verify first run and deep-link straight into triage.</p>
 
     ${data.fetch_error
       ? `<div class="card" style="border-color:rgba(255, 68, 68, 0.45)">

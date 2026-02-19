@@ -93,16 +93,32 @@ function formatPct(value: number): string {
 }
 
 function quickstartCard(title: string, description: string): string {
-  const command = 'npx clawsig wrap -- your-agent-command';
-  const commandLiteral = JSON.stringify(command);
+  const verifyCommand = 'npx clawsig wrap -- your-agent-command';
+  const deepLinkPattern = 'https://explorer.clawsig.com/run/<run_id>';
+  const deepLinkSnippet = [
+    'RUN_ID="<run_id_from_verify_response>"',
+    'echo "https://explorer.clawsig.com/run/${RUN_ID}"',
+  ].join('\n');
 
   return `
     <div class="runs-empty" style="display:grid; gap:0.6rem">
       <p style="font-weight:600">${esc(title)}</p>
       <p class="dim" style="font-size:0.875rem">${esc(description)}</p>
-      <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto">${esc(command)}</pre>
+
+      <div>
+        <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Verify your first run</p>
+        <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto; margin-top:0.35rem">${esc(verifyCommand)}</pre>
+      </div>
+
+      <div>
+        <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Post-run deep-link pattern</p>
+        <pre class="mono" style="background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto; margin-top:0.35rem">${esc(deepLinkSnippet)}</pre>
+        <p class="dim" style="font-size:0.78rem; margin-top:0.35rem">Run detail URL: <span class="mono">${esc(deepLinkPattern)}</span></p>
+      </div>
+
       <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center">
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(${commandLiteral}); this.textContent='Copied';">Copy quickstart command</button>
+        <button class="copy-btn" data-copy="${esc(verifyCommand)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy verify command</button>
+        <button class="copy-btn" data-copy="${esc(deepLinkSnippet)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy deep-link snippet</button>
         <a href="https://docs.clawsig.com/quickstart" target="_blank" rel="noopener">Open quickstart docs &rarr;</a>
         <a href="/runs">Browse runs feed &rarr;</a>
       </div>
@@ -209,8 +225,11 @@ export function homePage(data: HomePageData): string {
         Filter failures, inspect diagnostics, and verify proofs independently.
       </p>
       <div class="cta-box">
-        <span class="prompt">$</span> <span class="cmd">npx clawsig wrap -- your-agent</span>
+        <span class="prompt">$</span> <span class="cmd">npx clawsig wrap -- your-agent-command</span>
       </div>
+      <p class="dim" style="font-size:0.82rem; margin-top:0.55rem">
+        Verify your first run, then open <span class="mono">https://explorer.clawsig.com/run/&lt;run_id&gt;</span> for transparent triage.
+      </p>
     </div>
 
     <div class="stats-grid">
@@ -234,6 +253,14 @@ export function homePage(data: HomePageData): string {
         <div class="value">${formatPct(data.stats.fail_rate_24h)}</div>
         <div class="label">Fail Rate (24h)</div>
       </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Verify Your First Run</p>
+      ${quickstartCard(
+        'CLI-first onboarding',
+        'Copy the verify command and post-run deep-link snippet. Keep the onboarding path transparent and reproducible.'
+      )}
     </div>
 
     ${data.stats.total_runs === 0

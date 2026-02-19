@@ -64,6 +64,7 @@ describe('home/stats pages', () => {
     const html = homePage(sampleData);
 
     expect(html).toContain('Reliability Ops Snapshot');
+    expect(html).toContain('Verify Your First Run');
     expect(html).toContain('Top fail reason');
     expect(html).toContain('/runs?status=FAIL&reason_code=HASH_MISMATCH');
     expect(html).toContain('Recent Failures');
@@ -82,7 +83,8 @@ describe('home/stats pages', () => {
     const statsHtml = statsPage(emptyData);
 
     expect(homeHtml).toContain('Ledger is live, but no public runs are indexed yet');
-    expect(homeHtml).toContain('Copy quickstart command');
+    expect(homeHtml).toContain('Copy verify command');
+    expect(homeHtml).toContain('Post-run deep-link pattern');
     expect(statsHtml).toContain('No network activity captured yet');
     expect(statsHtml).toContain('Open quickstart docs');
   });
