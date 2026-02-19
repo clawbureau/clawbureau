@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/arena/proof_pack.v3.json",
+  "title": "Bounty Arena Proof Pack v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arena_id",
+    "generated_at",
+    "claim_binding",
+    "contender",
+    "compliance",
+    "metrics",
+    "evidence",
+    "insights"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "proof_pack.v3"
+    },
+    "arena_id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claim_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bounty_id",
+        "contract_id",
+        "contract_hash_b64u",
+        "claim_hash_b64u",
+        "task_fingerprint"
+      ],
+      "properties": {
+        "bounty_id": { "type": "string", "minLength": 3, "maxLength": 128 },
+        "contract_id": { "type": "string", "minLength": 3, "maxLength": 128 },
+        "contract_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "claim_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "task_fingerprint": { "type": "string", "minLength": 3, "maxLength": 256 },
+        "objective_profile": {
+          "type": "string",
+          "enum": ["quality", "speed", "cost", "safety", "balanced"]
+        }
+      }
+    },
+    "contender": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contender_id", "label", "config"],
+      "properties": {
+        "contender_id": { "type": "string", "minLength": 2, "maxLength": 128 },
+        "label": { "type": "string", "minLength": 2, "maxLength": 256 },
+        "config": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "harness", "tools", "skills", "plugins", "prompt_hash_b64u"],
+          "properties": {
+            "model": { "type": "string", "minLength": 2, "maxLength": 256 },
+            "harness": { "type": "string", "minLength": 2, "maxLength": 256 },
+            "tools": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "maxItems": 64
+            },
+            "skills": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "maxItems": 64
+            },
+            "plugins": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "maxItems": 64
+            },
+            "prompt_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+          }
+        }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mandatory_passed", "mandatory_failed", "checks"],
+      "properties": {
+        "mandatory_passed": { "type": "integer", "minimum": 0 },
+        "mandatory_failed": { "type": "integer", "minimum": 0 },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["criterion_id", "required", "status", "reason_code"],
+            "properties": {
+              "criterion_id": { "type": "string", "minLength": 2, "maxLength": 128 },
+              "required": { "type": "boolean" },
+              "status": { "type": "string", "enum": ["PASS", "FAIL"] },
+              "reason_code": { "type": "string", "minLength": 2, "maxLength": 128 },
+              "notes": { "type": "string", "maxLength": 500 }
+            }
+          },
+          "maxItems": 128
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quality_score",
+        "risk_score",
+        "efficiency_score",
+        "latency_ms",
+        "cost_usd",
+        "autonomy_score"
+      ],
+      "properties": {
+        "quality_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "risk_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "efficiency_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "latency_ms": { "type": "integer", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "autonomy_score": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["delivery_summary", "delivery_hash_b64u", "links"],
+      "properties": {
+        "delivery_summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "delivery_hash_b64u": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "url"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "url": { "type": "string", "format": "uri", "maxLength": 2048 }
+            }
+          },
+          "maxItems": 128
+        }
+      }
+    },
+    "insights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bottlenecks", "contract_improvements", "next_delegation_hints"],
+      "properties": {
+        "bottlenecks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "maxItems": 64
+        },
+        "contract_improvements": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "maxItems": 64
+        },
+        "next_delegation_hints": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "maxItems": 64
+        }
+      }
+    }
+  }
+}

@@ -445,11 +445,24 @@
       "priority": 34,
       "passes": true,
       "notes": "Shipped via PR #332 (merge c34eabf45d2eb134937779062d1746bfbbf3e5bd): service/core causal reason-code parity checker + workflow + pipeline integration."
+    },
+    {
+      "id": "CAV-US-030",
+      "title": "Roadmap continuity sync through CAV-US-030",
+      "description": "Close continuity drift by syncing roadmap evidence and status windows through merged CAV-US-030 while preserving fail-closed roadmap checks.",
+      "acceptanceCriteria": [
+        "README/prd/progress include CAV-US-030 shipped evidence with PR and merge commit",
+        "Roadmap status windows declare through CAV-US-030 or newer",
+        "cav-roadmap-sync checker remains green with latest merged lane coverage"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": "Shipped via PR #333 (merge baf37ad873cb4df53630dd075c37b7ea2374a92a): roadmap continuity sync through CAV-US-030."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-19T01:10:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-029 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-19T14:40:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-030 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -558,6 +571,10 @@
       {
         "pr": "#332",
         "merge_commit": "c34eabf45d2eb134937779062d1746bfbbf3e5bd"
+      },
+      {
+        "pr": "#333",
+        "merge_commit": "baf37ad873cb4df53630dd075c37b7ea2374a92a"
       }
     ]
   }

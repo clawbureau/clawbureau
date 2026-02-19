@@ -30,6 +30,8 @@ import {
   validatePromptPackV1 as validatePromptPackV1Generated,
   validateSystemPromptReportV1 as validateSystemPromptReportV1Generated,
   validateWorkPolicyContractV2 as validateWorkPolicyContractV2Generated,
+  validateArenaProofPackV3 as validateArenaProofPackV3Generated,
+  validateArenaManagerReviewV1 as validateArenaManagerReviewV1Generated,
 } from './schema-validators.generated';
 
 export interface SchemaValidationFailure {
@@ -104,6 +106,12 @@ const validateSystemPromptReportV1Fn =
 
 const validateWorkPolicyContractV2Fn =
   validateWorkPolicyContractV2Generated as StandaloneValidateFunction;
+
+const validateArenaProofPackV3Fn =
+  validateArenaProofPackV3Generated as StandaloneValidateFunction;
+
+const validateArenaManagerReviewV1Fn =
+  validateArenaManagerReviewV1Generated as StandaloneValidateFunction;
 
 export function getSchemaValidationInitError(): string | null {
   // Standalone validators are generated at build/commit time.
@@ -361,5 +369,21 @@ export function validateWorkPolicyContractV2(value: unknown): SchemaValidationRe
     validateWorkPolicyContractV2Fn,
     value,
     'work_policy_contract.v2'
+  );
+}
+
+export function validateArenaProofPackV3(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateArenaProofPackV3Fn,
+    value,
+    'arena.proof_pack.v3'
+  );
+}
+
+export function validateArenaManagerReviewV1(value: unknown): SchemaValidationResult {
+  return validateWith(
+    validateArenaManagerReviewV1Fn,
+    value,
+    'arena.manager_review.v1'
   );
 }

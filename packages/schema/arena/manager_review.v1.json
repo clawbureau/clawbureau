@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.clawbureau.org/arena/manager_review.v1.json",
+  "title": "Bounty Arena Manager Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "arena_id",
+    "contender_id",
+    "decision",
+    "confidence",
+    "reason_codes",
+    "failed_checks",
+    "metrics",
+    "recommended_next_action"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "manager_review.v1"
+    },
+    "arena_id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "contender_id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 128
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["promote", "conditional", "reject"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 2, "maxLength": 128 },
+      "maxItems": 64
+    },
+    "failed_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion_id", "reason_code"],
+        "properties": {
+          "criterion_id": { "type": "string", "minLength": 2, "maxLength": 128 },
+          "reason_code": { "type": "string", "minLength": 2, "maxLength": 128 },
+          "required": { "type": "boolean" }
+        }
+      },
+      "maxItems": 64
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quality_score", "risk_score", "efficiency_score", "latency_ms", "cost_usd", "autonomy_score"],
+      "properties": {
+        "quality_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "risk_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "efficiency_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "latency_ms": { "type": "integer", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0 },
+        "autonomy_score": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "recommended_next_action": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 600
+    }
+  }
+}

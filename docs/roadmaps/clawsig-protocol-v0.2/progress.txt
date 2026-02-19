@@ -810,3 +810,24 @@ Deliverables:
 
 Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+
+---
+
+2026-02-19 — CAV-US-030 roadmap continuity sync closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-030 on `main`.
+
+Shipped merge references:
+- CAV-US-030 — PR #333 (`baf37ad8`)
+
+Deliverables:
+- Truth-sync updates through latest merged lane window:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+- Continuity guardrail remains required:
+  - `scripts/docs/check-cav-roadmap-sync.mjs`
+  - `.github/workflows/cav-roadmap-sync.yml`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
