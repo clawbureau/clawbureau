@@ -17,10 +17,17 @@
  */
 
 import { layout, type PageMeta } from "./layout.js";
-import { fetchRun, fetchAgentPassport, fetchAgentRuns, fetchGlobalStats } from "./api.js";
-import { runDetailPage, runNotFoundPage } from "./pages/run.js";
-import { agentProfilePage, agentNotFoundPage } from "./pages/agent.js";
-import { homePage, statsPage } from "./pages/home.js";
+import {
+  fetchRun,
+  fetchAgentPassport,
+  fetchAgentRuns,
+  fetchGlobalStats,
+  fetchRunsFeed,
+} from './api.js';
+import { runDetailPage, runNotFoundPage } from './pages/run.js';
+import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
+import { homePage, statsPage } from './pages/home.js';
+import { runsFeedPage } from './pages/runs.js';
 
 export interface Env {
   ENVIRONMENT: string;
@@ -90,9 +97,42 @@ export default {
       return html(statsPage(data), 200, 30);
     }
 
-    // -- Agents listing (redirect to home for now) --
-    if (path === "/agents") {
-      return Response.redirect(url.origin + "/", 302);
+    // -- Runs feed / triage mode --
+    if (path === '/runs') {
+      const limit = Math.max(1, parseInt(url.searchParams.get('limit') ?? '20', 10) || 20);
+      const data = await fetchRunsFeed(
+        {
+          limit,
+          cursor: url.searchParams.get('cursor') ?? undefined,
+          status: url.searchParams.get('status') ?? undefined,
+          tier: url.searchParams.get('tier') ?? undefined,
+          reason_code: url.searchParams.get('reason_code') ?? undefined,
+          agent_did: url.searchParams.get('agent_did') ?? undefined,
+        },
+        apiOpts,
+      );
+
+      if (!data) {
+        return html(runsFeedPage({
+          runs: [],
+          filters: {
+            status: url.searchParams.get('status') ?? undefined,
+            tier: url.searchParams.get('tier') ?? undefined,
+            reason_code: url.searchParams.get('reason_code') ?? undefined,
+            agent_did: url.searchParams.get('agent_did') ?? undefined,
+          },
+          limit,
+          has_next: false,
+          next_cursor: null,
+        }), 200, 10);
+      }
+
+      return html(runsFeedPage(data), 200, 20);
+    }
+
+    // -- Agents listing (redirect to runs feed for now) --
+    if (path === '/agents') {
+      return Response.redirect(url.origin + '/runs', 302);
     }
 
     // -- Run detail --
