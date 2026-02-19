@@ -1,0 +1,84 @@
+{
+  "story": "AGP-US-048",
+  "generated_at": "2026-02-19T20:36:48Z",
+  "deploys": {
+    "staging": {
+      "clawbounties_version_id": "eed0374f-4962-42b9-9cd9-56e9f7b0aefe",
+      "explorer_version_id": "c1635824-edbc-4640-93ff-ec1bb9272641"
+    },
+    "prod": {
+      "clawbounties_version_id": "02db520c-402b-48eb-b457-721e4e0d2927",
+      "explorer_version_id": "23f94d69-7774-4841-8808-14d6f318be18"
+    }
+  },
+  "seeds": {
+    "staging": {
+      "bounty_id": "bty_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab",
+      "arena_id": "arena_bty_aaaaaaaa_stage_seed_002",
+      "registry": {
+        "registry_version": "2026-02-19",
+        "objective_profile_name": "balanced"
+      },
+      "experiment": {
+        "experiment_id": "exp_api_hardening_ab_v1",
+        "arm": "B"
+      },
+      "winner": "contender_codex_pi"
+    },
+    "prod": {
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "arena_id": "arena_bty_bbbbbbbb_prod_seed_002",
+      "registry": {
+        "registry_version": "2026-02-19",
+        "objective_profile_name": "balanced"
+      },
+      "experiment": {
+        "experiment_id": "exp_api_hardening_ab_v1",
+        "arm": "B"
+      },
+      "winner": "contender_codex_pi"
+    }
+  },
+  "route_filter_checks": {
+    "staging": {
+      "arm_b": {
+        "status": 200,
+        "recommended": "contender_codex_pi",
+        "analyzed_runs": 1
+      },
+      "arm_a": {
+        "status": 404
+      }
+    },
+    "prod": {
+      "arm_b": {
+        "status": 200,
+        "recommended": "contender_codex_pi",
+        "analyzed_runs": 1
+      },
+      "arm_a": {
+        "status": 404
+      }
+    }
+  },
+  "health": {
+    "staging": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "staging"
+    },
+    "prod": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "production"
+    }
+  },
+  "files": {
+    "staging_contract": "artifacts/ops/arena-productization/staging-contract-agp-us-048.json",
+    "prod_contract": "artifacts/ops/arena-productization/prod-contract-agp-us-048.json",
+    "staging_route_arm_b": "artifacts/ops/arena-productization/2026-02-19T20-36-13Z-agp-us-048-live-enable/staging-route-arm-b.json",
+    "prod_route_arm_b": "artifacts/ops/arena-productization/2026-02-19T20-36-13Z-agp-us-048-live-enable/prod-route-arm-b.json"
+  }
+}
