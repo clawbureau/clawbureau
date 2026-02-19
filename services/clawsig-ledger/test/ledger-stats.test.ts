@@ -69,9 +69,10 @@ function makeEnv(fixture: StatsFixture): Env {
   };
 }
 
-async function callStats(env: Env): Promise<Response> {
-  const request = new Request('https://ledger.test/v1/ledger/stats', {
+async function callStats(env: Env, path = '/v1/ledger/stats', init?: RequestInit): Promise<Response> {
+  const request = new Request(`https://ledger.test${path}`, {
     method: 'GET',
+    ...init,
   });
 
   const ctx = {
@@ -221,5 +222,65 @@ describe('GET /v1/ledger/stats', () => {
         { day: '2026-02-14', runs: 30, fail_runs: 3, fail_rate: 0.1 },
       ],
     });
+  });
+
+  it('returns cache headers and 304 for matching etag on stats endpoint', async () => {
+    const env = makeEnv({
+      baseRow: {
+        total_agents: 0,
+        total_runs: 0,
+        total_gateway_runs: 0,
+        total_violations: 0,
+        runs_24h: 0,
+        fail_runs_24h: 0,
+      },
+      topFailRows: [],
+      diagnostics7dBase: { runs_7d: 0, fail_runs_7d: 0 },
+      topFailRows7d: [],
+      dailyDiagnostics7d: [],
+      recentRuns: [],
+    });
+
+    const response = await callStats(env);
+    const etag = response.headers.get('etag');
+    const cacheControl = response.headers.get('cache-control');
+
+    expect(response.status).toBe(200);
+    expect(etag).toBeTruthy();
+    expect(cacheControl).toContain('max-age=15');
+
+    const notModified = await callStats(env, '/v1/ledger/stats', {
+      headers: { 'If-None-Match': String(etag) },
+    });
+
+    expect(notModified.status).toBe(304);
+  });
+
+  it('rejects unsupported or abusive stats query strings deterministically', async () => {
+    const env = makeEnv({
+      baseRow: {
+        total_agents: 0,
+        total_runs: 0,
+        total_gateway_runs: 0,
+        total_violations: 0,
+        runs_24h: 0,
+        fail_runs_24h: 0,
+      },
+      topFailRows: [],
+      diagnostics7dBase: { runs_7d: 0, fail_runs_7d: 0 },
+      topFailRows7d: [],
+      dailyDiagnostics7d: [],
+      recentRuns: [],
+    });
+
+    const unsupported = await callStats(env, '/v1/ledger/stats?foo=bar');
+    const unsupportedPayload = (await unsupported.json()) as { error: { code: string } };
+    expect(unsupported.status).toBe(400);
+    expect(unsupportedPayload.error.code).toBe('UNSUPPORTED_QUERY_PARAMETER');
+
+    const abusive = await callStats(env, `/v1/ledger/stats?${'x='.concat('y'.repeat(1400))}`);
+    const abusivePayload = (await abusive.json()) as { error: { code: string } };
+    expect(abusive.status).toBe(414);
+    expect(abusivePayload.error.code).toBe('QUERY_TOO_LONG');
   });
 });
