@@ -713,6 +713,18 @@ export interface ArenaContenderView {
   manager_review_json: string;
 }
 
+export interface ArenaDelegationInsights {
+  winner_hints: string[];
+  winner_bottlenecks: string[];
+  bottlenecks: string[];
+  contract_improvements: string[];
+  next_delegation_hints: string[];
+  manager_routing: {
+    default_contender_id: string | null;
+    backup_contenders: string[];
+  };
+}
+
 export interface ArenaReportView {
   arena_id: string;
   generated_at: string;
@@ -739,6 +751,7 @@ export interface ArenaReportView {
   };
   tradeoffs: string[];
   reason_codes: string[];
+  delegation_insights?: ArenaDelegationInsights;
 }
 
 interface ArenaIndexResponse {
@@ -800,6 +813,7 @@ interface ArenaReportResponse {
   };
   tradeoffs?: unknown;
   reason_codes?: unknown;
+  delegation_insights?: unknown;
 }
 
 function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>[number]): ArenaContenderView | null {
@@ -855,6 +869,39 @@ function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>
     check_results: checkResults,
     review_paste: asString(row.review_paste) ?? '',
     manager_review_json: managerReviewJson,
+  };
+}
+
+function parseDelegationInsights(input: unknown): ArenaDelegationInsights | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+  const routingRaw = rec.manager_routing;
+  const routing = routingRaw && typeof routingRaw === 'object'
+    ? (routingRaw as Record<string, unknown>)
+    : {};
+
+  return {
+    winner_hints: Array.isArray(rec.winner_hints)
+      ? rec.winner_hints.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    winner_bottlenecks: Array.isArray(rec.winner_bottlenecks)
+      ? rec.winner_bottlenecks.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    bottlenecks: Array.isArray(rec.bottlenecks)
+      ? rec.bottlenecks.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    contract_improvements: Array.isArray(rec.contract_improvements)
+      ? rec.contract_improvements.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    next_delegation_hints: Array.isArray(rec.next_delegation_hints)
+      ? rec.next_delegation_hints.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    manager_routing: {
+      default_contender_id: asString(routing.default_contender_id),
+      backup_contenders: Array.isArray(routing.backup_contenders)
+        ? routing.backup_contenders.filter((entry): entry is string => typeof entry === 'string')
+        : [],
+    },
   };
 }
 
@@ -981,5 +1028,6 @@ export async function fetchArenaReport(
     reason_codes: Array.isArray(data.reason_codes)
       ? data.reason_codes.filter((entry): entry is string => typeof entry === 'string')
       : [],
+    delegation_insights: parseDelegationInsights(data.delegation_insights),
   };
 }

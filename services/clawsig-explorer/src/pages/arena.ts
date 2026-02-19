@@ -166,6 +166,22 @@ export function arenaComparePage(report: ArenaReportView): string {
       <p class="dim" style="font-size:0.8rem; margin-top:0.65rem">Reason codes: ${esc(report.reason_codes.join(', ') || 'none')}</p>
     </div>
 
+    ${report.delegation_insights ? `
+      <div class="card">
+        <p class="section-title">Delegation insights</p>
+        <p class="dim" style="font-size:0.82rem; margin-bottom:0.5rem">Route future work using winner hints + observed bottlenecks.</p>
+        <div class="detail-grid" style="margin-bottom:0.6rem">
+          <dt>Default route</dt><dd class="mono">${esc(report.delegation_insights.manager_routing.default_contender_id ?? 'none')}</dd>
+          <dt>Backups</dt><dd class="mono">${esc(report.delegation_insights.manager_routing.backup_contenders.join(', ') || 'none')}</dd>
+        </div>
+        <div style="display:grid; gap:0.45rem; font-size:0.82rem">
+          <div><strong>Winner hints:</strong> ${esc(report.delegation_insights.winner_hints.join(' | ') || 'none')}</div>
+          <div><strong>Bottlenecks:</strong> ${esc(report.delegation_insights.bottlenecks.join(' | ') || 'none')}</div>
+          <div><strong>Contract improvements:</strong> ${esc(report.delegation_insights.contract_improvements.join(' | ') || 'none')}</div>
+        </div>
+      </div>
+    ` : ''}
+
     <div class="card">
       <p class="section-title">Contract binding</p>
       <div class="detail-grid">
@@ -398,5 +414,19 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
       'contender_codex_pi trades latency for stronger compliance confidence.',
     ],
     reason_codes: ['ARENA_WINNER_SELECTED', 'ARENA_HARD_GATES_PASSED'],
+    delegation_insights: {
+      winner_hints: ['use for high-risk API hardening bounties'],
+      winner_bottlenecks: ['slower due to larger test matrix'],
+      bottlenecks: ['slower due to larger test matrix', 'requires stricter contract language'],
+      contract_improvements: ['clarify schema version lock in contract text'],
+      next_delegation_hints: [
+        'use for high-risk API hardening bounties',
+        'pair with low-cost contender for quick reruns',
+      ],
+      manager_routing: {
+        default_contender_id: 'contender_codex_pi',
+        backup_contenders: ['contender_claude_codex_cli'],
+      },
+    },
   };
 }
