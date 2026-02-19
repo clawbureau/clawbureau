@@ -11,6 +11,8 @@ const ROOT = path.resolve(__dirname, '../..');
 
 const PARITY_MESSAGE_PREFIX = 'causal-service-core-parity-evidence';
 const STABILITY_MESSAGE_PREFIX = 'causal-reason-code-stability-evidence';
+const FIXTURE_CONTRACT_MESSAGE_PREFIX = 'causal-fixture-contract-evidence';
+const CROSS_RUNTIME_MESSAGE_PREFIX = 'causal-cross-runtime-determinism-evidence';
 
 const BASE58_ALPHABET =
   '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -40,6 +42,22 @@ function parseArgs(argv) {
     stabilitySignatureOut:
       getValue('--stability-signature-out') ??
       getValueEq('--stability-signature-out') ??
+      null,
+    fixtureContractSummary:
+      getValue('--fixture-contract-summary') ??
+      getValueEq('--fixture-contract-summary') ??
+      null,
+    fixtureContractSignatureOut:
+      getValue('--fixture-contract-signature-out') ??
+      getValueEq('--fixture-contract-signature-out') ??
+      null,
+    crossRuntimeSummary:
+      getValue('--cross-runtime-summary') ??
+      getValueEq('--cross-runtime-summary') ??
+      null,
+    crossRuntimeSignatureOut:
+      getValue('--cross-runtime-signature-out') ??
+      getValueEq('--cross-runtime-signature-out') ??
       null,
     signingMode:
       getValue('--signing-mode') ?? getValueEq('--signing-mode') ?? 'auto',
@@ -321,6 +339,12 @@ async function run() {
   const stabilitySummaryPath =
     opts.stabilitySummary ??
     findLatestSummaryPath('artifacts/ops/causal-reason-code-stability');
+  const fixtureContractSummaryPath =
+    opts.fixtureContractSummary ??
+    findLatestSummaryPath('artifacts/ops/causal-fixture-contract');
+  const crossRuntimeSummaryPath =
+    opts.crossRuntimeSummary ??
+    findLatestSummaryPath('artifacts/ops/causal-cross-runtime-determinism');
 
   if (!paritySummaryPath) {
     console.error('[sign-causal-parity-evidence-pack] FAIL');
@@ -332,6 +356,22 @@ async function run() {
     console.error('[sign-causal-parity-evidence-pack] FAIL');
     console.error(
       'No reason-code stability summary found. Pass --stability-summary <path>.'
+    );
+    process.exit(1);
+  }
+
+  if (!fixtureContractSummaryPath) {
+    console.error('[sign-causal-parity-evidence-pack] FAIL');
+    console.error(
+      'No causal fixture-contract summary found. Pass --fixture-contract-summary <path>.'
+    );
+    process.exit(1);
+  }
+
+  if (!crossRuntimeSummaryPath) {
+    console.error('[sign-causal-parity-evidence-pack] FAIL');
+    console.error(
+      'No causal cross-runtime determinism summary found. Pass --cross-runtime-summary <path>.'
     );
     process.exit(1);
   }
@@ -352,6 +392,22 @@ async function run() {
     signingMode: opts.signingMode,
   });
 
+  const fixture_contract = await signSummary({
+    label: 'fixture-contract',
+    summaryPath: fixtureContractSummaryPath,
+    signatureOut: opts.fixtureContractSignatureOut,
+    messagePrefix: FIXTURE_CONTRACT_MESSAGE_PREFIX,
+    signingMode: opts.signingMode,
+  });
+
+  const cross_runtime = await signSummary({
+    label: 'cross-runtime-determinism',
+    summaryPath: crossRuntimeSummaryPath,
+    signatureOut: opts.crossRuntimeSignatureOut,
+    messagePrefix: CROSS_RUNTIME_MESSAGE_PREFIX,
+    signingMode: opts.signingMode,
+  });
+
   console.log('[sign-causal-parity-evidence-pack] PASS');
   console.log(
     JSON.stringify(
@@ -359,6 +415,8 @@ async function run() {
         ok: true,
         parity,
         stability,
+        fixture_contract,
+        cross_runtime,
       },
       null,
       2
