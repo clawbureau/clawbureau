@@ -10,7 +10,8 @@
  * - Client-side verification panel (WebCrypto)
  */
 
-import { layout, esc, didDisplay, statusBadge, tierBadge, relativeTime, type PageMeta } from "../layout.js";
+import { layout, esc, didDisplay, statusBadge, tierBadge, relativeTime, type PageMeta } from '../layout.js';
+import { getReasonCodeExplanation } from '../reason-codes.js';
 
 export interface RunData {
   run_id: string;
@@ -72,6 +73,10 @@ export function runDetailPage(run: RunData): string {
   const authMode = run.auth_mode
     ? `<span class="hash">${esc(run.auth_mode)}</span>`
     : `<span class="dim">Not available</span>`;
+
+  const reasonExplanation = run.status === 'FAIL'
+    ? getReasonCodeExplanation(run.reason_code)
+    : null;
 
   const body = `
     <div style="margin-bottom: 1.5rem">
@@ -140,10 +145,46 @@ export function runDetailPage(run: RunData): string {
       </dl>
     </div>
 
+    ${reasonExplanationCard(reasonExplanation)}
+
     ${clientVerifyPanel(run)}
   `;
 
   return layout(meta, body);
+}
+
+function reasonExplanationCard(
+  explanation: ReturnType<typeof getReasonCodeExplanation>
+): string {
+  if (!explanation) {
+    return '';
+  }
+
+  const remediationList = explanation.remediation_steps
+    .map((step) => `<li>${esc(step)}</li>`)
+    .join('');
+
+  return `
+    <div class="card" style="border-color: rgba(255, 170, 0, 0.45)">
+      <p class="section-title">Failure Triage</p>
+      <h3 style="margin-bottom:0.5rem">${esc(explanation.title)}</h3>
+      <p style="margin-bottom:0.75rem">${esc(explanation.plain_language)}</p>
+
+      <div style="display:grid; gap:0.75rem">
+        <div>
+          <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Likely Root Cause</p>
+          <p>${esc(explanation.likely_root_cause)}</p>
+        </div>
+
+        <div>
+          <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Recommended Remediation</p>
+          <ol style="padding-left:1.25rem; margin-top:0.25rem; display:grid; gap:0.25rem">
+            ${remediationList}
+          </ol>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function clientVerifyPanel(run: RunData): string {
