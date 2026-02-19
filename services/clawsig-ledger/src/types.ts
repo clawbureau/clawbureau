@@ -7,6 +7,8 @@ export interface Env {
   CLAWLOGS_ADMIN_TOKEN?: string;
   ORACLE_SIGNING_KEY?: string;
   VAAS_API_KEY_HASH?: string;
+  CLAWVERIFY_API_URL?: string;
+  CLAWVERIFY_API_TOKEN?: string;
   GATEWAY_RECEIPT_SIGNER_DIDS?: string;
   ATTESTATION_SIGNER_DIDS?: string;
 }

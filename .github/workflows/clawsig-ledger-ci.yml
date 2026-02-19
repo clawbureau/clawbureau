@@ -1,0 +1,43 @@
+name: clawsig-ledger-ci
+
+on:
+  pull_request:
+    paths:
+      - 'services/clawsig-ledger/**'
+      - '.github/workflows/clawsig-ledger-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/clawsig-ledger/**'
+      - '.github/workflows/clawsig-ledger-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  clawsig-ledger-typecheck-test:
+    name: clawsig-ledger-typecheck-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clawsig-ledger dependencies
+        run: |
+          cd services/clawsig-ledger
+          npm install
+
+      - name: Typecheck clawsig-ledger
+        run: |
+          cd services/clawsig-ledger
+          npm run typecheck
+
+      - name: Test clawsig-ledger
+        run: |
+          cd services/clawsig-ledger
+          npm test

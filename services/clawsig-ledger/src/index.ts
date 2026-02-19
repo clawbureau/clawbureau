@@ -2,16 +2,16 @@
  * clawsig-ledger: VaaS API + Public Ledger + Badges + Agent Passports
  * Sections 2-5 of Gemini Deep Think Round 3: The Moonshot (Viral Flywheel)
  */
-// TODO: Wire real verification once core is Workers-compatible
 import {
-  verifyProofBundle, base64UrlEncode, generateComplianceReport,
-  type ComplianceFramework, type ComplianceBundleInput, type CompliancePolicyInput,
+  generateComplianceReport,
+  type ComplianceFramework,
+  type ComplianceBundleInput,
+  type CompliancePolicyInput,
 } from './stubs';
-// TODO: Wire real verification once core is Workers-compatible
+import { base64UrlEncode } from './utils';
+import { verifyProofBundleViaApi } from './verify-client';
 import { resolveBadge, renderBadgeSvg } from './badges';
-// TODO: Wire real verification once core is Workers-compatible
 import { importOracleKey, signWithOracleKey } from './crypto';
-// TODO: Wire real verification once core is Workers-compatible
 import { handleQueue } from './queue-consumer';
 import type {
   Env, VerifyRequest, VerifyResponse, LedgerIngestMessage,
@@ -24,7 +24,6 @@ function json(data: unknown, status = 200, extra?: Record<string, string>): Resp
   });
 }
 function errorJson(message: string, code: string, status = 400): Response { return json({ error: { code, message } }, status); }
-function csv(v: string | undefined): string[] { return v ? v.split(',').map(s => s.trim()).filter(Boolean) : []; }
 function genRunId(): string {
   const b = new Uint8Array(8); crypto.getRandomValues(b);
   return `run_${Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('')}`;
@@ -40,15 +39,13 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   const hasApiKey = !!(apiKey && env.VAAS_API_KEY_HASH);
   const publishToLedger = body.publish_to_ledger !== false || !hasApiKey;
 
-  const verification = await verifyProofBundle(body.proof_bundle, {
-    allowlistedReceiptSignerDids: csv(env.GATEWAY_RECEIPT_SIGNER_DIDS),
-    allowlistedAttesterDids: csv(env.ATTESTATION_SIGNER_DIDS),
-  });
+  const verification = await verifyProofBundleViaApi(body.proof_bundle, env);
 
-  const isPassing = verification.result.status === 'VALID';
-  const proofTier = verification.result.proof_tier ?? 'unknown';
-  const agentDid = verification.result.agent_did ?? 'unknown';
+  const isPassing = verification.status === 'VALID';
+  const proofTier = verification.proof_tier;
+  const agentDid = verification.agent_did ?? 'unknown';
   const runId = genRunId();
+  const shouldPublishToLedger = publishToLedger && verification.failure_class === 'none';
 
   const bundleJsonStr = JSON.stringify(body.proof_bundle);
   const bundleHashB64u = base64UrlEncode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bundleJsonStr))));
@@ -62,13 +59,24 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   if (hasApiKey && body.options?.emit_compliance_report && isPassing) {
     for (const fw of body.options.emit_compliance_report) {
       try {
-        complianceReports[fw] = generateComplianceReport(fw as ComplianceFramework, payload as unknown as ComplianceBundleInput,
-          body.wpc_policy_override ? (body.wpc_policy_override as CompliancePolicyInput) : undefined, { bundleHash: bundleHashB64u });
-      } catch { complianceReports[fw] = { error: `Unknown framework: ${fw}` }; }
+        const report = generateComplianceReport(
+          fw as ComplianceFramework,
+          payload as ComplianceBundleInput,
+          body.wpc_policy_override
+            ? (body.wpc_policy_override as CompliancePolicyInput)
+            : undefined
+        );
+        complianceReports[fw] = {
+          ...(typeof report === 'object' && report ? report : { report }),
+          bundle_hash_b64u: bundleHashB64u,
+        };
+      } catch {
+        complianceReports[fw] = { error: `Unknown framework: ${fw}` };
+      }
     }
   }
 
-  if (publishToLedger) {
+  if (shouldPublishToLedger) {
     const msg: LedgerIngestMessage = {
       run_id: runId, bundle_hash_b64u: bundleHashB64u, agent_did: agentDid, proof_tier: proofTier,
       status: isPassing ? 'PASS' : 'FAIL',
@@ -80,11 +88,16 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
 
   const response: VerifyResponse = {
     status: isPassing ? 'PASS' : 'FAIL', tier: proofTier,
-    reason_code: isPassing ? 'OK' : (verification.error?.code ?? 'VERIFICATION_FAILED'), run_id: runId,
+    reason_code: isPassing ? 'OK' : verification.reason_code, run_id: runId,
     urls: { badge: `https://api.clawverify.com/v1/badges/${runId}.svg`, ledger: `https://explorer.clawsig.com/run/${runId}` },
-    rt_log_inclusion: { status: publishToLedger ? 'PENDING_ASYNC' : 'NOT_PUBLISHED' }, compliance_reports: complianceReports,
+    rt_log_inclusion: { status: shouldPublishToLedger ? 'PENDING_ASYNC' : 'NOT_PUBLISHED' }, compliance_reports: complianceReports,
   };
-  return json(response, isPassing ? 200 : 422);
+
+  const statusCode = verification.failure_class === 'none'
+    ? (isPassing ? 200 : 422)
+    : 503;
+
+  return json(response, statusCode);
 }
 
 // GET /v1/badges/:run_id.svg
