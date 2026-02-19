@@ -809,6 +809,23 @@ export interface ArenaAutopilotView {
   };
 }
 
+export interface ArenaPolicyOptimizerView {
+  status: string;
+  task_fingerprint: string | null;
+  environment: string | null;
+  promotion_status: string | null;
+  reason_codes: string[];
+  gates: {
+    min_samples: number;
+    min_confidence: number;
+    sample_count: number;
+    confidence_score: number;
+  };
+  current_active_policy: Record<string, unknown> | null;
+  candidate_shadow_policy: Record<string, unknown> | null;
+  promotion: Record<string, unknown> | null;
+}
+
 export interface ArenaContractLanguageSuggestionView {
   suggestion_id: string;
   scope: 'global' | 'contender';
@@ -864,6 +881,7 @@ export interface ArenaReportView {
   outcomes: ArenaOutcomeView[];
   calibration?: ArenaCalibrationView;
   autopilot?: ArenaAutopilotView;
+  policy_optimizer?: ArenaPolicyOptimizerView;
   contract_language_optimizer?: ArenaContractLanguageOptimizerView;
 }
 
@@ -994,6 +1012,17 @@ interface ArenaReportResponse {
       rework_rate?: unknown;
       winner_stability_ratio?: unknown;
     };
+  };
+  policy_optimizer?: {
+    status?: unknown;
+    task_fingerprint?: unknown;
+    environment?: unknown;
+    promotion_status?: unknown;
+    reason_codes?: unknown;
+    gates?: unknown;
+    current_active_policy?: unknown;
+    candidate_shadow_policy?: unknown;
+    promotion?: unknown;
   };
   contract_language_optimizer?: {
     status?: unknown;
@@ -1316,6 +1345,40 @@ function parseAutopilot(input: unknown): ArenaAutopilotView | undefined {
   };
 }
 
+function parsePolicyOptimizer(input: unknown): ArenaPolicyOptimizerView | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+  const gatesRaw = rec.gates;
+  const gates = gatesRaw && typeof gatesRaw === 'object'
+    ? gatesRaw as Record<string, unknown>
+    : {};
+
+  return {
+    status: asString(rec.status) ?? 'unknown',
+    task_fingerprint: asString(rec.task_fingerprint),
+    environment: asString(rec.environment),
+    promotion_status: asString(rec.promotion_status),
+    reason_codes: Array.isArray(rec.reason_codes)
+      ? rec.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    gates: {
+      min_samples: asNumber(gates.min_samples, 0),
+      min_confidence: asNumber(gates.min_confidence, 0),
+      sample_count: asNumber(gates.sample_count, 0),
+      confidence_score: asNumber(gates.confidence_score, 0),
+    },
+    current_active_policy: rec.current_active_policy && typeof rec.current_active_policy === 'object'
+      ? rec.current_active_policy as Record<string, unknown>
+      : null,
+    candidate_shadow_policy: rec.candidate_shadow_policy && typeof rec.candidate_shadow_policy === 'object'
+      ? rec.candidate_shadow_policy as Record<string, unknown>
+      : null,
+    promotion: rec.promotion && typeof rec.promotion === 'object'
+      ? rec.promotion as Record<string, unknown>
+      : null,
+  };
+}
+
 function parseContractLanguageSuggestion(input: unknown): ArenaContractLanguageSuggestionView | null {
   if (!input || typeof input !== 'object') return null;
   const rec = input as Record<string, unknown>;
@@ -1501,6 +1564,7 @@ export async function fetchArenaReport(
     outcomes: parseOutcomeEntries(data.outcomes),
     calibration: parseCalibration(data.calibration),
     autopilot: parseAutopilot(data.autopilot),
+    policy_optimizer: parsePolicyOptimizer(data.policy_optimizer),
     contract_language_optimizer: parseContractLanguageOptimizer(data.contract_language_optimizer),
   };
 }

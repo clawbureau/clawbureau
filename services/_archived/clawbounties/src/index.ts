@@ -560,6 +560,26 @@ interface ArenaContractLanguageSuggestionRecord {
   updated_at: string;
 }
 
+interface ArenaRoutePolicyOptimizerStateRecord {
+  state_id: string;
+  task_fingerprint: string;
+  environment: string;
+  objective_profile_name: string;
+  experiment_id: string;
+  experiment_arm: string;
+  active_policy_json: string | null;
+  shadow_policy_json: string;
+  last_promotion_event_json: string | null;
+  reason_codes_json: string;
+  sample_count: number;
+  confidence_score: number;
+  min_samples: number;
+  min_confidence: number;
+  promotion_status: 'PROMOTED' | 'NOT_READY';
+  created_at: string;
+  updated_at: string;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -7448,6 +7468,203 @@ async function replaceArenaContractLanguageSuggestions(
   }
 }
 
+function parseArenaRoutePolicyOptimizerStateRow(row: unknown): ArenaRoutePolicyOptimizerStateRecord | null {
+  if (!isRecord(row)) return null;
+
+  const state_id = d1String(row.state_id);
+  const task_fingerprint = d1String(row.task_fingerprint);
+  const environment = d1String(row.environment);
+  const objective_profile_name = d1String(row.objective_profile_name);
+  const experiment_id = d1String(row.experiment_id);
+  const experiment_arm = d1String(row.experiment_arm);
+  const active_policy_json = d1String(row.active_policy_json);
+  const shadow_policy_json = d1String(row.shadow_policy_json);
+  const last_promotion_event_json = d1String(row.last_promotion_event_json);
+  const reason_codes_json = d1String(row.reason_codes_json);
+  const sample_count = d1Number(row.sample_count);
+  const confidence_score = d1Number(row.confidence_score);
+  const min_samples = d1Number(row.min_samples);
+  const min_confidence = d1Number(row.min_confidence);
+  const promotion_status = d1String(row.promotion_status);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !state_id ||
+    !task_fingerprint ||
+    !environment ||
+    objective_profile_name === null ||
+    experiment_id === null ||
+    experiment_arm === null ||
+    !shadow_policy_json ||
+    !reason_codes_json ||
+    sample_count === null ||
+    confidence_score === null ||
+    min_samples === null ||
+    min_confidence === null ||
+    !promotion_status ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  if (promotion_status !== 'PROMOTED' && promotion_status !== 'NOT_READY') {
+    return null;
+  }
+
+  return {
+    state_id,
+    task_fingerprint,
+    environment,
+    objective_profile_name,
+    experiment_id,
+    experiment_arm,
+    active_policy_json,
+    shadow_policy_json,
+    last_promotion_event_json,
+    reason_codes_json,
+    sample_count,
+    confidence_score,
+    min_samples,
+    min_confidence,
+    promotion_status,
+    created_at,
+    updated_at,
+  };
+}
+
+async function getArenaRoutePolicyOptimizerState(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    environment: string;
+    objectiveProfileName: string;
+    experimentId: string;
+    experimentArm: string;
+  },
+): Promise<ArenaRoutePolicyOptimizerStateRecord | null> {
+  const row = await db
+    .prepare(
+      `SELECT *
+       FROM bounty_arena_route_policy_optimizer_state
+       WHERE task_fingerprint = ?
+         AND environment = ?
+         AND objective_profile_name = ?
+         AND experiment_id = ?
+         AND experiment_arm = ?
+       LIMIT 1`
+    )
+    .bind(
+      params.taskFingerprint,
+      params.environment,
+      params.objectiveProfileName,
+      params.experimentId,
+      params.experimentArm,
+    )
+    .first();
+
+  const parsed = parseArenaRoutePolicyOptimizerStateRow(row);
+  if (parsed) return parsed;
+
+  if (params.objectiveProfileName !== '' || params.experimentId !== '' || params.experimentArm !== '') {
+    const fallbackRow = await db
+      .prepare(
+        `SELECT *
+         FROM bounty_arena_route_policy_optimizer_state
+         WHERE task_fingerprint = ?
+           AND environment = ?
+           AND objective_profile_name = ''
+           AND experiment_id = ''
+           AND experiment_arm = ''
+         LIMIT 1`
+      )
+      .bind(params.taskFingerprint, params.environment)
+      .first();
+    return parseArenaRoutePolicyOptimizerStateRow(fallbackRow);
+  }
+
+  return null;
+}
+
+async function upsertArenaRoutePolicyOptimizerState(
+  db: D1Database,
+  state: ArenaRoutePolicyOptimizerStateRecord,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO bounty_arena_route_policy_optimizer_state (
+        state_id,
+        task_fingerprint,
+        environment,
+        objective_profile_name,
+        experiment_id,
+        experiment_arm,
+        active_policy_json,
+        shadow_policy_json,
+        last_promotion_event_json,
+        reason_codes_json,
+        sample_count,
+        confidence_score,
+        min_samples,
+        min_confidence,
+        promotion_status,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(task_fingerprint, environment, objective_profile_name, experiment_id, experiment_arm)
+      DO UPDATE SET
+        state_id = excluded.state_id,
+        active_policy_json = excluded.active_policy_json,
+        shadow_policy_json = excluded.shadow_policy_json,
+        last_promotion_event_json = excluded.last_promotion_event_json,
+        reason_codes_json = excluded.reason_codes_json,
+        sample_count = excluded.sample_count,
+        confidence_score = excluded.confidence_score,
+        min_samples = excluded.min_samples,
+        min_confidence = excluded.min_confidence,
+        promotion_status = excluded.promotion_status,
+        updated_at = excluded.updated_at`
+    )
+    .bind(
+      state.state_id,
+      state.task_fingerprint,
+      state.environment,
+      state.objective_profile_name,
+      state.experiment_id,
+      state.experiment_arm,
+      state.active_policy_json,
+      state.shadow_policy_json,
+      state.last_promotion_event_json,
+      state.reason_codes_json,
+      state.sample_count,
+      state.confidence_score,
+      state.min_samples,
+      state.min_confidence,
+      state.promotion_status,
+      state.created_at,
+      state.updated_at,
+    )
+    .run();
+}
+
+async function buildArenaRoutePolicyOptimizerStateId(params: {
+  taskFingerprint: string;
+  environment: string;
+  objectiveProfileName: string;
+  experimentId: string;
+  experimentArm: string;
+}): Promise<string> {
+  const material = stableStringify({
+    task_fingerprint: params.taskFingerprint,
+    environment: params.environment,
+    objective_profile_name: params.objectiveProfileName,
+    experiment_id: params.experimentId,
+    experiment_arm: params.experimentArm,
+  });
+  return `arps_${(await sha256B64uUtf8(material)).slice(0, 32)}`;
+}
+
 async function writeArenaContenderRecords(
   db: D1Database,
   runId: string,
@@ -14204,6 +14421,17 @@ function normalizeArenaReviewerDecision(value: unknown): ArenaReviewerDecisionVi
   return null;
 }
 
+function normalizeArenaPolicyOptimizerEnvironment(value: unknown, fallback: string): string {
+  const normalized = d1String(value)?.trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (normalized === 'prod') return 'production';
+  return normalized;
+}
+
+function normalizeArenaPolicyDimensionValue(value: string | null): string {
+  return value ? value.trim() : '';
+}
+
 async function buildArenaRunMap(
   db: D1Database,
   arenaIds: Iterable<string>,
@@ -14712,6 +14940,11 @@ async function handleGetArena(
   const calibration = buildArenaCalibrationSummary(outcomes, new Map([[arenaId, run]]));
 
   const autopilot = buildArenaAutopilotPreview(run, payload, calibration);
+  const policyOptimizer = await buildArenaPolicyOptimizerPreview(
+    env.BOUNTIES_DB,
+    run,
+    env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
+  );
   const contractLanguageOptimizer = await buildArenaContractLanguageOptimizerPreview(env.BOUNTIES_DB, run.task_fingerprint);
 
   return jsonResponse(
@@ -14721,6 +14954,7 @@ async function handleGetArena(
       outcomes: outcomes.map((row) => buildArenaOutcomePayload(row)),
       calibration,
       autopilot,
+      policy_optimizer: policyOptimizer,
       contract_language_optimizer: contractLanguageOptimizer,
     },
     200,
@@ -15358,6 +15592,395 @@ async function handlePostArenaContractLanguageOptimizer(
   return jsonResponse(optimizer, 200, version);
 }
 
+function parseArenaRoutePolicyJson(input: string | null): Record<string, unknown> | null {
+  if (!input) return null;
+  return parseJsonObject(input);
+}
+
+function parseArenaPolicyReasonCodes(input: string): string[] {
+  return parseJsonStringArray(input) ?? [];
+}
+
+function computeArenaPolicyOptimizerConfidence(params: {
+  winRate: number;
+  acceptRate: number;
+  overrideRate: number;
+  reworkRate: number;
+  calibrationGap: number;
+}): number {
+  const reliability = 1 - Math.min(1, Math.max(0, params.overrideRate) + Math.max(0, params.reworkRate));
+  const calibrationQuality = 1 - Math.min(1, Math.abs(params.calibrationGap));
+
+  const score =
+    (Math.max(0, params.winRate) * 0.35) +
+    (Math.max(0, params.acceptRate) * 0.35) +
+    (Math.max(0, reliability) * 0.2) +
+    (Math.max(0, calibrationQuality) * 0.1);
+
+  return Number(Math.max(0, Math.min(1, score)).toFixed(4));
+}
+
+function buildArenaPolicyOptimizerPayloadFromState(
+  state: ArenaRoutePolicyOptimizerStateRecord,
+): Record<string, unknown> {
+  return {
+    schema_version: 'arena_policy_optimizer.v1',
+    computed_at: state.updated_at,
+    task_fingerprint: state.task_fingerprint,
+    environment: state.environment,
+    objective_profile_name: state.objective_profile_name || null,
+    experiment_id: state.experiment_id || null,
+    experiment_arm: state.experiment_arm || null,
+    gates: {
+      min_samples: state.min_samples,
+      min_confidence: Number(state.min_confidence.toFixed(4)),
+      sample_count: state.sample_count,
+      confidence_score: Number(state.confidence_score.toFixed(4)),
+    },
+    current_active_policy: parseArenaRoutePolicyJson(state.active_policy_json),
+    candidate_shadow_policy: parseArenaRoutePolicyJson(state.shadow_policy_json),
+    promotion: parseArenaRoutePolicyJson(state.last_promotion_event_json),
+    reason_codes: parseArenaPolicyReasonCodes(state.reason_codes_json),
+    promotion_status: state.promotion_status,
+  };
+}
+
+async function handleGetArenaPolicyOptimizer(
+  request: Request,
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const taskFingerprint = d1String(url.searchParams.get('task_fingerprint'))?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const environment = normalizeArenaPolicyOptimizerEnvironment(
+    url.searchParams.get('environment'),
+    env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
+  );
+
+  const objectiveProfileName = normalizeArenaPolicyDimensionValue(
+    d1String(url.searchParams.get('objective_profile_name'))?.trim() ?? null,
+  );
+  const experimentId = normalizeArenaPolicyDimensionValue(
+    d1String(url.searchParams.get('experiment_id'))?.trim() ?? null,
+  );
+  const experimentArm = normalizeArenaPolicyDimensionValue(
+    d1String(url.searchParams.get('experiment_arm'))?.trim() ?? null,
+  );
+
+  const state = await getArenaRoutePolicyOptimizerState(env.BOUNTIES_DB, {
+    taskFingerprint,
+    environment,
+    objectiveProfileName,
+    experimentId,
+    experimentArm,
+  });
+
+  if (!state) {
+    return errorResponse(
+      'ARENA_POLICY_OPTIMIZER_NOT_FOUND',
+      'No policy optimizer state found for query',
+      404,
+      {
+        task_fingerprint: taskFingerprint,
+        environment,
+        objective_profile_name: objectiveProfileName || null,
+        experiment_id: experimentId || null,
+        experiment_arm: experimentArm || null,
+      },
+      version,
+    );
+  }
+
+  return jsonResponse(buildArenaPolicyOptimizerPayloadFromState(state), 200, version);
+}
+
+async function handlePostArenaPolicyOptimizer(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const environment = normalizeArenaPolicyOptimizerEnvironment(
+    body.environment,
+    env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
+  );
+
+  const objectiveProfileName = normalizeArenaPolicyDimensionValue(
+    d1String(body.objective_profile_name)?.trim() ?? null,
+  );
+  const experimentId = normalizeArenaPolicyDimensionValue(
+    d1String(body.experiment_id)?.trim() ?? null,
+  );
+  const experimentArm = normalizeArenaPolicyDimensionValue(
+    d1String(body.experiment_arm)?.trim() ?? null,
+  );
+
+  const maxRunsRaw = d1Number(body.max_runs);
+  let maxRuns = 80;
+  if (maxRunsRaw !== null) {
+    if (!Number.isInteger(maxRunsRaw) || maxRunsRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'max_runs must be a positive integer', 400, { field: 'max_runs' }, version);
+    }
+    maxRuns = Math.min(maxRunsRaw, 200);
+  }
+
+  const minSamplesRaw = d1Number(body.min_samples);
+  let minSamples = 6;
+  if (minSamplesRaw !== null) {
+    if (!Number.isInteger(minSamplesRaw) || minSamplesRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'min_samples must be a positive integer', 400, { field: 'min_samples' }, version);
+    }
+    minSamples = Math.min(minSamplesRaw, 200);
+  }
+
+  const minConfidenceRaw = d1Number(body.min_confidence);
+  let minConfidence = 0.62;
+  if (minConfidenceRaw !== null) {
+    if (!Number.isFinite(minConfidenceRaw) || minConfidenceRaw < 0 || minConfidenceRaw > 1) {
+      return errorResponse('INVALID_REQUEST', 'min_confidence must be within [0,1]', 400, { field: 'min_confidence' }, version);
+    }
+    minConfidence = minConfidenceRaw;
+  }
+
+  if (!env.BOUNTIES_ADMIN_KEY || env.BOUNTIES_ADMIN_KEY.trim().length === 0) {
+    return errorResponse('CONFIG_ERROR', 'BOUNTIES_ADMIN_KEY secret is required for policy optimizer routing snapshots', 500, undefined, version);
+  }
+
+  const routeBody = {
+    task_fingerprint: taskFingerprint,
+    environment,
+    objective_profile_name: objectiveProfileName || undefined,
+    experiment_id: experimentId || undefined,
+    experiment_arm: experimentArm || undefined,
+    max_runs: maxRuns,
+    require_hard_gate_pass: true,
+    allow_fallback: true,
+    use_active_policy: false,
+  };
+
+  const internalRouteRequest = new Request('https://internal/v1/arena/manager/route', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-admin-key': env.BOUNTIES_ADMIN_KEY,
+    },
+    body: stableStringify(routeBody),
+  });
+
+  const routeResponse = await handleArenaManagerRoute(internalRouteRequest, env, version, 'route');
+  if (routeResponse.status !== 200) {
+    return routeResponse;
+  }
+
+  let routePayload: unknown;
+  try {
+    routePayload = await routeResponse.json();
+  } catch {
+    return errorResponse('INTERNAL_ERROR', 'Failed to parse manager route payload', 500, undefined, version);
+  }
+
+  if (!isRecord(routePayload)) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Manager route payload is invalid', 500, undefined, version);
+  }
+
+  const recommended = isRecord(routePayload.recommended) ? routePayload.recommended : null;
+  const evidence = recommended && isRecord(recommended.evidence) ? recommended.evidence : null;
+  const contenderId = d1String(recommended?.contender_id)?.trim() ?? null;
+
+  if (!recommended || !evidence || !contenderId) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Policy optimizer could not parse routing recommendation', 500, undefined, version);
+  }
+
+  const sampleCount = Math.trunc(d1Number(evidence.outcome_samples) ?? d1Number(evidence.appearances) ?? 0);
+  const winRate = d1Number(evidence.win_rate) ?? 0;
+  const acceptRate = d1Number(evidence.empirical_accept_rate) ?? 0;
+  const overrideRate = d1Number(evidence.override_rate) ?? 0;
+  const reworkRate = d1Number(evidence.rework_rate) ?? 0;
+  const calibrationGap = d1Number(evidence.calibration_gap) ?? 0;
+  const routingScore = d1Number(recommended.routing_score) ?? 0;
+
+  const confidenceScore = computeArenaPolicyOptimizerConfidence({
+    winRate,
+    acceptRate,
+    overrideRate,
+    reworkRate,
+    calibrationGap,
+  });
+
+  const now = new Date().toISOString();
+  const shadowMaterial = stableStringify({
+    task_fingerprint: taskFingerprint,
+    environment,
+    objective_profile_name: objectiveProfileName,
+    experiment_id: experimentId,
+    experiment_arm: experimentArm,
+    contender_id: contenderId,
+    routing_score: routingScore,
+    sample_count: sampleCount,
+    confidence_score: confidenceScore,
+    computed_at: now,
+  });
+  const shadowPolicyId = `arp_shadow_${(await sha256B64uUtf8(shadowMaterial)).slice(0, 24)}`;
+
+  const routeReasonCodesSource = Array.isArray(routePayload.reason_codes)
+    ? routePayload.reason_codes
+    : (Array.isArray(recommended.reason_codes) ? recommended.reason_codes : []);
+
+  const routeReasonCodes = routeReasonCodesSource.filter((entry): entry is string => typeof entry === 'string');
+
+  const shadowPolicy = {
+    schema_version: 'arena_route_policy_shadow.v1',
+    route_policy_id: shadowPolicyId,
+    contender_id: contenderId,
+    routing_score: Number(routingScore.toFixed(6)),
+    sample_count: sampleCount,
+    confidence_score: confidenceScore,
+    win_rate: Number(winRate.toFixed(4)),
+    empirical_accept_rate: Number(acceptRate.toFixed(4)),
+    override_rate: Number(overrideRate.toFixed(4)),
+    rework_rate: Number(reworkRate.toFixed(4)),
+    calibration_gap: Number(calibrationGap.toFixed(4)),
+    objective_profile_name: objectiveProfileName || null,
+    experiment_id: experimentId || null,
+    experiment_arm: experimentArm || null,
+    computed_at: now,
+    reason_codes: routeReasonCodes,
+  };
+
+  const existingState = await getArenaRoutePolicyOptimizerState(env.BOUNTIES_DB, {
+    taskFingerprint,
+    environment,
+    objectiveProfileName,
+    experimentId,
+    experimentArm,
+  });
+
+  const existingActive = parseArenaRoutePolicyJson(existingState?.active_policy_json ?? null);
+  const previousContenderId = d1String(existingActive?.contender_id)?.trim() ?? null;
+
+  const reasonCodes = ['ARENA_POLICY_SHADOW_REFRESHED'];
+  const thresholdsMet = sampleCount >= minSamples && confidenceScore >= minConfidence;
+
+  if (sampleCount < minSamples) {
+    reasonCodes.push('ARENA_POLICY_NOT_READY_INSUFFICIENT_SAMPLE');
+  }
+  if (confidenceScore < minConfidence) {
+    reasonCodes.push('ARENA_POLICY_NOT_READY_CONFIDENCE_BELOW_THRESHOLD');
+  }
+
+  let promotionStatus: 'PROMOTED' | 'NOT_READY' = 'NOT_READY';
+  let promoted = false;
+  let activePolicy: Record<string, unknown> | null = existingActive;
+
+  if (thresholdsMet) {
+    promotionStatus = 'PROMOTED';
+    activePolicy = {
+      ...shadowPolicy,
+      schema_version: 'arena_route_policy_active.v1',
+      promoted_at: now,
+    };
+
+    if (!previousContenderId) {
+      reasonCodes.push('ARENA_POLICY_PROMOTED_INITIAL_ACTIVE');
+      promoted = true;
+    } else if (previousContenderId !== contenderId) {
+      reasonCodes.push('ARENA_POLICY_PROMOTED_REPLACED_ACTIVE');
+      promoted = true;
+    } else {
+      reasonCodes.push('ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE');
+    }
+  } else {
+    promotionStatus = 'NOT_READY';
+    if (reasonCodes.length === 1) {
+      reasonCodes.push('ARENA_POLICY_NOT_READY_UNKNOWN');
+    }
+  }
+
+  const promotionEvent = {
+    schema_version: 'arena_policy_promotion_event.v1',
+    event_id: `arpe_${crypto.randomUUID()}`,
+    status: promotionStatus,
+    promoted,
+    reason_codes: reasonCodes,
+    previous_contender_id: previousContenderId,
+    active_contender_id: d1String(activePolicy?.contender_id) ?? null,
+    shadow_contender_id: contenderId,
+    sample_count: sampleCount,
+    confidence_score: confidenceScore,
+    min_samples: minSamples,
+    min_confidence: Number(minConfidence.toFixed(4)),
+    computed_at: now,
+  };
+
+  const stateId = await buildArenaRoutePolicyOptimizerStateId({
+    taskFingerprint,
+    environment,
+    objectiveProfileName,
+    experimentId,
+    experimentArm,
+  });
+
+  const state: ArenaRoutePolicyOptimizerStateRecord = {
+    state_id: stateId,
+    task_fingerprint: taskFingerprint,
+    environment,
+    objective_profile_name: objectiveProfileName,
+    experiment_id: experimentId,
+    experiment_arm: experimentArm,
+    active_policy_json: activePolicy ? stableStringify(activePolicy) : null,
+    shadow_policy_json: stableStringify(shadowPolicy),
+    last_promotion_event_json: stableStringify(promotionEvent),
+    reason_codes_json: stableStringify(reasonCodes),
+    sample_count: sampleCount,
+    confidence_score: confidenceScore,
+    min_samples: minSamples,
+    min_confidence: Number(minConfidence.toFixed(4)),
+    promotion_status: promotionStatus,
+    created_at: existingState?.created_at ?? now,
+    updated_at: now,
+  };
+
+  try {
+    await upsertArenaRoutePolicyOptimizerState(env.BOUNTIES_DB, state);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  const payload = {
+    ...buildArenaPolicyOptimizerPayloadFromState(state),
+    route_snapshot: {
+      analyzed_runs: d1Number(routePayload.analyzed_runs) ?? 0,
+      winner_stability_ratio: d1Number(routePayload.winner_stability_ratio) ?? 0,
+      recommended,
+      backups: Array.isArray(routePayload.backups)
+        ? routePayload.backups
+        : [],
+    },
+  };
+
+  return jsonResponse(payload, 200, version);
+}
+
 async function handleArenaBacktesting(
   request: Request,
   url: URL,
@@ -15522,6 +16145,10 @@ async function handleArenaManagerRoute(
   const objectiveProfileName = d1String(body.objective_profile_name)?.trim() ?? null;
   const experimentIdFilter = d1String(body.experiment_id)?.trim() ?? null;
   const experimentArmFilter = d1String(body.experiment_arm)?.trim() ?? null;
+  const environment = normalizeArenaPolicyOptimizerEnvironment(
+    body.environment,
+    env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
+  );
 
   if (experimentIdFilter && experimentIdFilter.length > 128) {
     return errorResponse('INVALID_REQUEST', 'experiment_id must be <=128 chars', 400, { field: 'experiment_id' }, version);
@@ -15543,6 +16170,7 @@ async function handleArenaManagerRoute(
 
   const requireHardGatePass = body.require_hard_gate_pass !== false;
   const allowFallback = body.allow_fallback !== false;
+  const useActivePolicy = body.use_active_policy !== false;
 
   const runsRaw = await listCompletedArenaRunsByTaskFingerprint(env.BOUNTIES_DB, taskFingerprint, maxRuns);
   const runs = runsRaw
@@ -15803,18 +16431,49 @@ async function handleArenaManagerRoute(
     return errorResponse('ARENA_ROUTE_NOT_FOUND', 'No routing candidates available', 404, undefined, version);
   }
 
-  const recommended = selectedPool[0];
+  let recommended = selectedPool[0];
   if (!recommended) {
     return errorResponse('ARENA_ROUTE_NOT_FOUND', 'No routing candidates available', 404, undefined, version);
+  }
+
+  let policyOptimizerState: ArenaRoutePolicyOptimizerStateRecord | null = null;
+  const policyOptimizerReasonCodes: string[] = [];
+
+  if (useActivePolicy) {
+    policyOptimizerState = await getArenaRoutePolicyOptimizerState(env.BOUNTIES_DB, {
+      taskFingerprint,
+      environment,
+      objectiveProfileName: normalizeArenaPolicyDimensionValue(objectiveProfileName),
+      experimentId: normalizeArenaPolicyDimensionValue(experimentIdFilter),
+      experimentArm: normalizeArenaPolicyDimensionValue(experimentArmFilter),
+    });
+
+    const activePolicy = parseArenaRoutePolicyJson(policyOptimizerState?.active_policy_json ?? null);
+    const activeContenderId = d1String(activePolicy?.contender_id)?.trim() ?? null;
+
+    if (activeContenderId) {
+      const activeCandidate = selectedPool.find((entry) => entry.contender_id === activeContenderId) ?? null;
+      if (activeCandidate) {
+        recommended = activeCandidate;
+        policyOptimizerReasonCodes.push('ARENA_ROUTING_ACTIVE_POLICY_APPLIED');
+      } else {
+        policyOptimizerReasonCodes.push('ARENA_ROUTING_ACTIVE_POLICY_MISS');
+      }
+    } else if (policyOptimizerState) {
+      policyOptimizerReasonCodes.push('ARENA_ROUTING_ACTIVE_POLICY_EMPTY');
+    }
   }
 
   const reasonCodes = [
     eligible.length > 0 ? 'ARENA_ROUTING_SELECTED' : 'ARENA_ROUTING_HARD_GATE_FALLBACK',
     objectiveProfileName ? 'ARENA_ROUTING_OBJECTIVE_MATCHED' : 'ARENA_ROUTING_OBJECTIVE_ANY',
     mode === 'coach' ? 'ARENA_ROUTING_COACH_MODE' : 'ARENA_ROUTING_STANDARD_MODE',
+    ...policyOptimizerReasonCodes,
   ];
 
-  const backups = selectedPool.slice(1, 4);
+  const backups = selectedPool
+    .filter((entry) => entry.contender_id !== recommended.contender_id)
+    .slice(0, 3);
 
   const topWinner = [...winnerCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
   const winnerStabilityRatio = topWinner && runs.length > 0 ? topWinner[1] / runs.length : 0;
@@ -15853,6 +16512,8 @@ async function handleArenaManagerRoute(
       policy: {
         require_hard_gate_pass: requireHardGatePass,
         allow_fallback: allowFallback,
+        use_active_policy: useActivePolicy,
+        environment,
         max_runs: maxRuns,
         experiment_id: experimentIdFilter,
         experiment_arm: experimentArmFilter,
@@ -15890,6 +16551,9 @@ async function handleArenaManagerRoute(
       },
       backups,
       contenders_ranked: ranked,
+      policy_optimizer: policyOptimizerState
+        ? buildArenaPolicyOptimizerPayloadFromState(policyOptimizerState)
+        : null,
       delegation_coach: {
         primary_contender_id: recommended.contender_id,
         backup_contenders: backups.map((entry) => entry.contender_id),
@@ -16152,6 +16816,34 @@ function buildArenaAutopilotPreview(
       ? ['ARENA_AUTOPILOT_PREVIEW_ENABLED']
       : ['ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW'],
     violations,
+  };
+}
+
+async function buildArenaPolicyOptimizerPreview(
+  db: D1Database,
+  run: ArenaRunRecord,
+  environmentFallback: string,
+): Promise<Record<string, unknown>> {
+  const state = await getArenaRoutePolicyOptimizerState(db, {
+    taskFingerprint: run.task_fingerprint,
+    environment: normalizeArenaPolicyOptimizerEnvironment(environmentFallback, 'production'),
+    objectiveProfileName: normalizeArenaPolicyDimensionValue(getArenaObjectiveProfileNameFromRun(run)),
+    experimentId: normalizeArenaPolicyDimensionValue(run.experiment_id),
+    experimentArm: normalizeArenaPolicyDimensionValue(run.experiment_arm),
+  });
+
+  if (!state) {
+    return {
+      schema_version: 'arena_policy_optimizer_preview.v1',
+      status: 'empty',
+      task_fingerprint: run.task_fingerprint,
+    };
+  }
+
+  return {
+    schema_version: 'arena_policy_optimizer_preview.v1',
+    status: 'available',
+    ...buildArenaPolicyOptimizerPayloadFromState(state),
   };
 }
 
@@ -16592,6 +17284,14 @@ export default {
 
       if (path === '/v1/arena/policy-learning' && method === 'GET') {
         return handleArenaPolicyLearning(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/policy-optimizer' && method === 'GET') {
+        return handleGetArenaPolicyOptimizer(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/policy-optimizer' && method === 'POST') {
+        return handlePostArenaPolicyOptimizer(request, env, version);
       }
 
       if (path === '/v1/arena/contract-language-optimizer' && method === 'GET') {

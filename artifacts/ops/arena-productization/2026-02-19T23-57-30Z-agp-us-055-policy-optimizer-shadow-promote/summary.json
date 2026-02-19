@@ -1,0 +1,167 @@
+{
+  "ok": true,
+  "story": "AGP-US-055",
+  "generated_at": "2026-02-19T23:58:01.377Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "2f24c3d7-bf3e-407c-8d98-1dff55217aa5",
+      "clawsig_explorer_version_id": "33747da5-e142-41f4-b011-a9e80b59ea26",
+      "d1_migration": "0027_arena_route_policy_optimizer_state.sql"
+    },
+    "production": {
+      "clawbounties_version_id": "bfba065a-8aad-4a0d-b5fd-9e39d893c243",
+      "clawsig_explorer_version_id": "16e395f0-4113-4c37-badd-559937309aaa",
+      "d1_migration": "0027_arena_route_policy_optimizer_state.sql"
+    }
+  },
+  "real_data_evidence": {
+    "staging_not_ready_gate": {
+      "checks": {
+        "not_ready_reason_codes_present": true,
+        "promoted_active_matches_shadow": true,
+        "real_samples_present": true,
+        "route_uses_active_policy_when_promoted": true,
+        "shadow_policy_present": true
+      },
+      "endpoint_base": "https://staging.clawbounties.com",
+      "environment": "staging",
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "gates": {
+        "confidence_score": 0.3101,
+        "min_confidence": 0.62,
+        "min_samples": 6,
+        "sample_count": 7
+      },
+      "generated_at": "2026-02-19T23:56:43.655Z",
+      "objective_profile_name": "balanced",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-19T23-56-42-586Z-agp-us-055-policy-optimizer-typescript-worker-api-hardening",
+      "status": {
+        "active_contender_id": "contender_codex_pi",
+        "promotion_status": "NOT_READY",
+        "reason_codes": [
+          "ARENA_POLICY_SHADOW_REFRESHED",
+          "ARENA_POLICY_NOT_READY_CONFIDENCE_BELOW_THRESHOLD"
+        ],
+        "route_recommended_contender_id": "contender_codex_pi",
+        "shadow_contender_id": "contender_codex_pi"
+      },
+      "story": "AGP-US-055",
+      "task_fingerprint": "typescript:worker:api-hardening"
+    },
+    "status_transition_promoted": {
+      "checks": {
+        "not_ready_reason_codes_present": true,
+        "promoted_active_matches_shadow": true,
+        "real_samples_present": true,
+        "route_uses_active_policy_when_promoted": true,
+        "shadow_policy_present": true
+      },
+      "endpoint_base": "https://staging.clawbounties.com",
+      "environment": "staging",
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "gates": {
+        "confidence_score": 0.3101,
+        "min_confidence": 0.3,
+        "min_samples": 6,
+        "sample_count": 7
+      },
+      "generated_at": "2026-02-19T23:56:52.756Z",
+      "objective_profile_name": "balanced",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-19T23-56-52-196Z-agp-us-055-policy-optimizer-typescript-worker-api-hardening",
+      "status": {
+        "active_contender_id": "contender_codex_pi",
+        "promotion_status": "PROMOTED",
+        "reason_codes": [
+          "ARENA_POLICY_SHADOW_REFRESHED",
+          "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+        ],
+        "route_recommended_contender_id": "contender_codex_pi",
+        "shadow_contender_id": "contender_codex_pi"
+      },
+      "story": "AGP-US-055",
+      "task_fingerprint": "typescript:worker:api-hardening"
+    },
+    "production_promoted": {
+      "checks": {
+        "not_ready_reason_codes_present": true,
+        "promoted_active_matches_shadow": true,
+        "real_samples_present": true,
+        "route_uses_active_policy_when_promoted": true,
+        "shadow_policy_present": true
+      },
+      "endpoint_base": "https://clawbounties.com",
+      "environment": "production",
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "gates": {
+        "confidence_score": 0.813,
+        "min_confidence": 0.3,
+        "min_samples": 3,
+        "sample_count": 3
+      },
+      "generated_at": "2026-02-19T23:57:00.619Z",
+      "objective_profile_name": "balanced",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-19T23-56-59-881Z-agp-us-055-policy-optimizer-typescript-worker-api-hardening",
+      "status": {
+        "active_contender_id": "contender_codex_pi",
+        "promotion_status": "PROMOTED",
+        "reason_codes": [
+          "ARENA_POLICY_SHADOW_REFRESHED",
+          "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+        ],
+        "route_recommended_contender_id": "contender_codex_pi",
+        "shadow_contender_id": "contender_codex_pi"
+      },
+      "story": "AGP-US-055",
+      "task_fingerprint": "typescript:worker:api-hardening"
+    }
+  },
+  "endpoint_regressions": {
+    "staging": {
+      "route_status": 200,
+      "autopilot_status": 200,
+      "route_reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED"
+      ],
+      "policy_promotion_status": "PROMOTED",
+      "autopilot_status_label": "manual_review_required"
+    },
+    "production": {
+      "route_status": 200,
+      "autopilot_status": 200,
+      "route_reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED"
+      ],
+      "policy_promotion_status": "PROMOTED",
+      "autopilot_status_label": "manual_review_required"
+    }
+  },
+  "explorer_render_checks": {
+    "staging_policy_optimizer_card": true,
+    "production_policy_optimizer_card": true
+  },
+  "artifacts": {
+    "stage_not_ready_summary": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/stage-not-ready.summary.json",
+    "stage_promoted_summary": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/stage-promoted.summary.json",
+    "prod_promoted_summary": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/prod-promoted.summary.json",
+    "route_stage": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/route-stage.json",
+    "route_prod": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/route-prod.json",
+    "autopilot_stage": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/autopilot-stage.json",
+    "autopilot_prod": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/autopilot-prod.json",
+    "arena_stage": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/arena-stage.json",
+    "arena_prod": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/arena-prod.json",
+    "explorer_stage": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/explorer-stage.html",
+    "explorer_prod": "artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/explorer-prod.html"
+  }
+}

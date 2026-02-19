@@ -1,0 +1,35 @@
+{
+  "checks": {
+    "not_ready_reason_codes_present": true,
+    "promoted_active_matches_shadow": true,
+    "real_samples_present": true,
+    "route_uses_active_policy_when_promoted": true,
+    "shadow_policy_present": true
+  },
+  "endpoint_base": "https://clawbounties.com",
+  "environment": "production",
+  "experiment_arm": "LIVE",
+  "experiment_id": "exp_api_hardening_live_v1",
+  "gates": {
+    "confidence_score": 0.813,
+    "min_confidence": 0.3,
+    "min_samples": 3,
+    "sample_count": 3
+  },
+  "generated_at": "2026-02-19T23:57:00.619Z",
+  "objective_profile_name": "balanced",
+  "ok": true,
+  "output_dir": "artifacts/ops/arena-productization/2026-02-19T23-56-59-881Z-agp-us-055-policy-optimizer-typescript-worker-api-hardening",
+  "status": {
+    "active_contender_id": "contender_codex_pi",
+    "promotion_status": "PROMOTED",
+    "reason_codes": [
+      "ARENA_POLICY_SHADOW_REFRESHED",
+      "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+    ],
+    "route_recommended_contender_id": "contender_codex_pi",
+    "shadow_contender_id": "contender_codex_pi"
+  },
+  "story": "AGP-US-055",
+  "task_fingerprint": "typescript:worker:api-hardening"
+}
