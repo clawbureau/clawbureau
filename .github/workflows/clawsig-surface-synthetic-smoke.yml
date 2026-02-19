@@ -1,0 +1,31 @@
+name: clawsig-surface-synthetic-smoke
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '23 * * * *'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run synthetic surface smoke
+        run: node scripts/ops/smoke-clawsig-surface.mjs
+
+      - name: Upload synthetic smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawsig-synthetic-${{ github.run_id }}
+          path: artifacts/ops/clawsig-synthetic/
+          if-no-files-found: warn
