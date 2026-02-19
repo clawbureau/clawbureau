@@ -11,7 +11,7 @@ compatibility_date = "2026-02-01"
 workers_dev = true
 
 routes = [
-  { pattern = "explorer.clawsig.com/*", zone_name = "clawsig.com" }
+  { pattern = "explorer.clawsig.com", custom_domain = true }
 ]
 
 [vars]
@@ -21,7 +21,7 @@ VAAS_API_BASE = "https://api.clawverify.com"
 [env.staging]
 name = "clawsig-explorer-staging"
 routes = [
-  { pattern = "staging-explorer.clawsig.com/*", zone_name = "clawsig.com" }
+  { pattern = "staging-explorer.clawsig.com", custom_domain = true }
 ]
 workers_dev = true
 
