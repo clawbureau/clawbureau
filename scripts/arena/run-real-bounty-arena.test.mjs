@@ -35,6 +35,10 @@ test('real bounty launcher dry-run generates summary artifact', () => {
   assert.equal(summary.arena_id, arenaId);
   assert.equal(typeof summary.start_idempotency_key, 'string');
   assert.equal(typeof summary.result_idempotency_key, 'string');
+  assert.equal(typeof summary.decision_paste?.output_path, 'string');
+
+  const decisionPaste = readFileSync(summary.decision_paste.output_path, 'utf8');
+  assert.equal(decisionPaste.includes('Recommendation:'), true);
 
   rmSync(dir, { recursive: true, force: true });
 });

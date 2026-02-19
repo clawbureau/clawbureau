@@ -18,6 +18,9 @@ describe('arena pages', () => {
     expect(html).toContain('Winner rationale + tradeoffs');
     expect(html).toContain('Delegation insights');
     expect(html).toContain('Default route');
+    expect(html).toContain('Decision review thread');
+    expect(html).toContain('APPROVE');
+    expect(html).toContain('Proof card');
   });
 
   it('renders arena index rows and fallback empty state', () => {

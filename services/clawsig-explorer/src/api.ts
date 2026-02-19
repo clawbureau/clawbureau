@@ -736,6 +736,17 @@ export interface ArenaDelegationInsights {
   };
 }
 
+export interface ArenaReviewThreadEntryView {
+  thread_entry_id: string;
+  contender_id: string;
+  recommendation: 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT';
+  confidence: number;
+  body_markdown: string;
+  links: Array<{ label: string; url: string }>;
+  source: string;
+  created_at: string;
+}
+
 export interface ArenaReportView {
   arena_id: string;
   generated_at: string;
@@ -763,6 +774,7 @@ export interface ArenaReportView {
   tradeoffs: string[];
   reason_codes: string[];
   delegation_insights?: ArenaDelegationInsights;
+  review_thread: ArenaReviewThreadEntryView[];
 }
 
 interface ArenaIndexResponse {
@@ -832,6 +844,16 @@ interface ArenaReportResponse {
   tradeoffs?: unknown;
   reason_codes?: unknown;
   delegation_insights?: unknown;
+  review_thread?: Array<{
+    thread_entry_id?: unknown;
+    contender_id?: unknown;
+    recommendation?: unknown;
+    confidence?: unknown;
+    body_markdown?: unknown;
+    links?: unknown;
+    source?: unknown;
+    created_at?: unknown;
+  }>;
 }
 
 function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>[number]): ArenaContenderView | null {
@@ -948,6 +970,51 @@ function parseDelegationInsights(input: unknown): ArenaDelegationInsights | unde
         : [],
     },
   };
+}
+
+function parseReviewThreadEntries(input: unknown): ArenaReviewThreadEntryView[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const rec = raw as Record<string, unknown>;
+      const threadEntryId = asString(rec.thread_entry_id);
+      const contenderId = asString(rec.contender_id);
+      const recommendation = asString(rec.recommendation);
+      const confidence = asNumber(rec.confidence, 0);
+      const bodyMarkdown = asString(rec.body_markdown);
+      const source = asString(rec.source);
+      const createdAt = asString(rec.created_at);
+
+      if (!threadEntryId || !contenderId || !recommendation || !bodyMarkdown || !source || !createdAt) return null;
+      if (recommendation !== 'APPROVE' && recommendation !== 'REQUEST_CHANGES' && recommendation !== 'REJECT') return null;
+
+      const links = Array.isArray(rec.links)
+        ? rec.links
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object') return null;
+            const link = entry as Record<string, unknown>;
+            const label = asString(link.label);
+            const url = asString(link.url);
+            if (!label || !url) return null;
+            return { label, url };
+          })
+          .filter((entry): entry is { label: string; url: string } => entry !== null)
+        : [];
+
+      return {
+        thread_entry_id: threadEntryId,
+        contender_id: contenderId,
+        recommendation,
+        confidence,
+        body_markdown: bodyMarkdown,
+        links,
+        source,
+        created_at: createdAt,
+      } as ArenaReviewThreadEntryView;
+    })
+    .filter((entry): entry is ArenaReviewThreadEntryView => entry !== null);
 }
 
 export async function fetchArenaIndex(
@@ -1074,5 +1141,6 @@ export async function fetchArenaReport(
       ? data.reason_codes.filter((entry): entry is string => typeof entry === 'string')
       : [],
     delegation_insights: parseDelegationInsights(data.delegation_insights),
+    review_thread: parseReviewThreadEntries(data.review_thread),
   };
 }

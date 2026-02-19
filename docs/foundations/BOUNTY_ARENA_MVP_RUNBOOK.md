@@ -176,6 +176,25 @@ node scripts/arena/run-real-bounty-arena.mjs \
   --dry-run
 ```
 
+### Step H — Decision paste workflow (PR + bounty thread)
+
+Create a decision paste for the winning contender and optionally post it:
+
+```bash
+node scripts/arena/post-decision-paste.mjs \
+  --arena-report artifacts/arena/<arena_id>/arena-report.json \
+  --arena-base-url https://staging.clawsig-explorer.com \
+  --pr-number 123 \
+  --post-bounty-thread \
+  --bounty-id bty_... \
+  --bounties-base https://staging.clawbounties.com
+```
+
+This produces markdown with:
+- APPROVE / REQUEST_CHANGES / REJECT recommendation
+- confidence
+- one-click links (proof card, arena comparison, manager-review.json)
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`
