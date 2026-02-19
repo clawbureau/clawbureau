@@ -1,11 +1,20 @@
 import { layout, esc, fmtNum, type PageMeta } from '../layout.js';
 import type { GlobalStats, FailReasonCode } from './home.js';
-import type { DomainHealthProbe, SyntheticWorkflowStatus } from '../api.js';
+import type {
+  DomainHealthProbe,
+  SyntheticWorkflowStatus,
+  WorkflowRunHistoryItem,
+  RunsFeedRun,
+} from '../api.js';
 
 export interface OpsPageData {
   stats: GlobalStats;
   domain_health: DomainHealthProbe[];
   synthetic_statuses: SyntheticWorkflowStatus[];
+  synthetic_history: WorkflowRunHistoryItem[];
+  canary_history: WorkflowRunHistoryItem[];
+  guarded_deploy_history: WorkflowRunHistoryItem[];
+  recent_failed_runs: RunsFeedRun[];
 }
 
 function healthBadge(ok: boolean): string {
@@ -68,6 +77,91 @@ function syntheticRows(rows: SyntheticWorkflowStatus[]): string {
     .join('');
 }
 
+function historyDotClass(conclusion: string | null): 'pass' | 'fail' | 'warn' {
+  if (conclusion === 'success') return 'pass';
+  if (conclusion === 'failure' || conclusion === 'cancelled' || conclusion === 'timed_out') return 'fail';
+  return 'warn';
+}
+
+function historyTrend(rows: WorkflowRunHistoryItem[]): string {
+  if (rows.length === 0) {
+    return '<span class="dim" style="font-size:0.8125rem">No workflow trend data available.</span>';
+  }
+
+  const dots = rows
+    .slice(0, 12)
+    .map((row) => {
+      const cls = historyDotClass(row.conclusion);
+      const title = `${row.conclusion ?? row.status ?? 'unknown'} · ${row.updated_at ?? 'n/a'}`;
+      return `<span title="${esc(title)}" style="width:10px;height:10px;border-radius:999px;display:inline-block;background:var(--${cls});opacity:0.9"></span>`;
+    })
+    .join('');
+
+  return `<span style="display:inline-flex;gap:0.35rem;align-items:center">${dots}</span>`;
+}
+
+function workflowHistoryRows(rows: WorkflowRunHistoryItem[], emptyLabel: string): string {
+  if (rows.length === 0) {
+    return `<p class="dim">${esc(emptyLabel)}</p>`;
+  }
+
+  return rows
+    .slice(0, 8)
+    .map((row) => {
+      const statusText = row.conclusion ?? row.status ?? 'unknown';
+      const shaShort = row.head_sha ? row.head_sha.slice(0, 8) : 'n/a';
+      return `
+      <div class="run-item" style="align-items:center; flex-wrap:wrap">
+        <span class="hash">${esc(statusText)}</span>
+        <span class="run-meta dim" style="font-size:0.8125rem">${esc(row.updated_at ?? 'unknown')} · ${esc(shaShort)}</span>
+        ${row.html_url
+          ? `<a href="${esc(row.html_url)}" target="_blank" rel="noopener" style="margin-left:auto; font-size:0.8125rem">Open run &rarr;</a>`
+          : '<span class="dim" style="margin-left:auto; font-size:0.8125rem">No run metadata</span>'}
+      </div>
+    `;
+    })
+    .join('');
+}
+
+function recentFailedRunsRows(rows: RunsFeedRun[]): string {
+  if (rows.length === 0) {
+    return '<p class="dim">No failed runs available for drilldown.</p>';
+  }
+
+  return rows
+    .slice(0, 10)
+    .map((run) => {
+      const reasonCode = run.reason_code ?? 'UNKNOWN_REASON';
+      return `
+      <div class="run-item" style="align-items:center; flex-wrap:wrap">
+        <a class="mono" href="/run/${encodeURIComponent(run.run_id)}">${esc(run.run_id)}</a>
+        <a class="hash" href="/runs?status=FAIL&reason_code=${encodeURIComponent(reasonCode)}">${esc(reasonCode)}</a>
+        <span class="run-meta dim" style="font-size:0.8125rem">${esc(run.agent_did)} · ${esc(run.created_at)}</span>
+        <a href="/runs?status=FAIL&agent_did=${encodeURIComponent(run.agent_did)}" style="margin-left:auto; font-size:0.8125rem">Agent fail route &rarr;</a>
+      </div>
+    `;
+    })
+    .join('');
+}
+
+function latestArtifactLinks(data: OpsPageData): string {
+  const latest = [
+    ['Synthetic smoke', data.synthetic_history[0]],
+    ['Canary seed', data.canary_history[0]],
+    ['Guarded deploy', data.guarded_deploy_history[0]],
+  ] as const;
+
+  const links = latest
+    .filter(([, row]) => Boolean(row?.artifacts_url))
+    .map(([label, row]) => `<a href="${esc(row!.artifacts_url!)}" target="_blank" rel="noopener">${esc(label)} artifacts &rarr;</a>`);
+
+  if (links.length === 0) {
+    return '<p class="dim">No workflow artifact links available.</p>';
+  }
+
+  return `<div style="display:flex; gap:0.75rem; flex-wrap:wrap">${links.join('')}</div>`;
+}
+
 export function opsDashboardPage(data: OpsPageData): string {
   const meta: PageMeta = {
     title: 'Ops Dashboard',
@@ -119,7 +213,51 @@ export function opsDashboardPage(data: OpsPageData): string {
       <div style="margin-top:0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap">
         <a href="https://github.com/clawbureau/clawbureau/actions/workflows/clawsig-surface-synthetic-smoke.yml" target="_blank" rel="noopener">Synthetic workflow history &rarr;</a>
         <a href="https://github.com/clawbureau/clawbureau/actions/workflows/clawsig-canary-seed.yml" target="_blank" rel="noopener">Canary seeding workflow &rarr;</a>
+        <a href="https://github.com/clawbureau/clawbureau/actions/workflows/clawsig-guarded-deploy.yml" target="_blank" rel="noopener">Guarded deploy workflow &rarr;</a>
       </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Synthetic Trend (latest runs)</p>
+      <div style="display:grid; gap:0.7rem">
+        <div>
+          <p class="dim" style="font-size:0.75rem; margin-bottom:0.35rem">Surface smoke</p>
+          ${historyTrend(data.synthetic_history)}
+        </div>
+        <div>
+          <p class="dim" style="font-size:0.75rem; margin-bottom:0.35rem">Canary seed</p>
+          ${historyTrend(data.canary_history)}
+        </div>
+        <div>
+          <p class="dim" style="font-size:0.75rem; margin-bottom:0.35rem">Guarded deploy</p>
+          ${historyTrend(data.guarded_deploy_history)}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Synthetic Run History</p>
+      ${workflowHistoryRows(data.synthetic_history, 'No synthetic workflow history available.')}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Canary Seed History</p>
+      ${workflowHistoryRows(data.canary_history, 'No canary history available.')}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Guarded Deploy History</p>
+      ${workflowHistoryRows(data.guarded_deploy_history, 'No guarded deploy history available.')}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Recent Failed Routes + Reason Codes</p>
+      ${recentFailedRunsRows(data.recent_failed_runs)}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Latest Artifact Bundles</p>
+      ${latestArtifactLinks(data)}
     </div>
 
     <div class="card">

@@ -491,6 +491,18 @@ export interface SyntheticWorkflowStatus {
   html_url: string | null;
 }
 
+export interface WorkflowRunHistoryItem {
+  workflow: string;
+  run_id: number | null;
+  status: string | null;
+  conclusion: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  html_url: string | null;
+  head_sha: string | null;
+  artifacts_url: string | null;
+}
+
 async function probeHealth(host: string): Promise<DomainHealthProbe> {
   const started = Date.now();
   const url = `https://${host}/health`;
@@ -528,15 +540,18 @@ async function probeHealth(host: string): Promise<DomainHealthProbe> {
 
 interface GitHubWorkflowRunsResponse {
   workflow_runs?: Array<{
+    id?: unknown;
     status?: unknown;
     conclusion?: unknown;
+    created_at?: unknown;
     updated_at?: unknown;
     html_url?: unknown;
+    head_sha?: unknown;
   }>;
 }
 
-async function fetchLatestWorkflowStatus(workflow: string): Promise<SyntheticWorkflowStatus> {
-  const url = `https://api.github.com/repos/clawbureau/clawbureau/actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=1`;
+async function fetchWorkflowRuns(workflow: string, limit: number): Promise<GitHubWorkflowRunsResponse | null> {
+  const url = `https://api.github.com/repos/clawbureau/clawbureau/actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=${Math.max(1, Math.min(20, limit))}`;
 
   try {
     const controller = new AbortController();
@@ -553,33 +568,20 @@ async function fetchLatestWorkflowStatus(workflow: string): Promise<SyntheticWor
     clearTimeout(timer);
 
     if (!response.ok) {
-      return {
-        workflow,
-        ok: null,
-        status: null,
-        conclusion: null,
-        updated_at: null,
-        html_url: null,
-      };
+      return null;
     }
 
-    const data = (await response.json()) as GitHubWorkflowRunsResponse;
-    const latest = Array.isArray(data.workflow_runs) ? data.workflow_runs[0] : null;
-
-    const status = asString(latest?.status);
-    const conclusion = asString(latest?.conclusion);
-    const updatedAt = asString(latest?.updated_at);
-    const htmlUrl = asString(latest?.html_url);
-
-    return {
-      workflow,
-      ok: conclusion === 'success',
-      status,
-      conclusion,
-      updated_at: updatedAt,
-      html_url: htmlUrl,
-    };
+    return (await response.json()) as GitHubWorkflowRunsResponse;
   } catch {
+    return null;
+  }
+}
+
+async function fetchLatestWorkflowStatus(workflow: string): Promise<SyntheticWorkflowStatus> {
+  const data = await fetchWorkflowRuns(workflow, 1);
+  const latest = Array.isArray(data?.workflow_runs) ? data.workflow_runs[0] : null;
+
+  if (!latest) {
     return {
       workflow,
       ok: null,
@@ -589,6 +591,46 @@ async function fetchLatestWorkflowStatus(workflow: string): Promise<SyntheticWor
       html_url: null,
     };
   }
+
+  const status = asString(latest.status);
+  const conclusion = asString(latest.conclusion);
+  const updatedAt = asString(latest.updated_at);
+  const htmlUrl = asString(latest.html_url);
+
+  return {
+    workflow,
+    ok: conclusion === 'success',
+    status,
+    conclusion,
+    updated_at: updatedAt,
+    html_url: htmlUrl,
+  };
+}
+
+export async function fetchWorkflowRunHistory(workflow: string, limit = 8): Promise<WorkflowRunHistoryItem[]> {
+  const data = await fetchWorkflowRuns(workflow, limit);
+  const rows = Array.isArray(data?.workflow_runs) ? data.workflow_runs : [];
+
+  return rows.map((row) => {
+    const runIdRaw = row.id;
+    const runId = typeof runIdRaw === 'number'
+      ? runIdRaw
+      : (typeof runIdRaw === 'string' ? Number.parseInt(runIdRaw, 10) : null);
+
+    const htmlUrl = asString(row.html_url);
+
+    return {
+      workflow,
+      run_id: Number.isFinite(runId) ? runId : null,
+      status: asString(row.status),
+      conclusion: asString(row.conclusion),
+      created_at: asString(row.created_at),
+      updated_at: asString(row.updated_at),
+      html_url: htmlUrl,
+      head_sha: asString(row.head_sha),
+      artifacts_url: htmlUrl ? `${htmlUrl}#artifacts` : null,
+    };
+  });
 }
 
 export async function fetchOpsDomainHealth(): Promise<DomainHealthProbe[]> {
@@ -609,4 +651,19 @@ export async function fetchSyntheticWorkflowStatuses(): Promise<SyntheticWorkflo
   ];
 
   return Promise.all(workflows.map((workflow) => fetchLatestWorkflowStatus(workflow)));
+}
+
+export async function fetchRecentFailedRuns(
+  opts: FetchOptions,
+  limit = 8,
+): Promise<RunsFeedRun[]> {
+  const page = await fetchRunsFeed({
+    status: 'FAIL',
+    limit,
+  }, {
+    ...opts,
+    cacheTtl: 20,
+  });
+
+  return page?.runs ?? [];
 }
