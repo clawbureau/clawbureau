@@ -6218,6 +6218,32 @@ async function listArenaRuns(
   return out;
 }
 
+async function listCompletedArenaRunsByTaskFingerprint(
+  db: D1Database,
+  taskFingerprint: string,
+  limit: number,
+): Promise<ArenaRunRecord[]> {
+  const rows = await db
+    .prepare(
+      `SELECT *
+         FROM bounty_arena_runs
+        WHERE status = 'completed'
+          AND task_fingerprint = ?
+        ORDER BY updated_at DESC, run_id DESC
+        LIMIT ?`
+    )
+    .bind(taskFingerprint, limit)
+    .all<Record<string, unknown>>();
+
+  const out: ArenaRunRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaRunRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
 async function listArenaContendersByRunId(db: D1Database, runId: string): Promise<ArenaContenderRecord[]> {
   const rows = await db
     .prepare('SELECT * FROM bounty_arena_contenders WHERE run_id = ? ORDER BY score DESC, contender_id ASC')
@@ -6444,6 +6470,12 @@ function parseArenaObjectiveProfile(input: unknown): Record<string, unknown> | n
     weights,
     tie_breakers: tieBreakers,
   };
+}
+
+function getArenaObjectiveProfileNameFromRun(run: ArenaRunRecord): string | null {
+  const profile = parseJsonObject(run.objective_profile_json);
+  const name = profile ? d1String(profile.name) : null;
+  return name ? name.trim() : null;
 }
 
 function parseArenaContract(
@@ -11690,6 +11722,235 @@ async function handleListArena(
   return jsonResponse({ arenas }, 200, version);
 }
 
+async function handleArenaManagerRoute(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const objectiveProfileName = d1String(body.objective_profile_name)?.trim() ?? null;
+
+  const maxRunsRaw = body.max_runs;
+  let maxRuns = 50;
+  if (maxRunsRaw !== undefined) {
+    const parsed = d1Number(maxRunsRaw);
+    if (parsed === null || !Number.isInteger(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'max_runs must be a positive integer', 400, { field: 'max_runs' }, version);
+    }
+    maxRuns = Math.min(parsed, 200);
+  }
+
+  const requireHardGatePass = body.require_hard_gate_pass !== false;
+  const allowFallback = body.allow_fallback !== false;
+
+  const runsRaw = await listCompletedArenaRunsByTaskFingerprint(env.BOUNTIES_DB, taskFingerprint, maxRuns);
+  const runs = objectiveProfileName
+    ? runsRaw.filter((run) => getArenaObjectiveProfileNameFromRun(run) === objectiveProfileName)
+    : runsRaw;
+
+  if (runs.length === 0) {
+    return errorResponse(
+      'ARENA_ROUTE_NOT_FOUND',
+      'No completed arena runs matched the routing query',
+      404,
+      {
+        task_fingerprint: taskFingerprint,
+        objective_profile_name: objectiveProfileName,
+      },
+      version,
+    );
+  }
+
+  type RoutingAggregate = {
+    contender_id: string;
+    label: string;
+    model: string;
+    harness: string;
+    appearances: number;
+    wins: number;
+    hard_gate_passes: number;
+    avg_score_sum: number;
+    avg_risk_sum: number;
+    avg_quality_sum: number;
+    latest_hard_gate_pass: boolean;
+    last_seen_at: string;
+    sample_run_ids: string[];
+  };
+
+  const aggregates = new Map<string, RoutingAggregate>();
+
+  for (const run of runs) {
+    const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
+    for (const contenderRow of contenderRows) {
+      const contender = parseArenaContenderResult(contenderRow);
+      if (!contender) {
+        return errorResponse('DATA_INTEGRITY_ERROR', 'Arena contender payload is invalid', 500, { run_id: run.run_id }, version);
+      }
+
+      const existing = aggregates.get(contender.contender_id);
+      if (!existing) {
+        aggregates.set(contender.contender_id, {
+          contender_id: contender.contender_id,
+          label: contender.label,
+          model: contender.model,
+          harness: contender.harness,
+          appearances: 1,
+          wins: run.winner_contender_id === contender.contender_id ? 1 : 0,
+          hard_gate_passes: contender.hard_gate_pass ? 1 : 0,
+          avg_score_sum: contender.score,
+          avg_risk_sum: contender.metrics.risk_score,
+          avg_quality_sum: contender.metrics.quality_score,
+          latest_hard_gate_pass: contender.hard_gate_pass,
+          last_seen_at: run.updated_at,
+          sample_run_ids: [run.run_id],
+        });
+        continue;
+      }
+
+      existing.appearances += 1;
+      existing.wins += run.winner_contender_id === contender.contender_id ? 1 : 0;
+      existing.hard_gate_passes += contender.hard_gate_pass ? 1 : 0;
+      existing.avg_score_sum += contender.score;
+      existing.avg_risk_sum += contender.metrics.risk_score;
+      existing.avg_quality_sum += contender.metrics.quality_score;
+
+      if (run.updated_at >= existing.last_seen_at) {
+        existing.last_seen_at = run.updated_at;
+        existing.latest_hard_gate_pass = contender.hard_gate_pass;
+      }
+
+      if (existing.sample_run_ids.length < 10) {
+        existing.sample_run_ids.push(run.run_id);
+      }
+    }
+  }
+
+  const ranked = [...aggregates.values()]
+    .map((entry) => {
+      const appearances = entry.appearances;
+      const winRate = entry.wins / appearances;
+      const hardGatePassRate = entry.hard_gate_passes / appearances;
+      const avgScore = entry.avg_score_sum / appearances;
+      const avgRisk = entry.avg_risk_sum / appearances;
+      const avgQuality = entry.avg_quality_sum / appearances;
+
+      const routingScore =
+        (avgScore * 0.65) +
+        (winRate * 25) +
+        (hardGatePassRate * 10) -
+        (avgRisk * 0.1);
+
+      return {
+        contender_id: entry.contender_id,
+        label: entry.label,
+        model: entry.model,
+        harness: entry.harness,
+        appearances,
+        wins: entry.wins,
+        win_rate: Number(winRate.toFixed(4)),
+        hard_gate_pass_rate: Number(hardGatePassRate.toFixed(4)),
+        avg_score: Number(avgScore.toFixed(4)),
+        avg_risk: Number(avgRisk.toFixed(4)),
+        avg_quality: Number(avgQuality.toFixed(4)),
+        latest_hard_gate_pass: entry.latest_hard_gate_pass,
+        routing_score: Number(routingScore.toFixed(6)),
+        last_seen_at: entry.last_seen_at,
+        sample_run_ids: entry.sample_run_ids,
+      };
+    })
+    .sort((a, b) => {
+      if (b.routing_score !== a.routing_score) return b.routing_score - a.routing_score;
+      if (b.avg_score !== a.avg_score) return b.avg_score - a.avg_score;
+      return a.contender_id.localeCompare(b.contender_id);
+    });
+
+  const eligible = requireHardGatePass
+    ? ranked.filter((entry) => entry.latest_hard_gate_pass)
+    : ranked;
+
+  if (eligible.length === 0 && !allowFallback) {
+    return errorResponse(
+      'ARENA_ROUTE_HARD_GATE_BLOCKED',
+      'No contender satisfies hard gate routing policy',
+      409,
+      {
+        task_fingerprint: taskFingerprint,
+        objective_profile_name: objectiveProfileName,
+      },
+      version,
+    );
+  }
+
+  const selectedPool = eligible.length > 0 ? eligible : ranked;
+  if (selectedPool.length === 0) {
+    return errorResponse('ARENA_ROUTE_NOT_FOUND', 'No routing candidates available', 404, undefined, version);
+  }
+
+  const recommended = selectedPool[0];
+  if (!recommended) {
+    return errorResponse('ARENA_ROUTE_NOT_FOUND', 'No routing candidates available', 404, undefined, version);
+  }
+
+  const reasonCodes = [
+    eligible.length > 0 ? 'ARENA_ROUTING_SELECTED' : 'ARENA_ROUTING_HARD_GATE_FALLBACK',
+    objectiveProfileName ? 'ARENA_ROUTING_OBJECTIVE_MATCHED' : 'ARENA_ROUTING_OBJECTIVE_ANY',
+  ];
+
+  const backups = selectedPool.slice(1, 4);
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_manager_route.v1',
+      computed_at: new Date().toISOString(),
+      task_fingerprint: taskFingerprint,
+      objective_profile_name: objectiveProfileName,
+      analyzed_runs: runs.length,
+      policy: {
+        require_hard_gate_pass: requireHardGatePass,
+        allow_fallback: allowFallback,
+        max_runs: maxRuns,
+      },
+      recommended: {
+        contender_id: recommended.contender_id,
+        label: recommended.label,
+        model: recommended.model,
+        harness: recommended.harness,
+        routing_score: recommended.routing_score,
+        reason_codes: reasonCodes,
+        rationale: `Selected ${recommended.contender_id} with routing_score=${recommended.routing_score} from ${recommended.appearances} matched runs (win_rate=${recommended.win_rate}, hard_gate_pass_rate=${recommended.hard_gate_pass_rate}).`,
+        evidence: {
+          appearances: recommended.appearances,
+          wins: recommended.wins,
+          win_rate: recommended.win_rate,
+          hard_gate_pass_rate: recommended.hard_gate_pass_rate,
+          avg_score: recommended.avg_score,
+          avg_risk: recommended.avg_risk,
+          avg_quality: recommended.avg_quality,
+          latest_hard_gate_pass: recommended.latest_hard_gate_pass,
+          last_seen_at: recommended.last_seen_at,
+          sample_run_ids: recommended.sample_run_ids,
+        },
+      },
+      backups,
+      contenders_ranked: ranked,
+    },
+    200,
+    version,
+  );
+}
+
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
   const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   if (!bounty) {
@@ -12027,6 +12288,10 @@ export default {
 
       if (path === '/v1/workers/self' && method === 'GET') {
         return handleGetWorkerSelf(request, env, version);
+      }
+
+      if (path === '/v1/arena/manager/route' && method === 'POST') {
+        return handleArenaManagerRoute(request, env, version);
       }
 
       if (path === '/v1/arena' && method === 'GET') {
