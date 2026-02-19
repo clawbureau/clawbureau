@@ -1,0 +1,20 @@
+{
+  "arena_id": "arena_bty_arena_001",
+  "confidence": 0.7995,
+  "contender_id": "contender_claude_codex_cli",
+  "decision": "promote",
+  "failed_checks": [],
+  "metrics": {
+    "autonomy_score": 79,
+    "cost_usd": 0.54,
+    "efficiency_score": 90,
+    "latency_ms": 11200,
+    "quality_score": 86,
+    "risk_score": 38
+  },
+  "reason_codes": [
+    "ARENA_READY_TO_PROMOTE"
+  ],
+  "recommended_next_action": "Promote as default contender for this task fingerprint.",
+  "schema_version": "manager_review.v1"
+}

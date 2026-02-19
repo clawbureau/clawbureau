@@ -76,6 +76,7 @@ const workPolicyContractV2 = readJson('packages/schema/policy/work_policy_contra
 // Arena product schemas
 const arenaProofPackV3 = readJson('packages/schema/arena/proof_pack.v3.json');
 const arenaManagerReviewV1 = readJson('packages/schema/arena/manager_review.v1.json');
+const arenaReportV1 = readJson('packages/schema/arena/arena_report.v1.json');
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -146,6 +147,7 @@ ajv.addSchema(workPolicyContractV2);
 // Arena product schemas
 ajv.addSchema(arenaProofPackV3);
 ajv.addSchema(arenaManagerReviewV1);
+ajv.addSchema(arenaReportV1);
 
 const code = standaloneCode(ajv, {
   validateProofBundleEnvelopeV1: proofBundleEnvelope.$id,
@@ -178,6 +180,7 @@ const code = standaloneCode(ajv, {
   validateWorkPolicyContractV2: workPolicyContractV2.$id,
   validateArenaProofPackV3: arenaProofPackV3.$id,
   validateArenaManagerReviewV1: arenaManagerReviewV1.$id,
+  validateArenaReportV1: arenaReportV1.$id,
 });
 
 const header = `/* eslint-disable */\n// @ts-nocheck\n\n// AUTO-GENERATED FILE. DO NOT EDIT.\n// Regenerate via:\n//   node services/clawverify/scripts/generate-schema-validators.mjs\n\n`;

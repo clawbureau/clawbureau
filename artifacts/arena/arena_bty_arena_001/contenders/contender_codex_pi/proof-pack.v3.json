@@ -1,0 +1,95 @@
+{
+  "arena_id": "arena_bty_arena_001",
+  "claim_binding": {
+    "bounty_id": "bty_arena_001",
+    "claim_hash_b64u": "K3hA0c9cbN55TfDRXeCyJgc1UM2nrlwvbWf7etAaupY",
+    "contract_hash_b64u": "RVGH8pYttabUqs0rewkHlUVnxFap8c7lc81vxZi2H7I",
+    "contract_id": "contract_arena_001",
+    "objective_profile": "balanced",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "compliance": {
+    "checks": [
+      {
+        "criterion_id": "ac_contract_binding",
+        "notes": "Delivery must mention contract binding enforcement.",
+        "reason_code": "CHECK_OK",
+        "required": true,
+        "status": "PASS"
+      },
+      {
+        "criterion_id": "ac_reason_codes",
+        "notes": "Delivery must include deterministic reason codes.",
+        "reason_code": "CHECK_OK",
+        "required": true,
+        "status": "PASS"
+      },
+      {
+        "criterion_id": "ac_test_coverage",
+        "notes": "Delivery should mention tests.",
+        "reason_code": "CHECK_OK",
+        "required": false,
+        "status": "PASS"
+      }
+    ],
+    "mandatory_failed": 0,
+    "mandatory_passed": 2
+  },
+  "contender": {
+    "config": {
+      "harness": "pi",
+      "model": "gpt-5.2-codex",
+      "plugins": [
+        "did-work"
+      ],
+      "prompt_hash_b64u": "X1t2iBaLN774QYW1FkfgsaM-qiDmmY8KKSxklE5sA8A",
+      "skills": [
+        "cloudflare",
+        "wrangler"
+      ],
+      "tools": [
+        "bash",
+        "edit",
+        "read",
+        "wrangler"
+      ]
+    },
+    "contender_id": "contender_codex_pi",
+    "label": "Codex + Pi + cloudflare skill"
+  },
+  "evidence": {
+    "delivery_hash_b64u": "DsQ6Cr7yZYiPpVFq9g5s3kz-WEzkV13U45Lilpzunbk",
+    "delivery_summary": "Implemented contract binding checks with deterministic reason code handling and full test coverage.",
+    "links": [
+      {
+        "label": "PR",
+        "url": "https://github.com/clawbureau/clawbureau/pull/366"
+      },
+      {
+        "label": "Runbook",
+        "url": "https://docs.clawsig.com/quickstart"
+      }
+    ]
+  },
+  "generated_at": "2026-02-19T15:10:00.000Z",
+  "insights": {
+    "bottlenecks": [
+      "slower due to larger test matrix"
+    ],
+    "contract_improvements": [
+      "clarify schema version lock in contract text"
+    ],
+    "next_delegation_hints": [
+      "use for high-risk API hardening bounties"
+    ]
+  },
+  "metrics": {
+    "autonomy_score": 84,
+    "cost_usd": 0.78,
+    "efficiency_score": 81,
+    "latency_ms": 16000,
+    "quality_score": 92,
+    "risk_score": 26
+  },
+  "schema_version": "proof_pack.v3"
+}
