@@ -15,3 +15,4 @@
 - `docs/foundations/ARCHITECTURE.md` — high-level architecture overview (currently thin)
 - `docs/foundations/DEPLOYMENT_RUNBOOK.md` — clawproxy + clawverify deployment flow
 - `docs/foundations/CLAWSIG_OPS_RUNBOOK.md` — ledger/explorer ops handbook v2 (deploy+rollback, alerts, parity gate, incident mode)
+- `docs/foundations/BOUNTY_ARENA_MVP_RUNBOOK.md` — arena generation, persistence, explorer, and manager routing operations (AGP-US-031..037)
