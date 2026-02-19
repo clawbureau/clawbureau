@@ -14,4 +14,4 @@
 - `docs/foundations/PARALLEL_EXECUTION.md` — Ralph/Pi parallel execution guidance
 - `docs/foundations/ARCHITECTURE.md` — high-level architecture overview (currently thin)
 - `docs/foundations/DEPLOYMENT_RUNBOOK.md` — clawproxy + clawverify deployment flow
-- `docs/foundations/CLAWSIG_OPS_RUNBOOK.md` — ledger/explorer deploy+rollback + synthetic/canary/domain ops
+- `docs/foundations/CLAWSIG_OPS_RUNBOOK.md` — ledger/explorer ops handbook v2 (deploy+rollback, alerts, parity gate, incident mode)

@@ -94,5 +94,5 @@
 6. `docs/foundations/ARCHITECTURE.md` — service topology
 7. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — fail-closed error contract
 8. `docs/foundations/DEPLOYMENT_RUNBOOK.md` — clawproxy/clawverify deployment procedures
-9. `docs/foundations/CLAWSIG_OPS_RUNBOOK.md` — ledger/explorer deploy rollback + synthetic/canary incident ops
+9. `docs/foundations/CLAWSIG_OPS_RUNBOOK.md` — ledger/explorer ops handbook v2 (guarded deploy, alerts, parity drift gate, incident-mode triage)
 10. Security Review Pack → [clawea.com/security](https://clawea.com/security) (external)
