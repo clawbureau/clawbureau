@@ -351,6 +351,26 @@ curl -sS https://staging.clawbounties.com/v1/arena/manager/route \
 
 If staging checks are green, repeat migration/deploy/seed/route checks on production.
 
+### One-click arena start in bounty review flow (AGP-US-049)
+
+Bounty submission read APIs now include `arena_review_flow`:
+- `GET /v1/bounties/{bounty_id}/submissions`
+- `GET /v1/submissions/{submission_id}`
+
+`arena_review_flow.start_arena.payload_template` contains a ready-to-send `POST /v1/bounties/{bounty_id}/arena/start` payload.
+
+`arena_review_flow.latest_arena` exposes inline winner + tradeoffs + winner confidence for review UX.
+
+Arena auto-thread now includes direct links to contender artifacts:
+- review paste anchor (`#review-paste-<contender_id>`)
+- manager review anchor (`#manager-review-<contender_id>`)
+
+Rollout evidence (AGP-US-049):
+- staging deploys: `clawbounties-staging` `b080128b-b7dd-489c-9a8f-34f4fc9c7b46`, `clawsig-explorer-staging` `3bb8e443-27f3-4c33-ae8a-f8ecc4473900`
+- production deploys: `clawbounties` `94e28319-4ede-4e54-8c81-f7abaffcbd05`, `clawsig-explorer` `19a3b700-620c-4a64-8e27-2aa2b05c5cd9`
+- seeded runs: `arena_bty_aaaaaaaa_stage_seed_003`, `arena_bty_bbbbbbbb_prod_seed_003`
+- evidence summary: `artifacts/ops/arena-productization/2026-02-19T21-00-00Z-agp-us-049-bounty-ui-one-click/summary.json`
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`

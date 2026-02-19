@@ -132,8 +132,8 @@ function contenderRows(report: ArenaReportView): string {
           </td>
           <td>
             <div style="display:grid; gap:0.35rem">
-              <button class="copy-btn" data-copy="${esc(reviewPaste)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Review Paste</button>
-              <button class="copy-btn" data-copy="${esc(managerJson)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Manager JSON</button>
+              <button id="review-paste-${esc(contender.contender_id)}" class="copy-btn" data-copy="${esc(reviewPaste)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Review Paste</button>
+              <button id="manager-review-${esc(contender.contender_id)}" class="copy-btn" data-copy="${esc(managerJson)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Manager JSON</button>
             </div>
           </td>
         </tr>
@@ -608,7 +608,8 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         links: [
           { label: 'Proof card', url: '/arena/arena_bty_arena_001#proof-card' },
           { label: 'Arena comparison', url: '/arena/arena_bty_arena_001' },
-          { label: 'Manager review JSON', url: '/arena/arena_bty_arena_001#proof-card' },
+          { label: 'Review paste', url: '/arena/arena_bty_arena_001#review-paste-contender_codex_pi' },
+          { label: 'Manager review', url: '/arena/arena_bty_arena_001#manager-review-contender_codex_pi' },
         ],
         source: 'sample',
         created_at: '2026-02-19T15:12:00.000Z',
