@@ -9,6 +9,12 @@ import {
   type CompliancePolicyInput,
 } from './stubs';
 import { base64UrlEncode } from './utils';
+import {
+  authenticateRequestApiKey,
+  buildPowChallenge,
+  resolvePowDifficulty,
+  verifyHashcashNonce,
+} from './auth';
 import { verifyProofBundleViaApi } from './verify-client';
 import { resolveBadge, renderBadgeSvg } from './badges';
 import { importOracleKey, signWithOracleKey } from './crypto';
@@ -23,10 +29,24 @@ function json(data: unknown, status = 200, extra?: Record<string, string>): Resp
     status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Clawsig-Ledger-Version': '1', ...extra },
   });
 }
-function errorJson(message: string, code: string, status = 400): Response { return json({ error: { code, message } }, status); }
-function genRunId(): string {
-  const b = new Uint8Array(8); crypto.getRandomValues(b);
-  return `run_${Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('')}`;
+function errorJson(message: string, code: string, status = 400, extra?: Record<string, string>): Response {
+  return json({ error: { code, message } }, status, extra);
+}
+
+function runIdFromBundleHash(bundleHashB64u: string): string {
+  return `run_${bundleHashB64u.slice(0, 24)}`;
+}
+
+async function findExistingRunIdByBundleHash(env: Env, bundleHashB64u: string): Promise<string | null> {
+  const row = await env.LEDGER_DB.prepare(
+    'SELECT run_id FROM runs WHERE bundle_hash_b64u = ? LIMIT 1'
+  )
+    .bind(bundleHashB64u)
+    .first<{ run_id: string }>();
+
+  return typeof row?.run_id === 'string' && row.run_id.length > 0
+    ? row.run_id
+    : null;
 }
 
 // POST /v1/verify
@@ -35,20 +55,58 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   try { body = (await req.json()) as VerifyRequest; } catch { return errorJson('Invalid JSON', 'INVALID_JSON'); }
   if (!body.proof_bundle || typeof body.proof_bundle !== 'object') return errorJson('Missing proof_bundle', 'MISSING_REQUIRED_FIELD');
 
-  const apiKey = req.headers.get('X-API-Key') ?? req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '');
-  const hasApiKey = !!(apiKey && env.VAAS_API_KEY_HASH);
-  const publishToLedger = body.publish_to_ledger !== false || !hasApiKey;
+  const bundleJsonStr = JSON.stringify(body.proof_bundle);
+  const bundleHashB64u = base64UrlEncode(
+    new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bundleJsonStr))
+    )
+  );
+
+  const auth = await authenticateRequestApiKey(req, env);
+  if (auth.error_code === 'UNAUTHORIZED') {
+    return errorJson('Invalid API key', 'UNAUTHORIZED', 401);
+  }
+
+  const isAuthenticated = auth.authenticated;
+  const publishToLedger = body.publish_to_ledger !== false || !isAuthenticated;
+
+  if (!isAuthenticated) {
+    const powDifficulty = resolvePowDifficulty(env.VAAS_POW_DIFFICULTY);
+    const challenge = buildPowChallenge(bundleHashB64u);
+    const powHeaders = {
+      'X-Hashcash-Challenge': challenge,
+      'X-Hashcash-Difficulty': String(powDifficulty),
+    };
+
+    const nonce = req.headers.get('X-Hashcash-Nonce')?.trim();
+    if (!nonce) {
+      return errorJson('Hashcash proof is required', 'POW_REQUIRED', 401, powHeaders);
+    }
+
+    const powValid = await verifyHashcashNonce(challenge, nonce, powDifficulty);
+    if (!powValid) {
+      return errorJson('Hashcash proof is invalid', 'POW_INVALID', 401, powHeaders);
+    }
+  }
 
   const verification = await verifyProofBundleViaApi(body.proof_bundle, env);
 
   const isPassing = verification.status === 'VALID';
   const proofTier = verification.proof_tier;
   const agentDid = verification.agent_did ?? 'unknown';
-  const runId = genRunId();
-  const shouldPublishToLedger = publishToLedger && verification.failure_class === 'none';
 
-  const bundleJsonStr = JSON.stringify(body.proof_bundle);
-  const bundleHashB64u = base64UrlEncode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(bundleJsonStr))));
+  let existingRunId: string | null = null;
+  try {
+    existingRunId = await findExistingRunIdByBundleHash(env, bundleHashB64u);
+  } catch {
+    return errorJson('Ledger database unavailable', 'LEDGER_DB_UNAVAILABLE', 503);
+  }
+
+  const runId = existingRunId ?? runIdFromBundleHash(bundleHashB64u);
+  const shouldPublishToLedger =
+    publishToLedger &&
+    verification.failure_class === 'none' &&
+    existingRunId === null;
 
   const bundle = body.proof_bundle as Record<string, unknown>;
   const payload = (bundle.payload ?? bundle) as Record<string, unknown>;
@@ -56,7 +114,7 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   const modelsUsed = receipts ? [...new Set(receipts.map(r => r.payload?.model).filter(Boolean) as string[])] : [];
 
   const complianceReports: Record<string, unknown> = {};
-  if (hasApiKey && body.options?.emit_compliance_report && isPassing) {
+  if (isAuthenticated && body.options?.emit_compliance_report && isPassing) {
     for (const fw of body.options.emit_compliance_report) {
       try {
         const report = generateComplianceReport(
@@ -173,7 +231,7 @@ export default {
     const url = new URL(req.url);
     const { method } = req, p = url.pathname;
 
-    if (method === 'OPTIONS') return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key' } });
+    if (method === 'OPTIONS') return new Response(null, { headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Hashcash-Nonce' } });
     if (method === 'GET' && p === '/health') return json({ status: 'ok', service: 'clawsig-ledger', version: env.SERVICE_VERSION });
     if (method === 'GET' && p === '/') return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>clawsig-ledger</title></head><body style="max-width:800px;margin:2rem auto;font-family:system-ui"><h1>clawsig-ledger</h1><p>VaaS + Public Ledger + Badges + Passports</p></body></html>`, { headers: { 'Content-Type': 'text/html' } });
 
