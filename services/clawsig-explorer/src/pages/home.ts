@@ -20,6 +20,21 @@ export interface FailReasonCode {
   count: number;
 }
 
+export interface Diagnostics7dDaily {
+  day: string;
+  runs: number;
+  fail_runs: number;
+  fail_rate: number;
+}
+
+export interface Diagnostics7d {
+  runs_7d: number;
+  fail_runs_7d: number;
+  fail_rate_7d: number;
+  top_fail_reason_codes_7d: FailReasonCode[];
+  daily: Diagnostics7dDaily[];
+}
+
 export interface GlobalStats {
   total_runs: number;
   total_agents: number;
@@ -27,6 +42,7 @@ export interface GlobalStats {
   fail_runs_24h: number;
   fail_rate_24h: number;
   top_fail_reason_codes: FailReasonCode[];
+  diagnostics_7d: Diagnostics7d;
 }
 
 export interface RecentRun {
