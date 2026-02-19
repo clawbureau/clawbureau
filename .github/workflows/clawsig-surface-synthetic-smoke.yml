@@ -32,8 +32,8 @@ jobs:
         continue-on-error: true
         run: node scripts/ops/smoke-clawsig-surface.mjs --max-run-ref-age-minutes 180
 
-      - name: Route synthetic failure alerts (Slack/Discord)
-        if: steps.smoke.outcome == 'failure'
+      - name: Route synthetic alerts (warn/critical)
+        if: always()
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

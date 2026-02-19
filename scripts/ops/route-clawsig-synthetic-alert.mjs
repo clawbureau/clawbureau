@@ -88,6 +88,53 @@ function normalizeFailures(summary, checksPayload) {
   }));
 }
 
+function normalizeSeverity(raw) {
+  if (raw === 'critical' || raw === 'warn' || raw === 'ok') return raw;
+  return 'ok';
+}
+
+function deriveAlertSignal(summary) {
+  const summaryAlertSeverity = normalizeSeverity(summary?.alert?.severity);
+  const summaryAlertReason = typeof summary?.alert?.reason_code === 'string'
+    ? summary.alert.reason_code
+    : null;
+
+  const sloSeverity = normalizeSeverity(summary?.slo_health?.severity);
+  const sloReason = typeof summary?.slo_health?.reason_code === 'string'
+    ? summary.slo_health.reason_code
+    : null;
+
+  if (summary?.ok === false) {
+    return {
+      severity: 'critical',
+      reason_code: summaryAlertReason ?? sloReason ?? 'SYNTHETIC_SURFACE_FAILURE',
+      shouldRoute: true,
+    };
+  }
+
+  if (summaryAlertSeverity !== 'ok') {
+    return {
+      severity: summaryAlertSeverity,
+      reason_code: summaryAlertReason ?? sloReason ?? 'SYNTHETIC_ALERT_DEGRADED',
+      shouldRoute: true,
+    };
+  }
+
+  if (sloSeverity !== 'ok') {
+    return {
+      severity: sloSeverity,
+      reason_code: sloReason ?? 'SLO_DEGRADED',
+      shouldRoute: true,
+    };
+  }
+
+  return {
+    severity: 'ok',
+    reason_code: 'SLO_HEALTHY',
+    shouldRoute: false,
+  };
+}
+
 async function fetchRecentRuns(workflowFile, token) {
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) return [];
@@ -109,7 +156,7 @@ async function fetchRecentRuns(workflowFile, token) {
   return Array.isArray(payload?.workflow_runs) ? payload.workflow_runs : [];
 }
 
-function shouldSuppressAsDuplicate(runs, dedupeWindowMinutes) {
+function shouldSuppressAsDuplicate(runs, dedupeWindowMinutes, severity) {
   const currentRunId = Number.parseInt(process.env.GITHUB_RUN_ID ?? '', 10);
   const currentSha = process.env.GITHUB_SHA ?? '';
 
@@ -121,11 +168,18 @@ function shouldSuppressAsDuplicate(runs, dedupeWindowMinutes) {
     const runId = typeof run?.id === 'number' ? run.id : null;
     const runSha = typeof run?.head_sha === 'string' ? run.head_sha : null;
     const runConclusion = typeof run?.conclusion === 'string' ? run.conclusion : null;
+    const runStatus = typeof run?.status === 'string' ? run.status : null;
     const runCreatedAt = typeof run?.created_at === 'string' ? run.created_at : null;
 
     if (!runId || runId === currentRunId) continue;
     if (runSha !== currentSha) continue;
-    if (runConclusion !== 'failure') continue;
+
+    if (severity === 'critical') {
+      if (runConclusion !== 'failure') continue;
+    } else if (severity === 'warn') {
+      if (runStatus !== 'completed') continue;
+    }
+
     if (!runCreatedAt) continue;
 
     const createdMs = Date.parse(runCreatedAt);
@@ -140,12 +194,16 @@ function shouldSuppressAsDuplicate(runs, dedupeWindowMinutes) {
   return false;
 }
 
-function buildAlertMessage(summary, failures) {
+function buildAlertMessage(summary, failures, alertSignal) {
   const repo = process.env.GITHUB_REPOSITORY ?? 'unknown-repo';
   const sha = process.env.GITHUB_SHA ?? 'unknown-sha';
   const runId = process.env.GITHUB_RUN_ID ?? 'unknown-run';
   const server = process.env.GITHUB_SERVER_URL ?? 'https://github.com';
   const workflowUrl = `${server}/${repo}/actions/runs/${runId}`;
+
+  const severityIcon = alertSignal.severity === 'critical'
+    ? '🚨'
+    : (alertSignal.severity === 'warn' ? '⚠️' : '✅');
 
   const failureLines = failures
     .slice(0, 20)
@@ -157,11 +215,13 @@ function buildAlertMessage(summary, failures) {
   const targetEnv = typeof summary?.target_env === 'string' ? summary.target_env : 'all';
 
   const text = [
-    `🚨 Clawsig synthetic smoke failure (${targetEnv})`,
+    `${severityIcon} Clawsig synthetic signal (${targetEnv})`,
+    `severity: ${alertSignal.severity}`,
+    `reason_code: ${alertSignal.reason_code}`,
     `repo: ${repo}`,
     `commit: ${sha}`,
     `workflow: ${workflowUrl}`,
-    `checks: ${totalChecks - failedChecks}/${totalChecks} passed`,
+    `checks: ${Math.max(0, totalChecks - failedChecks)}/${totalChecks} passed`,
     'failures:',
     failureLines || '- no structured failures reported',
   ].join('\n');
@@ -174,6 +234,8 @@ function buildAlertMessage(summary, failures) {
     targetEnv,
     failedChecks,
     totalChecks,
+    severity: alertSignal.severity,
+    reason_code: alertSignal.reason_code,
   };
 }
 
@@ -206,7 +268,7 @@ async function routeAlerts(alertMessage) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `*Clawsig synthetic smoke failure*\n*repo:* ${alertMessage.repo}\n*commit:* ${alertMessage.sha}\n*env:* ${alertMessage.targetEnv}\n*workflow:* <${alertMessage.workflowUrl}|open run>`
+            text: `*Clawsig synthetic signal*\n*severity:* ${alertMessage.severity}\n*reason_code:* ${alertMessage.reason_code}\n*repo:* ${alertMessage.repo}\n*commit:* ${alertMessage.sha}\n*env:* ${alertMessage.targetEnv}\n*workflow:* <${alertMessage.workflowUrl}|open run>`
           }
         },
         {
@@ -240,22 +302,23 @@ async function main() {
   const summary = readJson(args.summaryPath);
   const checksPayload = readJson(args.checksPath);
 
-  if (summary?.ok === true) {
-    console.log(JSON.stringify({ ok: true, skipped: true, reason: 'SYNTHETIC_PASS' }, null, 2));
+  const alertSignal = deriveAlertSignal(summary);
+  if (!alertSignal.shouldRoute) {
+    console.log(JSON.stringify({ ok: true, skipped: true, reason: 'NO_ALERT_SIGNAL' }, null, 2));
     return;
   }
 
   const failures = normalizeFailures(summary, checksPayload);
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '';
   const runs = await fetchRecentRuns(args.workflowFile, token);
-  const deduped = shouldSuppressAsDuplicate(runs, args.dedupeWindowMinutes);
+  const deduped = shouldSuppressAsDuplicate(runs, args.dedupeWindowMinutes, alertSignal.severity);
 
   if (deduped) {
     console.log(JSON.stringify({ ok: true, skipped: true, reason: 'DUPLICATE_FAILURE_SUPPRESSED' }, null, 2));
     return;
   }
 
-  const message = buildAlertMessage(summary, failures);
+  const message = buildAlertMessage(summary, failures, alertSignal);
   const attempts = await routeAlerts(message);
 
   const routedChannels = attempts.filter((attempt) => attempt.ok).map((attempt) => attempt.channel);
@@ -264,6 +327,8 @@ async function main() {
     ok: routedChannels.length > 0,
     routed_channels: routedChannels,
     attempts,
+    severity: message.severity,
+    reason_code: message.reason_code,
     failure_count: failures.length,
   };
 

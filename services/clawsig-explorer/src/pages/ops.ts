@@ -6,6 +6,7 @@ import type {
   WorkflowRunHistoryItem,
   RunsFeedRun,
 } from '../api.js';
+import type { OpsSloHealth } from '../slo.js';
 
 export interface OpsPageData {
   stats: GlobalStats;
@@ -15,6 +16,7 @@ export interface OpsPageData {
   canary_history: WorkflowRunHistoryItem[];
   guarded_deploy_history: WorkflowRunHistoryItem[];
   recent_failed_runs: RunsFeedRun[];
+  slo_health: OpsSloHealth;
 }
 
 function healthBadge(ok: boolean): string {
@@ -31,6 +33,24 @@ function syntheticBadge(status: SyntheticWorkflowStatus): string {
     return '<span class="status-badge fail"><span class="dot"></span>fail</span>';
   }
   return '<span class="status-badge warn"><span class="dot"></span>unknown</span>';
+}
+
+function sloSeverityBadge(sloHealth: OpsSloHealth): string {
+  if (sloHealth.severity === 'critical') {
+    return '<span class="status-badge fail"><span class="dot"></span>critical</span>';
+  }
+  if (sloHealth.severity === 'warn') {
+    return '<span class="status-badge warn"><span class="dot"></span>warn</span>';
+  }
+  return '<span class="status-badge pass"><span class="dot"></span>healthy</span>';
+}
+
+function formatPct(value: number): string {
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatBurnRate(value: number): string {
+  return `${value.toFixed(2)}x`;
 }
 
 function reasonsList(
@@ -178,11 +198,11 @@ export function opsDashboardPage(data: OpsPageData): string {
 
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="value">${(failRate24h * 100).toFixed(2)}%</div>
+        <div class="value">${formatPct(failRate24h)}</div>
         <div class="label">Fail Rate (24h)</div>
       </div>
       <div class="stat-card">
-        <div class="value">${(failRate7d * 100).toFixed(2)}%</div>
+        <div class="value">${formatPct(failRate7d)}</div>
         <div class="label">Fail Rate (7d)</div>
       </div>
       <div class="stat-card">
@@ -193,6 +213,34 @@ export function opsDashboardPage(data: OpsPageData): string {
         <div class="value">${fmtNum(data.stats.diagnostics_7d.fail_runs_7d)}</div>
         <div class="label">Fail Runs (7d)</div>
       </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">SLO Burn-Rate Guardrails</p>
+      <div style="display:flex; gap:0.7rem; align-items:center; flex-wrap:wrap; margin-bottom:0.75rem">
+        ${sloSeverityBadge(data.slo_health)}
+        <span class="hash">${esc(data.slo_health.reason_code)}</span>
+        <a href="/ops/slo-health.json" target="_blank" rel="noopener" style="font-size:0.8125rem">Machine-readable JSON &rarr;</a>
+      </div>
+      <div class="stats-grid" style="margin-bottom:0.75rem">
+        <div class="stat-card">
+          <div class="value">${formatBurnRate(data.slo_health.windows.window_24h.burn_rate)}</div>
+          <div class="label">Burn Rate (24h)</div>
+        </div>
+        <div class="stat-card">
+          <div class="value">${formatBurnRate(data.slo_health.windows.window_7d.burn_rate)}</div>
+          <div class="label">Burn Rate (7d)</div>
+        </div>
+        <div class="stat-card">
+          <div class="value">${formatPct(data.slo_health.windows.window_24h.error_budget_fraction)}</div>
+          <div class="label">Error Budget</div>
+        </div>
+        <div class="stat-card">
+          <div class="value">${formatPct(data.slo_health.target_success_rate)}</div>
+          <div class="label">SLO Target</div>
+        </div>
+      </div>
+      <p class="dim" style="font-size:0.8125rem">Thresholds: warn(24h ${data.slo_health.thresholds.warn_burn_rate_24h.toFixed(2)}x / 7d ${data.slo_health.thresholds.warn_burn_rate_7d.toFixed(2)}x), critical(24h ${data.slo_health.thresholds.critical_burn_rate_24h.toFixed(2)}x / 7d ${data.slo_health.thresholds.critical_burn_rate_7d.toFixed(2)}x).</p>
     </div>
 
     <div class="card">

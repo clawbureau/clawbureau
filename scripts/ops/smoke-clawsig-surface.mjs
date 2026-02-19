@@ -6,6 +6,13 @@ import path from 'node:path';
 const OUTPUT_ROOT_DEFAULT = 'artifacts/ops/clawsig-synthetic';
 const DEFAULT_MAX_RUN_REF_AGE_MINUTES = 180;
 
+const SLO_TARGET_SUCCESS_RATE = 0.99;
+const SLO_ERROR_BUDGET = 1 - SLO_TARGET_SUCCESS_RATE;
+const SLO_WARN_BURN_RATE_24H = 1;
+const SLO_WARN_BURN_RATE_7D = 1;
+const SLO_CRITICAL_BURN_RATE_24H = 2;
+const SLO_CRITICAL_BURN_RATE_7D = 1.5;
+
 function parseArgs(argv) {
   const args = {
     outputRoot: OUTPUT_ROOT_DEFAULT,
@@ -195,6 +202,132 @@ function parseRunTimestamp(rawTimestamp) {
   return parsed;
 }
 
+function toFiniteNumber(value, fallback = 0) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function computeSloSeverity(window24hBurnRate, window7dBurnRate, degradedHosts, failingWorkflows) {
+  if (Array.isArray(degradedHosts) && degradedHosts.length > 0) {
+    return { severity: 'critical', reason_code: 'SLO_CRITICAL_DOMAIN_HEALTH_DEGRADED' };
+  }
+
+  if (Array.isArray(failingWorkflows) && failingWorkflows.length > 0) {
+    return { severity: 'critical', reason_code: 'SLO_CRITICAL_SYNTHETIC_FAILURE' };
+  }
+
+  const critical24h = window24hBurnRate >= SLO_CRITICAL_BURN_RATE_24H;
+  const critical7d = window7dBurnRate >= SLO_CRITICAL_BURN_RATE_7D;
+  const warn24h = window24hBurnRate >= SLO_WARN_BURN_RATE_24H;
+  const warn7d = window7dBurnRate >= SLO_WARN_BURN_RATE_7D;
+
+  if (critical24h && critical7d) {
+    return { severity: 'critical', reason_code: 'SLO_CRITICAL_BURNRATE_MULTIWINDOW' };
+  }
+  if (critical24h) {
+    return { severity: 'critical', reason_code: 'SLO_CRITICAL_BURNRATE_24H' };
+  }
+  if (critical7d) {
+    return { severity: 'critical', reason_code: 'SLO_CRITICAL_BURNRATE_7D' };
+  }
+  if (warn24h && warn7d) {
+    return { severity: 'warn', reason_code: 'SLO_WARN_BURNRATE_MULTIWINDOW' };
+  }
+  if (warn24h) {
+    return { severity: 'warn', reason_code: 'SLO_WARN_BURNRATE_24H' };
+  }
+  if (warn7d) {
+    return { severity: 'warn', reason_code: 'SLO_WARN_BURNRATE_7D' };
+  }
+
+  return { severity: 'ok', reason_code: 'SLO_HEALTHY' };
+}
+
+function fetchSloSnapshot(apiHost) {
+  const stats = curlViaResolvedHost(apiHost, '/v1/ledger/stats');
+  if (!stats.ok || !stats.body) {
+    return {
+      check: {
+        name: `api:slo:${apiHost}`,
+        ok: false,
+        reason_code: stats.code,
+        http_status: stats.status,
+        host: apiHost,
+        path: '/v1/ledger/stats',
+      },
+      snapshot: null,
+    };
+  }
+
+  try {
+    const payload = JSON.parse(stats.body);
+    const runs24h = Math.max(0, toFiniteNumber(payload?.runs_24h, 0));
+    const failRuns24h = Math.max(0, toFiniteNumber(payload?.fail_runs_24h, 0));
+    const failRate24h = Math.max(0, toFiniteNumber(payload?.fail_rate_24h, runs24h > 0 ? failRuns24h / runs24h : 0));
+
+    const runs7d = Math.max(0, toFiniteNumber(payload?.diagnostics_7d?.runs_7d, 0));
+    const failRuns7d = Math.max(0, toFiniteNumber(payload?.diagnostics_7d?.fail_runs_7d, 0));
+    const failRate7d = Math.max(0, toFiniteNumber(payload?.diagnostics_7d?.fail_rate_7d, runs7d > 0 ? failRuns7d / runs7d : 0));
+
+    const burnRate24h = Number((failRate24h / SLO_ERROR_BUDGET).toFixed(6));
+    const burnRate7d = Number((failRate7d / SLO_ERROR_BUDGET).toFixed(6));
+    const health = computeSloSeverity(burnRate24h, burnRate7d, [], []);
+
+    const snapshot = {
+      host: apiHost,
+      target_success_rate: SLO_TARGET_SUCCESS_RATE,
+      error_budget_fraction: SLO_ERROR_BUDGET,
+      runs_24h: runs24h,
+      fail_runs_24h: failRuns24h,
+      fail_rate_24h: failRate24h,
+      burn_rate_24h: burnRate24h,
+      runs_7d: runs7d,
+      fail_runs_7d: failRuns7d,
+      fail_rate_7d: failRate7d,
+      burn_rate_7d: burnRate7d,
+      severity: health.severity,
+      reason_code: health.reason_code,
+      thresholds: {
+        warn_burn_rate_24h: SLO_WARN_BURN_RATE_24H,
+        warn_burn_rate_7d: SLO_WARN_BURN_RATE_7D,
+        critical_burn_rate_24h: SLO_CRITICAL_BURN_RATE_24H,
+        critical_burn_rate_7d: SLO_CRITICAL_BURN_RATE_7D,
+      },
+    };
+
+    return {
+      check: {
+        name: `api:slo:${apiHost}`,
+        ok: health.severity !== 'critical',
+        reason_code: health.reason_code,
+        http_status: stats.status,
+        host: apiHost,
+        path: '/v1/ledger/stats',
+        severity: health.severity,
+        burn_rate_24h: burnRate24h,
+        burn_rate_7d: burnRate7d,
+      },
+      snapshot,
+    };
+  } catch {
+    return {
+      check: {
+        name: `api:slo:${apiHost}`,
+        ok: false,
+        reason_code: 'SLO_STATS_PARSE_FAILED',
+        http_status: stats.status,
+        host: apiHost,
+        path: '/v1/ledger/stats',
+      },
+      snapshot: null,
+    };
+  }
+}
+
 function latestRunRef(apiHost, maxRunRefAgeMinutes) {
   const response = curlViaResolvedHost(apiHost, '/v1/ledger/runs?limit=1');
   if (!response.ok || !response.body) {
@@ -345,6 +478,7 @@ function runSmoke() {
     dns: {},
     tls: {},
     refs: {},
+    slo: {},
     options: args,
   };
 
@@ -396,6 +530,10 @@ function runSmoke() {
     };
     pushCheck(checks, refs.check);
 
+    const slo = fetchSloSnapshot(apiHost);
+    context.slo[envLabel] = slo.snapshot;
+    pushCheck(checks, slo.check);
+
     for (const pathName of ['/', '/runs', '/stats']) {
       const check = pageCheck(explorerHost, pathName);
       pushCheck(checks, {
@@ -442,6 +580,34 @@ function runSmoke() {
   }
 
   const failed = checks.filter((c) => !c.ok);
+  const degradedHosts = checks
+    .filter((c) => c.name.startsWith('health:') && c.ok === false)
+    .map((c) => c.host)
+    .filter(Boolean);
+
+  const sloSnapshots = Object.values(context.slo).filter((snapshot) => snapshot && typeof snapshot === 'object');
+  const burnRate24h = sloSnapshots.length > 0
+    ? Math.max(...sloSnapshots.map((snapshot) => toFiniteNumber(snapshot.burn_rate_24h, 0)))
+    : 0;
+  const burnRate7d = sloSnapshots.length > 0
+    ? Math.max(...sloSnapshots.map((snapshot) => toFiniteNumber(snapshot.burn_rate_7d, 0)))
+    : 0;
+
+  const sloHealth = computeSloSeverity(burnRate24h, burnRate7d, degradedHosts, []);
+
+  let alertSeverity = 'ok';
+  let alertReasonCode = 'SLO_HEALTHY';
+
+  if (failed.length > 0) {
+    alertSeverity = 'critical';
+    alertReasonCode = sloHealth.reason_code !== 'SLO_HEALTHY'
+      ? sloHealth.reason_code
+      : 'SYNTHETIC_SURFACE_FAILURE';
+  } else if (sloHealth.severity !== 'ok') {
+    alertSeverity = sloHealth.severity;
+    alertReasonCode = sloHealth.reason_code;
+  }
+
   const summary = {
     ok: failed.length === 0,
     generated_at: new Date().toISOString(),
@@ -456,6 +622,26 @@ function runSmoke() {
       reason_code: f.reason_code,
       http_status: f.http_status ?? null,
     })),
+    slo_health: {
+      severity: sloHealth.severity,
+      reason_code: sloHealth.reason_code,
+      burn_rate_24h: Number(burnRate24h.toFixed(6)),
+      burn_rate_7d: Number(burnRate7d.toFixed(6)),
+      degraded_hosts: degradedHosts,
+      per_env: context.slo,
+      thresholds: {
+        warn_burn_rate_24h: SLO_WARN_BURN_RATE_24H,
+        warn_burn_rate_7d: SLO_WARN_BURN_RATE_7D,
+        critical_burn_rate_24h: SLO_CRITICAL_BURN_RATE_24H,
+        critical_burn_rate_7d: SLO_CRITICAL_BURN_RATE_7D,
+      },
+      target_success_rate: SLO_TARGET_SUCCESS_RATE,
+      error_budget_fraction: SLO_ERROR_BUDGET,
+    },
+    alert: {
+      severity: alertSeverity,
+      reason_code: alertReasonCode,
+    },
   };
 
   writeFileSync(path.join(outDir, 'checks.json'), JSON.stringify({ checks, context }, null, 2));

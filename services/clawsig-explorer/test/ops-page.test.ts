@@ -96,10 +96,48 @@ describe('opsDashboardPage', () => {
           created_at: '2026-02-19 01:00:00',
         },
       ],
+      slo_health: {
+        generated_at: '2026-02-19T00:05:00.000Z',
+        target_success_rate: 0.99,
+        error_budget_fraction: 0.01,
+        thresholds: {
+          warn_burn_rate_24h: 1,
+          warn_burn_rate_7d: 1,
+          critical_burn_rate_24h: 2,
+          critical_burn_rate_7d: 1.5,
+        },
+        windows: {
+          window_24h: {
+            window: '24h',
+            runs: 20,
+            fail_runs: 2,
+            fail_rate: 0.1,
+            error_budget_fraction: 0.01,
+            burn_rate: 10,
+          },
+          window_7d: {
+            window: '7d',
+            runs: 120,
+            fail_runs: 6,
+            fail_rate: 0.05,
+            error_budget_fraction: 0.01,
+            burn_rate: 5,
+          },
+        },
+        severity: 'critical',
+        status: 'degraded',
+        reason_code: 'SLO_CRITICAL_BURNRATE_MULTIWINDOW',
+        domain_degraded_hosts: [],
+        failing_workflows: [],
+        notes: [],
+      },
     });
 
     expect(html).toContain('Operations Dashboard');
     expect(html).toContain('Domain Health');
+    expect(html).toContain('SLO Burn-Rate Guardrails');
+    expect(html).toContain('SLO_CRITICAL_BURNRATE_MULTIWINDOW');
+    expect(html).toContain('/ops/slo-health.json');
     expect(html).toContain('Synthetic Trend (latest runs)');
     expect(html).toContain('Canary Seed History');
     expect(html).toContain('Recent Failed Routes + Reason Codes');
