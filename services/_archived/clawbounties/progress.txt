@@ -740,3 +740,9 @@ Started: 2026-02-02T03:08:26.937005
   - staging watch: `artifacts/ops/econ-risk/2026-02-12T14-25-43-531Z-staging-loss-event-watch/summary.json` (limit=5)
   - prod watch: `artifacts/ops/econ-risk/2026-02-12T14-28-43-320Z-prod-loss-event-watch/summary.json`
 - Rollout summary: `artifacts/ops/econ-risk/2026-02-12T14-29-11Z-econ-risk-max-002-rollout/deploy-summary.json`
+
+## 2026-02-19 - AGP-US-043 live bounty-triggered arena lifecycle
+- Added migration `migrations/0022_bounty_arena_live_lifecycle.sql` to persist arena lifecycle fields directly on bounty rows (`arena_status`, `arena_id`, winner + evidence links).
+- `POST /v1/bounties/{bounty_id}/submit` now auto-triggers a deterministic started arena run when a valid submission is accepted for review.
+- `POST /v1/bounties/{bounty_id}/arena/start` and `POST /v1/bounties/{bounty_id}/arena/result` now synchronize bounty lifecycle state (`started`/`completed`) fail-closed.
+- `GET /v1/bounties/{bounty_id}` and `GET /v1/bounties/{bounty_id}/arena` now expose `arena_lifecycle` summary.

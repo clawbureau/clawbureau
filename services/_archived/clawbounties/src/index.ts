@@ -81,6 +81,7 @@ export interface Env {
 
 type ClosureType = 'test' | 'requester' | 'quorum';
 type BountyStatus = 'open' | 'accepted' | 'pending_review' | 'approved' | 'rejected' | 'disputed' | 'cancelled';
+type BountyArenaStatus = 'idle' | 'started' | 'completed' | 'failed';
 type ProofTier = 'self' | 'gateway' | 'sandbox';
 type SubmissionStatus = 'pending_review' | 'invalid' | 'approved' | 'rejected';
 type VerificationStatus = 'VALID' | 'INVALID';
@@ -316,6 +317,14 @@ interface BountyV2 {
   rejected_at: string | null;
   trial_case_id: string | null;
   trial_opened_at: string | null;
+
+  // arena lifecycle (AGP-US-043)
+  arena_status: BountyArenaStatus;
+  arena_id: string | null;
+  arena_task_fingerprint: string | null;
+  arena_winner_contender_id: string | null;
+  arena_evidence_links: ArenaScoreExplainLink[];
+  arena_updated_at: string | null;
 
   // recommended/common
   is_code_bounty: boolean;
@@ -1031,6 +1040,15 @@ function parseBountyStatus(input: unknown): BountyStatus | null {
     v === 'disputed' ||
     v === 'cancelled'
   ) {
+    return v;
+  }
+  return null;
+}
+
+function parseBountyArenaStatus(input: unknown): BountyArenaStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'idle' || v === 'started' || v === 'completed' || v === 'failed') {
     return v;
   }
   return null;
@@ -4649,6 +4667,13 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
   const trial_case_id = d1String(row.trial_case_id);
   const trial_opened_at = d1String(row.trial_opened_at);
 
+  const arena_status = parseBountyArenaStatus(d1String(row.arena_status)) ?? 'idle';
+  const arena_id = d1String(row.arena_id);
+  const arena_task_fingerprint = d1String(row.arena_task_fingerprint);
+  const arena_winner_contender_id = d1String(row.arena_winner_contender_id);
+  const arena_evidence_links_json = d1String(row.arena_evidence_links_json);
+  const arena_updated_at = d1String(row.arena_updated_at);
+
   const is_code_bounty_num = d1Number(row.is_code_bounty);
   const tags_json = d1String(row.tags_json);
   const min_proof_tier = parseProofTier(d1String(row.min_proof_tier));
@@ -4721,6 +4746,16 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
 
   if (!tags || !metadata) return null;
 
+  let arena_evidence_links: ArenaScoreExplainLink[] = [];
+  if (arena_evidence_links_json) {
+    try {
+      const parsed = JSON.parse(arena_evidence_links_json) as unknown;
+      arena_evidence_links = parseArenaScoreExplainLinks(parsed);
+    } catch {
+      return null;
+    }
+  }
+
   const cwc_buyer_envelope = cwc_buyer_envelope_json ? parseJsonObject(cwc_buyer_envelope_json) : null;
   const cwc_worker_envelope = cwc_worker_envelope_json ? parseJsonObject(cwc_worker_envelope_json) : null;
 
@@ -4780,6 +4815,13 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     rejected_at: rejected_at ? rejected_at.trim() : null,
     trial_case_id: trial_case_id ? trial_case_id.trim() : null,
     trial_opened_at: trial_opened_at ? trial_opened_at.trim() : null,
+
+    arena_status,
+    arena_id: arena_id ? arena_id.trim() : null,
+    arena_task_fingerprint: arena_task_fingerprint ? arena_task_fingerprint.trim() : null,
+    arena_winner_contender_id: arena_winner_contender_id ? arena_winner_contender_id.trim() : null,
+    arena_evidence_links,
+    arena_updated_at: arena_updated_at ? arena_updated_at.trim() : null,
 
     is_code_bounty: Boolean(is_code_bounty_num),
     tags,
@@ -6209,6 +6251,23 @@ function parseArenaCheckResults(input: unknown): ArenaCheckResult[] {
   return out;
 }
 
+function parseArenaScoreExplainLinks(value: unknown): ArenaScoreExplainLink[] {
+  if (!Array.isArray(value)) return [];
+
+  const evidenceLinks: ArenaScoreExplainLink[] = [];
+  for (const raw of value) {
+    if (!isRecord(raw)) continue;
+    const label = d1String(raw.label);
+    const url = d1String(raw.url);
+    const source = d1String(raw.source);
+
+    if (!label || !url) continue;
+    evidenceLinks.push(source ? { label, url, source } : { label, url });
+  }
+
+  return evidenceLinks;
+}
+
 function parseArenaScoreExplain(value: unknown, fallbackFinalScore = 0): ArenaScoreExplain {
   if (!isRecord(value)) {
     return {
@@ -6220,19 +6279,7 @@ function parseArenaScoreExplain(value: unknown, fallbackFinalScore = 0): ArenaSc
 
   const derived = isRecord(value.derived) ? value.derived : null;
   const reasonCodes = parseStringList(value.reason_codes, 32, 128, true) ?? [];
-
-  const evidenceLinks: ArenaScoreExplainLink[] = [];
-  if (Array.isArray(value.evidence_links)) {
-    for (const raw of value.evidence_links) {
-      if (!isRecord(raw)) continue;
-      const label = d1String(raw.label);
-      const url = d1String(raw.url);
-      const source = d1String(raw.source);
-
-      if (!label || !url) continue;
-      evidenceLinks.push(source ? { label, url, source } : { label, url });
-    }
-  }
+  const evidenceLinks = parseArenaScoreExplainLinks(value.evidence_links);
 
   const finalScore = d1Number(derived?.final_score);
 
@@ -6751,6 +6798,275 @@ async function writeArenaContenderRecords(
       )
       .run();
   }
+}
+
+function sanitizeArenaTaskFingerprint(input: string): string {
+  const normalized = input
+    .toLowerCase()
+    .replace(/[^a-z0-9:_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (normalized.length === 0) return 'task:unknown';
+  return normalized.slice(0, 120);
+}
+
+function deriveLiveArenaTaskFingerprint(bounty: BountyV2): string {
+  const metadataFingerprint = d1String(bounty.metadata.task_fingerprint);
+  if (metadataFingerprint && metadataFingerprint.trim().length > 0) {
+    return sanitizeArenaTaskFingerprint(metadataFingerprint.trim());
+  }
+
+  const topTags = bounty.tags
+    .slice(0, 3)
+    .map((tag) => sanitizeArenaTaskFingerprint(tag))
+    .filter((tag) => tag !== 'task:unknown')
+    .join(':');
+
+  const base = topTags ? `${bounty.closure_type}:${bounty.min_proof_tier}:${topTags}` : `${bounty.closure_type}:${bounty.min_proof_tier}`;
+  return sanitizeArenaTaskFingerprint(base);
+}
+
+function buildLiveArenaObjectiveProfile(bounty: BountyV2): Record<string, unknown> {
+  const fromMetadata = parseArenaObjectiveProfile(bounty.metadata.arena_objective_profile);
+  if (fromMetadata) return fromMetadata;
+
+  if (bounty.closure_type === 'test') {
+    return {
+      name: 'latency-balanced',
+      weights: { quality: 0.35, speed: 0.3, cost: 0.15, safety: 0.2 },
+      tie_breakers: ['hard_gate_pass', 'latency_ms', 'cost_usd'],
+    };
+  }
+
+  if (bounty.min_proof_tier === 'sandbox') {
+    return {
+      name: 'safety-first',
+      weights: { quality: 0.4, speed: 0.15, cost: 0.1, safety: 0.35 },
+      tie_breakers: ['hard_gate_pass', 'risk_score', 'cost_usd'],
+    };
+  }
+
+  return {
+    name: 'balanced',
+    weights: { quality: 0.45, speed: 0.2, cost: 0.15, safety: 0.2 },
+    tie_breakers: ['hard_gate_pass', 'quality_score', 'cost_usd'],
+  };
+}
+
+function buildSubmissionEvidenceLinks(submission: SubmissionRecord): ArenaScoreExplainLink[] {
+  const links: ArenaScoreExplainLink[] = [];
+
+  if (submission.repo_url) {
+    links.push({
+      label: 'submission_repo',
+      url: submission.repo_url,
+      source: 'submission',
+    });
+
+    if (submission.commit_sha) {
+      const trimmedRepo = submission.repo_url.replace(/\.git$/i, '').replace(/\/$/, '');
+      links.push({
+        label: 'submission_commit',
+        url: `${trimmedRepo}/commit/${submission.commit_sha}`,
+        source: 'submission',
+      });
+    }
+  }
+
+  if (submission.proof_bundle_hash_b64u) {
+    links.push({
+      label: 'proof_bundle_hash',
+      url: `urn:sha256:${submission.proof_bundle_hash_b64u}`,
+      source: 'proof_bundle',
+    });
+  }
+
+  return links;
+}
+
+function buildLiveArenaBaselineContender(bounty: BountyV2, submission: SubmissionRecord): ArenaContenderResult {
+  const agentPack = submission.agent_pack;
+  const model = d1String(agentPack?.model)?.trim() || 'unknown';
+  const harness = bounty.test_harness_id ?? 'clawbounties-live';
+
+  const tools = parseStringList(agentPack?.tools, 32, 120, true) ?? [];
+  const skills = parseStringList(agentPack?.skills, 32, 120, true) ?? [];
+  const plugins = parseStringList(agentPack?.plugins, 32, 120, true) ?? [];
+
+  return {
+    contender_id: `contender_submission_${submission.submission_id.slice(-12)}`,
+    label: 'Live bounty submission',
+    model,
+    harness,
+    tools,
+    skills,
+    plugins,
+    score: 0,
+    hard_gate_pass: false,
+    mandatory_failed: 0,
+    metrics: {
+      quality_score: 0,
+      risk_score: 0,
+      efficiency_score: 0,
+      latency_ms: 0,
+      cost_usd: 0,
+      autonomy_score: 0,
+    },
+    check_results: [],
+    score_explain: {
+      final_score: 0,
+      reason_codes: ['ARENA_LIVE_TRIGGERED'],
+      evidence_links: buildSubmissionEvidenceLinks(submission),
+    },
+    insights: {
+      bottlenecks: [],
+      contract_improvements: [],
+      next_delegation_hints: [],
+    },
+    proof_pack: null,
+    manager_review: null,
+    review_paste: 'Live arena trigger created from submission; contender evaluation pending.',
+  };
+}
+
+function getWinnerEvidenceLinks(contenders: ArenaContenderResult[], winnerContenderId: string): ArenaScoreExplainLink[] {
+  const winner = contenders.find((entry) => entry.contender_id === winnerContenderId);
+  if (!winner) return [];
+  return winner.score_explain.evidence_links.slice(0, 20);
+}
+
+async function updateBountyArenaLifecycle(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    arena_status: BountyArenaStatus;
+    arena_id: string | null;
+    arena_task_fingerprint: string | null;
+    arena_winner_contender_id: string | null;
+    arena_evidence_links: ArenaScoreExplainLink[];
+    arena_updated_at: string;
+  },
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE bounties
+          SET arena_status = ?,
+              arena_id = ?,
+              arena_task_fingerprint = ?,
+              arena_winner_contender_id = ?,
+              arena_evidence_links_json = ?,
+              arena_updated_at = ?,
+              updated_at = ?
+        WHERE bounty_id = ?`
+    )
+    .bind(
+      params.arena_status,
+      params.arena_id,
+      params.arena_task_fingerprint,
+      params.arena_winner_contender_id,
+      stableStringify(params.arena_evidence_links),
+      params.arena_updated_at,
+      params.arena_updated_at,
+      params.bounty_id,
+    )
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('BOUNTY_ARENA_LIFECYCLE_UPDATE_FAILED');
+  }
+}
+
+async function triggerLiveArenaFromSubmission(
+  db: D1Database,
+  bounty: BountyV2,
+  submission: SubmissionRecord,
+  now: string,
+): Promise<{ replay: boolean; run: ArenaRunRecord }> {
+  const arenaId = `arena_${bounty.bounty_id}_live_${submission.submission_id}`.slice(0, 120);
+  const startIdempotencyKey = `arena-live:${submission.submission_id}`;
+  const taskFingerprint = deriveLiveArenaTaskFingerprint(bounty);
+  const objectiveProfile = buildLiveArenaObjectiveProfile(bounty);
+
+  const existingByIdempotency = await getArenaRunByStartIdempotencyKey(db, startIdempotencyKey);
+  if (existingByIdempotency) {
+    return { replay: true, run: existingByIdempotency };
+  }
+
+  const existingArena = await getArenaRunByArenaId(db, arenaId);
+  if (existingArena) {
+    return { replay: true, run: existingArena };
+  }
+
+  const runId = `arn_${crypto.randomUUID()}`;
+  const contractId = `contract_${bounty.bounty_id}_${submission.submission_id}`;
+  const contractPayload = stableStringify({
+    bounty_id: bounty.bounty_id,
+    submission_id: submission.submission_id,
+    status: submission.status,
+    task_fingerprint: taskFingerprint,
+  });
+  const contractHashB64u = await sha256B64uUtf8(contractPayload);
+
+  await db
+    .prepare(
+      `INSERT INTO bounty_arena_runs (
+          run_id,
+          arena_id,
+          bounty_id,
+          status,
+          contract_id,
+          contract_hash_b64u,
+          task_fingerprint,
+          objective_profile_json,
+          arena_report_json,
+          winner_contender_id,
+          winner_reason,
+          reason_codes_json,
+          tradeoffs_json,
+          start_idempotency_key,
+          result_idempotency_key,
+          report_hash_b64u,
+          started_at,
+          completed_at,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'started', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, ?, NULL, ?, ?)`
+    )
+    .bind(
+      runId,
+      arenaId,
+      bounty.bounty_id,
+      contractId,
+      contractHashB64u,
+      taskFingerprint,
+      stableStringify(objectiveProfile),
+      startIdempotencyKey,
+      now,
+      now,
+      now,
+    )
+    .run();
+
+  const baselineContender = buildLiveArenaBaselineContender(bounty, submission);
+  await writeArenaContenderRecords(db, runId, [baselineContender], now);
+
+  await updateBountyArenaLifecycle(db, {
+    bounty_id: bounty.bounty_id,
+    arena_status: 'started',
+    arena_id: arenaId,
+    arena_task_fingerprint: taskFingerprint,
+    arena_winner_contender_id: null,
+    arena_evidence_links: baselineContender.score_explain.evidence_links,
+    arena_updated_at: now,
+  });
+
+  const savedRun = await getArenaRunByArenaId(db, arenaId);
+  if (!savedRun) {
+    throw new Error('ARENA_LIVE_TRIGGER_PERSISTENCE_FAILED');
+  }
+
+  return { replay: false, run: savedRun };
 }
 
 function dedupeStrings(items: string[]): string[] {
@@ -7353,6 +7669,17 @@ function buildArenaRunSummary(run: ArenaRunRecord): {
     winner_contender_id: run.winner_contender_id ?? 'pending',
     reason_code,
     status: run.status,
+  };
+}
+
+function buildBountyArenaLifecycleSummary(bounty: BountyV2): Record<string, unknown> {
+  return {
+    status: bounty.arena_status,
+    arena_id: bounty.arena_id,
+    task_fingerprint: bounty.arena_task_fingerprint,
+    winner_contender_id: bounty.arena_winner_contender_id,
+    evidence_links: bounty.arena_evidence_links,
+    updated_at: bounty.arena_updated_at,
   };
 }
 
@@ -10270,6 +10597,33 @@ async function handleSubmitBounty(bountyId: string, request: Request, env: Env, 
         `Failed to update bounty status to 'pending_review' for bounty ${bounty.bounty_id} after submission ${submission_id}: ${message}`
       );
     }
+
+    try {
+      await triggerLiveArenaFromSubmission(env.BOUNTIES_DB, bounty, record, now);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      console.error(
+        `Failed to trigger live arena for bounty ${bounty.bounty_id} submission ${submission_id}: ${message}`,
+      );
+
+      try {
+        const failedArenaId = `arena_${bounty.bounty_id}_live_${submission_id}`.slice(0, 120);
+        await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+          bounty_id: bounty.bounty_id,
+          arena_status: 'failed',
+          arena_id: failedArenaId,
+          arena_task_fingerprint: deriveLiveArenaTaskFingerprint(bounty),
+          arena_winner_contender_id: null,
+          arena_evidence_links: [],
+          arena_updated_at: new Date().toISOString(),
+        });
+      } catch (syncErr) {
+        const syncMessage = syncErr instanceof Error ? syncErr.message : 'Unknown error';
+        console.error(
+          `Failed to persist arena failure lifecycle for bounty ${bounty.bounty_id} submission ${submission_id}: ${syncMessage}`,
+        );
+      }
+    }
   }
 
   let autoDecision: TestAutoDecisionResult | null = null;
@@ -11420,6 +11774,13 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
     trial_case_id: null,
     trial_opened_at: null,
 
+    arena_status: 'idle',
+    arena_id: null,
+    arena_task_fingerprint: null,
+    arena_winner_contender_id: null,
+    arena_evidence_links: [],
+    arena_updated_at: null,
+
     is_code_bounty,
     tags,
     min_proof_tier,
@@ -11996,6 +12357,16 @@ async function handleStartBountyArena(
       );
     }
 
+    await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+      bounty_id: bountyId,
+      arena_status: 'started',
+      arena_id: existingByIdempotency.arena_id,
+      arena_task_fingerprint: existingByIdempotency.task_fingerprint,
+      arena_winner_contender_id: null,
+      arena_evidence_links: [],
+      arena_updated_at: new Date().toISOString(),
+    });
+
     const replayPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, existingByIdempotency);
     return jsonResponse(
       {
@@ -12066,6 +12437,17 @@ async function handleStartBountyArena(
     if (baselineContenders.length > 0) {
       await writeArenaContenderRecords(env.BOUNTIES_DB, runId, baselineContenders, now);
     }
+
+    const seededEvidenceLinks = baselineContenders.length > 0 ? (baselineContenders[0]?.score_explain.evidence_links ?? []) : [];
+    await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+      bounty_id: bountyId,
+      arena_status: 'started',
+      arena_id: arenaId,
+      arena_task_fingerprint: contract.task_fingerprint,
+      arena_winner_contender_id: null,
+      arena_evidence_links: seededEvidenceLinks,
+      arena_updated_at: now,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
@@ -12206,6 +12588,17 @@ async function handleSubmitBountyArenaResult(
       );
     }
 
+    const winnerEvidenceLinks = getWinnerEvidenceLinks(contenders, winnerContenderId);
+    await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+      bounty_id: bountyId,
+      arena_status: 'completed',
+      arena_id: arenaId,
+      arena_task_fingerprint: contract.task_fingerprint,
+      arena_winner_contender_id: winnerContenderId,
+      arena_evidence_links: winnerEvidenceLinks,
+      arena_updated_at: new Date().toISOString(),
+    });
+
     const replayPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, existingByResultKey);
     return jsonResponse(
       {
@@ -12271,6 +12664,17 @@ async function handleSubmitBountyArenaResult(
       .run();
 
     await writeArenaContenderRecords(env.BOUNTIES_DB, run.run_id, contenders, now);
+
+    const winnerEvidenceLinks = getWinnerEvidenceLinks(contenders, winnerContenderId);
+    await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+      bounty_id: bountyId,
+      arena_status: 'completed',
+      arena_id: arenaId,
+      arena_task_fingerprint: contract.task_fingerprint,
+      arena_winner_contender_id: winnerContenderId,
+      arena_evidence_links: winnerEvidenceLinks,
+      arena_updated_at: now,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
@@ -12309,6 +12713,7 @@ async function handleGetBountyArena(
     return errorResponse('DATA_INTEGRITY_ERROR', 'Arena payload could not be rendered', 500, { run_id: run.run_id }, version);
   }
 
+  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   const thread = await listArenaReviewThreadByBountyId(env.BOUNTIES_DB, bountyId, 20);
   const outcomes = await listArenaOutcomesByArenaId(env.BOUNTIES_DB, run.arena_id, 50);
   const calibration = buildArenaCalibrationSummary(outcomes, new Map([[run.arena_id, run]]));
@@ -12316,6 +12721,7 @@ async function handleGetBountyArena(
   return jsonResponse(
     {
       bounty_id: bountyId,
+      arena_lifecycle: bounty ? buildBountyArenaLifecycleSummary(bounty) : null,
       arena: payload,
       review_thread: thread.map((entry) => buildArenaReviewThreadEntryPayload(entry)),
       outcomes: outcomes.map((row) => buildArenaOutcomePayload(row)),
@@ -13272,7 +13678,7 @@ async function handleGetBounty(bountyId: string, env: Env, version: string): Pro
     arena = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
   }
 
-  return jsonResponse({ ...bounty, arena }, 200, version);
+  return jsonResponse({ ...bounty, arena_lifecycle: buildBountyArenaLifecycleSummary(bounty), arena }, 200, version);
 }
 
 async function handleListBountySubmissions(

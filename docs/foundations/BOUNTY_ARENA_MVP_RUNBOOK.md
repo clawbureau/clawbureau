@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..037)
+> **Scope:** Bounty Arena MVP (AGP-US-031..043)
 
 # Bounty Arena MVP Runbook
 
@@ -27,6 +27,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: `fa38dc5b99b0d5a7760d066fe56697fa807317ab`
 - AGP-US-036 — manager routing API
   - merge: `100b0ba19b32ce8d2eef10424e23293b1eb78bbe`
+- AGP-US-043 — live bounty-triggered arena lifecycle persistence
+  - merge: pending
 
 ## 2. Key files
 
@@ -42,6 +44,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 
 ### Arena persistence / APIs
 - `services/_archived/clawbounties/migrations/0019_bounty_arena_runs.sql`
+- `services/_archived/clawbounties/migrations/0022_bounty_arena_live_lifecycle.sql`
 - `services/_archived/clawbounties/src/index.ts`
 
 ### Explorer routes
@@ -63,8 +66,13 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `POST /v1/arena/manager/route` (admin)
 
 ### Existing reads now enriched
-- `GET /v1/bounties/{bounty_id}` includes `arena`
+- `GET /v1/bounties/{bounty_id}` includes `arena` + `arena_lifecycle`
+- `GET /v1/bounties/{bounty_id}/arena` includes `arena_lifecycle`
 - `GET /v1/submissions/{submission_id}` includes `submission.arena`
+
+### Live trigger behavior
+- Valid work submission (`POST /v1/bounties/{bounty_id}/submit`) auto-creates a started arena run.
+- Bounty row now persists deterministic lifecycle fields (`arena_status`, `arena_id`, winner + evidence links).
 
 ## 4. Data model
 
@@ -83,8 +91,9 @@ wrangler d1 migrations apply clawbounties-staging --env staging --remote
 wrangler d1 migrations apply clawbounties --remote
 ```
 
-Required migration for Arena MVP:
+Required migrations for Arena MVP:
 - `0019_bounty_arena_runs.sql`
+- `0022_bounty_arena_live_lifecycle.sql`
 
 ## 6. End-to-end operator flow
 
