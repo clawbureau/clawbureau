@@ -28,12 +28,15 @@ import {
   fetchSyntheticWorkflowStatuses,
   fetchWorkflowRunHistory,
   fetchRecentFailedRuns,
+  fetchArenaIndex,
+  fetchArenaReport,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
 import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
 import { opsDashboardPage } from './pages/ops.js';
+import { arenaComparePage, arenaIndexPage, arenaNotFoundPage, sampleArenaReport } from './pages/arena.js';
 import { deriveOpsSloHealth } from './slo.js';
 
 export interface Env {
@@ -241,6 +244,38 @@ export default {
     // -- Agents listing (redirect to runs feed for now) --
     if (path === '/agents') {
       return Response.redirect(url.origin + '/runs', 302);
+    }
+
+    // -- Arena index --
+    if (path === '/arena') {
+      const remoteArenaIndex = await fetchArenaIndex(apiOpts);
+
+      const fallbackArenaIndex = [
+        {
+          arena_id: 'arena_bty_arena_001',
+          bounty_id: 'bty_arena_001',
+          contract_id: 'contract_arena_001',
+          generated_at: '2026-02-19T15:10:00.000Z',
+          winner_contender_id: 'contender_codex_pi',
+          reason_code: 'ARENA_WINNER_SELECTED',
+        },
+      ];
+
+      return html(arenaIndexPage(remoteArenaIndex ?? fallbackArenaIndex), 200, 20);
+    }
+
+    // -- Arena compare detail --
+    const arenaMatch = path.match(/^\/arena\/([^/]+)$/);
+    if (arenaMatch) {
+      const arenaId = decodeURIComponent(arenaMatch[1]);
+      const report = await fetchArenaReport(arenaId, apiOpts);
+      const fallbackReport = sampleArenaReport(arenaId);
+
+      if (!report && !fallbackReport) {
+        return html(arenaNotFoundPage(arenaId), 404, 20);
+      }
+
+      return html(arenaComparePage(report ?? fallbackReport!), 200, 20);
     }
 
     // -- Run detail --

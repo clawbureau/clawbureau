@@ -667,3 +667,305 @@ export async function fetchRecentFailedRuns(
 
   return page?.runs ?? [];
 }
+
+export interface ArenaCheckResult {
+  criterion_id: string;
+  required: boolean;
+  status: 'PASS' | 'FAIL';
+  reason_code: string;
+}
+
+export interface ArenaContenderView {
+  contender_id: string;
+  label: string;
+  model: string;
+  harness: string;
+  tools: string[];
+  skills: string[];
+  plugins: string[];
+  score: number;
+  hard_gate_pass: boolean;
+  mandatory_failed: number;
+  metrics: {
+    quality_score: number;
+    risk_score: number;
+    efficiency_score: number;
+    latency_ms: number;
+    cost_usd: number;
+    autonomy_score: number;
+  };
+  check_results: ArenaCheckResult[];
+  review_paste: string;
+  manager_review_json: string;
+}
+
+export interface ArenaReportView {
+  arena_id: string;
+  generated_at: string;
+  contract: {
+    bounty_id: string;
+    contract_id: string;
+    contract_hash_b64u: string;
+    task_fingerprint: string;
+  };
+  objective_profile: {
+    name: string;
+    weights: {
+      quality: number;
+      speed: number;
+      cost: number;
+      safety: number;
+    };
+    tie_breakers: string[];
+  };
+  contenders: ArenaContenderView[];
+  winner: {
+    contender_id: string;
+    reason: string;
+  };
+  tradeoffs: string[];
+  reason_codes: string[];
+}
+
+interface ArenaIndexResponse {
+  arenas?: Array<{
+    arena_id?: unknown;
+    bounty_id?: unknown;
+    contract_id?: unknown;
+    generated_at?: unknown;
+    winner_contender_id?: unknown;
+    reason_code?: unknown;
+  }>;
+}
+
+interface ArenaReportResponse {
+  arena_id?: unknown;
+  generated_at?: unknown;
+  contract?: {
+    bounty_id?: unknown;
+    contract_id?: unknown;
+    contract_hash_b64u?: unknown;
+    task_fingerprint?: unknown;
+  };
+  objective_profile?: {
+    name?: unknown;
+    weights?: {
+      quality?: unknown;
+      speed?: unknown;
+      cost?: unknown;
+      safety?: unknown;
+    };
+    tie_breakers?: unknown;
+  };
+  contenders?: Array<{
+    contender_id?: unknown;
+    label?: unknown;
+    model?: unknown;
+    harness?: unknown;
+    tools?: unknown;
+    skills?: unknown;
+    plugins?: unknown;
+    score?: unknown;
+    hard_gate_pass?: unknown;
+    mandatory_failed?: unknown;
+    metrics?: {
+      quality_score?: unknown;
+      risk_score?: unknown;
+      efficiency_score?: unknown;
+      latency_ms?: unknown;
+      cost_usd?: unknown;
+      autonomy_score?: unknown;
+    };
+    check_results?: unknown;
+    review_paste?: unknown;
+    manager_review_json?: unknown;
+  }>;
+  winner?: {
+    contender_id?: unknown;
+    reason?: unknown;
+  };
+  tradeoffs?: unknown;
+  reason_codes?: unknown;
+}
+
+function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>[number]): ArenaContenderView | null {
+  const contenderId = asString(row.contender_id);
+  const label = asString(row.label);
+
+  if (!contenderId || !label) return null;
+
+  const checkResultsRaw = Array.isArray(row.check_results) ? row.check_results : [];
+  const checkResults = checkResultsRaw
+    .map((check) => {
+      if (!check || typeof check !== 'object') return null;
+      const rec = check as Record<string, unknown>;
+      const criterionId = asString(rec.criterion_id);
+      const required = rec.required === true;
+      const status = asString(rec.status);
+      const reasonCode = asString(rec.reason_code);
+      if (!criterionId || !status || !reasonCode) return null;
+      if (status !== 'PASS' && status !== 'FAIL') return null;
+      return {
+        criterion_id: criterionId,
+        required,
+        status,
+        reason_code: reasonCode,
+      } as ArenaCheckResult;
+    })
+    .filter((check): check is ArenaCheckResult => check !== null);
+
+  const managerReviewRaw = row.manager_review_json;
+  const managerReviewJson = typeof managerReviewRaw === 'string'
+    ? managerReviewRaw
+    : JSON.stringify(managerReviewRaw ?? {}, null, 2);
+
+  return {
+    contender_id: contenderId,
+    label,
+    model: asString(row.model) ?? 'unknown-model',
+    harness: asString(row.harness) ?? 'unknown-harness',
+    tools: Array.isArray(row.tools) ? row.tools.filter((v): v is string => typeof v === 'string') : [],
+    skills: Array.isArray(row.skills) ? row.skills.filter((v): v is string => typeof v === 'string') : [],
+    plugins: Array.isArray(row.plugins) ? row.plugins.filter((v): v is string => typeof v === 'string') : [],
+    score: asNumber(row.score, 0),
+    hard_gate_pass: row.hard_gate_pass === true,
+    mandatory_failed: asNumber(row.mandatory_failed, 0),
+    metrics: {
+      quality_score: asNumber(row.metrics?.quality_score, 0),
+      risk_score: asNumber(row.metrics?.risk_score, 0),
+      efficiency_score: asNumber(row.metrics?.efficiency_score, 0),
+      latency_ms: asNumber(row.metrics?.latency_ms, 0),
+      cost_usd: asNumber(row.metrics?.cost_usd, 0),
+      autonomy_score: asNumber(row.metrics?.autonomy_score, 0),
+    },
+    check_results: checkResults,
+    review_paste: asString(row.review_paste) ?? '',
+    manager_review_json: managerReviewJson,
+  };
+}
+
+export async function fetchArenaIndex(
+  opts: FetchOptions,
+): Promise<Array<{
+  arena_id: string;
+  bounty_id: string;
+  contract_id: string;
+  generated_at: string;
+  winner_contender_id: string;
+  reason_code: string;
+}> | null> {
+  const data = await fetchJson<ArenaIndexResponse>('/v1/arena?limit=20', {
+    ...opts,
+    cacheTtl: 20,
+  });
+
+  if (!data) return null;
+
+  const rows = Array.isArray(data.arenas) ? data.arenas : [];
+
+  return rows
+    .map((row) => {
+      const arenaId = asString(row.arena_id);
+      const bountyId = asString(row.bounty_id);
+      const contractId = asString(row.contract_id);
+      const generatedAt = asString(row.generated_at);
+      const winner = asString(row.winner_contender_id);
+      const reasonCode = asString(row.reason_code) ?? 'UNKNOWN';
+      if (!arenaId || !bountyId || !contractId || !generatedAt || !winner) return null;
+      return {
+        arena_id: arenaId,
+        bounty_id: bountyId,
+        contract_id: contractId,
+        generated_at: generatedAt,
+        winner_contender_id: winner,
+        reason_code: reasonCode,
+      };
+    })
+    .filter((row): row is {
+      arena_id: string;
+      bounty_id: string;
+      contract_id: string;
+      generated_at: string;
+      winner_contender_id: string;
+      reason_code: string;
+    } => row !== null);
+}
+
+export async function fetchArenaReport(
+  arenaId: string,
+  opts: FetchOptions,
+): Promise<ArenaReportView | null> {
+  const data = await fetchJson<ArenaReportResponse>(`/v1/arena/${encodeURIComponent(arenaId)}`, {
+    ...opts,
+    cacheTtl: 20,
+  });
+
+  if (!data) return null;
+
+  const contenders = Array.isArray(data.contenders)
+    ? data.contenders
+      .map((row) => parseArenaContender(row))
+      .filter((row): row is ArenaContenderView => row !== null)
+    : [];
+
+  const contract = data.contract;
+  const winner = data.winner;
+  const objectiveProfile = data.objective_profile;
+
+  const arena_id = asString(data.arena_id);
+  const generated_at = asString(data.generated_at);
+  const bounty_id = asString(contract?.bounty_id);
+  const contract_id = asString(contract?.contract_id);
+  const contract_hash_b64u = asString(contract?.contract_hash_b64u);
+  const task_fingerprint = asString(contract?.task_fingerprint);
+  const winner_contender_id = asString(winner?.contender_id);
+  const winner_reason = asString(winner?.reason);
+  const objective_name = asString(objectiveProfile?.name) ?? 'balanced';
+
+  if (
+    !arena_id ||
+    !generated_at ||
+    !bounty_id ||
+    !contract_id ||
+    !contract_hash_b64u ||
+    !task_fingerprint ||
+    !winner_contender_id ||
+    !winner_reason
+  ) {
+    return null;
+  }
+
+  return {
+    arena_id,
+    generated_at,
+    contract: {
+      bounty_id,
+      contract_id,
+      contract_hash_b64u,
+      task_fingerprint,
+    },
+    objective_profile: {
+      name: objective_name,
+      weights: {
+        quality: asNumber(objectiveProfile?.weights?.quality, 0.35),
+        speed: asNumber(objectiveProfile?.weights?.speed, 0.25),
+        cost: asNumber(objectiveProfile?.weights?.cost, 0.2),
+        safety: asNumber(objectiveProfile?.weights?.safety, 0.2),
+      },
+      tie_breakers: Array.isArray(objectiveProfile?.tie_breakers)
+        ? objectiveProfile.tie_breakers.filter((entry): entry is string => typeof entry === 'string')
+        : [],
+    },
+    contenders,
+    winner: {
+      contender_id: winner_contender_id,
+      reason: winner_reason,
+    },
+    tradeoffs: Array.isArray(data.tradeoffs)
+      ? data.tradeoffs.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    reason_codes: Array.isArray(data.reason_codes)
+      ? data.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+  };
+}
