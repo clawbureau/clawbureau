@@ -25,6 +25,9 @@ export interface VerifyResponse {
   status: 'PASS' | 'FAIL';
   tier: string;
   reason_code: string;
+  failure_class: string;
+  verification_source: string;
+  auth_mode: string;
   run_id: string;
   urls: { badge: string; ledger: string };
   rt_log_inclusion: { status: string };
@@ -41,13 +44,17 @@ export interface AgentRow {
 
 export interface RunRow {
   run_id: string; bundle_hash_b64u: string; agent_did: string;
-  proof_tier: string; status: string; wpc_hash_b64u: string | null;
+  proof_tier: string; status: string; reason_code: string | null;
+  failure_class: string | null; verification_source: string | null;
+  auth_mode: string | null; wpc_hash_b64u: string | null;
   rt_leaf_index: number | null; models_json: string | null; created_at: string;
 }
 
 export interface LedgerIngestMessage {
   run_id: string; bundle_hash_b64u: string; agent_did: string;
-  proof_tier: string; status: string; wpc_hash_b64u?: string;
+  proof_tier: string; status: string; reason_code: string;
+  failure_class: string; verification_source: string;
+  auth_mode: string; wpc_hash_b64u?: string;
   models_json?: string; bundle_json: string;
 }
 
