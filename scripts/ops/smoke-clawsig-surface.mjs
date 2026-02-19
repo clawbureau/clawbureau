@@ -10,6 +10,7 @@ function parseArgs(argv) {
   const args = {
     outputRoot: OUTPUT_ROOT_DEFAULT,
     maxRunRefAgeMinutes: DEFAULT_MAX_RUN_REF_AGE_MINUTES,
+    env: 'all',
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -29,6 +30,16 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+
+    if (arg === '--env') {
+      args.env = (argv[i + 1] ?? 'all').trim().toLowerCase();
+      i += 1;
+      continue;
+    }
+  }
+
+  if (!['all', 'staging', 'prod'].includes(args.env)) {
+    throw new Error('Invalid --env value: expected all, staging, or prod');
   }
 
   return args;
@@ -313,16 +324,31 @@ function runSmoke() {
     prod_explorer: 'explorer.clawsig.com',
   };
 
+  const envTargets = args.env === 'all'
+    ? [
+      ['staging', hosts.staging_api, hosts.staging_explorer],
+      ['prod', hosts.prod_api, hosts.prod_explorer],
+    ]
+    : args.env === 'staging'
+      ? [['staging', hosts.staging_api, hosts.staging_explorer]]
+      : [['prod', hosts.prod_api, hosts.prod_explorer]];
+
+  const targetHostEntries = envTargets.flatMap(([envLabel, apiHost, explorerHost]) => [
+    [`${envLabel}_api`, apiHost],
+    [`${envLabel}_explorer`, explorerHost],
+  ]);
+
   const checks = [];
   const context = {
     hosts,
+    target_env: args.env,
     dns: {},
     tls: {},
     refs: {},
     options: args,
   };
 
-  for (const [name, host] of Object.entries(hosts)) {
+  for (const [name, host] of targetHostEntries) {
     const a = resolveRecords(host, 'A');
     const aaaa = resolveRecords(host, 'AAAA');
 
@@ -348,7 +374,7 @@ function runSmoke() {
     });
   }
 
-  for (const host of [hosts.staging_api, hosts.prod_api, hosts.staging_explorer, hosts.prod_explorer]) {
+  for (const [, host] of targetHostEntries) {
     const health = curlViaResolvedHost(host, '/health');
     pushCheck(checks, {
       name: `health:${host}`,
@@ -360,10 +386,7 @@ function runSmoke() {
     });
   }
 
-  for (const [envLabel, apiHost, explorerHost] of [
-    ['staging', hosts.staging_api, hosts.staging_explorer],
-    ['prod', hosts.prod_api, hosts.prod_explorer],
-  ]) {
+  for (const [envLabel, apiHost, explorerHost] of envTargets) {
     const refs = latestRunRef(apiHost, args.maxRunRefAgeMinutes);
     context.refs[envLabel] = {
       run_id: refs.runId,
@@ -423,6 +446,7 @@ function runSmoke() {
     ok: failed.length === 0,
     generated_at: new Date().toISOString(),
     output_dir: outDir,
+    target_env: args.env,
     total_checks: checks.length,
     passed_checks: checks.length - failed.length,
     failed_checks: failed.length,

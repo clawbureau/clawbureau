@@ -1,0 +1,56 @@
+name: clawsig-guarded-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_run_ref_age_minutes:
+        description: Max age for latest run references used by strict synthetic checks
+        required: false
+        default: '180'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/clawsig-guarded-deploy.yml'
+      - 'services/clawsig-ledger/**'
+      - 'services/clawsig-explorer/**'
+      - 'scripts/ops/**'
+
+concurrency:
+  group: clawsig-guarded-deploy
+  cancel-in-progress: false
+
+jobs:
+  guarded-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Guarded deploy (staging -> strict smoke -> prod -> strict smoke -> rollback on failure)
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.max_run_ref_age_minutes }}" ]; then
+            MAX_AGE="${{ github.event.inputs.max_run_ref_age_minutes }}"
+          else
+            MAX_AGE="180"
+          fi
+
+          node scripts/ops/run-clawsig-guarded-deploy.mjs --max-run-ref-age-minutes "$MAX_AGE"
+
+      - name: Upload guarded deploy artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawsig-guarded-deploy-${{ github.run_id }}
+          path: artifacts/ops/clawsig-guarded-deploy/
+          if-no-files-found: warn
