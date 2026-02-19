@@ -676,6 +676,40 @@ interface TestAutoDecisionResult {
   failure?: DeterministicTestLaneFailure;
 }
 
+interface ArenaStartActionTemplateView {
+  endpoint: string;
+  method: 'POST';
+  payload_template: {
+    idempotency_key: string;
+    arena_id: string;
+    contract: {
+      bounty_id: string;
+      contract_id: string;
+      contract_hash_b64u: string;
+      task_fingerprint: string;
+    };
+    objective_profile: Record<string, unknown>;
+  };
+}
+
+interface ArenaInlineReviewSummaryView {
+  arena_id: string;
+  status: ArenaRunStatus;
+  winner_contender_id: string | null;
+  winner_reason: string | null;
+  winner_confidence: number | null;
+  tradeoffs: string[];
+  review_links: {
+    review_paste: string | null;
+    manager_review: string | null;
+  };
+}
+
+interface BountyReviewArenaFlowView {
+  start_arena: ArenaStartActionTemplateView;
+  latest_arena: ArenaInlineReviewSummaryView | null;
+}
+
 interface SubmissionSummaryView {
   submission_id: string;
   bounty_id: string;
@@ -694,6 +728,7 @@ interface SubmissionSummaryView {
     completed_at: string;
     error: string | null;
   } | null;
+  arena_review_flow: BountyReviewArenaFlowView;
 }
 
 interface SubmissionDetailView {
@@ -739,6 +774,7 @@ interface SubmissionDetailView {
     completed_at: string;
     error: string | null;
   } | null;
+  arena_review_flow: BountyReviewArenaFlowView;
   arena?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -5258,9 +5294,121 @@ async function resolveSubmissionTestLaneFailure(
   };
 }
 
+function resolveArenaExplorerBaseUrl(env: Env): string {
+  const environment = env.ENVIRONMENT?.trim().toLowerCase() ?? 'production';
+  return environment === 'staging'
+    ? 'https://staging-explorer.clawsig.com'
+    : 'https://explorer.clawsig.com';
+}
+
+function buildArenaReviewArtifactLinks(
+  arenaExplorerBaseUrl: string,
+  arenaId: string,
+  contenderId: string,
+): {
+  review_paste: string;
+  manager_review: string;
+} {
+  const encodedArenaId = encodeURIComponent(arenaId);
+  const encodedContenderId = encodeURIComponent(contenderId);
+  return {
+    review_paste: `${arenaExplorerBaseUrl}/arena/${encodedArenaId}?contender=${encodedContenderId}#review-paste-${encodedContenderId}`,
+    manager_review: `${arenaExplorerBaseUrl}/arena/${encodedArenaId}?contender=${encodedContenderId}#manager-review-${encodedContenderId}`,
+  };
+}
+
+async function buildArenaStartActionTemplateView(
+  bounty: BountyV2,
+  submission: SubmissionRecord,
+): Promise<ArenaStartActionTemplateView> {
+  const taskFingerprint = deriveLiveArenaTaskFingerprint(bounty);
+  const objectiveProfile = parseArenaObjectiveProfile(buildLiveArenaObjectiveProfile(bounty)) ?? {
+    name: 'balanced',
+    weights: { quality: 0.45, speed: 0.2, cost: 0.15, safety: 0.2 },
+    tie_breakers: ['hard_gate_pass', 'quality_score', 'cost_usd'],
+  };
+
+  const arenaId = `arena_${bounty.bounty_id}_review_${submission.submission_id}`.slice(0, 120);
+  const contractId = `contract_${bounty.bounty_id}_${submission.submission_id}`.slice(0, 120);
+
+  const contractHashMaterial = stableStringify({
+    bounty_id: bounty.bounty_id,
+    submission_id: submission.submission_id,
+    worker_did: submission.worker_did,
+    task_fingerprint: taskFingerprint,
+    source: 'bounty-review-start',
+  });
+
+  const contractHashB64u = await sha256B64uUtf8(contractHashMaterial);
+
+  return {
+    endpoint: `/v1/bounties/${bounty.bounty_id}/arena/start`,
+    method: 'POST',
+    payload_template: {
+      idempotency_key: `arena-review:${submission.submission_id}`.slice(0, 128),
+      arena_id: arenaId,
+      contract: {
+        bounty_id: bounty.bounty_id,
+        contract_id: contractId,
+        contract_hash_b64u: contractHashB64u,
+        task_fingerprint: taskFingerprint,
+      },
+      objective_profile: objectiveProfile,
+    },
+  };
+}
+
+function buildArenaInlineReviewSummaryView(
+  run: ArenaRunRecord | null,
+  winnerContender: ArenaContenderResult | null,
+  arenaExplorerBaseUrl: string,
+): ArenaInlineReviewSummaryView | null {
+  if (!run) return null;
+
+  const tradeoffs = run.tradeoffs_json
+    ? (parseJsonStringArray(run.tradeoffs_json) ?? [])
+    : [];
+
+  const managerReview = winnerContender?.manager_review && isRecord(winnerContender.manager_review)
+    ? winnerContender.manager_review
+    : null;
+
+  const winnerConfidenceRaw = managerReview ? d1Number(managerReview.confidence) : null;
+  const winnerConfidence = winnerConfidenceRaw === null
+    ? null
+    : Math.max(0, Math.min(1, winnerConfidenceRaw));
+
+  const winnerContenderId = run.winner_contender_id ?? winnerContender?.contender_id ?? null;
+  const reviewLinks = winnerContenderId
+    ? buildArenaReviewArtifactLinks(arenaExplorerBaseUrl, run.arena_id, winnerContenderId)
+    : { review_paste: null, manager_review: null };
+
+  return {
+    arena_id: run.arena_id,
+    status: run.status,
+    winner_contender_id: winnerContenderId,
+    winner_reason: run.winner_reason,
+    winner_confidence: winnerConfidence,
+    tradeoffs,
+    review_links: reviewLinks,
+  };
+}
+
+async function buildBountyReviewArenaFlowView(
+  bounty: BountyV2,
+  submission: SubmissionRecord,
+  latestArena: ArenaInlineReviewSummaryView | null,
+): Promise<BountyReviewArenaFlowView> {
+  return {
+    start_arena: await buildArenaStartActionTemplateView(bounty, submission),
+    latest_arena: latestArena,
+  };
+}
+
 function toSubmissionSummaryView(
   record: SubmissionRecord,
-  latestTest: TestResultRecord | null
+  latestTest: TestResultRecord | null,
+  arenaReviewFlow: BountyReviewArenaFlowView,
 ): SubmissionSummaryView {
   return {
     submission_id: record.submission_id,
@@ -5282,12 +5430,14 @@ function toSubmissionSummaryView(
           error: latestTest.error,
         }
       : null,
+    arena_review_flow: arenaReviewFlow,
   };
 }
 
 function toSubmissionDetailView(
   record: SubmissionRecord,
-  latestTest: TestResultRecord | null
+  latestTest: TestResultRecord | null,
+  arenaReviewFlow: BountyReviewArenaFlowView,
 ): SubmissionDetailView {
   return {
     submission_id: record.submission_id,
@@ -5334,6 +5484,7 @@ function toSubmissionDetailView(
           error: latestTest.error,
         }
       : null,
+    arena_review_flow: arenaReviewFlow,
     created_at: record.created_at,
     updated_at: record.updated_at,
   };
@@ -7123,6 +7274,7 @@ async function autoPostArenaWinnerReviewThread(
     contender: ArenaContenderResult;
     source: string;
     now: string;
+    arena_explorer_base_url: string;
   },
 ): Promise<ArenaReviewThreadEntry> {
   const managerReview = isRecord(params.contender.manager_review) ? params.contender.manager_review : null;
@@ -7135,9 +7287,34 @@ async function autoPostArenaWinnerReviewThread(
     ? managerReasonCodes
     : params.contender.score_explain.reason_codes;
 
-  const links = params.contender.score_explain.evidence_links
-    .slice(0, 12)
-    .map((entry) => ({ label: entry.label, url: entry.url }));
+  const arenaExplorerBaseUrl = params.arena_explorer_base_url.replace(/\/$/, '');
+  const encodedArenaId = encodeURIComponent(params.arena_id);
+  const encodedContenderId = encodeURIComponent(params.contender.contender_id);
+
+  const reviewArtifactLinks = [
+    {
+      label: 'Review paste',
+      url: `${arenaExplorerBaseUrl}/arena/${encodedArenaId}?contender=${encodedContenderId}#review-paste-${encodedContenderId}`,
+    },
+    {
+      label: 'Manager review',
+      url: `${arenaExplorerBaseUrl}/arena/${encodedArenaId}?contender=${encodedContenderId}#manager-review-${encodedContenderId}`,
+    },
+  ];
+
+  const linkSeen = new Set<string>();
+  const links = [
+    ...params.contender.score_explain.evidence_links
+      .slice(0, 10)
+      .map((entry) => ({ label: entry.label, url: entry.url })),
+    ...reviewArtifactLinks,
+  ].filter((entry) => {
+    if (!entry.url || !entry.label) return false;
+    const key = `${entry.label}::${entry.url}`;
+    if (linkSeen.has(key)) return false;
+    linkSeen.add(key);
+    return true;
+  }).slice(0, 12);
 
   const bodyMarkdown = buildArenaAutoReviewThreadBody(params.contender, recommendation, confidence, reasonCodes);
   const idempotencyMaterial = stableStringify({
@@ -7157,6 +7334,7 @@ async function autoPostArenaWinnerReviewThread(
     manager_decision: managerDecision,
     reason_codes: reasonCodes,
     evidence_links: params.contender.score_explain.evidence_links,
+    review_links: reviewArtifactLinks,
     auto_posted: true,
   };
 
@@ -12993,6 +13171,7 @@ async function handleSubmitBountyArenaResult(
       contender: winnerContender,
       source: 'arena-result-autopost',
       now: replayNow,
+      arena_explorer_base_url: resolveArenaExplorerBaseUrl(env),
     });
 
     const replayPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, existingByResultKey);
@@ -13082,6 +13261,7 @@ async function handleSubmitBountyArenaResult(
       contender: winnerContender,
       source: 'arena-result-autopost',
       now,
+      arena_explorer_base_url: resolveArenaExplorerBaseUrl(env),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14549,11 +14729,31 @@ async function handleListBountySubmissions(
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
   }
 
+  const arenaExplorerBaseUrl = resolveArenaExplorerBaseUrl(env);
+  let latestArenaSummary: ArenaInlineReviewSummaryView | null = null;
+  try {
+    const latestRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bounty.bounty_id);
+    if (latestRun) {
+      let winnerContender: ArenaContenderResult | null = null;
+      if (latestRun.winner_contender_id) {
+        const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestRun.run_id);
+        const winnerRow = contenderRows.find((row) => row.contender_id === latestRun.winner_contender_id) ?? null;
+        winnerContender = winnerRow ? parseArenaContenderResult(winnerRow) : null;
+      }
+
+      latestArenaSummary = buildArenaInlineReviewSummaryView(latestRun, winnerContender, arenaExplorerBaseUrl);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
   const views: SubmissionSummaryView[] = [];
   for (const record of submissions) {
     try {
       const latest = await getLatestTestResultBySubmissionId(env.BOUNTIES_DB, record.submission_id);
-      views.push(toSubmissionSummaryView(record, latest));
+      const arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, record, latestArenaSummary);
+      views.push(toSubmissionSummaryView(record, latest, arenaReviewFlow));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
@@ -14641,16 +14841,40 @@ async function handleGetSubmissionDetail(
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
   }
 
-  const view = toSubmissionDetailView(submission, latestTest);
+  const arenaExplorerBaseUrl = resolveArenaExplorerBaseUrl(env);
+  let latestArenaPayload: Record<string, unknown> | null = null;
+  let latestArenaSummary: ArenaInlineReviewSummaryView | null = null;
 
   try {
     const run = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, submission.bounty_id);
     if (run) {
-      view.arena = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+      latestArenaPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+
+      let winnerContender: ArenaContenderResult | null = null;
+      if (run.winner_contender_id) {
+        const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
+        const winnerRow = contenderRows.find((row) => row.contender_id === run.winner_contender_id) ?? null;
+        winnerContender = winnerRow ? parseArenaContenderResult(winnerRow) : null;
+      }
+
+      latestArenaSummary = buildArenaInlineReviewSummaryView(run, winnerContender, arenaExplorerBaseUrl);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  let arenaReviewFlow: BountyReviewArenaFlowView;
+  try {
+    arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, submission, latestArenaSummary);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('INTERNAL_ERROR', message, 500, undefined, version);
+  }
+
+  const view = toSubmissionDetailView(submission, latestTest, arenaReviewFlow);
+  if (latestArenaPayload) {
+    view.arena = latestArenaPayload;
   }
 
   return jsonResponse({ submission: view }, 200, version);

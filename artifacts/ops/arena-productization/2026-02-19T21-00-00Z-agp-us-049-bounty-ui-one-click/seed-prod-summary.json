@@ -1,0 +1,46 @@
+{
+  "arena_id": "arena_bty_bbbbbbbb_prod_seed_003",
+  "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  "review_thread_entry_id": "ath_b2772182-1509-4b64-b47b-3f4553c73e55",
+  "review_thread_links": [
+    {
+      "label": "Arena execution trace",
+      "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+    },
+    {
+      "label": "PR #366 diff",
+      "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+    },
+    {
+      "label": "Test run summary",
+      "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+    },
+    {
+      "label": "Typecheck log",
+      "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+    },
+    {
+      "label": "Usage ledger",
+      "url": "https://docs.clawsig.com/quickstart"
+    },
+    {
+      "label": "Review paste",
+      "url": "https://explorer.clawsig.com/arena/arena_bty_bbbbbbbb_prod_seed_003?contender=contender_codex_pi#review-paste-contender_codex_pi"
+    },
+    {
+      "label": "Manager review",
+      "url": "https://explorer.clawsig.com/arena/arena_bty_bbbbbbbb_prod_seed_003?contender=contender_codex_pi#manager-review-contender_codex_pi"
+    }
+  ],
+  "review_thread_review_links_meta": [
+    {
+      "label": "Review paste",
+      "url": "https://explorer.clawsig.com/arena/arena_bty_bbbbbbbb_prod_seed_003?contender=contender_codex_pi#review-paste-contender_codex_pi"
+    },
+    {
+      "label": "Manager review",
+      "url": "https://explorer.clawsig.com/arena/arena_bty_bbbbbbbb_prod_seed_003?contender=contender_codex_pi#manager-review-contender_codex_pi"
+    }
+  ],
+  "output_dir": "artifacts/arena/arena_bty_bbbbbbbb_prod_seed_003"
+}

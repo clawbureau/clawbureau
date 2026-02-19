@@ -801,3 +801,29 @@ Started: 2026-02-02T03:08:26.937005
   - arm `A` -> fail-closed `404 ARENA_ROUTE_NOT_FOUND` when no matching runs exist.
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T20-36-13Z-agp-us-048-live-enable/summary.json`
+
+## 2026-02-19 - AGP-US-049 one-click arena start + inline review UX contract
+- Submission review APIs now expose `arena_review_flow` for one-click arena launch:
+  - `GET /v1/bounties/{bounty_id}/submissions`
+  - `GET /v1/submissions/{submission_id}`
+- `arena_review_flow.start_arena.payload_template` includes deterministic `arena/start` payload primitives (idempotency key, arena id, contract hash, objective profile).
+- `arena_review_flow.latest_arena` includes inline winner summary (`winner_contender_id`, `winner_reason`, `winner_confidence`, `tradeoffs`) for bounty review UI embedding.
+- Arena result auto-thread now appends direct explorer links for winner artifacts:
+  - review paste anchor
+  - manager review anchor
+- Deployed services:
+  - `clawbounties-staging` version `b080128b-b7dd-489c-9a8f-34f4fc9c7b46`
+  - `clawsig-explorer-staging` version `3bb8e443-27f3-4c33-ae8a-f8ecc4473900`
+  - `clawbounties` version `94e28319-4ede-4e54-8c81-f7abaffcbd05`
+  - `clawsig-explorer` version `19a3b700-620c-4a64-8e27-2aa2b05c5cd9`
+- Seeded runs with updated thread-link surfaces:
+  - staging: `arena_bty_aaaaaaaa_stage_seed_003`
+  - prod: `arena_bty_bbbbbbbb_prod_seed_003`
+- Verified manager route filtering remains fail-closed post-rollout:
+  - arm `B` -> `200` with `recommended.contender_id=contender_codex_pi` (staging + prod)
+  - arm `A` -> `404 ARENA_ROUTE_NOT_FOUND` (staging + prod)
+- Verified explorer UI anchors exist for seeded runs:
+  - `#review-paste-contender_codex_pi`
+  - `#manager-review-contender_codex_pi`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T21-00-00Z-agp-us-049-bounty-ui-one-click/summary.json`

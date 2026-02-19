@@ -1,0 +1,147 @@
+{
+  "schema_version": "arena_manager_route.v2",
+  "computed_at": "2026-02-19T21:00:41.945Z",
+  "mode": "route",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile_name": null,
+  "experiment_id": "exp_api_hardening_ab_v1",
+  "experiment_arm": "B",
+  "analyzed_runs": 2,
+  "winner_stability_ratio": 1,
+  "policy": {
+    "require_hard_gate_pass": true,
+    "allow_fallback": true,
+    "max_runs": 50,
+    "experiment_id": "exp_api_hardening_ab_v1",
+    "experiment_arm": "B"
+  },
+  "recommended": {
+    "contender_id": "contender_codex_pi",
+    "label": "Codex + Pi + cloudflare skill",
+    "model": "gpt-5.2-codex",
+    "harness": "pi",
+    "routing_score": 91.17075,
+    "reason_codes": [
+      "ARENA_ROUTING_SELECTED",
+      "ARENA_ROUTING_OBJECTIVE_ANY",
+      "ARENA_ROUTING_STANDARD_MODE"
+    ],
+    "rationale": "Selected contender_codex_pi with routing_score=91.17075 from 2 matched runs (win_rate=1, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=0).",
+    "evidence": {
+      "appearances": 2,
+      "wins": 2,
+      "win_rate": 1,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 89.275,
+      "avg_risk": 18.58,
+      "avg_quality": 98.41,
+      "latest_hard_gate_pass": true,
+      "outcome_samples": 0,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0,
+      "calibration_gap": 0,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Stable performer; keep as primary route for matching fingerprint."
+      ],
+      "last_seen_at": "2026-02-19T20:58:05.958Z",
+      "sample_run_ids": [
+        "arn_91e28675-c7bc-4296-841f-696d506747e2",
+        "arn_42fa7ebb-49c3-464c-bcdf-ec43996511f3"
+      ]
+    }
+  },
+  "backups": [],
+  "contenders_ranked": [
+    {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "appearances": 2,
+      "wins": 2,
+      "win_rate": 1,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 89.275,
+      "avg_risk": 18.58,
+      "avg_quality": 98.41,
+      "latest_hard_gate_pass": true,
+      "routing_score": 91.17075,
+      "outcome_samples": 0,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0,
+      "calibration_gap": 0,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Stable performer; keep as primary route for matching fingerprint."
+      ],
+      "last_seen_at": "2026-02-19T20:58:05.958Z",
+      "sample_run_ids": [
+        "arn_91e28675-c7bc-4296-841f-696d506747e2",
+        "arn_42fa7ebb-49c3-464c-bcdf-ec43996511f3"
+      ]
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "appearances": 2,
+      "wins": 0,
+      "win_rate": 0,
+      "hard_gate_pass_rate": 0,
+      "avg_score": 66.7645,
+      "avg_risk": 60.39,
+      "avg_quality": 56.25,
+      "latest_hard_gate_pass": false,
+      "routing_score": 37.357925,
+      "outcome_samples": 0,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0,
+      "calibration_gap": 0,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Risk profile elevated; enforce stricter safety gates and staged rollout.",
+        "Mandatory checks not consistently passing; fix contract compliance first."
+      ],
+      "last_seen_at": "2026-02-19T20:58:05.958Z",
+      "sample_run_ids": [
+        "arn_91e28675-c7bc-4296-841f-696d506747e2",
+        "arn_42fa7ebb-49c3-464c-bcdf-ec43996511f3"
+      ]
+    }
+  ],
+  "delegation_coach": {
+    "primary_contender_id": "contender_codex_pi",
+    "backup_contenders": [],
+    "global_recommendations": [
+      "Routing profile appears stable; continue autonomous routing with periodic calibration checks."
+    ],
+    "contender_cards": [
+      {
+        "contender_id": "contender_codex_pi",
+        "routing_score": 91.17075,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "calibration_gap": 0,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Stable performer; keep as primary route for matching fingerprint."
+        ]
+      }
+    ]
+  }
+}
