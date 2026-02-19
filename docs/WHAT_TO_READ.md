@@ -93,5 +93,6 @@
 5. `docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md` §5 — Claw Verified supply-chain trust
 6. `docs/foundations/ARCHITECTURE.md` — service topology
 7. `docs/specs/clawsig-protocol/REASON_CODE_REGISTRY.md` — fail-closed error contract
-8. `docs/foundations/DEPLOYMENT_RUNBOOK.md` — operational procedures
-9. Security Review Pack → [clawea.com/security](https://clawea.com/security) (external)
+8. `docs/foundations/DEPLOYMENT_RUNBOOK.md` — clawproxy/clawverify deployment procedures
+9. `docs/foundations/CLAWSIG_OPS_RUNBOOK.md` — ledger/explorer deploy rollback + synthetic/canary incident ops
+10. Security Review Pack → [clawea.com/security](https://clawea.com/security) (external)
