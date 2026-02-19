@@ -172,9 +172,6 @@ function shareRunCard(run: RunData): string {
   const shareMarkdown = `[${shareText}](${shareUrl})`;
   const embedSnippet = `<a href="${shareUrl}" target="_blank" rel="noopener" data-clawsig-run="${run.run_id}">${shareText}</a>`;
 
-  const shareUrlLiteral = JSON.stringify(shareUrl);
-  const shareMarkdownLiteral = JSON.stringify(shareMarkdown);
-  const embedSnippetLiteral = JSON.stringify(embedSnippet);
   const twitterIntent = `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
 
   return `
@@ -198,9 +195,9 @@ function shareRunCard(run: RunData): string {
       </div>
 
       <div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.75rem">
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(${shareUrlLiteral}); this.textContent='Copied';">Copy link</button>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(${shareMarkdownLiteral}); this.textContent='Copied';">Copy markdown</button>
-        <button class="copy-btn" onclick="navigator.clipboard.writeText(${embedSnippetLiteral}); this.textContent='Copied';">Copy embed snippet</button>
+        <button class="copy-btn" data-copy="${esc(shareUrl)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy link</button>
+        <button class="copy-btn" data-copy="${esc(shareMarkdown)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy markdown</button>
+        <button class="copy-btn" data-copy="${esc(embedSnippet)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy embed snippet</button>
         <a href="${esc(twitterIntent)}" target="_blank" rel="noopener" style="font-size:0.8125rem">Share on X &rarr;</a>
       </div>
     </div>
