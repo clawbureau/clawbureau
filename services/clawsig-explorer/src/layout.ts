@@ -43,6 +43,14 @@ function css(): string {
 
     a { color: var(--pass); text-decoration: none; }
     a:hover { text-decoration: underline; }
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 2px solid var(--pass);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
 
     .mono { font-family: var(--font-mono); font-size: 0.875rem; }
     .dim { color: var(--text-dim); }
@@ -428,10 +436,10 @@ function css(): string {
       display: flex;
       flex-direction: column;
       gap: 0.12rem;
-      border: 1px solid var(--border);
+      border: 1px solid #3a3a3a;
       border-radius: 6px;
       padding: 0.38rem 0.45rem;
-      background: var(--bg);
+      background: #111;
       min-width: 0;
     }
 
@@ -459,6 +467,24 @@ function css(): string {
       border-radius: 8px;
       padding: 1rem;
       background: rgba(255, 255, 255, 0.01);
+    }
+
+    .loading-skeleton {
+      border-radius: 6px;
+      background: linear-gradient(90deg, #1b1b1b 0%, #2a2a2a 50%, #1b1b1b 100%);
+      background-size: 180% 100%;
+      animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    }
+
+    @keyframes skeleton-shimmer {
+      from { background-position: 180% 0; }
+      to { background-position: -20% 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loading-skeleton {
+        animation: none;
+      }
     }
 
     @media (max-width: 640px) {

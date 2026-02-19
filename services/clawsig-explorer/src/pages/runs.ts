@@ -150,6 +150,16 @@ function runsEmptyState(filters: RunsFeedFilters): string {
   `;
 }
 
+function loadingSkeletonRows(): string {
+  return `
+    <div style="display:grid; gap:0.5rem; margin-top:0.6rem" aria-hidden="true">
+      <div class="loading-skeleton" style="height:18px; width:90%"></div>
+      <div class="loading-skeleton" style="height:18px; width:82%"></div>
+      <div class="loading-skeleton" style="height:18px; width:76%"></div>
+    </div>
+  `;
+}
+
 function runsRows(rows: RunsFeedRun[]): string {
   return rows
     .map((run) => {
@@ -163,7 +173,7 @@ function runsRows(rows: RunsFeedRun[]): string {
         : undefined;
 
       return `
-      <div class="${rowClass}" style="align-items: flex-start; gap: 0.75rem; flex-wrap: wrap">
+      <div class="${rowClass}" role="listitem" tabindex="0" aria-label="Run ${esc(run.run_id)} status ${esc(run.status)} tier ${esc(run.proof_tier)}" style="align-items: flex-start; gap: 0.75rem; flex-wrap: wrap">
         <div style="min-width: 130px">
           <a href="/run/${encodeURIComponent(run.run_id)}" class="run-id">${esc(run.run_id.slice(0, 16))}...</a>
           <div class="dim" style="font-size:0.75rem; margin-top:0.2rem">${relativeTime(run.created_at)}</div>
@@ -255,6 +265,7 @@ export function runsFeedPage(data: RunsFeedPageData): string {
           <p class="dim" style="font-size:0.8125rem; margin-top:0.5rem">
             Data fetch is fail-closed. Existing filters are preserved so you can retry safely.
           </p>
+          ${loadingSkeletonRows()}
         </div>`
       : ''}
 
@@ -266,19 +277,21 @@ export function runsFeedPage(data: RunsFeedPageData): string {
           <a href="/runs" class="dim">Clear all</a>
         </div>
       </div>
-      <form method="GET" action="/runs" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end; margin-top:0.75rem">
-        <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
+      <p id="runs-filter-hint" class="dim" style="font-size:0.78rem; margin-top:0.5rem">Filters are encoded in the URL for shareable triage links.</p>
+      <form method="GET" action="/runs" aria-describedby="runs-filter-hint" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end; margin-top:0.75rem">
+        <fieldset style="display:contents; border:0; padding:0; margin:0">
+        <label for="runs-status" style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
           Status
-          <select name="status" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem">
+          <select id="runs-status" name="status" aria-label="Filter by status" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem">
             <option value="">Any</option>
             <option value="PASS"${selected(data.filters.status, 'PASS')}>PASS</option>
             <option value="FAIL"${selected(data.filters.status, 'FAIL')}>FAIL</option>
           </select>
         </label>
 
-        <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
+        <label for="runs-tier" style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
           Tier
-          <select name="tier" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem">
+          <select id="runs-tier" name="tier" aria-label="Filter by tier" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem">
             <option value="">Any</option>
             <option value="self"${selected(data.filters.tier, 'self')}>self</option>
             <option value="gateway"${selected(data.filters.tier, 'gateway')}>gateway</option>
@@ -289,25 +302,26 @@ export function runsFeedPage(data: RunsFeedPageData): string {
           </select>
         </label>
 
-        <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
+        <label for="runs-reason-code" style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
           Reason Code
-          <input name="reason_code" value="${esc(data.filters.reason_code ?? '')}" placeholder="HASH_MISMATCH" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem" />
+          <input id="runs-reason-code" name="reason_code" aria-label="Filter by reason code" value="${esc(data.filters.reason_code ?? '')}" placeholder="HASH_MISMATCH" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem" />
         </label>
 
-        <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
+        <label for="runs-agent-did" style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
           Agent DID
-          <input name="agent_did" value="${esc(data.filters.agent_did ?? '')}" placeholder="did:key:..." style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem" />
+          <input id="runs-agent-did" name="agent_did" aria-label="Filter by agent DID" value="${esc(data.filters.agent_did ?? '')}" placeholder="did:key:..." style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem" />
         </label>
 
-        <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
+        <label for="runs-limit" style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
           Limit
-          <input name="limit" value="${esc(String(data.limit))}" type="number" min="1" max="100" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem" />
+          <input id="runs-limit" name="limit" aria-label="Page size" value="${esc(String(data.limit))}" type="number" min="1" max="100" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem" />
         </label>
 
         <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap">
           <button type="submit" style="background:var(--pass); color:#000; border:0; border-radius:6px; padding:0.5rem 0.75rem; font-weight:600; cursor:pointer">Apply</button>
           <a href="${pagination.resetHref}" class="dim" style="font-size:0.8125rem">Reset filters</a>
         </div>
+        </fieldset>
       </form>
 
       <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.9rem">
@@ -321,7 +335,7 @@ export function runsFeedPage(data: RunsFeedPageData): string {
       </div>
     </div>
 
-    <div class="stats-grid" style="margin-bottom:1rem">
+    <div class="stats-grid" aria-live="polite" style="margin-bottom:1rem">
       <div class="stat-card">
         <div class="value">${fmtNum(summary.total)}</div>
         <div class="label">Rows in Current Page</div>
@@ -343,7 +357,7 @@ export function runsFeedPage(data: RunsFeedPageData): string {
     <div class="card">
       <p class="section-title">Runs</p>
       ${data.runs.length > 0
-        ? runsRows(data.runs)
+        ? `<div role="list" aria-label="Runs feed rows">${runsRows(data.runs)}</div>`
         : runsEmptyState(data.filters)}
     </div>
 
