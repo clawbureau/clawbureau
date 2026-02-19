@@ -1,0 +1,114 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  validateArenaManagerReviewV1,
+  validateArenaProofPackV3,
+} from '../src/schema-validation';
+
+const HASH_A = '9fUlg6xBkfyyjv4FIKR2Rjm3M2fW2Y8zW0y0kJ3Qn3A';
+const HASH_B = '9fUlg6xBkfyyjv4FIKR2Rjm3M2fW2Y8zW0y0kJ3Qn3B';
+
+function makeProofPackV3() {
+  return {
+    schema_version: 'proof_pack.v3',
+    arena_id: 'arena_contract_001',
+    generated_at: '2026-02-19T14:00:00.000Z',
+    claim_binding: {
+      bounty_id: 'bty_contract_001',
+      contract_id: 'contract_001',
+      contract_hash_b64u: HASH_A,
+      claim_hash_b64u: HASH_B,
+      task_fingerprint: 'typescript:api:bugfix',
+      objective_profile: 'balanced',
+    },
+    contender: {
+      contender_id: 'contender_alpha',
+      label: 'Alpha contender',
+      config: {
+        model: 'gpt-5.2-codex',
+        harness: 'pi',
+        tools: ['bash', 'read'],
+        skills: ['cloudflare'],
+        plugins: ['did-work'],
+        prompt_hash_b64u: HASH_A,
+      },
+    },
+    compliance: {
+      mandatory_passed: 2,
+      mandatory_failed: 0,
+      checks: [
+        {
+          criterion_id: 'ac_1',
+          required: true,
+          status: 'PASS',
+          reason_code: 'CHECK_OK',
+        },
+      ],
+    },
+    metrics: {
+      quality_score: 82,
+      risk_score: 24,
+      efficiency_score: 79,
+      latency_ms: 9012,
+      cost_usd: 0.42,
+      autonomy_score: 76,
+    },
+    evidence: {
+      delivery_summary: 'Implements contract checks and test coverage.',
+      delivery_hash_b64u: HASH_A,
+      links: [
+        {
+          label: 'PR',
+          url: 'https://github.com/clawbureau/clawbureau/pull/366',
+        },
+      ],
+    },
+    insights: {
+      bottlenecks: ['integration test runtime'],
+      contract_improvements: ['clarify failure budget threshold'],
+      next_delegation_hints: ['reuse contender for API bugfix class'],
+    },
+  };
+}
+
+describe('arena schema validators', () => {
+  it('accepts valid proof_pack.v3 payload', () => {
+    const out = validateArenaProofPackV3(makeProofPackV3());
+    expect(out.valid).toBe(true);
+  });
+
+  it('rejects proof_pack.v3 payload with invalid schema_version', () => {
+    const payload = makeProofPackV3();
+    payload.schema_version = 'proof_pack.v2';
+
+    const out = validateArenaProofPackV3(payload);
+    expect(out.valid).toBe(false);
+    if (!out.valid) {
+      expect(out.message).toContain('arena.proof_pack.v3');
+    }
+  });
+
+  it('accepts valid manager_review.v1 payload', () => {
+    const payload = {
+      schema_version: 'manager_review.v1',
+      arena_id: 'arena_contract_001',
+      contender_id: 'contender_alpha',
+      decision: 'promote',
+      confidence: 0.88,
+      reason_codes: ['ARENA_READY_TO_PROMOTE'],
+      failed_checks: [],
+      metrics: {
+        quality_score: 82,
+        risk_score: 24,
+        efficiency_score: 79,
+        latency_ms: 9012,
+        cost_usd: 0.42,
+        autonomy_score: 76,
+      },
+      recommended_next_action: 'Promote as default contender for this task fingerprint.',
+    };
+
+    const out = validateArenaManagerReviewV1(payload);
+    expect(out.valid).toBe(true);
+  });
+});

@@ -206,6 +206,20 @@ export const SCHEMA_ALLOWLIST: readonly SchemaAllowlistEntry[] = [
     status: 'active',
     added_at: '2026-01-01T00:00:00Z',
   },
+  {
+    schema_id: 'arena_proof_pack',
+    version: '3',
+    supported_versions: ['3'],
+    status: 'active',
+    added_at: '2026-02-19T00:00:00Z',
+  },
+  {
+    schema_id: 'arena_manager_review',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-19T00:00:00Z',
+  },
 ] as const;
 
 /**
@@ -232,6 +246,8 @@ const CANONICAL_SCHEMA_URI_TO_ALLOWLIST_ID: Readonly<Record<string, string>> = {
   'https://schemas.clawbureau.org/claw.poh.selective_disclosure.v1.json': 'selective_disclosure',
   'https://schemas.clawbureau.org/claw.poh.aggregate_bundle.v1.json': 'aggregate_bundle',
   'https://schemas.clawbureau.org/claw.poh.aggregate_bundle_envelope.v1.json': 'aggregate_bundle_envelope',
+  'https://schemas.clawbureau.org/arena/proof_pack.v3.json': 'arena_proof_pack',
+  'https://schemas.clawbureau.org/arena/manager_review.v1.json': 'arena_manager_review',
 };
 
 const SCHEMA_URI_ALIAS_TO_CANONICAL: Readonly<Record<string, string>> = {
