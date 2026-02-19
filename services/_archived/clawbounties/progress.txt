@@ -827,3 +827,30 @@ Started: 2026-02-02T03:08:26.937005
   - `#manager-review-contender_codex_pi`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T21-00-00Z-agp-us-049-bounty-ui-one-click/summary.json`
+
+## 2026-02-19 - AGP-US-050 reviewer decision capture + override taxonomy
+- `arena_review_flow` now includes `decision_capture` for reviewer action UX in:
+  - `GET /v1/bounties/{bounty_id}/submissions`
+  - `GET /v1/submissions/{submission_id}`
+- `decision_capture` includes:
+  - prefilled outcome payload template for `POST /v1/bounties/{bounty_id}/arena/outcome`
+  - `outcome_status_options` with deterministic `requires_override_reason`
+  - override taxonomy options from `ARENA_OVERRIDE_REASON_REGISTRY` (weight + rewrite hints)
+  - calibration payload path bindings (`notes`, `decision_rationale`, `override_reason_code`)
+- Calibration summary now includes rationale/taxonomy signals from outcome metadata:
+  - `override_taxonomy.reason_breakdown`
+  - `rationale_signals.top_tags`
+  - `rationale_signals.recent_decisions`
+  - contender-level `override_reason_breakdown`, `top_override_reason_code`, `recent_rationales`
+- Deployed service:
+  - `clawbounties-staging` version `7d0a2571-25a9-4e74-9cbb-ac212d4e47eb`
+  - `clawbounties` version `77e7a2fd-cb0c-4402-b5f4-cddfe00be535`
+- Seeded validation runs:
+  - staging: `arena_bty_5c048032_stage_050_001`
+  - prod: `arena_bty_836a4e15_prod_050_001`
+- Posted reviewer override outcomes with taxonomy + rationale metadata (`ARENA_OVERRIDE_SCOPE_MISMATCH`) in staging + prod (201 created).
+- Verified manager route fail-closed behavior unchanged:
+  - arm `B` -> `200` + `recommended.contender_id=contender_codex_pi`
+  - arm `A` -> `404 ARENA_ROUTE_NOT_FOUND`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T21-24-53Z-agp-us-050-decision-capture/summary.json`

@@ -1,0 +1,107 @@
+{
+  "story": "AGP-US-050",
+  "title": "reviewer decision capture UX + override taxonomy + rationale calibration signals",
+  "generated_at": "2026-02-19T21:26:00.465Z",
+  "deploys": {
+    "staging": {
+      "clawbounties": {
+        "version_id": "7d0a2571-25a9-4e74-9cbb-ac212d4e47eb"
+      }
+    },
+    "production": {
+      "clawbounties": {
+        "version_id": "77e7a2fd-cb0c-4402-b5f4-cddfe00be535"
+      }
+    }
+  },
+  "seeded_runs": {
+    "staging": {
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_050_001",
+      "run_id": "arn_1b5cd33a-7400-42b3-899b-e25f9c33ce8d",
+      "output_dir": "artifacts/arena/arena_bty_5c048032_stage_050_001"
+    },
+    "production": {
+      "bounty_id": "bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f",
+      "arena_id": "arena_bty_836a4e15_prod_050_001",
+      "run_id": "arn_3d5d1b97-3d5e-4854-8313-bfbf5fb5f9a5",
+      "output_dir": "artifacts/arena/arena_bty_836a4e15_prod_050_001"
+    }
+  },
+  "decision_capture_surface": {
+    "staging_list": {
+      "has_arena_review_flow": true,
+      "has_decision_capture": true,
+      "override_options": 6
+    },
+    "production_list": {
+      "has_arena_review_flow": true,
+      "has_decision_capture": true,
+      "override_options": 6
+    },
+    "staging_detail": {
+      "has_arena_review_flow": true,
+      "has_decision_capture": true,
+      "template_outcome_endpoint": "/v1/bounties/bty_5c048032-1c54-4db5-947e-b82f68ddaa96/arena/outcome"
+    },
+    "production_detail": {
+      "has_arena_review_flow": true,
+      "has_decision_capture": true,
+      "template_outcome_endpoint": "/v1/bounties/bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f/arena/outcome"
+    }
+  },
+  "outcome_capture": {
+    "staging": {
+      "status": 201,
+      "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "recommendation": "REQUEST_CHANGES"
+    },
+    "production": {
+      "status": 201,
+      "outcome_id": "aot_1bfc99a9-7e6a-4115-8d50-05a37ee874d7",
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "recommendation": "REQUEST_CHANGES"
+    }
+  },
+  "calibration_signals": {
+    "staging": {
+      "has_override_taxonomy": true,
+      "has_rationale_signals": true,
+      "top_override_reason": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "top_rationale_tag": "scope-boundary"
+    },
+    "production": {
+      "has_override_taxonomy": true,
+      "has_rationale_signals": true,
+      "top_override_reason": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "top_rationale_tag": "scope-boundary"
+    }
+  },
+  "route_checks": {
+    "staging": {
+      "arm_B_status": 200,
+      "arm_B_recommended": "contender_codex_pi",
+      "arm_A_status": 404,
+      "arm_A_error": "ARENA_ROUTE_NOT_FOUND"
+    },
+    "production": {
+      "arm_B_status": 200,
+      "arm_B_recommended": "contender_codex_pi",
+      "arm_A_status": 404,
+      "arm_A_error": "ARENA_ROUTE_NOT_FOUND"
+    }
+  },
+  "validation": {
+    "commands": [
+      "services/_archived/clawbounties: npm run typecheck",
+      "services/clawsig-explorer: npm run typecheck && npm test",
+      "services/clawsig-ledger: npm run typecheck && npm test",
+      "services/clawverify: npm run typecheck && npm test",
+      "node --test scripts/arena/*.test.mjs",
+      "node scripts/docs/lint-prds.mjs",
+      "node scripts/protocol/run-clawsig-verified-pr.mjs"
+    ],
+    "clawsig_verified_pr_summary": "artifacts/ops/clawsig-verified-pr/2026-02-19T21-27-01-114Z/summary.json"
+  }
+}

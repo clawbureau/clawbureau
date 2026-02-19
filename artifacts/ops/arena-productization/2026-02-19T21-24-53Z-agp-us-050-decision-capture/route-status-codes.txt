@@ -1,0 +1,4 @@
+route-prod-armA.headers 404
+route-prod-armB.headers 200
+route-stage-armA.headers 404
+route-stage-armB.headers 200

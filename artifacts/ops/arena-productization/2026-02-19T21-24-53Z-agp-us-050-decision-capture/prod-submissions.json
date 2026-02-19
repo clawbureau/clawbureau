@@ -1,0 +1,169 @@
+{
+  "bounty_id": "bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f",
+  "submissions": [
+    {
+      "submission_id": "sub_fd4c88f1-368c-4345-819b-66887cfa424c",
+      "bounty_id": "bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f",
+      "worker_did": "did:key:z6MksMnJCN4SR5sGu1whjYumYNMEBsTDi5eafKBHNBUreFqs",
+      "status": "pending_review",
+      "proof_verify_status": "valid",
+      "proof_tier": "self",
+      "commit_proof_verify_status": "valid",
+      "commit_sha": "261271e",
+      "created_at": "2026-02-11T23:12:45.941Z",
+      "updated_at": "2026-02-11T23:12:45.941Z",
+      "latest_test_result": {
+        "test_result_id": "tst_04f693d0-a880-457f-aff2-4f220d0ec395",
+        "test_harness_id": "th_missing_invalid_case_v2",
+        "passed": false,
+        "completed_at": "2026-02-11T23:12:46.181Z",
+        "error": "HARNESS_NOT_FOUND:th_missing_invalid_case_v2"
+      },
+      "arena_review_flow": {
+        "start_arena": {
+          "endpoint": "/v1/bounties/bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f/arena/start",
+          "method": "POST",
+          "payload_template": {
+            "idempotency_key": "arena-review:sub_fd4c88f1-368c-4345-819b-66887cfa424c",
+            "arena_id": "arena_bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f_review_sub_fd4c88f1-368c-4345-819b-66887cfa424c",
+            "contract": {
+              "bounty_id": "bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f",
+              "contract_id": "contract_bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f_sub_fd4c88f1-368c-4345-819b-66887cfa424c",
+              "contract_hash_b64u": "rxngOP0y44YmCr8xuQkYk2ztQMNp3bZKY-ZseMYkZt0",
+              "task_fingerprint": "test:self:simulation:prod-gate:invalid-harness"
+            },
+            "objective_profile": {
+              "name": "latency-balanced",
+              "weights": {
+                "quality": 0.35,
+                "speed": 0.3,
+                "cost": 0.15,
+                "safety": 0.2
+              },
+              "tie_breakers": [
+                "hard_gate_pass",
+                "latency_ms",
+                "cost_usd"
+              ]
+            }
+          }
+        },
+        "latest_arena": {
+          "arena_id": "arena_bty_836a4e15_prod_050_001",
+          "status": "completed",
+          "winner_contender_id": "contender_codex_pi",
+          "winner_reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750).",
+          "winner_confidence": 0.8928,
+          "tradeoffs": [
+            "contender_codex_pi wins quality/safety but costs more than contender_gemini_swarm."
+          ],
+          "review_links": {
+            "review_paste": "https://explorer.clawsig.com/arena/arena_bty_836a4e15_prod_050_001?contender=contender_codex_pi#review-paste-contender_codex_pi",
+            "manager_review": "https://explorer.clawsig.com/arena/arena_bty_836a4e15_prod_050_001?contender=contender_codex_pi#manager-review-contender_codex_pi"
+          }
+        },
+        "decision_capture": {
+          "outcome_endpoint": {
+            "endpoint": "/v1/bounties/bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f/arena/outcome",
+            "method": "POST",
+            "payload_template": {
+              "idempotency_key": "arena-outcome:sub_fd4c88f1-368c-4345-819b-66887cfa424c:arena_bty_836a4e15_prod_050_001",
+              "arena_id": "arena_bty_836a4e15_prod_050_001",
+              "contender_id": "contender_codex_pi",
+              "outcome_status": "ACCEPTED",
+              "recommendation": "APPROVE",
+              "predicted_confidence": 0.8928,
+              "review_time_minutes": 0,
+              "time_to_accept_minutes": null,
+              "override_reason_code": null,
+              "notes": "",
+              "source": "bounty-review-ui",
+              "metadata": {
+                "decision_rationale": "",
+                "override_rationale": "",
+                "calibration_signal_tags": [
+                  "arena-review"
+                ]
+              }
+            }
+          },
+          "outcome_status_options": [
+            {
+              "value": "ACCEPTED",
+              "requires_override_reason": false,
+              "calibration_impact": "Improves empirical accept rate for selected contender."
+            },
+            {
+              "value": "OVERRIDDEN",
+              "requires_override_reason": true,
+              "calibration_impact": "Increases override rate and applies override reason weighting in policy-learning."
+            },
+            {
+              "value": "REWORK",
+              "requires_override_reason": false,
+              "calibration_impact": "Increases rework rate for selected contender."
+            },
+            {
+              "value": "REJECTED",
+              "requires_override_reason": false,
+              "calibration_impact": "Counts as non-accept and raises calibration gap when confidence was high."
+            },
+            {
+              "value": "DISPUTED",
+              "requires_override_reason": false,
+              "calibration_impact": "Marks outcome as disputed for risk tracking and review-depth analytics."
+            }
+          ],
+          "override_reason_options": [
+            {
+              "code": "ARENA_OVERRIDE_POLICY_RISK",
+              "weight": 1,
+              "contract_rewrite": "Raise safety and policy constraints to mandatory hard-gate checks.",
+              "prompt_rewrite": "Insert explicit policy-risk self-audit and fail-closed escalation path."
+            },
+            {
+              "code": "ARENA_OVERRIDE_TEST_FAILURE",
+              "weight": 0.9,
+              "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+              "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+            },
+            {
+              "code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+              "weight": 0.8,
+              "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+              "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+            },
+            {
+              "code": "ARENA_OVERRIDE_OTHER",
+              "weight": 0.7,
+              "contract_rewrite": "Review override notes and encode recurring blockers into explicit acceptance checks.",
+              "prompt_rewrite": "Add a post-mortem checklist seeded from recent override notes."
+            },
+            {
+              "code": "ARENA_OVERRIDE_COST_TOO_HIGH",
+              "weight": 0.6,
+              "contract_rewrite": "Set stricter max-cost / max-latency targets in objective profile.",
+              "prompt_rewrite": "Prioritize cost-efficient plans and include tradeoff justification."
+            },
+            {
+              "code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+              "weight": 0.5,
+              "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+              "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+            }
+          ],
+          "calibration_bindings": {
+            "notes_path": "notes",
+            "rationale_path": "metadata.decision_rationale",
+            "override_reason_path": "override_reason_code"
+          }
+        }
+      }
+    }
+  ],
+  "filters": {
+    "status": null,
+    "worker_did": null,
+    "limit": 50
+  }
+}

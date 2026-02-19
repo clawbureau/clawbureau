@@ -705,9 +705,60 @@ interface ArenaInlineReviewSummaryView {
   };
 }
 
+type ArenaOutcomeStatusView = 'ACCEPTED' | 'OVERRIDDEN' | 'REWORK' | 'REJECTED' | 'DISPUTED';
+type ArenaRecommendationView = 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT';
+
+interface ArenaDecisionCaptureActionTemplateView {
+  endpoint: string;
+  method: 'POST';
+  payload_template: {
+    idempotency_key: string;
+    arena_id: string;
+    contender_id: string | null;
+    outcome_status: ArenaOutcomeStatusView;
+    recommendation: ArenaRecommendationView;
+    predicted_confidence: number;
+    review_time_minutes: number;
+    time_to_accept_minutes: number | null;
+    override_reason_code: ArenaOverrideReasonCode | null;
+    notes: string;
+    source: string;
+    metadata: {
+      decision_rationale: string;
+      override_rationale: string;
+      calibration_signal_tags: string[];
+    };
+  };
+}
+
+interface ArenaOutcomeStatusOptionView {
+  value: ArenaOutcomeStatusView;
+  requires_override_reason: boolean;
+  calibration_impact: string;
+}
+
+interface ArenaOverrideReasonOptionView {
+  code: ArenaOverrideReasonCode;
+  weight: number;
+  contract_rewrite: string;
+  prompt_rewrite: string;
+}
+
+interface ArenaDecisionCaptureView {
+  outcome_endpoint: ArenaDecisionCaptureActionTemplateView;
+  outcome_status_options: ArenaOutcomeStatusOptionView[];
+  override_reason_options: ArenaOverrideReasonOptionView[];
+  calibration_bindings: {
+    notes_path: string;
+    rationale_path: string;
+    override_reason_path: string;
+  };
+}
+
 interface BountyReviewArenaFlowView {
   start_arena: ArenaStartActionTemplateView;
   latest_arena: ArenaInlineReviewSummaryView | null;
+  decision_capture: ArenaDecisionCaptureView | null;
 }
 
 interface SubmissionSummaryView {
@@ -5394,14 +5445,115 @@ function buildArenaInlineReviewSummaryView(
   };
 }
 
+function buildArenaOutcomeStatusOptions(): ArenaOutcomeStatusOptionView[] {
+  return [
+    {
+      value: 'ACCEPTED',
+      requires_override_reason: false,
+      calibration_impact: 'Improves empirical accept rate for selected contender.',
+    },
+    {
+      value: 'OVERRIDDEN',
+      requires_override_reason: true,
+      calibration_impact: 'Increases override rate and applies override reason weighting in policy-learning.',
+    },
+    {
+      value: 'REWORK',
+      requires_override_reason: false,
+      calibration_impact: 'Increases rework rate for selected contender.',
+    },
+    {
+      value: 'REJECTED',
+      requires_override_reason: false,
+      calibration_impact: 'Counts as non-accept and raises calibration gap when confidence was high.',
+    },
+    {
+      value: 'DISPUTED',
+      requires_override_reason: false,
+      calibration_impact: 'Marks outcome as disputed for risk tracking and review-depth analytics.',
+    },
+  ];
+}
+
+function buildArenaOverrideReasonOptions(): ArenaOverrideReasonOptionView[] {
+  return (Object.entries(ARENA_OVERRIDE_REASON_REGISTRY) as [ArenaOverrideReasonCode, (typeof ARENA_OVERRIDE_REASON_REGISTRY)[ArenaOverrideReasonCode]][])
+    .map(([code, info]) => ({
+      code,
+      weight: info.weight,
+      contract_rewrite: info.contract_rewrite,
+      prompt_rewrite: info.prompt_rewrite,
+    }))
+    .sort((a, b) => b.weight - a.weight || a.code.localeCompare(b.code));
+}
+
+function buildArenaDecisionCaptureView(
+  submission: SubmissionRecord,
+  run: ArenaRunRecord | null,
+  winnerContender: ArenaContenderResult | null,
+  latestThreadForContender: ArenaReviewThreadEntry | null,
+): ArenaDecisionCaptureView | null {
+  if (!run) return null;
+
+  const winnerContenderId = run.winner_contender_id ?? winnerContender?.contender_id ?? null;
+  const managerReview = winnerContender?.manager_review && isRecord(winnerContender.manager_review)
+    ? winnerContender.manager_review
+    : null;
+
+  const fallbackRecommendation = mapManagerDecisionToArenaRecommendation(managerReview?.decision);
+  const recommendation = latestThreadForContender
+    ? latestThreadForContender.recommendation
+    : fallbackRecommendation;
+
+  const managerConfidence = d1Number(managerReview?.confidence);
+  const predictedConfidence = latestThreadForContender
+    ? latestThreadForContender.confidence
+    : managerConfidence === null
+      ? 0.5
+      : Math.max(0, Math.min(1, managerConfidence));
+
+  return {
+    outcome_endpoint: {
+      endpoint: `/v1/bounties/${submission.bounty_id}/arena/outcome`,
+      method: 'POST',
+      payload_template: {
+        idempotency_key: `arena-outcome:${submission.submission_id}:${run.arena_id}`.slice(0, 128),
+        arena_id: run.arena_id,
+        contender_id: winnerContenderId,
+        outcome_status: 'ACCEPTED',
+        recommendation,
+        predicted_confidence: Number(predictedConfidence.toFixed(4)),
+        review_time_minutes: 0,
+        time_to_accept_minutes: null,
+        override_reason_code: null,
+        notes: '',
+        source: 'bounty-review-ui',
+        metadata: {
+          decision_rationale: '',
+          override_rationale: '',
+          calibration_signal_tags: ['arena-review'],
+        },
+      },
+    },
+    outcome_status_options: buildArenaOutcomeStatusOptions(),
+    override_reason_options: buildArenaOverrideReasonOptions(),
+    calibration_bindings: {
+      notes_path: 'notes',
+      rationale_path: 'metadata.decision_rationale',
+      override_reason_path: 'override_reason_code',
+    },
+  };
+}
+
 async function buildBountyReviewArenaFlowView(
   bounty: BountyV2,
   submission: SubmissionRecord,
   latestArena: ArenaInlineReviewSummaryView | null,
+  decisionCapture: ArenaDecisionCaptureView | null,
 ): Promise<BountyReviewArenaFlowView> {
   return {
     start_arena: await buildArenaStartActionTemplateView(bounty, submission),
     latest_arena: latestArena,
+    decision_capture: decisionCapture,
   };
 }
 
@@ -7572,6 +7724,41 @@ function buildArenaOutcomePayload(outcome: ArenaOutcomeRecord): Record<string, u
   };
 }
 
+function parseArenaOutcomeMetadata(
+  metadataJson: string | null,
+): {
+  decision_rationale: string | null;
+  override_rationale: string | null;
+  calibration_signal_tags: string[];
+} {
+  if (!metadataJson) {
+    return {
+      decision_rationale: null,
+      override_rationale: null,
+      calibration_signal_tags: [],
+    };
+  }
+
+  const metadata = parseJsonObject(metadataJson);
+  if (!metadata) {
+    return {
+      decision_rationale: null,
+      override_rationale: null,
+      calibration_signal_tags: [],
+    };
+  }
+
+  const decisionRationaleRaw = d1String(metadata.decision_rationale)?.trim() ?? null;
+  const overrideRationaleRaw = d1String(metadata.override_rationale)?.trim() ?? null;
+  const tagsRaw = parseStringList(metadata.calibration_signal_tags, 20, 64, true) ?? [];
+
+  return {
+    decision_rationale: decisionRationaleRaw && decisionRationaleRaw.length > 0 ? decisionRationaleRaw : null,
+    override_rationale: overrideRationaleRaw && overrideRationaleRaw.length > 0 ? overrideRationaleRaw : null,
+    calibration_signal_tags: tagsRaw,
+  };
+}
+
 function buildArenaCalibrationSummary(
   outcomes: ArenaOutcomeRecord[],
   runByArenaId: Map<string, ArenaRunRecord>,
@@ -7622,6 +7809,19 @@ function buildArenaCalibrationSummary(
     contenderGroups.set(row.contender_id, list);
   }
 
+  const globalTagCounts = new Map<string, number>();
+  const globalOverrideReasonCounts = new Map<ArenaOverrideReasonCode, number>();
+  const globalRationaleRows: Array<{
+    outcome_id: string;
+    contender_id: string;
+    outcome_status: ArenaOutcomeRecord['outcome_status'];
+    override_reason_code: ArenaOverrideReasonCode | null;
+    rationale: string;
+    override_rationale: string | null;
+    tags: string[];
+    updated_at: string;
+  }> = [];
+
   const contenders = [...contenderGroups.entries()]
     .map(([contenderId, rows]) => {
       const count = rows.length;
@@ -7630,6 +7830,75 @@ function buildArenaCalibrationSummary(
       const overrideRate = rows.filter((row) => row.overridden).length / count;
       const reworkRate = rows.filter((row) => row.rework_required).length / count;
       const meanReviewTime = rows.reduce((sum, row) => sum + row.review_time_minutes, 0) / count;
+
+      const tagCounts = new Map<string, number>();
+      const overrideReasonCounts = new Map<ArenaOverrideReasonCode, number>();
+      const rationaleRows: Array<{
+        outcome_id: string;
+        outcome_status: ArenaOutcomeRecord['outcome_status'];
+        override_reason_code: ArenaOverrideReasonCode | null;
+        rationale: string;
+        override_rationale: string | null;
+        tags: string[];
+        updated_at: string;
+      }> = [];
+
+      for (const row of rows) {
+        const metadata = parseArenaOutcomeMetadata(row.metadata_json);
+        const notes = row.notes?.trim() ?? null;
+        const decisionRationale = metadata.decision_rationale ?? notes;
+        const overrideRationale = metadata.override_rationale ?? (row.overridden ? notes : null);
+        const overrideReasonCode = row.overridden
+          ? (normalizeArenaOverrideReasonCode(row.override_reason_code) ?? 'ARENA_OVERRIDE_OTHER')
+          : null;
+
+        if (overrideReasonCode) {
+          overrideReasonCounts.set(overrideReasonCode, (overrideReasonCounts.get(overrideReasonCode) ?? 0) + 1);
+          globalOverrideReasonCounts.set(overrideReasonCode, (globalOverrideReasonCounts.get(overrideReasonCode) ?? 0) + 1);
+        }
+
+        for (const tag of metadata.calibration_signal_tags) {
+          tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+          globalTagCounts.set(tag, (globalTagCounts.get(tag) ?? 0) + 1);
+        }
+
+        if (decisionRationale) {
+          const rationaleEntry = {
+            outcome_id: row.outcome_id,
+            outcome_status: row.outcome_status,
+            override_reason_code: overrideReasonCode,
+            rationale: decisionRationale,
+            override_rationale: overrideRationale,
+            tags: metadata.calibration_signal_tags,
+            updated_at: row.updated_at,
+          };
+          rationaleRows.push(rationaleEntry);
+          globalRationaleRows.push({ contender_id: contenderId, ...rationaleEntry });
+        }
+      }
+
+      const overrideReasonBreakdown = [...overrideReasonCounts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([reason_code, reasonCount]) => ({
+          reason_code,
+          count: reasonCount,
+          share: Number((reasonCount / count).toFixed(4)),
+          contract_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reason_code].contract_rewrite,
+          prompt_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reason_code].prompt_rewrite,
+        }));
+
+      const topRationaleTags = [...tagCounts.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, 5)
+        .map(([tag, tagCount]) => ({
+          tag,
+          count: tagCount,
+          share: Number((tagCount / count).toFixed(4)),
+        }));
+
+      const recentRationales = [...rationaleRows]
+        .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+        .slice(0, 3);
 
       return {
         contender_id: contenderId,
@@ -7640,6 +7909,11 @@ function buildArenaCalibrationSummary(
         override_rate: overrideRate,
         rework_rate: reworkRate,
         average_review_time_minutes: meanReviewTime,
+        top_override_reason_code: overrideReasonBreakdown[0]?.reason_code ?? null,
+        override_reason_breakdown: overrideReasonBreakdown,
+        rationale_samples: rationaleRows.length,
+        top_rationale_tags: topRationaleTags,
+        recent_rationales: recentRationales,
       };
     })
     .sort((a, b) => b.samples - a.samples || a.contender_id.localeCompare(b.contender_id));
@@ -7671,6 +7945,31 @@ function buildArenaCalibrationSummary(
     .filter((entry): entry is { task_fingerprint: string; top_winner_contender_id: string; stability_ratio: number; sample_runs: number } => entry !== null)
     .sort((a, b) => b.sample_runs - a.sample_runs || a.task_fingerprint.localeCompare(b.task_fingerprint));
 
+  const overrideTaxonomy = [...globalOverrideReasonCounts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([reason_code, countForReason]) => ({
+      reason_code,
+      count: countForReason,
+      share: total > 0 ? Number((countForReason / total).toFixed(4)) : 0,
+      contract_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reason_code].contract_rewrite,
+      prompt_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reason_code].prompt_rewrite,
+      priority_score: Number((countForReason * ARENA_OVERRIDE_REASON_REGISTRY[reason_code].weight).toFixed(4)),
+    }));
+
+  const rationaleSignals = {
+    top_tags: [...globalTagCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 10)
+      .map(([tag, countForTag]) => ({
+        tag,
+        count: countForTag,
+        share: total > 0 ? Number((countForTag / total).toFixed(4)) : 0,
+      })),
+    recent_decisions: [...globalRationaleRows]
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .slice(0, 8),
+  };
+
   return {
     totals: {
       samples: total,
@@ -7685,6 +7984,10 @@ function buildArenaCalibrationSummary(
       rework_rate: total > 0 ? rework / total : 0,
     },
     contenders,
+    override_taxonomy: {
+      reason_breakdown: overrideTaxonomy,
+    },
+    rationale_signals: rationaleSignals,
     winner_stability: winnerStability,
   };
 }
@@ -14730,18 +15033,30 @@ async function handleListBountySubmissions(
   }
 
   const arenaExplorerBaseUrl = resolveArenaExplorerBaseUrl(env);
+  let latestArenaRun: ArenaRunRecord | null = null;
+  let latestArenaWinnerContender: ArenaContenderResult | null = null;
+  let latestArenaThreadForWinner: ArenaReviewThreadEntry | null = null;
   let latestArenaSummary: ArenaInlineReviewSummaryView | null = null;
   try {
-    const latestRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bounty.bounty_id);
-    if (latestRun) {
-      let winnerContender: ArenaContenderResult | null = null;
-      if (latestRun.winner_contender_id) {
-        const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestRun.run_id);
-        const winnerRow = contenderRows.find((row) => row.contender_id === latestRun.winner_contender_id) ?? null;
-        winnerContender = winnerRow ? parseArenaContenderResult(winnerRow) : null;
+    latestArenaRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bounty.bounty_id);
+    if (latestArenaRun) {
+      const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestArenaRun.run_id);
+      if (latestArenaRun.winner_contender_id) {
+        const winnerRow = contenderRows.find((row) => row.contender_id === latestArenaRun?.winner_contender_id) ?? null;
+        latestArenaWinnerContender = winnerRow ? parseArenaContenderResult(winnerRow) : null;
       }
 
-      latestArenaSummary = buildArenaInlineReviewSummaryView(latestRun, winnerContender, arenaExplorerBaseUrl);
+      const winnerContenderId = latestArenaRun.winner_contender_id ?? latestArenaWinnerContender?.contender_id ?? null;
+      if (winnerContenderId) {
+        const threadEntries = await listArenaReviewThreadByArenaId(env.BOUNTIES_DB, latestArenaRun.arena_id, 50);
+        latestArenaThreadForWinner = threadEntries.find((entry) => entry.contender_id === winnerContenderId) ?? null;
+      }
+
+      latestArenaSummary = buildArenaInlineReviewSummaryView(
+        latestArenaRun,
+        latestArenaWinnerContender,
+        arenaExplorerBaseUrl,
+      );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14752,7 +15067,13 @@ async function handleListBountySubmissions(
   for (const record of submissions) {
     try {
       const latest = await getLatestTestResultBySubmissionId(env.BOUNTIES_DB, record.submission_id);
-      const arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, record, latestArenaSummary);
+      const decisionCapture = buildArenaDecisionCaptureView(
+        record,
+        latestArenaRun,
+        latestArenaWinnerContender,
+        latestArenaThreadForWinner,
+      );
+      const arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, record, latestArenaSummary, decisionCapture);
       views.push(toSubmissionSummaryView(record, latest, arenaReviewFlow));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14844,20 +15165,32 @@ async function handleGetSubmissionDetail(
   const arenaExplorerBaseUrl = resolveArenaExplorerBaseUrl(env);
   let latestArenaPayload: Record<string, unknown> | null = null;
   let latestArenaSummary: ArenaInlineReviewSummaryView | null = null;
+  let latestArenaRun: ArenaRunRecord | null = null;
+  let latestArenaWinnerContender: ArenaContenderResult | null = null;
+  let latestArenaThreadForWinner: ArenaReviewThreadEntry | null = null;
 
   try {
-    const run = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, submission.bounty_id);
-    if (run) {
-      latestArenaPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+    latestArenaRun = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, submission.bounty_id);
+    if (latestArenaRun) {
+      latestArenaPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, latestArenaRun);
 
-      let winnerContender: ArenaContenderResult | null = null;
-      if (run.winner_contender_id) {
-        const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
-        const winnerRow = contenderRows.find((row) => row.contender_id === run.winner_contender_id) ?? null;
-        winnerContender = winnerRow ? parseArenaContenderResult(winnerRow) : null;
+      const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, latestArenaRun.run_id);
+      if (latestArenaRun.winner_contender_id) {
+        const winnerRow = contenderRows.find((row) => row.contender_id === latestArenaRun?.winner_contender_id) ?? null;
+        latestArenaWinnerContender = winnerRow ? parseArenaContenderResult(winnerRow) : null;
       }
 
-      latestArenaSummary = buildArenaInlineReviewSummaryView(run, winnerContender, arenaExplorerBaseUrl);
+      const winnerContenderId = latestArenaRun.winner_contender_id ?? latestArenaWinnerContender?.contender_id ?? null;
+      if (winnerContenderId) {
+        const threadEntries = await listArenaReviewThreadByArenaId(env.BOUNTIES_DB, latestArenaRun.arena_id, 50);
+        latestArenaThreadForWinner = threadEntries.find((entry) => entry.contender_id === winnerContenderId) ?? null;
+      }
+
+      latestArenaSummary = buildArenaInlineReviewSummaryView(
+        latestArenaRun,
+        latestArenaWinnerContender,
+        arenaExplorerBaseUrl,
+      );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14866,7 +15199,13 @@ async function handleGetSubmissionDetail(
 
   let arenaReviewFlow: BountyReviewArenaFlowView;
   try {
-    arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, submission, latestArenaSummary);
+    const decisionCapture = buildArenaDecisionCaptureView(
+      submission,
+      latestArenaRun,
+      latestArenaWinnerContender,
+      latestArenaThreadForWinner,
+    );
+    arenaReviewFlow = await buildBountyReviewArenaFlowView(bounty, submission, latestArenaSummary, decisionCapture);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('INTERNAL_ERROR', message, 500, undefined, version);
