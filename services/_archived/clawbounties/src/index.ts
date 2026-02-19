@@ -362,6 +362,84 @@ interface BountyRiskClearRecord {
   updated_at: string;
 }
 
+type ArenaRunStatus = 'started' | 'completed';
+
+interface ArenaCheckResult {
+  criterion_id: string;
+  required: boolean;
+  status: 'PASS' | 'FAIL';
+  reason_code: string;
+}
+
+interface ArenaContenderResult {
+  contender_id: string;
+  label: string;
+  model: string;
+  harness: string;
+  tools: string[];
+  skills: string[];
+  plugins: string[];
+  score: number;
+  hard_gate_pass: boolean;
+  mandatory_failed: number;
+  metrics: {
+    quality_score: number;
+    risk_score: number;
+    efficiency_score: number;
+    latency_ms: number;
+    cost_usd: number;
+    autonomy_score: number;
+  };
+  check_results: ArenaCheckResult[];
+  proof_pack: Record<string, unknown> | null;
+  manager_review: Record<string, unknown> | null;
+  review_paste: string;
+}
+
+interface ArenaRunRecord {
+  run_id: string;
+  arena_id: string;
+  bounty_id: string;
+  status: ArenaRunStatus;
+  contract_id: string;
+  contract_hash_b64u: string;
+  task_fingerprint: string;
+  objective_profile_json: string;
+  arena_report_json: string | null;
+  winner_contender_id: string | null;
+  winner_reason: string | null;
+  reason_codes_json: string | null;
+  tradeoffs_json: string | null;
+  start_idempotency_key: string;
+  result_idempotency_key: string | null;
+  report_hash_b64u: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ArenaContenderRecord {
+  run_id: string;
+  contender_id: string;
+  label: string;
+  model: string;
+  harness: string;
+  tools_json: string;
+  skills_json: string;
+  plugins_json: string;
+  score: number;
+  hard_gate_pass: boolean;
+  mandatory_failed: number;
+  metrics_json: string;
+  check_results_json: string;
+  proof_pack_json: string | null;
+  manager_review_json: string | null;
+  review_paste: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -565,6 +643,7 @@ interface SubmissionDetailView {
     completed_at: string;
     error: string | null;
   } | null;
+  arena?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -893,6 +972,13 @@ function parseBountyStatus(input: unknown): BountyStatus | null {
   ) {
     return v;
   }
+  return null;
+}
+
+function parseArenaRunStatus(input: unknown): ArenaRunStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'started' || v === 'completed') return v;
   return null;
 }
 
@@ -5863,6 +5949,642 @@ async function getBountyRiskClearByPair(
   return parseBountyRiskClearRow(row);
 }
 
+function parseArenaRunRow(row: unknown): ArenaRunRecord | null {
+  if (!isRecord(row)) return null;
+
+  const run_id = d1String(row.run_id);
+  const arena_id = d1String(row.arena_id);
+  const bounty_id = d1String(row.bounty_id);
+  const status = parseArenaRunStatus(d1String(row.status));
+  const contract_id = d1String(row.contract_id);
+  const contract_hash_b64u = d1String(row.contract_hash_b64u);
+  const task_fingerprint = d1String(row.task_fingerprint);
+  const objective_profile_json = d1String(row.objective_profile_json);
+  const arena_report_json = d1String(row.arena_report_json);
+  const winner_contender_id = d1String(row.winner_contender_id);
+  const winner_reason = d1String(row.winner_reason);
+  const reason_codes_json = d1String(row.reason_codes_json);
+  const tradeoffs_json = d1String(row.tradeoffs_json);
+  const start_idempotency_key = d1String(row.start_idempotency_key);
+  const result_idempotency_key = d1String(row.result_idempotency_key);
+  const report_hash_b64u = d1String(row.report_hash_b64u);
+  const started_at = d1String(row.started_at);
+  const completed_at = d1String(row.completed_at);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !run_id ||
+    !arena_id ||
+    !bounty_id ||
+    !status ||
+    !contract_id ||
+    !contract_hash_b64u ||
+    !task_fingerprint ||
+    !objective_profile_json ||
+    !start_idempotency_key ||
+    !started_at ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  return {
+    run_id,
+    arena_id,
+    bounty_id,
+    status,
+    contract_id,
+    contract_hash_b64u,
+    task_fingerprint,
+    objective_profile_json,
+    arena_report_json,
+    winner_contender_id,
+    winner_reason,
+    reason_codes_json,
+    tradeoffs_json,
+    start_idempotency_key,
+    result_idempotency_key,
+    report_hash_b64u,
+    started_at,
+    completed_at,
+    created_at,
+    updated_at,
+  };
+}
+
+function parseArenaContenderRow(row: unknown): ArenaContenderRecord | null {
+  if (!isRecord(row)) return null;
+
+  const run_id = d1String(row.run_id);
+  const contender_id = d1String(row.contender_id);
+  const label = d1String(row.label);
+  const model = d1String(row.model);
+  const harness = d1String(row.harness);
+  const tools_json = d1String(row.tools_json);
+  const skills_json = d1String(row.skills_json);
+  const plugins_json = d1String(row.plugins_json);
+  const score = d1Number(row.score);
+  const hard_gate_pass_num = d1Number(row.hard_gate_pass);
+  const mandatory_failed = d1Number(row.mandatory_failed);
+  const metrics_json = d1String(row.metrics_json);
+  const check_results_json = d1String(row.check_results_json);
+  const proof_pack_json = d1String(row.proof_pack_json);
+  const manager_review_json = d1String(row.manager_review_json);
+  const review_paste = d1String(row.review_paste);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !run_id ||
+    !contender_id ||
+    !label ||
+    !model ||
+    !harness ||
+    !tools_json ||
+    !skills_json ||
+    !plugins_json ||
+    score === null ||
+    hard_gate_pass_num === null ||
+    mandatory_failed === null ||
+    !metrics_json ||
+    !check_results_json ||
+    !review_paste ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  return {
+    run_id,
+    contender_id,
+    label,
+    model,
+    harness,
+    tools_json,
+    skills_json,
+    plugins_json,
+    score,
+    hard_gate_pass: hard_gate_pass_num !== 0,
+    mandatory_failed,
+    metrics_json,
+    check_results_json,
+    proof_pack_json,
+    manager_review_json,
+    review_paste,
+    created_at,
+    updated_at,
+  };
+}
+
+function parseArenaMetrics(value: Record<string, unknown>): ArenaContenderResult['metrics'] | null {
+  const quality_score = d1Number(value.quality_score);
+  const risk_score = d1Number(value.risk_score);
+  const efficiency_score = d1Number(value.efficiency_score);
+  const latency_ms = d1Number(value.latency_ms);
+  const cost_usd = d1Number(value.cost_usd);
+  const autonomy_score = d1Number(value.autonomy_score);
+
+  if (
+    quality_score === null ||
+    risk_score === null ||
+    efficiency_score === null ||
+    latency_ms === null ||
+    cost_usd === null ||
+    autonomy_score === null
+  ) {
+    return null;
+  }
+
+  return {
+    quality_score,
+    risk_score,
+    efficiency_score,
+    latency_ms,
+    cost_usd,
+    autonomy_score,
+  };
+}
+
+function parseArenaCheckResults(input: unknown): ArenaCheckResult[] {
+  if (!Array.isArray(input)) return [];
+
+  const out: ArenaCheckResult[] = [];
+  for (const item of input) {
+    if (!isRecord(item)) continue;
+
+    const criterion_id = d1String(item.criterion_id);
+    const requiredRaw = item.required;
+    const statusRaw = d1String(item.status);
+    const reason_code = d1String(item.reason_code);
+
+    if (!criterion_id || !statusRaw || !reason_code) continue;
+    if (statusRaw !== 'PASS' && statusRaw !== 'FAIL') continue;
+
+    out.push({
+      criterion_id,
+      required: requiredRaw === true,
+      status: statusRaw,
+      reason_code,
+    });
+  }
+
+  return out;
+}
+
+function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContenderResult | null {
+  const tools = parseJsonStringArray(record.tools_json);
+  const skills = parseJsonStringArray(record.skills_json);
+  const plugins = parseJsonStringArray(record.plugins_json);
+  const metricsObj = parseJsonObject(record.metrics_json);
+  const checkResultsRaw = parseJsonUnknownArray(record.check_results_json);
+
+  if (!tools || !skills || !plugins || !metricsObj) return null;
+
+  const metrics = parseArenaMetrics(metricsObj);
+  if (!metrics) return null;
+
+  const proofPack = record.proof_pack_json ? parseJsonObject(record.proof_pack_json) : null;
+  const managerReview = record.manager_review_json ? parseJsonObject(record.manager_review_json) : null;
+
+  return {
+    contender_id: record.contender_id,
+    label: record.label,
+    model: record.model,
+    harness: record.harness,
+    tools,
+    skills,
+    plugins,
+    score: record.score,
+    hard_gate_pass: record.hard_gate_pass,
+    mandatory_failed: record.mandatory_failed,
+    metrics,
+    check_results: parseArenaCheckResults(checkResultsRaw),
+    proof_pack: proofPack,
+    manager_review: managerReview,
+    review_paste: record.review_paste,
+  };
+}
+
+async function getArenaRunByArenaId(db: D1Database, arenaId: string): Promise<ArenaRunRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_arena_runs WHERE arena_id = ?').bind(arenaId).first();
+  return parseArenaRunRow(row);
+}
+
+async function getArenaRunByStartIdempotencyKey(db: D1Database, key: string): Promise<ArenaRunRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_arena_runs WHERE start_idempotency_key = ?').bind(key).first();
+  return parseArenaRunRow(row);
+}
+
+async function getArenaRunByResultIdempotencyKey(db: D1Database, key: string): Promise<ArenaRunRecord | null> {
+  const row = await db.prepare('SELECT * FROM bounty_arena_runs WHERE result_idempotency_key = ?').bind(key).first();
+  return parseArenaRunRow(row);
+}
+
+async function getLatestArenaRunByBountyId(db: D1Database, bountyId: string): Promise<ArenaRunRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM bounty_arena_runs WHERE bounty_id = ? ORDER BY updated_at DESC, run_id DESC LIMIT 1')
+    .bind(bountyId)
+    .first();
+
+  return parseArenaRunRow(row);
+}
+
+async function listArenaRuns(
+  db: D1Database,
+  limit: number,
+): Promise<ArenaRunRecord[]> {
+  const rows = await db
+    .prepare('SELECT * FROM bounty_arena_runs ORDER BY updated_at DESC, run_id DESC LIMIT ?')
+    .bind(limit)
+    .all<Record<string, unknown>>();
+
+  const out: ArenaRunRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaRunRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
+async function listArenaContendersByRunId(db: D1Database, runId: string): Promise<ArenaContenderRecord[]> {
+  const rows = await db
+    .prepare('SELECT * FROM bounty_arena_contenders WHERE run_id = ? ORDER BY score DESC, contender_id ASC')
+    .bind(runId)
+    .all<Record<string, unknown>>();
+
+  const out: ArenaContenderRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaContenderRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
+async function writeArenaContenderRecords(
+  db: D1Database,
+  runId: string,
+  contenders: ArenaContenderResult[],
+  now: string,
+): Promise<void> {
+  await db.prepare('DELETE FROM bounty_arena_contenders WHERE run_id = ?').bind(runId).run();
+
+  for (const contender of contenders) {
+    await db
+      .prepare(
+        `INSERT INTO bounty_arena_contenders (
+          run_id,
+          contender_id,
+          label,
+          model,
+          harness,
+          tools_json,
+          skills_json,
+          plugins_json,
+          score,
+          hard_gate_pass,
+          mandatory_failed,
+          metrics_json,
+          check_results_json,
+          proof_pack_json,
+          manager_review_json,
+          review_paste,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        runId,
+        contender.contender_id,
+        contender.label,
+        contender.model,
+        contender.harness,
+        stableStringify(contender.tools),
+        stableStringify(contender.skills),
+        stableStringify(contender.plugins),
+        contender.score,
+        contender.hard_gate_pass ? 1 : 0,
+        contender.mandatory_failed,
+        stableStringify(contender.metrics),
+        stableStringify(contender.check_results),
+        contender.proof_pack ? stableStringify(contender.proof_pack) : null,
+        contender.manager_review ? stableStringify(contender.manager_review) : null,
+        contender.review_paste,
+        now,
+        now,
+      )
+      .run();
+  }
+}
+
+async function buildArenaPayloadFromRun(
+  db: D1Database,
+  run: ArenaRunRecord,
+): Promise<Record<string, unknown> | null> {
+  const objectiveProfile = parseJsonObject(run.objective_profile_json);
+  if (!objectiveProfile) return null;
+
+  const contenders = await listArenaContendersByRunId(db, run.run_id);
+  const contenderViews: ArenaContenderResult[] = [];
+  for (const contender of contenders) {
+    const view = parseArenaContenderResult(contender);
+    if (!view) return null;
+    contenderViews.push(view);
+  }
+
+  const reasonCodes = run.reason_codes_json ? parseJsonStringArray(run.reason_codes_json) : [];
+  const tradeoffs = run.tradeoffs_json ? parseJsonStringArray(run.tradeoffs_json) : [];
+  if (!reasonCodes || !tradeoffs) return null;
+
+  let generatedAt = run.updated_at;
+  if (run.arena_report_json) {
+    const reportObj = parseJsonObject(run.arena_report_json);
+    const generated = reportObj ? d1String(reportObj.generated_at) : null;
+    if (generated) generatedAt = generated;
+  }
+
+  return {
+    run_id: run.run_id,
+    arena_id: run.arena_id,
+    status: run.status,
+    generated_at: generatedAt,
+    contract: {
+      bounty_id: run.bounty_id,
+      contract_id: run.contract_id,
+      contract_hash_b64u: run.contract_hash_b64u,
+      task_fingerprint: run.task_fingerprint,
+    },
+    objective_profile: objectiveProfile,
+    contenders: contenderViews.map((contender) => ({
+      contender_id: contender.contender_id,
+      label: contender.label,
+      model: contender.model,
+      harness: contender.harness,
+      tools: contender.tools,
+      skills: contender.skills,
+      plugins: contender.plugins,
+      score: contender.score,
+      hard_gate_pass: contender.hard_gate_pass,
+      mandatory_failed: contender.mandatory_failed,
+      metrics: contender.metrics,
+      check_results: contender.check_results,
+      review_paste: contender.review_paste,
+      manager_review_json: contender.manager_review,
+    })),
+    winner: {
+      contender_id: run.winner_contender_id,
+      reason: run.winner_reason,
+    },
+    tradeoffs,
+    reason_codes: reasonCodes,
+  };
+}
+
+function parseArenaObjectiveWeights(input: unknown): { quality: number; speed: number; cost: number; safety: number } | null {
+  if (!isRecord(input)) return null;
+
+  const quality = d1Number(input.quality);
+  const speed = d1Number(input.speed);
+  const cost = d1Number(input.cost);
+  const safety = d1Number(input.safety);
+
+  if (quality === null || speed === null || cost === null || safety === null) return null;
+
+  if (quality < 0 || quality > 1 || speed < 0 || speed > 1 || cost < 0 || cost > 1 || safety < 0 || safety > 1) {
+    return null;
+  }
+
+  return { quality, speed, cost, safety };
+}
+
+function parseArenaObjectiveProfile(input: unknown): Record<string, unknown> | null {
+  if (!isRecord(input)) return null;
+
+  const name = d1String(input.name);
+  if (!name || name.trim().length < 2 || name.trim().length > 64) return null;
+
+  const weights = parseArenaObjectiveWeights(input.weights);
+  if (!weights) return null;
+
+  const tieBreakers = parseStringList(input.tie_breakers, 10, 64, true);
+  if (!tieBreakers) return null;
+
+  return {
+    name: name.trim(),
+    weights,
+    tie_breakers: tieBreakers,
+  };
+}
+
+function parseArenaContract(
+  input: unknown,
+  expectedBountyId: string,
+): {
+  bounty_id: string;
+  contract_id: string;
+  contract_hash_b64u: string;
+  task_fingerprint: string;
+} | null {
+  if (!isRecord(input)) return null;
+
+  const bounty_id = d1String(input.bounty_id);
+  const contract_id = d1String(input.contract_id);
+  const contract_hash_b64u = d1String(input.contract_hash_b64u);
+  const task_fingerprint = d1String(input.task_fingerprint);
+
+  if (!bounty_id || !contract_id || !contract_hash_b64u || !task_fingerprint) return null;
+  if (bounty_id.trim() !== expectedBountyId) return null;
+  if (!isSha256B64u(contract_hash_b64u.trim())) return null;
+
+  return {
+    bounty_id: bounty_id.trim(),
+    contract_id: contract_id.trim(),
+    contract_hash_b64u: contract_hash_b64u.trim(),
+    task_fingerprint: task_fingerprint.trim(),
+  };
+}
+
+function buildArenaReviewPaste(contender: ArenaContenderResult): string {
+  const passFail = contender.hard_gate_pass ? 'PASS' : 'FAIL';
+
+  return [
+    `Decision Summary: ${contender.hard_gate_pass ? 'Promote contender' : 'Manual review required'}`,
+    `Contract Compliance: ${passFail} (mandatory_failed=${contender.mandatory_failed})`,
+    `Delivery/Risk: quality=${contender.metrics.quality_score.toFixed(2)}, risk=${contender.metrics.risk_score.toFixed(2)}, efficiency=${contender.metrics.efficiency_score.toFixed(2)}, cost=$${contender.metrics.cost_usd.toFixed(4)}, latency=${Math.round(contender.metrics.latency_ms)}ms`,
+    `Contender: ${contender.contender_id} (${contender.label})`,
+  ].join('\n');
+}
+
+function parseArenaContenderArtifactsMap(input: unknown): Map<string, {
+  proof_pack: Record<string, unknown> | null;
+  manager_review: Record<string, unknown> | null;
+  review_paste: string | null;
+}> | null {
+  const map = new Map<string, {
+    proof_pack: Record<string, unknown> | null;
+    manager_review: Record<string, unknown> | null;
+    review_paste: string | null;
+  }>();
+
+  if (input === undefined) return map;
+  if (!Array.isArray(input)) return null;
+
+  for (const row of input) {
+    if (!isRecord(row)) return null;
+
+    const contenderId = d1String(row.contender_id);
+    if (!contenderId) return null;
+
+    const proofPack = row.proof_pack;
+    const managerReview = row.manager_review;
+    const reviewPaste = d1String(row.review_paste);
+
+    if (proofPack !== undefined && proofPack !== null && !isRecord(proofPack)) return null;
+    if (managerReview !== undefined && managerReview !== null && !isRecord(managerReview)) return null;
+    if (reviewPaste !== null && reviewPaste !== undefined && reviewPaste.trim().length === 0) return null;
+
+    map.set(contenderId.trim(), {
+      proof_pack: proofPack && isRecord(proofPack) ? proofPack : null,
+      manager_review: managerReview && isRecord(managerReview) ? managerReview : null,
+      review_paste: reviewPaste ? reviewPaste.trim() : null,
+    });
+  }
+
+  return map;
+}
+
+function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknown> | null): {
+  model: string;
+  harness: string;
+  tools: string[];
+  skills: string[];
+  plugins: string[];
+  check_results: ArenaCheckResult[];
+} {
+  if (!proofPack) {
+    return {
+      model: 'unknown-model',
+      harness: 'unknown-harness',
+      tools: [],
+      skills: [],
+      plugins: [],
+      check_results: [],
+    };
+  }
+
+  const contender = isRecord(proofPack.contender) ? proofPack.contender : null;
+  const config = contender && isRecord(contender.config) ? contender.config : null;
+
+  const model = config ? d1String(config.model) : null;
+  const harness = config ? d1String(config.harness) : null;
+  const tools = config ? parseStringList(config.tools, 64, 120, true) : [];
+  const skills = config ? parseStringList(config.skills, 64, 120, true) : [];
+  const plugins = config ? parseStringList(config.plugins, 64, 120, true) : [];
+
+  const compliance = isRecord(proofPack.compliance) ? proofPack.compliance : null;
+  const checks = compliance ? parseArenaCheckResults(compliance.checks) : [];
+
+  return {
+    model: model?.trim() ?? 'unknown-model',
+    harness: harness?.trim() ?? 'unknown-harness',
+    tools: tools ?? [],
+    skills: skills ?? [],
+    plugins: plugins ?? [],
+    check_results: checks,
+  };
+}
+
+function parseArenaContenderFromReportRow(
+  row: unknown,
+  artifacts: Map<string, {
+    proof_pack: Record<string, unknown> | null;
+    manager_review: Record<string, unknown> | null;
+    review_paste: string | null;
+  }>,
+): ArenaContenderResult | null {
+  if (!isRecord(row)) return null;
+
+  const contender_id = d1String(row.contender_id);
+  const label = d1String(row.label);
+  const hard_gate_pass = row.hard_gate_pass === true;
+  const mandatory_failed = d1Number(row.mandatory_failed);
+  const score = d1Number(row.score);
+  const metricsRaw = row.metrics;
+
+  if (!contender_id || !label || mandatory_failed === null || score === null || !isRecord(metricsRaw)) {
+    return null;
+  }
+
+  const metrics = parseArenaMetrics(metricsRaw);
+  if (!metrics) return null;
+
+  const artifact = artifacts.get(contender_id.trim()) ?? {
+    proof_pack: null,
+    manager_review: null,
+    review_paste: null,
+  };
+
+  const config = parseArenaContenderConfigFromProofPack(artifact.proof_pack);
+
+  const directCheckResults = parseArenaCheckResults(row.check_results);
+  const check_results = directCheckResults.length > 0 ? directCheckResults : config.check_results;
+
+  const result: ArenaContenderResult = {
+    contender_id: contender_id.trim(),
+    label: label.trim(),
+    model: config.model,
+    harness: config.harness,
+    tools: config.tools,
+    skills: config.skills,
+    plugins: config.plugins,
+    score,
+    hard_gate_pass,
+    mandatory_failed,
+    metrics,
+    check_results,
+    proof_pack: artifact.proof_pack,
+    manager_review: artifact.manager_review,
+    review_paste: artifact.review_paste ?? '',
+  };
+
+  if (!result.review_paste) {
+    result.review_paste = buildArenaReviewPaste(result);
+  }
+
+  return result;
+}
+
+function buildArenaRunSummary(run: ArenaRunRecord): {
+  arena_id: string;
+  bounty_id: string;
+  contract_id: string;
+  generated_at: string;
+  winner_contender_id: string;
+  reason_code: string;
+  status: ArenaRunStatus;
+} {
+  const reasonCodes = run.reason_codes_json ? parseJsonStringArray(run.reason_codes_json) : [];
+  const reason_code = reasonCodes && reasonCodes.length > 0
+    ? (reasonCodes[0] ?? 'ARENA_RESULT_RECORDED')
+    : run.status === 'completed'
+      ? 'ARENA_RESULT_RECORDED'
+      : 'ARENA_PENDING';
+
+  return {
+    arena_id: run.arena_id,
+    bounty_id: run.bounty_id,
+    contract_id: run.contract_id,
+    generated_at: run.completed_at ?? run.updated_at,
+    winner_contender_id: run.winner_contender_id ?? 'pending',
+    reason_code,
+    status: run.status,
+  };
+}
+
 function buildTestHarnessOutput(submission: SubmissionRecord): Record<string, unknown> {
   return {
     artifacts: submission.artifacts ?? [],
@@ -10384,13 +11106,484 @@ async function handleRiskLossEventClear(
   );
 }
 
+async function handleStartBountyArena(
+  bountyId: string,
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotencyKey = d1String(body.idempotency_key)?.trim();
+  if (!idempotencyKey) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, { field: 'idempotency_key' }, version);
+  }
+
+  const arenaId = d1String(body.arena_id)?.trim();
+  if (!arenaId || arenaId.length < 3 || arenaId.length > 128) {
+    return errorResponse('INVALID_REQUEST', 'arena_id must be a non-empty string (3-128 chars)', 400, { field: 'arena_id' }, version);
+  }
+
+  const contract = parseArenaContract(body.contract, bountyId);
+  if (!contract) {
+    return errorResponse('INVALID_REQUEST', 'contract must include bounty_id, contract_id, contract_hash_b64u, and task_fingerprint', 400, { field: 'contract' }, version);
+  }
+
+  const objectiveProfile = parseArenaObjectiveProfile(body.objective_profile);
+  if (!objectiveProfile) {
+    return errorResponse('INVALID_REQUEST', 'objective_profile is invalid', 400, { field: 'objective_profile' }, version);
+  }
+
+  const baselineContenders: ArenaContenderResult[] = [];
+  if (body.contenders !== undefined) {
+    if (!Array.isArray(body.contenders)) {
+      return errorResponse('INVALID_REQUEST', 'contenders must be an array when provided', 400, { field: 'contenders' }, version);
+    }
+
+    for (const contenderRaw of body.contenders) {
+      if (!isRecord(contenderRaw)) {
+        return errorResponse('INVALID_REQUEST', 'contenders entries must be objects', 400, { field: 'contenders' }, version);
+      }
+
+      const contenderId = d1String(contenderRaw.contender_id)?.trim();
+      const label = d1String(contenderRaw.label)?.trim();
+      const model = d1String(contenderRaw.model)?.trim();
+      const harness = d1String(contenderRaw.harness)?.trim();
+      const tools = parseStringList(contenderRaw.tools, 64, 120, true);
+      const skills = parseStringList(contenderRaw.skills, 64, 120, true);
+      const plugins = parseStringList(contenderRaw.plugins, 64, 120, true);
+
+      if (!contenderId || !label || !model || !harness || !tools || !skills || !plugins) {
+        return errorResponse('INVALID_REQUEST', 'contender entry is invalid', 400, { contender: contenderRaw }, version);
+      }
+
+      baselineContenders.push({
+        contender_id: contenderId,
+        label,
+        model,
+        harness,
+        tools,
+        skills,
+        plugins,
+        score: 0,
+        hard_gate_pass: false,
+        mandatory_failed: 0,
+        metrics: {
+          quality_score: 0,
+          risk_score: 0,
+          efficiency_score: 0,
+          latency_ms: 0,
+          cost_usd: 0,
+          autonomy_score: 0,
+        },
+        check_results: [],
+        proof_pack: null,
+        manager_review: null,
+        review_paste: 'Arena run started; result payload pending.',
+      });
+    }
+  }
+
+  const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+  if (!bounty) {
+    return errorResponse('NOT_FOUND', 'Bounty not found', 404, { bounty_id: bountyId }, version);
+  }
+
+  const existingByIdempotency = await getArenaRunByStartIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+  if (existingByIdempotency) {
+    const samePayload =
+      existingByIdempotency.bounty_id === bountyId &&
+      existingByIdempotency.arena_id === arenaId &&
+      existingByIdempotency.contract_id === contract.contract_id &&
+      existingByIdempotency.contract_hash_b64u === contract.contract_hash_b64u &&
+      existingByIdempotency.task_fingerprint === contract.task_fingerprint &&
+      existingByIdempotency.objective_profile_json === stableStringify(objectiveProfile);
+
+    if (!samePayload) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used with a different payload',
+        409,
+        { idempotency_key: idempotencyKey, run_id: existingByIdempotency.run_id },
+        version,
+      );
+    }
+
+    const replayPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, existingByIdempotency);
+    return jsonResponse(
+      {
+        ok: true,
+        replay: true,
+        arena: replayPayload ?? buildArenaRunSummary(existingByIdempotency),
+      },
+      200,
+      version,
+    );
+  }
+
+  const existingArena = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
+  if (existingArena) {
+    return errorResponse(
+      'ARENA_ALREADY_EXISTS',
+      'arena_id already exists',
+      409,
+      { arena_id: arenaId, run_id: existingArena.run_id },
+      version,
+    );
+  }
+
+  const now = new Date().toISOString();
+  const runId = `arn_${crypto.randomUUID()}`;
+
+  try {
+    await env.BOUNTIES_DB
+      .prepare(
+        `INSERT INTO bounty_arena_runs (
+          run_id,
+          arena_id,
+          bounty_id,
+          status,
+          contract_id,
+          contract_hash_b64u,
+          task_fingerprint,
+          objective_profile_json,
+          arena_report_json,
+          winner_contender_id,
+          winner_reason,
+          reason_codes_json,
+          tradeoffs_json,
+          start_idempotency_key,
+          result_idempotency_key,
+          report_hash_b64u,
+          started_at,
+          completed_at,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'started', ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL, ?, NULL, ?, ?)`
+      )
+      .bind(
+        runId,
+        arenaId,
+        bountyId,
+        contract.contract_id,
+        contract.contract_hash_b64u,
+        contract.task_fingerprint,
+        stableStringify(objectiveProfile),
+        idempotencyKey,
+        now,
+        now,
+        now,
+      )
+      .run();
+
+    if (baselineContenders.length > 0) {
+      await writeArenaContenderRecords(env.BOUNTIES_DB, runId, baselineContenders, now);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  const saved = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
+  if (!saved) {
+    return errorResponse('DB_WRITE_FAILED', 'Arena run could not be loaded after insert', 500, undefined, version);
+  }
+
+  const payload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, saved);
+
+  return jsonResponse(
+    {
+      ok: true,
+      replay: false,
+      arena: payload ?? buildArenaRunSummary(saved),
+    },
+    201,
+    version,
+  );
+}
+
+async function handleSubmitBountyArenaResult(
+  bountyId: string,
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const idempotencyKey = d1String(body.idempotency_key)?.trim();
+  if (!idempotencyKey) {
+    return errorResponse('INVALID_REQUEST', 'idempotency_key is required', 400, { field: 'idempotency_key' }, version);
+  }
+
+  const report = body.arena_report;
+  if (!isRecord(report)) {
+    return errorResponse('INVALID_REQUEST', 'arena_report must be an object', 400, { field: 'arena_report' }, version);
+  }
+
+  const arenaId = d1String(report.arena_id)?.trim();
+  if (!arenaId) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.arena_id is required', 400, { field: 'arena_report.arena_id' }, version);
+  }
+
+  const contract = parseArenaContract(report.contract, bountyId);
+  if (!contract) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.contract is invalid or bounty mismatch', 400, { field: 'arena_report.contract' }, version);
+  }
+
+  const objectiveProfile = parseArenaObjectiveProfile(report.objective_profile);
+  if (!objectiveProfile) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.objective_profile is invalid', 400, { field: 'arena_report.objective_profile' }, version);
+  }
+
+  const winner = report.winner;
+  if (!isRecord(winner)) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.winner must be an object', 400, { field: 'arena_report.winner' }, version);
+  }
+
+  const winnerContenderId = d1String(winner.contender_id)?.trim();
+  const winnerReason = d1String(winner.reason)?.trim();
+  if (!winnerContenderId || !winnerReason) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.winner.contender_id and winner.reason are required', 400, { field: 'arena_report.winner' }, version);
+  }
+
+  const reasonCodes = parseStringList(report.reason_codes, 20, 128, true);
+  if (!reasonCodes) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.reason_codes must be string[]', 400, { field: 'arena_report.reason_codes' }, version);
+  }
+
+  const tradeoffs = parseStringList(report.tradeoffs, 50, 300, true);
+  if (!tradeoffs) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.tradeoffs must be string[]', 400, { field: 'arena_report.tradeoffs' }, version);
+  }
+
+  if (!Array.isArray(report.contenders) || report.contenders.length === 0) {
+    return errorResponse('INVALID_REQUEST', 'arena_report.contenders must contain at least one contender', 400, { field: 'arena_report.contenders' }, version);
+  }
+
+  const artifactsMap = parseArenaContenderArtifactsMap(body.contender_artifacts);
+  if (!artifactsMap) {
+    return errorResponse('INVALID_REQUEST', 'contender_artifacts is invalid', 400, { field: 'contender_artifacts' }, version);
+  }
+
+  const contenders: ArenaContenderResult[] = [];
+  for (const contenderRaw of report.contenders) {
+    const contender = parseArenaContenderFromReportRow(contenderRaw, artifactsMap);
+    if (!contender) {
+      return errorResponse('INVALID_REQUEST', 'arena_report.contenders contains an invalid contender', 400, { contender: contenderRaw }, version);
+    }
+    contenders.push(contender);
+  }
+
+  const run = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
+  if (!run) {
+    return errorResponse('ARENA_RUN_NOT_STARTED', 'Arena run must be started before result ingestion', 404, { arena_id: arenaId }, version);
+  }
+
+  if (run.bounty_id !== bountyId) {
+    return errorResponse('ARENA_BOUNTY_MISMATCH', 'Arena run is bound to a different bounty', 409, { arena_id: arenaId, run_bounty_id: run.bounty_id }, version);
+  }
+
+  if (
+    run.contract_id !== contract.contract_id ||
+    run.contract_hash_b64u !== contract.contract_hash_b64u ||
+    run.task_fingerprint !== contract.task_fingerprint
+  ) {
+    return errorResponse(
+      'ARENA_CONTRACT_MISMATCH',
+      'Arena result contract does not match started arena contract',
+      409,
+      {
+        arena_id: arenaId,
+        expected_contract_id: run.contract_id,
+        expected_contract_hash_b64u: run.contract_hash_b64u,
+      },
+      version,
+    );
+  }
+
+  const existingByResultKey = await getArenaRunByResultIdempotencyKey(env.BOUNTIES_DB, idempotencyKey);
+  if (existingByResultKey) {
+    if (existingByResultKey.run_id !== run.run_id) {
+      return errorResponse(
+        'IDEMPOTENCY_CONFLICT',
+        'idempotency_key already used by another arena run',
+        409,
+        { idempotency_key: idempotencyKey, run_id: existingByResultKey.run_id },
+        version,
+      );
+    }
+
+    const replayPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, existingByResultKey);
+    return jsonResponse(
+      {
+        ok: true,
+        replay: true,
+        arena: replayPayload ?? buildArenaRunSummary(existingByResultKey),
+      },
+      200,
+      version,
+    );
+  }
+
+  if (run.result_idempotency_key) {
+    return errorResponse(
+      'ARENA_RESULT_ALREADY_RECORDED',
+      'Arena result already recorded for this run',
+      409,
+      { run_id: run.run_id, result_idempotency_key: run.result_idempotency_key },
+      version,
+    );
+  }
+
+  const reportCanonical = stableStringify(report);
+  const reportHashB64u = await sha256B64uUtf8(reportCanonical);
+  const now = new Date().toISOString();
+
+  try {
+    await env.BOUNTIES_DB
+      .prepare(
+        `UPDATE bounty_arena_runs
+            SET status = 'completed',
+                contract_id = ?,
+                contract_hash_b64u = ?,
+                task_fingerprint = ?,
+                objective_profile_json = ?,
+                arena_report_json = ?,
+                winner_contender_id = ?,
+                winner_reason = ?,
+                reason_codes_json = ?,
+                tradeoffs_json = ?,
+                result_idempotency_key = ?,
+                report_hash_b64u = ?,
+                completed_at = ?,
+                updated_at = ?
+          WHERE run_id = ?`
+      )
+      .bind(
+        contract.contract_id,
+        contract.contract_hash_b64u,
+        contract.task_fingerprint,
+        stableStringify(objectiveProfile),
+        reportCanonical,
+        winnerContenderId,
+        winnerReason,
+        stableStringify(reasonCodes),
+        stableStringify(tradeoffs),
+        idempotencyKey,
+        reportHashB64u,
+        now,
+        now,
+        run.run_id,
+      )
+      .run();
+
+    await writeArenaContenderRecords(env.BOUNTIES_DB, run.run_id, contenders, now);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
+  }
+
+  const saved = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
+  if (!saved) {
+    return errorResponse('DB_WRITE_FAILED', 'Arena run could not be loaded after update', 500, undefined, version);
+  }
+
+  const payload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, saved);
+
+  return jsonResponse(
+    {
+      ok: true,
+      replay: false,
+      arena: payload ?? buildArenaRunSummary(saved),
+    },
+    201,
+    version,
+  );
+}
+
+async function handleGetBountyArena(
+  bountyId: string,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const run = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bountyId);
+  if (!run) {
+    return errorResponse('NOT_FOUND', 'Arena payload not found for bounty', 404, { bounty_id: bountyId }, version);
+  }
+
+  const payload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+  if (!payload) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Arena payload could not be rendered', 500, { run_id: run.run_id }, version);
+  }
+
+  return jsonResponse({ bounty_id: bountyId, arena: payload }, 200, version);
+}
+
+async function handleGetArena(
+  arenaId: string,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const run = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
+  if (!run) {
+    return errorResponse('NOT_FOUND', 'Arena run not found', 404, { arena_id: arenaId }, version);
+  }
+
+  const payload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+  if (!payload) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Arena payload could not be rendered', 500, { run_id: run.run_id }, version);
+  }
+
+  return jsonResponse(payload, 200, version);
+}
+
+async function handleListArena(
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 20;
+
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 100);
+  }
+
+  const runs = await listArenaRuns(env.BOUNTIES_DB, limit);
+  const arenas = runs.map((run) => buildArenaRunSummary(run));
+
+  return jsonResponse({ arenas }, 200, version);
+}
+
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
   const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   if (!bounty) {
     return errorResponse('NOT_FOUND', 'Bounty not found', 404, undefined, version);
   }
 
-  return jsonResponse(bounty, 200, version);
+  const run = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, bountyId);
+  let arena: Record<string, unknown> | null = null;
+  if (run) {
+    arena = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+  }
+
+  return jsonResponse({ ...bounty, arena }, 200, version);
 }
 
 async function handleListBountySubmissions(
@@ -10579,7 +11772,19 @@ async function handleGetSubmissionDetail(
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
   }
 
-  return jsonResponse({ submission: toSubmissionDetailView(submission, latestTest) }, 200, version);
+  const view = toSubmissionDetailView(submission, latestTest);
+
+  try {
+    const run = await getLatestArenaRunByBountyId(env.BOUNTIES_DB, submission.bounty_id);
+    if (run) {
+      view.arena = await buildArenaPayloadFromRun(env.BOUNTIES_DB, run);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  return jsonResponse({ submission: view }, 200, version);
 }
 
 async function handleGetSubmissionTrustPulse(
@@ -10703,6 +11908,46 @@ export default {
 
       if (path === '/v1/workers/self' && method === 'GET') {
         return handleGetWorkerSelf(request, env, version);
+      }
+
+      if (path === '/v1/arena' && method === 'GET') {
+        return handleListArena(url, env, version);
+      }
+
+      const arenaMatch = path.match(/^\/v1\/arena\/([^/]+)$/);
+      if (arenaMatch && method === 'GET') {
+        const arenaId = decodeURIComponent(arenaMatch[1] ?? '');
+        if (!arenaId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleGetArena(arenaId, env, version);
+      }
+
+      const bountyArenaStartMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/arena\/start$/);
+      if (bountyArenaStartMatch && method === 'POST') {
+        const bountyId = bountyArenaStartMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleStartBountyArena(bountyId, request, env, version);
+      }
+
+      const bountyArenaResultMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/arena\/result$/);
+      if (bountyArenaResultMatch && method === 'POST') {
+        const bountyId = bountyArenaResultMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleSubmitBountyArenaResult(bountyId, request, env, version);
+      }
+
+      const bountyArenaGetMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/arena$/);
+      if (bountyArenaGetMatch && method === 'GET') {
+        const bountyId = bountyArenaGetMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleGetBountyArena(bountyId, env, version);
       }
 
       const acceptMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/accept$/);

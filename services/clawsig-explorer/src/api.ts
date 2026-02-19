@@ -13,6 +13,7 @@ const FETCH_TIMEOUT_MS = 5000;
 
 interface FetchOptions {
   vaasBase: string;
+  arenaBase?: string;
   cache?: Cache;
   cacheTtl?: number;
 }
@@ -94,6 +95,19 @@ async function fetchJson<T>(
   } catch {
     return null;
   }
+}
+
+async function fetchArenaJson<T>(
+  url: string,
+  opts: FetchOptions,
+): Promise<T | null> {
+  const arenaBase = opts.arenaBase?.trim();
+  const baseOpts: FetchOptions = {
+    ...opts,
+    vaasBase: arenaBase && arenaBase.length > 0 ? arenaBase : opts.vaasBase,
+  };
+
+  return fetchJson<T>(url, baseOpts);
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -854,7 +868,7 @@ export async function fetchArenaIndex(
   winner_contender_id: string;
   reason_code: string;
 }> | null> {
-  const data = await fetchJson<ArenaIndexResponse>('/v1/arena?limit=20', {
+  const data = await fetchArenaJson<ArenaIndexResponse>('/v1/arena?limit=20', {
     ...opts,
     cacheTtl: 20,
   });
@@ -895,7 +909,7 @@ export async function fetchArenaReport(
   arenaId: string,
   opts: FetchOptions,
 ): Promise<ArenaReportView | null> {
-  const data = await fetchJson<ArenaReportResponse>(`/v1/arena/${encodeURIComponent(arenaId)}`, {
+  const data = await fetchArenaJson<ArenaReportResponse>(`/v1/arena/${encodeURIComponent(arenaId)}`, {
     ...opts,
     cacheTtl: 20,
   });

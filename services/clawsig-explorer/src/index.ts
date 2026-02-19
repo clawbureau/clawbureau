@@ -42,6 +42,7 @@ import { deriveOpsSloHealth } from './slo.js';
 export interface Env {
   ENVIRONMENT: string;
   VAAS_API_BASE: string;
+  ARENA_API_BASE?: string;
 }
 
 function json(data: unknown, status = 200): Response {
@@ -131,7 +132,11 @@ export default {
 
     // Cache API instance
     const cache = await caches.open("clawsig-explorer");
-    const apiOpts = { vaasBase: env.VAAS_API_BASE, cache };
+    const apiOpts = {
+      vaasBase: env.VAAS_API_BASE,
+      arenaBase: env.ARENA_API_BASE ?? 'https://clawbounties.com',
+      cache,
+    };
 
     // -- Health --
     if (path === "/health") {
