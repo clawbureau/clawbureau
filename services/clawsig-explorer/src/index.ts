@@ -6,6 +6,7 @@
  * - GET /run/:run_id       -> Run detail with client-side verification
  * - GET /agent/:did        -> Agent profile with run history
  * - GET /stats             -> Network statistics
+ * - GET /ops               -> Operator dashboard
  * - GET /health            -> Health check
  * - GET /robots.txt        -> Robots
  *
@@ -23,11 +24,14 @@ import {
   fetchAgentRuns,
   fetchGlobalStats,
   fetchRunsFeed,
+  fetchOpsDomainHealth,
+  fetchSyntheticWorkflowStatuses,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
 import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
+import { opsDashboardPage } from './pages/ops.js';
 
 export interface Env {
   ENVIRONMENT: string;
@@ -117,6 +121,25 @@ export default {
         return html(fallbackHomePage(), 200, 10);
       }
       return html(statsPage(data), 200, 30);
+    }
+
+    // -- Ops dashboard --
+    if (path === '/ops') {
+      const [statsData, domainHealth, syntheticStatuses] = await Promise.all([
+        fetchGlobalStats(apiOpts),
+        fetchOpsDomainHealth(),
+        fetchSyntheticWorkflowStatuses(),
+      ]);
+
+      if (!statsData) {
+        return html(fallbackHomePage(), 200, 10);
+      }
+
+      return html(opsDashboardPage({
+        stats: statsData.stats,
+        domain_health: domainHealth,
+        synthetic_statuses: syntheticStatuses,
+      }), 200, 15);
     }
 
     // -- Runs feed / triage mode --

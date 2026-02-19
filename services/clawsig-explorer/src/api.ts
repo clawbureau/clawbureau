@@ -354,6 +354,21 @@ interface VaaSStatsResponse {
     status?: unknown;
     created_at?: unknown;
   }>;
+  diagnostics_7d?: {
+    runs_7d?: unknown;
+    fail_runs_7d?: unknown;
+    fail_rate_7d?: unknown;
+    top_fail_reason_codes_7d?: Array<{
+      reason_code?: unknown;
+      count?: unknown;
+    }>;
+    daily?: Array<{
+      day?: unknown;
+      runs?: unknown;
+      fail_runs?: unknown;
+      fail_rate?: unknown;
+    }>;
+  };
 }
 
 export async function fetchGlobalStats(
@@ -410,6 +425,34 @@ export async function fetchGlobalStats(
       .slice(0, 20)
     : [];
 
+  const topFailReasonCodes7d = Array.isArray(data.diagnostics_7d?.top_fail_reason_codes_7d)
+    ? data.diagnostics_7d.top_fail_reason_codes_7d
+      .map((row) => {
+        const reasonCode = asString(row.reason_code);
+        if (!reasonCode) return null;
+        return {
+          reason_code: reasonCode,
+          count: asNumber(row.count, 0),
+        };
+      })
+      .filter((row): row is { reason_code: string; count: number } => row !== null)
+    : [];
+
+  const diagnosticsDaily = Array.isArray(data.diagnostics_7d?.daily)
+    ? data.diagnostics_7d.daily
+      .map((row) => {
+        const day = asString(row.day);
+        if (!day) return null;
+        return {
+          day,
+          runs: asNumber(row.runs, 0),
+          fail_runs: asNumber(row.fail_runs, 0),
+          fail_rate: asNumber(row.fail_rate, 0),
+        };
+      })
+      .filter((row): row is { day: string; runs: number; fail_runs: number; fail_rate: number } => row !== null)
+    : [];
+
   return {
     stats: {
       total_runs: asNumber(data.total_runs, 0),
@@ -418,7 +461,152 @@ export async function fetchGlobalStats(
       fail_runs_24h: failRuns24h,
       fail_rate_24h: failRate24h,
       top_fail_reason_codes: topFailReasonCodes,
+      diagnostics_7d: {
+        runs_7d: asNumber(data.diagnostics_7d?.runs_7d, 0),
+        fail_runs_7d: asNumber(data.diagnostics_7d?.fail_runs_7d, 0),
+        fail_rate_7d: asNumber(data.diagnostics_7d?.fail_rate_7d, 0),
+        top_fail_reason_codes_7d: topFailReasonCodes7d,
+        daily: diagnosticsDaily,
+      },
     },
     recent_runs: recentRuns,
   };
+}
+
+export interface DomainHealthProbe {
+  host: string;
+  url: string;
+  ok: boolean;
+  status: number | null;
+  latency_ms: number;
+  reason_code: string;
+}
+
+export interface SyntheticWorkflowStatus {
+  workflow: string;
+  ok: boolean | null;
+  status: string | null;
+  conclusion: string | null;
+  updated_at: string | null;
+  html_url: string | null;
+}
+
+async function probeHealth(host: string): Promise<DomainHealthProbe> {
+  const started = Date.now();
+  const url = `https://${host}/health`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+
+    clearTimeout(timer);
+
+    return {
+      host,
+      url,
+      ok: response.ok,
+      status: response.status,
+      latency_ms: Date.now() - started,
+      reason_code: response.ok ? 'OK' : 'HTTP_NON_2XX',
+    };
+  } catch {
+    return {
+      host,
+      url,
+      ok: false,
+      status: null,
+      latency_ms: Date.now() - started,
+      reason_code: 'NETWORK_ERROR',
+    };
+  }
+}
+
+interface GitHubWorkflowRunsResponse {
+  workflow_runs?: Array<{
+    status?: unknown;
+    conclusion?: unknown;
+    updated_at?: unknown;
+    html_url?: unknown;
+  }>;
+}
+
+async function fetchLatestWorkflowStatus(workflow: string): Promise<SyntheticWorkflowStatus> {
+  const url = `https://api.github.com/repos/clawbureau/clawbureau/actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=1`;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'clawsig-explorer-ops',
+      },
+    });
+
+    clearTimeout(timer);
+
+    if (!response.ok) {
+      return {
+        workflow,
+        ok: null,
+        status: null,
+        conclusion: null,
+        updated_at: null,
+        html_url: null,
+      };
+    }
+
+    const data = (await response.json()) as GitHubWorkflowRunsResponse;
+    const latest = Array.isArray(data.workflow_runs) ? data.workflow_runs[0] : null;
+
+    const status = asString(latest?.status);
+    const conclusion = asString(latest?.conclusion);
+    const updatedAt = asString(latest?.updated_at);
+    const htmlUrl = asString(latest?.html_url);
+
+    return {
+      workflow,
+      ok: conclusion === 'success',
+      status,
+      conclusion,
+      updated_at: updatedAt,
+      html_url: htmlUrl,
+    };
+  } catch {
+    return {
+      workflow,
+      ok: null,
+      status: null,
+      conclusion: null,
+      updated_at: null,
+      html_url: null,
+    };
+  }
+}
+
+export async function fetchOpsDomainHealth(): Promise<DomainHealthProbe[]> {
+  const hosts = [
+    'staging-api.clawverify.com',
+    'api.clawverify.com',
+    'staging-explorer.clawsig.com',
+    'explorer.clawsig.com',
+  ];
+
+  return Promise.all(hosts.map((host) => probeHealth(host)));
+}
+
+export async function fetchSyntheticWorkflowStatuses(): Promise<SyntheticWorkflowStatus[]> {
+  const workflows = [
+    'clawsig-surface-synthetic-smoke.yml',
+    'clawsig-canary-seed.yml',
+  ];
+
+  return Promise.all(workflows.map((workflow) => fetchLatestWorkflowStatus(workflow)));
 }

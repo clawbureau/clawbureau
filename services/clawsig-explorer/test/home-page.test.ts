@@ -12,6 +12,15 @@ const sampleData: HomePageData = {
       { reason_code: 'HASH_MISMATCH', count: 4 },
       { reason_code: 'POW_INVALID', count: 3 },
     ],
+    diagnostics_7d: {
+      runs_7d: 900,
+      fail_runs_7d: 50,
+      fail_rate_7d: 0.055,
+      top_fail_reason_codes_7d: [
+        { reason_code: 'HASH_MISMATCH', count: 20 },
+      ],
+      daily: [],
+    },
   },
   recent_runs: [
     {
@@ -39,6 +48,13 @@ const emptyData: HomePageData = {
     fail_runs_24h: 0,
     fail_rate_24h: 0,
     top_fail_reason_codes: [],
+    diagnostics_7d: {
+      runs_7d: 0,
+      fail_runs_7d: 0,
+      fail_rate_7d: 0,
+      top_fail_reason_codes_7d: [],
+      daily: [],
+    },
   },
   recent_runs: [],
 };
