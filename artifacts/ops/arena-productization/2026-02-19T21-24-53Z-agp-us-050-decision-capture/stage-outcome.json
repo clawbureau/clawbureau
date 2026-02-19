@@ -1,0 +1,224 @@
+{
+  "ok": true,
+  "replay": false,
+  "outcome": {
+    "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+    "idempotency_key": "agp-us-050-stage-override-002",
+    "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+    "arena_id": "arena_bty_5c048032_stage_050_001",
+    "contender_id": "contender_codex_pi",
+    "outcome_status": "OVERRIDDEN",
+    "accepted": false,
+    "overridden": true,
+    "rework_required": false,
+    "disputed": false,
+    "review_time_minutes": 9,
+    "time_to_accept_minutes": null,
+    "predicted_confidence": 0.8928,
+    "recommendation": "REQUEST_CHANGES",
+    "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+    "notes": "Reviewer requested stronger fallback scope lock before approval.",
+    "source": "arena-review-ui",
+    "metadata": {
+      "calibration_signal_tags": [
+        "scope-boundary",
+        "fallback-guard",
+        "reviewer-override"
+      ],
+      "decision_rationale": "Winner quality remains high, but reviewer requires explicit fallback scope exclusions.",
+      "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits."
+    },
+    "created_at": "2026-02-19T21:24:55.271Z",
+    "updated_at": "2026-02-19T21:24:55.271Z"
+  },
+  "calibration": {
+    "totals": {
+      "samples": 3,
+      "accepted": 1,
+      "overridden": 2,
+      "rework": 0,
+      "disputed": 0,
+      "review_time_avg_minutes": 13,
+      "time_to_accept_avg_minutes": 57,
+      "cost_per_accepted_bounty_usd": 0.78,
+      "override_rate": 0.6666666666666666,
+      "rework_rate": 0
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_codex_pi",
+        "samples": 3,
+        "average_predicted_confidence": 0.8927999999999999,
+        "empirical_accept_rate": 0.3333333333333333,
+        "calibration_gap": 0.5594666666666666,
+        "override_rate": 0.6666666666666666,
+        "rework_rate": 0,
+        "average_review_time_minutes": 13,
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 2,
+            "share": 0.6667,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          }
+        ],
+        "rationale_samples": 3,
+        "top_rationale_tags": [
+          {
+            "tag": "scope-boundary",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "tag": "contract-language",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "fallback-guard",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "human-checkpoint",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 0.3333
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Winner quality remains high, but reviewer requires explicit fallback scope exclusions.",
+            "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits.",
+            "tags": [
+              "scope-boundary",
+              "fallback-guard",
+              "reviewer-override"
+            ],
+            "updated_at": "2026-02-19T21:24:55.271Z"
+          },
+          {
+            "outcome_id": "aot_f14271c0-f00a-4b1f-87b0-2935c537b544",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Promote winner quality, but reviewer requires explicit out-of-scope guardrails before approval.",
+            "override_rationale": "Scope boundary language missing for fallback behavior.",
+            "tags": [
+              "scope-boundary",
+              "human-checkpoint",
+              "contract-language"
+            ],
+            "updated_at": "2026-02-19T21:23:05.035Z"
+          },
+          {
+            "outcome_id": "aot_2d481e83-d5d1-45f9-8714-cc92654b9441",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "staging seed acceptance",
+            "override_rationale": null,
+            "tags": [],
+            "updated_at": "2026-02-19T18:42:38.329Z"
+          }
+        ]
+      }
+    ],
+    "override_taxonomy": {
+      "reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 2,
+          "share": 0.6667,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+          "priority_score": 1.6
+        }
+      ]
+    },
+    "rationale_signals": {
+      "top_tags": [
+        {
+          "tag": "scope-boundary",
+          "count": 2,
+          "share": 0.6667
+        },
+        {
+          "tag": "contract-language",
+          "count": 1,
+          "share": 0.3333
+        },
+        {
+          "tag": "fallback-guard",
+          "count": 1,
+          "share": 0.3333
+        },
+        {
+          "tag": "human-checkpoint",
+          "count": 1,
+          "share": 0.3333
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 0.3333
+        }
+      ],
+      "recent_decisions": [
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Winner quality remains high, but reviewer requires explicit fallback scope exclusions.",
+          "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits.",
+          "tags": [
+            "scope-boundary",
+            "fallback-guard",
+            "reviewer-override"
+          ],
+          "updated_at": "2026-02-19T21:24:55.271Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_f14271c0-f00a-4b1f-87b0-2935c537b544",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Promote winner quality, but reviewer requires explicit out-of-scope guardrails before approval.",
+          "override_rationale": "Scope boundary language missing for fallback behavior.",
+          "tags": [
+            "scope-boundary",
+            "human-checkpoint",
+            "contract-language"
+          ],
+          "updated_at": "2026-02-19T21:23:05.035Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_2d481e83-d5d1-45f9-8714-cc92654b9441",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "staging seed acceptance",
+          "override_rationale": null,
+          "tags": [],
+          "updated_at": "2026-02-19T18:42:38.329Z"
+        }
+      ]
+    },
+    "winner_stability": [
+      {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "top_winner_contender_id": "contender_codex_pi",
+        "stability_ratio": 1,
+        "sample_runs": 3
+      }
+    ]
+  }
+}

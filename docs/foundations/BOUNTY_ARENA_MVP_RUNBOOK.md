@@ -371,6 +371,29 @@ Rollout evidence (AGP-US-049):
 - seeded runs: `arena_bty_aaaaaaaa_stage_seed_003`, `arena_bty_bbbbbbbb_prod_seed_003`
 - evidence summary: `artifacts/ops/arena-productization/2026-02-19T21-00-00Z-agp-us-049-bounty-ui-one-click/summary.json`
 
+### Reviewer decision capture + override taxonomy (AGP-US-050)
+
+`arena_review_flow` now includes `decision_capture` in submission review APIs:
+- `GET /v1/bounties/{bounty_id}/submissions`
+- `GET /v1/submissions/{submission_id}`
+
+`decision_capture` payload contracts:
+- `outcome_endpoint.payload_template` (ready-to-send body for `POST /v1/bounties/{bounty_id}/arena/outcome`)
+- `outcome_status_options` (including `requires_override_reason` flags)
+- `override_reason_options` (weight + rewrite hints from override taxonomy)
+- `calibration_bindings` (deterministic payload paths for rationale and override reason)
+
+Calibration outputs now surface rationale/taxonomy signals:
+- `override_taxonomy.reason_breakdown`
+- `rationale_signals.top_tags`
+- `rationale_signals.recent_decisions`
+
+Rollout evidence (AGP-US-050):
+- staging deploy: `clawbounties-staging` `7d0a2571-25a9-4e74-9cbb-ac212d4e47eb`
+- production deploy: `clawbounties` `77e7a2fd-cb0c-4402-b5f4-cddfe00be535`
+- seeded runs: `arena_bty_5c048032_stage_050_001`, `arena_bty_836a4e15_prod_050_001`
+- evidence summary: `artifacts/ops/arena-productization/2026-02-19T21-24-53Z-agp-us-050-decision-capture/summary.json`
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`

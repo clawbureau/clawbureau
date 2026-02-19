@@ -1,0 +1,54 @@
+{
+  "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+  "contract_id": "contract_arena_bty_5c048032_stage_050_001",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile": {
+    "name": "balanced",
+    "weights": {
+      "quality": 0.35,
+      "speed": 0.25,
+      "cost": 0.2,
+      "safety": 0.2
+    },
+    "tie_breakers": [
+      "mandatory_passed",
+      "quality_score",
+      "risk_score_low",
+      "cost_low",
+      "latency_low",
+      "contender_id"
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "id": "ac_contract_binding",
+      "description": "Delivery must mention contract binding enforcement.",
+      "required": true,
+      "rule": {
+        "type": "contains",
+        "field": "delivery_summary",
+        "needle": "contract binding"
+      }
+    },
+    {
+      "id": "ac_reason_codes",
+      "description": "Delivery must include deterministic reason codes.",
+      "required": true,
+      "rule": {
+        "type": "contains",
+        "field": "delivery_summary",
+        "needle": "reason code"
+      }
+    },
+    {
+      "id": "ac_test_coverage",
+      "description": "Delivery should mention tests.",
+      "required": false,
+      "rule": {
+        "type": "contains",
+        "field": "delivery_summary",
+        "needle": "test"
+      }
+    }
+  ]
+}
