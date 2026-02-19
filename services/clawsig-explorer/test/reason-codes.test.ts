@@ -9,6 +9,7 @@ describe('getReasonCodeExplanation', () => {
     expect(result?.reason_code).toBe('POW_REQUIRED');
     expect(result?.title.length).toBeGreaterThan(0);
     expect(result?.remediation_steps.length).toBeGreaterThan(0);
+    expect(result?.next_step_snippet.length).toBeGreaterThan(0);
   });
 
   it('returns null for unknown reason codes', () => {

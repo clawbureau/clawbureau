@@ -145,7 +145,7 @@ export function runDetailPage(run: RunData): string {
       </dl>
     </div>
 
-    ${reasonExplanationCard(reasonExplanation)}
+    ${reasonExplanationCard(reasonExplanation, run.failure_class, run.reason_code, run.run_id)}
 
     ${clientVerifyPanel(run)}
   `;
@@ -153,35 +153,92 @@ export function runDetailPage(run: RunData): string {
   return layout(meta, body);
 }
 
-function reasonExplanationCard(
-  explanation: ReturnType<typeof getReasonCodeExplanation>
-): string {
-  if (!explanation) {
-    return '';
+function failureClassTone(failureClass: string | null | undefined): {
+  label: string;
+  borderColor: string;
+  toneClass: 'pass' | 'warn' | 'fail';
+} {
+  const normalized = (failureClass ?? '').trim().toLowerCase();
+
+  if (normalized === 'upstream_unavailable') {
+    return {
+      label: 'Upstream Unavailable',
+      borderColor: 'rgba(255, 170, 0, 0.55)',
+      toneClass: 'warn',
+    };
   }
 
-  const remediationList = explanation.remediation_steps
+  if (normalized === 'upstream_malformed') {
+    return {
+      label: 'Upstream Response Malformed',
+      borderColor: 'rgba(255, 68, 68, 0.55)',
+      toneClass: 'fail',
+    };
+  }
+
+  if (normalized === 'none' || normalized.length === 0) {
+    return {
+      label: 'Verification Failure',
+      borderColor: 'rgba(255, 170, 0, 0.5)',
+      toneClass: 'warn',
+    };
+  }
+
+  return {
+    label: normalized.replace(/_/g, ' '),
+    borderColor: 'rgba(255, 170, 0, 0.5)',
+    toneClass: 'warn',
+  };
+}
+
+function reasonExplanationCard(
+  explanation: ReturnType<typeof getReasonCodeExplanation>,
+  failureClass: string | null,
+  runReasonCode: string | null,
+  runId: string,
+): string {
+  const fallbackReason = runReasonCode?.trim().toUpperCase() || 'UNKNOWN_REASON';
+
+  const card = explanation ?? {
+    reason_code: fallbackReason,
+    title: 'Unclassified Verification Failure',
+    plain_language: 'The run failed but no remediation profile is registered for this reason code yet.',
+    likely_root_cause: 'Unexpected verifier output or missing reason-code mapping in explorer triage catalog.',
+    remediation_steps: [
+      'Open the raw bundle and inspect verifier output fields manually.',
+      'Escalate this reason code to update the reason-code registry and triage mapping.',
+      'Retry once verifier contract and explorer reason mapping are aligned.',
+    ],
+    next_step_snippet: `curl -sS https://api.clawverify.com/v1/ledger/runs/${runId} | jq .`,
+  };
+
+  const remediationList = card.remediation_steps
     .map((step) => `<li>${esc(step)}</li>`)
     .join('');
 
-  const reasonFilterHref = `/runs?status=FAIL&reason_code=${encodeURIComponent(explanation.reason_code)}`;
+  const reasonFilterHref = `/runs?status=FAIL&reason_code=${encodeURIComponent(card.reason_code)}`;
+  const tone = failureClassTone(failureClass);
+  const snippetLiteral = JSON.stringify(card.next_step_snippet);
 
   return `
-    <div class="card" style="border-color: rgba(255, 170, 0, 0.5)">
+    <div class="card" style="border-color: ${tone.borderColor}">
       <p class="section-title">Failure Triage</p>
 
       <div style="display:flex; justify-content:space-between; gap:0.75rem; align-items:flex-start; flex-wrap:wrap; margin-bottom:0.65rem">
         <div>
-          <h3 style="margin-bottom:0.35rem">${esc(explanation.title)}</h3>
-          <p class="dim" style="font-size:0.875rem">${esc(explanation.plain_language)}</p>
+          <h3 style="margin-bottom:0.35rem">${esc(card.title)}</h3>
+          <p class="dim" style="font-size:0.875rem">${esc(card.plain_language)}</p>
         </div>
-        <span class="hash">${esc(explanation.reason_code)}</span>
+        <div style="display:flex; flex-direction:column; gap:0.35rem; align-items:flex-end">
+          <span class="hash">${esc(card.reason_code)}</span>
+          <span class="status-badge ${tone.toneClass}">${esc(tone.label)}</span>
+        </div>
       </div>
 
       <div style="display:grid; gap:0.75rem">
         <div style="border:1px solid var(--border); border-radius:8px; padding:0.75rem">
           <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Likely Root Cause</p>
-          <p style="margin-top:0.35rem">${esc(explanation.likely_root_cause)}</p>
+          <p style="margin-top:0.35rem">${esc(card.likely_root_cause)}</p>
         </div>
 
         <div style="border:1px solid var(--border); border-radius:8px; padding:0.75rem">
@@ -189,6 +246,12 @@ function reasonExplanationCard(
           <ol style="padding-left:1.25rem; margin-top:0.45rem; display:grid; gap:0.3rem">
             ${remediationList}
           </ol>
+        </div>
+
+        <div style="border:1px solid var(--border); border-radius:8px; padding:0.75rem">
+          <p class="dim" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.08em">Next Step Snippet</p>
+          <pre class="mono" style="margin-top:0.45rem; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:0.6rem; overflow-x:auto">${esc(card.next_step_snippet)}</pre>
+          <button class="copy-btn" style="margin-top:0.5rem" onclick="navigator.clipboard.writeText(${snippetLiteral}); this.textContent='Copied';">Copy next step</button>
         </div>
       </div>
 

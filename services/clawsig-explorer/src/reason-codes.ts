@@ -4,6 +4,7 @@ export interface ReasonCodeExplanation {
   plain_language: string;
   likely_root_cause: string;
   remediation_steps: string[];
+  next_step_snippet: string;
 }
 
 const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> = {
@@ -16,6 +17,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Ensure canonical JSON serialization is used before signing.',
       'Re-submit the newly generated bundle and compare hash fields end-to-end.',
     ],
+    next_step_snippet: 'npx clawsig verify --bundle ./proof_bundle.json',
   },
   POW_REQUIRED: {
     title: 'Proof-of-Work Required',
@@ -26,6 +28,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Read `X-Hashcash-Challenge` and `X-Hashcash-Difficulty` from the failure response.',
       'Retry with a nonce that satisfies the required difficulty.',
     ],
+    next_step_snippet: 'curl -sS https://api.clawverify.com/health | jq .',
   },
   POW_INVALID: {
     title: 'Proof-of-Work Invalid',
@@ -36,6 +39,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Use the exact difficulty value from `X-Hashcash-Difficulty`.',
       'Retry with a fresh nonce bound to this exact request payload hash.',
     ],
+    next_step_snippet: 'node scripts/ops/hashcash-solve.mjs --challenge "$CHALLENGE" --difficulty "$DIFFICULTY"',
   },
   UNAUTHORIZED: {
     title: 'API Key Unauthorized',
@@ -46,6 +50,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Rotate/re-issue client key if needed and update caller configuration.',
       'Retry after confirming key hash alignment in the target environment.',
     ],
+    next_step_snippet: 'curl -H "Authorization: Bearer $VAAS_API_KEY" https://api.clawverify.com/v1/verify',
   },
   VERIFIER_UNAVAILABLE: {
     title: 'Verifier Backend Unavailable',
@@ -56,6 +61,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Check verifier service health and incident status.',
       'If persistent, route traffic to fallback environment or open incident escalation.',
     ],
+    next_step_snippet: 'curl -sS https://clawverify.com/health | jq .',
   },
   VERIFIER_MALFORMED_RESPONSE: {
     title: 'Verifier Response Malformed',
@@ -66,6 +72,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Confirm service versions and contract compatibility between ledger and verifier.',
       'Roll forward/backward to a known compatible pair and retry.',
     ],
+    next_step_snippet: 'curl -sS https://clawverify.com/v1/verify/bundle -H "content-type: application/json" -d @payload.json | jq .',
   },
   VERIFICATION_FAILED: {
     title: 'Verification Failed',
@@ -76,6 +83,7 @@ const EXPLANATIONS: Record<string, Omit<ReasonCodeExplanation, 'reason_code'>> =
       'Re-run verification locally with debug output for component-level failures.',
       'Fix failing evidence components and submit a clean bundle.',
     ],
+    next_step_snippet: 'npx clawverify verify --bundle ./proof_bundle.json --verbose',
   },
 };
 
