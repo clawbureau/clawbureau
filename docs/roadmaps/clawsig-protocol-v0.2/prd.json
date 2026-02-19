@@ -1,7 +1,7 @@
 {
   "name": "clawsig-protocol-v0.2",
   "project": "clawbureau",
-  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-027.",
+  "description": "Clawsig Protocol v0.2 roadmap. All CPL-V2-001..005 stories are shipped on main, with causal hardening shipped through CAV-US-029.",
   "branchName": "feat/protocol/clawsig-v0.2",
   "userStories": [
     {
@@ -419,11 +419,37 @@
       "priority": 32,
       "passes": true,
       "notes": "Shipped via PR #330 (merge b61f79338aa263efe17c63e7f54ca1a6c5ca2598): signed parity/stability evidence and fail-closed release contract expansion."
+    },
+    {
+      "id": "CAV-US-028",
+      "title": "Roadmap sync through CAV-US-027 + trigger hardening",
+      "description": "Sync roadmap truth through CAV-US-027 and broaden cav-roadmap-sync trigger coverage for causal/release guardrail deltas.",
+      "acceptanceCriteria": [
+        "README/prd/progress include CAV-US-027 shipped evidence with PR + merge commit",
+        "Roadmap status windows declare through CAV-US-027 or newer with no stale-window failures",
+        "cav-roadmap-sync workflow trigger coverage includes release scripts/workflows and causal guardrail path deltas"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": "Shipped via PR #331 (merge 326715848170624e85dd721bc14ef451da18df24): roadmap sync through CAV-US-027 with trigger hardening."
+    },
+    {
+      "id": "CAV-US-029",
+      "title": "Service/core causal reason-code parity contract",
+      "description": "Add static parity checks that fixture-derived causal INVALID reason codes are represented in both service and core VerificationErrorCode surfaces.",
+      "acceptanceCriteria": [
+        "Static checker emits deterministic parity summary artifact for fixture-derived causal reason codes",
+        "Checker validates all expected causal fixture error codes exist in service and core types",
+        "Service-core parity pipeline and required workflow fail closed on parity contract drift"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": "Shipped via PR #332 (merge c34eabf45d2eb134937779062d1746bfbbf3e5bd): service/core causal reason-code parity checker + workflow + pipeline integration."
     }
   ],
   "metadata": {
-    "updatedAt": "2026-02-18T23:58:00.000Z",
-    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-027 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
+    "updatedAt": "2026-02-19T01:10:00.000Z",
+    "status": "shipped v0.2 core + causal-attribution hardening through CAV-US-029 (schema/verifier/runtime/conformance/guardrails/release-evidence)",
     "references": [
       {
         "pr": "#281",
@@ -524,6 +550,14 @@
       {
         "pr": "#330",
         "merge_commit": "b61f79338aa263efe17c63e7f54ca1a6c5ca2598"
+      },
+      {
+        "pr": "#331",
+        "merge_commit": "326715848170624e85dd721bc14ef451da18df24"
+      },
+      {
+        "pr": "#332",
+        "merge_commit": "c34eabf45d2eb134937779062d1746bfbbf3e5bd"
       }
     ]
   }

@@ -11,10 +11,12 @@
  * - burn-in summary signature exists and verifies unless --require-signed=false
  * - signed burn-in summary hash + message binding matches summary bytes
  *
- * Additional parity contract (CAV-US-027):
- * - service-core parity summary exists and is fresh + ok=true
- * - reason-code stability summary exists and is fresh + ok=true
- * - both summaries are signed and signatures verify unless explicitly disabled
+ * Additional causal evidence contract:
+ * - service-core parity summary exists, is fresh, and ok=true
+ * - reason-code stability summary exists, is fresh, and ok=true
+ * - fixture-contract summary exists, is fresh, and ok=true
+ * - cross-runtime determinism summary exists, is fresh, and ok=true
+ * - each auxiliary summary is signed + verified unless explicitly disabled
  */
 
 import fs from 'node:fs';
@@ -27,6 +29,8 @@ const ROOT = path.resolve(__dirname, '../..');
 const BURNIN_MESSAGE_PREFIX = 'causal-integrity-evidence';
 const PARITY_MESSAGE_PREFIX = 'causal-service-core-parity-evidence';
 const STABILITY_MESSAGE_PREFIX = 'causal-reason-code-stability-evidence';
+const FIXTURE_CONTRACT_MESSAGE_PREFIX = 'causal-fixture-contract-evidence';
+const CROSS_RUNTIME_MESSAGE_PREFIX = 'causal-cross-runtime-determinism-evidence';
 
 const REQUIRED_STEP_IDS = [
   'reason-code-parity',
@@ -67,20 +71,42 @@ function parseArgs(argv) {
   return {
     summary: getValue('--summary') ?? getValueEq('--summary') ?? null,
     signature: getValue('--signature') ?? getValueEq('--signature') ?? null,
+
     paritySummary:
       getValue('--parity-summary') ?? getValueEq('--parity-summary') ?? null,
     paritySignature:
       getValue('--parity-signature') ?? getValueEq('--parity-signature') ?? null,
+
     stabilitySummary:
       getValue('--stability-summary') ?? getValueEq('--stability-summary') ?? null,
     stabilitySignature:
       getValue('--stability-signature') ?? getValueEq('--stability-signature') ?? null,
+
+    fixtureContractSummary:
+      getValue('--fixture-contract-summary') ??
+      getValueEq('--fixture-contract-summary') ??
+      null,
+    fixtureContractSignature:
+      getValue('--fixture-contract-signature') ??
+      getValueEq('--fixture-contract-signature') ??
+      null,
+
+    crossRuntimeSummary:
+      getValue('--cross-runtime-summary') ??
+      getValueEq('--cross-runtime-summary') ??
+      null,
+    crossRuntimeSignature:
+      getValue('--cross-runtime-signature') ??
+      getValueEq('--cross-runtime-signature') ??
+      null,
+
     requireMode:
       getValue('--require-mode') ?? getValueEq('--require-mode') ?? 'quick',
     requireMutationSubset:
       getValue('--require-mutation-subset') ??
       getValueEq('--require-mutation-subset') ??
       'quick',
+
     requireSigned: parseBoolean(
       getValue('--require-signed') ?? getValueEq('--require-signed'),
       true
@@ -95,6 +121,17 @@ function parseArgs(argv) {
         getValueEq('--require-signed-stability'),
       true
     ),
+    requireSignedFixtureContract: parseBoolean(
+      getValue('--require-signed-fixture-contract') ??
+        getValueEq('--require-signed-fixture-contract'),
+      true
+    ),
+    requireSignedCrossRuntime: parseBoolean(
+      getValue('--require-signed-cross-runtime') ??
+        getValueEq('--require-signed-cross-runtime'),
+      true
+    ),
+
     maxAgeMinutes:
       maxAgeRaw !== undefined && Number.isFinite(Number(maxAgeRaw))
         ? Number(maxAgeRaw)
@@ -455,6 +492,20 @@ function validateSummaryFreshness(summaryPath, maxAgeMinutes) {
   };
 }
 
+function hasPositiveSuiteCount(summary) {
+  const counts = [
+    summary?.suite_count_executed,
+    summary?.suite_count,
+    Array.isArray(summary?.suites) ? summary.suites.length : null,
+    Array.isArray(summary?.suite_comparisons)
+      ? summary.suite_comparisons.length
+      : null,
+  ].filter((value) => typeof value === 'number');
+
+  if (counts.length === 0) return false;
+  return counts.some((value) => value > 0);
+}
+
 async function validateBurnInSummary(summaryPath, opts) {
   const issues = [];
   const summary = readJson(summaryPath);
@@ -556,17 +607,12 @@ async function validateAuxSummary({
     issues.push(`summary.ok must be true (got ${String(summary.ok)})`);
   }
 
-  if (!Array.isArray(summary.suites)) {
-    issues.push('summary.suites must be an array');
+  if (!Array.isArray(summary.suites) && !Array.isArray(summary.suite_comparisons)) {
+    issues.push('summary must include suites[] or suite_comparisons[] evidence rows');
   }
 
-  if (
-    typeof summary.suite_count_executed === 'number' &&
-    summary.suite_count_executed <= 0
-  ) {
-    issues.push(
-      `summary.suite_count_executed must be > 0 (got ${summary.suite_count_executed})`
-    );
+  if (!hasPositiveSuiteCount(summary)) {
+    issues.push('summary must include a positive suite count');
   }
 
   const signatureValidation = await validateSignatureContract({
@@ -603,6 +649,12 @@ async function run() {
   const stabilitySummaryPath =
     opts.stabilitySummary ??
     findLatestSummaryPath('artifacts/ops/causal-reason-code-stability');
+  const fixtureContractSummaryPath =
+    opts.fixtureContractSummary ??
+    findLatestSummaryPath('artifacts/ops/causal-fixture-contract');
+  const crossRuntimeSummaryPath =
+    opts.crossRuntimeSummary ??
+    findLatestSummaryPath('artifacts/ops/causal-cross-runtime-determinism');
 
   const issues = [];
 
@@ -624,9 +676,23 @@ async function run() {
     );
   }
 
+  if (!fixtureContractSummaryPath) {
+    issues.push(
+      'fixture_contract: no causal fixture-contract summary found. Pass --fixture-contract-summary <path> or generate artifacts/ops/causal-fixture-contract/<timestamp>/summary.json'
+    );
+  }
+
+  if (!crossRuntimeSummaryPath) {
+    issues.push(
+      'cross_runtime: no causal cross-runtime summary found. Pass --cross-runtime-summary <path> or generate artifacts/ops/causal-cross-runtime-determinism/<timestamp>/summary.json'
+    );
+  }
+
   let burninValidation = null;
   let parityValidation = null;
   let stabilityValidation = null;
+  let fixtureContractValidation = null;
+  let crossRuntimeValidation = null;
 
   if (burninSummaryPath) {
     burninValidation = await validateBurnInSummary(burninSummaryPath, opts);
@@ -659,6 +725,35 @@ async function run() {
       signingHint: 'scripts/release/sign-causal-parity-evidence-pack.mjs',
     });
     issues.push(...prefixIssues('stability', stabilityValidation.issues));
+  }
+
+  if (fixtureContractSummaryPath) {
+    const fixtureContractSignaturePath =
+      opts.fixtureContractSignature ??
+      defaultSignaturePath(fixtureContractSummaryPath);
+    fixtureContractValidation = await validateAuxSummary({
+      summaryPath: fixtureContractSummaryPath,
+      signaturePath: fixtureContractSignaturePath,
+      maxAgeMinutes: opts.maxAgeMinutes,
+      requireSigned: opts.requireSignedFixtureContract,
+      expectedMessagePrefix: FIXTURE_CONTRACT_MESSAGE_PREFIX,
+      signingHint: 'scripts/release/sign-causal-parity-evidence-pack.mjs',
+    });
+    issues.push(...prefixIssues('fixture_contract', fixtureContractValidation.issues));
+  }
+
+  if (crossRuntimeSummaryPath) {
+    const crossRuntimeSignaturePath =
+      opts.crossRuntimeSignature ?? defaultSignaturePath(crossRuntimeSummaryPath);
+    crossRuntimeValidation = await validateAuxSummary({
+      summaryPath: crossRuntimeSummaryPath,
+      signaturePath: crossRuntimeSignaturePath,
+      maxAgeMinutes: opts.maxAgeMinutes,
+      requireSigned: opts.requireSignedCrossRuntime,
+      expectedMessagePrefix: CROSS_RUNTIME_MESSAGE_PREFIX,
+      signingHint: 'scripts/release/sign-causal-parity-evidence-pack.mjs',
+    });
+    issues.push(...prefixIssues('cross_runtime', crossRuntimeValidation.issues));
   }
 
   const result = {
@@ -700,6 +795,32 @@ async function run() {
       : null,
     require_signed_stability: opts.requireSignedStability,
 
+    fixture_contract_summary_path: fixtureContractSummaryPath,
+    fixture_contract_signature_path:
+      fixtureContractValidation?.signature.signature_path ?? null,
+    fixture_contract_signature_present:
+      fixtureContractValidation?.signature.signature_present ?? false,
+    fixture_contract_signature_ok: fixtureContractValidation?.signature.ok ?? false,
+    fixture_contract_signing_mode:
+      fixtureContractValidation?.signature.signing_mode,
+    fixture_contract_signer_did: fixtureContractValidation?.signature.signer_did,
+    fixture_contract_summary_age_minutes: fixtureContractValidation
+      ? Number(fixtureContractValidation.age_minutes.toFixed(2))
+      : null,
+    require_signed_fixture_contract: opts.requireSignedFixtureContract,
+
+    cross_runtime_summary_path: crossRuntimeSummaryPath,
+    cross_runtime_signature_path: crossRuntimeValidation?.signature.signature_path ?? null,
+    cross_runtime_signature_present:
+      crossRuntimeValidation?.signature.signature_present ?? false,
+    cross_runtime_signature_ok: crossRuntimeValidation?.signature.ok ?? false,
+    cross_runtime_signing_mode: crossRuntimeValidation?.signature.signing_mode,
+    cross_runtime_signer_did: crossRuntimeValidation?.signature.signer_did,
+    cross_runtime_summary_age_minutes: crossRuntimeValidation
+      ? Number(crossRuntimeValidation.age_minutes.toFixed(2))
+      : null,
+    require_signed_cross_runtime: opts.requireSignedCrossRuntime,
+
     issues,
   };
 
@@ -719,6 +840,10 @@ run().catch((error) => {
     parity_signature_path: null,
     stability_summary_path: null,
     stability_signature_path: null,
+    fixture_contract_summary_path: null,
+    fixture_contract_signature_path: null,
+    cross_runtime_summary_path: null,
+    cross_runtime_signature_path: null,
     issues: [error instanceof Error ? error.message : String(error)],
   };
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

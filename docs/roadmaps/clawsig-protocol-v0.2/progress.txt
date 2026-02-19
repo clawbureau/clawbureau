@@ -765,3 +765,48 @@ Deliverables:
 
 Validation:
 - `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+
+---
+
+2026-02-18 — CAV-US-028 roadmap sync through CAV-US-027 closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-028 on `main`.
+
+Shipped merge references:
+- CAV-US-028 — PR #331 (`32671584`)
+
+Deliverables:
+- Truth-sync updates through CAV-US-027:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+- Trigger hardening:
+  - `.github/workflows/cav-roadmap-sync.yml`
+  - expanded to cover broader release scripts/workflows and causal guardrail deltas.
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
+
+---
+
+2026-02-19 — CAV-US-029 service/core causal reason-code parity contract closeout
+
+Roadmap/tracker/docs now align with shipped causal tranche through CAV-US-029 on `main`.
+
+Shipped merge references:
+- CAV-US-029 — PR #332 (`c34eabf4`)
+
+Deliverables:
+- Static parity checker:
+  - `scripts/protocol/check-service-core-causal-reason-code-parity.mjs`
+- Parity pipeline integration:
+  - `scripts/protocol/run-clawverify-service-core-causal-parity.mjs`
+- Required workflow:
+  - `.github/workflows/clawverify-service-core-causal-reason-code-parity.yml`
+- Truth-sync updates:
+  - `docs/roadmaps/clawsig-protocol-v0.2/README.md`
+  - `docs/roadmaps/clawsig-protocol-v0.2/prd.json`
+  - `docs/roadmaps/clawsig-protocol-v0.2/progress.txt`
+
+Validation:
+- `node scripts/docs/check-cav-roadmap-sync.mjs` ✅
