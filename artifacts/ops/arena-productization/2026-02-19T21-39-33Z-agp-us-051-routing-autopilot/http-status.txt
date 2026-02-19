@@ -1,0 +1,4 @@
+autopilot-prod-armA.headers 404
+autopilot-prod-armB.headers 200
+autopilot-stage-armA.headers 404
+autopilot-stage-armB.headers 200

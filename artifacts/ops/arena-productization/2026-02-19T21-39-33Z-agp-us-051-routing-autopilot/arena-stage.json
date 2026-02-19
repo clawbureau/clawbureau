@@ -1,0 +1,714 @@
+{
+  "run_id": "arn_1b5cd33a-7400-42b3-899b-e25f9c33ce8d",
+  "arena_id": "arena_bty_5c048032_stage_050_001",
+  "status": "completed",
+  "generated_at": "2026-02-19T21:24:17.938Z",
+  "contract": {
+    "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+    "contract_id": "contract_arena_bty_5c048032_stage_050_001",
+    "contract_hash_b64u": "FjQDEyOTEPCzxvTlvBzIMkeiACXmY4YaezQLonchixA",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "objective_profile": {
+    "name": "balanced",
+    "tie_breakers": [
+      "mandatory_passed",
+      "quality_score",
+      "risk_score_low",
+      "cost_low",
+      "latency_low",
+      "contender_id"
+    ],
+    "weights": {
+      "cost": 0.2,
+      "quality": 0.35,
+      "safety": 0.2,
+      "speed": 0.25
+    }
+  },
+  "registry": {
+    "registry_version": "2026-02-19",
+    "objective_profile_name": "balanced"
+  },
+  "experiment": {
+    "experiment_id": "exp_api_hardening_ab_v1",
+    "arm": "B"
+  },
+  "score_explain": {
+    "contender_breakdown": [
+      {
+        "contender_id": "contender_codex_pi",
+        "evidence_links": [
+          {
+            "label": "Arena execution trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+          },
+          {
+            "label": "PR #366 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+          },
+          {
+            "label": "Test run summary",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+          },
+          {
+            "label": "Typecheck log",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+          },
+          {
+            "label": "Usage ledger",
+            "source": "cost",
+            "url": "https://docs.clawsig.com/quickstart"
+          }
+        ],
+        "final_score": 89.275,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "evidence_links": [
+          {
+            "label": "CI run",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "PR #370 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370/files"
+          },
+          {
+            "label": "Protocol check",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188096436/job/64167593939"
+          },
+          {
+            "label": "Swarm trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "Usage estimate",
+            "source": "cost",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370"
+          }
+        ],
+        "final_score": 66.7645,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED",
+          "ARENA_EVIDENCE_LINT_FAILED",
+          "ARENA_EVIDENCE_RETRY_HEAVY",
+          "ARENA_EVIDENCE_MANUAL_INTERVENTION",
+          "ARENA_EVIDENCE_HIGH_CHURN",
+          "ARENA_MANDATORY_CHECK_FAILED"
+        ]
+      }
+    ],
+    "formula": {
+      "components": [
+        "quality/risk/efficiency are derived from CI + git + execution traces",
+        "speed is normalized from latency_ms",
+        "cost is normalized from cost_usd",
+        "safety is normalized from risk_score"
+      ],
+      "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+    },
+    "weights": {
+      "cost": 0.2,
+      "quality": 0.35,
+      "safety": 0.2,
+      "speed": 0.25
+    }
+  },
+  "contenders": [
+    {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "tools": [
+        "bash",
+        "edit",
+        "read",
+        "wrangler"
+      ],
+      "skills": [
+        "cloudflare",
+        "wrangler"
+      ],
+      "plugins": [
+        "did-work"
+      ],
+      "version_pin": "codex-pi-2026-02-19.1",
+      "prompt_template": "arena/codex-pi/api-hardening.v3",
+      "experiment_arm": "B",
+      "score": 89.275,
+      "hard_gate_pass": true,
+      "mandatory_failed": 0,
+      "metrics": {
+        "quality_score": 98.41,
+        "risk_score": 18.58,
+        "efficiency_score": 70.1,
+        "latency_ms": 16000,
+        "cost_usd": 0.78,
+        "autonomy_score": 94.5
+      },
+      "check_results": [
+        {
+          "criterion_id": "ac_contract_binding",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_reason_codes",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_test_coverage",
+          "required": false,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        }
+      ],
+      "score_explain": {
+        "final_score": 89.275,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ],
+        "evidence_links": [
+          {
+            "label": "Arena execution trace",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224",
+            "source": "execution"
+          },
+          {
+            "label": "PR #366 diff",
+            "url": "https://github.com/clawbureau/clawbureau/pull/366/files",
+            "source": "git"
+          },
+          {
+            "label": "Test run summary",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467",
+            "source": "ci"
+          },
+          {
+            "label": "Typecheck log",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956",
+            "source": "ci"
+          },
+          {
+            "label": "Usage ledger",
+            "url": "https://docs.clawsig.com/quickstart",
+            "source": "cost"
+          }
+        ]
+      },
+      "insights": {
+        "bottlenecks": [
+          "slower due to larger test matrix"
+        ],
+        "contract_improvements": [
+          "clarify schema version lock in contract text"
+        ],
+        "next_delegation_hints": [
+          "use for high-risk API hardening bounties"
+        ]
+      },
+      "review_paste": "Decision Summary: APPROVE (89.3% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=98.41, risk=18.58, efficiency=70.10, cost=$0.7800, latency=16000ms\nScore Explain: final=89.2750 | weighted=89.2750 | penalty=0.0000\nEvidence: Arena execution trace: https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224 | PR: https://github.com/clawbureau/clawbureau/pull/366 | PR #366 diff: https://github.com/clawbureau/clawbureau/pull/366/files | Runbook: https://docs.clawsig.com/quickstart | Test run summary: https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467 | Typecheck log: https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956 | Usage ledger: https://docs.clawsig.com/quickstart\nRecommendation: use for high-risk API hardening bounties",
+      "manager_review_json": {
+        "arena_id": "arena_bty_5c048032_stage_050_001",
+        "confidence": 0.8928,
+        "contender_id": "contender_codex_pi",
+        "decision": "promote",
+        "failed_checks": [],
+        "metrics": {
+          "autonomy_score": 94.5,
+          "cost_usd": 0.78,
+          "efficiency_score": 70.1,
+          "latency_ms": 16000,
+          "quality_score": 98.41,
+          "risk_score": 18.58
+        },
+        "reason_codes": [
+          "ARENA_READY_TO_PROMOTE"
+        ],
+        "recommended_next_action": "Promote as default contender for this task fingerprint.",
+        "schema_version": "manager_review.v1"
+      }
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "tools": [
+        "bash",
+        "edit",
+        "parallel",
+        "read"
+      ],
+      "skills": [
+        "deep-think-swarm",
+        "swarm-orchestrator"
+      ],
+      "plugins": [
+        "artifact-tracer",
+        "did-work"
+      ],
+      "version_pin": "gemini-swarm-2026-02-19.1",
+      "prompt_template": "arena/gemini-swarm/broad-explore.v2",
+      "experiment_arm": "B",
+      "score": 66.7645,
+      "hard_gate_pass": false,
+      "mandatory_failed": 2,
+      "metrics": {
+        "quality_score": 56.25,
+        "risk_score": 60.39,
+        "efficiency_score": 35.98,
+        "latency_ms": 22100,
+        "cost_usd": 0.31,
+        "autonomy_score": 34
+      },
+      "check_results": [
+        {
+          "criterion_id": "ac_contract_binding",
+          "required": true,
+          "status": "FAIL",
+          "reason_code": "ARENA_ACCEPTANCE_CRITERION_FAILED"
+        },
+        {
+          "criterion_id": "ac_reason_codes",
+          "required": true,
+          "status": "FAIL",
+          "reason_code": "ARENA_ACCEPTANCE_CRITERION_FAILED"
+        },
+        {
+          "criterion_id": "ac_test_coverage",
+          "required": false,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        }
+      ],
+      "score_explain": {
+        "final_score": 66.7645,
+        "reason_codes": [
+          "ARENA_EVIDENCE_HIGH_CHURN",
+          "ARENA_EVIDENCE_LINT_FAILED",
+          "ARENA_EVIDENCE_MANUAL_INTERVENTION",
+          "ARENA_EVIDENCE_RETRY_HEAVY",
+          "ARENA_MANDATORY_CHECK_FAILED",
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ],
+        "evidence_links": [
+          {
+            "label": "CI run",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977",
+            "source": "ci"
+          },
+          {
+            "label": "PR #370 diff",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370/files",
+            "source": "git"
+          },
+          {
+            "label": "Protocol check",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188096436/job/64167593939",
+            "source": "ci"
+          },
+          {
+            "label": "Swarm trace",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977",
+            "source": "execution"
+          },
+          {
+            "label": "Usage estimate",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370",
+            "source": "cost"
+          }
+        ]
+      },
+      "insights": {
+        "bottlenecks": [
+          "weak compliance on mandatory contract language"
+        ],
+        "contract_improvements": [
+          "add explicit fail-closed requirement examples"
+        ],
+        "next_delegation_hints": [
+          "pair with strict verifier contender for production work"
+        ]
+      },
+      "review_paste": "Decision Summary: REJECT (66.8% confidence)\nContract Compliance: FAIL (0 mandatory passed, 2 mandatory failed)\nDelivery/Risk: quality=56.25, risk=60.39, efficiency=35.98, cost=$0.3100, latency=22100ms\nScore Explain: final=66.7645 | weighted=66.7645 | penalty=0.0000\nEvidence: CI run: https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977 | PR #370 diff: https://github.com/clawbureau/clawbureau/pull/370/files | Protocol check: https://github.com/clawbureau/clawbureau/actions/runs/22188096436/job/64167593939 | Spec: https://github.com/clawbureau/clawbureau/blob/main/docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md | Swarm trace: https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977 | Usage estimate: https://github.com/clawbureau/clawbureau/pull/370\nRecommendation: pair with strict verifier contender for production work",
+      "manager_review_json": {
+        "arena_id": "arena_bty_5c048032_stage_050_001",
+        "confidence": 0.3176,
+        "contender_id": "contender_gemini_swarm",
+        "decision": "reject",
+        "failed_checks": [
+          {
+            "criterion_id": "ac_contract_binding",
+            "reason_code": "ARENA_ACCEPTANCE_CRITERION_FAILED",
+            "required": true
+          },
+          {
+            "criterion_id": "ac_reason_codes",
+            "reason_code": "ARENA_ACCEPTANCE_CRITERION_FAILED",
+            "required": true
+          }
+        ],
+        "metrics": {
+          "autonomy_score": 34,
+          "cost_usd": 0.31,
+          "efficiency_score": 35.98,
+          "latency_ms": 22100,
+          "quality_score": 56.25,
+          "risk_score": 60.39
+        },
+        "reason_codes": [
+          "ARENA_MANDATORY_CHECK_FAILED",
+          "ARENA_RISK_ABOVE_THRESHOLD"
+        ],
+        "recommended_next_action": "Reject contender and request contract/evidence correction.",
+        "schema_version": "manager_review.v1"
+      }
+    }
+  ],
+  "winner": {
+    "contender_id": "contender_codex_pi",
+    "reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750)."
+  },
+  "tradeoffs": [
+    "contender_codex_pi wins quality/safety but costs more than contender_gemini_swarm."
+  ],
+  "reason_codes": [
+    "ARENA_WINNER_SELECTED",
+    "ARENA_HARD_GATES_PASSED"
+  ],
+  "delegation_insights": {
+    "winner_hints": [
+      "use for high-risk API hardening bounties"
+    ],
+    "winner_bottlenecks": [
+      "slower due to larger test matrix"
+    ],
+    "bottlenecks": [
+      "slower due to larger test matrix",
+      "weak compliance on mandatory contract language"
+    ],
+    "contract_improvements": [
+      "clarify schema version lock in contract text",
+      "add explicit fail-closed requirement examples"
+    ],
+    "next_delegation_hints": [
+      "use for high-risk API hardening bounties",
+      "pair with strict verifier contender for production work"
+    ],
+    "manager_routing": {
+      "default_contender_id": "contender_codex_pi",
+      "backup_contenders": []
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_codex_pi",
+        "score": 89.275,
+        "hard_gate_pass": true,
+        "mandatory_failed": 0,
+        "next_delegation_hints": [
+          "use for high-risk API hardening bounties"
+        ],
+        "bottlenecks": [
+          "slower due to larger test matrix"
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "score": 66.7645,
+        "hard_gate_pass": false,
+        "mandatory_failed": 2,
+        "next_delegation_hints": [
+          "pair with strict verifier contender for production work"
+        ],
+        "bottlenecks": [
+          "weak compliance on mandatory contract language"
+        ]
+      }
+    ]
+  },
+  "review_thread": [
+    {
+      "thread_entry_id": "ath_685fc2e6-4e92-4b6f-80f6-b9e52c3d86f4",
+      "idempotency_key": "arena-thread-auto:0TWBAHo_jqp79Td2GN5d_9HyupSfofqZOoUV7z1fync",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_050_001",
+      "contender_id": "contender_codex_pi",
+      "recommendation": "APPROVE",
+      "confidence": 0.8928,
+      "body_markdown": "## Arena Auto Decision — Codex + Pi + cloudflare skill (contender_codex_pi)\n\nRecommendation: **APPROVE**\nConfidence: **89.3%**\nManager decision: `promote`\nHard-gate pass: **yes**\nMetrics: quality=98.41, risk=18.58, efficiency=70.10, cost=$0.7800, latency=16000ms\n\n### Reason codes\n- `ARENA_READY_TO_PROMOTE`\n\nNext action: Promote as default contender for this task fingerprint.\n\n---\n\nDecision Summary: APPROVE (89.3% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=98.41, risk=18.58, efficiency=70.10, cost=$0.7800, latency=16000ms\nScore Explain: final=89.2750 | weighted=89.2750 | penalty=0.0000\nEvidence: Arena execution trace: https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224 | PR: https://github.com/clawbureau/clawbureau/pull/366 | PR #366 diff: https://github.com/clawbureau/clawbureau/pull/366/files | Runbook: https://docs.clawsig.com/quickstart | Test run summary: https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467 | Typecheck log: https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956 | Usage ledger: https://docs.clawsig.com/quickstart\nRecommendation: use for high-risk API hardening bounties",
+      "links": [
+        {
+          "label": "Arena execution trace",
+          "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+        },
+        {
+          "label": "PR #366 diff",
+          "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+        },
+        {
+          "label": "Test run summary",
+          "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+        },
+        {
+          "label": "Typecheck log",
+          "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+        },
+        {
+          "label": "Usage ledger",
+          "url": "https://docs.clawsig.com/quickstart"
+        },
+        {
+          "label": "Review paste",
+          "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_050_001?contender=contender_codex_pi#review-paste-contender_codex_pi"
+        },
+        {
+          "label": "Manager review",
+          "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_050_001?contender=contender_codex_pi#manager-review-contender_codex_pi"
+        }
+      ],
+      "source": "arena-result-autopost",
+      "metadata": {
+        "auto_posted": true,
+        "evidence_links": [
+          {
+            "label": "Arena execution trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+          },
+          {
+            "label": "PR #366 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+          },
+          {
+            "label": "Test run summary",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+          },
+          {
+            "label": "Typecheck log",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+          },
+          {
+            "label": "Usage ledger",
+            "source": "cost",
+            "url": "https://docs.clawsig.com/quickstart"
+          }
+        ],
+        "manager_decision": "promote",
+        "reason_codes": [
+          "ARENA_READY_TO_PROMOTE"
+        ],
+        "review_links": [
+          {
+            "label": "Review paste",
+            "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_050_001?contender=contender_codex_pi#review-paste-contender_codex_pi"
+          },
+          {
+            "label": "Manager review",
+            "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_050_001?contender=contender_codex_pi#manager-review-contender_codex_pi"
+          }
+        ]
+      },
+      "created_at": "2026-02-19T21:24:18.484Z",
+      "updated_at": "2026-02-19T21:24:18.484Z"
+    }
+  ],
+  "outcomes": [
+    {
+      "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+      "idempotency_key": "agp-us-050-stage-override-002",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_050_001",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 9,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.8928,
+      "recommendation": "REQUEST_CHANGES",
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "notes": "Reviewer requested stronger fallback scope lock before approval.",
+      "source": "arena-review-ui",
+      "metadata": {
+        "calibration_signal_tags": [
+          "scope-boundary",
+          "fallback-guard",
+          "reviewer-override"
+        ],
+        "decision_rationale": "Winner quality remains high, but reviewer requires explicit fallback scope exclusions.",
+        "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits."
+      },
+      "created_at": "2026-02-19T21:24:55.271Z",
+      "updated_at": "2026-02-19T21:24:55.271Z"
+    }
+  ],
+  "calibration": {
+    "totals": {
+      "samples": 1,
+      "accepted": 0,
+      "overridden": 1,
+      "rework": 0,
+      "disputed": 0,
+      "review_time_avg_minutes": 9,
+      "time_to_accept_avg_minutes": 0,
+      "cost_per_accepted_bounty_usd": 0,
+      "override_rate": 1,
+      "rework_rate": 0
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_codex_pi",
+        "samples": 1,
+        "average_predicted_confidence": 0.8928,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.8928,
+        "override_rate": 1,
+        "rework_rate": 0,
+        "average_review_time_minutes": 9,
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 1,
+            "share": 1,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          }
+        ],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "fallback-guard",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "scope-boundary",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Winner quality remains high, but reviewer requires explicit fallback scope exclusions.",
+            "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits.",
+            "tags": [
+              "scope-boundary",
+              "fallback-guard",
+              "reviewer-override"
+            ],
+            "updated_at": "2026-02-19T21:24:55.271Z"
+          }
+        ]
+      }
+    ],
+    "override_taxonomy": {
+      "reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 1,
+          "share": 1,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+          "priority_score": 0.8
+        }
+      ]
+    },
+    "rationale_signals": {
+      "top_tags": [
+        {
+          "tag": "fallback-guard",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "tag": "scope-boundary",
+          "count": 1,
+          "share": 1
+        }
+      ],
+      "recent_decisions": [
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Winner quality remains high, but reviewer requires explicit fallback scope exclusions.",
+          "override_rationale": "Contract lacked strict out-of-scope behavior for fallback edits.",
+          "tags": [
+            "scope-boundary",
+            "fallback-guard",
+            "reviewer-override"
+          ],
+          "updated_at": "2026-02-19T21:24:55.271Z"
+        }
+      ]
+    },
+    "winner_stability": [
+      {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "top_winner_contender_id": "contender_codex_pi",
+        "stability_ratio": 1,
+        "sample_runs": 1
+      }
+    ]
+  },
+  "autopilot": {
+    "schema_version": "arena_autopilot_preview.v1",
+    "status": "manual_review_required",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "default_contender_id": "contender_codex_pi",
+    "backup_contenders": [],
+    "guardrails": {
+      "max_override_rate": 0.3,
+      "max_rework_rate": 0.2,
+      "min_winner_stability_ratio": 0.6
+    },
+    "metrics": {
+      "override_rate": 1,
+      "rework_rate": 0,
+      "winner_stability_ratio": 1
+    },
+    "reason_codes": [
+      "ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW"
+    ],
+    "violations": [
+      "ARENA_AUTOPILOT_HIGH_OVERRIDE_RATE"
+    ]
+  }
+}

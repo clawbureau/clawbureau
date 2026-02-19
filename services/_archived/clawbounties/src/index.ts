@@ -14163,12 +14163,15 @@ async function handleGetArena(
   const outcomes = await listArenaOutcomesByArenaId(env.BOUNTIES_DB, arenaId, 50);
   const calibration = buildArenaCalibrationSummary(outcomes, new Map([[arenaId, run]]));
 
+  const autopilot = buildArenaAutopilotPreview(run, payload, calibration);
+
   return jsonResponse(
     {
       ...payload,
       review_thread: thread.map((entry) => buildArenaReviewThreadEntryPayload(entry)),
       outcomes: outcomes.map((row) => buildArenaOutcomePayload(row)),
       calibration,
+      autopilot,
     },
     200,
     version,
@@ -14923,6 +14926,250 @@ async function handleArenaManagerRoute(
   );
 }
 
+async function buildArenaManagerAutopilotPayload(
+  routePayload: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const recommended = isRecord(routePayload.recommended) ? routePayload.recommended : null;
+  if (!recommended) return null;
+
+  const defaultContenderId = d1String(recommended.contender_id)?.trim() ?? null;
+  const evidence = isRecord(recommended.evidence) ? recommended.evidence : null;
+  if (!defaultContenderId || !evidence) return null;
+
+  const backupsRaw = Array.isArray(routePayload.backups) ? routePayload.backups : [];
+  const backupContenders = backupsRaw
+    .map((entry) => (isRecord(entry) ? d1String(entry.contender_id)?.trim() ?? null : null))
+    .filter((entry): entry is string => Boolean(entry));
+
+  const analyzedRuns = d1Number(routePayload.analyzed_runs) ?? 0;
+  const winnerStabilityRatio = d1Number(routePayload.winner_stability_ratio) ?? 0;
+
+  const winRate = d1Number(evidence.win_rate) ?? 0;
+  const overrideRate = d1Number(evidence.override_rate) ?? 0;
+  const reworkRate = d1Number(evidence.rework_rate) ?? 0;
+  const calibrationGap = d1Number(evidence.calibration_gap) ?? 0;
+  const latestHardGatePass = evidence.latest_hard_gate_pass === true;
+
+  const guardrails = {
+    min_runs: 2,
+    min_winner_stability_ratio: 0.6,
+    min_win_rate: 0.5,
+    max_override_rate: 0.3,
+    max_rework_rate: 0.2,
+    max_abs_calibration_gap: 0.2,
+    require_latest_hard_gate_pass: true,
+  };
+
+  const violations: Array<{ code: string; message: string; value: number | boolean; threshold: number | boolean }> = [];
+  if (analyzedRuns < guardrails.min_runs) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_INSUFFICIENT_RUNS',
+      message: 'Matched runs are below minimum threshold for autonomous default routing.',
+      value: analyzedRuns,
+      threshold: guardrails.min_runs,
+    });
+  }
+
+  if (winnerStabilityRatio < guardrails.min_winner_stability_ratio) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_LOW_WINNER_STABILITY',
+      message: 'Winner stability is below autopilot threshold.',
+      value: Number(winnerStabilityRatio.toFixed(4)),
+      threshold: guardrails.min_winner_stability_ratio,
+    });
+  }
+
+  if (winRate < guardrails.min_win_rate) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_LOW_WIN_RATE',
+      message: 'Recommended contender win rate is below threshold.',
+      value: Number(winRate.toFixed(4)),
+      threshold: guardrails.min_win_rate,
+    });
+  }
+
+  if (overrideRate > guardrails.max_override_rate) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_HIGH_OVERRIDE_RATE',
+      message: 'Override rate exceeds autopilot limit.',
+      value: Number(overrideRate.toFixed(4)),
+      threshold: guardrails.max_override_rate,
+    });
+  }
+
+  if (reworkRate > guardrails.max_rework_rate) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_HIGH_REWORK_RATE',
+      message: 'Rework rate exceeds autopilot limit.',
+      value: Number(reworkRate.toFixed(4)),
+      threshold: guardrails.max_rework_rate,
+    });
+  }
+
+  if (Math.abs(calibrationGap) > guardrails.max_abs_calibration_gap) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_CALIBRATION_GAP_HIGH',
+      message: 'Calibration gap exceeds allowed threshold.',
+      value: Number(calibrationGap.toFixed(4)),
+      threshold: guardrails.max_abs_calibration_gap,
+    });
+  }
+
+  if (guardrails.require_latest_hard_gate_pass && !latestHardGatePass) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_HARD_GATE_NOT_STABLE',
+      message: 'Latest recommended contender run did not pass hard-gate requirements.',
+      value: latestHardGatePass,
+      threshold: true,
+    });
+  }
+
+  const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
+
+  const globalRecommendations = (() => {
+    const coach = isRecord(routePayload.delegation_coach) ? routePayload.delegation_coach : null;
+    const recsRaw = coach && Array.isArray(coach.global_recommendations) ? coach.global_recommendations : [];
+    return recsRaw.filter((entry): entry is string => typeof entry === 'string');
+  })();
+
+  const computedAt = new Date().toISOString();
+  const routePolicyMaterial = stableStringify({
+    task_fingerprint: routePayload.task_fingerprint ?? null,
+    objective_profile_name: routePayload.objective_profile_name ?? null,
+    experiment_id: routePayload.experiment_id ?? null,
+    experiment_arm: routePayload.experiment_arm ?? null,
+    default_contender_id: defaultContenderId,
+    backup_contenders: backupContenders,
+    status,
+    computed_at: computedAt,
+  });
+  const routePolicyId = `arp_${(await sha256B64uUtf8(routePolicyMaterial)).slice(0, 32)}`;
+
+  return {
+    schema_version: 'arena_manager_autopilot.v1',
+    computed_at: computedAt,
+    mode: 'autopilot',
+    task_fingerprint: d1String(routePayload.task_fingerprint) ?? null,
+    objective_profile_name: d1String(routePayload.objective_profile_name) ?? null,
+    experiment_id: d1String(routePayload.experiment_id) ?? null,
+    experiment_arm: d1String(routePayload.experiment_arm) ?? null,
+    analyzed_runs: analyzedRuns,
+    winner_stability_ratio: Number(winnerStabilityRatio.toFixed(4)),
+    route: {
+      recommended,
+      backups: backupsRaw,
+      reason_codes: Array.isArray(routePayload.reason_codes)
+        ? routePayload.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+        : [],
+    },
+    autopilot: {
+      status,
+      default_contender_id: defaultContenderId,
+      backup_contenders: backupContenders,
+      guardrails,
+      violations,
+      reason_codes: status === 'auto_route_enabled'
+        ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED']
+        : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED'],
+      recommendations: globalRecommendations,
+      policy_template: {
+        route_policy_id: routePolicyId,
+        task_fingerprint: d1String(routePayload.task_fingerprint) ?? null,
+        default_contender_id: defaultContenderId,
+        backup_contenders: backupContenders,
+        require_manual_approval: status !== 'auto_route_enabled',
+        generated_at: computedAt,
+      },
+    },
+  };
+}
+
+async function handleArenaManagerAutopilot(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const routeResponse = await handleArenaManagerRoute(request, env, version, 'route');
+  if (routeResponse.status !== 200) {
+    return routeResponse;
+  }
+
+  let routePayload: unknown;
+  try {
+    routePayload = await routeResponse.json();
+  } catch {
+    return errorResponse('INTERNAL_ERROR', 'Failed to parse manager route payload', 500, undefined, version);
+  }
+
+  if (!isRecord(routePayload)) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Manager route payload is invalid', 500, undefined, version);
+  }
+
+  const autopilot = await buildArenaManagerAutopilotPayload(routePayload);
+  if (!autopilot) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Autopilot payload could not be computed', 500, undefined, version);
+  }
+
+  return jsonResponse(autopilot, 200, version);
+}
+
+function buildArenaAutopilotPreview(
+  run: ArenaRunRecord,
+  payload: Record<string, unknown>,
+  calibration: Record<string, unknown>,
+): Record<string, unknown> {
+  const delegationInsights = isRecord(payload.delegation_insights) ? payload.delegation_insights : null;
+  const managerRouting = delegationInsights && isRecord(delegationInsights.manager_routing)
+    ? delegationInsights.manager_routing
+    : null;
+
+  const backupContenders = managerRouting && Array.isArray(managerRouting.backup_contenders)
+    ? managerRouting.backup_contenders.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  const totals = isRecord(calibration.totals) ? calibration.totals : null;
+  const winnerStability = Array.isArray(calibration.winner_stability)
+    ? calibration.winner_stability.find((entry) => isRecord(entry) && d1String(entry.task_fingerprint) === run.task_fingerprint)
+    : null;
+
+  const overrideRate = totals ? d1Number(totals.override_rate) ?? 0 : 0;
+  const reworkRate = totals ? d1Number(totals.rework_rate) ?? 0 : 0;
+  const stabilityRatio = winnerStability && isRecord(winnerStability)
+    ? d1Number(winnerStability.stability_ratio) ?? 0
+    : 1;
+
+  const guardrails = {
+    max_override_rate: 0.3,
+    max_rework_rate: 0.2,
+    min_winner_stability_ratio: 0.6,
+  };
+
+  const violations: string[] = [];
+  if (overrideRate > guardrails.max_override_rate) violations.push('ARENA_AUTOPILOT_HIGH_OVERRIDE_RATE');
+  if (reworkRate > guardrails.max_rework_rate) violations.push('ARENA_AUTOPILOT_HIGH_REWORK_RATE');
+  if (stabilityRatio < guardrails.min_winner_stability_ratio) violations.push('ARENA_AUTOPILOT_LOW_WINNER_STABILITY');
+
+  const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
+
+  return {
+    schema_version: 'arena_autopilot_preview.v1',
+    status,
+    task_fingerprint: run.task_fingerprint,
+    default_contender_id: run.winner_contender_id,
+    backup_contenders: backupContenders,
+    guardrails,
+    metrics: {
+      override_rate: Number(overrideRate.toFixed(4)),
+      rework_rate: Number(reworkRate.toFixed(4)),
+      winner_stability_ratio: Number(stabilityRatio.toFixed(4)),
+    },
+    reason_codes: status === 'auto_route_enabled'
+      ? ['ARENA_AUTOPILOT_PREVIEW_ENABLED']
+      : ['ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW'],
+    violations,
+  };
+}
+
 async function handleGetBounty(bountyId: string, env: Env, version: string): Promise<Response> {
   const bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
   if (!bounty) {
@@ -15344,6 +15591,10 @@ export default {
 
       if (path === '/v1/arena/manager/route' && method === 'POST') {
         return handleArenaManagerRoute(request, env, version, 'route');
+      }
+
+      if (path === '/v1/arena/manager/autopilot' && method === 'POST') {
+        return handleArenaManagerAutopilot(request, env, version);
       }
 
       if (path === '/v1/arena/manager/coach' && method === 'POST') {

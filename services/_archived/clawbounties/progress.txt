@@ -854,3 +854,28 @@ Started: 2026-02-02T03:08:26.937005
   - arm `A` -> `404 ARENA_ROUTE_NOT_FOUND`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T21-24-53Z-agp-us-050-decision-capture/summary.json`
+
+## 2026-02-19 - AGP-US-051 routing policy autopilot endpoint + explorer panel
+- Added manager autopilot endpoint:
+  - `POST /v1/arena/manager/autopilot` (admin)
+  - wraps manager route ranking with guardrail evaluation and emits `arena_manager_autopilot.v1` payload.
+- Autopilot payload includes:
+  - default contender + backups
+  - guardrails (`min_runs`, winner stability floor, override/rework/calibration limits)
+  - deterministic violations + reason codes
+  - `policy_template` scaffold for route-policy materialization.
+- `GET /v1/arena/{arena_id}` now includes `autopilot` preview (`arena_autopilot_preview.v1`) for explorer rendering.
+- Clawsig explorer arena page now renders a **Routing autopilot** panel (status, default route, guardrail metrics, violations).
+- Deployed services:
+  - `clawbounties-staging` version `678d049e-9586-4963-8aca-94301c0db094`
+  - `clawsig-explorer-staging` version `c6260209-dfd1-492f-94b1-338ed6f731ca`
+  - `clawbounties` version `950b78b8-2ce8-42af-8375-a917a3f0c23f`
+  - `clawsig-explorer` version `d520225a-8c90-4757-959b-a95ec482b90e`
+- Verified autopilot endpoint behavior (staging + prod):
+  - arm `B` -> `200` with `autopilot.status=manual_review_required`
+  - arm `A` -> fail-closed `404 ARENA_ROUTE_NOT_FOUND`
+- Verified explorer panel render on seeded arena pages:
+  - `https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_050_001`
+  - `https://explorer.clawsig.com/arena/arena_bty_836a4e15_prod_050_001`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T21-39-33Z-agp-us-051-routing-autopilot/summary.json`

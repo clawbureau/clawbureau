@@ -1,0 +1,112 @@
+{
+  "schema_version": "arena_manager_autopilot.v1",
+  "computed_at": "2026-02-19T21:39:34.231Z",
+  "mode": "autopilot",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile_name": null,
+  "experiment_id": "exp_api_hardening_ab_v1",
+  "experiment_arm": "B",
+  "analyzed_runs": 3,
+  "winner_stability_ratio": 1,
+  "route": {
+    "recommended": {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "routing_score": 58.02835,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_ANY",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rationale": "Selected contender_codex_pi with routing_score=58.02835 from 3 matched runs (win_rate=1, hard_gate_pass_rate=1, override_rate=1, top_override_reason=ARENA_OVERRIDE_SCOPE_MISMATCH, calibration_gap=0.8928).",
+      "evidence": {
+        "appearances": 3,
+        "wins": 3,
+        "win_rate": 1,
+        "hard_gate_pass_rate": 1,
+        "avg_score": 89.275,
+        "avg_risk": 18.58,
+        "avg_quality": 98.41,
+        "latest_hard_gate_pass": true,
+        "outcome_samples": 2,
+        "empirical_accept_rate": 0,
+        "override_rate": 1,
+        "rework_rate": 0,
+        "avg_predicted_confidence": 0.8928,
+        "calibration_gap": 0.8928,
+        "override_reason_penalty": 0.8,
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 2,
+            "share": 1,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          }
+        ],
+        "coaching_recommendations": [
+          "High override rate; add human checkpoint before auto-route.",
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+        ],
+        "last_seen_at": "2026-02-19T21:24:18.484Z",
+        "sample_run_ids": [
+          "arn_1b5cd33a-7400-42b3-899b-e25f9c33ce8d",
+          "arn_91e28675-c7bc-4296-841f-696d506747e2",
+          "arn_42fa7ebb-49c3-464c-bcdf-ec43996511f3"
+        ]
+      }
+    },
+    "backups": [],
+    "reason_codes": []
+  },
+  "autopilot": {
+    "status": "manual_review_required",
+    "default_contender_id": "contender_codex_pi",
+    "backup_contenders": [],
+    "guardrails": {
+      "min_runs": 2,
+      "min_winner_stability_ratio": 0.6,
+      "min_win_rate": 0.5,
+      "max_override_rate": 0.3,
+      "max_rework_rate": 0.2,
+      "max_abs_calibration_gap": 0.2,
+      "require_latest_hard_gate_pass": true
+    },
+    "violations": [
+      {
+        "code": "ARENA_AUTOPILOT_HIGH_OVERRIDE_RATE",
+        "message": "Override rate exceeds autopilot limit.",
+        "value": 1,
+        "threshold": 0.3
+      },
+      {
+        "code": "ARENA_AUTOPILOT_CALIBRATION_GAP_HIGH",
+        "message": "Calibration gap exceeds allowed threshold.",
+        "value": 0.8928,
+        "threshold": 0.2
+      }
+    ],
+    "reason_codes": [
+      "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED"
+    ],
+    "recommendations": [
+      "Primary route has elevated override rate; require manual approval until calibration improves.",
+      "Primary route is over-confident; cap auto-approval confidence thresholds.",
+      "Policy-learning signal (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+      "Prompt-learning signal: Add a scope-check checklist before final answer generation."
+    ],
+    "policy_template": {
+      "route_policy_id": "arp_iIolwRUVaDaQg8-oZTWCn5l3ORmCuVdS",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "default_contender_id": "contender_codex_pi",
+      "backup_contenders": [],
+      "require_manual_approval": true,
+      "generated_at": "2026-02-19T21:39:34.231Z"
+    }
+  }
+}
