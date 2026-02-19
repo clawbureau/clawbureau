@@ -34,11 +34,63 @@ import type {
 
 function json(data: unknown, status = 200, extra?: Record<string, string>): Response {
   return new Response(JSON.stringify(data), {
-    status, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'X-Clawsig-Ledger-Version': '1', ...extra },
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'X-Clawsig-Ledger-Version': '1',
+      ...extra,
+    },
   });
 }
 function errorJson(message: string, code: string, status = 400, extra?: Record<string, string>): Response {
   return json({ error: { code, message } }, status, extra);
+}
+
+async function computeBodyEtag(body: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+  const encoded = base64UrlEncode(new Uint8Array(digest));
+  return `"${encoded}"`;
+}
+
+function parseIfNoneMatch(raw: string | null): Set<string> {
+  if (!raw) return new Set();
+
+  const tags = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.startsWith('W/') ? entry.slice(2).trim() : entry)
+    .filter(Boolean);
+
+  return new Set(tags);
+}
+
+async function conditionalJson(
+  req: Request,
+  data: unknown,
+  status: number,
+  cacheControl: string,
+  extra?: Record<string, string>
+): Promise<Response> {
+  const body = JSON.stringify(data);
+  const etag = await computeBodyEtag(body);
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'X-Clawsig-Ledger-Version': '1',
+    'Cache-Control': cacheControl,
+    ETag: etag,
+    ...extra,
+  };
+
+  const ifNoneMatch = parseIfNoneMatch(req.headers.get('if-none-match'));
+  if (ifNoneMatch.has(etag)) {
+    return new Response(null, { status: 304, headers });
+  }
+
+  return new Response(body, { status, headers });
 }
 
 function runIdFromBundleHash(bundleHashB64u: string): string {
@@ -71,6 +123,8 @@ async function findExistingRunByBundleHash(
 
 const DEFAULT_RUNS_LIMIT = 20;
 const MAX_RUNS_LIMIT = 100;
+const MAX_QUERY_STRING_LENGTH = 1024;
+const MAX_CURSOR_LENGTH = 256;
 const VALID_STATUS_FILTERS = new Set(['PASS', 'FAIL']);
 const VALID_TIER_FILTERS = new Set(['self', 'gateway', 'sandbox', 'tee', 'witnessed_web', 'unknown']);
 const REASON_CODE_FILTER_RE = /^[A-Z0-9_]{1,64}$/;
@@ -113,7 +167,14 @@ function parseRunsLimitStrict(raw: string | null): ValidationResult<number> {
     };
   }
 
-  const parsed = Number.parseInt(trimmed, 10);
+  if (!/^[0-9]{1,3}$/.test(trimmed)) {
+    return {
+      ok: false,
+      response: errorJson('Invalid limit: expected integer between 1 and 100', 'INVALID_LIMIT', 400),
+    };
+  }
+
+  const parsed = Number(trimmed);
   if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_RUNS_LIMIT) {
     return {
       ok: false,
@@ -130,7 +191,7 @@ function parseRunsCursorStrict(raw: string | null): ValidationResult<{ created_a
   }
 
   const trimmed = raw.trim();
-  if (trimmed.length === 0) {
+  if (trimmed.length === 0 || trimmed.length > MAX_CURSOR_LENGTH) {
     return {
       ok: false,
       response: errorJson('Invalid cursor format', 'INVALID_CURSOR', 400),
@@ -148,7 +209,19 @@ function parseRunsCursorStrict(raw: string | null): ValidationResult<{ created_a
   const createdAt = trimmed.slice(0, sep).trim();
   const runId = trimmed.slice(sep + 1).trim();
 
-  if (!createdAt || !runId || runId.length > 200 || !/^[A-Za-z0-9:_-]+$/.test(runId)) {
+  const normalizedCreatedAt = createdAt.includes('T')
+    ? createdAt
+    : `${createdAt.replace(' ', 'T')}Z`;
+
+  const parsedCursorTime = Date.parse(normalizedCreatedAt);
+
+  if (
+    !createdAt ||
+    !runId ||
+    !Number.isFinite(parsedCursorTime) ||
+    runId.length > 120 ||
+    !/^[A-Za-z0-9:_-]+$/.test(runId)
+  ) {
     return {
       ok: false,
       response: errorJson('Invalid cursor format', 'INVALID_CURSOR', 400),
@@ -468,7 +541,11 @@ async function handleRunDetail(runId: string, env: Env): Promise<Response> {
 }
 
 // GET /v1/ledger/runs
-async function handleRunsFeed(url: URL, env: Env): Promise<Response> {
+async function handleRunsFeed(req: Request, url: URL, env: Env): Promise<Response> {
+  if (url.search.length > MAX_QUERY_STRING_LENGTH) {
+    return errorJson('Query string too long', 'QUERY_TOO_LONG', 414);
+  }
+
   const limitResult = parseRunsLimitStrict(url.searchParams.get('limit'));
   if (!limitResult.ok) return limitResult.response;
   const limit = limitResult.value;
@@ -536,11 +613,24 @@ async function handleRunsFeed(url: URL, env: Env): Promise<Response> {
     filters_echo: filters,
   };
 
-  return json(response);
+  return conditionalJson(
+    req,
+    response,
+    200,
+    'public, max-age=10, s-maxage=20, stale-while-revalidate=30'
+  );
 }
 
 // GET /v1/ledger/stats
-async function handleGlobalStats(env: Env): Promise<Response> {
+async function handleGlobalStats(req: Request, env: Env, url: URL): Promise<Response> {
+  if (url.search.length > MAX_QUERY_STRING_LENGTH) {
+    return errorJson('Query string too long', 'QUERY_TOO_LONG', 414);
+  }
+
+  if (url.searchParams.size > 0) {
+    return errorJson('Unsupported query parameter for stats endpoint', 'UNSUPPORTED_QUERY_PARAMETER', 400);
+  }
+
   const asNumber = (value: unknown): number => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string') {
@@ -662,7 +752,12 @@ async function handleGlobalStats(env: Env): Promise<Response> {
     },
   };
 
-  return json(stats);
+  return conditionalJson(
+    req,
+    stats,
+    200,
+    'public, max-age=15, s-maxage=30, stale-while-revalidate=60'
+  );
 }
 
 export default {
@@ -681,10 +776,10 @@ export default {
     if (method === 'GET' && m) return handlePassport(decodeURIComponent(m[1]!), env);
     m = p.match(/^\/v1\/ledger\/agents\/(.+)$/);
     if (method === 'GET' && m) return handleAgentStats(decodeURIComponent(m[1]!), env, url);
-    if (method === 'GET' && p === '/v1/ledger/runs') return handleRunsFeed(url, env);
+    if (method === 'GET' && p === '/v1/ledger/runs') return handleRunsFeed(req, url, env);
     m = p.match(/^\/v1\/ledger\/runs\/([^/]+)$/);
     if (method === 'GET' && m) return handleRunDetail(m[1]!, env);
-    if (method === 'GET' && p === '/v1/ledger/stats') return handleGlobalStats(env);
+    if (method === 'GET' && p === '/v1/ledger/stats') return handleGlobalStats(req, env, url);
     return errorJson('Not found', 'NOT_FOUND', 404);
   },
   async queue(batch: MessageBatch<LedgerIngestMessage>, env: Env): Promise<void> { await handleQueue(batch, env); },

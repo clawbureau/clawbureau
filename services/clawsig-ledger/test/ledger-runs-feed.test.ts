@@ -131,8 +131,11 @@ function makeEnv(fixture: Fixture): Env {
   };
 }
 
-async function call(path: string, env: Env): Promise<Response> {
-  const request = new Request(`https://ledger.test${path}`, { method: 'GET' });
+async function call(path: string, env: Env, init?: RequestInit): Promise<Response> {
+  const request = new Request(`https://ledger.test${path}`, {
+    method: 'GET',
+    ...init,
+  });
   const ctx = {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn(),
@@ -312,16 +315,39 @@ describe('ledger runs feed + agent contract alignment', () => {
     expect(payload.has_next).toBe(true);
   });
 
-  it('returns deterministic 400s for invalid query parameters', async () => {
+  it('returns cache headers and 304 for matching etag on runs feed', async () => {
+    const env = makeEnv({
+      runs: [makeRun({ run_id: 'run_etag', bundle_hash_b64u: 'hash_etag', created_at: '2026-02-19 10:05:00' })],
+      agents: [],
+    });
+
+    const response = await call('/v1/ledger/runs?limit=1', env);
+    const etag = response.headers.get('etag');
+    const cacheControl = response.headers.get('cache-control');
+
+    expect(response.status).toBe(200);
+    expect(etag).toBeTruthy();
+    expect(cacheControl).toContain('max-age=10');
+
+    const notModified = await call('/v1/ledger/runs?limit=1', env, {
+      headers: { 'If-None-Match': String(etag) },
+    });
+
+    expect(notModified.status).toBe(304);
+  });
+
+  it('returns deterministic 4xx for malformed and abusive query parameters', async () => {
     const env = makeEnv({ runs: [], agents: [] });
 
     const badCases = [
-      { path: '/v1/ledger/runs?limit=0', code: 'INVALID_LIMIT' },
-      { path: '/v1/ledger/runs?status=MAYBE', code: 'INVALID_STATUS_FILTER' },
-      { path: '/v1/ledger/runs?tier=super', code: 'INVALID_TIER_FILTER' },
-      { path: '/v1/ledger/runs?reason_code=bad-code!', code: 'INVALID_REASON_CODE_FILTER' },
-      { path: '/v1/ledger/runs?agent_did=not-a-did', code: 'INVALID_AGENT_DID_FILTER' },
-      { path: '/v1/ledger/runs?cursor=invalidcursor', code: 'INVALID_CURSOR' },
+      { path: '/v1/ledger/runs?limit=0', code: 'INVALID_LIMIT', status: 400 },
+      { path: '/v1/ledger/runs?limit=1abc', code: 'INVALID_LIMIT', status: 400 },
+      { path: '/v1/ledger/runs?status=MAYBE', code: 'INVALID_STATUS_FILTER', status: 400 },
+      { path: '/v1/ledger/runs?tier=super', code: 'INVALID_TIER_FILTER', status: 400 },
+      { path: '/v1/ledger/runs?reason_code=bad-code!', code: 'INVALID_REASON_CODE_FILTER', status: 400 },
+      { path: '/v1/ledger/runs?agent_did=not-a-did', code: 'INVALID_AGENT_DID_FILTER', status: 400 },
+      { path: '/v1/ledger/runs?cursor=invalidcursor', code: 'INVALID_CURSOR', status: 400 },
+      { path: `/v1/ledger/runs?${'f='.concat('x'.repeat(1400))}`, code: 'QUERY_TOO_LONG', status: 414 },
     ] as const;
 
     for (const badCase of badCases) {
@@ -330,7 +356,7 @@ describe('ledger runs feed + agent contract alignment', () => {
         error: { code: string; message: string };
       };
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(badCase.status);
       expect(payload.error.code).toBe(badCase.code);
       expect(payload.error.message.length).toBeGreaterThan(0);
     }
