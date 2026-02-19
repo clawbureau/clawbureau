@@ -1,0 +1,56 @@
+name: clawsig-canary-seed
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 */2 * * *'
+
+jobs:
+  seed-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Seed staging canary run
+        run: node scripts/ops/seed-clawsig-canary-run.mjs --env staging
+
+      - name: Upload staging canary artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawsig-canary-staging-${{ github.run_id }}
+          path: artifacts/ops/clawsig-canary-seed/
+          if-no-files-found: warn
+
+  seed-prod:
+    needs: seed-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Seed production canary run
+        run: node scripts/ops/seed-clawsig-canary-run.mjs --env prod
+
+      - name: Upload production canary artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawsig-canary-prod-${{ github.run_id }}
+          path: artifacts/ops/clawsig-canary-seed/
+          if-no-files-found: warn
