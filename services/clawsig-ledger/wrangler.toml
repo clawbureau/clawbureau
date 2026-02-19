@@ -3,7 +3,7 @@ account_id = "b8f2c66f1848dff476faa874282d781e"
 main = "src/index.ts"
 compatibility_date = "2026-02-11"
 compatibility_flags = ["nodejs_compat"]
-routes = [{ pattern = "api.clawverify.com/v1/*", zone_name = "clawverify.com" }]
+routes = [{ pattern = "api.clawverify.com", custom_domain = true }]
 [[d1_databases]]
 binding = "LEDGER_DB"
 database_name = "clawsig-public-ledger"
@@ -27,7 +27,7 @@ CLAWVERIFY_API_URL = "https://clawverify.com"
 VAAS_POW_DIFFICULTY = "18"
 [env.staging]
 name = "clawsig-ledger-staging"
-routes = [{ pattern = "staging-api.clawverify.com/v1/*", zone_name = "clawverify.com" }]
+routes = [{ pattern = "staging-api.clawverify.com", custom_domain = true }]
 [[env.staging.d1_databases]]
 binding = "LEDGER_DB"
 database_name = "clawsig-public-ledger-staging"
