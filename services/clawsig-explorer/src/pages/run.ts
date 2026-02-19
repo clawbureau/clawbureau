@@ -18,6 +18,10 @@ export interface RunData {
   agent_did: string;
   proof_tier: string;
   status: string;
+  reason_code: string | null;
+  failure_class: string | null;
+  verification_source: string | null;
+  auth_mode: string | null;
   wpc_hash_b64u: string | null;
   rt_leaf_index: number | null;
   created_at: string;
@@ -53,6 +57,22 @@ export function runDetailPage(run: RunData): string {
     ? `<a href="${esc(run.bundle_url)}" target="_blank" rel="noopener" class="mono">View raw bundle JSON &rarr;</a>`
     : `<span class="dim">Bundle not available</span>`;
 
+  const reasonCode = run.reason_code
+    ? `<span class="hash">${esc(run.reason_code)}</span>`
+    : `<span class="dim">Not available</span>`;
+
+  const failureClass = run.failure_class
+    ? `<span class="hash">${esc(run.failure_class)}</span>`
+    : `<span class="dim">Not available</span>`;
+
+  const verificationSource = run.verification_source
+    ? `<span class="hash">${esc(run.verification_source)}</span>`
+    : `<span class="dim">Not available</span>`;
+
+  const authMode = run.auth_mode
+    ? `<span class="hash">${esc(run.auth_mode)}</span>`
+    : `<span class="dim">Not available</span>`;
+
   const body = `
     <div style="margin-bottom: 1.5rem">
       <a href="/" class="dim" style="font-size: 0.8125rem">&larr; Explorer</a>
@@ -81,6 +101,18 @@ export function runDetailPage(run: RunData): string {
 
         <dt>Status</dt>
         <dd>${statusBadge(run.status)}</dd>
+
+        <dt>Reason Code</dt>
+        <dd>${reasonCode}</dd>
+
+        <dt>Failure Class</dt>
+        <dd>${failureClass}</dd>
+
+        <dt>Verification Source</dt>
+        <dd>${verificationSource}</dd>
+
+        <dt>Auth Mode</dt>
+        <dd>${authMode}</dd>
 
         <dt>Timestamp</dt>
         <dd>${esc(run.created_at)} <span class="dim">(${relativeTime(run.created_at)})</span></dd>

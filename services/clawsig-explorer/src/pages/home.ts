@@ -10,10 +10,18 @@ import {
   relativeTime, fmtNum, type PageMeta,
 } from "../layout.js";
 
+export interface FailReasonCode {
+  reason_code: string;
+  count: number;
+}
+
 export interface GlobalStats {
   total_runs: number;
   total_agents: number;
   runs_24h: number;
+  fail_runs_24h: number;
+  fail_rate_24h: number;
+  top_fail_reason_codes: FailReasonCode[];
 }
 
 export interface RecentRun {
@@ -61,11 +69,24 @@ export function homePage(data: HomePageData): string {
         <div class="value">${fmtNum(data.stats.runs_24h)}</div>
         <div class="label">Runs (24h)</div>
       </div>
+      <div class="stat-card">
+        <div class="value">${fmtNum(data.stats.fail_runs_24h)}</div>
+        <div class="label">Fails (24h)</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">${(data.stats.fail_rate_24h * 100).toFixed(2)}%</div>
+        <div class="label">Fail Rate (24h)</div>
+      </div>
     </div>
 
     <div class="card">
       <p class="section-title">Recent Verified Runs</p>
       ${recentRunsFeed(data.recent_runs)}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Top Failure Reason Codes (24h)</p>
+      ${topFailReasonCodesList(data.stats.top_fail_reason_codes)}
     </div>
 
     <div style="text-align: center; padding: 2rem 0">
@@ -107,6 +128,23 @@ function recentRunsFeed(runs: RecentRun[]): string {
   }).join("");
 }
 
+function topFailReasonCodesList(rows: FailReasonCode[]): string {
+  if (rows.length === 0) {
+    return `<p class="dim">No failed runs in the last 24 hours.</p>`;
+  }
+
+  return rows
+    .map(
+      (row) => `
+      <div class="run-item">
+        <span class="hash">${esc(row.reason_code)}</span>
+        <span class="run-time">${fmtNum(row.count)} run(s)</span>
+      </div>
+    `
+    )
+    .join('');
+}
+
 /** Stats-only page for /stats route */
 export function statsPage(data: HomePageData): string {
   const meta: PageMeta = {
@@ -132,11 +170,24 @@ export function statsPage(data: HomePageData): string {
         <div class="value">${fmtNum(data.stats.runs_24h)}</div>
         <div class="label">Runs (Last 24h)</div>
       </div>
+      <div class="stat-card">
+        <div class="value">${fmtNum(data.stats.fail_runs_24h)}</div>
+        <div class="label">Fails (Last 24h)</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">${(data.stats.fail_rate_24h * 100).toFixed(2)}%</div>
+        <div class="label">Fail Rate (Last 24h)</div>
+      </div>
     </div>
 
     <div class="card">
       <p class="section-title">Recent Activity</p>
       ${recentRunsFeed(data.recent_runs)}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Top Failure Reason Codes (24h)</p>
+      ${topFailReasonCodesList(data.stats.top_fail_reason_codes)}
     </div>
   `;
 
