@@ -5,6 +5,13 @@ import type { Env } from '../src/types';
 interface StatsFixture {
   baseRow: Record<string, unknown>;
   topFailRows: Array<{ reason_code: string; count: number | string }>;
+  recentRuns: Array<{
+    run_id: string;
+    agent_did: string;
+    proof_tier: string;
+    status: string;
+    created_at: string;
+  }>;
 }
 
 function makeLedgerDb(fixture: StatsFixture): D1Database {
@@ -21,6 +28,9 @@ function makeLedgerDb(fixture: StatsFixture): D1Database {
         all: vi.fn(async () => {
           if (query.includes('SELECT reason_code, COUNT(*) AS count')) {
             return { results: fixture.topFailRows };
+          }
+          if (query.includes('SELECT run_id, agent_did, proof_tier, status, created_at')) {
+            return { results: fixture.recentRuns };
           }
           return { results: [] };
         }),
@@ -66,6 +76,7 @@ describe('GET /v1/ledger/stats', () => {
         fail_runs_24h: 0,
       },
       topFailRows: [],
+      recentRuns: [],
     });
 
     const response = await callStats(env);
@@ -77,6 +88,7 @@ describe('GET /v1/ledger/stats', () => {
     expect(payload.fail_runs_24h).toBe(0);
     expect(payload.fail_rate_24h).toBe(0);
     expect(payload.top_fail_reason_codes).toEqual([]);
+    expect(payload.recent_runs).toEqual([]);
   });
 
   it('returns fail-rate and top reason codes for populated dataset', async () => {
@@ -94,6 +106,15 @@ describe('GET /v1/ledger/stats', () => {
         { reason_code: 'POW_INVALID', count: '3' },
         { reason_code: 'VERIFIER_UNAVAILABLE', count: 1 },
       ],
+      recentRuns: [
+        {
+          run_id: 'run_latest',
+          agent_did: 'did:key:agent-1',
+          proof_tier: 'gateway',
+          status: 'FAIL',
+          created_at: '2026-02-19 11:00:00',
+        },
+      ],
     });
 
     const response = await callStats(env);
@@ -106,6 +127,13 @@ describe('GET /v1/ledger/stats', () => {
       fail_runs_24h: number;
       fail_rate_24h: number;
       top_fail_reason_codes: Array<{ reason_code: string; count: number }>;
+      recent_runs: Array<{
+        run_id: string;
+        agent_did: string;
+        proof_tier: string;
+        status: string;
+        created_at: string;
+      }>;
     };
 
     expect(response.status).toBe(200);
@@ -120,6 +148,15 @@ describe('GET /v1/ledger/stats', () => {
       { reason_code: 'HASH_MISMATCH', count: 6 },
       { reason_code: 'POW_INVALID', count: 3 },
       { reason_code: 'VERIFIER_UNAVAILABLE', count: 1 },
+    ]);
+    expect(payload.recent_runs).toEqual([
+      {
+        run_id: 'run_latest',
+        agent_did: 'did:key:agent-1',
+        proof_tier: 'gateway',
+        status: 'FAIL',
+        created_at: '2026-02-19 11:00:00',
+      },
     ]);
   });
 });

@@ -20,8 +20,16 @@ import { resolveBadge, renderBadgeSvg } from './badges';
 import { importOracleKey, signWithOracleKey } from './crypto';
 import { handleQueue } from './queue-consumer';
 import type {
-  Env, VerifyRequest, VerifyResponse, LedgerIngestMessage,
-  AgentRow, RunRow, AgentPassportVC, GlobalStatsResponse,
+  Env,
+  VerifyRequest,
+  VerifyResponse,
+  LedgerIngestMessage,
+  AgentRow,
+  RunRow,
+  AgentPassportVC,
+  GlobalStatsResponse,
+  RunsFeedResponse,
+  RunsFeedFilters,
 } from './types';
 
 function json(data: unknown, status = 200, extra?: Record<string, string>): Response {
@@ -59,6 +67,45 @@ async function findExistingRunByBundleHash(
     .first<ExistingRunLookup>();
 
   return row ?? null;
+}
+
+const DEFAULT_RUNS_LIMIT = 20;
+const MAX_RUNS_LIMIT = 100;
+
+function parsePositiveInt(raw: string | null | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function normalizeRunsLimit(raw: string | null | undefined): number {
+  const requested = parsePositiveInt(raw, DEFAULT_RUNS_LIMIT);
+  return Math.min(MAX_RUNS_LIMIT, requested);
+}
+
+function normalizeOptionalFilter(raw: string | null): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function encodeRunsCursor(row: Pick<RunRow, 'created_at' | 'run_id'>): string {
+  return `${row.created_at}|${row.run_id}`;
+}
+
+function decodeRunsCursor(cursor: string | null): { created_at: string; run_id: string } | null {
+  if (!cursor) return null;
+  const trimmed = cursor.trim();
+  if (!trimmed) return null;
+
+  const sep = trimmed.lastIndexOf('|');
+  if (sep <= 0 || sep >= trimmed.length - 1) return null;
+
+  return {
+    created_at: trimmed.slice(0, sep),
+    run_id: trimmed.slice(sep + 1),
+  };
 }
 
 // POST /v1/verify
@@ -256,9 +303,36 @@ async function handlePassport(did: string, env: Env): Promise<Response> {
 async function handleAgentStats(did: string, env: Env, url: URL): Promise<Response> {
   const agent = await env.LEDGER_DB.prepare('SELECT * FROM agents WHERE did = ?').bind(did).first<AgentRow>();
   if (!agent) return errorJson('Agent not found', 'NOT_FOUND', 404);
-  const page = Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
-  const runs = await env.LEDGER_DB.prepare('SELECT * FROM runs WHERE agent_did = ? ORDER BY created_at DESC LIMIT 50 OFFSET ?').bind(did, (page - 1) * 50).all<RunRow>();
-  return json({ agent, recent_runs: runs.results ?? [], page, page_size: 50 });
+
+  const pageSize = normalizeRunsLimit(url.searchParams.get('limit'));
+  const page = Math.max(1, parsePositiveInt(url.searchParams.get('page'), 1));
+  const offset = (page - 1) * pageSize;
+
+  const runs = await env.LEDGER_DB.prepare(
+    `SELECT *
+     FROM runs
+     WHERE agent_did = ?
+     ORDER BY created_at DESC, run_id DESC
+     LIMIT ? OFFSET ?`
+  ).bind(did, pageSize, offset).all<RunRow>();
+
+  const totalRow = await env.LEDGER_DB.prepare(
+    'SELECT COUNT(*) AS total FROM runs WHERE agent_did = ?'
+  ).bind(did).first<{ total: number | string }>();
+
+  const total = Number(totalRow?.total ?? 0) || 0;
+  const runRows = runs.results ?? [];
+  const hasNext = offset + runRows.length < total;
+
+  return json({
+    agent,
+    runs: runRows,
+    recent_runs: runRows,
+    total,
+    page,
+    page_size: pageSize,
+    has_next: hasNext,
+  });
 }
 
 // GET /v1/ledger/runs/:run_id
@@ -266,6 +340,76 @@ async function handleRunDetail(runId: string, env: Env): Promise<Response> {
   const run = await env.LEDGER_DB.prepare('SELECT * FROM runs WHERE run_id = ?').bind(runId).first<RunRow>();
   if (!run) return errorJson('Run not found', 'NOT_FOUND', 404);
   return json({ run, bundle_url: `https://clawsig-public-bundles.r2.dev/bundles/${runId}.json` });
+}
+
+// GET /v1/ledger/runs
+async function handleRunsFeed(url: URL, env: Env): Promise<Response> {
+  const limit = normalizeRunsLimit(url.searchParams.get('limit'));
+
+  const filters: RunsFeedFilters = {
+    status: normalizeOptionalFilter(url.searchParams.get('status')),
+    tier: normalizeOptionalFilter(url.searchParams.get('tier')),
+    reason_code: normalizeOptionalFilter(url.searchParams.get('reason_code')),
+    agent_did: normalizeOptionalFilter(url.searchParams.get('agent_did')),
+  };
+
+  const cursor = decodeRunsCursor(url.searchParams.get('cursor'));
+
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  if (filters.status) {
+    where.push('status = ?');
+    params.push(filters.status.toUpperCase());
+  }
+  if (filters.tier) {
+    where.push('proof_tier = ?');
+    params.push(filters.tier);
+  }
+  if (filters.reason_code) {
+    where.push('reason_code = ?');
+    params.push(filters.reason_code.toUpperCase());
+  }
+  if (filters.agent_did) {
+    where.push('agent_did = ?');
+    params.push(filters.agent_did);
+  }
+  if (cursor) {
+    where.push('(created_at < ? OR (created_at = ? AND run_id < ?))');
+    params.push(cursor.created_at, cursor.created_at, cursor.run_id);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+
+  const query = `
+    SELECT *
+    FROM runs
+    ${whereSql}
+    ORDER BY created_at DESC, run_id DESC
+    LIMIT ?
+  `;
+
+  const result = await env.LEDGER_DB.prepare(query)
+    .bind(...params, limit + 1)
+    .all<RunRow>();
+
+  const rows = result.results ?? [];
+  const hasNext = rows.length > limit;
+  const visibleRows = hasNext ? rows.slice(0, limit) : rows;
+
+  const nextCursor = hasNext && visibleRows.length > 0
+    ? encodeRunsCursor(visibleRows[visibleRows.length - 1]!)
+    : null;
+
+  const response: RunsFeedResponse = {
+    runs: visibleRows,
+    limit,
+    has_next: hasNext,
+    next_cursor: nextCursor,
+    filters,
+  };
+
+  return json(response);
 }
 
 // GET /v1/ledger/stats
@@ -300,6 +444,19 @@ async function handleGlobalStats(env: Env): Promise<Response> {
     LIMIT 5
   `).all<{ reason_code: string; count: number | string }>();
 
+  const recentRuns = await env.LEDGER_DB.prepare(`
+    SELECT run_id, agent_did, proof_tier, status, created_at
+    FROM runs
+    ORDER BY created_at DESC, run_id DESC
+    LIMIT 20
+  `).all<{
+    run_id: string;
+    agent_did: string;
+    proof_tier: string;
+    status: string;
+    created_at: string;
+  }>();
+
   const runs24h = asNumber(base?.runs_24h);
   const failRuns24h = asNumber(base?.fail_runs_24h);
   const failRate24h = runs24h > 0 ? Number((failRuns24h / runs24h).toFixed(6)) : 0;
@@ -315,6 +472,13 @@ async function handleGlobalStats(env: Env): Promise<Response> {
     top_fail_reason_codes: (topFailRows.results ?? []).map((row) => ({
       reason_code: row.reason_code,
       count: asNumber(row.count),
+    })),
+    recent_runs: (recentRuns.results ?? []).map((row) => ({
+      run_id: row.run_id,
+      agent_did: row.agent_did,
+      proof_tier: row.proof_tier,
+      status: row.status,
+      created_at: row.created_at,
     })),
   };
 
@@ -337,6 +501,7 @@ export default {
     if (method === 'GET' && m) return handlePassport(decodeURIComponent(m[1]!), env);
     m = p.match(/^\/v1\/ledger\/agents\/(.+)$/);
     if (method === 'GET' && m) return handleAgentStats(decodeURIComponent(m[1]!), env, url);
+    if (method === 'GET' && p === '/v1/ledger/runs') return handleRunsFeed(url, env);
     m = p.match(/^\/v1\/ledger\/runs\/([^/]+)$/);
     if (method === 'GET' && m) return handleRunDetail(m[1]!, env);
     if (method === 'GET' && p === '/v1/ledger/stats') return handleGlobalStats(env);
