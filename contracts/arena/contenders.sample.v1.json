@@ -9,13 +9,53 @@
     "plugins": ["did-work"],
     "prompt": "Enforce contract binding and deterministic reason code surfaces.",
     "delivery_summary": "Implemented contract binding checks with deterministic reason code handling and full test coverage.",
-    "metrics": {
-      "quality_score": 92,
-      "risk_score": 26,
-      "efficiency_score": 81,
-      "latency_ms": 16000,
-      "cost_usd": 0.78,
-      "autonomy_score": 84
+    "evidence_signals": {
+      "ci": {
+        "typecheck_passed": true,
+        "lint_passed": true,
+        "tests_passed": 124,
+        "tests_failed": 2,
+        "artifacts": [
+          {
+            "label": "Typecheck log",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+          },
+          {
+            "label": "Test run summary",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+          }
+        ]
+      },
+      "git": {
+        "files_changed": 21,
+        "lines_added": 880,
+        "lines_deleted": 210,
+        "churn_hotspots": [
+          "services/clawverify/src/schema-validation.ts",
+          "services/clawverify/src/schema-registry.ts"
+        ],
+        "diff_artifact": {
+          "label": "PR #366 diff",
+          "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+        }
+      },
+      "execution": {
+        "latency_ms": 16000,
+        "tool_calls": 42,
+        "retries": 1,
+        "manual_interventions": 0,
+        "trace_artifact": {
+          "label": "Arena execution trace",
+          "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+        }
+      },
+      "cost": {
+        "usd": 0.78,
+        "cost_artifact": {
+          "label": "Usage ledger",
+          "url": "https://docs.clawsig.com/quickstart"
+        }
+      }
     },
     "evidence_links": [
       {
@@ -41,13 +81,52 @@
     "plugins": ["did-work"],
     "prompt": "Prioritize fast delivery with acceptable risk and reason code traceability.",
     "delivery_summary": "Added reason code traceability and quick fixes; contract binding discussed but partial test rollout.",
-    "metrics": {
-      "quality_score": 86,
-      "risk_score": 38,
-      "efficiency_score": 90,
-      "latency_ms": 11200,
-      "cost_usd": 0.54,
-      "autonomy_score": 79
+    "evidence_signals": {
+      "ci": {
+        "typecheck_passed": true,
+        "lint_passed": true,
+        "tests_passed": 98,
+        "tests_failed": 7,
+        "artifacts": [
+          {
+            "label": "Typecheck run",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560"
+          },
+          {
+            "label": "Unit test summary",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187190314/job/64164222818"
+          }
+        ]
+      },
+      "git": {
+        "files_changed": 14,
+        "lines_added": 640,
+        "lines_deleted": 180,
+        "churn_hotspots": [
+          "services/clawsig-explorer/src/pages/arena.ts"
+        ],
+        "diff_artifact": {
+          "label": "PR #368 diff",
+          "url": "https://github.com/clawbureau/clawbureau/pull/368/files"
+        }
+      },
+      "execution": {
+        "latency_ms": 11200,
+        "tool_calls": 35,
+        "retries": 2,
+        "manual_interventions": 1,
+        "trace_artifact": {
+          "label": "Arena replay trace",
+          "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560"
+        }
+      },
+      "cost": {
+        "usd": 0.54,
+        "cost_artifact": {
+          "label": "Usage breakdown",
+          "url": "https://github.com/clawbureau/clawbureau/pull/368"
+        }
+      }
     },
     "evidence_links": [
       {
@@ -69,13 +148,53 @@
     "plugins": ["did-work", "artifact-tracer"],
     "prompt": "Focus on broad exploration and recommendations.",
     "delivery_summary": "Produced broad recommendations and test plan, but omitted deterministic compliance mapping and explicit binding evidence.",
-    "metrics": {
-      "quality_score": 74,
-      "risk_score": 52,
-      "efficiency_score": 72,
-      "latency_ms": 22100,
-      "cost_usd": 0.31,
-      "autonomy_score": 69
+    "evidence_signals": {
+      "ci": {
+        "typecheck_passed": true,
+        "lint_passed": false,
+        "tests_passed": 61,
+        "tests_failed": 19,
+        "artifacts": [
+          {
+            "label": "CI run",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "Protocol check",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188096436/job/64167593939"
+          }
+        ]
+      },
+      "git": {
+        "files_changed": 33,
+        "lines_added": 1350,
+        "lines_deleted": 620,
+        "churn_hotspots": [
+          "services/_archived/clawbounties/src/index.ts",
+          "services/clawsig-explorer/src/api.ts"
+        ],
+        "diff_artifact": {
+          "label": "PR #370 diff",
+          "url": "https://github.com/clawbureau/clawbureau/pull/370/files"
+        }
+      },
+      "execution": {
+        "latency_ms": 22100,
+        "tool_calls": 58,
+        "retries": 5,
+        "manual_interventions": 2,
+        "trace_artifact": {
+          "label": "Swarm trace",
+          "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+        }
+      },
+      "cost": {
+        "usd": 0.31,
+        "cost_artifact": {
+          "label": "Usage estimate",
+          "url": "https://github.com/clawbureau/clawbureau/pull/370"
+        }
+      }
     },
     "evidence_links": [
       {

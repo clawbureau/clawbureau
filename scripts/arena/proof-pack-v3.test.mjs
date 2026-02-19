@@ -43,6 +43,62 @@ const sampleInput = {
     cost_usd: 0.1912,
     autonomy_score: 71.9,
   },
+  score_explain: {
+    formula: {
+      summary: 'final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty',
+      components: ['quality from ci', 'risk from retries', 'cost from usd'],
+    },
+    raw_inputs: {
+      ci: {
+        typecheck_passed: true,
+        lint_passed: true,
+        tests_passed: 42,
+        tests_failed: 3,
+        tests_total: 45,
+      },
+      git: {
+        files_changed: 9,
+        lines_added: 210,
+        lines_deleted: 80,
+        churn_hotspots: ['src/index.ts'],
+      },
+      execution: {
+        latency_ms: 18342,
+        tool_calls: 18,
+        retries: 1,
+        manual_interventions: 0,
+      },
+      cost: {
+        usd: 0.1912,
+      },
+    },
+    weights: {
+      objective: {
+        quality: 0.35,
+        speed: 0.25,
+        cost: 0.2,
+        safety: 0.2,
+      },
+    },
+    derived: {
+      quality_score: 83.12,
+      risk_score: 42.1,
+      efficiency_score: 76.44,
+      autonomy_score: 71.9,
+      speed_score: 84.72,
+      cost_score: 96.18,
+      safety_score: 57.9,
+      weighted_pre_penalty: 78.104,
+      optional_penalty: 1.5,
+      final_score: 76.604,
+    },
+    reason_codes: ['ARENA_SCORE_EVIDENCE_GROUNDED'],
+    evidence_links: [
+      { label: 'CI', url: 'https://example.com/ci/999', source: 'ci' },
+      { label: 'Diff', url: 'https://example.com/diff/999', source: 'git' },
+      { label: 'Trace', url: 'https://example.com/trace/999', source: 'execution' },
+    ],
+  },
   delivery_summary: 'Implements endpoint coverage and deterministic conflict handling.',
   evidence_links: [
     { label: 'PR', url: 'https://github.com/clawbureau/clawbureau/pull/999' },
@@ -93,7 +149,25 @@ test('proof pack schema includes expected top-level required fields', () => {
   const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
   const required = new Set(schema.required ?? []);
 
-  for (const field of ['schema_version', 'claim_binding', 'contender', 'compliance', 'metrics', 'evidence', 'insights']) {
+  for (const field of ['schema_version', 'claim_binding', 'contender', 'compliance', 'metrics', 'score_explain', 'evidence', 'insights']) {
     assert.equal(required.has(field), true, `expected schema required field: ${field}`);
   }
+});
+
+test('proof pack validator rejects payload with missing score evidence links', () => {
+  const invalid = buildProofPackV3({
+    ...sampleInput,
+    score_explain: {
+      ...sampleInput.score_explain,
+      evidence_links: [{ label: 'CI', url: 'https://example.com/ci/999', source: 'ci' }],
+    },
+  });
+
+  const validation = validateProofPackV3Shape(invalid);
+  assert.equal(validation.valid, false);
+  assert.equal(
+    validation.errors.some((entry) => entry.includes('score_explain.evidence_links')),
+    true,
+    'expected score_explain.evidence_links validation failure',
+  );
 });

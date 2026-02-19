@@ -689,6 +689,12 @@ export interface ArenaCheckResult {
   reason_code: string;
 }
 
+export interface ArenaScoreExplainLink {
+  label: string;
+  url: string;
+  source?: string;
+}
+
 export interface ArenaContenderView {
   contender_id: string;
   label: string;
@@ -709,6 +715,11 @@ export interface ArenaContenderView {
     autonomy_score: number;
   };
   check_results: ArenaCheckResult[];
+  score_explain: {
+    final_score: number;
+    reason_codes: string[];
+    evidence_links: ArenaScoreExplainLink[];
+  };
   review_paste: string;
   manager_review_json: string;
 }
@@ -804,6 +815,13 @@ interface ArenaReportResponse {
       autonomy_score?: unknown;
     };
     check_results?: unknown;
+    score_explain?: {
+      derived?: {
+        final_score?: unknown;
+      };
+      reason_codes?: unknown;
+      evidence_links?: unknown;
+    };
     review_paste?: unknown;
     manager_review_json?: unknown;
   }>;
@@ -847,6 +865,28 @@ function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>
     ? managerReviewRaw
     : JSON.stringify(managerReviewRaw ?? {}, null, 2);
 
+  const evidenceLinksRaw = row.score_explain?.evidence_links;
+  const evidenceLinks = Array.isArray(evidenceLinksRaw)
+    ? evidenceLinksRaw
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const rec = entry as Record<string, unknown>;
+        const label = asString(rec.label);
+        const url = asString(rec.url);
+        const source = asString(rec.source) ?? undefined;
+        if (!label || !url) return null;
+        return { label, url, source } as ArenaScoreExplainLink;
+      })
+      .filter((entry): entry is ArenaScoreExplainLink => entry !== null)
+    : [];
+
+  const reasonCodesRaw = row.score_explain?.reason_codes;
+  const scoreReasonCodes = Array.isArray(reasonCodesRaw)
+    ? reasonCodesRaw.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  const finalScore = asNumber(row.score_explain?.derived?.final_score, asNumber(row.score, 0));
+
   return {
     contender_id: contenderId,
     label,
@@ -867,6 +907,11 @@ function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>
       autonomy_score: asNumber(row.metrics?.autonomy_score, 0),
     },
     check_results: checkResults,
+    score_explain: {
+      final_score: finalScore,
+      reason_codes: scoreReasonCodes,
+      evidence_links: evidenceLinks,
+    },
     review_paste: asString(row.review_paste) ?? '',
     manager_review_json: managerReviewJson,
   };

@@ -1,6 +1,6 @@
 {
   "arena_id": "arena_bty_arena_001",
-  "confidence": 0.3125,
+  "confidence": 0.3176,
   "contender_id": "contender_gemini_swarm",
   "decision": "reject",
   "failed_checks": [
@@ -16,15 +16,16 @@
     }
   ],
   "metrics": {
-    "autonomy_score": 69,
+    "autonomy_score": 34,
     "cost_usd": 0.31,
-    "efficiency_score": 72,
+    "efficiency_score": 35.98,
     "latency_ms": 22100,
-    "quality_score": 74,
-    "risk_score": 52
+    "quality_score": 56.25,
+    "risk_score": 60.39
   },
   "reason_codes": [
-    "ARENA_MANDATORY_CHECK_FAILED"
+    "ARENA_MANDATORY_CHECK_FAILED",
+    "ARENA_RISK_ABOVE_THRESHOLD"
   ],
   "recommended_next_action": "Reject contender and request contract/evidence correction.",
   "schema_version": "manager_review.v1"

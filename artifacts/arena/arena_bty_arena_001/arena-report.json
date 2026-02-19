@@ -8,16 +8,107 @@
       "manager_review_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_codex_pi/manager-review.json",
       "mandatory_failed": 0,
       "metrics": {
-        "autonomy_score": 84,
+        "autonomy_score": 94.5,
         "cost_usd": 0.78,
-        "efficiency_score": 81,
+        "efficiency_score": 70.1,
         "latency_ms": 16000,
-        "quality_score": 92,
-        "risk_score": 26
+        "quality_score": 98.41,
+        "risk_score": 18.58
       },
       "proof_pack_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_codex_pi/proof-pack.v3.json",
       "review_paste_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_codex_pi/review-paste.md",
-      "score": 85.5475
+      "score": 89.275,
+      "score_explain": {
+        "derived": {
+          "autonomy_score": 94.5,
+          "cost_score": 84.4,
+          "efficiency_score": 70.1,
+          "final_score": 89.275,
+          "optional_penalty": 0,
+          "quality_score": 98.41,
+          "risk_score": 18.58,
+          "safety_score": 81.42,
+          "speed_score": 86.67,
+          "weighted_pre_penalty": 89.275
+        },
+        "evidence_links": [
+          {
+            "label": "Arena execution trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+          },
+          {
+            "label": "PR #366 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+          },
+          {
+            "label": "Test run summary",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+          },
+          {
+            "label": "Typecheck log",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+          },
+          {
+            "label": "Usage ledger",
+            "source": "cost",
+            "url": "https://docs.clawsig.com/quickstart"
+          }
+        ],
+        "formula": {
+          "components": [
+            "quality = f(ci.typecheck, ci.lint, test pass rate, manual interventions)",
+            "risk = f(ci failures, retries, manual interventions, git churn)",
+            "efficiency = f(retries, tool_calls, latency, files_changed)",
+            "speed = 100 - min(100, latency_ms/120000*100)",
+            "cost = 100 - min(100, cost_usd/5*100)",
+            "safety = 100 - risk_score",
+            "optional_penalty = optional_failed * 1.5"
+          ],
+          "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+        },
+        "raw_inputs": {
+          "ci": {
+            "lint_passed": true,
+            "tests_failed": 2,
+            "tests_passed": 124,
+            "tests_total": 126,
+            "typecheck_passed": true
+          },
+          "cost": {
+            "usd": 0.78
+          },
+          "execution": {
+            "latency_ms": 16000,
+            "manual_interventions": 0,
+            "retries": 1,
+            "tool_calls": 42
+          },
+          "git": {
+            "churn_hotspots": [
+              "services/clawverify/src/schema-registry.ts",
+              "services/clawverify/src/schema-validation.ts"
+            ],
+            "files_changed": 21,
+            "lines_added": 880,
+            "lines_deleted": 210
+          }
+        },
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ],
+        "weights": {
+          "objective": {
+            "cost": 0.2,
+            "quality": 0.35,
+            "safety": 0.2,
+            "speed": 0.25
+          }
+        }
+      }
     },
     {
       "contender_id": "contender_claude_codex_cli",
@@ -26,16 +117,107 @@
       "manager_review_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_claude_codex_cli/manager-review.json",
       "mandatory_failed": 0,
       "metrics": {
-        "autonomy_score": 79,
+        "autonomy_score": 74,
         "cost_usd": 0.54,
-        "efficiency_score": 90,
+        "efficiency_score": 61.46,
         "latency_ms": 11200,
-        "quality_score": 86,
-        "risk_score": 38
+        "quality_score": 89.33,
+        "risk_score": 27.34
       },
       "proof_pack_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_claude_codex_cli/proof-pack.v3.json",
       "review_paste_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_claude_codex_cli/review-paste.md",
-      "score": 83.0075
+      "score": 86.305,
+      "score_explain": {
+        "derived": {
+          "autonomy_score": 74,
+          "cost_score": 89.2,
+          "efficiency_score": 61.46,
+          "final_score": 86.305,
+          "optional_penalty": 0,
+          "quality_score": 89.33,
+          "risk_score": 27.34,
+          "safety_score": 72.66,
+          "speed_score": 90.67,
+          "weighted_pre_penalty": 86.305
+        },
+        "evidence_links": [
+          {
+            "label": "Arena replay trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560"
+          },
+          {
+            "label": "PR #368 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/368/files"
+          },
+          {
+            "label": "Typecheck run",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560"
+          },
+          {
+            "label": "Unit test summary",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187190314/job/64164222818"
+          },
+          {
+            "label": "Usage breakdown",
+            "source": "cost",
+            "url": "https://github.com/clawbureau/clawbureau/pull/368"
+          }
+        ],
+        "formula": {
+          "components": [
+            "quality = f(ci.typecheck, ci.lint, test pass rate, manual interventions)",
+            "risk = f(ci failures, retries, manual interventions, git churn)",
+            "efficiency = f(retries, tool_calls, latency, files_changed)",
+            "speed = 100 - min(100, latency_ms/120000*100)",
+            "cost = 100 - min(100, cost_usd/5*100)",
+            "safety = 100 - risk_score",
+            "optional_penalty = optional_failed * 1.5"
+          ],
+          "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+        },
+        "raw_inputs": {
+          "ci": {
+            "lint_passed": true,
+            "tests_failed": 7,
+            "tests_passed": 98,
+            "tests_total": 105,
+            "typecheck_passed": true
+          },
+          "cost": {
+            "usd": 0.54
+          },
+          "execution": {
+            "latency_ms": 11200,
+            "manual_interventions": 1,
+            "retries": 2,
+            "tool_calls": 35
+          },
+          "git": {
+            "churn_hotspots": [
+              "services/clawsig-explorer/src/pages/arena.ts"
+            ],
+            "files_changed": 14,
+            "lines_added": 640,
+            "lines_deleted": 180
+          }
+        },
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED",
+          "ARENA_EVIDENCE_MANUAL_INTERVENTION"
+        ],
+        "weights": {
+          "objective": {
+            "cost": 0.2,
+            "quality": 0.35,
+            "safety": 0.2,
+            "speed": 0.25
+          }
+        }
+      }
     },
     {
       "contender_id": "contender_gemini_swarm",
@@ -44,16 +226,112 @@
       "manager_review_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_gemini_swarm/manager-review.json",
       "mandatory_failed": 2,
       "metrics": {
-        "autonomy_score": 69,
+        "autonomy_score": 34,
         "cost_usd": 0.31,
-        "efficiency_score": 72,
+        "efficiency_score": 35.98,
         "latency_ms": 22100,
-        "quality_score": 74,
-        "risk_score": 52
+        "quality_score": 56.25,
+        "risk_score": 60.39
       },
       "proof_pack_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_gemini_swarm/proof-pack.v3.json",
       "review_paste_path": "artifacts/arena/arena_bty_arena_001/contenders/contender_gemini_swarm/review-paste.md",
-      "score": 74.655
+      "score": 66.7645,
+      "score_explain": {
+        "derived": {
+          "autonomy_score": 34,
+          "cost_score": 93.8,
+          "efficiency_score": 35.98,
+          "final_score": 66.7645,
+          "optional_penalty": 0,
+          "quality_score": 56.25,
+          "risk_score": 60.39,
+          "safety_score": 39.61,
+          "speed_score": 81.58,
+          "weighted_pre_penalty": 66.7645
+        },
+        "evidence_links": [
+          {
+            "label": "CI run",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "PR #370 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370/files"
+          },
+          {
+            "label": "Protocol check",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188096436/job/64167593939"
+          },
+          {
+            "label": "Swarm trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "Usage estimate",
+            "source": "cost",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370"
+          }
+        ],
+        "formula": {
+          "components": [
+            "quality = f(ci.typecheck, ci.lint, test pass rate, manual interventions)",
+            "risk = f(ci failures, retries, manual interventions, git churn)",
+            "efficiency = f(retries, tool_calls, latency, files_changed)",
+            "speed = 100 - min(100, latency_ms/120000*100)",
+            "cost = 100 - min(100, cost_usd/5*100)",
+            "safety = 100 - risk_score",
+            "optional_penalty = optional_failed * 1.5"
+          ],
+          "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+        },
+        "raw_inputs": {
+          "ci": {
+            "lint_passed": false,
+            "tests_failed": 19,
+            "tests_passed": 61,
+            "tests_total": 80,
+            "typecheck_passed": true
+          },
+          "cost": {
+            "usd": 0.31
+          },
+          "execution": {
+            "latency_ms": 22100,
+            "manual_interventions": 2,
+            "retries": 5,
+            "tool_calls": 58
+          },
+          "git": {
+            "churn_hotspots": [
+              "services/_archived/clawbounties/src/index.ts",
+              "services/clawsig-explorer/src/api.ts"
+            ],
+            "files_changed": 33,
+            "lines_added": 1350,
+            "lines_deleted": 620
+          }
+        },
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED",
+          "ARENA_EVIDENCE_LINT_FAILED",
+          "ARENA_EVIDENCE_RETRY_HEAVY",
+          "ARENA_EVIDENCE_MANUAL_INTERVENTION",
+          "ARENA_EVIDENCE_HIGH_CHURN",
+          "ARENA_MANDATORY_CHECK_FAILED"
+        ],
+        "weights": {
+          "objective": {
+            "cost": 0.2,
+            "quality": 0.35,
+            "safety": 0.2,
+            "speed": 0.25
+          }
+        }
+      }
     }
   ],
   "contract": {
@@ -85,19 +363,19 @@
       "contender_id": "contender_codex_pi",
       "hard_gate_pass": true,
       "rank": 1,
-      "score": 85.5475
+      "score": 89.275
     },
     {
       "contender_id": "contender_claude_codex_cli",
       "hard_gate_pass": true,
       "rank": 2,
-      "score": 83.0075
+      "score": 86.305
     },
     {
       "contender_id": "contender_gemini_swarm",
       "hard_gate_pass": false,
       "rank": 3,
-      "score": 74.655
+      "score": 66.7645
     }
   ],
   "reason_codes": [
@@ -105,12 +383,139 @@
     "ARENA_HARD_GATES_PASSED"
   ],
   "schema_version": "arena_report.v1",
+  "score_explain": {
+    "contender_breakdown": [
+      {
+        "contender_id": "contender_codex_pi",
+        "evidence_links": [
+          {
+            "label": "Arena execution trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+          },
+          {
+            "label": "PR #366 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+          },
+          {
+            "label": "Test run summary",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+          },
+          {
+            "label": "Typecheck log",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+          },
+          {
+            "label": "Usage ledger",
+            "source": "cost",
+            "url": "https://docs.clawsig.com/quickstart"
+          }
+        ],
+        "final_score": 89.275,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ]
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "evidence_links": [
+          {
+            "label": "Arena replay trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560"
+          },
+          {
+            "label": "PR #368 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/368/files"
+          },
+          {
+            "label": "Typecheck run",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560"
+          },
+          {
+            "label": "Unit test summary",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22187190314/job/64164222818"
+          },
+          {
+            "label": "Usage breakdown",
+            "source": "cost",
+            "url": "https://github.com/clawbureau/clawbureau/pull/368"
+          }
+        ],
+        "final_score": 86.305,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED",
+          "ARENA_EVIDENCE_MANUAL_INTERVENTION"
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "evidence_links": [
+          {
+            "label": "CI run",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "PR #370 diff",
+            "source": "git",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370/files"
+          },
+          {
+            "label": "Protocol check",
+            "source": "ci",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188096436/job/64167593939"
+          },
+          {
+            "label": "Swarm trace",
+            "source": "execution",
+            "url": "https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977"
+          },
+          {
+            "label": "Usage estimate",
+            "source": "cost",
+            "url": "https://github.com/clawbureau/clawbureau/pull/370"
+          }
+        ],
+        "final_score": 66.7645,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED",
+          "ARENA_EVIDENCE_LINT_FAILED",
+          "ARENA_EVIDENCE_RETRY_HEAVY",
+          "ARENA_EVIDENCE_MANUAL_INTERVENTION",
+          "ARENA_EVIDENCE_HIGH_CHURN",
+          "ARENA_MANDATORY_CHECK_FAILED"
+        ]
+      }
+    ],
+    "formula": {
+      "components": [
+        "quality/risk/efficiency are derived from CI + git + execution traces",
+        "speed is normalized from latency_ms",
+        "cost is normalized from cost_usd",
+        "safety is normalized from risk_score"
+      ],
+      "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+    },
+    "weights": {
+      "cost": 0.2,
+      "quality": 0.35,
+      "safety": 0.2,
+      "speed": 0.25
+    }
+  },
   "tradeoffs": [
     "contender_codex_pi wins quality/safety but costs more than contender_claude_codex_cli.",
     "contender_codex_pi trades latency for stronger compliance confidence."
   ],
   "winner": {
     "contender_id": "contender_codex_pi",
-    "reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (85.5475)."
+    "reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750)."
   }
 }

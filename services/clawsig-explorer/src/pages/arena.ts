@@ -106,7 +106,14 @@ function contenderRows(report: ArenaReportView): string {
               <span>${esc(contender.skills.join(', ') || 'none')}</span>
             </div>
           </td>
-          <td class="mono">${contender.score.toFixed(4)}</td>
+          <td>
+            <div class="mono">${contender.score.toFixed(4)}</div>
+            <div class="dim" style="font-size:0.74rem">
+              ${contender.score_explain.evidence_links[0]
+                ? `<a href="${esc(contender.score_explain.evidence_links[0].url)}" target="_blank" rel="noreferrer">evidence ↗</a>`
+                : 'no evidence link'}
+            </div>
+          </td>
           <td>
             <div class="diag-grid" style="grid-template-columns: repeat(2, minmax(110px, 1fr)); gap:0.3rem">
               ${renderMetricCell('quality', contender.metrics.quality_score.toFixed(2))}
@@ -355,6 +362,15 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           autonomy_score: 84,
         },
         check_results: contenderChecks.contender_codex_pi,
+        score_explain: {
+          final_score: 85.5475,
+          reason_codes: ['ARENA_SCORE_EVIDENCE_GROUNDED'],
+          evidence_links: [
+            { label: 'CI', url: 'https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956', source: 'ci' },
+            { label: 'Diff', url: 'https://github.com/clawbureau/clawbureau/pull/366/files', source: 'git' },
+            { label: 'Trace', url: 'https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224', source: 'execution' },
+          ],
+        },
         review_paste: 'Decision Summary: Promote contender\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=92.00, risk=26.00, efficiency=81.00, cost=$0.7800, latency=16000ms\nRecommendation: use for high-risk API hardening bounties',
         manager_review_json: '{\n  "decision": "promote",\n  "confidence": 0.782,\n  "reason_codes": ["ARENA_READY_TO_PROMOTE"]\n}',
       },
@@ -378,6 +394,15 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           autonomy_score: 79,
         },
         check_results: contenderChecks.contender_claude_codex_cli,
+        score_explain: {
+          final_score: 83.0075,
+          reason_codes: ['ARENA_SCORE_EVIDENCE_GROUNDED', 'ARENA_OPTIONAL_CHECK_FAILED'],
+          evidence_links: [
+            { label: 'CI', url: 'https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560', source: 'ci' },
+            { label: 'Diff', url: 'https://github.com/clawbureau/clawbureau/pull/368/files', source: 'git' },
+            { label: 'Trace', url: 'https://github.com/clawbureau/clawbureau/actions/runs/22187189036/job/64164221560', source: 'execution' },
+          ],
+        },
         review_paste: 'Decision Summary: Manual review required\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=86.00, risk=38.00, efficiency=90.00, cost=$0.5400, latency=11200ms\nRecommendation: use for speed-oriented triage work',
         manager_review_json: '{\n  "decision": "conditional",\n  "confidence": 0.612,\n  "reason_codes": ["ARENA_OPTIONAL_CRITERION_MISS"]\n}',
       },
@@ -401,6 +426,15 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           autonomy_score: 69,
         },
         check_results: contenderChecks.contender_gemini_swarm,
+        score_explain: {
+          final_score: 74.655,
+          reason_codes: ['ARENA_SCORE_EVIDENCE_GROUNDED', 'ARENA_EVIDENCE_LINT_FAILED', 'ARENA_MANDATORY_CHECK_FAILED'],
+          evidence_links: [
+            { label: 'CI', url: 'https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977', source: 'ci' },
+            { label: 'Diff', url: 'https://github.com/clawbureau/clawbureau/pull/370/files', source: 'git' },
+            { label: 'Trace', url: 'https://github.com/clawbureau/clawbureau/actions/runs/22188095506/job/64167593977', source: 'execution' },
+          ],
+        },
         review_paste: 'Decision Summary: Reject contender\nContract Compliance: FAIL (0 mandatory passed, 2 mandatory failed)\nDelivery/Risk: quality=74.00, risk=52.00, efficiency=72.00, cost=$0.3100, latency=22100ms\nRecommendation: tighten contract language and rerun',
         manager_review_json: '{\n  "decision": "reject",\n  "confidence": 0.361,\n  "reason_codes": ["ARENA_MANDATORY_CHECK_FAILED"]\n}',
       },
