@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..044)
+> **Scope:** Bounty Arena MVP (AGP-US-031..045)
 
 # Bounty Arena MVP Runbook
 
@@ -31,6 +31,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: pending
 - AGP-US-044 — decision paste autopost (PR comment + bounty review thread)
   - merge: pending
+- AGP-US-045 — override-driven policy learning + routing feedback loop
+  - merge: pending
 
 ## 2. Key files
 
@@ -38,6 +40,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/run-bounty-arena.mjs`
 - `scripts/arena/lib/arena-runner.mjs`
 - `scripts/arena/lib/proof-pack-v3.mjs`
+- `scripts/arena/generate-policy-learning-report.mjs`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -47,6 +50,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 ### Arena persistence / APIs
 - `services/_archived/clawbounties/migrations/0019_bounty_arena_runs.sql`
 - `services/_archived/clawbounties/migrations/0022_bounty_arena_live_lifecycle.sql`
+- `services/_archived/clawbounties/migrations/0023_arena_outcome_override_reasons.sql`
 - `services/_archived/clawbounties/src/index.ts`
 
 ### Explorer routes
@@ -66,6 +70,12 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 
 ### Manager route API
 - `POST /v1/arena/manager/route` (admin)
+- `POST /v1/arena/manager/coach` (admin)
+
+### Policy learning API
+- `GET /v1/arena/policy-learning` (admin)
+  - supports `task_fingerprint` and `limit`
+  - returns override reason breakdown + contract/prompt rewrite recommendations
 
 ### Existing reads now enriched
 - `GET /v1/bounties/{bounty_id}` includes `arena` + `arena_lifecycle`
@@ -96,6 +106,7 @@ wrangler d1 migrations apply clawbounties --remote
 Required migrations for Arena MVP:
 - `0019_bounty_arena_runs.sql`
 - `0022_bounty_arena_live_lifecycle.sql`
+- `0023_arena_outcome_override_reasons.sql`
 
 ## 6. End-to-end operator flow
 
@@ -239,11 +250,27 @@ node scripts/arena/post-outcome-feedback.mjs \
   --review-time-minutes 18 \
   --time-to-accept-minutes 55 \
   --bounties-base https://staging.clawbounties.com
+
+# OVERRIDDEN outcomes now require explicit reason codes:
+node scripts/arena/post-outcome-feedback.mjs \
+  --bounty-id bty_... \
+  --arena-id arena_... \
+  --outcome-status OVERRIDDEN \
+  --override-reason-code ARENA_OVERRIDE_POLICY_RISK \
+  --review-time-minutes 27
 ```
 
-Read calibration metrics:
+Read calibration + policy-learning metrics:
 - `GET /v1/arena/calibration`
 - `GET /v1/arena/{arena_id}/outcomes`
+- `GET /v1/arena/policy-learning?task_fingerprint=<...>`
+
+Emit policy-learning artifacts:
+```bash
+node scripts/arena/generate-policy-learning-report.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --bounties-base https://staging.clawbounties.com
+```
 
 ## 7. Fail-closed behavior checklist
 

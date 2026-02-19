@@ -26,3 +26,16 @@ test('outcome feedback script dry-run builds payload and endpoint', () => {
   assert.equal(typeof json.payload.idempotency_key, 'string');
   assert.equal(String(json.endpoint).includes('/v1/bounties/bty_arena_001/arena/outcome'), true);
 });
+
+test('outcome feedback script requires override reason for OVERRIDDEN status', () => {
+  const proc = spawnSync(process.execPath, [
+    scriptPath,
+    '--bounty-id', 'bty_arena_001',
+    '--arena-id', 'arena_bty_arena_001',
+    '--outcome-status', 'OVERRIDDEN',
+    '--dry-run',
+  ], { encoding: 'utf8' });
+
+  assert.notEqual(proc.status, 0);
+  assert.equal((proc.stderr + proc.stdout).includes('--override-reason-code is required'), true);
+});
