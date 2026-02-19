@@ -1,0 +1,52 @@
+name: clawsig-prod-parity-drift
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_drift_count:
+        description: Maximum allowed parity drift checks before failing
+        required: false
+        default: '0'
+  schedule:
+    - cron: '37 * * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/clawsig-prod-parity-drift.yml'
+      - '.github/workflows/clawsig-guarded-deploy.yml'
+      - 'scripts/ops/check-clawsig-prod-parity-drift.mjs'
+      - 'services/clawsig-ledger/**'
+      - 'services/clawsig-explorer/**'
+
+jobs:
+  parity-drift-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run staging/prod parity drift gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.max_drift_count }}" ]; then
+            MAX_DRIFT="${{ github.event.inputs.max_drift_count }}"
+          else
+            MAX_DRIFT="0"
+          fi
+
+          node scripts/ops/check-clawsig-prod-parity-drift.mjs --max-drift-count "$MAX_DRIFT"
+
+      - name: Upload parity drift artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clawsig-parity-drift-${{ github.run_id }}
+          path: artifacts/ops/clawsig-parity-drift/
+          if-no-files-found: warn
