@@ -17,6 +17,34 @@ interface FetchOptions {
   cacheTtl?: number;
 }
 
+export interface RunsFeedFilters {
+  status?: string;
+  tier?: string;
+  reason_code?: string;
+  agent_did?: string;
+}
+
+export interface RunsFeedRun {
+  run_id: string;
+  bundle_hash_b64u: string;
+  agent_did: string;
+  proof_tier: string;
+  status: string;
+  reason_code: string | null;
+  failure_class: string | null;
+  verification_source: string | null;
+  auth_mode: string | null;
+  created_at: string;
+}
+
+export interface RunsFeedPage {
+  runs: RunsFeedRun[];
+  limit: number;
+  has_next: boolean;
+  next_cursor: string | null;
+  filters: RunsFeedFilters;
+}
+
 async function fetchJson<T>(
   url: string,
   opts: FetchOptions,
@@ -106,6 +134,45 @@ interface VaaSRunResponse extends VaaSRunPayload {
   event_count?: unknown;
 }
 
+interface VaaSRunsFeedResponse {
+  runs?: VaaSRunPayload[];
+  limit?: unknown;
+  has_next?: unknown;
+  next_cursor?: unknown;
+  filters?: {
+    status?: unknown;
+    tier?: unknown;
+    reason_code?: unknown;
+    agent_did?: unknown;
+  };
+}
+
+function parseRunsFeedRun(payload: VaaSRunPayload): RunsFeedRun | null {
+  const runId = asString(payload.run_id);
+  const bundleHash = asString(payload.bundle_hash_b64u);
+  const agentDid = asString(payload.agent_did);
+  const proofTier = asString(payload.proof_tier);
+  const status = asString(payload.status);
+  const createdAt = asString(payload.created_at);
+
+  if (!runId || !bundleHash || !agentDid || !proofTier || !status || !createdAt) {
+    return null;
+  }
+
+  return {
+    run_id: runId,
+    bundle_hash_b64u: bundleHash,
+    agent_did: agentDid,
+    proof_tier: proofTier,
+    status,
+    reason_code: asString(payload.reason_code),
+    failure_class: asString(payload.failure_class),
+    verification_source: asString(payload.verification_source),
+    auth_mode: asString(payload.auth_mode),
+    created_at: createdAt,
+  };
+}
+
 export async function fetchRun(
   runId: string,
   opts: FetchOptions,
@@ -118,41 +185,70 @@ export async function fetchRun(
 
   const run = data.run ?? data;
 
-  const resolvedRunId = asString(run.run_id);
-  const resolvedBundleHash = asString(run.bundle_hash_b64u);
-  const resolvedAgentDid = asString(run.agent_did);
-  const resolvedProofTier = asString(run.proof_tier);
-  const resolvedStatus = asString(run.status);
-  const resolvedCreatedAt = asString(run.created_at);
-
-  if (
-    !resolvedRunId ||
-    !resolvedBundleHash ||
-    !resolvedAgentDid ||
-    !resolvedProofTier ||
-    !resolvedStatus ||
-    !resolvedCreatedAt
-  ) {
-    return null;
-  }
+  const baseRun = parseRunsFeedRun(run);
+  if (!baseRun) return null;
 
   return {
-    run_id: resolvedRunId,
-    bundle_hash_b64u: resolvedBundleHash,
-    agent_did: resolvedAgentDid,
-    proof_tier: resolvedProofTier,
-    status: resolvedStatus,
-    reason_code: asString(run.reason_code),
-    failure_class: asString(run.failure_class),
-    verification_source: asString(run.verification_source),
-    auth_mode: asString(run.auth_mode),
+    ...baseRun,
     wpc_hash_b64u: asString(run.wpc_hash_b64u),
     rt_leaf_index: run.rt_leaf_index === null ? null : asNumber(run.rt_leaf_index, 0),
-    created_at: resolvedCreatedAt,
     models: Array.isArray(run.models) ? run.models : [],
     bundle_url: asString(data.bundle_url ?? null) ?? undefined,
     receipt_count: asNumber(data.receipt_count, 0),
     event_count: asNumber(data.event_count, 0),
+  };
+}
+
+export async function fetchRunsFeed(
+  params: {
+    limit?: number;
+    cursor?: string;
+    status?: string;
+    tier?: string;
+    reason_code?: string;
+    agent_did?: string;
+  },
+  opts: FetchOptions,
+): Promise<RunsFeedPage | null> {
+  const search = new URLSearchParams();
+
+  if (params.limit && Number.isFinite(params.limit)) {
+    search.set('limit', String(params.limit));
+  }
+  if (params.cursor) search.set('cursor', params.cursor);
+  if (params.status) search.set('status', params.status);
+  if (params.tier) search.set('tier', params.tier);
+  if (params.reason_code) search.set('reason_code', params.reason_code);
+  if (params.agent_did) search.set('agent_did', params.agent_did);
+
+  const qs = search.toString();
+  const path = qs.length > 0 ? `/v1/ledger/runs?${qs}` : '/v1/ledger/runs';
+
+  const data = await fetchJson<VaaSRunsFeedResponse>(path, {
+    ...opts,
+    cacheTtl: 15,
+  });
+  if (!data) return null;
+
+  const rows = Array.isArray(data.runs)
+    ? data.runs
+      .map((row) => parseRunsFeedRun(row))
+      .filter((row): row is RunsFeedRun => row !== null)
+    : [];
+
+  const filters: RunsFeedFilters = {
+    status: asString(data.filters?.status) ?? undefined,
+    tier: asString(data.filters?.tier) ?? undefined,
+    reason_code: asString(data.filters?.reason_code) ?? undefined,
+    agent_did: asString(data.filters?.agent_did) ?? undefined,
+  };
+
+  return {
+    runs: rows,
+    limit: Math.max(1, asNumber(data.limit, params.limit ?? 20)),
+    has_next: Boolean(data.has_next),
+    next_cursor: asString(data.next_cursor),
+    filters,
   };
 }
 
