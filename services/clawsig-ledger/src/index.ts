@@ -121,6 +121,96 @@ async function findExistingRunByBundleHash(
   return row ?? null;
 }
 
+function buildDuplicateVerifyResponse(existingRun: ExistingRunLookup, isAuthenticated: boolean): VerifyResponse {
+  const status = existingRun.status === 'PASS' ? 'PASS' : 'FAIL';
+  const reasonCode = existingRun.reason_code ?? (status === 'PASS' ? 'OK' : 'VERIFICATION_FAILED');
+  const failureClass = existingRun.failure_class ?? 'none';
+  const verificationSource = existingRun.verification_source ?? 'clawverify_api';
+  const authMode = existingRun.auth_mode ?? (isAuthenticated ? 'api_key' : 'pow');
+
+  return {
+    status,
+    tier: existingRun.proof_tier,
+    reason_code: reasonCode,
+    failure_class: failureClass,
+    verification_source: verificationSource,
+    auth_mode: authMode,
+    run_id: existingRun.run_id,
+    urls: {
+      badge: `https://api.clawverify.com/v1/badges/${existingRun.run_id}.svg`,
+      ledger: `https://explorer.clawsig.com/run/${existingRun.run_id}`,
+    },
+    rt_log_inclusion: { status: 'NOT_PUBLISHED' },
+    compliance_reports: {},
+  };
+}
+
+function d1Changes(result: unknown): number {
+  const maybeMeta = (result as { meta?: { changes?: number | string } } | null | undefined)?.meta;
+  const raw = maybeMeta?.changes;
+
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return 0;
+}
+
+async function persistRunIfNew(env: Env, input: {
+  run_id: string;
+  bundle_hash_b64u: string;
+  agent_did: string;
+  proof_tier: string;
+  status: string;
+  reason_code: string;
+  failure_class: string;
+  verification_source: string;
+  auth_mode: string;
+  wpc_hash_b64u: string | undefined;
+  models_json: string | undefined;
+}): Promise<{ inserted: boolean }> {
+  const insertResult = await env.LEDGER_DB.prepare(
+    `INSERT OR IGNORE INTO runs (
+      run_id, bundle_hash_b64u, agent_did, proof_tier, status,
+      reason_code, failure_class, verification_source, auth_mode,
+      wpc_hash_b64u, models_json
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(
+    input.run_id,
+    input.bundle_hash_b64u,
+    input.agent_did,
+    input.proof_tier,
+    input.status,
+    input.reason_code,
+    input.failure_class,
+    input.verification_source,
+    input.auth_mode,
+    input.wpc_hash_b64u ?? null,
+    input.models_json ?? null,
+  ).run();
+
+  const inserted = d1Changes(insertResult) > 0;
+  if (!inserted) {
+    return { inserted: false };
+  }
+
+  const gw = ['gateway', 'sandbox', 'tee', 'witnessed_web'].includes(input.proof_tier) ? 1 : 0;
+  const viol = input.status !== 'PASS' ? 1 : 0;
+
+  await env.LEDGER_DB.prepare(
+    `INSERT INTO agents (did, verified_runs, gateway_tier_runs, policy_violations)
+     VALUES (?,1,?,?)
+     ON CONFLICT(did) DO UPDATE SET
+       verified_runs = verified_runs + 1,
+       gateway_tier_runs = gateway_tier_runs + ?,
+       policy_violations = policy_violations + ?`
+  ).bind(input.agent_did, gw, viol, gw, viol).run();
+
+  return { inserted: true };
+}
+
 const DEFAULT_RUNS_LIMIT = 20;
 const MAX_RUNS_LIMIT = 100;
 const MAX_QUERY_STRING_LENGTH = 1024;
@@ -354,29 +444,8 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   }
 
   if (existingRun) {
-    const status = existingRun.status === 'PASS' ? 'PASS' : 'FAIL';
-    const reasonCode = existingRun.reason_code ?? (status === 'PASS' ? 'OK' : 'VERIFICATION_FAILED');
-    const failureClass = existingRun.failure_class ?? 'none';
-    const verificationSource = existingRun.verification_source ?? 'clawverify_api';
-    const authMode = existingRun.auth_mode ?? (isAuthenticated ? 'api_key' : 'pow');
-
-    const duplicateResponse: VerifyResponse = {
-      status,
-      tier: existingRun.proof_tier,
-      reason_code: reasonCode,
-      failure_class: failureClass,
-      verification_source: verificationSource,
-      auth_mode: authMode,
-      run_id: existingRun.run_id,
-      urls: {
-        badge: `https://api.clawverify.com/v1/badges/${existingRun.run_id}.svg`,
-        ledger: `https://explorer.clawsig.com/run/${existingRun.run_id}`,
-      },
-      rt_log_inclusion: { status: 'NOT_PUBLISHED' },
-      compliance_reports: {},
-    };
-
-    return json(duplicateResponse, status === 'PASS' ? 200 : 422);
+    const duplicateResponse = buildDuplicateVerifyResponse(existingRun, isAuthenticated);
+    return json(duplicateResponse, duplicateResponse.status === 'PASS' ? 200 : 422);
   }
 
   const verification = await verifyProofBundleViaApi(body.proof_bundle, env);
@@ -418,22 +487,55 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
     }
   }
 
+  let queuedForLedgerIngest = false;
+
   if (shouldPublishToLedger) {
-    const msg: LedgerIngestMessage = {
-      run_id: runId,
-      bundle_hash_b64u: bundleHashB64u,
-      agent_did: agentDid,
-      proof_tier: proofTier,
-      status,
-      reason_code: reasonCode,
-      failure_class: failureClass,
-      verification_source: verificationSource,
-      auth_mode: authMode,
-      wpc_hash_b64u: typeof payload.wpc_hash_b64u === 'string' ? payload.wpc_hash_b64u : undefined,
-      models_json: modelsUsed.length > 0 ? JSON.stringify(modelsUsed) : undefined,
-      bundle_json: bundleJsonStr,
-    };
-    ctx.waitUntil(env.LEDGER_QUEUE.send(msg).catch(e => console.error('[vaas] Queue send failed:', e)));
+    const modelsJson = modelsUsed.length > 0 ? JSON.stringify(modelsUsed) : undefined;
+
+    try {
+      const persisted = await persistRunIfNew(env, {
+        run_id: runId,
+        bundle_hash_b64u: bundleHashB64u,
+        agent_did: agentDid,
+        proof_tier: proofTier,
+        status,
+        reason_code: reasonCode,
+        failure_class: failureClass,
+        verification_source: verificationSource,
+        auth_mode: authMode,
+        wpc_hash_b64u: typeof payload.wpc_hash_b64u === 'string' ? payload.wpc_hash_b64u : undefined,
+        models_json: modelsJson,
+      });
+
+      if (!persisted.inserted) {
+        const racedExisting = await findExistingRunByBundleHash(env, bundleHashB64u);
+        if (racedExisting) {
+          const duplicateResponse = buildDuplicateVerifyResponse(racedExisting, isAuthenticated);
+          return json(duplicateResponse, duplicateResponse.status === 'PASS' ? 200 : 422);
+        }
+        return errorJson('Ledger replay race unresolved', 'LEDGER_REPLAY_RACE_UNRESOLVED', 503);
+      }
+
+      const msg: LedgerIngestMessage = {
+        run_id: runId,
+        bundle_hash_b64u: bundleHashB64u,
+        agent_did: agentDid,
+        proof_tier: proofTier,
+        status,
+        reason_code: reasonCode,
+        failure_class: failureClass,
+        verification_source: verificationSource,
+        auth_mode: authMode,
+        wpc_hash_b64u: typeof payload.wpc_hash_b64u === 'string' ? payload.wpc_hash_b64u : undefined,
+        models_json: modelsJson,
+        bundle_json: bundleJsonStr,
+      };
+
+      queuedForLedgerIngest = true;
+      ctx.waitUntil(env.LEDGER_QUEUE.send(msg).catch(e => console.error('[vaas] Queue send failed:', e)));
+    } catch {
+      return errorJson('Ledger persistence failed', 'LEDGER_PERSIST_FAILED', 503);
+    }
   }
 
   const response: VerifyResponse = {
@@ -445,7 +547,7 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
     auth_mode: authMode,
     run_id: runId,
     urls: { badge: `https://api.clawverify.com/v1/badges/${runId}.svg`, ledger: `https://explorer.clawsig.com/run/${runId}` },
-    rt_log_inclusion: { status: shouldPublishToLedger ? 'PENDING_ASYNC' : 'NOT_PUBLISHED' },
+    rt_log_inclusion: { status: queuedForLedgerIngest ? 'PENDING_ASYNC' : 'NOT_PUBLISHED' },
     compliance_reports: complianceReports,
   };
 

@@ -58,7 +58,16 @@ function findPowNonce(challenge: string, difficulty: number): string {
   throw new Error('failed to find pow nonce within test budget');
 }
 
-function makeLedgerDb(existingRuns: Map<string, ExistingRunRow>): D1Database {
+interface LedgerDbOptions {
+  simulateRaceOnNextInsert?: boolean;
+}
+
+function makeLedgerDb(
+  existingRuns: Map<string, ExistingRunRow>,
+  options: LedgerDbOptions = {}
+): D1Database {
+  let raceOnNextInsert = options.simulateRaceOnNextInsert === true;
+
   return {
     prepare: vi.fn((query: string) => ({
       bind: vi.fn((...params: unknown[]) => ({
@@ -69,7 +78,57 @@ function makeLedgerDb(existingRuns: Map<string, ExistingRunRow>): D1Database {
           return null;
         }),
         all: vi.fn(async () => ({ results: [] })),
-        run: vi.fn(async () => ({})),
+        run: vi.fn(async () => {
+          if (query.includes('INSERT OR IGNORE INTO runs')) {
+            const runId = String(params[0] ?? 'run_unknown');
+            const bundleHash = String(params[1] ?? 'hash_unknown');
+            const proofTier = String(params[3] ?? 'self');
+            const status = String(params[4] ?? 'FAIL');
+            const reasonCodeRaw = params[5];
+            const failureClassRaw = params[6];
+            const verificationSourceRaw = params[7];
+            const authModeRaw = params[8];
+
+            const asNullableString = (value: unknown): string | null =>
+              typeof value === 'string' ? value : null;
+
+            if (raceOnNextInsert) {
+              raceOnNextInsert = false;
+              if (!existingRuns.has(bundleHash)) {
+                existingRuns.set(bundleHash, makeExistingRunRow(runId, {
+                  status,
+                  proof_tier: proofTier,
+                  reason_code: asNullableString(reasonCodeRaw),
+                  failure_class: asNullableString(failureClassRaw),
+                  verification_source: asNullableString(verificationSourceRaw),
+                  auth_mode: asNullableString(authModeRaw),
+                }));
+              }
+              return { meta: { changes: 0 } };
+            }
+
+            if (existingRuns.has(bundleHash)) {
+              return { meta: { changes: 0 } };
+            }
+
+            existingRuns.set(bundleHash, makeExistingRunRow(runId, {
+              status,
+              proof_tier: proofTier,
+              reason_code: asNullableString(reasonCodeRaw),
+              failure_class: asNullableString(failureClassRaw),
+              verification_source: asNullableString(verificationSourceRaw),
+              auth_mode: asNullableString(authModeRaw),
+            }));
+
+            return { meta: { changes: 1 } };
+          }
+
+          if (query.includes('INSERT INTO agents')) {
+            return { meta: { changes: 1 } };
+          }
+
+          return { meta: { changes: 0 } };
+        }),
       })),
     })),
   } as unknown as D1Database;
@@ -91,12 +150,15 @@ function makeExistingRunRow(
   };
 }
 
-function makeEnv(overrides: Partial<Env> = {}) {
+function makeEnv(
+  overrides: Partial<Env> = {},
+  options: LedgerDbOptions = {},
+) {
   const existingRuns = new Map<string, ExistingRunRow>();
   const queueSend = vi.fn().mockResolvedValue(undefined);
 
   const env: Env = {
-    LEDGER_DB: makeLedgerDb(existingRuns),
+    LEDGER_DB: makeLedgerDb(existingRuns, options),
     BUNDLES: {} as R2Bucket,
     LEDGER_QUEUE: {
       send: queueSend,
@@ -410,16 +472,7 @@ describe('POST /v1/verify', () => {
     const firstPayload = (await firstResponse.json()) as Record<string, unknown>;
     const firstRunId = String(firstPayload.run_id);
 
-    existingRuns.set(
-      bundleHash,
-      makeExistingRunRow(firstRunId, {
-        status: 'PASS',
-        reason_code: 'OK',
-        failure_class: 'none',
-        verification_source: 'clawverify_api',
-        auth_mode: 'api_key',
-      })
-    );
+    expect(existingRuns.get(bundleHash)?.run_id).toBe(firstRunId);
 
     const secondResponse = await callVerify(
       env,
@@ -435,6 +488,26 @@ describe('POST /v1/verify', () => {
     expect(secondPayload.verification_source).toBe('clawverify_api');
     expect(secondPayload.auth_mode).toBe('api_key');
     expect(queueSend).toHaveBeenCalledTimes(1);
+    expect(upstreamFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles replay race window by returning deterministic existing run without requeue', async () => {
+    const upstreamFetch = stubUpstreamVerifyValid();
+    const { env, queueSend } = makeEnv({}, { simulateRaceOnNextInsert: true });
+
+    const bundle = { payload: { run_id: 'run_race_window' } };
+    const response = await callVerify(
+      env,
+      { proof_bundle: bundle },
+      { 'X-API-Key': 'test-key' }
+    );
+
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(String(payload.run_id)).toBe(`run_${computeBundleHash(bundle).slice(0, 24)}`);
+    expect(payload.reason_code).toBe('OK');
+    expect(queueSend).toHaveBeenCalledTimes(0);
     expect(upstreamFetch).toHaveBeenCalledTimes(1);
   });
 });
