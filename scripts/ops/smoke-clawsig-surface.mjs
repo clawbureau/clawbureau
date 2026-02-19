@@ -4,11 +4,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const OUTPUT_ROOT_DEFAULT = 'artifacts/ops/clawsig-synthetic';
+const DEFAULT_MAX_RUN_REF_AGE_MINUTES = 180;
 
 function parseArgs(argv) {
   const args = {
     outputRoot: OUTPUT_ROOT_DEFAULT,
-    requireRunRefs: true,
+    maxRunRefAgeMinutes: DEFAULT_MAX_RUN_REF_AGE_MINUTES,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -19,8 +20,13 @@ function parseArgs(argv) {
       continue;
     }
 
-    if (arg === '--allow-missing-run-refs') {
-      args.requireRunRefs = false;
+    if (arg === '--max-run-ref-age-minutes') {
+      const parsed = Number.parseInt(argv[i + 1] ?? '', 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error('Invalid --max-run-ref-age-minutes value');
+      }
+      args.maxRunRefAgeMinutes = parsed;
+      i += 1;
       continue;
     }
   }
@@ -151,6 +157,8 @@ function markerForPage(pathName) {
   if (pathName === '/') return 'Clawsig Explorer';
   if (pathName === '/runs') return 'Runs Feed';
   if (pathName === '/stats') return 'Network Statistics';
+  if (pathName === '/run/:id') return 'Verification Run';
+  if (pathName === '/agent/:did') return 'Agent Profile';
   return null;
 }
 
@@ -161,12 +169,29 @@ function pushCheck(checks, data) {
   });
 }
 
-function latestRunRef(apiHost) {
+function parseRunTimestamp(rawTimestamp) {
+  if (typeof rawTimestamp !== 'string' || rawTimestamp.trim().length === 0) {
+    return null;
+  }
+
+  const trimmed = rawTimestamp.trim();
+  const isoLike = trimmed.includes('T') ? trimmed : `${trimmed.replace(' ', 'T')}Z`;
+  const parsed = new Date(isoLike);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function latestRunRef(apiHost, maxRunRefAgeMinutes) {
   const response = curlViaResolvedHost(apiHost, '/v1/ledger/runs?limit=1');
   if (!response.ok || !response.body) {
     return {
       runId: null,
       agentDid: null,
+      createdAt: null,
+      ageMinutes: null,
       check: {
         name: `api:runs-feed:${apiHost}`,
         ok: false,
@@ -183,24 +208,71 @@ function latestRunRef(apiHost) {
     const run = Array.isArray(parsed?.runs) ? parsed.runs[0] : null;
     const runId = typeof run?.run_id === 'string' ? run.run_id : null;
     const agentDid = typeof run?.agent_did === 'string' ? run.agent_did : null;
+    const createdAt = typeof run?.created_at === 'string' ? run.created_at : null;
+
+    if (!runId || !agentDid || !createdAt) {
+      return {
+        runId,
+        agentDid,
+        createdAt,
+        ageMinutes: null,
+        check: {
+          name: `api:runs-feed:${apiHost}`,
+          ok: false,
+          reason_code: 'NO_RUN_REFERENCE_AVAILABLE',
+          http_status: response.status,
+          host: apiHost,
+          path: '/v1/ledger/runs?limit=1',
+        },
+      };
+    }
+
+    const parsedCreatedAt = parseRunTimestamp(createdAt);
+    if (!parsedCreatedAt) {
+      return {
+        runId,
+        agentDid,
+        createdAt,
+        ageMinutes: null,
+        check: {
+          name: `api:runs-feed:${apiHost}`,
+          ok: false,
+          reason_code: 'RUN_REFERENCE_TIMESTAMP_INVALID',
+          http_status: response.status,
+          host: apiHost,
+          path: '/v1/ledger/runs?limit=1',
+        },
+      };
+    }
+
+    const ageMinutes = (Date.now() - parsedCreatedAt.getTime()) / 60000;
+    const fresh = ageMinutes <= maxRunRefAgeMinutes;
 
     return {
       runId,
       agentDid,
+      createdAt,
+      ageMinutes,
       check: {
         name: `api:runs-feed:${apiHost}`,
-        ok: true,
-        reason_code: runId && agentDid ? 'OK' : 'NO_RUN_REFERENCE_AVAILABLE',
+        ok: fresh,
+        reason_code: fresh ? 'OK' : 'RUN_REFERENCE_STALE',
         http_status: response.status,
         host: apiHost,
         path: '/v1/ledger/runs?limit=1',
-        has_run_reference: Boolean(runId && agentDid),
+        run_id: runId,
+        agent_did: agentDid,
+        created_at: createdAt,
+        age_minutes: Number(ageMinutes.toFixed(3)),
+        max_age_minutes: maxRunRefAgeMinutes,
       },
     };
   } catch {
     return {
       runId: null,
       agentDid: null,
+      createdAt: null,
+      ageMinutes: null,
       check: {
         name: `api:runs-feed:${apiHost}`,
         ok: false,
@@ -211,6 +283,21 @@ function latestRunRef(apiHost) {
       },
     };
   }
+}
+
+function pageCheck(explorerHost, pathName, markerPathName = pathName) {
+  const page = curlViaResolvedHost(explorerHost, pathName);
+  const marker = markerForPage(markerPathName);
+  const hasMarker = marker ? (page.body ?? '').includes(marker) : true;
+
+  return {
+    ok: page.ok && hasMarker,
+    reason_code: page.ok ? (hasMarker ? 'OK' : 'MARKER_MISSING') : page.code,
+    http_status: page.status,
+    host: explorerHost,
+    path: pathName,
+    marker,
+  };
 }
 
 function runSmoke() {
@@ -277,38 +364,34 @@ function runSmoke() {
     ['staging', hosts.staging_api, hosts.staging_explorer],
     ['prod', hosts.prod_api, hosts.prod_explorer],
   ]) {
-    const refs = latestRunRef(apiHost);
-    context.refs[envLabel] = { run_id: refs.runId, agent_did: refs.agentDid };
+    const refs = latestRunRef(apiHost, args.maxRunRefAgeMinutes);
+    context.refs[envLabel] = {
+      run_id: refs.runId,
+      agent_did: refs.agentDid,
+      created_at: refs.createdAt,
+      age_minutes: refs.ageMinutes,
+    };
     pushCheck(checks, refs.check);
 
     for (const pathName of ['/', '/runs', '/stats']) {
-      const page = curlViaResolvedHost(explorerHost, pathName);
-      const marker = markerForPage(pathName);
-      const hasMarker = marker ? (page.body ?? '').includes(marker) : true;
+      const check = pageCheck(explorerHost, pathName);
       pushCheck(checks, {
         name: `page:${explorerHost}${pathName}`,
-        ok: page.ok && hasMarker,
-        reason_code: page.ok ? (hasMarker ? 'OK' : 'MARKER_MISSING') : page.code,
-        http_status: page.status,
-        host: explorerHost,
-        path: pathName,
+        ...check,
       });
     }
 
     if (refs.runId) {
-      const runPage = curlViaResolvedHost(explorerHost, `/run/${encodeURIComponent(refs.runId)}`);
+      const runPath = `/run/${encodeURIComponent(refs.runId)}`;
+      const runCheck = pageCheck(explorerHost, runPath, '/run/:id');
       pushCheck(checks, {
         name: `page:${explorerHost}/run/:id`,
-        ok: runPage.ok,
-        reason_code: runPage.code,
-        http_status: runPage.status,
-        host: explorerHost,
-        path: `/run/${refs.runId}`,
+        ...runCheck,
       });
     } else {
       pushCheck(checks, {
         name: `page:${explorerHost}/run/:id`,
-        ok: !args.requireRunRefs,
+        ok: false,
         reason_code: 'NO_RUN_REFERENCE_AVAILABLE',
         http_status: null,
         host: explorerHost,
@@ -318,19 +401,15 @@ function runSmoke() {
 
     if (refs.agentDid) {
       const agentPath = `/agent/${encodeURIComponent(refs.agentDid)}`;
-      const agentPage = curlViaResolvedHost(explorerHost, agentPath);
+      const agentCheck = pageCheck(explorerHost, agentPath, '/agent/:did');
       pushCheck(checks, {
         name: `page:${explorerHost}/agent/:did`,
-        ok: agentPage.ok,
-        reason_code: agentPage.code,
-        http_status: agentPage.status,
-        host: explorerHost,
-        path: agentPath,
+        ...agentCheck,
       });
     } else {
       pushCheck(checks, {
         name: `page:${explorerHost}/agent/:did`,
-        ok: !args.requireRunRefs,
+        ok: false,
         reason_code: 'NO_AGENT_REFERENCE_AVAILABLE',
         http_status: null,
         host: explorerHost,

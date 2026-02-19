@@ -267,14 +267,47 @@ interface VaaSAgentRunsResponse {
   has_next: boolean;
 }
 
+interface VaaSAgentContractResponse {
+  agent?: {
+    did?: unknown;
+    first_seen_at?: unknown;
+    verified_runs?: unknown;
+    gateway_tier_runs?: unknown;
+    policy_violations?: unknown;
+  };
+}
+
 export async function fetchAgentPassport(
   did: string,
   opts: FetchOptions,
 ): Promise<AgentPassport | null> {
-  return fetchJson<AgentPassport>(
+  const primary = await fetchJson<AgentPassport>(
     `/v1/passports/${encodeURIComponent(did)}`,
     { ...opts, cacheTtl: 120 },
   );
+
+  if (primary) {
+    return primary;
+  }
+
+  const fallback = await fetchJson<VaaSAgentContractResponse>(
+    `/v1/ledger/agents/${encodeURIComponent(did)}?page=1&limit=1`,
+    { ...opts, cacheTtl: 30 },
+  );
+
+  const agentDid = asString(fallback?.agent?.did);
+  const firstSeenAt = asString(fallback?.agent?.first_seen_at);
+  if (!agentDid || !firstSeenAt) {
+    return null;
+  }
+
+  return {
+    did: agentDid,
+    first_seen_at: firstSeenAt,
+    verified_runs: asNumber(fallback?.agent?.verified_runs, 0),
+    gateway_tier_runs: asNumber(fallback?.agent?.gateway_tier_runs, 0),
+    policy_violations: asNumber(fallback?.agent?.policy_violations, 0),
+  };
 }
 
 export async function fetchAgentRuns(

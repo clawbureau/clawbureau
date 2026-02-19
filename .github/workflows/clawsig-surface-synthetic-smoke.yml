@@ -8,7 +8,10 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
     steps:
       - name: Checkout
@@ -19,13 +22,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run synthetic surface smoke
-        run: node scripts/ops/smoke-clawsig-surface.mjs
+      - name: Seed canary references (staging + prod)
+        run: node scripts/ops/seed-clawsig-canary-run.mjs --env all
+
+      - name: Run strict synthetic surface smoke
+        run: node scripts/ops/smoke-clawsig-surface.mjs --max-run-ref-age-minutes 180
 
       - name: Upload synthetic smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: clawsig-synthetic-${{ github.run_id }}
-          path: artifacts/ops/clawsig-synthetic/
+          path: |
+            artifacts/ops/clawsig-synthetic/
+            artifacts/ops/clawsig-canary-seed/
           if-no-files-found: warn
