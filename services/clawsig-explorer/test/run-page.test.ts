@@ -32,6 +32,8 @@ describe('runDetailPage', () => {
     expect(html).toContain('Copy embed snippet');
     expect(html).toContain('twitter:description');
     expect(html).toContain('Clawsig Run');
+    expect(html).toContain('data-copy="https://explorer.clawsig.com/run/run_1234567890abcdef"');
+    expect(html).not.toContain('writeText("<a href');
   });
 
   it('renders fallback triage card for unknown reason codes', () => {
