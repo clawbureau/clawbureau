@@ -752,3 +752,10 @@ Started: 2026-02-02T03:08:26.937005
 - Auto-posted thread body includes manager summary, confidence, reason codes, and evidence links.
 - `scripts/arena/run-real-bounty-arena.mjs` now auto-posts PR comments when PR number is provided/discovered, and skips duplicate bounty-thread posts when service autopost already exists.
 - Decision paste payload now includes richer manager summary and evidence-link sections in generated markdown.
+
+## 2026-02-19 - AGP-US-045 override-driven policy learning loop
+- Added migration `migrations/0023_arena_outcome_override_reasons.sql` to capture structured `override_reason_code` on outcome rows.
+- `POST /v1/bounties/{bounty_id}/arena/outcome` now requires `override_reason_code` when `outcome_status=OVERRIDDEN` and persists it deterministically.
+- Manager routing now applies task-fingerprint-specific override reason penalties and emits rewrite-aware coaching hints.
+- Added `GET /v1/arena/policy-learning` (admin) returning reason breakdown + contract/prompt rewrite recommendations.
+- Added `scripts/arena/generate-policy-learning-report.mjs` to emit JSON + markdown policy-learning artifacts.

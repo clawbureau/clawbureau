@@ -14,6 +14,7 @@ function parseArgs(argv) {
     timeToAcceptMinutes: null,
     predictedConfidence: null,
     recommendation: null,
+    overrideReasonCode: null,
     notes: null,
     source: 'human-review',
     idempotencyKey: null,
@@ -65,6 +66,11 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === '--override-reason-code') {
+      args.overrideReasonCode = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
     if (arg === '--notes') {
       args.notes = argv[i + 1] ?? null;
       i += 1;
@@ -97,7 +103,11 @@ function parseArgs(argv) {
   }
 
   if (!args.bountyId || !args.arenaId || !args.outcomeStatus) {
-    throw new Error('Usage: node scripts/arena/post-outcome-feedback.mjs --bounty-id <bty_...> --arena-id <arena_...> --outcome-status <ACCEPTED|OVERRIDDEN|REWORK|REJECTED|DISPUTED> [--contender-id <id>] [--review-time-minutes <n>] [--time-to-accept-minutes <n>] [--predicted-confidence <0..1>] [--recommendation <APPROVE|REQUEST_CHANGES|REJECT>] [--notes <text>] [--bounties-base <url>] [--admin-key <key>] [--dry-run]');
+    throw new Error('Usage: node scripts/arena/post-outcome-feedback.mjs --bounty-id <bty_...> --arena-id <arena_...> --outcome-status <ACCEPTED|OVERRIDDEN|REWORK|REJECTED|DISPUTED> [--contender-id <id>] [--review-time-minutes <n>] [--time-to-accept-minutes <n>] [--predicted-confidence <0..1>] [--recommendation <APPROVE|REQUEST_CHANGES|REJECT>] [--override-reason-code <ARENA_OVERRIDE_...>] [--notes <text>] [--bounties-base <url>] [--admin-key <key>] [--dry-run]');
+  }
+
+  if (String(args.outcomeStatus).toUpperCase() === 'OVERRIDDEN' && !args.overrideReasonCode) {
+    throw new Error('--override-reason-code is required when --outcome-status OVERRIDDEN');
   }
 
   return args;
@@ -113,6 +123,7 @@ function buildIdempotencyKey(args) {
     args.arenaId,
     args.contenderId ?? '',
     args.outcomeStatus,
+    String(args.overrideReasonCode ?? ''),
     String(args.reviewTimeMinutes),
     String(args.timeToAcceptMinutes ?? ''),
     String(args.notes ?? ''),
@@ -165,6 +176,7 @@ async function main() {
     time_to_accept_minutes: args.timeToAcceptMinutes,
     predicted_confidence: args.predictedConfidence,
     recommendation: args.recommendation,
+    override_reason_code: args.overrideReasonCode,
     notes: args.notes,
     source: args.source,
   };
