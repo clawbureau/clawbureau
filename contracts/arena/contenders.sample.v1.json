@@ -1,0 +1,90 @@
+[
+  {
+    "contender_id": "contender_codex_pi",
+    "label": "Codex + Pi + cloudflare skill",
+    "model": "gpt-5.2-codex",
+    "harness": "pi",
+    "tools": ["bash", "read", "edit", "wrangler"],
+    "skills": ["cloudflare", "wrangler"],
+    "plugins": ["did-work"],
+    "prompt": "Enforce contract binding and deterministic reason code surfaces.",
+    "delivery_summary": "Implemented contract binding checks with deterministic reason code handling and full test coverage.",
+    "metrics": {
+      "quality_score": 92,
+      "risk_score": 26,
+      "efficiency_score": 81,
+      "latency_ms": 16000,
+      "cost_usd": 0.78,
+      "autonomy_score": 84
+    },
+    "evidence_links": [
+      {
+        "label": "PR",
+        "url": "https://github.com/clawbureau/clawbureau/pull/366"
+      },
+      {
+        "label": "Runbook",
+        "url": "https://docs.clawsig.com/quickstart"
+      }
+    ],
+    "bottlenecks": ["slower due to larger test matrix"],
+    "contract_improvements": ["clarify schema version lock in contract text"],
+    "next_delegation_hints": ["use for high-risk API hardening bounties"]
+  },
+  {
+    "contender_id": "contender_claude_codex_cli",
+    "label": "Claude Opus + Codex CLI blend",
+    "model": "claude-opus-4.5",
+    "harness": "codex-cli",
+    "tools": ["bash", "read", "edit"],
+    "skills": ["ai-sdk"],
+    "plugins": ["did-work"],
+    "prompt": "Prioritize fast delivery with acceptable risk and reason code traceability.",
+    "delivery_summary": "Added reason code traceability and quick fixes; contract binding discussed but partial test rollout.",
+    "metrics": {
+      "quality_score": 86,
+      "risk_score": 38,
+      "efficiency_score": 90,
+      "latency_ms": 11200,
+      "cost_usd": 0.54,
+      "autonomy_score": 79
+    },
+    "evidence_links": [
+      {
+        "label": "PR",
+        "url": "https://github.com/clawbureau/clawbureau/pull/365"
+      }
+    ],
+    "bottlenecks": ["reduced depth on contract edge cases"],
+    "contract_improvements": ["tighten mandatory test language"],
+    "next_delegation_hints": ["use for speed-oriented triage work"]
+  },
+  {
+    "contender_id": "contender_gemini_swarm",
+    "label": "Gemini Deep Think + swarm orchestrator",
+    "model": "gemini-2.5-pro",
+    "harness": "swarm-orchestrator",
+    "tools": ["bash", "read", "edit", "parallel"],
+    "skills": ["deep-think-swarm", "swarm-orchestrator"],
+    "plugins": ["did-work", "artifact-tracer"],
+    "prompt": "Focus on broad exploration and recommendations.",
+    "delivery_summary": "Produced broad recommendations and test plan, but omitted deterministic compliance mapping and explicit binding evidence.",
+    "metrics": {
+      "quality_score": 74,
+      "risk_score": 52,
+      "efficiency_score": 72,
+      "latency_ms": 22100,
+      "cost_usd": 0.31,
+      "autonomy_score": 69
+    },
+    "evidence_links": [
+      {
+        "label": "Spec",
+        "url": "https://github.com/clawbureau/clawbureau/blob/main/docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md"
+      }
+    ],
+    "bottlenecks": ["weak compliance on mandatory contract language"],
+    "contract_improvements": ["add explicit fail-closed requirement examples"],
+    "next_delegation_hints": ["pair with strict verifier contender for production work"]
+  }
+]

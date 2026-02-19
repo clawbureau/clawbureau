@@ -1,0 +1,89 @@
+{
+  "arena_id": "arena_bty_arena_001",
+  "claim_binding": {
+    "bounty_id": "bty_arena_001",
+    "claim_hash_b64u": "hmFL0KxQhBgdNUmZlTNQVurD0s42U0SV7pOicK1NbdY",
+    "contract_hash_b64u": "RVGH8pYttabUqs0rewkHlUVnxFap8c7lc81vxZi2H7I",
+    "contract_id": "contract_arena_001",
+    "objective_profile": "balanced",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "compliance": {
+    "checks": [
+      {
+        "criterion_id": "ac_contract_binding",
+        "notes": "Delivery must mention contract binding enforcement.",
+        "reason_code": "CHECK_OK",
+        "required": true,
+        "status": "PASS"
+      },
+      {
+        "criterion_id": "ac_reason_codes",
+        "notes": "Delivery must include deterministic reason codes.",
+        "reason_code": "CHECK_OK",
+        "required": true,
+        "status": "PASS"
+      },
+      {
+        "criterion_id": "ac_test_coverage",
+        "notes": "Delivery should mention tests.",
+        "reason_code": "CHECK_OK",
+        "required": false,
+        "status": "PASS"
+      }
+    ],
+    "mandatory_failed": 0,
+    "mandatory_passed": 2
+  },
+  "contender": {
+    "config": {
+      "harness": "codex-cli",
+      "model": "claude-opus-4.5",
+      "plugins": [
+        "did-work"
+      ],
+      "prompt_hash_b64u": "Wikx8JGAAPcRR-FuyH6U6CTjkH_uq1-tMJhhZtbhyf4",
+      "skills": [
+        "ai-sdk"
+      ],
+      "tools": [
+        "bash",
+        "edit",
+        "read"
+      ]
+    },
+    "contender_id": "contender_claude_codex_cli",
+    "label": "Claude Opus + Codex CLI blend"
+  },
+  "evidence": {
+    "delivery_hash_b64u": "B-bjg02i7JSjRNBIUEYByRlC-zjj-yb-oYstMdVUT-M",
+    "delivery_summary": "Added reason code traceability and quick fixes; contract binding discussed but partial test rollout.",
+    "links": [
+      {
+        "label": "PR",
+        "url": "https://github.com/clawbureau/clawbureau/pull/365"
+      }
+    ]
+  },
+  "generated_at": "2026-02-19T15:10:00.000Z",
+  "insights": {
+    "bottlenecks": [
+      "reduced depth on contract edge cases"
+    ],
+    "contract_improvements": [
+      "tighten mandatory test language"
+    ],
+    "next_delegation_hints": [
+      "use for speed-oriented triage work"
+    ]
+  },
+  "metrics": {
+    "autonomy_score": 79,
+    "cost_usd": 0.54,
+    "efficiency_score": 90,
+    "latency_ms": 11200,
+    "quality_score": 86,
+    "risk_score": 38
+  },
+  "schema_version": "proof_pack.v3"
+}

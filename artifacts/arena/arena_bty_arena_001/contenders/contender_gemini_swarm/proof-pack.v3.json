@@ -1,0 +1,92 @@
+{
+  "arena_id": "arena_bty_arena_001",
+  "claim_binding": {
+    "bounty_id": "bty_arena_001",
+    "claim_hash_b64u": "kGjTp6EZp71sV56hhEdvfJCFI9ek4HQAw5Y2okRbT-8",
+    "contract_hash_b64u": "RVGH8pYttabUqs0rewkHlUVnxFap8c7lc81vxZi2H7I",
+    "contract_id": "contract_arena_001",
+    "objective_profile": "balanced",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "compliance": {
+    "checks": [
+      {
+        "criterion_id": "ac_contract_binding",
+        "notes": "Delivery must mention contract binding enforcement.",
+        "reason_code": "ARENA_ACCEPTANCE_CRITERION_FAILED",
+        "required": true,
+        "status": "FAIL"
+      },
+      {
+        "criterion_id": "ac_reason_codes",
+        "notes": "Delivery must include deterministic reason codes.",
+        "reason_code": "ARENA_ACCEPTANCE_CRITERION_FAILED",
+        "required": true,
+        "status": "FAIL"
+      },
+      {
+        "criterion_id": "ac_test_coverage",
+        "notes": "Delivery should mention tests.",
+        "reason_code": "CHECK_OK",
+        "required": false,
+        "status": "PASS"
+      }
+    ],
+    "mandatory_failed": 2,
+    "mandatory_passed": 0
+  },
+  "contender": {
+    "config": {
+      "harness": "swarm-orchestrator",
+      "model": "gemini-2.5-pro",
+      "plugins": [
+        "artifact-tracer",
+        "did-work"
+      ],
+      "prompt_hash_b64u": "qfYOF5kGIi9lSaqvzpXnryTshCtQcPfTFZLIiBlFMts",
+      "skills": [
+        "deep-think-swarm",
+        "swarm-orchestrator"
+      ],
+      "tools": [
+        "bash",
+        "edit",
+        "parallel",
+        "read"
+      ]
+    },
+    "contender_id": "contender_gemini_swarm",
+    "label": "Gemini Deep Think + swarm orchestrator"
+  },
+  "evidence": {
+    "delivery_hash_b64u": "7BzVoB05VyjV9TFcE7zJdnYvn-XZH3zYRxDX845ZPSk",
+    "delivery_summary": "Produced broad recommendations and test plan, but omitted deterministic compliance mapping and explicit binding evidence.",
+    "links": [
+      {
+        "label": "Spec",
+        "url": "https://github.com/clawbureau/clawbureau/blob/main/docs/specs/clawsig-protocol/CLAWSIG_PROTOCOL_v1.0.md"
+      }
+    ]
+  },
+  "generated_at": "2026-02-19T15:10:00.000Z",
+  "insights": {
+    "bottlenecks": [
+      "weak compliance on mandatory contract language"
+    ],
+    "contract_improvements": [
+      "add explicit fail-closed requirement examples"
+    ],
+    "next_delegation_hints": [
+      "pair with strict verifier contender for production work"
+    ]
+  },
+  "metrics": {
+    "autonomy_score": 69,
+    "cost_usd": 0.31,
+    "efficiency_score": 72,
+    "latency_ms": 22100,
+    "quality_score": 74,
+    "risk_score": 52
+  },
+  "schema_version": "proof_pack.v3"
+}

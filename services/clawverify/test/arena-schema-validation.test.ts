@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   validateArenaManagerReviewV1,
   validateArenaProofPackV3,
+  validateArenaReportV1,
 } from '../src/schema-validation';
 
 const HASH_A = '9fUlg6xBkfyyjv4FIKR2Rjm3M2fW2Y8zW0y0kJ3Qn3A';
@@ -109,6 +110,67 @@ describe('arena schema validators', () => {
     };
 
     const out = validateArenaManagerReviewV1(payload);
+    expect(out.valid).toBe(true);
+  });
+
+  it('accepts valid arena_report.v1 payload', () => {
+    const payload = {
+      schema_version: 'arena_report.v1',
+      arena_id: 'arena_contract_001',
+      generated_at: '2026-02-19T14:05:00.000Z',
+      contract: {
+        bounty_id: 'bty_contract_001',
+        contract_id: 'contract_001',
+        contract_hash_b64u: HASH_A,
+        task_fingerprint: 'typescript:api:bugfix',
+      },
+      objective_profile: {
+        name: 'balanced',
+        weights: {
+          quality: 0.35,
+          speed: 0.25,
+          cost: 0.2,
+          safety: 0.2,
+        },
+        tie_breakers: ['mandatory_pass_rate', 'quality_score'],
+      },
+      contenders: [
+        {
+          contender_id: 'contender_alpha',
+          label: 'Alpha contender',
+          hard_gate_pass: true,
+          mandatory_failed: 0,
+          score: 84.44,
+          metrics: {
+            quality_score: 82,
+            risk_score: 24,
+            efficiency_score: 79,
+            latency_ms: 9012,
+            cost_usd: 0.42,
+            autonomy_score: 76,
+          },
+          proof_pack_path: 'artifacts/arena/arena_contract_001/contenders/contender_alpha/proof-pack.v3.json',
+          manager_review_path: 'artifacts/arena/arena_contract_001/contenders/contender_alpha/manager-review.json',
+          review_paste_path: 'artifacts/arena/arena_contract_001/contenders/contender_alpha/review-paste.md',
+        },
+      ],
+      rankings: [
+        {
+          rank: 1,
+          contender_id: 'contender_alpha',
+          score: 84.44,
+          hard_gate_pass: true,
+        },
+      ],
+      winner: {
+        contender_id: 'contender_alpha',
+        reason: 'Best weighted score with no mandatory check failures.',
+      },
+      tradeoffs: ['Slightly higher cost than low-latency contender.'],
+      reason_codes: ['ARENA_WINNER_SELECTED'],
+    };
+
+    const out = validateArenaReportV1(payload);
     expect(out.valid).toBe(true);
   });
 });
