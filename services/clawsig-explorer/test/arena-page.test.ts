@@ -21,6 +21,8 @@ describe('arena pages', () => {
     expect(html).toContain('Decision review thread');
     expect(html).toContain('APPROVE');
     expect(html).toContain('Proof card');
+    expect(html).toContain('Outcome calibration');
+    expect(html).toContain('Outcome feedback feed');
   });
 
   it('renders arena index rows and fallback empty state', () => {

@@ -195,6 +195,24 @@ This produces markdown with:
 - confidence
 - one-click links (proof card, arena comparison, manager-review.json)
 
+### Step I — Outcome feedback + calibration loop
+
+Post real-world decision outcomes back into Arena calibration:
+
+```bash
+node scripts/arena/post-outcome-feedback.mjs \
+  --bounty-id bty_... \
+  --arena-id arena_... \
+  --outcome-status ACCEPTED \
+  --review-time-minutes 18 \
+  --time-to-accept-minutes 55 \
+  --bounties-base https://staging.clawbounties.com
+```
+
+Read calibration metrics:
+- `GET /v1/arena/calibration`
+- `GET /v1/arena/{arena_id}/outcomes`
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`

@@ -747,6 +747,32 @@ export interface ArenaReviewThreadEntryView {
   created_at: string;
 }
 
+export interface ArenaOutcomeView {
+  outcome_id: string;
+  contender_id: string;
+  outcome_status: 'ACCEPTED' | 'OVERRIDDEN' | 'REWORK' | 'REJECTED' | 'DISPUTED';
+  review_time_minutes: number;
+  time_to_accept_minutes: number | null;
+  predicted_confidence: number;
+  recommendation: 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT';
+  created_at: string;
+}
+
+export interface ArenaCalibrationView {
+  totals: {
+    samples: number;
+    accepted: number;
+    overridden: number;
+    rework: number;
+    disputed: number;
+    review_time_avg_minutes: number;
+    time_to_accept_avg_minutes: number;
+    cost_per_accepted_bounty_usd: number;
+    override_rate: number;
+    rework_rate: number;
+  };
+}
+
 export interface ArenaReportView {
   arena_id: string;
   generated_at: string;
@@ -775,6 +801,8 @@ export interface ArenaReportView {
   reason_codes: string[];
   delegation_insights?: ArenaDelegationInsights;
   review_thread: ArenaReviewThreadEntryView[];
+  outcomes: ArenaOutcomeView[];
+  calibration?: ArenaCalibrationView;
 }
 
 interface ArenaIndexResponse {
@@ -854,6 +882,30 @@ interface ArenaReportResponse {
     source?: unknown;
     created_at?: unknown;
   }>;
+  outcomes?: Array<{
+    outcome_id?: unknown;
+    contender_id?: unknown;
+    outcome_status?: unknown;
+    review_time_minutes?: unknown;
+    time_to_accept_minutes?: unknown;
+    predicted_confidence?: unknown;
+    recommendation?: unknown;
+    created_at?: unknown;
+  }>;
+  calibration?: {
+    totals?: {
+      samples?: unknown;
+      accepted?: unknown;
+      overridden?: unknown;
+      rework?: unknown;
+      disputed?: unknown;
+      review_time_avg_minutes?: unknown;
+      time_to_accept_avg_minutes?: unknown;
+      cost_per_accepted_bounty_usd?: unknown;
+      override_rate?: unknown;
+      rework_rate?: unknown;
+    };
+  };
 }
 
 function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>[number]): ArenaContenderView | null {
@@ -1017,6 +1069,65 @@ function parseReviewThreadEntries(input: unknown): ArenaReviewThreadEntryView[] 
     .filter((entry): entry is ArenaReviewThreadEntryView => entry !== null);
 }
 
+function parseOutcomeEntries(input: unknown): ArenaOutcomeView[] {
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const rec = raw as Record<string, unknown>;
+      const outcomeId = asString(rec.outcome_id);
+      const contenderId = asString(rec.contender_id);
+      const outcomeStatus = asString(rec.outcome_status);
+      const recommendation = asString(rec.recommendation);
+      const createdAt = asString(rec.created_at);
+      if (!outcomeId || !contenderId || !outcomeStatus || !recommendation || !createdAt) return null;
+      if (
+        outcomeStatus !== 'ACCEPTED' &&
+        outcomeStatus !== 'OVERRIDDEN' &&
+        outcomeStatus !== 'REWORK' &&
+        outcomeStatus !== 'REJECTED' &&
+        outcomeStatus !== 'DISPUTED'
+      ) return null;
+      if (recommendation !== 'APPROVE' && recommendation !== 'REQUEST_CHANGES' && recommendation !== 'REJECT') return null;
+
+      return {
+        outcome_id: outcomeId,
+        contender_id: contenderId,
+        outcome_status: outcomeStatus,
+        review_time_minutes: asNumber(rec.review_time_minutes, 0),
+        time_to_accept_minutes: rec.time_to_accept_minutes === null ? null : asNumber(rec.time_to_accept_minutes, 0),
+        predicted_confidence: asNumber(rec.predicted_confidence, 0),
+        recommendation,
+        created_at: createdAt,
+      } as ArenaOutcomeView;
+    })
+    .filter((entry): entry is ArenaOutcomeView => entry !== null);
+}
+
+function parseCalibration(input: unknown): ArenaCalibrationView | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+  const totalsRaw = rec.totals;
+  if (!totalsRaw || typeof totalsRaw !== 'object') return undefined;
+  const totals = totalsRaw as Record<string, unknown>;
+
+  return {
+    totals: {
+      samples: asNumber(totals.samples, 0),
+      accepted: asNumber(totals.accepted, 0),
+      overridden: asNumber(totals.overridden, 0),
+      rework: asNumber(totals.rework, 0),
+      disputed: asNumber(totals.disputed, 0),
+      review_time_avg_minutes: asNumber(totals.review_time_avg_minutes, 0),
+      time_to_accept_avg_minutes: asNumber(totals.time_to_accept_avg_minutes, 0),
+      cost_per_accepted_bounty_usd: asNumber(totals.cost_per_accepted_bounty_usd, 0),
+      override_rate: asNumber(totals.override_rate, 0),
+      rework_rate: asNumber(totals.rework_rate, 0),
+    },
+  };
+}
+
 export async function fetchArenaIndex(
   opts: FetchOptions,
 ): Promise<Array<{
@@ -1142,5 +1253,7 @@ export async function fetchArenaReport(
       : [],
     delegation_insights: parseDelegationInsights(data.delegation_insights),
     review_thread: parseReviewThreadEntries(data.review_thread),
+    outcomes: parseOutcomeEntries(data.outcomes),
+    calibration: parseCalibration(data.calibration),
   };
 }
