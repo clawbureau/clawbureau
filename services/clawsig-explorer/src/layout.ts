@@ -562,6 +562,7 @@ export function layout(meta: PageMeta, body: string): string {
       <nav>
         <a href="/">Explorer</a>
         <a href="/runs">Runs</a>
+        <a href="/arena">Arena</a>
         <a href="/agents">Agents</a>
         <a href="/stats">Stats</a>
         <a href="/ops">Ops</a>
