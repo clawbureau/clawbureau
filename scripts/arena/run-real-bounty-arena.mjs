@@ -3,7 +3,9 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { runArena } from './lib/arena-runner.mjs';
+import { buildDecisionPastePayload } from './lib/decision-paste.mjs';
 import { stableJson } from './lib/proof-pack-v3.mjs';
 
 const DEFAULT_BOUNTIES_BASE = 'https://staging.clawbounties.com';
@@ -22,6 +24,11 @@ function parseArgs(argv) {
     startIdempotencyKey: null,
     resultIdempotencyKey: null,
     dryRun: false,
+    postPrNumber: null,
+    postBountyThread: false,
+    arenaBaseUrl: '',
+    artifactsBaseUrl: '',
+    decisionSource: 'arena-launcher',
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -81,10 +88,34 @@ function parseArgs(argv) {
       args.dryRun = true;
       continue;
     }
+    if (arg === '--post-pr-number') {
+      args.postPrNumber = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
+    if (arg === '--post-bounty-thread') {
+      args.postBountyThread = true;
+      continue;
+    }
+    if (arg === '--arena-base-url') {
+      args.arenaBaseUrl = argv[i + 1] ?? '';
+      i += 1;
+      continue;
+    }
+    if (arg === '--artifacts-base-url') {
+      args.artifactsBaseUrl = argv[i + 1] ?? '';
+      i += 1;
+      continue;
+    }
+    if (arg === '--decision-source') {
+      args.decisionSource = argv[i + 1] ?? 'arena-launcher';
+      i += 1;
+      continue;
+    }
   }
 
   if (!args.bountyId || !args.contractPath || !args.contendersPath) {
-    throw new Error('Usage: node scripts/arena/run-real-bounty-arena.mjs --bounty-id <bty_...> --contract <json> --contenders <json> [--output-root <dir>] [--arena-id <id>] [--generated-at <iso>] [--bounties-base <url>] [--admin-key <key>] [--start-idempotency-key <key>] [--result-idempotency-key <key>] [--dry-run]');
+    throw new Error('Usage: node scripts/arena/run-real-bounty-arena.mjs --bounty-id <bty_...> --contract <json> --contenders <json> [--output-root <dir>] [--arena-id <id>] [--generated-at <iso>] [--bounties-base <url>] [--admin-key <key>] [--start-idempotency-key <key>] [--result-idempotency-key <key>] [--post-pr-number <num>] [--post-bounty-thread] [--arena-base-url <url>] [--artifacts-base-url <url>] [--decision-source <name>] [--dry-run]');
   }
 
   return args;
@@ -165,6 +196,47 @@ function readContenderArtifacts(report) {
   return artifacts;
 }
 
+function buildDecisionPaste(report, winnerContenderId, arenaBaseUrl, artifactsBaseUrl) {
+  const contender = report.contenders.find((item) => item.contender_id === winnerContenderId);
+  if (!contender) {
+    return null;
+  }
+
+  const managerReview = loadJson(contender.manager_review_path);
+  const reviewPaste = readFileSync(contender.review_paste_path, 'utf8');
+
+  const decision = buildDecisionPastePayload({
+    arenaReport: report,
+    contender,
+    managerReview,
+    reviewPaste,
+    arenaBaseUrl,
+    artifactsBaseUrl,
+  });
+
+  return {
+    contender,
+    managerReview,
+    markdown: decision.bodyMarkdown,
+    recommendation: decision.recommendation,
+    confidence: decision.confidence,
+    links: decision.links,
+    reasonCodes: decision.reasonCodes,
+  };
+}
+
+function postPrComment(prNumber, markdownPath) {
+  const proc = spawnSync('gh', ['pr', 'comment', String(prNumber), '--body-file', markdownPath], {
+    encoding: 'utf8',
+  });
+
+  if (proc.status !== 0) {
+    throw new Error(`gh pr comment failed: ${proc.stderr || proc.stdout}`);
+  }
+
+  return (proc.stdout || '').trim();
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -197,6 +269,18 @@ async function main() {
   const resultIdempotencyKey = args.resultIdempotencyKey
     ?? buildDefaultIdempotencyKey('arena-result', [report.arena_id, report.winner.contender_id, String(report.generated_at)]);
 
+  const decision = buildDecisionPaste(
+    report,
+    report.winner.contender_id,
+    args.arenaBaseUrl,
+    args.artifactsBaseUrl,
+  );
+
+  const decisionOutputPath = path.join(outputDir, 'decision-paste.md');
+  if (decision) {
+    writeFileSync(decisionOutputPath, `${decision.markdown.trim()}\n`);
+  }
+
   const summary = {
     ok: true,
     generated_at: new Date().toISOString(),
@@ -208,6 +292,19 @@ async function main() {
     winner: report.winner,
     start_idempotency_key: startIdempotencyKey,
     result_idempotency_key: resultIdempotencyKey,
+    decision_paste: decision
+      ? {
+          output_path: decisionOutputPath,
+          contender_id: decision.contender.contender_id,
+          recommendation: decision.recommendation,
+          confidence: decision.confidence,
+          links: decision.links,
+          posted: {
+            pr_comment: null,
+            bounty_thread: null,
+          },
+        }
+      : null,
   };
 
   if (args.dryRun) {
@@ -266,6 +363,54 @@ async function main() {
       adminKey,
     },
   );
+
+  if (decision && args.postPrNumber) {
+    const output = postPrComment(args.postPrNumber, decisionOutputPath);
+    if (summary.decision_paste) {
+      summary.decision_paste.posted.pr_comment = {
+        pr_number: args.postPrNumber,
+        output,
+      };
+    }
+  }
+
+  if (decision && args.postBountyThread) {
+    const threadIdempotencyKey = buildDefaultIdempotencyKey('arena-thread', [
+      report.arena_id,
+      decision.contender.contender_id,
+      decision.recommendation,
+      String(decision.confidence),
+      sha256b64u(decision.markdown),
+    ]);
+
+    const threadPayload = {
+      idempotency_key: threadIdempotencyKey,
+      arena_id: report.arena_id,
+      contender_id: decision.contender.contender_id,
+      recommendation: decision.recommendation,
+      confidence: decision.confidence,
+      body_markdown: decision.markdown,
+      links: decision.links,
+      source: args.decisionSource,
+      metadata: {
+        manager_decision: decision.managerReview.decision,
+        reason_codes: decision.reasonCodes,
+      },
+    };
+
+    const threadResponse = await requestJson(
+      `${args.bountiesBase.replace(/\/$/, '')}/v1/bounties/${encodeURIComponent(args.bountyId)}/arena/review-thread`,
+      {
+        method: 'POST',
+        adminKey,
+        body: threadPayload,
+      },
+    );
+
+    if (summary.decision_paste) {
+      summary.decision_paste.posted.bounty_thread = threadResponse;
+    }
+  }
 
   const fullSummary = {
     ...summary,

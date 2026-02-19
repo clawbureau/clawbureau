@@ -87,6 +87,17 @@ function contenderRows(report: ArenaReportView): string {
           metrics: contender.metrics,
         }, null, 2);
 
+      const reasonCodes = contender.score_explain.reason_codes.length > 0
+        ? contender.score_explain.reason_codes.join(', ')
+        : 'none';
+
+      const evidenceLinks = contender.score_explain.evidence_links.length > 0
+        ? contender.score_explain.evidence_links
+          .slice(0, 2)
+          .map((entry) => `<a href="${esc(entry.url)}" target="_blank" rel="noreferrer">${esc(entry.label)} ↗</a>`)
+          .join(' · ')
+        : 'no evidence link';
+
       return `
         <tr>
           <td>
@@ -108,11 +119,8 @@ function contenderRows(report: ArenaReportView): string {
           </td>
           <td>
             <div class="mono">${contender.score.toFixed(4)}</div>
-            <div class="dim" style="font-size:0.74rem">
-              ${contender.score_explain.evidence_links[0]
-                ? `<a href="${esc(contender.score_explain.evidence_links[0].url)}" target="_blank" rel="noreferrer">evidence ↗</a>`
-                : 'no evidence link'}
-            </div>
+            <div class="dim" style="font-size:0.74rem">${evidenceLinks}</div>
+            <div class="dim" style="font-size:0.7rem">${esc(reasonCodes)}</div>
           </td>
           <td>
             <div class="diag-grid" style="grid-template-columns: repeat(2, minmax(110px, 1fr)); gap:0.3rem">
@@ -132,6 +140,57 @@ function contenderRows(report: ArenaReportView): string {
       `;
     })
     .join('');
+}
+
+function renderReviewThreadCard(report: ArenaReportView): string {
+  if (!Array.isArray(report.review_thread) || report.review_thread.length === 0) {
+    return `
+      <div class="card">
+        <p class="section-title">Decision review thread</p>
+        <p class="dim" style="font-size:0.82rem">No decision paste entries posted yet for this arena.</p>
+      </div>
+    `;
+  }
+
+  const rows = report.review_thread
+    .map((entry) => {
+      const recommendationBadge = statusBadge(entry.recommendation === 'APPROVE' ? 'PASS' : 'FAIL');
+      const links = entry.links.length > 0
+        ? entry.links.map((link) => `<a href="${esc(link.url)}" target="_blank" rel="noreferrer">${esc(link.label)} ↗</a>`).join(' · ')
+        : 'none';
+
+      return `
+        <tr>
+          <td><span class="mono">${esc(entry.contender_id)}</span></td>
+          <td>${recommendationBadge} <span class="mono" style="margin-left:0.35rem">${esc(entry.recommendation)}</span></td>
+          <td class="mono">${(entry.confidence * 100).toFixed(1)}%</td>
+          <td>${links}</td>
+          <td class="mono">${relativeTime(entry.created_at)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="card">
+      <p class="section-title">Decision review thread</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:0.55rem">PR/bounty recommendation history with confidence + one-click evidence links.</p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Contender</th>
+              <th>Recommendation</th>
+              <th>Confidence</th>
+              <th>Links</th>
+              <th>Posted</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 export function arenaComparePage(report: ArenaReportView): string {
@@ -189,6 +248,8 @@ export function arenaComparePage(report: ArenaReportView): string {
       </div>
     ` : ''}
 
+    ${renderReviewThreadCard(report)}
+
     <div class="card">
       <p class="section-title">Contract binding</p>
       <div class="detail-grid">
@@ -199,7 +260,7 @@ export function arenaComparePage(report: ArenaReportView): string {
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="proof-card">
       <p class="section-title">Contenders table</p>
       <div style="overflow-x:auto">
         <table>
@@ -462,5 +523,21 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         backup_contenders: ['contender_claude_codex_cli'],
       },
     },
+    review_thread: [
+      {
+        thread_entry_id: 'art_sample_001',
+        contender_id: 'contender_codex_pi',
+        recommendation: 'APPROVE',
+        confidence: 0.782,
+        body_markdown: 'Recommendation: APPROVE',
+        links: [
+          { label: 'Proof card', url: '/arena/arena_bty_arena_001#proof-card' },
+          { label: 'Arena comparison', url: '/arena/arena_bty_arena_001' },
+          { label: 'Manager review JSON', url: '/arena/arena_bty_arena_001#proof-card' },
+        ],
+        source: 'sample',
+        created_at: '2026-02-19T15:12:00.000Z',
+      },
+    ],
   };
 }
