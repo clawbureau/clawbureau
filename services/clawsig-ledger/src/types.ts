@@ -73,6 +73,14 @@ export interface FailReasonCodeStat {
   count: number;
 }
 
+export interface RecentRunStat {
+  run_id: string;
+  agent_did: string;
+  proof_tier: string;
+  status: string;
+  created_at: string;
+}
+
 export interface GlobalStatsResponse {
   total_agents: number;
   total_runs: number;
@@ -82,4 +90,20 @@ export interface GlobalStatsResponse {
   fail_runs_24h: number;
   fail_rate_24h: number;
   top_fail_reason_codes: FailReasonCodeStat[];
+  recent_runs: RecentRunStat[];
+}
+
+export interface RunsFeedFilters {
+  status?: string;
+  tier?: string;
+  reason_code?: string;
+  agent_did?: string;
+}
+
+export interface RunsFeedResponse {
+  runs: RunRow[];
+  limit: number;
+  has_next: boolean;
+  next_cursor: string | null;
+  filters: RunsFeedFilters;
 }
