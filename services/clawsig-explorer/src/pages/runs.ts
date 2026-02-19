@@ -23,6 +23,7 @@ export interface RunsFeedPageData {
 interface RunsPaginationState {
   previousHref: string | null;
   nextHref: string | null;
+  resetHref: string;
   pageLabel: string;
 }
 
@@ -190,10 +191,14 @@ function paginationState(data: RunsFeedPageData): RunsPaginationState {
     : null;
 
   const pageLabel = `Page ${history.length + 1}`;
+  const resetHref = `/runs${buildRunsQuery(data.filters, {
+    limit: data.limit,
+  })}`;
 
   return {
     previousHref,
     nextHref,
+    resetHref,
     pageLabel,
   };
 }
@@ -222,9 +227,15 @@ export function runsFeedPage(data: RunsFeedPageData): string {
         </div>`
       : ''}
 
-    <div class="card">
-      <p class="section-title">Filters</p>
-      <form method="GET" action="/runs" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end">
+    <div class="card sticky-filter-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap">
+        <p class="section-title" style="margin-bottom:0">Filters</p>
+        <div style="display:flex; gap:0.6rem; flex-wrap:wrap; font-size:0.78rem">
+          <a href="${pagination.resetHref}" class="dim">Reset pagination</a>
+          <a href="/runs" class="dim">Clear all</a>
+        </div>
+      </div>
+      <form method="GET" action="/runs" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end; margin-top:0.75rem">
         <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; color:var(--text-dim)">
           Status
           <select name="status" style="background:var(--bg-card); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:0.5rem">
@@ -264,12 +275,18 @@ export function runsFeedPage(data: RunsFeedPageData): string {
 
         <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap">
           <button type="submit" style="background:var(--pass); color:#000; border:0; border-radius:6px; padding:0.5rem 0.75rem; font-weight:600; cursor:pointer">Apply</button>
-          <a href="/runs" class="dim" style="font-size:0.8125rem">Reset</a>
+          <a href="${pagination.resetHref}" class="dim" style="font-size:0.8125rem">Reset filters</a>
         </div>
       </form>
 
       <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.9rem">
         ${activeFilterChips(data.filters, data.limit)}
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:0.45rem; margin-top:0.75rem">
+        <a class="filter-chip" href="/runs${buildRunsQuery({ ...data.filters, status: 'FAIL' }, { limit: data.limit })}">status: FAIL</a>
+        <a class="filter-chip" href="/runs${buildRunsQuery({ ...data.filters, status: 'PASS' }, { limit: data.limit })}">status: PASS</a>
+        <a class="filter-chip" href="/runs${buildRunsQuery({ ...data.filters, tier: 'gateway' }, { limit: data.limit })}">tier: gateway</a>
       </div>
     </div>
 
@@ -312,6 +329,9 @@ export function runsFeedPage(data: RunsFeedPageData): string {
         ${pagination.nextHref
           ? `<a href="${pagination.nextHref}" style="font-size:0.875rem">Older &rarr;</a>`
           : `<span class="dim" style="font-size:0.8125rem">End of feed</span>`}
+        ${pagination.previousHref
+          ? `<a href="${pagination.resetHref}" class="dim" style="font-size:0.8125rem">Jump to newest</a>`
+          : ''}
       </div>
     </div>
   `;
