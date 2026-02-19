@@ -169,6 +169,7 @@ describe('ledger runs feed + agent contract alignment', () => {
       limit: number;
       has_next: boolean;
       next_cursor: string | null;
+      filters_echo: Record<string, unknown>;
     };
 
     expect(response.status).toBe(200);
@@ -176,6 +177,7 @@ describe('ledger runs feed + agent contract alignment', () => {
     expect(payload.limit).toBe(10);
     expect(payload.has_next).toBe(false);
     expect(payload.next_cursor).toBeNull();
+    expect(payload.filters_echo).toEqual({});
   });
 
   it('supports pagination via cursor and newest-first ordering', async () => {
@@ -250,11 +252,25 @@ describe('ledger runs feed + agent contract alignment', () => {
       env,
     );
 
-    const payload = (await response.json()) as { runs: RunRow[] };
+    const payload = (await response.json()) as {
+      runs: RunRow[];
+      filters_echo: {
+        status?: string;
+        tier?: string;
+        reason_code?: string;
+        agent_did?: string;
+      };
+    };
 
     expect(response.status).toBe(200);
     expect(payload.runs).toHaveLength(1);
     expect(payload.runs[0]?.run_id).toBe('run_match');
+    expect(payload.filters_echo).toEqual({
+      status: 'FAIL',
+      tier: 'gateway',
+      reason_code: 'HASH_MISMATCH',
+      agent_did: 'did:key:agent-1',
+    });
   });
 
   it('aligns /v1/ledger/agents/:did contract with deterministic runs payload', async () => {
@@ -294,5 +310,29 @@ describe('ledger runs feed + agent contract alignment', () => {
     expect(payload.page).toBe(1);
     expect(payload.page_size).toBe(2);
     expect(payload.has_next).toBe(true);
+  });
+
+  it('returns deterministic 400s for invalid query parameters', async () => {
+    const env = makeEnv({ runs: [], agents: [] });
+
+    const badCases = [
+      { path: '/v1/ledger/runs?limit=0', code: 'INVALID_LIMIT' },
+      { path: '/v1/ledger/runs?status=MAYBE', code: 'INVALID_STATUS_FILTER' },
+      { path: '/v1/ledger/runs?tier=super', code: 'INVALID_TIER_FILTER' },
+      { path: '/v1/ledger/runs?reason_code=bad-code!', code: 'INVALID_REASON_CODE_FILTER' },
+      { path: '/v1/ledger/runs?agent_did=not-a-did', code: 'INVALID_AGENT_DID_FILTER' },
+      { path: '/v1/ledger/runs?cursor=invalidcursor', code: 'INVALID_CURSOR' },
+    ] as const;
+
+    for (const badCase of badCases) {
+      const response = await call(badCase.path, env);
+      const payload = (await response.json()) as {
+        error: { code: string; message: string };
+      };
+
+      expect(response.status).toBe(400);
+      expect(payload.error.code).toBe(badCase.code);
+      expect(payload.error.message.length).toBeGreaterThan(0);
+    }
   });
 });

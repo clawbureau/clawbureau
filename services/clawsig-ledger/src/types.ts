@@ -81,6 +81,21 @@ export interface RecentRunStat {
   created_at: string;
 }
 
+export interface DiagnosticsDailyStat {
+  day: string;
+  runs: number;
+  fail_runs: number;
+  fail_rate: number;
+}
+
+export interface Diagnostics7dSummary {
+  runs_7d: number;
+  fail_runs_7d: number;
+  fail_rate_7d: number;
+  top_fail_reason_codes_7d: FailReasonCodeStat[];
+  daily: DiagnosticsDailyStat[];
+}
+
 export interface GlobalStatsResponse {
   total_agents: number;
   total_runs: number;
@@ -91,6 +106,7 @@ export interface GlobalStatsResponse {
   fail_rate_24h: number;
   top_fail_reason_codes: FailReasonCodeStat[];
   recent_runs: RecentRunStat[];
+  diagnostics_7d: Diagnostics7dSummary;
 }
 
 export interface RunsFeedFilters {
@@ -106,4 +122,5 @@ export interface RunsFeedResponse {
   has_next: boolean;
   next_cursor: string | null;
   filters: RunsFeedFilters;
+  filters_echo: RunsFeedFilters;
 }

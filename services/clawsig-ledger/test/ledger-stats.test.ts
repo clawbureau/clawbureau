@@ -5,6 +5,9 @@ import type { Env } from '../src/types';
 interface StatsFixture {
   baseRow: Record<string, unknown>;
   topFailRows: Array<{ reason_code: string; count: number | string }>;
+  diagnostics7dBase: Record<string, unknown>;
+  topFailRows7d: Array<{ reason_code: string; count: number | string }>;
+  dailyDiagnostics7d: Array<{ day: string; runs: number | string; fail_runs: number | string }>;
   recentRuns: Array<{
     run_id: string;
     agent_did: string;
@@ -23,15 +26,30 @@ function makeLedgerDb(fixture: StatsFixture): D1Database {
           if (query.includes('AS total_agents') && query.includes('AS fail_runs_24h')) {
             return fixture.baseRow;
           }
+
+          if (query.includes('AS runs_7d') && query.includes('AS fail_runs_7d')) {
+            return fixture.diagnostics7dBase;
+          }
+
           return null;
         }),
         all: vi.fn(async () => {
-          if (query.includes('SELECT reason_code, COUNT(*) AS count')) {
+          if (query.includes("created_at >= datetime('now', '-24 hours')")) {
             return { results: fixture.topFailRows };
           }
+
+          if (query.includes("created_at >= datetime('now', '-7 days')") && query.includes('LIMIT 10')) {
+            return { results: fixture.topFailRows7d };
+          }
+
+          if (query.includes('GROUP BY date(created_at)')) {
+            return { results: fixture.dailyDiagnostics7d };
+          }
+
           if (query.includes('SELECT run_id, agent_did, proof_tier, status, created_at')) {
             return { results: fixture.recentRuns };
           }
+
           return { results: [] };
         }),
         run: vi.fn(async () => ({})),
@@ -76,6 +94,12 @@ describe('GET /v1/ledger/stats', () => {
         fail_runs_24h: 0,
       },
       topFailRows: [],
+      diagnostics7dBase: {
+        runs_7d: 0,
+        fail_runs_7d: 0,
+      },
+      topFailRows7d: [],
+      dailyDiagnostics7d: [],
       recentRuns: [],
     });
 
@@ -89,9 +113,16 @@ describe('GET /v1/ledger/stats', () => {
     expect(payload.fail_rate_24h).toBe(0);
     expect(payload.top_fail_reason_codes).toEqual([]);
     expect(payload.recent_runs).toEqual([]);
+    expect(payload.diagnostics_7d).toEqual({
+      runs_7d: 0,
+      fail_runs_7d: 0,
+      fail_rate_7d: 0,
+      top_fail_reason_codes_7d: [],
+      daily: [],
+    });
   });
 
-  it('returns fail-rate and top reason codes for populated dataset', async () => {
+  it('returns fail-rate and diagnostics for populated dataset', async () => {
     const env = makeEnv({
       baseRow: {
         total_agents: 12,
@@ -105,6 +136,18 @@ describe('GET /v1/ledger/stats', () => {
         { reason_code: 'HASH_MISMATCH', count: 6 },
         { reason_code: 'POW_INVALID', count: '3' },
         { reason_code: 'VERIFIER_UNAVAILABLE', count: 1 },
+      ],
+      diagnostics7dBase: {
+        runs_7d: 140,
+        fail_runs_7d: 21,
+      },
+      topFailRows7d: [
+        { reason_code: 'HASH_MISMATCH', count: 12 },
+        { reason_code: 'POW_INVALID', count: 6 },
+      ],
+      dailyDiagnostics7d: [
+        { day: '2026-02-13', runs: 20, fail_runs: 4 },
+        { day: '2026-02-14', runs: 30, fail_runs: 3 },
       ],
       recentRuns: [
         {
@@ -134,6 +177,13 @@ describe('GET /v1/ledger/stats', () => {
         status: string;
         created_at: string;
       }>;
+      diagnostics_7d: {
+        runs_7d: number;
+        fail_runs_7d: number;
+        fail_rate_7d: number;
+        top_fail_reason_codes_7d: Array<{ reason_code: string; count: number }>;
+        daily: Array<{ day: string; runs: number; fail_runs: number; fail_rate: number }>;
+      };
     };
 
     expect(response.status).toBe(200);
@@ -158,5 +208,18 @@ describe('GET /v1/ledger/stats', () => {
         created_at: '2026-02-19 11:00:00',
       },
     ]);
+    expect(payload.diagnostics_7d).toEqual({
+      runs_7d: 140,
+      fail_runs_7d: 21,
+      fail_rate_7d: 0.15,
+      top_fail_reason_codes_7d: [
+        { reason_code: 'HASH_MISMATCH', count: 12 },
+        { reason_code: 'POW_INVALID', count: 6 },
+      ],
+      daily: [
+        { day: '2026-02-13', runs: 20, fail_runs: 4, fail_rate: 0.2 },
+        { day: '2026-02-14', runs: 30, fail_runs: 3, fail_rate: 0.1 },
+      ],
+    });
   });
 });

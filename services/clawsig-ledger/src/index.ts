@@ -71,6 +71,22 @@ async function findExistingRunByBundleHash(
 
 const DEFAULT_RUNS_LIMIT = 20;
 const MAX_RUNS_LIMIT = 100;
+const VALID_STATUS_FILTERS = new Set(['PASS', 'FAIL']);
+const VALID_TIER_FILTERS = new Set(['self', 'gateway', 'sandbox', 'tee', 'witnessed_web', 'unknown']);
+const REASON_CODE_FILTER_RE = /^[A-Z0-9_]{1,64}$/;
+const DID_FILTER_RE = /^did:[a-z0-9]+:[A-Za-z0-9._:%-]{3,255}$/i;
+
+interface ValidationOk<T> {
+  ok: true;
+  value: T;
+}
+
+interface ValidationError {
+  ok: false;
+  response: Response;
+}
+
+type ValidationResult<T> = ValidationOk<T> | ValidationError;
 
 function parsePositiveInt(raw: string | null | undefined, fallback: number): number {
   if (!raw) return fallback;
@@ -84,28 +100,137 @@ function normalizeRunsLimit(raw: string | null | undefined): number {
   return Math.min(MAX_RUNS_LIMIT, requested);
 }
 
-function normalizeOptionalFilter(raw: string | null): string | undefined {
-  if (!raw) return undefined;
+function parseRunsLimitStrict(raw: string | null): ValidationResult<number> {
+  if (raw === null) {
+    return { ok: true, value: DEFAULT_RUNS_LIMIT };
+  }
+
   const trimmed = raw.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  if (trimmed.length === 0) {
+    return {
+      ok: false,
+      response: errorJson('Invalid limit: expected integer between 1 and 100', 'INVALID_LIMIT', 400),
+    };
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > MAX_RUNS_LIMIT) {
+    return {
+      ok: false,
+      response: errorJson('Invalid limit: expected integer between 1 and 100', 'INVALID_LIMIT', 400),
+    };
+  }
+
+  return { ok: true, value: parsed };
+}
+
+function parseRunsCursorStrict(raw: string | null): ValidationResult<{ created_at: string; run_id: string } | null> {
+  if (raw === null) {
+    return { ok: true, value: null };
+  }
+
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return {
+      ok: false,
+      response: errorJson('Invalid cursor format', 'INVALID_CURSOR', 400),
+    };
+  }
+
+  const sep = trimmed.lastIndexOf('|');
+  if (sep <= 0 || sep >= trimmed.length - 1) {
+    return {
+      ok: false,
+      response: errorJson('Invalid cursor format', 'INVALID_CURSOR', 400),
+    };
+  }
+
+  const createdAt = trimmed.slice(0, sep).trim();
+  const runId = trimmed.slice(sep + 1).trim();
+
+  if (!createdAt || !runId || runId.length > 200 || !/^[A-Za-z0-9:_-]+$/.test(runId)) {
+    return {
+      ok: false,
+      response: errorJson('Invalid cursor format', 'INVALID_CURSOR', 400),
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      created_at: createdAt,
+      run_id: runId,
+    },
+  };
+}
+
+function parseRunsFiltersStrict(url: URL): ValidationResult<RunsFeedFilters> {
+  const statusRaw = url.searchParams.get('status');
+  const tierRaw = url.searchParams.get('tier');
+  const reasonRaw = url.searchParams.get('reason_code');
+  const agentRaw = url.searchParams.get('agent_did');
+
+  let status: string | undefined;
+  if (statusRaw !== null) {
+    const normalized = statusRaw.trim().toUpperCase();
+    if (!VALID_STATUS_FILTERS.has(normalized)) {
+      return {
+        ok: false,
+        response: errorJson('Invalid status filter: expected PASS or FAIL', 'INVALID_STATUS_FILTER', 400),
+      };
+    }
+    status = normalized;
+  }
+
+  let tier: string | undefined;
+  if (tierRaw !== null) {
+    const normalized = tierRaw.trim().toLowerCase();
+    if (!VALID_TIER_FILTERS.has(normalized)) {
+      return {
+        ok: false,
+        response: errorJson('Invalid tier filter', 'INVALID_TIER_FILTER', 400),
+      };
+    }
+    tier = normalized;
+  }
+
+  let reason_code: string | undefined;
+  if (reasonRaw !== null) {
+    const normalized = reasonRaw.trim().toUpperCase();
+    if (!REASON_CODE_FILTER_RE.test(normalized)) {
+      return {
+        ok: false,
+        response: errorJson('Invalid reason_code filter', 'INVALID_REASON_CODE_FILTER', 400),
+      };
+    }
+    reason_code = normalized;
+  }
+
+  let agent_did: string | undefined;
+  if (agentRaw !== null) {
+    const normalized = agentRaw.trim();
+    if (!DID_FILTER_RE.test(normalized)) {
+      return {
+        ok: false,
+        response: errorJson('Invalid agent_did filter', 'INVALID_AGENT_DID_FILTER', 400),
+      };
+    }
+    agent_did = normalized;
+  }
+
+  return {
+    ok: true,
+    value: {
+      status,
+      tier,
+      reason_code,
+      agent_did,
+    },
+  };
 }
 
 function encodeRunsCursor(row: Pick<RunRow, 'created_at' | 'run_id'>): string {
   return `${row.created_at}|${row.run_id}`;
-}
-
-function decodeRunsCursor(cursor: string | null): { created_at: string; run_id: string } | null {
-  if (!cursor) return null;
-  const trimmed = cursor.trim();
-  if (!trimmed) return null;
-
-  const sep = trimmed.lastIndexOf('|');
-  if (sep <= 0 || sep >= trimmed.length - 1) return null;
-
-  return {
-    created_at: trimmed.slice(0, sep),
-    run_id: trimmed.slice(sep + 1),
-  };
 }
 
 // POST /v1/verify
@@ -344,23 +469,24 @@ async function handleRunDetail(runId: string, env: Env): Promise<Response> {
 
 // GET /v1/ledger/runs
 async function handleRunsFeed(url: URL, env: Env): Promise<Response> {
-  const limit = normalizeRunsLimit(url.searchParams.get('limit'));
+  const limitResult = parseRunsLimitStrict(url.searchParams.get('limit'));
+  if (!limitResult.ok) return limitResult.response;
+  const limit = limitResult.value;
 
-  const filters: RunsFeedFilters = {
-    status: normalizeOptionalFilter(url.searchParams.get('status')),
-    tier: normalizeOptionalFilter(url.searchParams.get('tier')),
-    reason_code: normalizeOptionalFilter(url.searchParams.get('reason_code')),
-    agent_did: normalizeOptionalFilter(url.searchParams.get('agent_did')),
-  };
+  const filtersResult = parseRunsFiltersStrict(url);
+  if (!filtersResult.ok) return filtersResult.response;
+  const filters = filtersResult.value;
 
-  const cursor = decodeRunsCursor(url.searchParams.get('cursor'));
+  const cursorResult = parseRunsCursorStrict(url.searchParams.get('cursor'));
+  if (!cursorResult.ok) return cursorResult.response;
+  const cursor = cursorResult.value;
 
   const where: string[] = [];
   const params: unknown[] = [];
 
   if (filters.status) {
     where.push('status = ?');
-    params.push(filters.status.toUpperCase());
+    params.push(filters.status);
   }
   if (filters.tier) {
     where.push('proof_tier = ?');
@@ -368,7 +494,7 @@ async function handleRunsFeed(url: URL, env: Env): Promise<Response> {
   }
   if (filters.reason_code) {
     where.push('reason_code = ?');
-    params.push(filters.reason_code.toUpperCase());
+    params.push(filters.reason_code);
   }
   if (filters.agent_did) {
     where.push('agent_did = ?');
@@ -407,6 +533,7 @@ async function handleRunsFeed(url: URL, env: Env): Promise<Response> {
     has_next: hasNext,
     next_cursor: nextCursor,
     filters,
+    filters_echo: filters,
   };
 
   return json(response);
@@ -444,6 +571,35 @@ async function handleGlobalStats(env: Env): Promise<Response> {
     LIMIT 5
   `).all<{ reason_code: string; count: number | string }>();
 
+  const diagnostics7dBase = await env.LEDGER_DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM runs WHERE created_at >= datetime('now', '-7 days')) AS runs_7d,
+      (SELECT COUNT(*) FROM runs WHERE status = 'FAIL' AND created_at >= datetime('now', '-7 days')) AS fail_runs_7d
+  `).first<Record<string, unknown>>();
+
+  const topFailRows7d = await env.LEDGER_DB.prepare(`
+    SELECT reason_code, COUNT(*) AS count
+    FROM runs
+    WHERE status = 'FAIL'
+      AND reason_code IS NOT NULL
+      AND reason_code != ''
+      AND created_at >= datetime('now', '-7 days')
+    GROUP BY reason_code
+    ORDER BY count DESC, reason_code ASC
+    LIMIT 10
+  `).all<{ reason_code: string; count: number | string }>();
+
+  const dailyDiagnostics7d = await env.LEDGER_DB.prepare(`
+    SELECT
+      date(created_at) AS day,
+      COUNT(*) AS runs,
+      SUM(CASE WHEN status = 'FAIL' THEN 1 ELSE 0 END) AS fail_runs
+    FROM runs
+    WHERE created_at >= datetime('now', '-7 days')
+    GROUP BY date(created_at)
+    ORDER BY day ASC
+  `).all<{ day: string; runs: number | string; fail_runs: number | string }>();
+
   const recentRuns = await env.LEDGER_DB.prepare(`
     SELECT run_id, agent_did, proof_tier, status, created_at
     FROM runs
@@ -460,6 +616,10 @@ async function handleGlobalStats(env: Env): Promise<Response> {
   const runs24h = asNumber(base?.runs_24h);
   const failRuns24h = asNumber(base?.fail_runs_24h);
   const failRate24h = runs24h > 0 ? Number((failRuns24h / runs24h).toFixed(6)) : 0;
+
+  const runs7d = asNumber(diagnostics7dBase?.runs_7d);
+  const failRuns7d = asNumber(diagnostics7dBase?.fail_runs_7d);
+  const failRate7d = runs7d > 0 ? Number((failRuns7d / runs7d).toFixed(6)) : 0;
 
   const stats: GlobalStatsResponse = {
     total_agents: asNumber(base?.total_agents),
@@ -480,6 +640,26 @@ async function handleGlobalStats(env: Env): Promise<Response> {
       status: row.status,
       created_at: row.created_at,
     })),
+    diagnostics_7d: {
+      runs_7d: runs7d,
+      fail_runs_7d: failRuns7d,
+      fail_rate_7d: failRate7d,
+      top_fail_reason_codes_7d: (topFailRows7d.results ?? []).map((row) => ({
+        reason_code: row.reason_code,
+        count: asNumber(row.count),
+      })),
+      daily: (dailyDiagnostics7d.results ?? []).map((row) => {
+        const runs = asNumber(row.runs);
+        const failRuns = asNumber(row.fail_runs);
+        const failRate = runs > 0 ? Number((failRuns / runs).toFixed(6)) : 0;
+        return {
+          day: row.day,
+          runs,
+          fail_runs: failRuns,
+          fail_rate: failRate,
+        };
+      }),
+    },
   };
 
   return json(stats);
