@@ -24,6 +24,8 @@ describe('arena pages', () => {
     expect(html).toContain('APPROVE');
     expect(html).toContain('Proof card');
     expect(html).toContain('Outcome calibration');
+    expect(html).toContain('Routing autopilot');
+    expect(html).toContain('winner stability');
     expect(html).toContain('Outcome feedback feed');
   });
 

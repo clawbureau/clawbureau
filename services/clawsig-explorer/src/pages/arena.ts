@@ -219,6 +219,43 @@ function renderCalibrationCard(report: ArenaReportView): string {
   `;
 }
 
+function renderAutopilotCard(report: ArenaReportView): string {
+  const autopilot = report.autopilot;
+  if (!autopilot) {
+    return `
+      <div class="card">
+        <p class="section-title">Routing autopilot</p>
+        <p class="dim" style="font-size:0.82rem">Autopilot preview is unavailable for this arena payload.</p>
+      </div>
+    `;
+  }
+
+  const status = autopilot.status === 'auto_route_enabled' ? 'PASS' : 'FAIL';
+  const violations = autopilot.violations.length > 0
+    ? autopilot.violations.join(', ')
+    : 'none';
+
+  return `
+    <div class="card">
+      <p class="section-title">Routing autopilot</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:0.55rem">Default routing policy preview generated from winner + calibration guardrails.</p>
+      <div class="detail-grid" style="margin-bottom:0.55rem">
+        <dt>Status</dt><dd>${statusBadge(status)} <span class="mono" style="margin-left:0.35rem">${esc(autopilot.status)}</span></dd>
+        <dt>Default contender</dt><dd class="mono">${esc(autopilot.default_contender_id ?? 'none')}</dd>
+        <dt>Backups</dt><dd class="mono">${esc(autopilot.backup_contenders.join(', ') || 'none')}</dd>
+        <dt>Task fingerprint</dt><dd class="mono">${esc(autopilot.task_fingerprint ?? 'unknown')}</dd>
+      </div>
+      <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(120px, 1fr)); gap:0.35rem; margin-bottom:0.5rem">
+        ${renderMetricCell('override rate', `${(autopilot.metrics.override_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('rework rate', `${(autopilot.metrics.rework_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('winner stability', `${(autopilot.metrics.winner_stability_ratio * 100).toFixed(1)}%`)}
+      </div>
+      <p class="dim" style="font-size:0.78rem"><strong>Violations:</strong> ${esc(violations)}</p>
+      <p class="dim" style="font-size:0.78rem"><strong>Reason codes:</strong> ${esc(autopilot.reason_codes.join(', ') || 'none')}</p>
+    </div>
+  `;
+}
+
 function renderOutcomeFeedCard(report: ArenaReportView): string {
   if (!Array.isArray(report.outcomes) || report.outcomes.length === 0) {
     return `
@@ -322,6 +359,8 @@ export function arenaComparePage(report: ArenaReportView): string {
     ${renderReviewThreadCard(report)}
 
     ${renderCalibrationCard(report)}
+
+    ${renderAutopilotCard(report)}
 
     ${renderOutcomeFeedCard(report)}
 
@@ -639,6 +678,19 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         cost_per_accepted_bounty_usd: 0.78,
         override_rate: 0,
         rework_rate: 0,
+      },
+    },
+    autopilot: {
+      status: 'auto_route_enabled',
+      task_fingerprint: 'typescript:worker:api-hardening',
+      default_contender_id: 'contender_codex_pi',
+      backup_contenders: ['contender_claude_codex_cli'],
+      reason_codes: ['ARENA_AUTOPILOT_PREVIEW_ENABLED'],
+      violations: [],
+      metrics: {
+        override_rate: 0,
+        rework_rate: 0,
+        winner_stability_ratio: 1,
       },
     },
   };

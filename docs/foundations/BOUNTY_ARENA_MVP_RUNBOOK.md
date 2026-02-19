@@ -394,6 +394,25 @@ Rollout evidence (AGP-US-050):
 - seeded runs: `arena_bty_5c048032_stage_050_001`, `arena_bty_836a4e15_prod_050_001`
 - evidence summary: `artifacts/ops/arena-productization/2026-02-19T21-24-53Z-agp-us-050-decision-capture/summary.json`
 
+### Routing policy autopilot + explorer panel (AGP-US-051)
+
+Added manager autopilot endpoint:
+- `POST /v1/arena/manager/autopilot` (admin)
+
+Behavior:
+- wraps manager-route ranking output
+- applies deterministic guardrails (run count, winner stability, win-rate, override/rework rates, calibration gap, hard-gate stability)
+- emits `arena_manager_autopilot.v1` payload with violations + policy template scaffold
+
+Arena detail payload now includes `autopilot` preview (`arena_autopilot_preview.v1`) for UI surfacing.
+
+Explorer now renders a **Routing autopilot** panel on arena pages.
+
+Rollout evidence (AGP-US-051):
+- staging deploys: `clawbounties-staging` `678d049e-9586-4963-8aca-94301c0db094`, `clawsig-explorer-staging` `c6260209-dfd1-492f-94b1-338ed6f731ca`
+- production deploys: `clawbounties` `950b78b8-2ce8-42af-8375-a917a3f0c23f`, `clawsig-explorer` `d520225a-8c90-4757-959b-a95ec482b90e`
+- evidence summary: `artifacts/ops/arena-productization/2026-02-19T21-39-33Z-agp-us-051-routing-autopilot/summary.json`
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`

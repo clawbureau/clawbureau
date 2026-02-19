@@ -773,6 +773,20 @@ export interface ArenaCalibrationView {
   };
 }
 
+export interface ArenaAutopilotView {
+  status: string;
+  task_fingerprint: string | null;
+  default_contender_id: string | null;
+  backup_contenders: string[];
+  reason_codes: string[];
+  violations: string[];
+  metrics: {
+    override_rate: number;
+    rework_rate: number;
+    winner_stability_ratio: number;
+  };
+}
+
 export interface ArenaReportView {
   arena_id: string;
   generated_at: string;
@@ -803,6 +817,7 @@ export interface ArenaReportView {
   review_thread: ArenaReviewThreadEntryView[];
   outcomes: ArenaOutcomeView[];
   calibration?: ArenaCalibrationView;
+  autopilot?: ArenaAutopilotView;
 }
 
 interface ArenaIndexResponse {
@@ -904,6 +919,19 @@ interface ArenaReportResponse {
       cost_per_accepted_bounty_usd?: unknown;
       override_rate?: unknown;
       rework_rate?: unknown;
+    };
+  };
+  autopilot?: {
+    status?: unknown;
+    task_fingerprint?: unknown;
+    default_contender_id?: unknown;
+    backup_contenders?: unknown;
+    reason_codes?: unknown;
+    violations?: unknown;
+    metrics?: {
+      override_rate?: unknown;
+      rework_rate?: unknown;
+      winner_stability_ratio?: unknown;
     };
   };
 }
@@ -1128,6 +1156,31 @@ function parseCalibration(input: unknown): ArenaCalibrationView | undefined {
   };
 }
 
+function parseAutopilot(input: unknown): ArenaAutopilotView | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+
+  return {
+    status: asString(rec.status) ?? 'unknown',
+    task_fingerprint: asString(rec.task_fingerprint),
+    default_contender_id: asString(rec.default_contender_id),
+    backup_contenders: Array.isArray(rec.backup_contenders)
+      ? rec.backup_contenders.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    reason_codes: Array.isArray(rec.reason_codes)
+      ? rec.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    violations: Array.isArray(rec.violations)
+      ? rec.violations.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    metrics: {
+      override_rate: asNumber((rec.metrics as Record<string, unknown> | undefined)?.override_rate, 0),
+      rework_rate: asNumber((rec.metrics as Record<string, unknown> | undefined)?.rework_rate, 0),
+      winner_stability_ratio: asNumber((rec.metrics as Record<string, unknown> | undefined)?.winner_stability_ratio, 0),
+    },
+  };
+}
+
 export async function fetchArenaIndex(
   opts: FetchOptions,
 ): Promise<Array<{
@@ -1255,5 +1308,6 @@ export async function fetchArenaReport(
     review_thread: parseReviewThreadEntries(data.review_thread),
     outcomes: parseOutcomeEntries(data.outcomes),
     calibration: parseCalibration(data.calibration),
+    autopilot: parseAutopilot(data.autopilot),
   };
 }

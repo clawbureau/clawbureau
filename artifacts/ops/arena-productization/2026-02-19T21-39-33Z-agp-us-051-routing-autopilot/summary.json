@@ -1,0 +1,60 @@
+{
+  "story": "AGP-US-051",
+  "title": "routing policy autopilot endpoint + explorer panel",
+  "generated_at": "2026-02-19T21:40:20.363Z",
+  "deploys": {
+    "staging": {
+      "clawbounties": {
+        "version_id": "678d049e-9586-4963-8aca-94301c0db094"
+      },
+      "clawsig_explorer": {
+        "version_id": "c6260209-dfd1-492f-94b1-338ed6f731ca"
+      }
+    },
+    "production": {
+      "clawbounties": {
+        "version_id": "950b78b8-2ce8-42af-8375-a917a3f0c23f"
+      },
+      "clawsig_explorer": {
+        "version_id": "d520225a-8c90-4757-959b-a95ec482b90e"
+      }
+    }
+  },
+  "manager_autopilot_endpoint": {
+    "endpoint": "POST /v1/arena/manager/autopilot",
+    "staging": {
+      "arm_B_status": 200,
+      "arm_B_autopilot_status": "manual_review_required",
+      "arm_B_default_contender_id": "contender_codex_pi",
+      "arm_B_violations": 2,
+      "arm_A_status": 404,
+      "arm_A_error": "ARENA_ROUTE_NOT_FOUND"
+    },
+    "production": {
+      "arm_B_status": 200,
+      "arm_B_autopilot_status": "manual_review_required",
+      "arm_B_default_contender_id": "contender_codex_pi",
+      "arm_B_violations": 2,
+      "arm_A_status": 404,
+      "arm_A_error": "ARENA_ROUTE_NOT_FOUND"
+    }
+  },
+  "arena_payload_autopilot_preview": {
+    "staging": {
+      "arena_id": "arena_bty_5c048032_stage_050_001",
+      "status": "manual_review_required",
+      "default_contender_id": "contender_codex_pi"
+    },
+    "production": {
+      "arena_id": "arena_bty_836a4e15_prod_050_001",
+      "status": "manual_review_required",
+      "default_contender_id": "contender_codex_pi"
+    }
+  },
+  "explorer_panel_checks": {
+    "staging_has_routing_autopilot_card": true,
+    "production_has_routing_autopilot_card": true,
+    "staging_contains_status_label": true,
+    "production_contains_status_label": true
+  }
+}
