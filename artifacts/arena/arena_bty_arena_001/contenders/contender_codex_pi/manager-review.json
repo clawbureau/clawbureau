@@ -1,16 +1,16 @@
 {
   "arena_id": "arena_bty_arena_001",
-  "confidence": 0.8355,
+  "confidence": 0.8928,
   "contender_id": "contender_codex_pi",
   "decision": "promote",
   "failed_checks": [],
   "metrics": {
-    "autonomy_score": 84,
+    "autonomy_score": 94.5,
     "cost_usd": 0.78,
-    "efficiency_score": 81,
+    "efficiency_score": 70.1,
     "latency_ms": 16000,
-    "quality_score": 92,
-    "risk_score": 26
+    "quality_score": 98.41,
+    "risk_score": 18.58
   },
   "reason_codes": [
     "ARENA_READY_TO_PROMOTE"

@@ -36,6 +36,8 @@ test('arena runner produces deterministic rankings and winner rationale', () => 
   assert.equal(reportA.schema_version, 'arena_report.v1');
   assert.equal(reportA.contenders.length, 3);
   assert.equal(reportA.rankings.length, 3);
+  assert.equal(typeof reportA.score_explain.formula.summary, 'string');
+  assert.equal(Array.isArray(reportA.contenders[0].score_explain.evidence_links), true);
   assert.equal(reportA.winner.contender_id, reportB.winner.contender_id);
   assert.deepEqual(
     reportA.rankings.map((row) => ({ contender_id: row.contender_id, score: row.score, hard_gate_pass: row.hard_gate_pass })),
@@ -47,6 +49,27 @@ test('arena runner produces deterministic rankings and winner rationale', () => 
 
   assert.equal(reportAOnDisk.winner.contender_id, reportBOnDisk.winner.contender_id);
   assert.equal(reportAOnDisk.reason_codes.join(','), reportBOnDisk.reason_codes.join(','));
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('arena runner fails closed when mandatory evidence_signals are missing', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'arena-runner-missing-evidence-'));
+  const out = path.join(dir, 'out');
+
+  const invalidContenders = structuredClone(contenders);
+  delete invalidContenders[0].evidence_signals;
+
+  assert.throws(
+    () => runArena({
+      contract,
+      contenders: invalidContenders,
+      outputDir: out,
+      generatedAt: '2026-02-19T15:00:00.000Z',
+      arenaIdOverride: 'arena_missing_evidence',
+    }),
+    /evidence_signals/,
+  );
 
   rmSync(dir, { recursive: true, force: true });
 });

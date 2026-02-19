@@ -371,6 +371,18 @@ interface ArenaCheckResult {
   reason_code: string;
 }
 
+interface ArenaScoreExplainLink {
+  label: string;
+  url: string;
+  source?: string;
+}
+
+interface ArenaScoreExplain {
+  final_score: number;
+  reason_codes: string[];
+  evidence_links: ArenaScoreExplainLink[];
+}
+
 interface ArenaContenderResult {
   contender_id: string;
   label: string;
@@ -391,6 +403,7 @@ interface ArenaContenderResult {
     autonomy_score: number;
   };
   check_results: ArenaCheckResult[];
+  score_explain: ArenaScoreExplain;
   insights: {
     bottlenecks: string[];
     contract_improvements: string[];
@@ -6139,6 +6152,40 @@ function parseArenaCheckResults(input: unknown): ArenaCheckResult[] {
   return out;
 }
 
+function parseArenaScoreExplain(value: unknown, fallbackFinalScore = 0): ArenaScoreExplain {
+  if (!isRecord(value)) {
+    return {
+      final_score: fallbackFinalScore,
+      reason_codes: [],
+      evidence_links: [],
+    };
+  }
+
+  const derived = isRecord(value.derived) ? value.derived : null;
+  const reasonCodes = parseStringList(value.reason_codes, 32, 128, true) ?? [];
+
+  const evidenceLinks: ArenaScoreExplainLink[] = [];
+  if (Array.isArray(value.evidence_links)) {
+    for (const raw of value.evidence_links) {
+      if (!isRecord(raw)) continue;
+      const label = d1String(raw.label);
+      const url = d1String(raw.url);
+      const source = d1String(raw.source);
+
+      if (!label || !url) continue;
+      evidenceLinks.push(source ? { label, url, source } : { label, url });
+    }
+  }
+
+  const finalScore = d1Number(derived?.final_score);
+
+  return {
+    final_score: finalScore ?? fallbackFinalScore,
+    reason_codes: reasonCodes,
+    evidence_links: evidenceLinks,
+  };
+}
+
 function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContenderResult | null {
   const tools = parseJsonStringArray(record.tools_json);
   const skills = parseJsonStringArray(record.skills_json);
@@ -6169,6 +6216,7 @@ function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContender
     mandatory_failed: record.mandatory_failed,
     metrics,
     check_results: parseArenaCheckResults(checkResultsRaw),
+    score_explain: parseArenaScoreExplain(proofPack?.score_explain, record.score),
     insights: proofPackConfig.insights,
     proof_pack: proofPack,
     manager_review: managerReview,
@@ -6391,10 +6439,14 @@ async function buildArenaPayloadFromRun(
   if (!reasonCodes || !tradeoffs) return null;
 
   let generatedAt = run.updated_at;
+  let reportScoreExplain: Record<string, unknown> | null = null;
   if (run.arena_report_json) {
     const reportObj = parseJsonObject(run.arena_report_json);
     const generated = reportObj ? d1String(reportObj.generated_at) : null;
     if (generated) generatedAt = generated;
+    if (reportObj && isRecord(reportObj.score_explain)) {
+      reportScoreExplain = reportObj.score_explain;
+    }
   }
 
   return {
@@ -6409,6 +6461,19 @@ async function buildArenaPayloadFromRun(
       task_fingerprint: run.task_fingerprint,
     },
     objective_profile: objectiveProfile,
+    score_explain: reportScoreExplain ?? {
+      formula: {
+        summary: 'final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty',
+        components: ['derived from stored contender score_explain payloads'],
+      },
+      weights: isRecord(objectiveProfile.weights) ? objectiveProfile.weights : {},
+      contender_breakdown: contenderViews.map((contender) => ({
+        contender_id: contender.contender_id,
+        final_score: contender.score_explain.final_score,
+        reason_codes: contender.score_explain.reason_codes,
+        evidence_links: contender.score_explain.evidence_links,
+      })),
+    },
     contenders: contenderViews.map((contender) => ({
       contender_id: contender.contender_id,
       label: contender.label,
@@ -6422,6 +6487,7 @@ async function buildArenaPayloadFromRun(
       mandatory_failed: contender.mandatory_failed,
       metrics: contender.metrics,
       check_results: contender.check_results,
+      score_explain: contender.score_explain,
       insights: contender.insights,
       review_paste: contender.review_paste,
       manager_review_json: contender.manager_review,
@@ -6562,6 +6628,7 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
   skills: string[];
   plugins: string[];
   check_results: ArenaCheckResult[];
+  score_explain: ArenaScoreExplain;
   insights: {
     bottlenecks: string[];
     contract_improvements: string[];
@@ -6576,6 +6643,11 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
       skills: [],
       plugins: [],
       check_results: [],
+      score_explain: {
+        final_score: 0,
+        reason_codes: [],
+        evidence_links: [],
+      },
       insights: {
         bottlenecks: [],
         contract_improvements: [],
@@ -6601,6 +6673,8 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
   const contractImprovements = insightsRaw ? parseStringList(insightsRaw.contract_improvements, 30, 300, true) : [];
   const nextDelegationHints = insightsRaw ? parseStringList(insightsRaw.next_delegation_hints, 30, 300, true) : [];
 
+  const scoreExplain = parseArenaScoreExplain(proofPack.score_explain, 0);
+
   return {
     model: model?.trim() ?? 'unknown-model',
     harness: harness?.trim() ?? 'unknown-harness',
@@ -6608,6 +6682,7 @@ function parseArenaContenderConfigFromProofPack(proofPack: Record<string, unknow
     skills: skills ?? [],
     plugins: plugins ?? [],
     check_results: checks,
+    score_explain: scoreExplain,
     insights: {
       bottlenecks: bottlenecks ?? [],
       contract_improvements: contractImprovements ?? [],
@@ -6651,6 +6726,7 @@ function parseArenaContenderFromReportRow(
   const directCheckResults = parseArenaCheckResults(row.check_results);
   const check_results = directCheckResults.length > 0 ? directCheckResults : config.check_results;
 
+  const directScoreExplain = parseArenaScoreExplain(row.score_explain, score);
   const result: ArenaContenderResult = {
     contender_id: contender_id.trim(),
     label: label.trim(),
@@ -6664,6 +6740,9 @@ function parseArenaContenderFromReportRow(
     mandatory_failed,
     metrics,
     check_results,
+    score_explain: directScoreExplain.evidence_links.length > 0 || directScoreExplain.reason_codes.length > 0
+      ? directScoreExplain
+      : parseArenaScoreExplain(config.score_explain, score),
     insights: config.insights,
     proof_pack: artifact.proof_pack,
     manager_review: artifact.manager_review,
@@ -11302,6 +11381,11 @@ async function handleStartBountyArena(
           autonomy_score: 0,
         },
         check_results: [],
+        score_explain: {
+          final_score: 0,
+          reason_codes: ['ARENA_PENDING'],
+          evidence_links: [],
+        },
         insights: {
           bottlenecks: [],
           contract_improvements: [],

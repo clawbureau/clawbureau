@@ -8,15 +8,15 @@
 
 ## Winner rationale
 
-Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (85.5475).
+Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750).
 
 ## Rankings
 
 | Rank | Contender | Hard Gate | Score |
 | --- | --- | --- | ---: |
-| 1 | contender_codex_pi | PASS | 85.5475 |
-| 2 | contender_claude_codex_cli | PASS | 83.0075 |
-| 3 | contender_gemini_swarm | FAIL | 74.6550 |
+| 1 | contender_codex_pi | PASS | 89.2750 |
+| 2 | contender_claude_codex_cli | PASS | 86.3050 |
+| 3 | contender_gemini_swarm | FAIL | 66.7645 |
 
 ## Tradeoffs
 

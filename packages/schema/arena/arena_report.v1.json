@@ -10,6 +10,7 @@
     "generated_at",
     "contract",
     "objective_profile",
+    "score_explain",
     "contenders",
     "rankings",
     "winner",
@@ -66,6 +67,73 @@
         }
       }
     },
+    "score_explain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["formula", "weights", "contender_breakdown"],
+      "properties": {
+        "formula": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["summary", "components"],
+          "properties": {
+            "summary": { "type": "string", "minLength": 8, "maxLength": 500 },
+            "components": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 2, "maxLength": 500 },
+              "minItems": 1,
+              "maxItems": 32
+            }
+          }
+        },
+        "weights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["quality", "speed", "cost", "safety"],
+          "properties": {
+            "quality": { "type": "number", "minimum": 0, "maximum": 1 },
+            "speed": { "type": "number", "minimum": 0, "maximum": 1 },
+            "cost": { "type": "number", "minimum": 0, "maximum": 1 },
+            "safety": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "contender_breakdown": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["contender_id", "final_score", "reason_codes", "evidence_links"],
+            "properties": {
+              "contender_id": { "type": "string", "minLength": 2, "maxLength": 128 },
+              "final_score": { "type": "number", "minimum": 0 },
+              "reason_codes": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 2, "maxLength": 128 },
+                "minItems": 1,
+                "maxItems": 32
+              },
+              "evidence_links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "url"],
+                  "properties": {
+                    "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+                    "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+                    "source": { "type": "string", "minLength": 2, "maxLength": 64 }
+                  }
+                },
+                "minItems": 1,
+                "maxItems": 128
+              }
+            }
+          }
+        }
+      }
+    },
     "contenders": {
       "type": "array",
       "items": {
@@ -78,6 +146,7 @@
           "mandatory_failed",
           "score",
           "metrics",
+          "score_explain",
           "proof_pack_path",
           "manager_review_path",
           "review_paste_path"
@@ -99,6 +168,147 @@
               "latency_ms": { "type": "integer", "minimum": 0 },
               "cost_usd": { "type": "number", "minimum": 0 },
               "autonomy_score": { "type": "number", "minimum": 0, "maximum": 100 }
+            }
+          },
+          "score_explain": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["formula", "raw_inputs", "weights", "derived", "reason_codes", "evidence_links"],
+            "properties": {
+              "formula": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["summary", "components"],
+                "properties": {
+                  "summary": { "type": "string", "minLength": 8, "maxLength": 500 },
+                  "components": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 2, "maxLength": 500 },
+                    "minItems": 1,
+                    "maxItems": 32
+                  }
+                }
+              },
+              "raw_inputs": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["ci", "git", "execution", "cost"],
+                "properties": {
+                  "ci": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["typecheck_passed", "lint_passed", "tests_passed", "tests_failed", "tests_total"],
+                    "properties": {
+                      "typecheck_passed": { "type": "boolean" },
+                      "lint_passed": { "type": "boolean" },
+                      "tests_passed": { "type": "integer", "minimum": 0 },
+                      "tests_failed": { "type": "integer", "minimum": 0 },
+                      "tests_total": { "type": "integer", "minimum": 0 }
+                    }
+                  },
+                  "git": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["files_changed", "lines_added", "lines_deleted", "churn_hotspots"],
+                    "properties": {
+                      "files_changed": { "type": "integer", "minimum": 0 },
+                      "lines_added": { "type": "integer", "minimum": 0 },
+                      "lines_deleted": { "type": "integer", "minimum": 0 },
+                      "churn_hotspots": {
+                        "type": "array",
+                        "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+                        "maxItems": 64
+                      }
+                    }
+                  },
+                  "execution": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["latency_ms", "tool_calls", "retries", "manual_interventions"],
+                    "properties": {
+                      "latency_ms": { "type": "integer", "minimum": 0 },
+                      "tool_calls": { "type": "integer", "minimum": 0 },
+                      "retries": { "type": "integer", "minimum": 0 },
+                      "manual_interventions": { "type": "integer", "minimum": 0 }
+                    }
+                  },
+                  "cost": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["usd"],
+                    "properties": {
+                      "usd": { "type": "number", "minimum": 0 }
+                    }
+                  }
+                }
+              },
+              "weights": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["objective"],
+                "properties": {
+                  "objective": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["quality", "speed", "cost", "safety"],
+                    "properties": {
+                      "quality": { "type": "number", "minimum": 0, "maximum": 1 },
+                      "speed": { "type": "number", "minimum": 0, "maximum": 1 },
+                      "cost": { "type": "number", "minimum": 0, "maximum": 1 },
+                      "safety": { "type": "number", "minimum": 0, "maximum": 1 }
+                    }
+                  }
+                }
+              },
+              "derived": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "quality_score",
+                  "risk_score",
+                  "efficiency_score",
+                  "autonomy_score",
+                  "speed_score",
+                  "cost_score",
+                  "safety_score",
+                  "weighted_pre_penalty",
+                  "optional_penalty",
+                  "final_score"
+                ],
+                "properties": {
+                  "quality_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "risk_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "efficiency_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "autonomy_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "speed_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "cost_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "safety_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "weighted_pre_penalty": { "type": "number", "minimum": 0 },
+                  "optional_penalty": { "type": "number", "minimum": 0 },
+                  "final_score": { "type": "number", "minimum": 0 }
+                }
+              },
+              "reason_codes": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 2, "maxLength": 128 },
+                "minItems": 1,
+                "maxItems": 32
+              },
+              "evidence_links": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["label", "url"],
+                  "properties": {
+                    "label": { "type": "string", "minLength": 1, "maxLength": 128 },
+                    "url": { "type": "string", "format": "uri", "maxLength": 2048 },
+                    "source": { "type": "string", "minLength": 2, "maxLength": 64 }
+                  }
+                },
+                "minItems": 3,
+                "maxItems": 128
+              }
             }
           },
           "proof_pack_path": { "type": "string", "minLength": 3, "maxLength": 512 },

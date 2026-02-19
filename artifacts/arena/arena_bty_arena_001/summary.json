@@ -1,7 +1,7 @@
 {
   "arena_id": "arena_bty_arena_001",
   "contenders_count": 3,
-  "generated_at": "2026-02-19T14:52:21.580Z",
+  "generated_at": "2026-02-19T16:11:35.425Z",
   "ok": true,
   "output_dir": "artifacts/arena/arena_bty_arena_001",
   "reason_codes": [
@@ -10,6 +10,6 @@
   ],
   "winner": {
     "contender_id": "contender_codex_pi",
-    "reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (85.5475)."
+    "reason": "Winner contender_codex_pi passed all mandatory checks and achieved top weighted score (89.2750)."
   }
 }

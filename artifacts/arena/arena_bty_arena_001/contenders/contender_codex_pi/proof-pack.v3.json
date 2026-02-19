@@ -62,11 +62,36 @@
     "delivery_summary": "Implemented contract binding checks with deterministic reason code handling and full test coverage.",
     "links": [
       {
+        "label": "Arena execution trace",
+        "source": "execution",
+        "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+      },
+      {
         "label": "PR",
         "url": "https://github.com/clawbureau/clawbureau/pull/366"
       },
       {
+        "label": "PR #366 diff",
+        "source": "git",
+        "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+      },
+      {
         "label": "Runbook",
+        "url": "https://docs.clawsig.com/quickstart"
+      },
+      {
+        "label": "Test run summary",
+        "source": "ci",
+        "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+      },
+      {
+        "label": "Typecheck log",
+        "source": "ci",
+        "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+      },
+      {
+        "label": "Usage ledger",
+        "source": "cost",
         "url": "https://docs.clawsig.com/quickstart"
       }
     ]
@@ -84,12 +109,103 @@
     ]
   },
   "metrics": {
-    "autonomy_score": 84,
+    "autonomy_score": 94.5,
     "cost_usd": 0.78,
-    "efficiency_score": 81,
+    "efficiency_score": 70.1,
     "latency_ms": 16000,
-    "quality_score": 92,
-    "risk_score": 26
+    "quality_score": 98.41,
+    "risk_score": 18.58
   },
-  "schema_version": "proof_pack.v3"
+  "schema_version": "proof_pack.v3",
+  "score_explain": {
+    "derived": {
+      "autonomy_score": 94.5,
+      "cost_score": 84.4,
+      "efficiency_score": 70.1,
+      "final_score": 89.275,
+      "optional_penalty": 0,
+      "quality_score": 98.41,
+      "risk_score": 18.58,
+      "safety_score": 81.42,
+      "speed_score": 86.67,
+      "weighted_pre_penalty": 89.275
+    },
+    "evidence_links": [
+      {
+        "label": "Arena execution trace",
+        "source": "execution",
+        "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834313/job/64162891224"
+      },
+      {
+        "label": "PR #366 diff",
+        "source": "git",
+        "url": "https://github.com/clawbureau/clawbureau/pull/366/files"
+      },
+      {
+        "label": "Test run summary",
+        "source": "ci",
+        "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186831548/job/64162887467"
+      },
+      {
+        "label": "Typecheck log",
+        "source": "ci",
+        "url": "https://github.com/clawbureau/clawbureau/actions/runs/22186834424/job/64162890956"
+      },
+      {
+        "label": "Usage ledger",
+        "source": "cost",
+        "url": "https://docs.clawsig.com/quickstart"
+      }
+    ],
+    "formula": {
+      "components": [
+        "cost = 100 - min(100, cost_usd/5*100)",
+        "efficiency = f(retries, tool_calls, latency, files_changed)",
+        "optional_penalty = optional_failed * 1.5",
+        "quality = f(ci.typecheck, ci.lint, test pass rate, manual interventions)",
+        "risk = f(ci failures, retries, manual interventions, git churn)",
+        "safety = 100 - risk_score",
+        "speed = 100 - min(100, latency_ms/120000*100)"
+      ],
+      "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+    },
+    "raw_inputs": {
+      "ci": {
+        "lint_passed": true,
+        "tests_failed": 2,
+        "tests_passed": 124,
+        "tests_total": 126,
+        "typecheck_passed": true
+      },
+      "cost": {
+        "usd": 0.78
+      },
+      "execution": {
+        "latency_ms": 16000,
+        "manual_interventions": 0,
+        "retries": 1,
+        "tool_calls": 42
+      },
+      "git": {
+        "churn_hotspots": [
+          "services/clawverify/src/schema-registry.ts",
+          "services/clawverify/src/schema-validation.ts"
+        ],
+        "files_changed": 21,
+        "lines_added": 880,
+        "lines_deleted": 210
+      }
+    },
+    "reason_codes": [
+      "ARENA_SCORE_EVIDENCE_GROUNDED"
+    ],
+    "weights": {
+      "objective": {
+        "cost": 0.2,
+        "quality": 0.35,
+        "safety": 0.2,
+        "speed": 0.25
+      }
+    }
+  }
 }

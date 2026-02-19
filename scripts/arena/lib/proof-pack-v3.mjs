@@ -27,13 +27,19 @@ function stableSortLinks(links) {
     .map((row) => ({
       label: typeof row?.label === 'string' ? row.label.trim() : '',
       url: typeof row?.url === 'string' ? row.url.trim() : '',
+      source: typeof row?.source === 'string' ? row.source.trim() : '',
     }))
-    .filter((row) => row.label && row.url);
+    .filter((row) => row.label && row.url)
+    .map((row) => row.source ? row : { label: row.label, url: row.url });
 
   normalized.sort((a, b) => {
     const byLabel = a.label.localeCompare(b.label);
     if (byLabel !== 0) return byLabel;
-    return a.url.localeCompare(b.url);
+
+    const byUrl = a.url.localeCompare(b.url);
+    if (byUrl !== 0) return byUrl;
+
+    return (a.source ?? '').localeCompare(b.source ?? '');
   });
 
   return normalized;
@@ -106,6 +112,47 @@ function normalizeInsights(insights) {
   };
 }
 
+function normalizeScoreExplain(scoreExplain, metrics) {
+  const source = scoreExplain ?? {};
+  const formula = source.formula ?? {};
+  const weights = source.weights ?? {};
+  const derived = source.derived ?? {};
+
+  return {
+    formula: {
+      summary: typeof formula.summary === 'string' && formula.summary.trim()
+        ? formula.summary.trim()
+        : 'final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty',
+      components: normalizeStringArray(formula.components),
+    },
+    raw_inputs: typeof source.raw_inputs === 'object' && source.raw_inputs !== null
+      ? source.raw_inputs
+      : {},
+    weights: {
+      objective: {
+        quality: Number.isFinite(Number(weights?.objective?.quality)) ? Number(weights.objective.quality) : 0,
+        speed: Number.isFinite(Number(weights?.objective?.speed)) ? Number(weights.objective.speed) : 0,
+        cost: Number.isFinite(Number(weights?.objective?.cost)) ? Number(weights.objective.cost) : 0,
+        safety: Number.isFinite(Number(weights?.objective?.safety)) ? Number(weights.objective.safety) : 0,
+      },
+    },
+    derived: {
+      quality_score: Number.isFinite(Number(derived.quality_score)) ? Number(derived.quality_score) : metrics.quality_score,
+      risk_score: Number.isFinite(Number(derived.risk_score)) ? Number(derived.risk_score) : metrics.risk_score,
+      efficiency_score: Number.isFinite(Number(derived.efficiency_score)) ? Number(derived.efficiency_score) : metrics.efficiency_score,
+      autonomy_score: Number.isFinite(Number(derived.autonomy_score)) ? Number(derived.autonomy_score) : metrics.autonomy_score,
+      speed_score: Number.isFinite(Number(derived.speed_score)) ? Number(derived.speed_score) : 0,
+      cost_score: Number.isFinite(Number(derived.cost_score)) ? Number(derived.cost_score) : 0,
+      safety_score: Number.isFinite(Number(derived.safety_score)) ? Number(derived.safety_score) : 0,
+      weighted_pre_penalty: Number.isFinite(Number(derived.weighted_pre_penalty)) ? Number(derived.weighted_pre_penalty) : 0,
+      optional_penalty: Number.isFinite(Number(derived.optional_penalty)) ? Number(derived.optional_penalty) : 0,
+      final_score: Number.isFinite(Number(derived.final_score)) ? Number(derived.final_score) : 0,
+    },
+    reason_codes: normalizeStringArray(source.reason_codes),
+    evidence_links: stableSortLinks(source.evidence_links),
+  };
+}
+
 export function buildProofPackV3(input) {
   const now = typeof input?.generated_at === 'string' && input.generated_at.trim()
     ? input.generated_at.trim()
@@ -145,6 +192,8 @@ export function buildProofPackV3(input) {
     ? input.delivery_summary.trim()
     : '';
 
+  const metrics = normalizeMetrics(input?.metrics);
+
   const proofPack = {
     schema_version: 'proof_pack.v3',
     arena_id: String(input?.arena_id ?? '').trim(),
@@ -156,7 +205,8 @@ export function buildProofPackV3(input) {
       mandatory_failed: mandatoryFailed,
       checks,
     },
-    metrics: normalizeMetrics(input?.metrics),
+    metrics,
+    score_explain: normalizeScoreExplain(input?.score_explain, metrics),
     evidence: {
       delivery_summary: deliverySummary,
       delivery_hash_b64u: sha256b64u(deliverySummary),
@@ -170,12 +220,23 @@ export function buildProofPackV3(input) {
 
 export function buildReviewPaste(proofPack) {
   const complianceStatus = proofPack.compliance.mandatory_failed === 0 ? 'PASS' : 'FAIL';
-  const decision = complianceStatus === 'PASS' && proofPack.metrics.risk_score < 70 ? 'Promote contender' : 'Manual review required';
+
+  const recommendation = proofPack.compliance.mandatory_failed > 0
+    ? 'REJECT'
+    : proofPack.metrics.risk_score >= 60
+      ? 'REQUEST_CHANGES'
+      : 'APPROVE';
+
+  const confidenceRaw = proofPack.score_explain?.derived?.final_score;
+  const confidence = Number.isFinite(Number(confidenceRaw))
+    ? Math.max(0, Math.min(1, Number((Number(confidenceRaw) / 100).toFixed(4))))
+    : 0;
 
   const lines = [
-    `Decision Summary: ${decision}`,
+    `Decision Summary: ${recommendation} (${(confidence * 100).toFixed(1)}% confidence)`,
     `Contract Compliance: ${complianceStatus} (${proofPack.compliance.mandatory_passed} mandatory passed, ${proofPack.compliance.mandatory_failed} mandatory failed)`,
     `Delivery/Risk: quality=${proofPack.metrics.quality_score.toFixed(2)}, risk=${proofPack.metrics.risk_score.toFixed(2)}, efficiency=${proofPack.metrics.efficiency_score.toFixed(2)}, cost=$${proofPack.metrics.cost_usd.toFixed(4)}, latency=${proofPack.metrics.latency_ms}ms`,
+    `Score Explain: final=${Number(proofPack.score_explain.derived.final_score).toFixed(4)} | weighted=${Number(proofPack.score_explain.derived.weighted_pre_penalty).toFixed(4)} | penalty=${Number(proofPack.score_explain.derived.optional_penalty).toFixed(4)}`,
     `Evidence: ${proofPack.evidence.links.map((row) => `${row.label}: ${row.url}`).join(' | ') || 'none'}`,
     `Recommendation: ${proofPack.insights.next_delegation_hints[0] ?? 'No additional recommendation available.'}`,
   ];
@@ -196,13 +257,7 @@ export function buildManagerReview(proofPack) {
   if (proofPack.compliance.mandatory_failed > 0) decision = 'reject';
   else if (proofPack.metrics.risk_score >= 60 || failedChecks.length > 0) decision = 'conditional';
 
-  const confidenceRaw = (
-    (proofPack.metrics.quality_score * 0.35) +
-    (proofPack.metrics.efficiency_score * 0.25) +
-    ((100 - proofPack.metrics.risk_score) * 0.25) +
-    (proofPack.metrics.autonomy_score * 0.15)
-  ) / 100;
-
+  const confidenceRaw = Number(proofPack.score_explain?.derived?.final_score ?? 0) / 100;
   const confidencePenalty = proofPack.compliance.mandatory_failed > 0
     ? 0.35
     : (failedChecks.length > 0 ? 0.15 : 0);
@@ -233,6 +288,14 @@ export function buildManagerReview(proofPack) {
   };
 }
 
+function ensurePathValue(obj, pathParts) {
+  let cursor = obj;
+  for (const segment of pathParts) {
+    cursor = cursor?.[segment];
+  }
+  return cursor;
+}
+
 export function validateProofPackV3Shape(proofPack) {
   const errors = [];
 
@@ -258,13 +321,11 @@ export function validateProofPackV3Shape(proofPack) {
     ['contender', 'config', 'prompt_hash_b64u'],
     ['evidence', 'delivery_summary'],
     ['evidence', 'delivery_hash_b64u'],
+    ['score_explain', 'formula', 'summary'],
   ];
 
   for (const pathParts of requiredStringPaths) {
-    let cursor = proofPack;
-    for (const segment of pathParts) {
-      cursor = cursor?.[segment];
-    }
+    const cursor = ensurePathValue(proofPack, pathParts);
     if (typeof cursor !== 'string' || cursor.trim().length === 0) {
       errors.push(`${pathParts.join('.')} must be a non-empty string`);
     }
@@ -290,6 +351,31 @@ export function validateProofPackV3Shape(proofPack) {
   const cost = Number(proofPack?.metrics?.cost_usd);
   if (!Number.isFinite(cost) || cost < 0) {
     errors.push('metrics.cost_usd must be a non-negative number');
+  }
+
+  if (!Array.isArray(proofPack?.score_explain?.reason_codes) || proofPack.score_explain.reason_codes.length === 0) {
+    errors.push('score_explain.reason_codes must be a non-empty array');
+  }
+
+  if (!Array.isArray(proofPack?.score_explain?.evidence_links) || proofPack.score_explain.evidence_links.length < 3) {
+    errors.push('score_explain.evidence_links must include CI/git/execution evidence links');
+  }
+
+  if (typeof proofPack?.score_explain?.raw_inputs !== 'object' || proofPack.score_explain.raw_inputs === null) {
+    errors.push('score_explain.raw_inputs must be an object');
+  }
+
+  if (typeof proofPack?.score_explain?.weights !== 'object' || proofPack.score_explain.weights === null) {
+    errors.push('score_explain.weights must be an object');
+  }
+
+  if (typeof proofPack?.score_explain?.derived !== 'object' || proofPack.score_explain.derived === null) {
+    errors.push('score_explain.derived must be an object');
+  }
+
+  const finalScore = Number(proofPack?.score_explain?.derived?.final_score);
+  if (!Number.isFinite(finalScore) || finalScore < 0) {
+    errors.push('score_explain.derived.final_score must be a non-negative number');
   }
 
   return { valid: errors.length === 0, errors };
