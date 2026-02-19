@@ -23,6 +23,7 @@ dead_letter_queue = "ledger-ingest-dlq"
 [vars]
 SERVICE_VERSION = "0.1.0"
 CLAWLOGS_RT_URL = "https://clawlogs.com"
+CLAWVERIFY_API_URL = "https://clawverify.com"
 [env.staging]
 name = "clawsig-ledger-staging"
 routes = [{ pattern = "staging-api.clawverify.com/v1/*", zone_name = "clawverify.com" }]
@@ -44,6 +45,7 @@ max_retries = 3
 [env.staging.vars]
 SERVICE_VERSION = "0.1.0"
 CLAWLOGS_RT_URL = "https://staging.clawlogs.com"
+CLAWVERIFY_API_URL = "https://staging.clawverify.com"
 
 [alias]
 "@clawbureau/clawverify-core/schema-validators.generated" = "./src/schema-validators-shim.ts"

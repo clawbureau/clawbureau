@@ -28,7 +28,7 @@ async function processMessage(m: LedgerIngestMessage, env: Env): Promise<void> {
   let rtIdx: number | null = null;
   if (env.CLAWLOGS_RT_URL && env.CLAWLOGS_ADMIN_TOKEN) {
     try {
-      const hash = await computeHash(m.bundle_hash_b64u, 'SHA-256');
+      const hash = await computeHash(m.bundle_hash_b64u);
       const res = await fetch(`${env.CLAWLOGS_RT_URL}/v1/rt/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.CLAWLOGS_ADMIN_TOKEN}` },
