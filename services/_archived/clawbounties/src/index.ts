@@ -12929,6 +12929,7 @@ async function handleArenaManagerRoute(
   request: Request,
   env: Env,
   version: string,
+  mode: 'route' | 'coach' = 'route',
 ): Promise<Response> {
   const adminError = requireAdmin(request, env, version);
   if (adminError) return adminError;
@@ -12992,9 +12993,23 @@ async function handleArenaManagerRoute(
     sample_run_ids: string[];
   };
 
-  const aggregates = new Map<string, RoutingAggregate>();
+  type OutcomeAggregate = {
+    samples: number;
+    accepted: number;
+    overridden: number;
+    rework: number;
+    confidence_sum: number;
+  };
 
+  const aggregates = new Map<string, RoutingAggregate>();
+  const outcomeAggregates = new Map<string, OutcomeAggregate>();
+
+  const winnerCounts = new Map<string, number>();
   for (const run of runs) {
+    if (run.winner_contender_id) {
+      winnerCounts.set(run.winner_contender_id, (winnerCounts.get(run.winner_contender_id) ?? 0) + 1);
+    }
+
     const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
     for (const contenderRow of contenderRows) {
       const contender = parseArenaContenderResult(contenderRow);
@@ -13019,23 +13034,42 @@ async function handleArenaManagerRoute(
           last_seen_at: run.updated_at,
           sample_run_ids: [run.run_id],
         });
-        continue;
+      } else {
+        existing.appearances += 1;
+        existing.wins += run.winner_contender_id === contender.contender_id ? 1 : 0;
+        existing.hard_gate_passes += contender.hard_gate_pass ? 1 : 0;
+        existing.avg_score_sum += contender.score;
+        existing.avg_risk_sum += contender.metrics.risk_score;
+        existing.avg_quality_sum += contender.metrics.quality_score;
+
+        if (run.updated_at >= existing.last_seen_at) {
+          existing.last_seen_at = run.updated_at;
+          existing.latest_hard_gate_pass = contender.hard_gate_pass;
+        }
+
+        if (existing.sample_run_ids.length < 10) {
+          existing.sample_run_ids.push(run.run_id);
+        }
       }
+    }
 
-      existing.appearances += 1;
-      existing.wins += run.winner_contender_id === contender.contender_id ? 1 : 0;
-      existing.hard_gate_passes += contender.hard_gate_pass ? 1 : 0;
-      existing.avg_score_sum += contender.score;
-      existing.avg_risk_sum += contender.metrics.risk_score;
-      existing.avg_quality_sum += contender.metrics.quality_score;
-
-      if (run.updated_at >= existing.last_seen_at) {
-        existing.last_seen_at = run.updated_at;
-        existing.latest_hard_gate_pass = contender.hard_gate_pass;
-      }
-
-      if (existing.sample_run_ids.length < 10) {
-        existing.sample_run_ids.push(run.run_id);
+    const outcomeRows = await listArenaOutcomesByArenaId(env.BOUNTIES_DB, run.arena_id, 50);
+    for (const outcome of outcomeRows) {
+      const existing = outcomeAggregates.get(outcome.contender_id);
+      if (!existing) {
+        outcomeAggregates.set(outcome.contender_id, {
+          samples: 1,
+          accepted: outcome.accepted ? 1 : 0,
+          overridden: outcome.overridden ? 1 : 0,
+          rework: outcome.rework_required ? 1 : 0,
+          confidence_sum: outcome.predicted_confidence,
+        });
+      } else {
+        existing.samples += 1;
+        existing.accepted += outcome.accepted ? 1 : 0;
+        existing.overridden += outcome.overridden ? 1 : 0;
+        existing.rework += outcome.rework_required ? 1 : 0;
+        existing.confidence_sum += outcome.predicted_confidence;
       }
     }
   }
@@ -13049,11 +13083,36 @@ async function handleArenaManagerRoute(
       const avgRisk = entry.avg_risk_sum / appearances;
       const avgQuality = entry.avg_quality_sum / appearances;
 
-      const routingScore =
+      const outcomes = outcomeAggregates.get(entry.contender_id);
+      const outcomeSamples = outcomes?.samples ?? 0;
+      const acceptRate = outcomeSamples > 0 ? (outcomes?.accepted ?? 0) / outcomeSamples : 0;
+      const overrideRate = outcomeSamples > 0 ? (outcomes?.overridden ?? 0) / outcomeSamples : 0;
+      const reworkRate = outcomeSamples > 0 ? (outcomes?.rework ?? 0) / outcomeSamples : 0;
+      const avgPredictedConfidence = outcomeSamples > 0 ? (outcomes?.confidence_sum ?? 0) / outcomeSamples : 0;
+      const calibrationGap = outcomeSamples > 0 ? avgPredictedConfidence - acceptRate : 0;
+
+      const baseRoutingScore =
         (avgScore * 0.65) +
         (winRate * 25) +
         (hardGatePassRate * 10) -
         (avgRisk * 0.1);
+
+      const outcomeAdjustment =
+        (acceptRate * 12) -
+        (overrideRate * 18) -
+        (reworkRate * 12) -
+        (Math.abs(calibrationGap) * 8);
+
+      const routingScore = baseRoutingScore + outcomeAdjustment;
+
+      const coachingRecommendations: string[] = [];
+      if (overrideRate >= 0.3) coachingRecommendations.push('High override rate; add human checkpoint before auto-route.');
+      if (reworkRate >= 0.25) coachingRecommendations.push('Frequent rework; tighten task decomposition and acceptance criteria.');
+      if (calibrationGap >= 0.2) coachingRecommendations.push('Predicted confidence appears over-optimistic; down-weight autonomy claims.');
+      if (calibrationGap <= -0.2) coachingRecommendations.push('Predicted confidence appears conservative; contender may be under-utilized.');
+      if (avgRisk >= 40) coachingRecommendations.push('Risk profile elevated; enforce stricter safety gates and staged rollout.');
+      if (hardGatePassRate < 1) coachingRecommendations.push('Mandatory checks not consistently passing; fix contract compliance first.');
+      if (coachingRecommendations.length === 0) coachingRecommendations.push('Stable performer; keep as primary route for matching fingerprint.');
 
       return {
         contender_id: entry.contender_id,
@@ -13069,6 +13128,13 @@ async function handleArenaManagerRoute(
         avg_quality: Number(avgQuality.toFixed(4)),
         latest_hard_gate_pass: entry.latest_hard_gate_pass,
         routing_score: Number(routingScore.toFixed(6)),
+        outcome_samples: outcomeSamples,
+        empirical_accept_rate: Number(acceptRate.toFixed(4)),
+        override_rate: Number(overrideRate.toFixed(4)),
+        rework_rate: Number(reworkRate.toFixed(4)),
+        avg_predicted_confidence: Number(avgPredictedConfidence.toFixed(4)),
+        calibration_gap: Number(calibrationGap.toFixed(4)),
+        coaching_recommendations: coachingRecommendations,
         last_seen_at: entry.last_seen_at,
         sample_run_ids: entry.sample_run_ids,
       };
@@ -13109,17 +13175,37 @@ async function handleArenaManagerRoute(
   const reasonCodes = [
     eligible.length > 0 ? 'ARENA_ROUTING_SELECTED' : 'ARENA_ROUTING_HARD_GATE_FALLBACK',
     objectiveProfileName ? 'ARENA_ROUTING_OBJECTIVE_MATCHED' : 'ARENA_ROUTING_OBJECTIVE_ANY',
+    mode === 'coach' ? 'ARENA_ROUTING_COACH_MODE' : 'ARENA_ROUTING_STANDARD_MODE',
   ];
 
   const backups = selectedPool.slice(1, 4);
 
+  const topWinner = [...winnerCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
+  const winnerStabilityRatio = topWinner && runs.length > 0 ? topWinner[1] / runs.length : 0;
+
+  const globalCoachRecommendations: string[] = [];
+  if (winnerStabilityRatio < 0.6) {
+    globalCoachRecommendations.push('Winner stability is low for this fingerprint; run arena more frequently before defaulting routes.');
+  }
+  if (recommended.override_rate >= 0.25) {
+    globalCoachRecommendations.push('Primary route has elevated override rate; require manual approval until calibration improves.');
+  }
+  if (recommended.calibration_gap >= 0.2) {
+    globalCoachRecommendations.push('Primary route is over-confident; cap auto-approval confidence thresholds.');
+  }
+  if (globalCoachRecommendations.length === 0) {
+    globalCoachRecommendations.push('Routing profile appears stable; continue autonomous routing with periodic calibration checks.');
+  }
+
   return jsonResponse(
     {
-      schema_version: 'arena_manager_route.v1',
+      schema_version: mode === 'coach' ? 'arena_manager_coach.v1' : 'arena_manager_route.v2',
       computed_at: new Date().toISOString(),
+      mode,
       task_fingerprint: taskFingerprint,
       objective_profile_name: objectiveProfileName,
       analyzed_runs: runs.length,
+      winner_stability_ratio: Number(winnerStabilityRatio.toFixed(4)),
       policy: {
         require_hard_gate_pass: requireHardGatePass,
         allow_fallback: allowFallback,
@@ -13132,7 +13218,7 @@ async function handleArenaManagerRoute(
         harness: recommended.harness,
         routing_score: recommended.routing_score,
         reason_codes: reasonCodes,
-        rationale: `Selected ${recommended.contender_id} with routing_score=${recommended.routing_score} from ${recommended.appearances} matched runs (win_rate=${recommended.win_rate}, hard_gate_pass_rate=${recommended.hard_gate_pass_rate}).`,
+        rationale: `Selected ${recommended.contender_id} with routing_score=${recommended.routing_score} from ${recommended.appearances} matched runs (win_rate=${recommended.win_rate}, hard_gate_pass_rate=${recommended.hard_gate_pass_rate}, override_rate=${recommended.override_rate}, calibration_gap=${recommended.calibration_gap}).`,
         evidence: {
           appearances: recommended.appearances,
           wins: recommended.wins,
@@ -13142,12 +13228,32 @@ async function handleArenaManagerRoute(
           avg_risk: recommended.avg_risk,
           avg_quality: recommended.avg_quality,
           latest_hard_gate_pass: recommended.latest_hard_gate_pass,
+          outcome_samples: recommended.outcome_samples,
+          empirical_accept_rate: recommended.empirical_accept_rate,
+          override_rate: recommended.override_rate,
+          rework_rate: recommended.rework_rate,
+          avg_predicted_confidence: recommended.avg_predicted_confidence,
+          calibration_gap: recommended.calibration_gap,
+          coaching_recommendations: recommended.coaching_recommendations,
           last_seen_at: recommended.last_seen_at,
           sample_run_ids: recommended.sample_run_ids,
         },
       },
       backups,
       contenders_ranked: ranked,
+      delegation_coach: {
+        primary_contender_id: recommended.contender_id,
+        backup_contenders: backups.map((entry) => entry.contender_id),
+        global_recommendations: globalCoachRecommendations,
+        contender_cards: selectedPool.slice(0, 3).map((entry) => ({
+          contender_id: entry.contender_id,
+          routing_score: entry.routing_score,
+          override_rate: entry.override_rate,
+          rework_rate: entry.rework_rate,
+          calibration_gap: entry.calibration_gap,
+          coaching_recommendations: entry.coaching_recommendations,
+        })),
+      },
     },
     200,
     version,
@@ -13494,7 +13600,11 @@ export default {
       }
 
       if (path === '/v1/arena/manager/route' && method === 'POST') {
-        return handleArenaManagerRoute(request, env, version);
+        return handleArenaManagerRoute(request, env, version, 'route');
+      }
+
+      if (path === '/v1/arena/manager/coach' && method === 'POST') {
+        return handleArenaManagerRoute(request, env, version, 'coach');
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {
