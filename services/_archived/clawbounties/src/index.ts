@@ -6936,6 +6936,118 @@ function getWinnerEvidenceLinks(contenders: ArenaContenderResult[], winnerConten
   return winner.score_explain.evidence_links.slice(0, 20);
 }
 
+function mapArenaManagerDecisionToRecommendation(
+  decision: string | null,
+  hardGatePass: boolean,
+): 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT' {
+  const normalized = String(decision ?? '').trim().toLowerCase();
+  if (normalized === 'promote') return 'APPROVE';
+  if (normalized === 'conditional' || normalized === 'iterate') return 'REQUEST_CHANGES';
+  if (normalized === 'reject') return 'REJECT';
+  return hardGatePass ? 'APPROVE' : 'REQUEST_CHANGES';
+}
+
+function buildArenaAutoReviewThreadBody(
+  contender: ArenaContenderResult,
+  recommendation: 'APPROVE' | 'REQUEST_CHANGES' | 'REJECT',
+  confidence: number,
+  reasonCodes: string[],
+): string {
+  const managerDecision = isRecord(contender.manager_review) ? d1String(contender.manager_review.decision) : null;
+  const nextAction = isRecord(contender.manager_review)
+    ? d1String(contender.manager_review.recommended_next_action)
+    : null;
+
+  const managerSummaryLines = [
+    `## Arena Auto Decision — ${contender.label} (${contender.contender_id})`,
+    '',
+    `Recommendation: **${recommendation}**`,
+    `Confidence: **${(confidence * 100).toFixed(1)}%**`,
+    managerDecision ? `Manager decision: \`${managerDecision}\`` : null,
+    `Hard-gate pass: **${contender.hard_gate_pass ? 'yes' : 'no'}**`,
+    `Metrics: quality=${contender.metrics.quality_score.toFixed(2)}, risk=${contender.metrics.risk_score.toFixed(2)}, efficiency=${contender.metrics.efficiency_score.toFixed(2)}, cost=$${contender.metrics.cost_usd.toFixed(4)}, latency=${Math.round(contender.metrics.latency_ms)}ms`,
+  ].filter((line) => line !== null);
+
+  if (reasonCodes.length > 0) {
+    managerSummaryLines.push('', '### Reason codes', ...reasonCodes.map((code) => `- \`${code}\``));
+  }
+
+  if (nextAction && nextAction.trim().length > 0) {
+    managerSummaryLines.push('', `Next action: ${nextAction.trim()}`);
+  }
+
+  const reviewPaste = contender.review_paste.trim();
+  const reviewPasteBody = reviewPaste.length > 0 ? reviewPaste : 'No review paste available.';
+
+  return `${managerSummaryLines.join('\n')}\n\n---\n\n${reviewPasteBody}`;
+}
+
+async function autoPostArenaWinnerReviewThread(
+  db: D1Database,
+  params: {
+    bounty_id: string;
+    arena_id: string;
+    result_idempotency_key: string;
+    contender: ArenaContenderResult;
+    source: string;
+    now: string;
+  },
+): Promise<ArenaReviewThreadEntry> {
+  const managerReview = isRecord(params.contender.manager_review) ? params.contender.manager_review : null;
+  const managerDecision = d1String(managerReview?.decision);
+  const recommendation = mapArenaManagerDecisionToRecommendation(managerDecision, params.contender.hard_gate_pass);
+  const confidenceRaw = d1Number(managerReview?.confidence);
+  const confidence = Math.max(0, Math.min(1, confidenceRaw ?? (params.contender.hard_gate_pass ? 0.72 : 0.45)));
+  const managerReasonCodes = parseStringList(managerReview?.reason_codes, 32, 128, true) ?? [];
+  const reasonCodes = managerReasonCodes.length > 0
+    ? managerReasonCodes
+    : params.contender.score_explain.reason_codes;
+
+  const links = params.contender.score_explain.evidence_links
+    .slice(0, 12)
+    .map((entry) => ({ label: entry.label, url: entry.url }));
+
+  const bodyMarkdown = buildArenaAutoReviewThreadBody(params.contender, recommendation, confidence, reasonCodes);
+  const idempotencyMaterial = stableStringify({
+    arena_id: params.arena_id,
+    contender_id: params.contender.contender_id,
+    recommendation,
+    confidence,
+    result_idempotency_key: params.result_idempotency_key,
+    body_hash: await sha256B64uUtf8(bodyMarkdown),
+  });
+  const idempotencyKey = `arena-thread-auto:${await sha256B64uUtf8(idempotencyMaterial)}`;
+
+  const existing = await getArenaReviewThreadByIdempotencyKey(db, idempotencyKey);
+  if (existing) return existing;
+
+  const metadata = {
+    manager_decision: managerDecision,
+    reason_codes: reasonCodes,
+    evidence_links: params.contender.score_explain.evidence_links,
+    auto_posted: true,
+  };
+
+  const entry: ArenaReviewThreadEntry = {
+    thread_entry_id: `ath_${crypto.randomUUID()}`,
+    idempotency_key: idempotencyKey,
+    bounty_id: params.bounty_id,
+    arena_id: params.arena_id,
+    contender_id: params.contender.contender_id,
+    recommendation,
+    confidence,
+    body_markdown: bodyMarkdown,
+    links_json: stableStringify(links),
+    source: params.source,
+    metadata_json: stableStringify(metadata),
+    created_at: params.now,
+    updated_at: params.now,
+  };
+
+  await writeArenaReviewThreadEntry(db, entry);
+  return entry;
+}
+
 async function updateBountyArenaLifecycle(
   db: D1Database,
   params: {
@@ -12549,6 +12661,17 @@ async function handleSubmitBountyArenaResult(
     contenders.push(contender);
   }
 
+  const winnerContender = contenders.find((entry) => entry.contender_id === winnerContenderId) ?? null;
+  if (!winnerContender) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'arena_report.winner.contender_id must reference an existing contender',
+      400,
+      { winner_contender_id: winnerContenderId },
+      version,
+    );
+  }
+
   const run = await getArenaRunByArenaId(env.BOUNTIES_DB, arenaId);
   if (!run) {
     return errorResponse('ARENA_RUN_NOT_STARTED', 'Arena run must be started before result ingestion', 404, { arena_id: arenaId }, version);
@@ -12589,6 +12712,7 @@ async function handleSubmitBountyArenaResult(
     }
 
     const winnerEvidenceLinks = getWinnerEvidenceLinks(contenders, winnerContenderId);
+    const replayNow = new Date().toISOString();
     await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
       bounty_id: bountyId,
       arena_status: 'completed',
@@ -12596,15 +12720,27 @@ async function handleSubmitBountyArenaResult(
       arena_task_fingerprint: contract.task_fingerprint,
       arena_winner_contender_id: winnerContenderId,
       arena_evidence_links: winnerEvidenceLinks,
-      arena_updated_at: new Date().toISOString(),
+      arena_updated_at: replayNow,
+    });
+
+    await autoPostArenaWinnerReviewThread(env.BOUNTIES_DB, {
+      bounty_id: bountyId,
+      arena_id: arenaId,
+      result_idempotency_key: idempotencyKey,
+      contender: winnerContender,
+      source: 'arena-result-autopost',
+      now: replayNow,
     });
 
     const replayPayload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, existingByResultKey);
+    const replayThread = await listArenaReviewThreadByArenaId(env.BOUNTIES_DB, arenaId, 20);
+
     return jsonResponse(
       {
         ok: true,
         replay: true,
         arena: replayPayload ?? buildArenaRunSummary(existingByResultKey),
+        review_thread: replayThread.map((entry) => buildArenaReviewThreadEntryPayload(entry)),
       },
       200,
       version,
@@ -12675,6 +12811,15 @@ async function handleSubmitBountyArenaResult(
       arena_evidence_links: winnerEvidenceLinks,
       arena_updated_at: now,
     });
+
+    await autoPostArenaWinnerReviewThread(env.BOUNTIES_DB, {
+      bounty_id: bountyId,
+      arena_id: arenaId,
+      result_idempotency_key: idempotencyKey,
+      contender: winnerContender,
+      source: 'arena-result-autopost',
+      now,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_WRITE_FAILED', message, 500, undefined, version);
@@ -12686,12 +12831,14 @@ async function handleSubmitBountyArenaResult(
   }
 
   const payload = await buildArenaPayloadFromRun(env.BOUNTIES_DB, saved);
+  const reviewThread = await listArenaReviewThreadByArenaId(env.BOUNTIES_DB, arenaId, 20);
 
   return jsonResponse(
     {
       ok: true,
       replay: false,
       arena: payload ?? buildArenaRunSummary(saved),
+      review_thread: reviewThread.map((entry) => buildArenaReviewThreadEntryPayload(entry)),
     },
     201,
     version,

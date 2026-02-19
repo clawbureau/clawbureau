@@ -24,8 +24,8 @@ function parseArgs(argv) {
     startIdempotencyKey: null,
     resultIdempotencyKey: null,
     dryRun: false,
-    postPrNumber: null,
-    postBountyThread: false,
+    prNumber: null,
+    postBountyThread: true,
     arenaBaseUrl: '',
     artifactsBaseUrl: '',
     decisionSource: 'arena-launcher',
@@ -88,13 +88,17 @@ function parseArgs(argv) {
       args.dryRun = true;
       continue;
     }
-    if (arg === '--post-pr-number') {
-      args.postPrNumber = argv[i + 1] ?? null;
+    if (arg === '--pr-number' || arg === '--post-pr-number') {
+      args.prNumber = argv[i + 1] ?? null;
       i += 1;
       continue;
     }
     if (arg === '--post-bounty-thread') {
       args.postBountyThread = true;
+      continue;
+    }
+    if (arg === '--no-post-bounty-thread' || arg === '--skip-bounty-thread') {
+      args.postBountyThread = false;
       continue;
     }
     if (arg === '--arena-base-url') {
@@ -115,7 +119,7 @@ function parseArgs(argv) {
   }
 
   if (!args.bountyId || !args.contractPath || !args.contendersPath) {
-    throw new Error('Usage: node scripts/arena/run-real-bounty-arena.mjs --bounty-id <bty_...> --contract <json> --contenders <json> [--output-root <dir>] [--arena-id <id>] [--generated-at <iso>] [--bounties-base <url>] [--admin-key <key>] [--start-idempotency-key <key>] [--result-idempotency-key <key>] [--post-pr-number <num>] [--post-bounty-thread] [--arena-base-url <url>] [--artifacts-base-url <url>] [--decision-source <name>] [--dry-run]');
+    throw new Error('Usage: node scripts/arena/run-real-bounty-arena.mjs --bounty-id <bty_...> --contract <json> --contenders <json> [--output-root <dir>] [--arena-id <id>] [--generated-at <iso>] [--bounties-base <url>] [--admin-key <key>] [--start-idempotency-key <key>] [--result-idempotency-key <key>] [--pr-number <num>] [--no-post-bounty-thread] [--arena-base-url <url>] [--artifacts-base-url <url>] [--decision-source <name>] [--dry-run]');
   }
 
   return args;
@@ -225,6 +229,41 @@ function buildDecisionPaste(report, winnerContenderId, arenaBaseUrl, artifactsBa
   };
 }
 
+function normalizePrNumber(value) {
+  if (value === null || value === undefined) return null;
+  const parsed = Number.parseInt(String(value).trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function resolvePrNumber(args, contract, report) {
+  const explicit = normalizePrNumber(args.prNumber);
+  if (explicit) return explicit;
+
+  const contractMeta = contract && typeof contract === 'object' && contract !== null
+    ? contract.metadata
+    : null;
+
+  const reportContract = report && typeof report === 'object' && report !== null
+    ? report.contract
+    : null;
+
+  return (
+    normalizePrNumber(contract?.pr_number)
+    || normalizePrNumber(contractMeta?.pr_number)
+    || normalizePrNumber(reportContract?.pr_number)
+    || normalizePrNumber(process.env.ARENA_PR_NUMBER)
+  );
+}
+
+function hasAutoPostedWinnerThread(resultResponse, contenderId) {
+  if (!resultResponse || !Array.isArray(resultResponse.review_thread)) return false;
+  return resultResponse.review_thread.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    return entry.contender_id === contenderId && entry.source === 'arena-result-autopost';
+  });
+}
+
 function postPrComment(prNumber, markdownPath) {
   const proc = spawnSync('gh', ['pr', 'comment', String(prNumber), '--body-file', markdownPath], {
     encoding: 'utf8',
@@ -275,6 +314,7 @@ async function main() {
     args.arenaBaseUrl,
     args.artifactsBaseUrl,
   );
+  const resolvedPrNumber = resolvePrNumber(args, contract, report);
 
   const decisionOutputPath = path.join(outputDir, 'decision-paste.md');
   if (decision) {
@@ -299,6 +339,7 @@ async function main() {
           recommendation: decision.recommendation,
           confidence: decision.confidence,
           links: decision.links,
+          target_pr_number: resolvedPrNumber,
           posted: {
             pr_comment: null,
             bounty_thread: null,
@@ -364,51 +405,64 @@ async function main() {
     },
   );
 
-  if (decision && args.postPrNumber) {
-    const output = postPrComment(args.postPrNumber, decisionOutputPath);
+  if (decision && resolvedPrNumber) {
+    const output = postPrComment(resolvedPrNumber, decisionOutputPath);
     if (summary.decision_paste) {
       summary.decision_paste.posted.pr_comment = {
-        pr_number: args.postPrNumber,
+        pr_number: resolvedPrNumber,
         output,
       };
     }
   }
 
   if (decision && args.postBountyThread) {
-    const threadIdempotencyKey = buildDefaultIdempotencyKey('arena-thread', [
-      report.arena_id,
-      decision.contender.contender_id,
-      decision.recommendation,
-      String(decision.confidence),
-      sha256b64u(decision.markdown),
-    ]);
+    const alreadyAutoPosted = hasAutoPostedWinnerThread(resultResponse, decision.contender.contender_id);
 
-    const threadPayload = {
-      idempotency_key: threadIdempotencyKey,
-      arena_id: report.arena_id,
-      contender_id: decision.contender.contender_id,
-      recommendation: decision.recommendation,
-      confidence: decision.confidence,
-      body_markdown: decision.markdown,
-      links: decision.links,
-      source: args.decisionSource,
-      metadata: {
-        manager_decision: decision.managerReview.decision,
-        reason_codes: decision.reasonCodes,
-      },
-    };
+    if (alreadyAutoPosted) {
+      if (summary.decision_paste) {
+        summary.decision_paste.posted.bounty_thread = {
+          skipped: true,
+          reason: 'arena-result-autopost-present',
+        };
+      }
+    } else {
+      const threadIdempotencyKey = buildDefaultIdempotencyKey('arena-thread', [
+        report.arena_id,
+        decision.contender.contender_id,
+        decision.recommendation,
+        String(decision.confidence),
+        sha256b64u(decision.markdown),
+      ]);
 
-    const threadResponse = await requestJson(
-      `${args.bountiesBase.replace(/\/$/, '')}/v1/bounties/${encodeURIComponent(args.bountyId)}/arena/review-thread`,
-      {
-        method: 'POST',
-        adminKey,
-        body: threadPayload,
-      },
-    );
+      const threadPayload = {
+        idempotency_key: threadIdempotencyKey,
+        arena_id: report.arena_id,
+        contender_id: decision.contender.contender_id,
+        recommendation: decision.recommendation,
+        confidence: decision.confidence,
+        body_markdown: decision.markdown,
+        links: decision.links,
+        source: args.decisionSource,
+        metadata: {
+          manager_decision: decision.managerReview.decision,
+          reason_codes: decision.reasonCodes,
+          evidence_links: decision.evidenceLinks ?? [],
+          auto_posted: true,
+        },
+      };
 
-    if (summary.decision_paste) {
-      summary.decision_paste.posted.bounty_thread = threadResponse;
+      const threadResponse = await requestJson(
+        `${args.bountiesBase.replace(/\/$/, '')}/v1/bounties/${encodeURIComponent(args.bountyId)}/arena/review-thread`,
+        {
+          method: 'POST',
+          adminKey,
+          body: threadPayload,
+        },
+      );
+
+      if (summary.decision_paste) {
+        summary.decision_paste.posted.bounty_thread = threadResponse;
+      }
     }
   }
 
