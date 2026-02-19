@@ -26,6 +26,8 @@ import {
   fetchRunsFeed,
   fetchOpsDomainHealth,
   fetchSyntheticWorkflowStatuses,
+  fetchWorkflowRunHistory,
+  fetchRecentFailedRuns,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
 import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
@@ -125,10 +127,22 @@ export default {
 
     // -- Ops dashboard --
     if (path === '/ops') {
-      const [statsData, domainHealth, syntheticStatuses] = await Promise.all([
+      const [
+        statsData,
+        domainHealth,
+        syntheticStatuses,
+        syntheticHistory,
+        canaryHistory,
+        guardedDeployHistory,
+        recentFailedRuns,
+      ] = await Promise.all([
         fetchGlobalStats(apiOpts),
         fetchOpsDomainHealth(),
         fetchSyntheticWorkflowStatuses(),
+        fetchWorkflowRunHistory('clawsig-surface-synthetic-smoke.yml', 8),
+        fetchWorkflowRunHistory('clawsig-canary-seed.yml', 8),
+        fetchWorkflowRunHistory('clawsig-guarded-deploy.yml', 8),
+        fetchRecentFailedRuns(apiOpts, 8),
       ]);
 
       if (!statsData) {
@@ -139,6 +153,10 @@ export default {
         stats: statsData.stats,
         domain_health: domainHealth,
         synthetic_statuses: syntheticStatuses,
+        synthetic_history: syntheticHistory,
+        canary_history: canaryHistory,
+        guarded_deploy_history: guardedDeployHistory,
+        recent_failed_runs: recentFailedRuns,
       }), 200, 15);
     }
 
