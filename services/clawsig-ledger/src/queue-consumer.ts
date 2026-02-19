@@ -15,8 +15,24 @@ async function processMessage(m: LedgerIngestMessage, env: Env): Promise<void> {
   });
 
   await env.LEDGER_DB.prepare(
-    'INSERT OR IGNORE INTO runs (run_id, bundle_hash_b64u, agent_did, proof_tier, status, wpc_hash_b64u, models_json) VALUES (?,?,?,?,?,?,?)',
-  ).bind(m.run_id, m.bundle_hash_b64u, m.agent_did, m.proof_tier, m.status, m.wpc_hash_b64u ?? null, m.models_json ?? null).run();
+    `INSERT OR IGNORE INTO runs (
+      run_id, bundle_hash_b64u, agent_did, proof_tier, status,
+      reason_code, failure_class, verification_source, auth_mode,
+      wpc_hash_b64u, models_json
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+  ).bind(
+    m.run_id,
+    m.bundle_hash_b64u,
+    m.agent_did,
+    m.proof_tier,
+    m.status,
+    m.reason_code,
+    m.failure_class,
+    m.verification_source,
+    m.auth_mode,
+    m.wpc_hash_b64u ?? null,
+    m.models_json ?? null,
+  ).run();
 
   const gw = ['gateway', 'sandbox', 'tee', 'witnessed_web'].includes(m.proof_tier) ? 1 : 0;
   const viol = m.status !== 'PASS' ? 1 : 0;

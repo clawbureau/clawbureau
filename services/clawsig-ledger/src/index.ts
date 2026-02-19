@@ -37,16 +37,28 @@ function runIdFromBundleHash(bundleHashB64u: string): string {
   return `run_${bundleHashB64u.slice(0, 24)}`;
 }
 
-async function findExistingRunIdByBundleHash(env: Env, bundleHashB64u: string): Promise<string | null> {
+interface ExistingRunLookup {
+  run_id: string;
+  status: string;
+  proof_tier: string;
+  reason_code: string | null;
+  failure_class: string | null;
+  verification_source: string | null;
+  auth_mode: string | null;
+}
+
+async function findExistingRunByBundleHash(
+  env: Env,
+  bundleHashB64u: string
+): Promise<ExistingRunLookup | null> {
   const row = await env.LEDGER_DB.prepare(
-    'SELECT run_id FROM runs WHERE bundle_hash_b64u = ? LIMIT 1'
+    `SELECT run_id, status, proof_tier, reason_code, failure_class, verification_source, auth_mode
+     FROM runs WHERE bundle_hash_b64u = ? LIMIT 1`
   )
     .bind(bundleHashB64u)
-    .first<{ run_id: string }>();
+    .first<ExistingRunLookup>();
 
-  return typeof row?.run_id === 'string' && row.run_id.length > 0
-    ? row.run_id
-    : null;
+  return row ?? null;
 }
 
 // POST /v1/verify
@@ -89,24 +101,51 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
     }
   }
 
-  const verification = await verifyProofBundleViaApi(body.proof_bundle, env);
-
-  const isPassing = verification.status === 'VALID';
-  const proofTier = verification.proof_tier;
-  const agentDid = verification.agent_did ?? 'unknown';
-
-  let existingRunId: string | null = null;
+  let existingRun: ExistingRunLookup | null = null;
   try {
-    existingRunId = await findExistingRunIdByBundleHash(env, bundleHashB64u);
+    existingRun = await findExistingRunByBundleHash(env, bundleHashB64u);
   } catch {
     return errorJson('Ledger database unavailable', 'LEDGER_DB_UNAVAILABLE', 503);
   }
 
-  const runId = existingRunId ?? runIdFromBundleHash(bundleHashB64u);
-  const shouldPublishToLedger =
-    publishToLedger &&
-    verification.failure_class === 'none' &&
-    existingRunId === null;
+  if (existingRun) {
+    const status = existingRun.status === 'PASS' ? 'PASS' : 'FAIL';
+    const reasonCode = existingRun.reason_code ?? (status === 'PASS' ? 'OK' : 'VERIFICATION_FAILED');
+    const failureClass = existingRun.failure_class ?? 'none';
+    const verificationSource = existingRun.verification_source ?? 'clawverify_api';
+    const authMode = existingRun.auth_mode ?? (isAuthenticated ? 'api_key' : 'pow');
+
+    const duplicateResponse: VerifyResponse = {
+      status,
+      tier: existingRun.proof_tier,
+      reason_code: reasonCode,
+      failure_class: failureClass,
+      verification_source: verificationSource,
+      auth_mode: authMode,
+      run_id: existingRun.run_id,
+      urls: {
+        badge: `https://api.clawverify.com/v1/badges/${existingRun.run_id}.svg`,
+        ledger: `https://explorer.clawsig.com/run/${existingRun.run_id}`,
+      },
+      rt_log_inclusion: { status: 'NOT_PUBLISHED' },
+      compliance_reports: {},
+    };
+
+    return json(duplicateResponse, status === 'PASS' ? 200 : 422);
+  }
+
+  const verification = await verifyProofBundleViaApi(body.proof_bundle, env);
+
+  const status = verification.status === 'VALID' ? 'PASS' : 'FAIL';
+  const proofTier = verification.proof_tier;
+  const agentDid = verification.agent_did ?? 'unknown';
+  const runId = runIdFromBundleHash(bundleHashB64u);
+  const reasonCode = status === 'PASS' ? 'OK' : verification.reason_code;
+  const failureClass = verification.failure_class;
+  const verificationSource = 'clawverify_api';
+  const authMode = isAuthenticated ? 'api_key' : 'pow';
+
+  const shouldPublishToLedger = publishToLedger && failureClass === 'none';
 
   const bundle = body.proof_bundle as Record<string, unknown>;
   const payload = (bundle.payload ?? bundle) as Record<string, unknown>;
@@ -114,7 +153,7 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
   const modelsUsed = receipts ? [...new Set(receipts.map(r => r.payload?.model).filter(Boolean) as string[])] : [];
 
   const complianceReports: Record<string, unknown> = {};
-  if (isAuthenticated && body.options?.emit_compliance_report && isPassing) {
+  if (isAuthenticated && body.options?.emit_compliance_report && status === 'PASS') {
     for (const fw of body.options.emit_compliance_report) {
       try {
         const report = generateComplianceReport(
@@ -136,24 +175,36 @@ async function handleVerify(req: Request, env: Env, ctx: ExecutionContext): Prom
 
   if (shouldPublishToLedger) {
     const msg: LedgerIngestMessage = {
-      run_id: runId, bundle_hash_b64u: bundleHashB64u, agent_did: agentDid, proof_tier: proofTier,
-      status: isPassing ? 'PASS' : 'FAIL',
+      run_id: runId,
+      bundle_hash_b64u: bundleHashB64u,
+      agent_did: agentDid,
+      proof_tier: proofTier,
+      status,
+      reason_code: reasonCode,
+      failure_class: failureClass,
+      verification_source: verificationSource,
+      auth_mode: authMode,
       wpc_hash_b64u: typeof payload.wpc_hash_b64u === 'string' ? payload.wpc_hash_b64u : undefined,
-      models_json: modelsUsed.length > 0 ? JSON.stringify(modelsUsed) : undefined, bundle_json: bundleJsonStr,
+      models_json: modelsUsed.length > 0 ? JSON.stringify(modelsUsed) : undefined,
+      bundle_json: bundleJsonStr,
     };
     ctx.waitUntil(env.LEDGER_QUEUE.send(msg).catch(e => console.error('[vaas] Queue send failed:', e)));
   }
 
   const response: VerifyResponse = {
-    status: isPassing ? 'PASS' : 'FAIL', tier: proofTier,
-    reason_code: isPassing ? 'OK' : verification.reason_code, run_id: runId,
+    status,
+    tier: proofTier,
+    reason_code: reasonCode,
+    failure_class: failureClass,
+    verification_source: verificationSource,
+    auth_mode: authMode,
+    run_id: runId,
     urls: { badge: `https://api.clawverify.com/v1/badges/${runId}.svg`, ledger: `https://explorer.clawsig.com/run/${runId}` },
-    rt_log_inclusion: { status: shouldPublishToLedger ? 'PENDING_ASYNC' : 'NOT_PUBLISHED' }, compliance_reports: complianceReports,
+    rt_log_inclusion: { status: shouldPublishToLedger ? 'PENDING_ASYNC' : 'NOT_PUBLISHED' },
+    compliance_reports: complianceReports,
   };
 
-  const statusCode = verification.failure_class === 'none'
-    ? (isPassing ? 200 : 422)
-    : 503;
+  const statusCode = failureClass === 'none' ? (status === 'PASS' ? 200 : 422) : 503;
 
   return json(response, statusCode);
 }
