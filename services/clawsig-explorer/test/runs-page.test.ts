@@ -38,6 +38,8 @@ describe('runsFeedPage', () => {
     expect(html).toContain('sticky-filter-card');
     expect(html).toContain('Reset pagination');
     expect(html).toContain('Jump to newest');
+    expect(html).toContain('aria-label="Filter by status"');
+    expect(html).toContain('role="list"');
   });
 
   it('renders explicit error state when feed fetch fails', () => {
@@ -54,5 +56,6 @@ describe('runsFeedPage', () => {
     expect(html).toContain('Runs feed is temporarily unavailable');
     expect(html).toContain('No public runs indexed yet');
     expect(html).toContain('Copy quickstart command');
+    expect(html).toContain('loading-skeleton');
   });
 });
