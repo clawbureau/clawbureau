@@ -1097,6 +1097,36 @@ const ARENA_OVERRIDE_REASON_REGISTRY = {
 
 type ArenaOverrideReasonCode = keyof typeof ARENA_OVERRIDE_REASON_REGISTRY;
 
+const ARENA_BACKTEST_WEIGHT_SUGGESTIONS: Record<ArenaOverrideReasonCode, {
+  delta: { quality: number; speed: number; cost: number; safety: number };
+  rationale: string;
+}> = {
+  ARENA_OVERRIDE_SCOPE_MISMATCH: {
+    delta: { quality: 0.04, speed: -0.03, cost: -0.01, safety: 0 },
+    rationale: 'Scope mismatches suggest increasing quality weighting and slowing fast-path routing.',
+  },
+  ARENA_OVERRIDE_TEST_FAILURE: {
+    delta: { quality: 0.06, speed: -0.03, cost: -0.01, safety: -0.02 },
+    rationale: 'Test failures indicate stronger quality pressure before selecting speed/cost optimized contenders.',
+  },
+  ARENA_OVERRIDE_POLICY_RISK: {
+    delta: { quality: 0.02, speed: -0.04, cost: -0.03, safety: 0.05 },
+    rationale: 'Policy-risk overrides require higher safety emphasis and lower speed/cost tradeoffs.',
+  },
+  ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT: {
+    delta: { quality: 0.01, speed: -0.05, cost: 0, safety: 0.04 },
+    rationale: 'Human-context misses should reduce aggressive autonomy routing and increase safety checks.',
+  },
+  ARENA_OVERRIDE_COST_TOO_HIGH: {
+    delta: { quality: 0, speed: -0.01, cost: 0.07, safety: -0.01 },
+    rationale: 'Cost-driven overrides require stronger cost weighting while keeping safety neutral.',
+  },
+  ARENA_OVERRIDE_OTHER: {
+    delta: { quality: 0.02, speed: -0.02, cost: -0.01, safety: 0.01 },
+    rationale: 'Generic overrides indicate slight rebalance toward quality/safety and less speed bias.',
+  },
+};
+
 function normalizeArenaOverrideReasonCode(input: unknown): ArenaOverrideReasonCode | null {
   if (!isNonEmptyString(input)) return null;
   const normalized = input.trim().toUpperCase();
@@ -13678,6 +13708,148 @@ async function handleArenaPolicyLearning(
   );
 }
 
+async function handleArenaBacktesting(
+  request: Request,
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 200;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 2000);
+  }
+
+  const taskFingerprintFilter = d1String(url.searchParams.get('task_fingerprint'))?.trim() ?? null;
+
+  const candidateRuns = await listArenaRuns(env.BOUNTIES_DB, Math.min(limit * 3, 5000));
+  const runs = candidateRuns
+    .filter((run) => run.status === 'completed')
+    .filter((run) => (taskFingerprintFilter ? run.task_fingerprint === taskFingerprintFilter : true))
+    .slice(0, limit);
+
+  const missReasonCounts = new Map<ArenaOverrideReasonCode, number>();
+  const records: Array<{
+    arena_id: string;
+    bounty_id: string;
+    task_fingerprint: string;
+    predicted_winner_contender_id: string | null;
+    actual_accepted_contender_id: string | null;
+    predicted_confidence: number | null;
+    prediction_hit: boolean | null;
+    calibration_drift: number | null;
+    miss_reason_code: ArenaOverrideReasonCode | null;
+    completed_at: string | null;
+  }> = [];
+
+  for (const run of runs) {
+    const outcomeRows = await listArenaOutcomesByArenaId(env.BOUNTIES_DB, run.arena_id, 200);
+
+    const acceptedOutcome = outcomeRows.find((row) => row.accepted) ?? null;
+    const predictedWinnerContenderId = run.winner_contender_id;
+    const predictedOutcome = predictedWinnerContenderId
+      ? outcomeRows.find((row) => row.contender_id === predictedWinnerContenderId) ?? null
+      : null;
+
+    const actualAcceptedContenderId = acceptedOutcome?.contender_id ?? null;
+    const predictionHit = (predictedWinnerContenderId && actualAcceptedContenderId)
+      ? predictedWinnerContenderId === actualAcceptedContenderId
+      : null;
+
+    const predictedConfidence = predictedOutcome?.predicted_confidence ?? null;
+    const calibrationDrift = (predictionHit === null || predictedConfidence === null)
+      ? null
+      : Math.abs(predictedConfidence - (predictionHit ? 1 : 0));
+
+    const missReasonCode = predictionHit === false
+      ? (normalizeArenaOverrideReasonCode(acceptedOutcome?.override_reason_code) ?? 'ARENA_OVERRIDE_OTHER')
+      : null;
+
+    if (missReasonCode) {
+      missReasonCounts.set(missReasonCode, (missReasonCounts.get(missReasonCode) ?? 0) + 1);
+    }
+
+    records.push({
+      arena_id: run.arena_id,
+      bounty_id: run.bounty_id,
+      task_fingerprint: run.task_fingerprint,
+      predicted_winner_contender_id: predictedWinnerContenderId,
+      actual_accepted_contender_id: actualAcceptedContenderId,
+      predicted_confidence: predictedConfidence,
+      prediction_hit: predictionHit,
+      calibration_drift: calibrationDrift === null ? null : Number(calibrationDrift.toFixed(4)),
+      miss_reason_code: missReasonCode,
+      completed_at: run.completed_at,
+    });
+  }
+
+  const evaluatedRecords = records.filter((row) => row.prediction_hit !== null);
+  const hits = evaluatedRecords.filter((row) => row.prediction_hit === true).length;
+  const misses = evaluatedRecords.filter((row) => row.prediction_hit === false).length;
+  const drifts = evaluatedRecords
+    .map((row) => row.calibration_drift)
+    .filter((row): row is number => row !== null);
+
+  const avgDrift = drifts.length > 0
+    ? drifts.reduce((sum, value) => sum + value, 0) / drifts.length
+    : 0;
+
+  const missReasonBreakdown = [...missReasonCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason_code, count]) => ({
+      reason_code,
+      count,
+      share: misses > 0 ? Number((count / misses).toFixed(4)) : 0,
+      contract_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reason_code].contract_rewrite,
+      prompt_rewrite: ARENA_OVERRIDE_REASON_REGISTRY[reason_code].prompt_rewrite,
+    }));
+
+  const weightUpdateSuggestions = missReasonBreakdown
+    .map((entry) => {
+      const suggestion = ARENA_BACKTEST_WEIGHT_SUGGESTIONS[entry.reason_code];
+      return {
+        reason_code: entry.reason_code,
+        priority_score: Number((entry.count * ARENA_OVERRIDE_REASON_REGISTRY[entry.reason_code].weight).toFixed(4)),
+        count: entry.count,
+        share: entry.share,
+        recommended_weight_delta: suggestion.delta,
+        rationale: suggestion.rationale,
+      };
+    })
+    .sort((a, b) => b.priority_score - a.priority_score);
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_backtesting.v1',
+      computed_at: new Date().toISOString(),
+      task_fingerprint: taskFingerprintFilter,
+      totals: {
+        runs_considered: runs.length,
+        evaluated_runs: evaluatedRecords.length,
+        hits,
+        misses,
+        hit_rate: evaluatedRecords.length > 0 ? Number((hits / evaluatedRecords.length).toFixed(4)) : 0,
+        miss_rate: evaluatedRecords.length > 0 ? Number((misses / evaluatedRecords.length).toFixed(4)) : 0,
+      },
+      calibration_drift: {
+        avg_absolute_drift: Number(avgDrift.toFixed(4)),
+      },
+      top_miss_reasons: missReasonBreakdown,
+      weight_update_suggestions: weightUpdateSuggestions,
+      runs: records,
+    },
+    200,
+    version,
+  );
+}
+
 async function handleArenaManagerRoute(
   request: Request,
   env: Env,
@@ -14423,6 +14595,10 @@ export default {
 
       if (path === '/v1/arena/policy-learning' && method === 'GET') {
         return handleArenaPolicyLearning(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/backtesting' && method === 'GET') {
+        return handleArenaBacktesting(request, url, env, version);
       }
 
       if (path === '/v1/arena' && method === 'GET') {

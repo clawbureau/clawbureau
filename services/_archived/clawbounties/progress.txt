@@ -759,3 +759,8 @@ Started: 2026-02-02T03:08:26.937005
 - Manager routing now applies task-fingerprint-specific override reason penalties and emits rewrite-aware coaching hints.
 - Added `GET /v1/arena/policy-learning` (admin) returning reason breakdown + contract/prompt rewrite recommendations.
 - Added `scripts/arena/generate-policy-learning-report.mjs` to emit JSON + markdown policy-learning artifacts.
+
+## 2026-02-19 - AGP-US-046 historical backtesting analytics
+- Added `GET /v1/arena/backtesting` (admin) for historical predicted-vs-actual winner analysis.
+- Backtesting now reports hit/miss rates, average calibration drift, top miss reasons, and weight-update suggestions.
+- Added `scripts/arena/run-historical-backtest.mjs` to emit JSON + markdown backtest artifacts for operators.
