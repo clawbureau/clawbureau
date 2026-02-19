@@ -35,6 +35,9 @@ describe('runsFeedPage', () => {
     expect(html).toContain('history=cursor-1%2Ccurrent-cursor-token');
     expect(html).toContain('Older &rarr;');
     expect(html).toContain('&larr; Newer');
+    expect(html).toContain('sticky-filter-card');
+    expect(html).toContain('Reset pagination');
+    expect(html).toContain('Jump to newest');
   });
 
   it('renders explicit error state when feed fetch fails', () => {

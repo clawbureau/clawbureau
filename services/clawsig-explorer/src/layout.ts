@@ -392,6 +392,14 @@ function css(): string {
       font-size: 0.75rem;
     }
 
+    .sticky-filter-card {
+      position: sticky;
+      top: 4.8rem;
+      z-index: 20;
+      background: rgba(20, 20, 20, 0.95);
+      backdrop-filter: blur(6px);
+    }
+
     .filter-chip {
       display: inline-flex;
       align-items: center;
@@ -474,6 +482,9 @@ function css(): string {
       }
       .diag-grid {
         grid-template-columns: 1fr 1fr;
+      }
+      .sticky-filter-card {
+        top: 6.8rem;
       }
     }
   `;
