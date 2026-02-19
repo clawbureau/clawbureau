@@ -154,6 +154,28 @@ Explorer env wiring:
 - `VAAS_API_BASE` (existing)
 - `ARENA_API_BASE` (new; defaults to clawbounties domain)
 
+### Step G — Real bounty launcher (one command)
+
+Use the launcher to run arena + persist start/result against a real bounty id:
+
+```bash
+node scripts/arena/run-real-bounty-arena.mjs \
+  --bounty-id bty_... \
+  --contract contracts/arena/bounty-contract.sample.v1.json \
+  --contenders contracts/arena/contenders.sample.v1.json \
+  --bounties-base https://staging.clawbounties.com
+```
+
+Dry-run (generate artifacts only, no API writes):
+
+```bash
+node scripts/arena/run-real-bounty-arena.mjs \
+  --bounty-id bty_... \
+  --contract contracts/arena/bounty-contract.sample.v1.json \
+  --contenders contracts/arena/contenders.sample.v1.json \
+  --dry-run
+```
+
 ## 7. Fail-closed behavior checklist
 
 - Start/result idempotency conflicts return `409 IDEMPOTENCY_CONFLICT`
