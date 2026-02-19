@@ -51,6 +51,10 @@ jobs:
 
           node scripts/ops/run-clawsig-guarded-deploy.mjs --max-run-ref-age-minutes "$MAX_AGE"
 
+      - name: Run staging/prod parity drift gate
+        if: steps.guarded.outcome == 'success'
+        run: node scripts/ops/check-clawsig-prod-parity-drift.mjs --max-drift-count 0
+
       - name: Route synthetic alerts (guarded deploy warn/critical)
         if: always()
         continue-on-error: true
@@ -80,5 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: clawsig-guarded-deploy-${{ github.run_id }}
-          path: artifacts/ops/clawsig-guarded-deploy/
+          path: |
+            artifacts/ops/clawsig-guarded-deploy/
+            artifacts/ops/clawsig-parity-drift/
           if-no-files-found: warn
