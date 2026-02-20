@@ -1641,3 +1641,16 @@ Started: 2026-02-02T03:08:26.937005
 - Added `fetchDuelLeague()` to explorer api.ts with typed parsing
 - Added `DuelLeagueView` and `DuelLeagueEntryView` types
 - Test: `scripts/arena/run-duel-league-explorer.test.mjs`
+
+## 2026-02-20 - Fix: duel arena report rendering
+- Fixed `parseArenaMetrics()` — synthesizes canonical metric schema from evaluator data
+  when original fields (quality_score, risk_score, etc.) are missing. Maps evaluator
+  fields (ux_score, perf_score, lighthouse_performance, avg_timing_ms) to canonical shape.
+- Fixed `parseArenaContenderResult()` — uses `?? []` / `?? {}` fallbacks instead of
+  returning null when tools/skills/plugins/metrics JSON is empty or non-standard.
+- Fixed `buildArenaPayloadFromRun()`:
+  - Contender loop now skips unparseable entries instead of failing entire report.
+  - reasonCodes/tradeoffs now null-safe with `?? []` fallback.
+  - Added `raw_evaluator_metrics` field to contender output for full transparency.
+- Result: `GET /v1/arena/{arena_id}` now works for duel batch entries, showing
+  contender models, scores, hard_gate_pass, and raw Playwright evaluator metrics.

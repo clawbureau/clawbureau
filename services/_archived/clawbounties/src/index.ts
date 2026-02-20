@@ -7119,24 +7119,48 @@ function parseArenaMetrics(value: Record<string, unknown>): ArenaContenderResult
   const autonomy_score = d1Number(value.autonomy_score);
 
   if (
-    quality_score === null ||
-    risk_score === null ||
-    efficiency_score === null ||
-    latency_ms === null ||
-    cost_usd === null ||
-    autonomy_score === null
+    quality_score !== null &&
+    risk_score !== null &&
+    efficiency_score !== null &&
+    latency_ms !== null &&
+    cost_usd !== null &&
+    autonomy_score !== null
   ) {
-    return null;
+    return {
+      quality_score,
+      risk_score,
+      efficiency_score,
+      latency_ms,
+      cost_usd,
+      autonomy_score,
+    };
   }
 
-  return {
-    quality_score,
-    risk_score,
-    efficiency_score,
-    latency_ms,
-    cost_usd,
-    autonomy_score,
-  };
+  // Fallback: synthesize from evaluator/duel metrics when original schema fields are missing.
+  // Maps Playwright evaluator metrics to the canonical arena metric schema.
+  const uxScore = d1Number(value.ux_score);
+  const perfScore = d1Number(value.perf_score);
+  const a11yScore = d1Number(value.a11y_score);
+  const maintScore = d1Number(value.maint_score);
+  const visualScore = d1Number(value.visual_score);
+  const weightedTotal = d1Number(value.weighted_total);
+  const avgTimingMs = d1Number(value.avg_timing_ms);
+  const flowSuccessRate = d1Number(value.flow_success_rate);
+  const lighthousePerf = d1Number(value.lighthouse_performance);
+
+  // If we have at least one evaluator metric, synthesize the canonical shape
+  if (uxScore !== null || perfScore !== null || weightedTotal !== null || flowSuccessRate !== null) {
+    return {
+      quality_score: uxScore ?? weightedTotal ?? flowSuccessRate ?? 0,
+      risk_score: a11yScore ?? (lighthousePerf !== null ? lighthousePerf * 100 : 0),
+      efficiency_score: perfScore ?? (lighthousePerf !== null ? lighthousePerf * 100 : 0),
+      latency_ms: avgTimingMs ?? 0,
+      cost_usd: 0,
+      autonomy_score: maintScore ?? visualScore ?? 0,
+    };
+  }
+
+  return null;
 }
 
 function parseArenaCheckResults(input: unknown): ArenaCheckResult[] {
@@ -7220,13 +7244,11 @@ function parseArenaThreadLinks(value: unknown): ArenaThreadLink[] {
 }
 
 function parseArenaContenderResult(record: ArenaContenderRecord): ArenaContenderResult | null {
-  const tools = parseJsonStringArray(record.tools_json);
-  const skills = parseJsonStringArray(record.skills_json);
-  const plugins = parseJsonStringArray(record.plugins_json);
-  const metricsObj = parseJsonObject(record.metrics_json);
+  const tools = parseJsonStringArray(record.tools_json) ?? [];
+  const skills = parseJsonStringArray(record.skills_json) ?? [];
+  const plugins = parseJsonStringArray(record.plugins_json) ?? [];
+  const metricsObj = parseJsonObject(record.metrics_json) ?? {};
   const checkResultsRaw = parseJsonUnknownArray(record.check_results_json);
-
-  if (!tools || !skills || !plugins || !metricsObj) return null;
 
   const metrics = parseArenaMetrics(metricsObj);
   if (!metrics) return null;
@@ -9875,16 +9897,16 @@ async function buildArenaPayloadFromRun(
   if (!objectiveProfile) return null;
 
   const contenders = await listArenaContendersByRunId(db, run.run_id);
-  const contenderViews: ArenaContenderResult[] = [];
+  const contenderPairs: Array<{ view: ArenaContenderResult; record: ArenaContenderRecord }> = [];
   for (const contender of contenders) {
     const view = parseArenaContenderResult(contender);
-    if (!view) return null;
-    contenderViews.push(view);
+    if (!view) continue; // Skip unparseable contenders instead of failing entire report
+    contenderPairs.push({ view, record: contender });
   }
+  const contenderViews = contenderPairs.map((p) => p.view);
 
-  const reasonCodes = run.reason_codes_json ? parseJsonStringArray(run.reason_codes_json) : [];
-  const tradeoffs = run.tradeoffs_json ? parseJsonStringArray(run.tradeoffs_json) : [];
-  if (!reasonCodes || !tradeoffs) return null;
+  const reasonCodes = run.reason_codes_json ? (parseJsonStringArray(run.reason_codes_json) ?? []) : [];
+  const tradeoffs = run.tradeoffs_json ? (parseJsonStringArray(run.tradeoffs_json) ?? []) : [];
 
   let generatedAt = run.updated_at;
   let reportScoreExplain: Record<string, unknown> | null = null;
@@ -9934,27 +9956,31 @@ async function buildArenaPayloadFromRun(
         evidence_links: contender.score_explain.evidence_links,
       })),
     },
-    contenders: contenderViews.map((contender) => ({
-      contender_id: contender.contender_id,
-      label: contender.label,
-      model: contender.model,
-      harness: contender.harness,
-      tools: contender.tools,
-      skills: contender.skills,
-      plugins: contender.plugins,
-      version_pin: contender.version_pin,
-      prompt_template: contender.prompt_template,
-      experiment_arm: contender.experiment_arm,
-      score: contender.score,
-      hard_gate_pass: contender.hard_gate_pass,
-      mandatory_failed: contender.mandatory_failed,
-      metrics: contender.metrics,
-      check_results: contender.check_results,
-      score_explain: contender.score_explain,
-      insights: contender.insights,
-      review_paste: contender.review_paste,
-      manager_review_json: contender.manager_review,
-    })),
+    contenders: contenderPairs.map(({ view: contender, record: rawRecord }) => {
+      const rawMetricsObj = parseJsonObject(rawRecord.metrics_json);
+      return {
+        contender_id: contender.contender_id,
+        label: contender.label,
+        model: contender.model,
+        harness: contender.harness,
+        tools: contender.tools,
+        skills: contender.skills,
+        plugins: contender.plugins,
+        version_pin: contender.version_pin,
+        prompt_template: contender.prompt_template,
+        experiment_arm: contender.experiment_arm,
+        score: contender.score,
+        hard_gate_pass: contender.hard_gate_pass,
+        mandatory_failed: contender.mandatory_failed,
+        metrics: contender.metrics,
+        raw_evaluator_metrics: rawMetricsObj ?? null,
+        check_results: contender.check_results,
+        score_explain: contender.score_explain,
+        insights: contender.insights,
+        review_paste: contender.review_paste,
+        manager_review_json: contender.manager_review,
+      };
+    }),
     winner: {
       contender_id: run.winner_contender_id,
       reason: run.winner_reason,
