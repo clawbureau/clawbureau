@@ -1,0 +1,76 @@
+{
+  "ok": true,
+  "generated_at": "2026-02-20T02:46:45.363Z",
+  "dry_run": false,
+  "endpoint": "https://staging.clawbounties.com/v1/arena/desk/kpi-gate",
+  "request": {
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "window_hours": 24,
+    "min_online_workers": 3,
+    "min_claim_success_rate": 0.8,
+    "min_submission_success_rate": 0.8,
+    "min_proof_valid_rate": 0.95,
+    "max_claim_submission_gap": 5,
+    "max_accepted_backlog": 5,
+    "enforce": true
+  },
+  "gate_result": {
+    "httpStatus": 200,
+    "payload": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T02:46:45.209Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T02:46:44.849Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 10,
+        "skipped": 0,
+        "failed": 0,
+        "total": 10
+      },
+      "submissions_window": {
+        "total": 10,
+        "pending_review_valid": 10,
+        "pending_review_invalid": 0,
+        "approved": 0,
+        "rejected": 0,
+        "proof_valid": 10,
+        "proof_invalid": 0
+      },
+      "backlog": {
+        "accepted_total": 0,
+        "accepted_without_valid_submission": 0,
+        "claim_submission_gap": 0
+      },
+      "kpi": {
+        "claim_success_rate": 1,
+        "submission_success_rate": 1,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      },
+      "gate": {
+        "enforce": true,
+        "passed": true,
+        "blocked": false
+      }
+    }
+  }
+}

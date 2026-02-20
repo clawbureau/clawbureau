@@ -1,0 +1,12 @@
+{
+  "schema_version": "arena_mission_kpi_gate_request.v1",
+  "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "window_hours": 24,
+  "min_online_workers": 3,
+  "min_claim_success_rate": 0.8,
+  "min_submission_success_rate": 0.8,
+  "min_proof_valid_rate": 0.95,
+  "max_claim_submission_gap": 5,
+  "max_accepted_backlog": 5,
+  "enforce": true
+}

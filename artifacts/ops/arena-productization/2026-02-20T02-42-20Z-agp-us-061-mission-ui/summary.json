@@ -1,0 +1,143 @@
+{
+  "ok": true,
+  "story": "AGP-US-061",
+  "generated_at": "2026-02-20T02:42:57.143Z",
+  "deployments": {
+    "clawbounties": {
+      "staging_version_id": "75a5d1d2-2fed-40e2-82fc-1f49b34c37ad",
+      "production_version_id": "b365232e-fe99-414d-a1d8-b1dd1bb8c517"
+    },
+    "clawsig_explorer": {
+      "staging_version_id": "9344b92f-e87e-4d1e-a683-4f6a8862cc50",
+      "production_version_id": "e93ab2d8-29a1-4d3c-afdd-0018cf4d9e23"
+    }
+  },
+  "mission_api": {
+    "staging": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T02:41:59.239Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T02:41:59.128Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 10,
+        "skipped": 0,
+        "failed": 0,
+        "total": 10
+      },
+      "submissions_window": {
+        "total": 10,
+        "pending_review_valid": 10,
+        "pending_review_invalid": 0,
+        "approved": 0,
+        "rejected": 0,
+        "proof_valid": 10,
+        "proof_invalid": 0
+      },
+      "backlog": {
+        "accepted_total": 0,
+        "accepted_without_valid_submission": 0,
+        "claim_submission_gap": 0
+      },
+      "kpi": {
+        "claim_success_rate": 1,
+        "submission_success_rate": 1,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      }
+    },
+    "production": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T02:41:59.591Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T02:41:59.407Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 3,
+        "skipped": 0,
+        "failed": 0,
+        "total": 3
+      },
+      "submissions_window": {
+        "total": 3,
+        "pending_review_valid": 3,
+        "pending_review_invalid": 0,
+        "approved": 0,
+        "rejected": 0,
+        "proof_valid": 3,
+        "proof_invalid": 0
+      },
+      "backlog": {
+        "accepted_total": 0,
+        "accepted_without_valid_submission": 0,
+        "claim_submission_gap": 0
+      },
+      "kpi": {
+        "claim_success_rate": 1,
+        "submission_success_rate": 1,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      }
+    }
+  },
+  "ui_checks": {
+    "staging": {
+      "url": "https://staging-explorer.clawsig.com/arena/mission",
+      "http_status": 200,
+      "contains": "Arena Mission Control"
+    },
+    "production": {
+      "url": "https://explorer.clawsig.com/arena/mission",
+      "http_status": 200,
+      "contains": "Arena Mission Control"
+    }
+  },
+  "done_criteria": {
+    "mission_endpoint_live_staging": true,
+    "mission_endpoint_live_production": true,
+    "ui_live_staging": true,
+    "ui_live_production": true
+  },
+  "artifacts": {
+    "stage_mission": "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-mission.summary.json",
+    "prod_mission": "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-mission.summary.json",
+    "stage_ui_headers": "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-explorer.headers",
+    "prod_ui_headers": "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-explorer.headers"
+  }
+}

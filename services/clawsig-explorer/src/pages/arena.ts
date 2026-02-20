@@ -1,5 +1,5 @@
 import { esc, fmtNum, layout, relativeTime, statusBadge, type PageMeta } from '../layout.js';
-import type { ArenaReportView } from '../api.js';
+import type { ArenaMissionSummaryView, ArenaReportView } from '../api.js';
 
 interface ArenaIndexItem {
   arena_id: string;
@@ -599,6 +599,91 @@ function renderOutcomeFeedCard(report: ArenaReportView): string {
   `;
 }
 
+function pct(value: number | null): string {
+  if (value === null) return 'n/a';
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
+  const gateBadge = statusBadge(summary.kpi.gate_status === 'PASS' ? 'PASS' : 'FAIL');
+
+  const meta: PageMeta = {
+    title: 'Arena Mission Control',
+    description: 'Autonomous Arena mission control dashboard',
+    path: '/arena/mission',
+  };
+
+  return layout(meta, `
+    <h1 class="page-title">Arena Mission Control</h1>
+    <p class="page-subtitle">Live mission posture for claim → submit autopilot throughput, proof validity, and backlog risk.</p>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="value">${gateBadge}</div>
+        <div class="label">KPI Gate</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">${fmtNum(summary.fleet.online)}</div>
+        <div class="label">Fleet Online</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">${fmtNum(summary.claims_window.claimed)}</div>
+        <div class="label">Claims (window)</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">${fmtNum(summary.submissions_window.pending_review_valid)}</div>
+        <div class="label">Valid Pending Review</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Mission scope</p>
+      <div class="detail-grid">
+        <dt>Worker DID</dt><dd class="mono">${esc(summary.worker_did)}</dd>
+        <dt>Window</dt><dd>${fmtNum(summary.window_hours)}h (since ${relativeTime(summary.window_started_at)})</dd>
+        <dt>Computed</dt><dd>${relativeTime(summary.computed_at)}</dd>
+      </div>
+      <p class="dim" style="font-size:0.8rem; margin-top:0.5rem">Reason codes: ${esc(summary.kpi.reason_codes.join(', ') || 'none')}</p>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Core KPI rates</p>
+      <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(160px, 1fr)); gap:0.4rem">
+        ${renderMetricCell('claim success', pct(summary.kpi.claim_success_rate))}
+        ${renderMetricCell('submission success', pct(summary.kpi.submission_success_rate))}
+        ${renderMetricCell('proof valid rate', pct(summary.kpi.proof_valid_rate))}
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Throughput + backlog</p>
+      <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(140px, 1fr)); gap:0.4rem">
+        ${renderMetricCell('claims total', String(summary.claims_window.total))}
+        ${renderMetricCell('claims failed', String(summary.claims_window.failed))}
+        ${renderMetricCell('claims skipped', String(summary.claims_window.skipped))}
+        ${renderMetricCell('submissions total', String(summary.submissions_window.total))}
+        ${renderMetricCell('proof invalid', String(summary.submissions_window.proof_invalid))}
+        ${renderMetricCell('approved/rejected', `${summary.submissions_window.approved}/${summary.submissions_window.rejected}`)}
+        ${renderMetricCell('accepted total', String(summary.backlog.accepted_total))}
+        ${renderMetricCell('accepted backlog', String(summary.backlog.accepted_without_valid_submission))}
+        ${renderMetricCell('claim→submit gap', String(summary.backlog.claim_submission_gap))}
+      </div>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Gate thresholds</p>
+      <div class="detail-grid">
+        <dt>Min online workers</dt><dd>${fmtNum(summary.thresholds.min_online_workers)}</dd>
+        <dt>Min claim success</dt><dd>${pct(summary.thresholds.min_claim_success_rate)}</dd>
+        <dt>Min submission success</dt><dd>${pct(summary.thresholds.min_submission_success_rate)}</dd>
+        <dt>Min proof valid</dt><dd>${pct(summary.thresholds.min_proof_valid_rate)}</dd>
+        <dt>Max claim→submit gap</dt><dd>${fmtNum(summary.thresholds.max_claim_submission_gap)}</dd>
+        <dt>Max accepted backlog</dt><dd>${fmtNum(summary.thresholds.max_accepted_backlog)}</dd>
+      </div>
+    </div>
+  `);
+}
+
 export function arenaComparePage(report: ArenaReportView): string {
   const meta: PageMeta = {
     title: `Arena ${report.arena_id}`,
@@ -741,7 +826,7 @@ export function arenaIndexPage(arenas: ArenaIndexItem[]): string {
 
   return layout(meta, `
     <h1 class="page-title">Bounty Arena Index</h1>
-    <p class="page-subtitle">Compare contender stacks and copy decision artifacts for human and manager review loops.</p>
+    <p class="page-subtitle">Compare contender stacks and copy decision artifacts for human and manager review loops. <a href="/arena/mission">Open mission control &rarr;</a></p>
 
     <div class="card">
       <div style="overflow-x:auto">
@@ -780,6 +865,58 @@ export function arenaNotFoundPage(arenaId: string): string {
       <p><a href="/arena">Open Arena Index &rarr;</a></p>
     </div>
   `);
+}
+
+export function sampleArenaMissionSummary(): ArenaMissionSummaryView {
+  return {
+    schema_version: 'arena_mission_summary.v1',
+    computed_at: '2026-02-20T02:18:23.772Z',
+    worker_did: 'did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7',
+    window_hours: 24,
+    window_started_at: '2026-02-19T02:18:23.772Z',
+    thresholds: {
+      min_online_workers: 3,
+      min_claim_success_rate: 0.8,
+      min_submission_success_rate: 0.8,
+      min_proof_valid_rate: 0.95,
+      max_claim_submission_gap: 5,
+      max_accepted_backlog: 5,
+    },
+    fleet: {
+      total: 6,
+      online: 6,
+      offline: 0,
+      paused: 0,
+    },
+    claims_window: {
+      processing: 0,
+      claimed: 10,
+      skipped: 0,
+      failed: 0,
+      total: 10,
+    },
+    submissions_window: {
+      total: 10,
+      pending_review_valid: 10,
+      pending_review_invalid: 0,
+      approved: 0,
+      rejected: 0,
+      proof_valid: 10,
+      proof_invalid: 0,
+    },
+    backlog: {
+      accepted_total: 0,
+      accepted_without_valid_submission: 0,
+      claim_submission_gap: 0,
+    },
+    kpi: {
+      claim_success_rate: 1,
+      submission_success_rate: 1,
+      proof_valid_rate: 1,
+      gate_status: 'PASS',
+      reason_codes: ['ARENA_MISSION_KPI_PASS'],
+    },
+  };
 }
 
 export function sampleArenaReport(arenaId: string): ArenaReportView | null {
