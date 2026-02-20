@@ -32,6 +32,7 @@ import {
   fetchArenaMissionSummary,
   fetchArenaReport,
   fetchArenaRoiDashboard,
+  fetchDuelLeague,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
 import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
@@ -47,6 +48,7 @@ import {
   sampleArenaReport,
 } from './pages/arena.js';
 import { arenaRoiPage, arenaRoiUnavailablePage } from './pages/arena-roi.js';
+import { arenaLeaguePage, arenaLeagueUnavailablePage } from './pages/arena-league.js';
 import { deriveOpsSloHealth } from './slo.js';
 
 export interface Env {
@@ -261,6 +263,15 @@ export default {
     // -- Agents listing (redirect to runs feed for now) --
     if (path === '/agents') {
       return Response.redirect(url.origin + '/runs', 302);
+    }
+
+    // -- Arena duel league (AGP-US-087) --
+    if (path === '/arena/league') {
+      const leagueData = await fetchDuelLeague(apiOpts);
+      if (!leagueData) {
+        return html(arenaLeagueUnavailablePage(), 200, 30);
+      }
+      return html(arenaLeaguePage(leagueData), 200, 30);
     }
 
     // -- Arena ROI dashboard (AGP-US-084) --
