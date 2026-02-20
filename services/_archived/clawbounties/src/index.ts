@@ -16950,6 +16950,107 @@ async function handleGetFleetHealth(
   }, 200, version);
 }
 
+
+
+// AGP-US-086: weekly ops report
+async function handleGetWeeklyReport(
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const now = new Date();
+  const weekEnd = now.toISOString().slice(0, 10);
+  const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  // Gather ROI
+  const roiPayload = await computeArenaRoiDashboard(env.BOUNTIES_DB, {
+    taskFingerprint: '',
+    objectiveProfileName: '',
+    contenderId: '',
+    experimentId: '',
+    experimentArm: '',
+    limit: 2000,
+    minSamples: 5,
+    nowIso: now.toISOString(),
+  });
+  const roiMetrics = roiPayload.metrics as Record<string, unknown> | null;
+  const roiTotals = roiPayload.totals as Record<string, unknown> | null;
+
+  // Gather fleet health (reuse inline logic to avoid double-fetch)
+  const pendingRuns = await listPendingArenaRuns(env.BOUNTIES_DB, { limit: 5000 });
+  const pendingMetrics = buildArenaPendingBacklogMetrics(pendingRuns);
+  const pendingCount = typeof pendingMetrics.pending_count === 'number' ? pendingMetrics.pending_count : 0;
+
+  let fleetWorkerCount = 0;
+  try {
+    const r = await env.BOUNTIES_DB
+      .prepare('SELECT COUNT(*) as cnt FROM bounty_arena_harness_fleet_workers WHERE status = ?')
+      .bind('active')
+      .first<{ cnt: number }>();
+    fleetWorkerCount = r?.cnt ?? 0;
+  } catch { /* D1 error */ }
+
+  // Gather duel league
+  const leagueData = await listDuelLeague(env.BOUNTIES_DB, 20);
+  const leagueEntries = leagueData.slice(0, 10);
+
+  // Gather recent duel count
+  let recentDuelCount = 0;
+  try {
+    const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const r = await env.BOUNTIES_DB
+      .prepare('SELECT COUNT(*) as cnt FROM bounty_arena_contenders WHERE created_at >= ?')
+      .bind(cutoff)
+      .first<{ cnt: number }>();
+    recentDuelCount = r?.cnt ?? 0;
+  } catch { /* D1 error */ }
+
+  // Derive grade
+  const roiStatus = typeof roiPayload.status === 'string' ? roiPayload.status : 'unknown';
+  const acceptRate = typeof roiMetrics?.first_pass_accept_rate === 'number' ? roiMetrics.first_pass_accept_rate as number : 0;
+  const overrideRate = typeof roiMetrics?.override_rate === 'number' ? roiMetrics.override_rate as number : 0;
+
+  let grade = 'GOOD';
+  if (roiStatus !== 'available' || fleetWorkerCount === 0) grade = 'NEEDS_ATTENTION';
+  if (acceptRate < 0.5 || overrideRate > 0.25) grade = 'NEEDS_ATTENTION';
+  if (acceptRate >= 0.7 && overrideRate <= 0.1 && fleetWorkerCount > 0 && pendingCount <= 5) grade = 'EXCELLENT';
+  if (fleetWorkerCount === 0 && pendingCount > 50) grade = 'CRITICAL';
+
+  const sampleCount = typeof roiTotals?.sample_count === 'number' ? roiTotals.sample_count as number : 0;
+
+  return jsonResponse({
+    schema_version: 'arena_weekly_report.v1',
+    generated_at: now.toISOString(),
+    week: { start: weekStart, end: weekEnd },
+    overall_grade: grade,
+    roi: {
+      status: roiStatus,
+      sample_count: sampleCount,
+      metrics: roiMetrics,
+      cycle_time_percentiles: roiPayload.cycle_time_percentiles ?? null,
+      contender_costs: roiPayload.contender_costs ?? [],
+      daily_buckets: roiPayload.daily_buckets ?? [],
+      reason_code_drilldown: roiPayload.reason_code_drilldown ?? [],
+    },
+    fleet: {
+      active_workers: fleetWorkerCount,
+      pending_backlog: pendingCount,
+      cron_enabled: (env.ARENA_RESOLVER_CRON_ENABLED ?? 'true').trim().toLowerCase() !== 'false',
+      recent_duel_count: recentDuelCount,
+    },
+    duel_league: {
+      total_contenders: leagueData.length,
+      standings: leagueEntries.map((e) => ({
+        contender_id: e.contender_id,
+        wins: e.wins,
+        losses: e.losses,
+        draws: e.draws,
+        total_runs: e.duels,
+        win_rate: e.win_rate,
+      })),
+    },
+  }, 200, version);
+}
+
 function computePercentile(sortedValues: number[], p: number): number {
   if (sortedValues.length === 0) return 0;
   const index = (p / 100) * (sortedValues.length - 1);
@@ -23971,6 +24072,13 @@ export default {
         const adminError = requireAdmin(request, env, version);
         if (adminError) return adminError;
         return handleGetFleetHealth(env, version);
+      }
+
+      // AGP-US-086: weekly ops report
+      if (path === '/v1/arena/desk/weekly-report' && method === 'GET') {
+        const adminError = requireAdmin(request, env, version);
+        if (adminError) return adminError;
+        return handleGetWeeklyReport(env, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {

@@ -1,0 +1,17 @@
+{
+  "schema_version": "arena_weekly_report_evidence.v1",
+  "story": "AGP-US-086",
+  "generated_at": "2026-02-20T21:15:09Z",
+  "staging": {
+    "deploy_id": "b1fb37ba-4b93-4426-a484-c2db34bd8520",
+    "grade": "NEEDS_ATTENTION",
+    "roi_samples": 24,
+    "duel_contenders": 18
+  },
+  "production": {
+    "deploy_id": "9d6a5e19-f303-44b0-ac1d-b508222b2a60",
+    "grade": "NEEDS_ATTENTION",
+    "roi_samples": 16,
+    "duel_contenders": 14
+  }
+}
