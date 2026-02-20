@@ -1,0 +1,126 @@
+{
+  "schema_version": "arena_manager_autopilot.v1",
+  "computed_at": "2026-02-20T14:31:46.120Z",
+  "mode": "autopilot",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "objective_profile_name": "ui-duel-balanced",
+  "experiment_id": null,
+  "experiment_arm": null,
+  "analyzed_runs": 1,
+  "winner_stability_ratio": 1,
+  "route": {
+    "recommended": {
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "label": "GPT-5.3 Codex xhigh (Pi)",
+      "model": "openai-codex/gpt-5.3-codex:xhigh",
+      "harness": "pi",
+      "routing_score": 102.7002,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "rationale": "Selected contender_gpt_5_3_codex_xhigh_pi with routing_score=102.7002 from 1 matched runs (win_rate=1, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=-0.2245).",
+      "evidence": {
+        "appearances": 1,
+        "wins": 1,
+        "win_rate": 1,
+        "hard_gate_pass_rate": 1,
+        "avg_score": 92.548,
+        "avg_risk": 26.6,
+        "avg_quality": 100,
+        "latest_hard_gate_pass": true,
+        "outcome_samples": 1,
+        "empirical_accept_rate": 1,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "avg_predicted_confidence": 0.7755,
+        "calibration_gap": -0.2245,
+        "override_reason_penalty": 0,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Predicted confidence appears conservative; contender may be under-utilized."
+        ],
+        "last_seen_at": "2026-02-20T14:24:23.332Z",
+        "sample_run_ids": [
+          "arn_e5dc6be3-c371-4179-824e-91db3660b262"
+        ]
+      }
+    },
+    "backups": [],
+    "reason_codes": []
+  },
+  "fleet_match": {
+    "schema_version": "arena_harness_fleet_match.v1",
+    "computed_at": "2026-02-20T14:31:46.120Z",
+    "status": "unavailable",
+    "reason_codes": [
+      "ARENA_FLEET_EMPTY",
+      "ARENA_FLEET_CONTENDER_BOUND"
+    ],
+    "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "objective_profile_name": "ui-duel-balanced",
+    "harness": "pi",
+    "required_skills": [],
+    "required_tools": [],
+    "max_cost_tier": null,
+    "max_risk_tier": null,
+    "total_online_workers": 0,
+    "candidates": []
+  },
+  "autopilot": {
+    "status": "manual_review_required",
+    "default_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "backup_contenders": [],
+    "guardrails": {
+      "min_runs": 2,
+      "min_winner_stability_ratio": 0.6,
+      "min_win_rate": 0.5,
+      "max_override_rate": 0.3,
+      "max_rework_rate": 0.2,
+      "max_abs_calibration_gap": 0.2,
+      "require_latest_hard_gate_pass": true
+    },
+    "violations": [
+      {
+        "code": "ARENA_AUTOPILOT_INSUFFICIENT_RUNS",
+        "message": "Matched runs are below minimum threshold for autonomous default routing.",
+        "value": 1,
+        "threshold": 2
+      },
+      {
+        "code": "ARENA_AUTOPILOT_CALIBRATION_GAP_HIGH",
+        "message": "Calibration gap exceeds allowed threshold.",
+        "value": -0.2245,
+        "threshold": 0.2
+      },
+      {
+        "code": "ARENA_AUTOPILOT_NO_FLEET_WORKER",
+        "message": "No online fleet worker matched the recommended contender capability profile.",
+        "value": 0,
+        "threshold": 1
+      }
+    ],
+    "reason_codes": [
+      "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+      "ARENA_FLEET_EMPTY",
+      "ARENA_FLEET_CONTENDER_BOUND"
+    ],
+    "recommendations": [
+      "Routing profile appears stable; continue autonomous routing with periodic calibration checks."
+    ],
+    "policy_template": {
+      "route_policy_id": "arp_HooV6T1P23Gn6E4GapZt7D_S_oHEawR1",
+      "task_fingerprint": "frontend:clawbounties:ux-redesign",
+      "default_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "backup_contenders": [],
+      "require_manual_approval": true,
+      "generated_at": "2026-02-20T14:31:46.120Z"
+    }
+  }
+}

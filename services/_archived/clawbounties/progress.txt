@@ -1346,3 +1346,26 @@ Started: 2026-02-02T03:08:26.937005
   - `artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/report.md`
 - Merge policy: merge-commit winner only, loser remains unmerged due hard-gate failure.
+
+## 2026-02-20 - AGP-US-074 UI duel routing policy shadow/promotion + rollback guardrails
+- Added UI duel routing contracts:
+  - `contracts/arena/bounty-ui-duel-routing.staging.v1.json`
+  - `contracts/arena/bounty-ui-duel-routing.production.v1.json`
+  - `contracts/arena/contenders-ui-duel.v1.json`
+- Seeded real arena runs for `frontend:clawbounties:ux-redesign`:
+  - staging: `arena_bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2_2026-02-20T14-23-59-924Z`
+  - production: `arena_bty_099bb056-9f9c-498a-9610-5d0028115371_2026-02-20T14-24-22-474Z`
+- Captured fail-closed pre-promotion state (staging):
+  - policy optimizer returned `NOT_READY` with reason code `ARENA_POLICY_NOT_READY_INSUFFICIENT_SAMPLE`.
+- Posted real reviewer outcome feedback for winner on both environments (source `agp-us-074-routing-policy`) to produce outcome samples.
+- Re-ran policy optimizer shadow/promotion (staging first, then production):
+  - staging: `PROMOTED`, active contender `contender_gpt_5_3_codex_xhigh_pi`
+  - production: `PROMOTED`, active contender `contender_gpt_5_3_codex_xhigh_pi`
+- Verified routing policy application + guardrails:
+  - route reason code includes `ARENA_ROUTING_ACTIVE_POLICY_APPLIED` on staging and production.
+  - autopilot remains `manual_review_required` with guardrail reason codes (`ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED`, `ARENA_AUTOPILOT_INSUFFICIENT_RUNS`, `ARENA_AUTOPILOT_CALIBRATION_GAP_HIGH`) acting as rollback/safety controls.
+- Health/smoke checks:
+  - `GET /health` and `GET /duel` returned `200` on staging + production.
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-status-codes.txt`

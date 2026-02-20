@@ -1,0 +1,142 @@
+{
+  "ok": true,
+  "story": "AGP-US-074",
+  "generated_at": "2026-02-20T14:33:21Z",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "objective_profile_name": "ui-duel-balanced",
+  "contracts": {
+    "staging": "contracts/arena/bounty-ui-duel-routing.staging.v1.json",
+    "production": "contracts/arena/bounty-ui-duel-routing.production.v1.json",
+    "contenders": "contracts/arena/contenders-ui-duel.v1.json"
+  },
+  "seeded_runs": {
+    "staging": {
+      "output_dir": "artifacts/ops/arena-productization/arena_bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2_2026-02-20T14-23-59-924Z",
+      "arena_id": "arena_bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2_2026-02-20T14-23-59-924Z",
+      "winner": "contender_gpt_5_3_codex_xhigh_pi"
+    },
+    "production": {
+      "output_dir": "artifacts/ops/arena-productization/arena_bty_099bb056-9f9c-498a-9610-5d0028115371_2026-02-20T14-24-22-474Z",
+      "arena_id": "arena_bty_099bb056-9f9c-498a-9610-5d0028115371_2026-02-20T14-24-22-474Z",
+      "winner": "contender_gpt_5_3_codex_xhigh_pi"
+    }
+  },
+  "outcome_seeding": {
+    "staging": {
+      "samples": 1,
+      "accepted": 1,
+      "outcome_ids": [
+        "aot_1d87bdc0-aff0-447d-a6f1-4243884c57e5"
+      ]
+    },
+    "production": {
+      "samples": 1,
+      "accepted": 1,
+      "outcome_ids": [
+        "aot_8259cc04-5fb9-4b97-99eb-42d574b7294a"
+      ]
+    }
+  },
+  "policy_optimizer": {
+    "staging_pre_seed_not_ready": {
+      "promotion_status": "NOT_READY",
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_NOT_READY_INSUFFICIENT_SAMPLE"
+      ],
+      "sample_count": 0,
+      "confidence_score": 0.65
+    },
+    "staging_promoted": {
+      "promotion_status": "PROMOTED",
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTED_INITIAL_ACTIVE"
+      ],
+      "active_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "sample_count": 1,
+      "confidence_score": 0.9775
+    },
+    "production_promoted": {
+      "promotion_status": "PROMOTED",
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTED_INITIAL_ACTIVE"
+      ],
+      "active_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "sample_count": 1,
+      "confidence_score": 0.9775
+    }
+  },
+  "routing_checks": {
+    "staging": {
+      "route_reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "autopilot_status": "manual_review_required",
+      "autopilot_reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND"
+      ]
+    },
+    "production": {
+      "route_reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "autopilot_status": "manual_review_required",
+      "autopilot_reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND"
+      ]
+    }
+  },
+  "rollback_guardrail_reason_codes": [
+    "ARENA_POLICY_NOT_READY_INSUFFICIENT_SAMPLE",
+    "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+    "ARENA_AUTOPILOT_INSUFFICIENT_RUNS",
+    "ARENA_AUTOPILOT_CALIBRATION_GAP_HIGH"
+  ],
+  "service_health": {
+    "staging": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "staging"
+    },
+    "production": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "production"
+    }
+  },
+  "duel_http_status": {
+    "staging": 200,
+    "production": 200
+  },
+  "artifacts": {
+    "stage_not_ready_summary": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/stage-policy-not-ready.summary.json",
+    "stage_promoted_summary": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/stage-policy-promoted.summary.json",
+    "prod_promoted_summary": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/prod-policy-promoted.summary.json",
+    "route_stage": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-stage.json",
+    "route_prod": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-prod.json",
+    "autopilot_stage": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/autopilot-stage.json",
+    "autopilot_prod": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/autopilot-prod.json",
+    "stage_outcomes": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/stage-outcomes.json",
+    "prod_outcomes": "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/prod-outcomes.json"
+  }
+}

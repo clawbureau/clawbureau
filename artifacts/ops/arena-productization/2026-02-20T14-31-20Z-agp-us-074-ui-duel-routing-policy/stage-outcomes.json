@@ -1,0 +1,202 @@
+{
+  "arena_id": "arena_bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2_2026-02-20T14-23-59-924Z",
+  "bounty_id": "bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2",
+  "outcomes": [
+    {
+      "outcome_id": "aot_1d87bdc0-aff0-447d-a6f1-4243884c57e5",
+      "idempotency_key": "arena-outcome:iZwSlcONtO10VSAKOYjSqn21MhMN3-JS23mII6NFr7s",
+      "bounty_id": "bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2",
+      "arena_id": "arena_bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2_2026-02-20T14-23-59-924Z",
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 4,
+      "time_to_accept_minutes": 6,
+      "predicted_confidence": 0.7755,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Codex winner accepted for UI duel routing promotion seeding",
+      "decision_taxonomy_tags": [
+        "agp-us-074",
+        "ui-duel-routing",
+        "promotion-seed"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "agp-us-074-routing-policy",
+      "metadata": {
+        "calibration_signal_tags": [
+          "agp-us-074",
+          "ui-duel-routing",
+          "promotion-seed"
+        ],
+        "decision_taxonomy_tags": [
+          "agp-us-074",
+          "ui-duel-routing",
+          "promotion-seed"
+        ],
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Codex winner accepted for UI duel routing promotion seeding",
+        "rework_required": false
+      },
+      "created_at": "2026-02-20T14:28:48.001Z",
+      "updated_at": "2026-02-20T14:28:48.001Z"
+    }
+  ],
+  "calibration": {
+    "totals": {
+      "samples": 1,
+      "accepted": 1,
+      "overridden": 0,
+      "rework": 0,
+      "disputed": 0,
+      "review_time_avg_minutes": 4,
+      "time_to_accept_avg_minutes": 6,
+      "cost_per_accepted_bounty_usd": 0.17,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "reviewer_decisions": {
+        "approve": 1,
+        "request_changes": 0,
+        "reject": 0
+      }
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "samples": 1,
+        "average_predicted_confidence": 0.7755,
+        "empirical_accept_rate": 1,
+        "calibration_gap": -0.22450000000000003,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "average_review_time_minutes": 4,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "agp-us-074",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "promotion-seed",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "ui-duel-routing",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "rationale_samples": 0,
+        "top_rationale_tags": [
+          {
+            "tag": "agp-us-074",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "promotion-seed",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "ui-duel-routing",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": []
+      }
+    ],
+    "override_taxonomy": {
+      "reason_breakdown": []
+    },
+    "reviewer_decision_capture": {
+      "decision_breakdown": [
+        {
+          "reviewer_decision": "approve",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "reviewer_decision": "request_changes",
+          "count": 0,
+          "share": 0
+        },
+        {
+          "reviewer_decision": "reject",
+          "count": 0,
+          "share": 0
+        }
+      ],
+      "decision_taxonomy_tags": [
+        {
+          "tag": "agp-us-074",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "tag": "promotion-seed",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "tag": "ui-duel-routing",
+          "count": 1,
+          "share": 1
+        }
+      ]
+    },
+    "rationale_signals": {
+      "top_tags": [
+        {
+          "tag": "agp-us-074",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "tag": "promotion-seed",
+          "count": 1,
+          "share": 1
+        },
+        {
+          "tag": "ui-duel-routing",
+          "count": 1,
+          "share": 1
+        }
+      ],
+      "recent_decisions": []
+    },
+    "winner_stability": [
+      {
+        "task_fingerprint": "frontend:clawbounties:ux-redesign",
+        "top_winner_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "stability_ratio": 1,
+        "sample_runs": 1
+      }
+    ]
+  }
+}

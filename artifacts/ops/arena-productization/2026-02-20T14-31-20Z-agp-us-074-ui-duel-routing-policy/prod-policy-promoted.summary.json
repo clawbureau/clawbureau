@@ -1,0 +1,35 @@
+{
+  "checks": {
+    "not_ready_reason_codes_present": true,
+    "promoted_active_matches_shadow": true,
+    "real_samples_present": true,
+    "route_uses_active_policy_when_promoted": true,
+    "shadow_policy_present": true
+  },
+  "endpoint_base": "https://clawbounties.com",
+  "environment": "production",
+  "experiment_arm": null,
+  "experiment_id": null,
+  "gates": {
+    "confidence_score": 0.9775,
+    "min_confidence": 0.62,
+    "min_samples": 1,
+    "sample_count": 1
+  },
+  "generated_at": "2026-02-20T14:29:20.125Z",
+  "objective_profile_name": "ui-duel-balanced",
+  "ok": true,
+  "output_dir": "artifacts/ops/arena-productization/2026-02-20T14-29-19-570Z-agp-us-055-policy-optimizer-frontend-clawbounties-ux-redesign",
+  "status": {
+    "active_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "promotion_status": "PROMOTED",
+    "reason_codes": [
+      "ARENA_POLICY_SHADOW_REFRESHED",
+      "ARENA_POLICY_PROMOTED_INITIAL_ACTIVE"
+    ],
+    "route_recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "shadow_contender_id": "contender_gpt_5_3_codex_xhigh_pi"
+  },
+  "story": "AGP-US-055",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign"
+}

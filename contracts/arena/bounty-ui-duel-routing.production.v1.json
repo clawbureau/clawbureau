@@ -1,0 +1,54 @@
+{
+  "bounty_id": "bty_099bb056-9f9c-498a-9610-5d0028115371",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "objective_profile": {
+    "name": "ui-duel-balanced",
+    "weights": {
+      "quality": 0.5,
+      "speed": 0.2,
+      "cost": 0.1,
+      "safety": 0.2
+    },
+    "tie_breakers": [
+      "mandatory_passed",
+      "quality_score",
+      "risk_score_low",
+      "latency_low",
+      "cost_low",
+      "contender_id"
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "id": "ac_hard_gate_pass",
+      "description": "Delivery summary must indicate hard gate pass.",
+      "required": true,
+      "rule": {
+        "type": "contains",
+        "field": "delivery_summary",
+        "needle": "hard gate pass"
+      }
+    },
+    {
+      "id": "ac_live_api",
+      "description": "Delivery summary must confirm live api wiring.",
+      "required": true,
+      "rule": {
+        "type": "contains",
+        "field": "delivery_summary",
+        "needle": "live api"
+      }
+    },
+    {
+      "id": "ac_accessibility",
+      "description": "Delivery summary should mention accessibility posture.",
+      "required": false,
+      "rule": {
+        "type": "contains",
+        "field": "delivery_summary",
+        "needle": "accessibility"
+      }
+    }
+  ]
+}
