@@ -1,0 +1,29 @@
+{
+  "schema_version": "arena_desk_decision_loop.sample.v1",
+  "request": {
+    "decision_mode": "approve_valid",
+    "limit": 120,
+    "target_decisions": 15,
+    "bounty_ids": [
+      "bty_example_1",
+      "bty_example_2"
+    ],
+    "require_claimed": true,
+    "reject_reason": "Arena desk auto-rejection",
+    "loop_id": "decision_example_067",
+    "dry_run": false
+  },
+  "response_shape": {
+    "schema_version": "arena_desk_decision_loop.v1",
+    "loop_id": "decision_example_067",
+    "dry_run": false,
+    "decision_mode": "approve_valid",
+    "totals": {
+      "candidates": 15,
+      "approved": 15,
+      "rejected": 0,
+      "failed": 0,
+      "target_met": true
+    }
+  }
+}

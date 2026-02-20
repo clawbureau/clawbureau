@@ -1,0 +1,170 @@
+{
+  "ok": true,
+  "story": "AGP-US-064",
+  "generated_at": "2026-02-20T12:29:48.563Z",
+  "endpoint": "https://clawbounties.com/v1/arena/desk/discover-loop",
+  "dry_run": false,
+  "request": {
+    "target_open_bounties": 8,
+    "seed_limit": 8,
+    "seed_reward_minor": "25",
+    "seed_requester_dids": [],
+    "seed_tags": [
+      "arena",
+      "autonomous",
+      "seed"
+    ],
+    "seed_title_prefix": "Arena autonomous task",
+    "seed_description": "Autonomous arena-seeded bounty for desk throughput operations.",
+    "objective_profile_name": "arena-autonomous",
+    "discover_id": null,
+    "dry_run": false
+  },
+  "loop_result": {
+    "schema_version": "arena_desk_discovery_loop.v1",
+    "discover_id": "arena_discover_4d302180125140fe886ad12652eda5fd",
+    "computed_at": "2026-02-20T12:29:48.531Z",
+    "dry_run": false,
+    "objective_profile_name": "arena-autonomous",
+    "limits": {
+      "target_open_bounties": 8,
+      "seed_limit": 8,
+      "seed_reward_minor": "25",
+      "seed_when_below_target": true,
+      "seed_tags": [
+        "arena",
+        "autonomous",
+        "seed"
+      ]
+    },
+    "totals": {
+      "open_before": 4,
+      "open_after": 8,
+      "needed_seeds": 4,
+      "planned_seeds": 4,
+      "seeded_created": 4,
+      "seeded_failed": 0,
+      "target_met": true
+    },
+    "requester_did_candidates": [
+      "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+      "did:key:z6Mkseedrequester0000000000000000000000000"
+    ],
+    "open_bounty_sample": [
+      {
+        "bounty_id": "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "50",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "25",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+        "requester_did": "did:key:zBuyerBountyProd1770135943",
+        "reward": {
+          "amount_minor": "5000",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_bb485106-7652-46a8-a539-1d420b145383",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "25",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "50",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_099bb056-9f9c-498a-9610-5d0028115371",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "200",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_a838eed7-ee8a-460e-8cc3-4aaf8977f9bf",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "200",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_aea682e6-5bb0-492d-b38e-53700215b53c",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "reward": {
+          "amount_minor": "200",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      }
+    ],
+    "seed_actions": [
+      {
+        "status": "created",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "bounty_id": "bty_bb485106-7652-46a8-a539-1d420b145383",
+        "idempotency_key": "arena-seed:arena_discover_4d302180125140fe886ad12652eda5fd:1",
+        "http_status": 201
+      },
+      {
+        "status": "created",
+        "seed_source": "escrow_reuse",
+        "requester_did": "did:key:zBuyerBountyProd1770135943",
+        "bounty_id": "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+        "escrow_id": "esc_4f8cc0ab-35ef-47ad-a301-c4cfd9c2ce32",
+        "idempotency_key": "arena-seed-reuse:arena_discover_4d302180125140fe886ad12652eda5fd:esc_4f8cc0ab-35ef-47ad-a301-c4cfd9c2ce32",
+        "fallback_error_code": "ESCROW_FAILED"
+      },
+      {
+        "status": "created",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "bounty_id": "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+        "idempotency_key": "arena-seed:arena_discover_4d302180125140fe886ad12652eda5fd:3",
+        "http_status": 201
+      },
+      {
+        "status": "created",
+        "seed_source": "escrow_reuse",
+        "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "bounty_id": "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3",
+        "escrow_id": "esc_33f184f6-6e14-47a8-8db8-bc652f5045f4",
+        "idempotency_key": "arena-seed-reuse:arena_discover_4d302180125140fe886ad12652eda5fd:esc_33f184f6-6e14-47a8-8db8-bc652f5045f4",
+        "fallback_error_code": "ESCROW_FAILED"
+      }
+    ]
+  }
+}

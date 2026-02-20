@@ -1,0 +1,176 @@
+{
+  "ok": true,
+  "story": "AGP-US-064",
+  "generated_at": "2026-02-20T12:22:20.696Z",
+  "endpoint": "https://staging.clawbounties.com/v1/arena/desk/discover-loop",
+  "dry_run": false,
+  "request": {
+    "target_open_bounties": 8,
+    "seed_limit": 8,
+    "seed_reward_minor": "25",
+    "seed_requester_dids": [],
+    "seed_tags": [
+      "arena",
+      "autonomous",
+      "seed"
+    ],
+    "seed_title_prefix": "Arena autonomous task",
+    "seed_description": "Autonomous arena-seeded bounty for desk throughput operations.",
+    "objective_profile_name": "arena-autonomous",
+    "discover_id": null,
+    "dry_run": false
+  },
+  "loop_result": {
+    "schema_version": "arena_desk_discovery_loop.v1",
+    "discover_id": "arena_discover_621e8ef1ee214ce5b07ea08126f69cf4",
+    "computed_at": "2026-02-20T12:22:20.658Z",
+    "dry_run": false,
+    "objective_profile_name": "arena-autonomous",
+    "limits": {
+      "target_open_bounties": 8,
+      "seed_limit": 8,
+      "seed_reward_minor": "25",
+      "seed_when_below_target": true,
+      "seed_tags": [
+        "arena",
+        "autonomous",
+        "seed"
+      ]
+    },
+    "totals": {
+      "open_before": 1,
+      "open_after": 3,
+      "needed_seeds": 7,
+      "planned_seeds": 7,
+      "seeded_created": 2,
+      "seeded_failed": 5,
+      "target_met": false
+    },
+    "requester_did_candidates": [
+      "did:key:zSmokeRequester",
+      "did:key:z6Mkseedrequester0000000000000000000000000"
+    ],
+    "open_bounty_sample": [
+      {
+        "bounty_id": "bty_4265f754-718b-4d59-a559-4aaa958a4597",
+        "requester_did": "did:key:zsimrequesterbatch0001",
+        "reward": {
+          "amount_minor": "1",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e",
+        "requester_did": "did:key:zsimrequesterbatch0001",
+        "reward": {
+          "amount_minor": "100",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      },
+      {
+        "bounty_id": "bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2",
+        "requester_did": "did:key:zSmokeRequester",
+        "reward": {
+          "amount_minor": "1000",
+          "currency": "USD"
+        },
+        "status": "open",
+        "closure_type": "requester"
+      }
+    ],
+    "seed_actions": [
+      {
+        "status": "created",
+        "seed_source": "escrow_reuse",
+        "requester_did": "did:key:zsimrequesterbatch0001",
+        "bounty_id": "bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e",
+        "escrow_id": "esc_d906041f-1bce-4a2b-8d32-4f6e34164d48",
+        "idempotency_key": "arena-seed-reuse:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:esc_d906041f-1bce-4a2b-8d32-4f6e34164d48",
+        "fallback_error_code": "ESCROW_FAILED"
+      },
+      {
+        "status": "created",
+        "seed_source": "escrow_reuse",
+        "requester_did": "did:key:zsimrequesterbatch0001",
+        "bounty_id": "bty_4265f754-718b-4d59-a559-4aaa958a4597",
+        "escrow_id": "esc_16e1ff1e-76af-45a0-9455-7235ccec9b95",
+        "idempotency_key": "arena-seed-reuse:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:esc_16e1ff1e-76af-45a0-9455-7235ccec9b95",
+        "fallback_error_code": "ESCROW_FAILED"
+      },
+      {
+        "status": "failed",
+        "requester_did": "did:key:zSmokeRequester",
+        "idempotency_key": "arena-seed:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:3",
+        "http_status": 502,
+        "response": {
+          "error": "ESCROW_FAILED",
+          "message": "ESCROW_FAILED:502:{\"error\":\"LEDGER_HOLD_FAILED\",\"message\":\"LEDGER_TRANSFER_FAILED:401:{\\\"error\\\":\\\"Unauthorized\\\",\\\"code\\\":\\\"UNAUTHORIZED\\\"}\"}"
+        },
+        "fallback": {
+          "seed_source": "escrow_reuse",
+          "error": "NO_ELIGIBLE_ESCROW_CANDIDATE"
+        }
+      },
+      {
+        "status": "failed",
+        "requester_did": "did:key:z6Mkseedrequester0000000000000000000000000",
+        "idempotency_key": "arena-seed:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:4",
+        "http_status": 502,
+        "response": {
+          "error": "ESCROW_FAILED",
+          "message": "ESCROW_FAILED:502:{\"error\":\"LEDGER_HOLD_FAILED\",\"message\":\"LEDGER_TRANSFER_FAILED:401:{\\\"error\\\":\\\"Unauthorized\\\",\\\"code\\\":\\\"UNAUTHORIZED\\\"}\"}"
+        },
+        "fallback": {
+          "seed_source": "escrow_reuse",
+          "error": "NO_ELIGIBLE_ESCROW_CANDIDATE"
+        }
+      },
+      {
+        "status": "failed",
+        "requester_did": "did:key:zSmokeRequester",
+        "idempotency_key": "arena-seed:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:5",
+        "http_status": 502,
+        "response": {
+          "error": "ESCROW_FAILED",
+          "message": "ESCROW_FAILED:502:{\"error\":\"LEDGER_HOLD_FAILED\",\"message\":\"LEDGER_TRANSFER_FAILED:401:{\\\"error\\\":\\\"Unauthorized\\\",\\\"code\\\":\\\"UNAUTHORIZED\\\"}\"}"
+        },
+        "fallback": {
+          "seed_source": "escrow_reuse",
+          "error": "NO_ELIGIBLE_ESCROW_CANDIDATE"
+        }
+      },
+      {
+        "status": "failed",
+        "requester_did": "did:key:z6Mkseedrequester0000000000000000000000000",
+        "idempotency_key": "arena-seed:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:6",
+        "http_status": 502,
+        "response": {
+          "error": "ESCROW_FAILED",
+          "message": "ESCROW_FAILED:502:{\"error\":\"LEDGER_HOLD_FAILED\",\"message\":\"LEDGER_TRANSFER_FAILED:401:{\\\"error\\\":\\\"Unauthorized\\\",\\\"code\\\":\\\"UNAUTHORIZED\\\"}\"}"
+        },
+        "fallback": {
+          "seed_source": "escrow_reuse",
+          "error": "NO_ELIGIBLE_ESCROW_CANDIDATE"
+        }
+      },
+      {
+        "status": "failed",
+        "requester_did": "did:key:zSmokeRequester",
+        "idempotency_key": "arena-seed:arena_discover_621e8ef1ee214ce5b07ea08126f69cf4:7",
+        "http_status": 502,
+        "response": {
+          "error": "ESCROW_FAILED",
+          "message": "ESCROW_FAILED:502:{\"error\":\"LEDGER_HOLD_FAILED\",\"message\":\"LEDGER_TRANSFER_FAILED:401:{\\\"error\\\":\\\"Unauthorized\\\",\\\"code\\\":\\\"UNAUTHORIZED\\\"}\"}"
+        },
+        "fallback": {
+          "seed_source": "escrow_reuse",
+          "error": "NO_ELIGIBLE_ESCROW_CANDIDATE"
+        }
+      }
+    ]
+  }
+}

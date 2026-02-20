@@ -1,0 +1,98 @@
+{
+  "schema_version": "arena_auto_claim_loop.v1",
+  "loop_id": "agp_v11_prod_claim_001",
+  "generated_at": "2026-02-20T12:30:31.098Z",
+  "dry_run": false,
+  "objective_profile_name": null,
+  "limits": {
+    "limit": 40,
+    "target_claims": 4,
+    "scan_limit": 300,
+    "budget_minor": "100000",
+    "max_fleet_cost_tier": "high",
+    "max_fleet_risk_tier": "high",
+    "include_code_bounties": false,
+    "allow_route_fallback": true
+  },
+  "totals": {
+    "scanned_open_bounties": 8,
+    "decisions": 4,
+    "claimed": 4,
+    "failed": 0,
+    "skipped": 0,
+    "replay": 0,
+    "duplicate_lock_incidents": 0,
+    "budget_minor_remaining": "94900",
+    "target_met": true
+  },
+  "decisions": [
+    {
+      "bounty_id": "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "50",
+      "budget_minor_before": "100000",
+      "budget_minor_after": "99950",
+      "error": null
+    },
+    {
+      "bounty_id": "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "25",
+      "budget_minor_before": "99950",
+      "budget_minor_after": "99925",
+      "error": null
+    },
+    {
+      "bounty_id": "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "5000",
+      "budget_minor_before": "99925",
+      "budget_minor_after": "94925",
+      "error": null
+    },
+    {
+      "bounty_id": "bty_bb485106-7652-46a8-a539-1d420b145383",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "25",
+      "budget_minor_before": "94925",
+      "budget_minor_after": "94900",
+      "error": null
+    }
+  ]
+}

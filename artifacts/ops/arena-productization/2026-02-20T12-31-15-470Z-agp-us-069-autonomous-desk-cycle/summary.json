@@ -1,0 +1,693 @@
+{
+  "ok": true,
+  "story": "AGP-US-069",
+  "generated_at": "2026-02-20T12:31:15.470Z",
+  "dry_run": false,
+  "endpoints": {
+    "discover": "https://clawbounties.com/v1/arena/desk/discover-loop",
+    "claim": "https://clawbounties.com/v1/arena/desk/claim-loop",
+    "submit": "https://clawbounties.com/v1/arena/desk/submit-loop",
+    "decision": "https://clawbounties.com/v1/arena/desk/decision-loop",
+    "mission": "https://clawbounties.com/v1/arena/mission?window_hours=24",
+    "kpiGate": "https://clawbounties.com/v1/arena/desk/kpi-gate",
+    "selfTune": "https://clawbounties.com/v1/arena/desk/self-tune-rollout"
+  },
+  "requests": {
+    "discover": {
+      "target_open_bounties": 4,
+      "seed_limit": 25,
+      "seed_reward_minor": "25",
+      "objective_profile_name": "balanced",
+      "discover_id": "discover_2026-02-20T12-31-12-584Z",
+      "dry_run": false
+    },
+    "claim": {
+      "limit": 80,
+      "target_claims": 1,
+      "budget_minor": "10000000",
+      "objective_profile_name": "balanced",
+      "dry_run": false,
+      "loop_id": "claim_2026-02-20T12-31-12-584Z"
+    },
+    "submit": {
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "target_submissions": 1,
+      "limit": 120,
+      "dry_run": false,
+      "bounty_ids": [
+        "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0"
+      ]
+    },
+    "decision": {
+      "decision_mode": "approve_valid",
+      "target_decisions": 1,
+      "limit": 120,
+      "require_claimed": true,
+      "loop_id": "decision_2026-02-20T12-31-12-584Z",
+      "dry_run": false,
+      "bounty_ids": [
+        "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0"
+      ]
+    }
+  },
+  "results": {
+    "discover": {
+      "schema_version": "arena_desk_discovery_loop.v1",
+      "discover_id": "discover_2026-02-20T12-31-12-584Z",
+      "computed_at": "2026-02-20T12:31:12.746Z",
+      "dry_run": false,
+      "objective_profile_name": "balanced",
+      "limits": {
+        "target_open_bounties": 4,
+        "seed_limit": 25,
+        "seed_reward_minor": "25",
+        "seed_when_below_target": true,
+        "seed_tags": [
+          "arena",
+          "autonomous",
+          "seed"
+        ]
+      },
+      "totals": {
+        "open_before": 4,
+        "open_after": 4,
+        "needed_seeds": 0,
+        "planned_seeds": 0,
+        "seeded_created": 0,
+        "seeded_failed": 0,
+        "target_met": true
+      },
+      "requester_did_candidates": [
+        "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+        "did:key:z6Mkseedrequester0000000000000000000000000"
+      ],
+      "open_bounty_sample": [
+        {
+          "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+          "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+          "reward": {
+            "amount_minor": "50",
+            "currency": "USD"
+          },
+          "status": "open",
+          "closure_type": "requester"
+        },
+        {
+          "bounty_id": "bty_099bb056-9f9c-498a-9610-5d0028115371",
+          "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+          "reward": {
+            "amount_minor": "200",
+            "currency": "USD"
+          },
+          "status": "open",
+          "closure_type": "requester"
+        },
+        {
+          "bounty_id": "bty_a838eed7-ee8a-460e-8cc3-4aaf8977f9bf",
+          "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+          "reward": {
+            "amount_minor": "200",
+            "currency": "USD"
+          },
+          "status": "open",
+          "closure_type": "requester"
+        },
+        {
+          "bounty_id": "bty_aea682e6-5bb0-492d-b38e-53700215b53c",
+          "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+          "reward": {
+            "amount_minor": "200",
+            "currency": "USD"
+          },
+          "status": "open",
+          "closure_type": "requester"
+        }
+      ],
+      "seed_actions": []
+    },
+    "claim": {
+      "schema_version": "arena_auto_claim_loop.v1",
+      "loop_id": "claim_2026-02-20T12-31-12-584Z",
+      "generated_at": "2026-02-20T12:31:13.225Z",
+      "dry_run": false,
+      "objective_profile_name": "balanced",
+      "limits": {
+        "limit": 80,
+        "target_claims": 1,
+        "scan_limit": 300,
+        "budget_minor": "10000000",
+        "max_fleet_cost_tier": null,
+        "max_fleet_risk_tier": null,
+        "include_code_bounties": false,
+        "allow_route_fallback": true
+      },
+      "totals": {
+        "scanned_open_bounties": 4,
+        "decisions": 1,
+        "claimed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "replay": 0,
+        "duplicate_lock_incidents": 0,
+        "budget_minor_remaining": "9999950",
+        "target_met": true
+      },
+      "decisions": [
+        {
+          "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+          "status": "claimed",
+          "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+          "contender_id": null,
+          "selected_worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+          "route_reason_codes": [
+            "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+            "ARENA_FLEET_MATCHED",
+            "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+          ],
+          "source": "fleet_fallback",
+          "reward_amount_minor": "50",
+          "budget_minor_before": "10000000",
+          "budget_minor_after": "9999950",
+          "error": null
+        }
+      ]
+    },
+    "submit": {
+      "schema_version": "arena_execution_submission_autopilot.v1",
+      "computed_at": "2026-02-20T12:31:13.888Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "dry_run": false,
+      "limits": {
+        "target_submissions": 1,
+        "limit": 120,
+        "candidate_bounty_ids": [
+          "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0"
+        ]
+      },
+      "totals": {
+        "decisions": 1,
+        "successful_pending_review": 1,
+        "target_met": true
+      },
+      "decisions": [
+        {
+          "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+          "http_status": 201,
+          "submission_id": null,
+          "submission_status": "pending_review",
+          "proof_verify_status": "valid",
+          "idempotency_key": "arena-autosubmit:bty_36aadedb-16b3-46f7-9edc-3870e00e14f0:30bc605a440d4b98b590b5b9c655dea0",
+          "run_id": "arena_exec_bty_36aadedb-16b3-46f7-9edc-3870e00e14f0_ad99ba0190ea44289a699038d6972975",
+          "response": {
+            "submission_id": "sub_aad5749a-8304-42b2-ad50-2856eed34a09",
+            "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+            "status": "pending_review",
+            "verification": {
+              "proof_bundle": {
+                "status": "valid",
+                "reason": "Proof bundle verified successfully",
+                "verified_at": "2026-02-20T12:31:13.490Z",
+                "tier": "self"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "decision": {
+      "schema_version": "arena_desk_decision_loop.v1",
+      "loop_id": "decision_2026-02-20T12-31-12-584Z",
+      "computed_at": "2026-02-20T12:31:14.269Z",
+      "dry_run": false,
+      "decision_mode": "approve_valid",
+      "limits": {
+        "limit": 120,
+        "target_decisions": 1,
+        "require_claimed": true,
+        "bounty_ids": [
+          "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0"
+        ]
+      },
+      "totals": {
+        "candidates": 1,
+        "decisions": 1,
+        "approved": 0,
+        "rejected": 0,
+        "failed": 1,
+        "target_met": false
+      },
+      "decisions": [
+        {
+          "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+          "submission_id": "sub_aad5749a-8304-42b2-ad50-2856eed34a09",
+          "status": "failed",
+          "action": "approve",
+          "idempotency_key": "arena-desk-approve:sub_aad5749a-8304-42b2-ad50-2856eed34a09",
+          "http_status": 502,
+          "response": {
+            "error": "FEE_APPLY_FAILED",
+            "message": "CUTS_APPLY_FAILED:422:{\"error\":\"POLICY_HASH_MISMATCH\",\"message\":\"snapshot.policy_hash_b64u does not match stored policy hash\",\"details\":{\"expected_policy_hash_b64u\":\"LGZKObdVxQNpVs3YB4-veIW2daqwDu_ob3460w_zThQ\",\"received_policy_hash_b64u\":\"oxpBXXjikkJi4_jYiFy3lwAXreCtgKEkR7k1SITFBhg\"}}"
+          }
+        }
+      ]
+    },
+    "mission": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T12:31:14.469Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T12:31:14.307Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 8,
+        "skipped": 0,
+        "failed": 0,
+        "total": 8
+      },
+      "submissions_window": {
+        "total": 8,
+        "pending_review_valid": 6,
+        "pending_review_invalid": 0,
+        "approved": 2,
+        "rejected": 0,
+        "proof_valid": 6,
+        "proof_invalid": 0
+      },
+      "backlog": {
+        "accepted_total": 0,
+        "accepted_without_valid_submission": 0,
+        "claim_submission_gap": 2
+      },
+      "kpi": {
+        "claim_success_rate": 1,
+        "submission_success_rate": 0.75,
+        "proof_valid_rate": 0.75,
+        "gate_status": "FAIL",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW",
+          "ARENA_MISSION_KPI_PROOF_VALIDITY_LOW"
+        ]
+      }
+    },
+    "kpi_gate": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T12:31:14.671Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T12:31:14.508Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 8,
+        "skipped": 0,
+        "failed": 0,
+        "total": 8
+      },
+      "submissions_window": {
+        "total": 8,
+        "pending_review_valid": 6,
+        "pending_review_invalid": 0,
+        "approved": 2,
+        "rejected": 0,
+        "proof_valid": 6,
+        "proof_invalid": 0
+      },
+      "backlog": {
+        "accepted_total": 0,
+        "accepted_without_valid_submission": 0,
+        "claim_submission_gap": 2
+      },
+      "kpi": {
+        "claim_success_rate": 1,
+        "submission_success_rate": 0.75,
+        "proof_valid_rate": 0.75,
+        "gate_status": "FAIL",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW",
+          "ARENA_MISSION_KPI_PROOF_VALIDITY_LOW"
+        ]
+      },
+      "gate": {
+        "enforce": false,
+        "passed": false,
+        "blocked": false
+      }
+    },
+    "self_tune": {
+      "schema_version": "arena_self_tune_rollout.v1",
+      "computed_at": "2026-02-20T12:31:15.370Z",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "environment": "production",
+      "rollout_status": "PROMOTED",
+      "promotion_status": "PROMOTED",
+      "reason_codes": [
+        "ARENA_SELF_TUNE_EVALUATED",
+        "ARENA_SELF_TUNE_GATE_WARN_ONLY",
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE",
+        "ARENA_SELF_TUNE_PROMOTED"
+      ],
+      "gate": {
+        "enforce": false,
+        "passed": false,
+        "blocked": false
+      },
+      "mission_summary": {
+        "schema_version": "arena_mission_summary.v1",
+        "computed_at": "2026-02-20T12:31:14.863Z",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "window_hours": 24,
+        "window_started_at": "2026-02-19T12:31:14.705Z",
+        "thresholds": {
+          "min_online_workers": 3,
+          "min_claim_success_rate": 0.8,
+          "min_submission_success_rate": 0.8,
+          "min_proof_valid_rate": 0.95,
+          "max_claim_submission_gap": 5,
+          "max_accepted_backlog": 5
+        },
+        "fleet": {
+          "total": 6,
+          "online": 6,
+          "offline": 0,
+          "paused": 0
+        },
+        "claims_window": {
+          "processing": 0,
+          "claimed": 8,
+          "skipped": 0,
+          "failed": 0,
+          "total": 8
+        },
+        "submissions_window": {
+          "total": 8,
+          "pending_review_valid": 6,
+          "pending_review_invalid": 0,
+          "approved": 2,
+          "rejected": 0,
+          "proof_valid": 6,
+          "proof_invalid": 0
+        },
+        "backlog": {
+          "accepted_total": 0,
+          "accepted_without_valid_submission": 0,
+          "claim_submission_gap": 2
+        },
+        "kpi": {
+          "claim_success_rate": 1,
+          "submission_success_rate": 0.75,
+          "proof_valid_rate": 0.75,
+          "gate_status": "FAIL",
+          "reason_codes": [
+            "ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW",
+            "ARENA_MISSION_KPI_PROOF_VALIDITY_LOW"
+          ]
+        }
+      },
+      "optimizer_request": {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "environment": "production",
+        "objective_profile_name": "balanced",
+        "max_runs": 80,
+        "min_samples": 6,
+        "min_confidence": 0.62
+      },
+      "optimizer_response": {
+        "schema_version": "arena_policy_optimizer.v1",
+        "computed_at": "2026-02-20T12:31:15.270Z",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "environment": "production",
+        "objective_profile_name": "balanced",
+        "experiment_id": null,
+        "experiment_arm": null,
+        "gates": {
+          "min_samples": 6,
+          "min_confidence": 0.62,
+          "sample_count": 6,
+          "confidence_score": 0.7364
+        },
+        "current_active_policy": {
+          "calibration_gap": 0.2196,
+          "computed_at": "2026-02-20T12:31:15.270Z",
+          "confidence_score": 0.7364,
+          "contender_id": "contender_codex_pi",
+          "empirical_accept_rate": 0.6667,
+          "experiment_arm": null,
+          "experiment_id": null,
+          "objective_profile_name": "balanced",
+          "override_rate": 0.3333,
+          "promoted_at": "2026-02-20T12:31:15.270Z",
+          "reason_codes": [
+            "ARENA_ROUTING_SELECTED",
+            "ARENA_ROUTING_OBJECTIVE_MATCHED",
+            "ARENA_ROUTING_STANDARD_MODE",
+            "ARENA_FLEET_MATCHED",
+            "ARENA_FLEET_CONTENDER_BOUND",
+            "ARENA_ROUTING_FLEET_MATCHED"
+          ],
+          "rework_rate": 0,
+          "route_policy_id": "arp_shadow_NVRw0Od9EI20OzGBjV1mkEI7",
+          "routing_score": 86.813975,
+          "sample_count": 6,
+          "schema_version": "arena_route_policy_active.v1",
+          "win_rate": 0.8333
+        },
+        "candidate_shadow_policy": {
+          "calibration_gap": 0.2196,
+          "computed_at": "2026-02-20T12:31:15.270Z",
+          "confidence_score": 0.7364,
+          "contender_id": "contender_codex_pi",
+          "empirical_accept_rate": 0.6667,
+          "experiment_arm": null,
+          "experiment_id": null,
+          "objective_profile_name": "balanced",
+          "override_rate": 0.3333,
+          "reason_codes": [
+            "ARENA_ROUTING_SELECTED",
+            "ARENA_ROUTING_OBJECTIVE_MATCHED",
+            "ARENA_ROUTING_STANDARD_MODE",
+            "ARENA_FLEET_MATCHED",
+            "ARENA_FLEET_CONTENDER_BOUND",
+            "ARENA_ROUTING_FLEET_MATCHED"
+          ],
+          "rework_rate": 0,
+          "route_policy_id": "arp_shadow_NVRw0Od9EI20OzGBjV1mkEI7",
+          "routing_score": 86.813975,
+          "sample_count": 6,
+          "schema_version": "arena_route_policy_shadow.v1",
+          "win_rate": 0.8333
+        },
+        "promotion": {
+          "active_contender_id": "contender_codex_pi",
+          "computed_at": "2026-02-20T12:31:15.270Z",
+          "confidence_score": 0.7364,
+          "event_id": "arpe_ebc47a80-da5c-40da-8184-68554e4233b7",
+          "min_confidence": 0.62,
+          "min_samples": 6,
+          "previous_contender_id": "contender_codex_pi",
+          "promoted": false,
+          "reason_codes": [
+            "ARENA_POLICY_SHADOW_REFRESHED",
+            "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+          ],
+          "sample_count": 6,
+          "schema_version": "arena_policy_promotion_event.v1",
+          "shadow_contender_id": "contender_codex_pi",
+          "status": "PROMOTED"
+        },
+        "reason_codes": [
+          "ARENA_POLICY_SHADOW_REFRESHED",
+          "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+        ],
+        "promotion_status": "PROMOTED",
+        "route_snapshot": {
+          "analyzed_runs": 6,
+          "winner_stability_ratio": 0.8333,
+          "recommended": {
+            "contender_id": "contender_codex_pi",
+            "label": "Codex + Pi + cloudflare skill",
+            "model": "gpt-5.2-codex",
+            "harness": "pi",
+            "routing_score": 86.813975,
+            "reason_codes": [
+              "ARENA_ROUTING_SELECTED",
+              "ARENA_ROUTING_OBJECTIVE_MATCHED",
+              "ARENA_ROUTING_STANDARD_MODE",
+              "ARENA_FLEET_MATCHED",
+              "ARENA_FLEET_CONTENDER_BOUND",
+              "ARENA_ROUTING_FLEET_MATCHED"
+            ],
+            "rationale": "Selected contender_codex_pi with routing_score=86.813975 from 6 matched runs (win_rate=0.8333, hard_gate_pass_rate=1, override_rate=0.3333, top_override_reason=ARENA_OVERRIDE_SCOPE_MISMATCH, calibration_gap=0.2196).",
+            "evidence": {
+              "appearances": 6,
+              "wins": 5,
+              "win_rate": 0.8333,
+              "hard_gate_pass_rate": 1,
+              "avg_score": 92.1682,
+              "avg_risk": 15.0533,
+              "avg_quality": 98.94,
+              "latest_hard_gate_pass": true,
+              "outcome_samples": 6,
+              "empirical_accept_rate": 0.6667,
+              "override_rate": 0.3333,
+              "rework_rate": 0,
+              "avg_predicted_confidence": 0.8863,
+              "calibration_gap": 0.2196,
+              "override_reason_penalty": 0.2667,
+              "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+              "override_reason_breakdown": [
+                {
+                  "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+                  "count": 2,
+                  "share": 0.3333,
+                  "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+                  "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+                }
+              ],
+              "coaching_recommendations": [
+                "High override rate; add human checkpoint before auto-route.",
+                "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+                "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+                "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+              ],
+              "last_seen_at": "2026-02-19T22:50:47.268Z",
+              "sample_run_ids": [
+                "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+                "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01",
+                "arn_3d5d1b97-3d5e-4854-8313-bfbf5fb5f9a5",
+                "arn_c1955c1a-3d28-4d82-8d63-7736759bacf4",
+                "arn_3f8c6e0a-5aba-41dc-a06b-18536f28d0c8",
+                "arn_d48ef374-1a28-437a-9a93-fc6fbe528817"
+              ]
+            }
+          },
+          "backups": [
+            {
+              "contender_id": "contender_claude_codex_cli",
+              "label": "Claude Opus + Codex CLI blend",
+              "model": "claude-opus-4.5",
+              "harness": "codex-cli",
+              "appearances": 3,
+              "wins": 1,
+              "win_rate": 0.3333,
+              "hard_gate_pass_rate": 1,
+              "avg_score": 88.2497,
+              "avg_risk": 14.4467,
+              "avg_quality": 79.7767,
+              "latest_hard_gate_pass": true,
+              "routing_score": 43.41335,
+              "outcome_samples": 1,
+              "empirical_accept_rate": 0,
+              "override_rate": 1,
+              "rework_rate": 0,
+              "avg_predicted_confidence": 0.9797,
+              "calibration_gap": 0.9797,
+              "override_reason_penalty": 0.5,
+              "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+              "override_reason_breakdown": [
+                {
+                  "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+                  "count": 1,
+                  "share": 1,
+                  "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+                  "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+                }
+              ],
+              "coaching_recommendations": [
+                "High override rate; add human checkpoint before auto-route.",
+                "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+                "Top override reason (ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT): Add human-context dependency markers and required reviewer checkpoints.",
+                "Prompt rewrite hint: Require ambiguity classification and human-clarification request when context is missing."
+              ],
+              "last_seen_at": "2026-02-19T22:50:47.268Z",
+              "sample_run_ids": [
+                "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+                "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01",
+                "arn_d48ef374-1a28-437a-9a93-fc6fbe528817"
+              ]
+            },
+            {
+              "contender_id": "contender_gemini_swarm",
+              "label": "Gemini Deep Think + swarm orchestrator",
+              "model": "gemini-3.1-pro-preview",
+              "harness": "swarm-orchestrator",
+              "appearances": 6,
+              "wins": 0,
+              "win_rate": 0,
+              "hard_gate_pass_rate": 0.3333,
+              "avg_score": 74.0511,
+              "avg_risk": 42.9267,
+              "avg_quality": 62.5,
+              "latest_hard_gate_pass": true,
+              "routing_score": 39.397871,
+              "outcome_samples": 1,
+              "empirical_accept_rate": 0,
+              "override_rate": 0,
+              "rework_rate": 0,
+              "avg_predicted_confidence": 0.972,
+              "calibration_gap": 0.972,
+              "override_reason_penalty": 0,
+              "top_override_reason_code": null,
+              "override_reason_breakdown": [],
+              "coaching_recommendations": [
+                "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+                "Risk profile elevated; enforce stricter safety gates and staged rollout.",
+                "Mandatory checks not consistently passing; fix contract compliance first."
+              ],
+              "last_seen_at": "2026-02-19T22:50:47.268Z",
+              "sample_run_ids": [
+                "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+                "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01",
+                "arn_3d5d1b97-3d5e-4854-8313-bfbf5fb5f9a5",
+                "arn_c1955c1a-3d28-4d82-8d63-7736759bacf4",
+                "arn_3f8c6e0a-5aba-41dc-a06b-18536f28d0c8",
+                "arn_d48ef374-1a28-437a-9a93-fc6fbe528817"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "targets": {
+    "target_open_bounties": 4,
+    "target_claims": 1,
+    "target_submissions": 1,
+    "target_decisions": 1
+  },
+  "achieved": {
+    "open_after": 4,
+    "claimed": 1,
+    "submitted": 1,
+    "decisions_applied": 0,
+    "gate_status": "FAIL",
+    "rollout_status": "PROMOTED"
+  }
+}

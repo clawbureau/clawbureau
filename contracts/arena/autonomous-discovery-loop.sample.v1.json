@@ -1,0 +1,38 @@
+{
+  "schema_version": "arena_desk_discovery_loop.sample.v1",
+  "request": {
+    "target_open_bounties": 25,
+    "seed_limit": 25,
+    "seed_reward_minor": "25",
+    "seed_requester_dids": [
+      "did:key:z6Mkseedrequester0000000000000000000000000"
+    ],
+    "seed_tags": [
+      "arena",
+      "autonomous",
+      "seed"
+    ],
+    "seed_title_prefix": "Arena autonomous task",
+    "seed_description": "Autonomous arena-seeded bounty for desk throughput operations.",
+    "objective_profile_name": "arena-autonomous",
+    "discover_id": "discover_example_064",
+    "dry_run": false
+  },
+  "response_shape": {
+    "schema_version": "arena_desk_discovery_loop.v1",
+    "discover_id": "discover_example_064",
+    "dry_run": false,
+    "limits": {
+      "target_open_bounties": 25,
+      "seed_limit": 25,
+      "seed_reward_minor": "25"
+    },
+    "totals": {
+      "open_before": 0,
+      "open_after": 25,
+      "seeded_created": 25,
+      "seeded_failed": 0,
+      "target_met": true
+    }
+  }
+}

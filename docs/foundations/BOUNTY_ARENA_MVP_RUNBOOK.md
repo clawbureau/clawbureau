@@ -1,8 +1,8 @@
 > **Type:** Runbook
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
-> **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..058)
+> **Last reviewed:** 2026-02-20
+> **Scope:** Bounty Arena MVP (AGP-US-031..069)
 
 # Bounty Arena MVP Runbook
 
@@ -62,12 +62,18 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/register-harness-fleet-workers.mjs`
 - `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
+- `scripts/arena/run-autonomous-discovery-loop.mjs`
+- `scripts/arena/run-autonomous-decision-loop.mjs`
+- `scripts/arena/run-autonomous-desk-cycle.mjs`
 
 ### Real contender dispatch config
 - `contracts/arena/real-contender-dispatch.sample.v1.json`
 - `contracts/arena/policy-optimizer.sample.v1.json`
 - `contracts/arena/contract-copilot.sample.v1.json`
 - `contracts/arena/harness-fleet-worker.sample.v1.json`
+- `contracts/arena/autonomous-discovery-loop.sample.v1.json`
+- `contracts/arena/autonomous-decision-loop.sample.v1.json`
+- `contracts/arena/autonomous-desk-cycle.sample.v1.json`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -115,6 +121,22 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - lists discoverable fleet workers with capability/risk/cost filters
 - `POST /v1/arena/fleet/match` (admin)
   - computes capability match candidates used by manager route/coach/autopilot payloads
+
+### Autonomous desk control API
+- `POST /v1/arena/desk/discover-loop` (admin)
+  - computes live open-bounty desk posture and seeds additional requester-closure bounties when below target.
+- `POST /v1/arena/desk/claim-loop` (admin)
+  - claims open bounties with deterministic lock ledger + budget/cost/risk guardrails.
+- `POST /v1/arena/desk/submit-loop` (admin)
+  - executes/submits accepted bounties through conformance signer lane.
+- `POST /v1/arena/desk/decision-loop` (admin)
+  - applies deterministic approve/reject transitions for pending-review submissions using internal requester auth override.
+- `GET /v1/arena/mission` (admin)
+  - mission KPI posture snapshot.
+- `POST /v1/arena/desk/kpi-gate` (admin)
+  - enforceable KPI gate with fail-closed `409` on `enforce=true` + failure.
+- `POST /v1/arena/desk/self-tune-rollout` (admin)
+  - KPI-gated policy optimizer promotion path.
 
 ### Policy learning API
 - `GET /v1/arena/policy-learning` (admin)
@@ -312,6 +334,28 @@ node scripts/arena/run-self-tuning-rollout.mjs \
   --min-samples 6 \
   --min-confidence 0.4 \
   --require-promotion
+
+# AGP-US-064: autonomous discovery loop (seed open desk supply fail-closed)
+node scripts/arena/run-autonomous-discovery-loop.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --target-open-bounties 25 \
+  --seed-limit 25 \
+  --seed-reward-minor 25
+
+# AGP-US-067/068: autonomous review+accept decision loop (admin fail-closed path)
+node scripts/arena/run-autonomous-decision-loop.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --decision-mode approve_valid \
+  --target-decisions 15 \
+  --require-claimed
+
+# AGP-US-069: one-shot autonomous desk cycle (discover -> claim -> submit -> review/accept -> tune)
+node scripts/arena/run-autonomous-desk-cycle.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --target-open-bounties 25 \
+  --target-claims 15 \
+  --target-submissions 15 \
+  --target-decisions 15
 
 # AGP-US-055: compute shadow policy and promote active policy (fail-closed)
 node scripts/arena/run-policy-optimizer-shadow.mjs \

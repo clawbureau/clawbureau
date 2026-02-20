@@ -1,0 +1,122 @@
+{
+  "ok": true,
+  "story": "AGP-US-067-068",
+  "generated_at": "2026-02-20T12:30:57.102Z",
+  "endpoint": "https://clawbounties.com/v1/arena/desk/decision-loop",
+  "dry_run": false,
+  "request": {
+    "decision_mode": "approve_valid",
+    "limit": 120,
+    "target_decisions": 4,
+    "bounty_ids": [
+      "bty_bb485106-7652-46a8-a539-1d420b145383",
+      "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+      "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+      "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3"
+    ],
+    "require_claimed": true,
+    "reject_reason": "Arena desk auto-rejection",
+    "loop_id": "agp_v11_prod_decision_001",
+    "dry_run": false
+  },
+  "loop_result": {
+    "schema_version": "arena_desk_decision_loop.v1",
+    "loop_id": "agp_v11_prod_decision_001",
+    "computed_at": "2026-02-20T12:30:57.068Z",
+    "dry_run": false,
+    "decision_mode": "approve_valid",
+    "limits": {
+      "limit": 120,
+      "target_decisions": 4,
+      "require_claimed": true,
+      "bounty_ids": [
+        "bty_bb485106-7652-46a8-a539-1d420b145383",
+        "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+        "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+        "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3"
+      ]
+    },
+    "totals": {
+      "candidates": 4,
+      "decisions": 4,
+      "approved": 2,
+      "rejected": 0,
+      "failed": 2,
+      "target_met": false
+    },
+    "decisions": [
+      {
+        "bounty_id": "bty_bb485106-7652-46a8-a539-1d420b145383",
+        "submission_id": "sub_b53729a5-b5d4-4638-b195-d593c9971ca8",
+        "status": "applied",
+        "action": "approve",
+        "idempotency_key": "arena-desk-approve:sub_b53729a5-b5d4-4638-b195-d593c9971ca8",
+        "http_status": 200,
+        "response": {
+          "bounty_id": "bty_bb485106-7652-46a8-a539-1d420b145383",
+          "submission_id": "sub_b53729a5-b5d4-4638-b195-d593c9971ca8",
+          "status": "approved",
+          "escrow": {
+            "escrow_id": "esc_a2b1cb1a-8e9f-47df-8212-46a8e4f437e7",
+            "status": "released",
+            "ledger_refs": {
+              "worker_transfer": "evt_mluvc1bp_ooz42fdo",
+              "fee_transfers": [
+                "evt_mluvc1ko_rg4bdhtx"
+              ]
+            }
+          },
+          "decided_at": "2026-02-20T12:30:55.083Z"
+        }
+      },
+      {
+        "bounty_id": "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+        "submission_id": "sub_d71bc3fb-f033-49fa-a718-3733e9f5b118",
+        "status": "failed",
+        "action": "approve",
+        "idempotency_key": "arena-desk-approve:sub_d71bc3fb-f033-49fa-a718-3733e9f5b118",
+        "http_status": 502,
+        "response": {
+          "error": "FEE_APPLY_FAILED",
+          "message": "CUTS_APPLY_FAILED:422:{\"error\":\"POLICY_HASH_MISMATCH\",\"message\":\"snapshot.policy_hash_b64u does not match stored policy hash\",\"details\":{\"expected_policy_hash_b64u\":\"LGZKObdVxQNpVs3YB4-veIW2daqwDu_ob3460w_zThQ\",\"received_policy_hash_b64u\":\"sCbesMQ-uA0hBITLYYKJLsv6KNrchK2yUWhmFXo5XqQ\"}}"
+        }
+      },
+      {
+        "bounty_id": "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+        "submission_id": "sub_f60663c2-2bdc-49ab-8b28-2b9be84add71",
+        "status": "applied",
+        "action": "approve",
+        "idempotency_key": "arena-desk-approve:sub_f60663c2-2bdc-49ab-8b28-2b9be84add71",
+        "http_status": 200,
+        "response": {
+          "bounty_id": "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+          "submission_id": "sub_f60663c2-2bdc-49ab-8b28-2b9be84add71",
+          "status": "approved",
+          "escrow": {
+            "escrow_id": "esc_f7b4d949-b8e9-4385-beb4-58d05113439d",
+            "status": "released",
+            "ledger_refs": {
+              "worker_transfer": "evt_mluvc2v2_1pjzx4qa",
+              "fee_transfers": [
+                "evt_mluvc33v_oa62qk40"
+              ]
+            }
+          },
+          "decided_at": "2026-02-20T12:30:56.664Z"
+        }
+      },
+      {
+        "bounty_id": "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3",
+        "submission_id": "sub_bc25b7f0-74b0-4232-913c-7eb5ae1d2601",
+        "status": "failed",
+        "action": "approve",
+        "idempotency_key": "arena-desk-approve:sub_bc25b7f0-74b0-4232-913c-7eb5ae1d2601",
+        "http_status": 502,
+        "response": {
+          "error": "FEE_APPLY_FAILED",
+          "message": "CUTS_APPLY_FAILED:422:{\"error\":\"POLICY_HASH_MISMATCH\",\"message\":\"snapshot.policy_hash_b64u does not match stored policy hash\",\"details\":{\"expected_policy_hash_b64u\":\"LGZKObdVxQNpVs3YB4-veIW2daqwDu_ob3460w_zThQ\",\"received_policy_hash_b64u\":\"oxpBXXjikkJi4_jYiFy3lwAXreCtgKEkR7k1SITFBhg\"}}"
+        }
+      }
+    ]
+  }
+}

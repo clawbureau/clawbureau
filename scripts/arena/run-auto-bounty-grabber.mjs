@@ -13,6 +13,8 @@ function parseArgs(argv) {
     objectiveProfileName: null,
     maxFleetCostTier: null,
     maxFleetRiskTier: null,
+    bountyIds: [],
+    requestedWorkerDid: null,
     allowRouteFallback: true,
     includeCodeBounties: false,
     dryRun: false,
@@ -68,6 +70,20 @@ function parseArgs(argv) {
       i += 1;
       continue;
     }
+    if (arg === '--bounty-ids') {
+      const raw = argv[i + 1] ?? '';
+      args.bountyIds = raw
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+      i += 1;
+      continue;
+    }
+    if (arg === '--requested-worker-did') {
+      args.requestedWorkerDid = argv[i + 1] ?? null;
+      i += 1;
+      continue;
+    }
     if (arg === '--allow-route-fallback') {
       args.allowRouteFallback = true;
       continue;
@@ -101,6 +117,14 @@ function parseArgs(argv) {
 
   if (!Number.isFinite(args.targetClaims) || args.targetClaims <= 0) {
     throw new Error('--target-claims must be a positive integer');
+  }
+
+  if (args.bountyIds.some((entry) => !entry.startsWith('bty_'))) {
+    throw new Error('--bounty-ids must contain bounty IDs (bty_*)');
+  }
+
+  if (args.requestedWorkerDid !== null && !args.requestedWorkerDid.startsWith('did:')) {
+    throw new Error('--requested-worker-did must be a DID string');
   }
 
   return args;
@@ -189,6 +213,8 @@ async function main() {
     objective_profile_name: args.objectiveProfileName,
     max_fleet_cost_tier: args.maxFleetCostTier,
     max_fleet_risk_tier: args.maxFleetRiskTier,
+    bounty_ids: args.bountyIds,
+    requested_worker_did: args.requestedWorkerDid,
     allow_route_fallback: args.allowRouteFallback,
     include_code_bounties: args.includeCodeBounties,
     dry_run: args.dryRun,

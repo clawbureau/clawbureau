@@ -1,0 +1,24 @@
+{
+  "schema_version": "arena_autonomous_desk_cycle.sample.v1",
+  "request": {
+    "target_open_bounties": 25,
+    "target_claims": 15,
+    "target_submissions": 15,
+    "target_decisions": 15,
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "decision_mode": "approve_valid",
+    "window_hours": 72,
+    "gate_enforce": false
+  },
+  "response_shape": {
+    "story": "AGP-US-069",
+    "achieved": {
+      "open_after": 25,
+      "claimed": 15,
+      "submitted": 15,
+      "decisions_applied": 15,
+      "gate_status": "PASS",
+      "rollout_status": "PROMOTED"
+    }
+  }
+}
