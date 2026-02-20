@@ -1,0 +1,310 @@
+{
+  "schema_version": "arena_manager_autopilot.v1",
+  "computed_at": "2026-02-20T01:27:49.318Z",
+  "mode": "autopilot",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile_name": "balanced",
+  "experiment_id": null,
+  "experiment_arm": null,
+  "analyzed_runs": 6,
+  "winner_stability_ratio": 0.8333,
+  "route": {
+    "recommended": {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "routing_score": 86.813975,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_MATCHED"
+      ],
+      "rationale": "Selected contender_codex_pi with routing_score=86.813975 from 6 matched runs (win_rate=0.8333, hard_gate_pass_rate=1, override_rate=0.3333, top_override_reason=ARENA_OVERRIDE_SCOPE_MISMATCH, calibration_gap=0.2196).",
+      "evidence": {
+        "appearances": 6,
+        "wins": 5,
+        "win_rate": 0.8333,
+        "hard_gate_pass_rate": 1,
+        "avg_score": 92.1682,
+        "avg_risk": 15.0533,
+        "avg_quality": 98.94,
+        "latest_hard_gate_pass": true,
+        "outcome_samples": 6,
+        "empirical_accept_rate": 0.6667,
+        "override_rate": 0.3333,
+        "rework_rate": 0,
+        "avg_predicted_confidence": 0.8863,
+        "calibration_gap": 0.2196,
+        "override_reason_penalty": 0.2667,
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 2,
+            "share": 0.3333,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          }
+        ],
+        "coaching_recommendations": [
+          "High override rate; add human checkpoint before auto-route.",
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+        ],
+        "last_seen_at": "2026-02-19T22:50:47.268Z",
+        "sample_run_ids": [
+          "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+          "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01",
+          "arn_3d5d1b97-3d5e-4854-8313-bfbf5fb5f9a5",
+          "arn_c1955c1a-3d28-4d82-8d63-7736759bacf4",
+          "arn_3f8c6e0a-5aba-41dc-a06b-18536f28d0c8",
+          "arn_d48ef374-1a28-437a-9a93-fc6fbe528817"
+        ]
+      }
+    },
+    "backups": [
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "label": "Claude Opus + Codex CLI blend",
+        "model": "claude-opus-4.5",
+        "harness": "codex-cli",
+        "appearances": 3,
+        "wins": 1,
+        "win_rate": 0.3333,
+        "hard_gate_pass_rate": 1,
+        "avg_score": 88.2497,
+        "avg_risk": 14.4467,
+        "avg_quality": 79.7767,
+        "latest_hard_gate_pass": true,
+        "routing_score": 43.41335,
+        "outcome_samples": 1,
+        "empirical_accept_rate": 0,
+        "override_rate": 1,
+        "rework_rate": 0,
+        "avg_predicted_confidence": 0.9797,
+        "calibration_gap": 0.9797,
+        "override_reason_penalty": 0.5,
+        "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+            "count": 1,
+            "share": 1,
+            "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+            "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+          }
+        ],
+        "coaching_recommendations": [
+          "High override rate; add human checkpoint before auto-route.",
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Top override reason (ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT): Add human-context dependency markers and required reviewer checkpoints.",
+          "Prompt rewrite hint: Require ambiguity classification and human-clarification request when context is missing."
+        ],
+        "last_seen_at": "2026-02-19T22:50:47.268Z",
+        "sample_run_ids": [
+          "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+          "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01",
+          "arn_d48ef374-1a28-437a-9a93-fc6fbe528817"
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "label": "Gemini Deep Think + swarm orchestrator",
+        "model": "gemini-3.1-pro-preview",
+        "harness": "swarm-orchestrator",
+        "appearances": 6,
+        "wins": 0,
+        "win_rate": 0,
+        "hard_gate_pass_rate": 0.3333,
+        "avg_score": 74.0511,
+        "avg_risk": 42.9267,
+        "avg_quality": 62.5,
+        "latest_hard_gate_pass": true,
+        "routing_score": 39.397871,
+        "outcome_samples": 1,
+        "empirical_accept_rate": 0,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "avg_predicted_confidence": 0.972,
+        "calibration_gap": 0.972,
+        "override_reason_penalty": 0,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Risk profile elevated; enforce stricter safety gates and staged rollout.",
+          "Mandatory checks not consistently passing; fix contract compliance first."
+        ],
+        "last_seen_at": "2026-02-19T22:50:47.268Z",
+        "sample_run_ids": [
+          "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+          "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01",
+          "arn_3d5d1b97-3d5e-4854-8313-bfbf5fb5f9a5",
+          "arn_c1955c1a-3d28-4d82-8d63-7736759bacf4",
+          "arn_3f8c6e0a-5aba-41dc-a06b-18536f28d0c8",
+          "arn_d48ef374-1a28-437a-9a93-fc6fbe528817"
+        ]
+      }
+    ],
+    "reason_codes": []
+  },
+  "fleet_match": {
+    "schema_version": "arena_harness_fleet_match.v1",
+    "computed_at": "2026-02-20T01:27:49.318Z",
+    "status": "matched",
+    "reason_codes": [
+      "ARENA_FLEET_MATCHED",
+      "ARENA_FLEET_CONTENDER_BOUND"
+    ],
+    "contender_id": "contender_codex_pi",
+    "objective_profile_name": "balanced",
+    "harness": "pi",
+    "required_skills": [
+      "typescript"
+    ],
+    "required_tools": [
+      "bash"
+    ],
+    "max_cost_tier": "medium",
+    "max_risk_tier": "medium",
+    "total_online_workers": 2,
+    "candidates": [
+      {
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "harness": "pi",
+        "model": "gpt-5.2-codex",
+        "skills": [
+          "typescript",
+          "arena-routing",
+          "proof-bundle"
+        ],
+        "tools": [
+          "bash",
+          "read",
+          "edit",
+          "write",
+          "wrangler"
+        ],
+        "objective_profiles": [
+          "balanced",
+          "quality-first"
+        ],
+        "cost_tier": "medium",
+        "risk_tier": "low",
+        "availability_status": "online",
+        "heartbeat_at": "2026-02-20T01:27:14.463Z",
+        "heartbeat_seq": 2,
+        "metadata": {
+          "lane": "mission-desk",
+          "owner": "clawbureau"
+        },
+        "created_at": "2026-02-20T01:27:14.271Z",
+        "updated_at": "2026-02-20T01:27:14.463Z",
+        "match_score": 68,
+        "skill_hits": [
+          "typescript"
+        ],
+        "tool_hits": [
+          "bash"
+        ],
+        "objective_matched": true
+      },
+      {
+        "worker_did": "did:key:z6MkFleetPiOps00000000000000000000000004",
+        "harness": "pi",
+        "model": "gpt-5.2-codex",
+        "skills": [
+          "ops",
+          "monitoring",
+          "rollback"
+        ],
+        "tools": [
+          "bash",
+          "read",
+          "edit",
+          "write",
+          "wrangler"
+        ],
+        "objective_profiles": [
+          "reliability-first",
+          "balanced"
+        ],
+        "cost_tier": "low",
+        "risk_tier": "low",
+        "availability_status": "online",
+        "heartbeat_at": "2026-02-20T01:27:15.486Z",
+        "heartbeat_seq": 2,
+        "metadata": {
+          "lane": "mission-desk",
+          "owner": "clawbureau"
+        },
+        "created_at": "2026-02-20T01:27:15.350Z",
+        "updated_at": "2026-02-20T01:27:15.486Z",
+        "match_score": 58,
+        "skill_hits": [],
+        "tool_hits": [
+          "bash"
+        ],
+        "objective_matched": true
+      }
+    ]
+  },
+  "autopilot": {
+    "status": "manual_review_required",
+    "default_contender_id": "contender_codex_pi",
+    "backup_contenders": [
+      "contender_claude_codex_cli",
+      "contender_gemini_swarm"
+    ],
+    "guardrails": {
+      "min_runs": 2,
+      "min_winner_stability_ratio": 0.6,
+      "min_win_rate": 0.5,
+      "max_override_rate": 0.3,
+      "max_rework_rate": 0.2,
+      "max_abs_calibration_gap": 0.2,
+      "require_latest_hard_gate_pass": true
+    },
+    "violations": [
+      {
+        "code": "ARENA_AUTOPILOT_HIGH_OVERRIDE_RATE",
+        "message": "Override rate exceeds autopilot limit.",
+        "value": 0.3333,
+        "threshold": 0.3
+      },
+      {
+        "code": "ARENA_AUTOPILOT_CALIBRATION_GAP_HIGH",
+        "message": "Calibration gap exceeds allowed threshold.",
+        "value": 0.2196,
+        "threshold": 0.2
+      }
+    ],
+    "reason_codes": [
+      "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+      "ARENA_FLEET_MATCHED",
+      "ARENA_FLEET_CONTENDER_BOUND"
+    ],
+    "recommendations": [
+      "Primary route has elevated override rate; require manual approval until calibration improves.",
+      "Primary route is over-confident; cap auto-approval confidence thresholds.",
+      "Policy-learning signal (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+      "Prompt-learning signal: Add a scope-check checklist before final answer generation."
+    ],
+    "policy_template": {
+      "route_policy_id": "arp_v6c4CvUYn5QszEKKSH3BdYbAEXrzxfHT",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "default_contender_id": "contender_codex_pi",
+      "backup_contenders": [
+        "contender_claude_codex_cli",
+        "contender_gemini_swarm"
+      ],
+      "require_manual_approval": true,
+      "generated_at": "2026-02-20T01:27:49.318Z"
+    }
+  }
+}

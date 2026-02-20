@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "story": "AGP-US-058",
+  "generated_at": "2026-02-20T01:28:22.685Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "5bc805c1-d717-4845-8ee3-f849e15f5fc1",
+      "migration": "0029_arena_harness_fleet_registry.sql"
+    },
+    "production": {
+      "clawbounties_version_id": "e3da42b1-9e5c-48b2-b702-e9df599b2209",
+      "migration": "0029_arena_harness_fleet_registry.sql"
+    }
+  },
+  "done_criteria": {
+    "staging_workers_discoverable": 6,
+    "production_workers_discoverable": 6,
+    "staging_target_met": true,
+    "production_target_met": true,
+    "minimums": {
+      "staging": 5,
+      "production": 3
+    }
+  },
+  "integration_checks": {
+    "manager_route_stage": {
+      "fleet_status": "matched",
+      "candidates": 2,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_MATCHED"
+      ]
+    },
+    "manager_route_prod": {
+      "fleet_status": "matched",
+      "candidates": 2,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_MATCHED"
+      ]
+    },
+    "autopilot_stage": {
+      "fleet_status": "matched",
+      "reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND"
+      ],
+      "status": "manual_review_required"
+    },
+    "autopilot_prod": {
+      "fleet_status": "matched",
+      "reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND"
+      ],
+      "status": "manual_review_required"
+    }
+  },
+  "artifacts": {
+    "stage_register": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/stage-register.summary.json",
+    "stage_roster": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/stage-roster.json",
+    "prod_register": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/prod-register.summary.json",
+    "prod_roster": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/prod-roster.json",
+    "stage_fleet_match": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/stage-fleet-match.json",
+    "prod_fleet_match": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/prod-fleet-match.json",
+    "stage_route": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/stage-route.json",
+    "prod_route": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/prod-route.json",
+    "stage_autopilot": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/stage-autopilot.json",
+    "prod_autopilot": "artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/prod-autopilot.json"
+  }
+}
