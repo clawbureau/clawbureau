@@ -1420,3 +1420,24 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-077 continuous UI duel league monitor
+- Added continuous monitor script for Gemini vs GPT UI duel league health:
+  - `scripts/arena/run-ui-duel-league-monitor.mjs`
+  - `scripts/arena/run-ui-duel-league-monitor.test.mjs`
+- Monitor loop behavior:
+  - polls `/v1/arena/manager/coach` on staging + production for `frontend:clawbounties:ux-redesign` (`ui-duel-balanced` objective),
+  - records repeated rounds (configured cadence),
+  - checks expected leader stability, contender presence, and minimum analyzed run sample,
+  - fail-closed on unhealthy league state when enforce mode is on.
+- Real-data monitor run:
+  - rounds: `3`
+  - cadence: `5s`
+  - staging leader: `contender_gpt_5_3_codex_xhigh_pi`
+  - production leader: `contender_gpt_5_3_codex_xhigh_pi`
+  - health reason code: `ARENA_UI_DUEL_LEAGUE_HEALTHY` on staging + production
+- Smoke checks:
+  - `GET /health` and `GET /duel` => `200` on staging + production.
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/route-status-codes.txt`

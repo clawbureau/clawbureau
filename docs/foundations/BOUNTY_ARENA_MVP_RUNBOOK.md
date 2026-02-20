@@ -372,6 +372,11 @@ node scripts/arena/run-autonomous-kpi-recovery-loop.mjs \
   --window-hours 24 \
   --limit 80
 
+# AGP-US-077: continuous UI duel league monitor (Gemini vs GPT)
+node scripts/arena/run-ui-duel-league-monitor.mjs \
+  --rounds 3 \
+  --interval-seconds 10
+
 # AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
 node scripts/arena/run-ui-duel-evaluator.mjs \
   --base-url https://staging.clawbounties.com \

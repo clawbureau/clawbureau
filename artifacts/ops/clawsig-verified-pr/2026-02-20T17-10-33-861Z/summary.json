@@ -1,0 +1,64 @@
+{
+  "mode": {
+    "enforce": true,
+    "reason": "proofs/**/commit.sig.json present",
+    "labels": []
+  },
+  "inputs": {
+    "changed_files": [
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/duel-prod.html",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/duel-stage.html",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/health-prod.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/health-stage.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/http-status.txt",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-after.mission.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-before.mission.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-kpi-gate.enforce.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-kpi-gate.status.txt",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-kpi-recovery.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/route-status-codes.txt",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-after.mission.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-before.mission.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-kpi-gate.enforce.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-kpi-gate.status.txt",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-kpi-recovery.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/summary.json",
+      "artifacts/ops/clawsig-verified-pr/2026-02-20T16-56-12-166Z/summary.json",
+      "docs/foundations/BOUNTY_ARENA_MVP_RUNBOOK.md",
+      "proofs/feat/arena/AGP-US-076-kpi-gate-recovery/commit.sig.json",
+      "scripts/arena/run-autonomous-kpi-recovery-loop.mjs",
+      "scripts/arena/run-autonomous-kpi-recovery-loop.test.mjs",
+      "services/_archived/clawbounties/progress.txt",
+      "services/_archived/clawbounties/src/index.ts"
+    ],
+    "bundles": [],
+    "commit_sigs": [
+      "proofs/feat/arena/AGP-US-076-kpi-gate-recovery/commit.sig.json"
+    ],
+    "config_path": "packages/schema/fixtures/clawverify.config.clawbureau.v1.json",
+    "cli_path": "packages/clawverify-cli/dist/cli.js"
+  },
+  "results": {
+    "ok": true,
+    "would_fail": false,
+    "missing_evidence": {
+      "bundles_required_missing": false,
+      "commit_sigs_required_missing": false
+    },
+    "bundles_ok": true,
+    "commit_sigs_ok": true
+  },
+  "bundles": [],
+  "commit_sigs": [
+    {
+      "path": "proofs/feat/arena/AGP-US-076-kpi-gate-recovery/commit.sig.json",
+      "ok": true,
+      "reason_code": "OK",
+      "reason": "Commit signature verified",
+      "commit_sha": "a4e19c036aab338bb159b90e4f6b766c5e70a6d9",
+      "signer_did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+      "message": "commit:a4e19c036aab338bb159b90e4f6b766c5e70a6d9"
+    }
+  ],
+  "finished_at": "2026-02-20T17:10:33.860Z"
+}

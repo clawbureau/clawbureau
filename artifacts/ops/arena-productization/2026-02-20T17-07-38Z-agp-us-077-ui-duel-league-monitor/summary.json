@@ -1,0 +1,320 @@
+{
+  "ok": true,
+  "story": "AGP-US-077",
+  "generated_at": "2026-02-20T17:09:05.784Z",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "objective_profile_name": "ui-duel-balanced",
+  "rounds": 3,
+  "interval_seconds": 5,
+  "expected_leader": "contender_gpt_5_3_codex_xhigh_pi",
+  "required_contenders": [
+    "contender_gpt_5_3_codex_xhigh_pi",
+    "contender_gemini_3_1_pro_preview_pi"
+  ],
+  "latest": {
+    "round": 3,
+    "captured_at": "2026-02-20T17:09:05.784Z",
+    "staging": {
+      "analyzed_runs": 1,
+      "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_COACH_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "contenders": [
+        {
+          "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+          "wins": 1,
+          "appearances": 1,
+          "win_rate": 1,
+          "avg_score": 92.548,
+          "hard_gate_pass_rate": 1
+        },
+        {
+          "contender_id": "contender_gemini_3_1_pro_preview_pi",
+          "wins": 0,
+          "appearances": 1,
+          "win_rate": 0,
+          "avg_score": 66.929,
+          "hard_gate_pass_rate": 0
+        }
+      ]
+    },
+    "production": {
+      "analyzed_runs": 1,
+      "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_COACH_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "contenders": [
+        {
+          "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+          "wins": 1,
+          "appearances": 1,
+          "win_rate": 1,
+          "avg_score": 92.548,
+          "hard_gate_pass_rate": 1
+        },
+        {
+          "contender_id": "contender_gemini_3_1_pro_preview_pi",
+          "wins": 0,
+          "appearances": 1,
+          "win_rate": 0,
+          "avg_score": 66.929,
+          "hard_gate_pass_rate": 0
+        }
+      ]
+    }
+  },
+  "health": {
+    "staging": {
+      "ok": true,
+      "reason_codes": [
+        "ARENA_UI_DUEL_LEAGUE_HEALTHY"
+      ],
+      "missing_contenders": []
+    },
+    "production": {
+      "ok": true,
+      "reason_codes": [
+        "ARENA_UI_DUEL_LEAGUE_HEALTHY"
+      ],
+      "missing_contenders": []
+    }
+  },
+  "snapshots": [
+    {
+      "round": 1,
+      "captured_at": "2026-02-20T17:08:54.913Z",
+      "staging": {
+        "analyzed_runs": 1,
+        "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_COACH_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_EMPTY",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_UNAVAILABLE"
+        ],
+        "contenders": [
+          {
+            "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+            "wins": 1,
+            "appearances": 1,
+            "win_rate": 1,
+            "avg_score": 92.548,
+            "hard_gate_pass_rate": 1
+          },
+          {
+            "contender_id": "contender_gemini_3_1_pro_preview_pi",
+            "wins": 0,
+            "appearances": 1,
+            "win_rate": 0,
+            "avg_score": 66.929,
+            "hard_gate_pass_rate": 0
+          }
+        ]
+      },
+      "production": {
+        "analyzed_runs": 1,
+        "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_COACH_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_EMPTY",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_UNAVAILABLE"
+        ],
+        "contenders": [
+          {
+            "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+            "wins": 1,
+            "appearances": 1,
+            "win_rate": 1,
+            "avg_score": 92.548,
+            "hard_gate_pass_rate": 1
+          },
+          {
+            "contender_id": "contender_gemini_3_1_pro_preview_pi",
+            "wins": 0,
+            "appearances": 1,
+            "win_rate": 0,
+            "avg_score": 66.929,
+            "hard_gate_pass_rate": 0
+          }
+        ]
+      }
+    },
+    {
+      "round": 2,
+      "captured_at": "2026-02-20T17:09:00.374Z",
+      "staging": {
+        "analyzed_runs": 1,
+        "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_COACH_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_EMPTY",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_UNAVAILABLE"
+        ],
+        "contenders": [
+          {
+            "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+            "wins": 1,
+            "appearances": 1,
+            "win_rate": 1,
+            "avg_score": 92.548,
+            "hard_gate_pass_rate": 1
+          },
+          {
+            "contender_id": "contender_gemini_3_1_pro_preview_pi",
+            "wins": 0,
+            "appearances": 1,
+            "win_rate": 0,
+            "avg_score": 66.929,
+            "hard_gate_pass_rate": 0
+          }
+        ]
+      },
+      "production": {
+        "analyzed_runs": 1,
+        "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_COACH_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_EMPTY",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_UNAVAILABLE"
+        ],
+        "contenders": [
+          {
+            "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+            "wins": 1,
+            "appearances": 1,
+            "win_rate": 1,
+            "avg_score": 92.548,
+            "hard_gate_pass_rate": 1
+          },
+          {
+            "contender_id": "contender_gemini_3_1_pro_preview_pi",
+            "wins": 0,
+            "appearances": 1,
+            "win_rate": 0,
+            "avg_score": 66.929,
+            "hard_gate_pass_rate": 0
+          }
+        ]
+      }
+    },
+    {
+      "round": 3,
+      "captured_at": "2026-02-20T17:09:05.784Z",
+      "staging": {
+        "analyzed_runs": 1,
+        "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_COACH_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_EMPTY",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_UNAVAILABLE"
+        ],
+        "contenders": [
+          {
+            "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+            "wins": 1,
+            "appearances": 1,
+            "win_rate": 1,
+            "avg_score": 92.548,
+            "hard_gate_pass_rate": 1
+          },
+          {
+            "contender_id": "contender_gemini_3_1_pro_preview_pi",
+            "wins": 0,
+            "appearances": 1,
+            "win_rate": 0,
+            "avg_score": 66.929,
+            "hard_gate_pass_rate": 0
+          }
+        ]
+      },
+      "production": {
+        "analyzed_runs": 1,
+        "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_COACH_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_EMPTY",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_UNAVAILABLE"
+        ],
+        "contenders": [
+          {
+            "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+            "wins": 1,
+            "appearances": 1,
+            "win_rate": 1,
+            "avg_score": 92.548,
+            "hard_gate_pass_rate": 1
+          },
+          {
+            "contender_id": "contender_gemini_3_1_pro_preview_pi",
+            "wins": 0,
+            "appearances": 1,
+            "win_rate": 0,
+            "avg_score": 66.929,
+            "hard_gate_pass_rate": 0
+          }
+        ]
+      }
+    }
+  ],
+  "smoke": {
+    "health_stage": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "staging"
+    },
+    "health_prod": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "production"
+    },
+    "duel_http_status": {
+      "staging": 200,
+      "production": 200
+    }
+  },
+  "artifacts": {
+    "summary": "artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/summary.json",
+    "health_stage": "artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/health-stage.json",
+    "health_prod": "artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/health-prod.json",
+    "http_status": "artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/http-status.txt"
+  }
+}
