@@ -1,0 +1,17 @@
+{
+  "schema_version": "arena_ui_duel_contender_evidence.v1",
+  "agp_story": "AGP-US-072",
+  "contender": "B",
+  "contender_id": "contender_gpt_5_3_codex_xhigh",
+  "model": "openai-codex/gpt-5.3-codex:xhigh",
+  "harness": "pi-claude-code",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "status": "placeholder",
+  "note": "Evidence placeholder. Populate after full evaluator run with Playwright + Lighthouse + axe against deployed staging.",
+  "files_changed": [
+    "services/_archived/clawbounties/src/ui-duel-page.ts",
+    "services/_archived/clawbounties/progress.txt"
+  ],
+  "generated_at": "2026-02-20T13:57:00Z"
+}

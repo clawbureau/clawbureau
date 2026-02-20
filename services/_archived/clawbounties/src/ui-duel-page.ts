@@ -23,258 +23,490 @@ export function bountyUiDuelPage(params: {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>clawbounties duel UI</title>
+    <title>clawbounties duel workbench</title>
     <style>
+      /* ===== Reset & tokens ===== */
       :root {
         color-scheme: dark;
-        --bg: #0b1220;
-        --panel: #111b2f;
-        --panel-soft: #15233b;
-        --text: #e6edf6;
-        --muted: #9eb1c8;
-        --accent: #4ecdc4;
-        --accent-2: #7aa2ff;
-        --danger: #ff7b72;
-        --ok: #3fb950;
-        --border: #263a5d;
+        --c-bg:        #080c14;
+        --c-surface-0: #0d1424;
+        --c-surface-1: #121d33;
+        --c-surface-2: #182842;
+        --c-border:    #1e2f50;
+        --c-border-hi: #2d4570;
+        --c-text:      #e4ecf7;
+        --c-text-2:    #9ab0cc;
+        --c-text-3:    #6a8099;
+        --c-accent:    #38bdf8;
+        --c-accent-2:  #818cf8;
+        --c-teal:      #2dd4bf;
+        --c-green:     #34d399;
+        --c-amber:     #fbbf24;
+        --c-red:       #f87171;
+        --c-white-a5:  rgba(255,255,255,0.05);
+        --c-white-a10: rgba(255,255,255,0.10);
+        --r-sm: 6px;
+        --r-md: 10px;
+        --r-lg: 14px;
+        --r-xl: 20px;
+        --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px var(--c-border);
+        --shadow-float: 0 8px 32px rgba(0,0,0,0.5);
+        --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --transition-fast: 120ms ease;
+        --transition-med:  200ms ease;
       }
 
-      * { box-sizing: border-box; }
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
       body {
-        margin: 0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        background: radial-gradient(1200px 600px at 10% 0%, #152545, transparent 70%), var(--bg);
-        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        line-height: 1.55;
+        color: var(--c-text);
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
+      /* ===== Layout shell ===== */
       .shell {
-        max-width: 1200px;
+        max-width: 1240px;
         margin: 0 auto;
-        padding: 20px;
+        padding: 24px 20px 48px;
       }
 
-      .hero {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 18px;
-        background: linear-gradient(160deg, rgba(122, 162, 255, 0.18), rgba(78, 205, 196, 0.08));
-        margin-bottom: 16px;
+      /* ===== Top bar ===== */
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: 24px;
+      }
+      .topbar-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .topbar-logo {
+        width: 28px; height: 28px;
+        border-radius: var(--r-sm);
+        background: linear-gradient(135deg, var(--c-accent), var(--c-accent-2));
+        display: grid; place-items: center;
+        font-weight: 700; font-size: 13px; color: #000;
+      }
+      .topbar h1 {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .topbar-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 12px;
+        color: var(--c-text-3);
+      }
+      .topbar-meta a { color: var(--c-accent); text-decoration: none; }
+      .topbar-meta a:hover { text-decoration: underline; }
+      .env-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--c-border);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--c-text-2);
+      }
+      .env-badge::before {
+        content: '';
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: var(--c-green);
       }
 
-      .hero h1 {
-        margin: 0;
-        font-size: 1.5rem;
-      }
-
-      .hero p {
-        margin: 8px 0 0;
-        color: var(--muted);
-      }
-
-      .grid {
+      /* ===== Grid layout ===== */
+      .main-grid {
         display: grid;
-        grid-template-columns: 360px minmax(0, 1fr);
-        gap: 14px;
+        grid-template-columns: 320px minmax(0,1fr);
+        grid-template-rows: auto auto 1fr;
+        gap: 16px;
+      }
+      .sidebar { grid-row: 1 / 4; }
+
+      @media (max-width: 900px) {
+        .main-grid {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto;
+        }
+        .sidebar { grid-row: auto; }
       }
 
-      .panel {
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: rgba(17, 27, 47, 0.86);
-        backdrop-filter: blur(8px);
-        padding: 14px;
+      /* ===== Card ===== */
+      .card {
+        background: var(--c-surface-0);
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-lg);
+        overflow: hidden;
       }
-
-      .panel h2 {
-        margin: 0 0 10px;
-        font-size: 1rem;
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-white-a5);
       }
-
-      .field {
-        margin-bottom: 10px;
-      }
-
-      .field label {
-        display: block;
-        margin-bottom: 6px;
-        font-size: 0.8rem;
+      .card-header h2 {
+        font-size: 12px;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--muted);
+        color: var(--c-text-2);
+      }
+      .card-body { padding: 16px; }
+
+      .card-count {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--c-text-3);
+        background: var(--c-surface-2);
+        padding: 1px 7px;
+        border-radius: 999px;
       }
 
-      .field input {
+      /* ===== Form fields ===== */
+      .field { margin-bottom: 14px; }
+      .field:last-child { margin-bottom: 0; }
+      .field-label {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--c-text-3);
+      }
+      .field-input {
         width: 100%;
-        padding: 9px 10px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--panel-soft);
-        color: var(--text);
+        padding: 8px 10px;
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        background: var(--c-surface-1);
+        color: var(--c-text);
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        transition: border-color var(--transition-fast);
+        outline: none;
       }
+      .field-input:focus {
+        border-color: var(--c-accent);
+        box-shadow: 0 0 0 2px rgba(56,189,248,0.15);
+      }
+      .field-input::placeholder { color: var(--c-text-3); }
 
-      .actions {
+      /* ===== Buttons ===== */
+      .btn-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
-        margin-bottom: 10px;
+        margin-top: 14px;
       }
-
-      button {
-        cursor: pointer;
-        border: 1px solid transparent;
-        border-radius: 10px;
-        padding: 9px 10px;
-        background: #203454;
-        color: var(--text);
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        background: var(--c-surface-2);
+        color: var(--c-text);
+        font-family: var(--font-sans);
+        font-size: 12.5px;
         font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        outline: none;
+        line-height: 1.3;
+      }
+      .btn:hover { background: var(--c-border-hi); border-color: var(--c-border-hi); }
+      .btn:focus-visible { box-shadow: 0 0 0 2px rgba(56,189,248,0.25); }
+      .btn:active { transform: scale(0.98); }
+
+      .btn-primary {
+        background: linear-gradient(135deg, rgba(56,189,248,0.20), rgba(129,140,248,0.15));
+        border-color: rgba(56,189,248,0.35);
+        color: var(--c-accent);
+      }
+      .btn-primary:hover {
+        background: linear-gradient(135deg, rgba(56,189,248,0.30), rgba(129,140,248,0.22));
+        border-color: rgba(56,189,248,0.5);
       }
 
-      button:hover {
-        border-color: var(--accent-2);
+      .btn-icon {
+        display: inline-flex;
+        font-size: 14px;
+        line-height: 1;
+        opacity: 0.7;
       }
 
-      button.primary {
-        background: linear-gradient(135deg, #2a4a77, #2f6f8a);
-      }
-
-      button.secondary {
-        background: #22314a;
-      }
-
-      .status {
-        min-height: 48px;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 0.75rem;
+      /* ===== Status log ===== */
+      .status-log {
+        margin-top: 14px;
+        min-height: 56px;
+        max-height: 120px;
+        overflow-y: auto;
+        padding: 10px 12px;
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        background: var(--c-bg);
+        font-family: var(--font-mono);
+        font-size: 11.5px;
+        line-height: 1.6;
         white-space: pre-wrap;
-        background: #0e182b;
+        word-break: break-word;
+        color: var(--c-text-2);
       }
 
+      /* ===== Bounty list ===== */
       .bounty-list {
-        display: grid;
-        gap: 8px;
-        max-height: 400px;
-        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 520px;
+        overflow-y: auto;
+        padding: 2px;
       }
+      .bounty-list::-webkit-scrollbar { width: 5px; }
+      .bounty-list::-webkit-scrollbar-track { background: transparent; }
+      .bounty-list::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 999px; }
 
       .bounty-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
         width: 100%;
         text-align: left;
-        border: 1px solid var(--border);
-        background: #13213a;
-        border-radius: 10px;
-        padding: 10px;
+        padding: 10px 14px;
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        background: var(--c-surface-1);
+        color: var(--c-text);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        outline: none;
       }
-
       .bounty-row:hover {
-        border-color: var(--accent);
+        background: var(--c-surface-2);
+        border-color: var(--c-border-hi);
       }
-
+      .bounty-row:focus-visible {
+        box-shadow: 0 0 0 2px rgba(56,189,248,0.25);
+      }
       .bounty-row.is-selected {
-        border-color: var(--accent);
-        box-shadow: inset 0 0 0 1px rgba(78, 205, 196, 0.45);
+        border-color: var(--c-accent);
+        background: rgba(56,189,248,0.06);
+        box-shadow: inset 0 0 0 1px rgba(56,189,248,0.12);
       }
 
-      .bounty-meta {
+      .bounty-row-indicator {
+        flex-shrink: 0;
+        width: 3px;
+        height: 28px;
+        border-radius: 999px;
+        background: var(--c-border);
+        transition: background var(--transition-fast);
+      }
+      .bounty-row.is-selected .bounty-row-indicator { background: var(--c-accent); }
+
+      .bounty-row-body { flex: 1; min-width: 0; }
+      .bounty-row-title {
+        font-weight: 600;
+        font-size: 13px;
+        line-height: 1.35;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bounty-row-meta {
         display: flex;
-        justify-content: space-between;
-        margin-top: 4px;
-        color: var(--muted);
-        font-size: 0.78rem;
+        align-items: center;
+        gap: 8px;
+        margin-top: 3px;
+        font-size: 11.5px;
+        color: var(--c-text-3);
+      }
+      .bounty-row-reward {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
       }
 
+      /* ===== Pills ===== */
       .pill {
         display: inline-flex;
         align-items: center;
-        padding: 2px 8px;
+        padding: 1px 7px;
         border-radius: 999px;
-        border: 1px solid var(--border);
-        font-size: 0.72rem;
+        border: 1px solid var(--c-border);
+        font-size: 10.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .pill-open {
+        border-color: rgba(52,211,153,0.4);
+        color: var(--c-green);
+        background: rgba(52,211,153,0.06);
+      }
+      .pill-other {
+        border-color: rgba(251,191,36,0.4);
+        color: var(--c-amber);
+        background: rgba(251,191,36,0.06);
       }
 
-      .pill.ok { border-color: rgba(63, 185, 80, 0.5); color: #8be28f; }
-      .pill.warn { border-color: rgba(255, 123, 114, 0.5); color: #ffb4ab; }
-
+      /* ===== Detail view ===== */
+      .detail-empty {
+        padding: 32px 16px;
+        text-align: center;
+        color: var(--c-text-3);
+        font-size: 13px;
+      }
       .detail-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 10px;
       }
-
-      .detail-item {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px;
-        background: #101d33;
+      .detail-cell {
+        padding: 10px 12px;
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        background: var(--c-surface-1);
       }
-
-      .detail-item .label {
-        color: var(--muted);
-        font-size: 0.72rem;
+      .detail-cell-label {
+        font-size: 10.5px;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
+        color: var(--c-text-3);
+        margin-bottom: 4px;
+      }
+      .detail-cell-value {
+        font-family: var(--font-mono);
+        font-size: 12.5px;
+        word-break: break-all;
+        color: var(--c-text);
+        line-height: 1.45;
       }
 
-      .detail-item .value {
-        margin-top: 4px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 0.85rem;
-        word-break: break-word;
+      /* ===== Empty state ===== */
+      .empty-state {
+        padding: 28px 16px;
+        text-align: center;
+        color: var(--c-text-3);
+        font-size: 13px;
       }
 
-      .muted { color: var(--muted); }
-
-      @media (max-width: 980px) {
-        .grid { grid-template-columns: 1fr; }
+      /* ===== Utility ===== */
+      .visually-hidden {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden;
+        clip: rect(0,0,0,0);
+        white-space: nowrap;
+        border: 0;
       }
     </style>
   </head>
   <body>
-    <main class="shell">
-      <section class="hero">
-        <h1>Clawbounties Duel UI</h1>
-        <p>Real-data operator surface for the UI duel contract. Browse open bounties, inspect details, execute claim path, and trigger submit path with evidence-first telemetry.</p>
-        <p class="muted">Environment: ${environment} · Version: ${version} · <a href="${origin}/docs" style="color:#9ac7ff">docs</a></p>
-      </section>
+    <main class="shell" role="main">
 
-      <section class="grid">
-        <aside class="panel">
-          <h2>Control Plane</h2>
-          <div class="field">
-            <label for="adminKey">Admin key</label>
-            <input id="adminKey" type="password" autocomplete="off" placeholder="BOUNTIES_ADMIN_KEY" />
+      <!-- ===== Top bar ===== -->
+      <header class="topbar">
+        <div class="topbar-brand">
+          <div class="topbar-logo" aria-hidden="true">C</div>
+          <h1>Clawbounties Duel Workbench</h1>
+        </div>
+        <nav class="topbar-meta" aria-label="Service metadata">
+          <span class="env-badge">${environment}</span>
+          <span>v${version}</span>
+          <a href="${origin}/docs">Docs</a>
+        </nav>
+      </header>
+
+      <!-- ===== Main grid ===== -->
+      <div class="main-grid">
+
+        <!-- Sidebar: Control Plane -->
+        <aside class="sidebar card" aria-label="Control plane">
+          <div class="card-header">
+            <h2>Control Plane</h2>
           </div>
-          <div class="field">
-            <label for="workerDid">Worker DID</label>
-            <input id="workerDid" type="text" value="${defaultWorkerDid}" autocomplete="off" />
+          <div class="card-body">
+            <div class="field">
+              <label class="field-label" for="adminKey">Admin Key</label>
+              <input id="adminKey" class="field-input" type="password" autocomplete="off" placeholder="BOUNTIES_ADMIN_KEY" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="workerDid">Worker DID</label>
+              <input id="workerDid" class="field-input" type="text" value="${defaultWorkerDid}" autocomplete="off" />
+            </div>
+
+            <div class="btn-row">
+              <button id="loadBounties" class="btn btn-primary" type="button">
+                <span class="btn-icon" aria-hidden="true">&#8635;</span> Load
+              </button>
+              <button id="seedBounties" class="btn" type="button">
+                <span class="btn-icon" aria-hidden="true">&#43;</span> Seed
+              </button>
+              <button id="claimBounty" class="btn btn-primary" type="button">
+                <span class="btn-icon" aria-hidden="true">&#10003;</span> Claim
+              </button>
+              <button id="submitBounty" class="btn btn-primary" type="button">
+                <span class="btn-icon" aria-hidden="true">&#9654;</span> Submit
+              </button>
+            </div>
+
+            <div id="actionStatus" class="status-log" aria-live="polite" role="log">Ready.</div>
           </div>
-          <div class="actions">
-            <button id="loadBounties" class="primary" type="button">Refresh open list</button>
-            <button id="seedBounties" class="secondary" type="button">Seed if empty</button>
-            <button id="claimBounty" class="primary" type="button">Claim selected</button>
-            <button id="submitBounty" class="primary" type="button">Submit selected</button>
-          </div>
-          <div id="actionStatus" class="status" aria-live="polite">Ready.</div>
         </aside>
 
-        <section class="panel">
-          <h2>Open bounties</h2>
-          <div id="bountyList" class="bounty-list"></div>
-          <p id="bountyListEmpty" class="muted" hidden>No open bounties found.</p>
+        <!-- Bounty list -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Open Bounties</h2>
+            <span id="bountyCount" class="card-count">0</span>
+          </div>
+          <div class="card-body" style="padding:10px">
+            <div id="bountyList" class="bounty-list" role="listbox" aria-label="Open bounties"></div>
+            <p id="bountyListEmpty" class="empty-state" hidden>No open bounties found. Use <strong>Seed</strong> to populate.</p>
+          </div>
         </section>
-      </section>
 
-      <section class="panel" style="margin-top:14px;">
-        <h2>Selected bounty details</h2>
-        <div id="bountyDetails" class="muted">Select a bounty row to inspect details.</div>
-      </section>
+        <!-- Selected bounty details -->
+        <section class="card" style="grid-column:2">
+          <div class="card-header">
+            <h2>Bounty Details</h2>
+          </div>
+          <div class="card-body">
+            <div id="bountyDetails" class="detail-empty">Select a bounty to view details.</div>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script>
       (() => {
+        'use strict';
+
         const state = {
           selectedBountyId: null,
           bounties: [],
@@ -291,17 +523,20 @@ export function bountyUiDuelPage(params: {
           bountyListEmpty: document.getElementById('bountyListEmpty'),
           bountyDetails: document.getElementById('bountyDetails'),
           actionStatus: document.getElementById('actionStatus'),
+          bountyCount: document.getElementById('bountyCount'),
         };
+
+        /* ---- helpers ---- */
 
         function stableStringify(value) {
           if (value === null || typeof value !== 'object') return JSON.stringify(value);
           if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
-          const keys = Object.keys(value).sort();
-          return '{' + keys.map((key) => JSON.stringify(key) + ':' + stableStringify(value[key])).join(',') + '}';
+          var keys = Object.keys(value).sort();
+          return '{' + keys.map(function (key) { return JSON.stringify(key) + ':' + stableStringify(value[key]); }).join(',') + '}';
         }
 
         function status(message, payload) {
-          const line = typeof payload === 'undefined'
+          var line = typeof payload === 'undefined'
             ? String(message)
             : String(message) + '\\n' + JSON.stringify(payload, null, 2);
           if (els.actionStatus) els.actionStatus.textContent = line;
@@ -311,24 +546,27 @@ export function bountyUiDuelPage(params: {
           return (els.adminKey && typeof els.adminKey.value === 'string') ? els.adminKey.value.trim() : '';
         }
 
-        async function api(path, init = {}) {
-          const key = adminKey();
+        /* ---- API wrapper (fail-closed) ---- */
+
+        async function api(path, init) {
+          if (!init) init = {};
+          var key = adminKey();
           if (!key) {
             throw new Error('Admin key is required.');
           }
 
-          const headers = new Headers(init.headers || {});
+          var headers = new Headers(init.headers || {});
           headers.set('x-admin-key', key);
           if (!headers.has('content-type') && init.body) {
             headers.set('content-type', 'application/json');
           }
 
-          const response = await fetch(path, { ...init, headers });
-          const text = await response.text();
-          let json;
+          var response = await fetch(path, Object.assign({}, init, { headers: headers }));
+          var text = await response.text();
+          var json;
           try {
             json = JSON.parse(text);
-          } catch {
+          } catch (_e) {
             json = { raw: text };
           }
 
@@ -339,34 +577,54 @@ export function bountyUiDuelPage(params: {
           return json;
         }
 
+        /* ---- rendering ---- */
+
+        function escText(str) {
+          var d = document.createElement('div');
+          d.textContent = str;
+          return d.innerHTML;
+        }
+
         function renderBountyList() {
           if (!els.bountyList || !els.bountyListEmpty) return;
           els.bountyList.innerHTML = '';
 
           if (!Array.isArray(state.bounties) || state.bounties.length === 0) {
             els.bountyListEmpty.hidden = false;
+            if (els.bountyCount) els.bountyCount.textContent = '0';
             return;
           }
 
           els.bountyListEmpty.hidden = true;
+          if (els.bountyCount) els.bountyCount.textContent = String(state.bounties.length);
 
-          state.bounties.forEach((bounty) => {
-            const row = document.createElement('button');
+          state.bounties.forEach(function (bounty) {
+            var row = document.createElement('button');
             row.type = 'button';
             row.className = 'bounty-row' + (state.selectedBountyId === bounty.bounty_id ? ' is-selected' : '');
-            row.dataset.testid = 'bounty-row';
             row.setAttribute('data-testid', 'bounty-row');
             row.dataset.bountyId = bounty.bounty_id;
+            row.setAttribute('role', 'option');
+            row.setAttribute('aria-selected', state.selectedBountyId === bounty.bounty_id ? 'true' : 'false');
+
+            var title = escText(String(bounty.title || bounty.bounty_id));
+            var rewardAmount = (bounty.reward && bounty.reward.amount_minor) ? escText(String(bounty.reward.amount_minor)) : '-';
+            var rewardCurrency = (bounty.reward && bounty.reward.currency) ? ' ' + escText(String(bounty.reward.currency)) : '';
+            var statusVal = bounty.status || 'unknown';
+            var pillClass = statusVal === 'open' ? 'pill-open' : 'pill-other';
 
             row.innerHTML = [
-              '<div><strong>' + String(bounty.title || bounty.bounty_id) + '</strong></div>',
-              '<div class="bounty-meta">',
-              '<span>' + String((bounty.reward && bounty.reward.amount_minor) || '-') + ' ' + String((bounty.reward && bounty.reward.currency) || '') + '</span>',
-              '<span class="pill ' + ((bounty.status === 'open') ? 'ok' : 'warn') + '">' + String(bounty.status || 'unknown') + '</span>',
+              '<div class="bounty-row-indicator" aria-hidden="true"></div>',
+              '<div class="bounty-row-body">',
+                '<div class="bounty-row-title">' + title + '</div>',
+                '<div class="bounty-row-meta">',
+                  '<span class="bounty-row-reward">' + rewardAmount + rewardCurrency + '</span>',
+                  '<span class="pill ' + pillClass + '">' + escText(String(statusVal)) + '</span>',
+                '</div>',
               '</div>',
             ].join('');
 
-            row.addEventListener('click', () => {
+            row.addEventListener('click', function () {
               state.selectedBountyId = bounty.bounty_id;
               renderBountyList();
               loadDetails();
@@ -380,12 +638,12 @@ export function bountyUiDuelPage(params: {
           if (!els.bountyDetails) return;
 
           if (!detail) {
-            els.bountyDetails.textContent = 'Select a bounty row to inspect details.';
+            els.bountyDetails.innerHTML = '<div class="detail-empty">Select a bounty to view details.</div>';
             return;
           }
 
-          const tags = Array.isArray(detail.tags) ? detail.tags.join(', ') : '';
-          const data = [
+          var tags = Array.isArray(detail.tags) ? detail.tags.join(', ') : '';
+          var data = [
             ['bounty_id', detail.bounty_id],
             ['status', detail.status],
             ['requester_did', detail.requester_did],
@@ -396,17 +654,22 @@ export function bountyUiDuelPage(params: {
             ['tags', tags || '(none)'],
           ];
 
-          els.bountyDetails.innerHTML = '<div class="detail-grid">' + data.map(([label, value]) => {
-            return '<article class="detail-item"><div class="label">' + String(label) + '</div><div class="value">' + String(value || '-') + '</div></article>';
+          els.bountyDetails.innerHTML = '<div class="detail-grid">' + data.map(function (pair) {
+            return '<article class="detail-cell">' +
+              '<div class="detail-cell-label">' + escText(String(pair[0])) + '</div>' +
+              '<div class="detail-cell-value">' + escText(String(pair[1] || '-')) + '</div>' +
+              '</article>';
           }).join('') + '</div>';
         }
 
+        /* ---- data operations (wired to live API, no mocks) ---- */
+
         async function loadOpenBounties() {
           status('Loading open bounties...');
-          const payload = await api('/v1/bounties?status=open&is_code_bounty=false&limit=50');
+          var payload = await api('/v1/bounties?status=open&is_code_bounty=false&limit=50');
           state.bounties = Array.isArray(payload.bounties) ? payload.bounties : [];
 
-          if (state.selectedBountyId && !state.bounties.some((entry) => entry.bounty_id === state.selectedBountyId)) {
+          if (state.selectedBountyId && !state.bounties.some(function (e) { return e.bounty_id === state.selectedBountyId; })) {
             state.selectedBountyId = null;
           }
           if (!state.selectedBountyId && state.bounties.length > 0) {
@@ -424,13 +687,13 @@ export function bountyUiDuelPage(params: {
             return;
           }
 
-          const detail = await api('/v1/bounties/' + encodeURIComponent(state.selectedBountyId));
+          var detail = await api('/v1/bounties/' + encodeURIComponent(state.selectedBountyId));
           renderDetails(detail);
         }
 
         async function seedIfEmpty() {
           status('Seeding open bounties if below target...');
-          const payload = await api('/v1/arena/desk/discover-loop', {
+          var payload = await api('/v1/arena/desk/discover-loop', {
             method: 'POST',
             body: stableStringify({
               target_open_bounties: 4,
@@ -452,12 +715,12 @@ export function bountyUiDuelPage(params: {
         }
 
         async function claimSelected() {
-          const workerDid = (els.workerDid && typeof els.workerDid.value === 'string') ? els.workerDid.value.trim() : '';
+          var workerDid = (els.workerDid && typeof els.workerDid.value === 'string') ? els.workerDid.value.trim() : '';
           if (!workerDid.startsWith('did:')) {
             throw new Error('worker DID must start with did:');
           }
 
-          const payload = await api('/v1/arena/desk/claim-loop', {
+          var payload = await api('/v1/arena/desk/claim-loop', {
             method: 'POST',
             body: stableStringify({
               limit: 12,
@@ -479,12 +742,12 @@ export function bountyUiDuelPage(params: {
         }
 
         async function submitSelected() {
-          const workerDid = (els.workerDid && typeof els.workerDid.value === 'string') ? els.workerDid.value.trim() : '';
+          var workerDid = (els.workerDid && typeof els.workerDid.value === 'string') ? els.workerDid.value.trim() : '';
           if (!workerDid.startsWith('did:')) {
             throw new Error('worker DID must start with did:');
           }
 
-          const payload = await api('/v1/arena/desk/submit-loop', {
+          var payload = await api('/v1/arena/desk/submit-loop', {
             method: 'POST',
             body: stableStringify({
               worker_did: workerDid,
@@ -510,10 +773,12 @@ export function bountyUiDuelPage(params: {
           }
         }
 
-        els.loadBounties && els.loadBounties.addEventListener('click', () => withStatus('Refresh open list', loadOpenBounties));
-        els.seedBounties && els.seedBounties.addEventListener('click', () => withStatus('Seed open bounties', seedIfEmpty));
-        els.claimBounty && els.claimBounty.addEventListener('click', () => withStatus('Claim selected bounty', claimSelected));
-        els.submitBounty && els.submitBounty.addEventListener('click', () => withStatus('Submit selected bounty', submitSelected));
+        /* ---- event bindings ---- */
+
+        if (els.loadBounties) els.loadBounties.addEventListener('click', function () { withStatus('Refresh open list', loadOpenBounties); });
+        if (els.seedBounties) els.seedBounties.addEventListener('click', function () { withStatus('Seed open bounties', seedIfEmpty); });
+        if (els.claimBounty) els.claimBounty.addEventListener('click', function () { withStatus('Claim selected bounty', claimSelected); });
+        if (els.submitBounty) els.submitBounty.addEventListener('click', function () { withStatus('Submit selected bounty', submitSelected); });
       })();
     </script>
   </body>
