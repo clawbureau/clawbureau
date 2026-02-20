@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "schema_version": "arena_duel_batch_runner.v1",
+  "generated_at": "2026-02-20T20:12:52.132Z",
+  "target": "https://staging.clawbounties.com",
+  "task_fingerprint": "AEM-FP-REAL-DUEL-V2",
+  "contender_a": {
+    "id": "contender_gemini_pi",
+    "model": "gemini-3.1-pro-preview"
+  },
+  "contender_b": {
+    "id": "contender_codex_pi",
+    "model": "gpt-5.3-codex"
+  },
+  "bounties_evaluated": 3,
+  "evaluator_runs": 6,
+  "batch_response": {
+    "status": 200,
+    "totals": {
+      "requested": 3,
+      "completed": 3,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "league_leader": {
+    "contender_id": "contender_codex_pi",
+    "label": "GPT-5.3 Codex xHigh via Pi",
+    "wins": 8,
+    "win_rate": 0.4706,
+    "avg_score": 76.888
+  },
+  "league_entries": 18,
+  "evidence": {
+    "batch_result": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/batch-result.json",
+    "league": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/league.json",
+    "evaluator_outputs": [
+      "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaab",
+      "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703",
+      "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2"
+    ]
+  }
+}

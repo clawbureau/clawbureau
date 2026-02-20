@@ -1,0 +1,318 @@
+{
+  "schema_version": "arena_desk_duel_batch.v1",
+  "computed_at": "2026-02-20T20:15:34.762Z",
+  "dry_run": false,
+  "task_fingerprint": "AEM-FP-REAL-DUEL-V2",
+  "totals": {
+    "requested": 5,
+    "completed": 5,
+    "failed": 0,
+    "skipped": 0
+  },
+  "duels": [
+    {
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "status": "completed",
+      "arena_id": "arena_duel_bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_1771618533723",
+      "run_id": "run_duel_bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb_1771618533723",
+      "contenders": [
+        {
+          "contender_id": "contender_gemini_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        }
+      ],
+      "winner": "contender_gemini_pi",
+      "winner_reason": "Evaluator scores: contender_gemini_pi=98.4 vs contender_codex_pi=98.4",
+      "reason_codes": [
+        "ARENA_DUEL_BATCH_COMPLETED",
+        "ARENA_RESOLVE_LOOP_COMPLETED"
+      ]
+    },
+    {
+      "bounty_id": "bty_099bb056-9f9c-498a-9610-5d0028115371",
+      "status": "completed",
+      "arena_id": "arena_duel_bty_099bb056-9f9c-498a-9610-5d0028115371_1771618533935",
+      "run_id": "run_duel_bty_099bb056-9f9c-498a-9610-5d0028115371_1771618533935",
+      "contenders": [
+        {
+          "contender_id": "contender_gemini_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        }
+      ],
+      "winner": "contender_gemini_pi",
+      "winner_reason": "Evaluator scores: contender_gemini_pi=98.4 vs contender_codex_pi=98.4",
+      "reason_codes": [
+        "ARENA_DUEL_BATCH_COMPLETED",
+        "ARENA_RESOLVE_LOOP_COMPLETED"
+      ]
+    },
+    {
+      "bounty_id": "bty_a838eed7-ee8a-460e-8cc3-4aaf8977f9bf",
+      "status": "completed",
+      "arena_id": "arena_duel_bty_a838eed7-ee8a-460e-8cc3-4aaf8977f9bf_1771618534143",
+      "run_id": "run_duel_bty_a838eed7-ee8a-460e-8cc3-4aaf8977f9bf_1771618534143",
+      "contenders": [
+        {
+          "contender_id": "contender_gemini_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        }
+      ],
+      "winner": "contender_gemini_pi",
+      "winner_reason": "Evaluator scores: contender_gemini_pi=98.4 vs contender_codex_pi=98.4",
+      "reason_codes": [
+        "ARENA_DUEL_BATCH_COMPLETED",
+        "ARENA_RESOLVE_LOOP_COMPLETED"
+      ]
+    },
+    {
+      "bounty_id": "bty_aea682e6-5bb0-492d-b38e-53700215b53c",
+      "status": "completed",
+      "arena_id": "arena_duel_bty_aea682e6-5bb0-492d-b38e-53700215b53c_1771618534351",
+      "run_id": "run_duel_bty_aea682e6-5bb0-492d-b38e-53700215b53c_1771618534351",
+      "contenders": [
+        {
+          "contender_id": "contender_gemini_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        }
+      ],
+      "winner": "contender_gemini_pi",
+      "winner_reason": "Evaluator scores: contender_gemini_pi=98.4 vs contender_codex_pi=98.4",
+      "reason_codes": [
+        "ARENA_DUEL_BATCH_COMPLETED",
+        "ARENA_RESOLVE_LOOP_COMPLETED"
+      ]
+    },
+    {
+      "bounty_id": "bty_1e5cf83a-fe72-4b09-92a8-6ef1c513aebc",
+      "status": "completed",
+      "arena_id": "arena_duel_bty_1e5cf83a-fe72-4b09-92a8-6ef1c513aebc_1771618534567",
+      "run_id": "run_duel_bty_1e5cf83a-fe72-4b09-92a8-6ef1c513aebc_1771618534567",
+      "contenders": [
+        {
+          "contender_id": "contender_gemini_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "score": 98.4,
+          "hard_gate_pass": true
+        }
+      ],
+      "winner": "contender_gemini_pi",
+      "winner_reason": "Evaluator scores: contender_gemini_pi=98.4 vs contender_codex_pi=98.4",
+      "reason_codes": [
+        "ARENA_DUEL_BATCH_COMPLETED",
+        "ARENA_RESOLVE_LOOP_COMPLETED"
+      ]
+    }
+  ],
+  "league_snapshot": [
+    {
+      "contender_id": "contender_codex_pi",
+      "label": "GPT-5.3 Codex xHigh via Pi",
+      "model": "gpt-5.3-codex",
+      "harness": "pi",
+      "duels": 16,
+      "wins": 8,
+      "losses": 8,
+      "draws": 0,
+      "win_rate": 0.5,
+      "avg_score": 93.9381,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_gemini_pi",
+      "label": "Gemini 3.1 Pro Preview via Pi",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "pi",
+      "duels": 10,
+      "wins": 7,
+      "losses": 3,
+      "draws": 0,
+      "win_rate": 0.7,
+      "avg_score": 94.5,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "label": "GPT-5.3 Codex xhigh (Pi)",
+      "model": "openai-codex/gpt-5.3-codex:xhigh",
+      "harness": "pi",
+      "duels": 1,
+      "wins": 1,
+      "losses": 0,
+      "draws": 0,
+      "win_rate": 1,
+      "avg_score": 92.548,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "duels": 3,
+      "wins": 1,
+      "losses": 2,
+      "draws": 0,
+      "win_rate": 0.3333,
+      "avg_score": 88.2497,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "duels": 6,
+      "wins": 0,
+      "losses": 6,
+      "draws": 0,
+      "win_rate": 0,
+      "avg_score": 74.0511,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_gemini_3_1_pro_preview_pi",
+      "label": "Gemini 3.1 Pro Preview (Pi)",
+      "model": "openrouter/google/gemini-3.1-pro-preview",
+      "harness": "pi",
+      "duels": 1,
+      "wins": 0,
+      "losses": 1,
+      "draws": 0,
+      "win_rate": 0,
+      "avg_score": 66.929,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_0b82606cb2cd",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_0d91ef4eafe1",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_2856eed34a09",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_2b9be84add71",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_3733e9f5b118",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_7eb5ae1d2601",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_d593c9971ca8",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    },
+    {
+      "contender_id": "contender_submission_ec147b0d0ec7",
+      "label": "Live bounty submission",
+      "model": "unknown",
+      "harness": "clawbounties-live",
+      "duels": 1,
+      "wins": 0,
+      "losses": 0,
+      "draws": 1,
+      "win_rate": 0,
+      "avg_score": 0,
+      "total_cost_usd": 0
+    }
+  ]
+}

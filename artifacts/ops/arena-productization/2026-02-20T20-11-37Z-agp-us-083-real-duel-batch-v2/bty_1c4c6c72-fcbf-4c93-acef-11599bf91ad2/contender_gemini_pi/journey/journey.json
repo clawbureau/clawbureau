@@ -1,0 +1,42 @@
+{
+  "schema_version": "arena_ui_duel_journey.v1",
+  "generated_at": "2026-02-20T20:12:28.633Z",
+  "ui_url": "https://staging.clawbounties.com/duel",
+  "selected_bounty_id": "bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2",
+  "flows": {
+    "browse": true,
+    "details": true,
+    "claim": true,
+    "submit": true
+  },
+  "timings_ms": {
+    "browse": 105.47,
+    "details": 17.64,
+    "claim": 214.74,
+    "submit": 85.95
+  },
+  "total_duration_ms": 984.14,
+  "friction_events": 0,
+  "console": {
+    "error_count": 0,
+    "warn_count": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "runtime_errors": [],
+  "accessibility": {
+    "total_violations": 2,
+    "critical_violations": 0
+  },
+  "action_status_text": "Loaded open bounties.\n{\n  \"count\": 1,\n  \"selected_bounty_id\": \"bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2\"\n}",
+  "artifacts": {
+    "screenshots": {
+      "browse": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2/contender_gemini_pi/journey/screenshots/01-browse.png",
+      "details": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2/contender_gemini_pi/journey/screenshots/02-details.png",
+      "claim": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2/contender_gemini_pi/journey/screenshots/03-claim.png",
+      "submit": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2/contender_gemini_pi/journey/screenshots/04-submit.png"
+    },
+    "video": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2/contender_gemini_pi/journey/videos/f4c2d125ed58b7d2f85366bc0554643f.webm",
+    "axe_raw": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2/contender_gemini_pi/journey/axe-results.json"
+  }
+}

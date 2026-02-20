@@ -1551,3 +1551,32 @@ Started: 2026-02-02T03:08:26.937005
   - Both envs exited `INSUFFICIENT_SAMPLE`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T19-26-15Z-agp-us-082-outcome-seeder/summary.json`
+
+## 2026-02-20 - AGP-US-083 duel batch runner + league table
+- Added `POST /v1/arena/desk/duel-batch` endpoint:
+  - Accepts pre-evaluated duel results with real evaluator scores (no synthetic/random data)
+  - Each duel entry requires `bounty_id` + `contenders[]` with real `score`, `hard_gate_pass`, `metrics`, `evidence_links`
+  - Determines winner from highest-scoring contender that passed hard gates
+  - Deduplicates by bounty_id + task_fingerprint
+  - Fail-closed: if no contender passes hard gates, winner is null
+- Added `GET /v1/arena/duel-league` endpoint:
+  - Aggregates wins/losses/draws per contender from completed arena runs
+  - Returns ranked league table with `arena_duel_league.v1` schema
+- Added `scripts/arena/run-duel-batch-runner.mjs` orchestrator:
+  - Fetches bounties from target env
+  - Runs real Playwright journey evaluator (browse/details/claim/submit) per bounty x contender
+  - Runs Lighthouse performance + accessibility audit per evaluation
+  - Captures screenshots, journey JSON, axe a11y results, lighthouse raw
+  - Posts real evaluator scores to the batch endpoint
+  - No mock/random data anywhere in the pipeline
+- Deploys:
+  - staging `954e5c62-f70b-4afc-859f-1e3845aea180`
+  - production `bac31c94-7536-416c-8405-5c15f0a82874`
+- Real-data verification (Playwright + Lighthouse):
+  - Staging: 6 evaluator runs (3 bounties x 2 contenders), all hard gates passed, score=98.4
+  - Production: 10 evaluator runs (5 bounties x 2 contenders), all hard gates passed, score=98.4
+  - Each run includes: journey.json, 4 screenshots, lighthouse.summary.json, evaluator-result.json
+  - League table live on both envs
+- Evidence bundles:
+  - `artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/summary.json` (staging)
+  - `artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/summary.json` (production)
