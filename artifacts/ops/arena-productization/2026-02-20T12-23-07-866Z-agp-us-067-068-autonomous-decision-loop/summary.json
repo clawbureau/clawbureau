@@ -1,0 +1,70 @@
+{
+  "ok": true,
+  "story": "AGP-US-067-068",
+  "generated_at": "2026-02-20T12:23:07.865Z",
+  "endpoint": "https://staging.clawbounties.com/v1/arena/desk/decision-loop",
+  "dry_run": false,
+  "request": {
+    "decision_mode": "approve_valid",
+    "limit": 120,
+    "target_decisions": 2,
+    "bounty_ids": [
+      "bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e",
+      "bty_4265f754-718b-4d59-a559-4aaa958a4597"
+    ],
+    "require_claimed": true,
+    "reject_reason": "Arena desk auto-rejection",
+    "loop_id": "agp_v11_stage_decision_001",
+    "dry_run": false
+  },
+  "loop_result": {
+    "schema_version": "arena_desk_decision_loop.v1",
+    "loop_id": "agp_v11_stage_decision_001",
+    "computed_at": "2026-02-20T12:23:07.844Z",
+    "dry_run": false,
+    "decision_mode": "approve_valid",
+    "limits": {
+      "limit": 120,
+      "target_decisions": 2,
+      "require_claimed": true,
+      "bounty_ids": [
+        "bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e",
+        "bty_4265f754-718b-4d59-a559-4aaa958a4597"
+      ]
+    },
+    "totals": {
+      "candidates": 2,
+      "decisions": 2,
+      "approved": 0,
+      "rejected": 0,
+      "failed": 2,
+      "target_met": false
+    },
+    "decisions": [
+      {
+        "bounty_id": "bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e",
+        "submission_id": "sub_e523076c-fb10-4fa9-99b0-aa2270b77856",
+        "status": "failed",
+        "action": "approve",
+        "idempotency_key": "arena-desk-approve:sub_e523076c-fb10-4fa9-99b0-aa2270b77856",
+        "http_status": 502,
+        "response": {
+          "error": "FEE_APPLY_FAILED",
+          "message": "CUTS_APPLY_FAILED:422:{\"error\":\"POLICY_NOT_FOUND\",\"message\":\"snapshot references unknown policy version\"}"
+        }
+      },
+      {
+        "bounty_id": "bty_4265f754-718b-4d59-a559-4aaa958a4597",
+        "submission_id": "sub_bd7b311a-aa45-4326-a565-e8af4e527191",
+        "status": "failed",
+        "action": "approve",
+        "idempotency_key": "arena-desk-approve:sub_bd7b311a-aa45-4326-a565-e8af4e527191",
+        "http_status": 502,
+        "response": {
+          "error": "FEE_APPLY_FAILED",
+          "message": "CUTS_APPLY_FAILED:422:{\"error\":\"POLICY_NOT_FOUND\",\"message\":\"snapshot references unknown policy version\"}"
+        }
+      }
+    ]
+  }
+}

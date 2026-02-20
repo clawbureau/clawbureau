@@ -116,6 +116,11 @@ interface RequesterAuthContext {
   bearer_token: string | null;
 }
 
+interface RequesterAuthOverrideOptions {
+  authOverride?: RequesterAuthContext;
+  controlPlaneCheckOverride?: Record<string, unknown> | null;
+}
+
 interface WorkerAuthContext {
   worker_did: string;
   auth_mode: WorkerAuthMode;
@@ -1502,6 +1507,7 @@ function inferArenaBountyRiskTier(bounty: BountyV2): ArenaFleetRiskTier {
 
 const ARENA_CONFORMANCE_AGENT_SEED = new Uint8Array(Array.from({ length: 32 }, (_, index) => index + 1));
 const ARENA_CONFORMANCE_AGENT_DID = 'did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7';
+const ARENA_AUTONOMOUS_DEFAULT_REQUESTER_DID = 'did:key:z6Mkseedrequester0000000000000000000000000';
 const ARENA_BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function base58Encode(bytes: Uint8Array): string {
@@ -2592,6 +2598,30 @@ async function validateRequesterSensitiveTransition(
 
 function isSensitiveRequesterAction(action: RequesterAuthAction): boolean {
   return action === 'post_bounty' || action === 'approve_bounty' || action === 'reject_bounty';
+}
+
+function buildArenaDeskRequesterAuthContext(requesterDid: string): RequesterAuthContext {
+  return {
+    requester_did: requesterDid,
+    auth_mode: 'legacy_admin_header',
+    token_hash: null,
+    scope: [
+      REQUESTER_AUTH_SCOPE_BY_ACTION.post_bounty,
+      REQUESTER_AUTH_SCOPE_BY_ACTION.approve_bounty,
+      REQUESTER_AUTH_SCOPE_BY_ACTION.reject_bounty,
+      REQUESTER_AUTH_SCOPE_BY_ACTION.read_submission,
+    ],
+    aud: [],
+    token_scope_hash_b64u: null,
+    token_lane: null,
+    payment_account_did: requesterDid,
+    delegation_id: null,
+    delegator_did: null,
+    delegate_did: null,
+    iat: null,
+    exp: null,
+    bearer_token: null,
+  };
 }
 
 async function requireRequesterAuth(
@@ -3907,6 +3937,45 @@ async function escrowGet(env: Env, escrow_id: string): Promise<Record<string, un
   }
 
   return json;
+}
+
+async function escrowListHeld(env: Env, limit = 200): Promise<Array<Record<string, unknown>>> {
+  if (!env.ESCROW_SERVICE_KEY || env.ESCROW_SERVICE_KEY.trim().length === 0) {
+    throw new Error('ESCROW_SERVICE_KEY_NOT_CONFIGURED');
+  }
+
+  const boundedLimit = Math.max(1, Math.min(limit, 500));
+  const url = `${resolveEscrowBaseUrl(env)}/v1/escrows?status=held&limit=${boundedLimit}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${env.ESCROW_SERVICE_KEY}`,
+    },
+  });
+
+  const text = await response.text();
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = null;
+  }
+
+  if (!response.ok) {
+    const details = isRecord(json) ? json : { raw: text };
+    throw new Error(`ESCROW_FAILED:${response.status}:${JSON.stringify(details)}`);
+  }
+
+  if (!isRecord(json) || !Array.isArray(json.escrows)) {
+    throw new Error('ESCROW_INVALID_RESPONSE');
+  }
+
+  const escrows: Array<Record<string, unknown>> = [];
+  for (const entry of json.escrows) {
+    if (!isRecord(entry)) continue;
+    escrows.push(entry);
+  }
+  return escrows;
 }
 
 async function escrowGetReleased(env: Env, escrow_id: string): Promise<EscrowReleaseResponse> {
@@ -6060,6 +6129,15 @@ async function getBountyByIdempotencyKey(db: D1Database, key: string): Promise<B
 
 async function getBountyById(db: D1Database, bountyId: string): Promise<BountyV2 | null> {
   const row = await db.prepare('SELECT * FROM bounties WHERE bounty_id = ?').bind(bountyId).first();
+  if (!row || !isRecord(row)) return null;
+  return parseBountyRow(row);
+}
+
+async function getBountyByEscrowId(db: D1Database, escrowId: string): Promise<BountyV2 | null> {
+  const row = await db
+    .prepare('SELECT * FROM bounties WHERE escrow_id = ? ORDER BY created_at DESC, bounty_id DESC LIMIT 1')
+    .bind(escrowId)
+    .first();
   if (!row || !isRecord(row)) return null;
   return parseBountyRow(row);
 }
@@ -13134,7 +13212,13 @@ async function handleSubmitBounty(
   return jsonResponse(response, isValid ? 201 : 422, version);
 }
 
-async function handleApproveBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
+async function handleApproveBounty(
+  bountyId: string,
+  request: Request,
+  env: Env,
+  version: string,
+  options?: RequesterAuthOverrideOptions,
+): Promise<Response> {
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
@@ -13144,24 +13228,54 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
   const submission_id_raw = bodyRaw.submission_id;
   const idempotency_key_raw = bodyRaw.idempotency_key;
 
-  if (!isNonEmptyString(requester_did_raw) || !requester_did_raw.trim().startsWith('did:')) {
+  const requesterDidHint = isNonEmptyString(requester_did_raw) ? requester_did_raw.trim() : null;
+  if (requesterDidHint && !requesterDidHint.startsWith('did:')) {
     return errorResponse('INVALID_REQUEST', 'requester_did must be a DID string', 400, undefined, version);
   }
 
-  const requester_did = requester_did_raw.trim();
-  const requesterAuthResult = await requireRequesterAuth(request, env, version, {
-    action: 'approve_bounty',
-    requester_did_hint: requester_did,
-  });
-  if ('error' in requesterAuthResult) return requesterAuthResult.error;
+  let requesterAuth: RequesterAuthContext;
+  let controlPlaneCheck: Record<string, unknown> | null;
 
-  const requesterAuth = requesterAuthResult.auth;
+  if (options?.authOverride) {
+    requesterAuth = options.authOverride;
+    if (requesterDidHint && requesterDidHint !== requesterAuth.requester_did) {
+      return errorResponse(
+        'REQUESTER_SUB_MISMATCH',
+        'requester_did does not match auth override requester DID',
+        401,
+        {
+          requester_did: requesterAuth.requester_did,
+          requested_requester_did: requesterDidHint,
+        },
+        version,
+      );
+    }
 
-  const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
-    auth: requesterAuth,
-    transition: 'approve_bounty',
-  });
-  if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+    controlPlaneCheck = options.controlPlaneCheckOverride ?? {
+      source: 'arena_desk_auth_override',
+      checked_at: new Date().toISOString(),
+    };
+  } else {
+    if (!requesterDidHint) {
+      return errorResponse('INVALID_REQUEST', 'requester_did is required', 400, undefined, version);
+    }
+
+    const requesterAuthResult = await requireRequesterAuth(request, env, version, {
+      action: 'approve_bounty',
+      requester_did_hint: requesterDidHint,
+    });
+    if ('error' in requesterAuthResult) return requesterAuthResult.error;
+
+    requesterAuth = requesterAuthResult.auth;
+
+    const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
+      auth: requesterAuth,
+      transition: 'approve_bounty',
+    });
+    if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+
+    controlPlaneCheck = transitionAuthCheck.evidence;
+  }
 
   if (!isNonEmptyString(submission_id_raw)) {
     return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
@@ -13210,7 +13324,7 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
       auth: requesterAuth,
       created_at: new Date().toISOString(),
       sensitive_transition: true,
-      control_plane_check: transitionAuthCheck.evidence,
+      control_plane_check: controlPlaneCheck,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -13465,7 +13579,13 @@ async function handleApproveBounty(bountyId: string, request: Request, env: Env,
   return jsonResponse(response, 200, version);
 }
 
-async function handleRejectBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
+async function handleRejectBounty(
+  bountyId: string,
+  request: Request,
+  env: Env,
+  version: string,
+  options?: RequesterAuthOverrideOptions,
+): Promise<Response> {
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
@@ -13476,24 +13596,54 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
   const idempotency_key_raw = bodyRaw.idempotency_key;
   const reason_raw = bodyRaw.reason;
 
-  if (!isNonEmptyString(requester_did_raw) || !requester_did_raw.trim().startsWith('did:')) {
+  const requesterDidHint = isNonEmptyString(requester_did_raw) ? requester_did_raw.trim() : null;
+  if (requesterDidHint && !requesterDidHint.startsWith('did:')) {
     return errorResponse('INVALID_REQUEST', 'requester_did must be a DID string', 400, undefined, version);
   }
 
-  const requester_did = requester_did_raw.trim();
-  const requesterAuthResult = await requireRequesterAuth(request, env, version, {
-    action: 'reject_bounty',
-    requester_did_hint: requester_did,
-  });
-  if ('error' in requesterAuthResult) return requesterAuthResult.error;
+  let requesterAuth: RequesterAuthContext;
+  let controlPlaneCheck: Record<string, unknown> | null;
 
-  const requesterAuth = requesterAuthResult.auth;
+  if (options?.authOverride) {
+    requesterAuth = options.authOverride;
+    if (requesterDidHint && requesterDidHint !== requesterAuth.requester_did) {
+      return errorResponse(
+        'REQUESTER_SUB_MISMATCH',
+        'requester_did does not match auth override requester DID',
+        401,
+        {
+          requester_did: requesterAuth.requester_did,
+          requested_requester_did: requesterDidHint,
+        },
+        version,
+      );
+    }
 
-  const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
-    auth: requesterAuth,
-    transition: 'reject_bounty',
-  });
-  if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+    controlPlaneCheck = options.controlPlaneCheckOverride ?? {
+      source: 'arena_desk_auth_override',
+      checked_at: new Date().toISOString(),
+    };
+  } else {
+    if (!requesterDidHint) {
+      return errorResponse('INVALID_REQUEST', 'requester_did is required', 400, undefined, version);
+    }
+
+    const requesterAuthResult = await requireRequesterAuth(request, env, version, {
+      action: 'reject_bounty',
+      requester_did_hint: requesterDidHint,
+    });
+    if ('error' in requesterAuthResult) return requesterAuthResult.error;
+
+    requesterAuth = requesterAuthResult.auth;
+
+    const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
+      auth: requesterAuth,
+      transition: 'reject_bounty',
+    });
+    if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+
+    controlPlaneCheck = transitionAuthCheck.evidence;
+  }
 
   if (!isNonEmptyString(submission_id_raw)) {
     return errorResponse('INVALID_REQUEST', 'submission_id is required', 400, undefined, version);
@@ -13547,7 +13697,7 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
       auth: requesterAuth,
       created_at: new Date().toISOString(),
       sensitive_transition: true,
-      control_plane_check: transitionAuthCheck.evidence,
+      control_plane_check: controlPlaneCheck,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -13856,7 +14006,12 @@ async function handleRejectBounty(bountyId: string, request: Request, env: Env, 
   return jsonResponse(response, 200, version);
 }
 
-async function handlePostBounty(request: Request, env: Env, version: string): Promise<Response> {
+async function handlePostBounty(
+  request: Request,
+  env: Env,
+  version: string,
+  options?: RequesterAuthOverrideOptions,
+): Promise<Response> {
   const bodyRaw = await parseJsonBody(request);
   if (!isRecord(bodyRaw)) {
     return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
@@ -13872,19 +14027,46 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
   }
 
   const requester_did_hint = isNonEmptyString(requester_did_hint_raw) ? requester_did_hint_raw.trim() : null;
-  const requesterAuthResult = await requireRequesterAuth(request, env, version, {
-    action: 'post_bounty',
-    requester_did_hint,
-  });
-  if ('error' in requesterAuthResult) return requesterAuthResult.error;
 
-  const requesterAuth = requesterAuthResult.auth;
+  let requesterAuth: RequesterAuthContext;
+  let controlPlaneCheck: Record<string, unknown> | null;
 
-  const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
-    auth: requesterAuth,
-    transition: 'post_bounty',
-  });
-  if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+  if (options?.authOverride) {
+    requesterAuth = options.authOverride;
+    if (requester_did_hint && requester_did_hint !== requesterAuth.requester_did) {
+      return errorResponse(
+        'REQUESTER_SUB_MISMATCH',
+        'requester_did does not match auth override requester DID',
+        401,
+        {
+          requester_did: requesterAuth.requester_did,
+          requested_requester_did: requester_did_hint,
+        },
+        version,
+      );
+    }
+
+    controlPlaneCheck = options.controlPlaneCheckOverride ?? {
+      source: 'arena_desk_auth_override',
+      checked_at: new Date().toISOString(),
+    };
+  } else {
+    const requesterAuthResult = await requireRequesterAuth(request, env, version, {
+      action: 'post_bounty',
+      requester_did_hint,
+    });
+    if ('error' in requesterAuthResult) return requesterAuthResult.error;
+
+    requesterAuth = requesterAuthResult.auth;
+
+    const transitionAuthCheck = await validateRequesterSensitiveTransition(env, version, {
+      auth: requesterAuth,
+      transition: 'post_bounty',
+    });
+    if ('error' in transitionAuthCheck) return transitionAuthCheck.error;
+
+    controlPlaneCheck = transitionAuthCheck.evidence;
+  }
 
   const title = bodyRaw.title;
   const description = bodyRaw.description;
@@ -14082,7 +14264,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
         auth: requesterAuth,
         created_at: new Date().toISOString(),
         sensitive_transition: true,
-        control_plane_check: transitionAuthCheck.evidence,
+        control_plane_check: controlPlaneCheck,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14143,7 +14325,7 @@ async function handlePostBounty(request: Request, env: Env, version: string): Pr
       auth: requesterAuth,
       created_at: new Date().toISOString(),
       sensitive_transition: true,
-      control_plane_check: transitionAuthCheck.evidence,
+      control_plane_check: controlPlaneCheck,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -17910,6 +18092,11 @@ function mapArenaAutoClaimFailureReason(message: string): string {
   return 'ARENA_AUTOCLAIM_CLAIM_FAILED';
 }
 
+async function isWorkerRegisteredForArenaAutoClaim(db: D1Database, workerDid: string): Promise<boolean> {
+  const row = await db.prepare('SELECT worker_did FROM workers WHERE worker_did = ?').bind(workerDid).first();
+  return !!(isRecord(row) && d1String(row.worker_did)?.trim() === workerDid);
+}
+
 async function resolveArenaAutoClaimRouteSelection(
   env: Env,
   version: string,
@@ -17976,6 +18163,11 @@ async function resolveArenaAutoClaimRouteSelection(
           if (!isRecord(candidate)) continue;
           const workerDid = d1String(candidate.worker_did)?.trim() ?? null;
           if (!workerDid) continue;
+          const isRegisteredWorker = await isWorkerRegisteredForArenaAutoClaim(env.BOUNTIES_DB, workerDid);
+          if (!isRegisteredWorker) {
+            routeReasonCodes = [...routeReasonCodes, 'ARENA_AUTOCLAIM_WORKER_NOT_REGISTERED'];
+            continue;
+          }
           return {
             source: 'route',
             contenderId,
@@ -18021,6 +18213,11 @@ async function resolveArenaAutoClaimRouteSelection(
     if (!isRecord(candidate)) continue;
     const workerDid = d1String(candidate.worker_did)?.trim() ?? null;
     if (!workerDid) continue;
+    const isRegisteredWorker = await isWorkerRegisteredForArenaAutoClaim(env.BOUNTIES_DB, workerDid);
+    if (!isRegisteredWorker) {
+      fallbackReasonCodes.push('ARENA_AUTOCLAIM_WORKER_NOT_REGISTERED');
+      continue;
+    }
     fallbackWorker = workerDid;
     break;
   }
@@ -18158,6 +18355,17 @@ function parseArenaMissionThresholds(body: Record<string, unknown>): {
     errorField: null,
     errorMessage: null,
   };
+}
+
+type ArenaDeskDecisionMode = 'approve_valid' | 'reject_invalid' | 'mixed';
+
+function parseArenaDeskDecisionMode(raw: unknown): ArenaDeskDecisionMode | null {
+  if (!isNonEmptyString(raw)) return 'approve_valid';
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'approve_valid' || normalized === 'reject_invalid' || normalized === 'mixed') {
+    return normalized;
+  }
+  return null;
 }
 
 async function buildArenaMissionSummary(
@@ -18722,6 +18930,730 @@ async function handlePostArenaDeskSelfTuneRollout(
   );
 }
 
+async function handlePostArenaDeskDiscoverLoop(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const targetOpenRaw = d1Number(body.target_open_bounties);
+  let targetOpenBounties = 25;
+  if (targetOpenRaw !== null) {
+    if (!Number.isInteger(targetOpenRaw) || targetOpenRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'target_open_bounties must be a positive integer', 400, { field: 'target_open_bounties' }, version);
+    }
+    targetOpenBounties = Math.min(targetOpenRaw, 400);
+  }
+
+  const seedLimitRaw = d1Number(body.seed_limit);
+  let seedLimit = targetOpenBounties;
+  if (seedLimitRaw !== null) {
+    if (!Number.isInteger(seedLimitRaw) || seedLimitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'seed_limit must be a positive integer', 400, { field: 'seed_limit' }, version);
+    }
+    seedLimit = Math.min(seedLimitRaw, 400);
+  }
+
+  const seedRewardRaw = d1String(body.seed_reward_minor)?.trim() ?? '25';
+  const seedRewardMinor = parsePositiveMinor(seedRewardRaw);
+  if (seedRewardMinor === null) {
+    return errorResponse('INVALID_REQUEST', 'seed_reward_minor must be a positive integer string', 400, { field: 'seed_reward_minor' }, version);
+  }
+
+  const seedRequesterDids = parseStringList(body.seed_requester_dids, 100, 200, true);
+  if (seedRequesterDids === null || seedRequesterDids.some((did) => !did.startsWith('did:'))) {
+    return errorResponse('INVALID_REQUEST', 'seed_requester_dids must be DID strings', 400, { field: 'seed_requester_dids' }, version);
+  }
+
+  const seedTagsInput = body.seed_tags === undefined ? ['arena', 'autonomous', 'seed'] : body.seed_tags;
+  const seedTags = parseTags(seedTagsInput);
+  if (!seedTags || seedTags.length === 0) {
+    return errorResponse('INVALID_REQUEST', 'seed_tags must be a non-empty string[]', 400, { field: 'seed_tags' }, version);
+  }
+
+  const seedTitlePrefix = d1String(body.seed_title_prefix)?.trim() || 'Arena autonomous task';
+  const seedDescription = d1String(body.seed_description)?.trim() || 'Autonomous arena-seeded bounty for desk throughput operations.';
+  const objectiveProfileName = normalizeArenaPolicyDimensionValue(d1String(body.objective_profile_name)?.trim() ?? null) ?? 'arena-autonomous';
+  const discoverIdRaw = d1String(body.discover_id)?.trim() ?? null;
+  const discoverId = discoverIdRaw && discoverIdRaw.length <= 120
+    ? discoverIdRaw
+    : `arena_discover_${crypto.randomUUID().replace(/-/g, '')}`;
+
+  const dryRun = body.dry_run === true;
+  const seedWhenBelowTarget = body.seed_when_below_target !== false;
+
+  const openBefore = await listBounties(env.BOUNTIES_DB, { status: 'open', is_code_bounty: false }, 500);
+  const openBeforeCount = openBefore.length;
+  const neededSeeds = Math.max(targetOpenBounties - openBeforeCount, 0);
+  const plannedSeeds = seedWhenBelowTarget ? Math.min(neededSeeds, seedLimit) : 0;
+
+  const candidateRequesterDids = dedupeStrings([
+    ...seedRequesterDids,
+    ...openBefore.map((entry) => entry.requester_did).filter((did) => did.startsWith('did:')),
+    ARENA_AUTONOMOUS_DEFAULT_REQUESTER_DID,
+  ]);
+
+  if (candidateRequesterDids.length === 0) {
+    return errorResponse('INVALID_REQUEST', 'No requester DID candidates available for seed loop', 400, undefined, version);
+  }
+
+  const seedActions: Array<Record<string, unknown>> = [];
+  let seededCreated = 0;
+  let seededFailed = 0;
+
+  let escrowReusePoolLoaded = false;
+  let escrowReusePoolError: string | null = null;
+  const escrowReusePool: Array<{ escrow_id: string; buyer_did: string; amount_minor: string; buyer_total_minor: string }> = [];
+
+  const loadEscrowReusePool = async (): Promise<void> => {
+    if (escrowReusePoolLoaded) return;
+    escrowReusePoolLoaded = true;
+
+    try {
+      const escrowRows = await escrowListHeld(env, 500);
+      for (const row of escrowRows) {
+        const escrowId = d1String(row.escrow_id)?.trim() ?? null;
+        const status = d1String(row.status)?.trim() ?? null;
+        const buyerDid = d1String(row.buyer_did)?.trim() ?? null;
+        const workerDid = d1String(row.worker_did)?.trim() ?? null;
+        const currency = d1String(row.currency)?.trim() ?? null;
+        const amountMinor = d1String(row.amount_minor)?.trim() ?? null;
+        const buyerTotalMinor = d1String(row.buyer_total_minor)?.trim() ?? amountMinor;
+        const riskHold = isRecord(row.risk_hold) ? row.risk_hold : null;
+        const riskHoldStatus = d1String(riskHold?.status)?.trim() ?? null;
+
+        if (!escrowId || status !== 'held' || !buyerDid || !buyerDid.startsWith('did:') || workerDid || currency !== 'USD' || !amountMinor) {
+          continue;
+        }
+
+        if (riskHoldStatus === 'active') {
+          continue;
+        }
+
+        const existingBounty = await getBountyByEscrowId(env.BOUNTIES_DB, escrowId);
+        if (
+          existingBounty &&
+          (existingBounty.status === 'open' || existingBounty.status === 'accepted' || existingBounty.status === 'pending_review')
+        ) {
+          continue;
+        }
+
+        escrowReusePool.push({
+          escrow_id: escrowId,
+          buyer_did: buyerDid,
+          amount_minor: amountMinor,
+          buyer_total_minor: buyerTotalMinor ?? amountMinor,
+        });
+      }
+    } catch (err) {
+      escrowReusePoolError = err instanceof Error ? err.message : 'Unknown error';
+    }
+  };
+
+  const takeEscrowReuseCandidate = (preferredRequesterDid: string): {
+    escrow_id: string;
+    buyer_did: string;
+    amount_minor: string;
+    buyer_total_minor: string;
+  } | null => {
+    if (escrowReusePool.length === 0) return null;
+
+    const preferredIndex = escrowReusePool.findIndex((entry) => entry.buyer_did === preferredRequesterDid);
+    if (preferredIndex >= 0) {
+      const [picked] = escrowReusePool.splice(preferredIndex, 1);
+      return picked ?? null;
+    }
+
+    const [fallback] = escrowReusePool.splice(0, 1);
+    return fallback ?? null;
+  };
+
+  for (let index = 0; index < plannedSeeds; index += 1) {
+    const requesterDid = candidateRequesterDids[index % candidateRequesterDids.length] ?? ARENA_AUTONOMOUS_DEFAULT_REQUESTER_DID;
+    const idempotencyKey = `arena-seed:${discoverId}:${index + 1}`;
+    const payload = {
+      requester_did: requesterDid,
+      title: `${seedTitlePrefix} ${index + 1}`,
+      description: seedDescription,
+      reward: {
+        amount_minor: seedRewardMinor.toString(),
+        currency: 'USD',
+      },
+      closure_type: 'requester',
+      difficulty_scalar: 1,
+      is_code_bounty: false,
+      tags: seedTags,
+      min_proof_tier: 'self',
+      metadata: {
+        arena_seed: true,
+        arena_seed_version: '1',
+        arena_seed_discover_id: discoverId,
+        arena_seed_index: index + 1,
+        objective_profile_name: objectiveProfileName,
+        requested_worker_did: ARENA_CONFORMANCE_AGENT_DID,
+      },
+      idempotency_key: idempotencyKey,
+    };
+
+    if (dryRun) {
+      seedActions.push({
+        status: 'planned',
+        requester_did: requesterDid,
+        idempotency_key: idempotencyKey,
+        payload,
+      });
+      continue;
+    }
+
+    const postRequest = new Request('https://internal/v1/bounties', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: stableStringify(payload),
+    });
+
+    const postResponse = await handlePostBounty(postRequest, env, version, {
+      authOverride: buildArenaDeskRequesterAuthContext(requesterDid),
+      controlPlaneCheckOverride: {
+        source: 'arena_desk_discover_loop',
+        discover_id: discoverId,
+        requester_did: requesterDid,
+      },
+    });
+
+    const responseText = await postResponse.text();
+    let responsePayload: unknown;
+    try {
+      responsePayload = JSON.parse(responseText);
+    } catch {
+      responsePayload = { raw: responseText };
+    }
+
+    const payloadRecord = isRecord(responsePayload) ? responsePayload : null;
+    const bountyId = d1String(payloadRecord?.bounty_id)?.trim() ?? null;
+
+    if (postResponse.status === 200 || postResponse.status === 201) {
+      seededCreated += 1;
+      seedActions.push({
+        status: 'created',
+        requester_did: requesterDid,
+        bounty_id: bountyId,
+        idempotency_key: idempotencyKey,
+        http_status: postResponse.status,
+      });
+      continue;
+    }
+
+    const errorCode = d1String(payloadRecord?.error)?.trim() ?? null;
+    const errorMessage = d1String(payloadRecord?.message)?.trim() ?? null;
+    const canReuseEscrow = errorCode === 'ESCROW_FAILED' && !!errorMessage;
+
+    if (canReuseEscrow) {
+      await loadEscrowReusePool();
+      const escrowCandidate = takeEscrowReuseCandidate(requesterDid);
+
+      if (escrowCandidate) {
+        const reuseIdempotencyKey = `arena-seed-reuse:${discoverId}:${escrowCandidate.escrow_id}`;
+        const existingReuse = await getBountyByIdempotencyKey(env.BOUNTIES_DB, reuseIdempotencyKey);
+
+        if (existingReuse) {
+          seededCreated += 1;
+          seedActions.push({
+            status: 'replay',
+            seed_source: 'escrow_reuse',
+            requester_did: existingReuse.requester_did,
+            bounty_id: existingReuse.bounty_id,
+            escrow_id: existingReuse.escrow_id,
+            idempotency_key: reuseIdempotencyKey,
+            fallback_error_code: errorCode,
+          });
+          continue;
+        }
+
+        const now = new Date().toISOString();
+        const bountyIdFromEscrow = `bty_${crypto.randomUUID()}`;
+        const principalMinor = escrowCandidate.amount_minor;
+        const buyerTotalMinor = escrowCandidate.buyer_total_minor;
+
+        const feeQuote: CutsSimulateResponse = {
+          policy: {
+            id: 'arena_escrow_reuse',
+            version: 'v1',
+            hash_b64u: 'arena_escrow_reuse',
+          },
+          quote: {
+            principal_minor: principalMinor,
+            buyer_total_minor: buyerTotalMinor,
+            worker_net_minor: principalMinor,
+            fees: [],
+          },
+        };
+
+        const allInCost: AllInCostV2 = {
+          principal_minor: principalMinor,
+          platform_fee_minor: (() => {
+            try {
+              const total = BigInt(buyerTotalMinor);
+              const principal = BigInt(principalMinor);
+              const fee = total - principal;
+              return fee > 0n ? fee.toString() : '0';
+            } catch {
+              return '0';
+            }
+          })(),
+          total_minor: buyerTotalMinor,
+          currency: 'USD',
+        };
+
+        const seededRecord: BountyV2 = {
+          schema_version: '2',
+          bounty_id: bountyIdFromEscrow,
+          requester_did: escrowCandidate.buyer_did,
+          title: `${seedTitlePrefix} ${index + 1}`,
+          description: `${seedDescription} (seed_source=escrow_reuse escrow_id=${escrowCandidate.escrow_id})`,
+          reward: {
+            amount_minor: principalMinor,
+            currency: 'USD',
+          },
+          closure_type: 'requester',
+          difficulty_scalar: 1,
+          escrow_id: escrowCandidate.escrow_id,
+          status: 'open',
+          created_at: now,
+          worker_did: null,
+          accept_idempotency_key: null,
+          accepted_at: null,
+          job_token_scope_hash_b64u: null,
+          cwc_hash_b64u: null,
+          cwc_wpc_policy_hash_b64u: null,
+          cwc_required_proof_tier: null,
+          cwc_token_scope_hash_b64u: null,
+          cwc_buyer_envelope: null,
+          cwc_worker_envelope: null,
+          approved_submission_id: null,
+          approve_idempotency_key: null,
+          approved_at: null,
+          rejected_submission_id: null,
+          reject_idempotency_key: null,
+          rejected_at: null,
+          trial_case_id: null,
+          trial_opened_at: null,
+          arena_status: 'idle',
+          arena_id: null,
+          arena_task_fingerprint: null,
+          arena_winner_contender_id: null,
+          arena_evidence_links: [],
+          arena_updated_at: null,
+          is_code_bounty: false,
+          tags: seedTags,
+          min_proof_tier: 'self',
+          require_owner_verified_votes: false,
+          test_harness_id: null,
+          metadata: {
+            arena_seed: true,
+            arena_seed_version: '1',
+            arena_seed_discover_id: discoverId,
+            arena_seed_index: index + 1,
+            objective_profile_name: objectiveProfileName,
+            requested_worker_did: ARENA_CONFORMANCE_AGENT_DID,
+            seed_source: 'escrow_reuse',
+            source_escrow_id: escrowCandidate.escrow_id,
+            fallback_error_code: errorCode,
+          },
+          idempotency_key: reuseIdempotencyKey,
+          fee_policy_version: feeQuote.policy.version,
+          all_in_cost: allInCost,
+          fee_quote: feeQuote,
+          updated_at: now,
+        };
+
+        try {
+          await insertBounty(env.BOUNTIES_DB, seededRecord);
+          seededCreated += 1;
+          seedActions.push({
+            status: 'created',
+            seed_source: 'escrow_reuse',
+            requester_did: seededRecord.requester_did,
+            bounty_id: seededRecord.bounty_id,
+            escrow_id: seededRecord.escrow_id,
+            idempotency_key: reuseIdempotencyKey,
+            fallback_error_code: errorCode,
+          });
+          continue;
+        } catch (err) {
+          seededFailed += 1;
+          seedActions.push({
+            status: 'failed',
+            seed_source: 'escrow_reuse',
+            requester_did: requesterDid,
+            escrow_id: escrowCandidate.escrow_id,
+            idempotency_key: reuseIdempotencyKey,
+            http_status: postResponse.status,
+            response: {
+              fallback_error_code: errorCode,
+              fallback_error_message: errorMessage,
+              insert_error: err instanceof Error ? err.message : 'Unknown error',
+            },
+          });
+          continue;
+        }
+      }
+
+      if (escrowReusePoolError) {
+        seededFailed += 1;
+        seedActions.push({
+          status: 'failed',
+          requester_did: requesterDid,
+          idempotency_key: idempotencyKey,
+          http_status: postResponse.status,
+          response: responsePayload,
+          fallback: {
+            seed_source: 'escrow_reuse',
+            error: escrowReusePoolError,
+          },
+        });
+        continue;
+      }
+    }
+
+    seededFailed += 1;
+    seedActions.push({
+      status: 'failed',
+      requester_did: requesterDid,
+      idempotency_key: idempotencyKey,
+      http_status: postResponse.status,
+      response: responsePayload,
+      fallback: canReuseEscrow
+        ? {
+            seed_source: 'escrow_reuse',
+            error: 'NO_ELIGIBLE_ESCROW_CANDIDATE',
+          }
+        : null,
+    });
+  }
+
+  const openAfter = dryRun
+    ? openBefore
+    : await listBounties(env.BOUNTIES_DB, { status: 'open', is_code_bounty: false }, 500);
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_desk_discovery_loop.v1',
+      discover_id: discoverId,
+      computed_at: new Date().toISOString(),
+      dry_run: dryRun,
+      objective_profile_name: objectiveProfileName,
+      limits: {
+        target_open_bounties: targetOpenBounties,
+        seed_limit: seedLimit,
+        seed_reward_minor: seedRewardMinor.toString(),
+        seed_when_below_target: seedWhenBelowTarget,
+        seed_tags: seedTags,
+      },
+      totals: {
+        open_before: openBeforeCount,
+        open_after: openAfter.length,
+        needed_seeds: neededSeeds,
+        planned_seeds: plannedSeeds,
+        seeded_created: seededCreated,
+        seeded_failed: seededFailed,
+        target_met: openAfter.length >= targetOpenBounties,
+      },
+      requester_did_candidates: candidateRequesterDids,
+      open_bounty_sample: openAfter.slice(0, 50).map((entry) => ({
+        bounty_id: entry.bounty_id,
+        requester_did: entry.requester_did,
+        reward: entry.reward,
+        status: entry.status,
+        closure_type: entry.closure_type,
+      })),
+      seed_actions: seedActions,
+    },
+    200,
+    version,
+  );
+}
+
+async function listArenaDeskPendingReviewCandidateIds(
+  db: D1Database,
+  params: {
+    limit: number;
+    bountyIds: string[];
+    requireClaimed: boolean;
+  },
+): Promise<Array<{ bounty_id: string; submission_id: string }>> {
+  let sql = `
+    SELECT s.bounty_id, s.submission_id
+      FROM submissions s
+      INNER JOIN bounties b ON b.bounty_id = s.bounty_id
+     WHERE s.status = 'pending_review'
+       AND b.status = 'pending_review'
+       AND b.closure_type = 'requester'
+  `;
+
+  const bindings: unknown[] = [];
+
+  if (params.requireClaimed) {
+    sql += `
+      AND EXISTS (
+        SELECT 1
+          FROM bounty_arena_auto_claim_locks l
+         WHERE l.bounty_id = s.bounty_id
+           AND l.claim_status = 'claimed'
+      )
+    `;
+  }
+
+  if (params.bountyIds.length > 0) {
+    const placeholders = params.bountyIds.map(() => '?').join(', ');
+    sql += ` AND s.bounty_id IN (${placeholders})`;
+    bindings.push(...params.bountyIds);
+  }
+
+  sql += ' ORDER BY s.created_at ASC, s.submission_id ASC LIMIT ?';
+  bindings.push(params.limit);
+
+  const rows = await db.prepare(sql).bind(...bindings).all<Record<string, unknown>>();
+  const out: Array<{ bounty_id: string; submission_id: string }> = [];
+
+  for (const row of rows.results ?? []) {
+    if (!isRecord(row)) continue;
+    const bountyId = d1String(row.bounty_id)?.trim() ?? null;
+    const submissionId = d1String(row.submission_id)?.trim() ?? null;
+    if (!bountyId || !submissionId) continue;
+    out.push({ bounty_id: bountyId, submission_id: submissionId });
+  }
+
+  return out;
+}
+
+async function handlePostArenaDeskDecisionLoop(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const limitRaw = d1Number(body.limit);
+  let limit = 120;
+  if (limitRaw !== null) {
+    if (!Number.isInteger(limitRaw) || limitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(limitRaw, 400);
+  }
+
+  const targetRaw = d1Number(body.target_decisions);
+  let targetDecisions = Math.min(limit, 20);
+  if (targetRaw !== null) {
+    if (!Number.isInteger(targetRaw) || targetRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'target_decisions must be a positive integer', 400, { field: 'target_decisions' }, version);
+    }
+    targetDecisions = Math.min(targetRaw, limit);
+  }
+
+  const decisionMode = parseArenaDeskDecisionMode(body.decision_mode);
+  if (!decisionMode) {
+    return errorResponse('INVALID_REQUEST', 'decision_mode must be approve_valid|reject_invalid|mixed', 400, { field: 'decision_mode' }, version);
+  }
+
+  const bountyIdsParsed = parseStringList(body.bounty_ids, 500, 160, true);
+  if (bountyIdsParsed === null || bountyIdsParsed.some((entry) => !entry.startsWith('bty_'))) {
+    return errorResponse('INVALID_REQUEST', 'bounty_ids must contain bounty IDs (bty_*)', 400, { field: 'bounty_ids' }, version);
+  }
+  const bountyIds = dedupeStrings(bountyIdsParsed);
+
+  const rejectReasonRaw = d1String(body.reject_reason)?.trim() ?? null;
+  const rejectReason = rejectReasonRaw && rejectReasonRaw.length > 0 ? rejectReasonRaw.slice(0, 512) : 'Arena desk auto-rejection';
+
+  const requireClaimed = body.require_claimed !== false;
+  const dryRun = body.dry_run === true;
+
+  const loopIdRaw = d1String(body.loop_id)?.trim() ?? null;
+  const loopId = loopIdRaw && loopIdRaw.length <= 120
+    ? loopIdRaw
+    : `arena_decision_${crypto.randomUUID().replace(/-/g, '')}`;
+
+  const candidateIds = await listArenaDeskPendingReviewCandidateIds(env.BOUNTIES_DB, {
+    limit,
+    bountyIds,
+    requireClaimed,
+  });
+
+  const decisions: Array<Record<string, unknown>> = [];
+  let approvedCount = 0;
+  let rejectedCount = 0;
+  let failedCount = 0;
+
+  for (const candidate of candidateIds) {
+    if (decisions.length >= limit) break;
+    if ((approvedCount + rejectedCount) >= targetDecisions) break;
+
+    const bounty = await getBountyById(env.BOUNTIES_DB, candidate.bounty_id);
+    const submission = await getSubmissionById(env.BOUNTIES_DB, candidate.submission_id);
+
+    if (!bounty || !submission) {
+      decisions.push({
+        bounty_id: candidate.bounty_id,
+        submission_id: candidate.submission_id,
+        status: 'skipped',
+        reason_code: 'ARENA_DECISION_ENTITY_NOT_FOUND',
+      });
+      continue;
+    }
+
+    const proofValid = submission.proof_verify_status === 'valid';
+    const commitValidForCode = !bounty.is_code_bounty || submission.commit_proof_verify_status === 'valid';
+    const eligibleForApproval = proofValid && commitValidForCode;
+
+    let action: 'approve' | 'reject' | null = null;
+    if (decisionMode === 'approve_valid') {
+      action = eligibleForApproval ? 'approve' : null;
+    } else if (decisionMode === 'reject_invalid') {
+      action = eligibleForApproval ? null : 'reject';
+    } else {
+      action = eligibleForApproval ? 'approve' : 'reject';
+    }
+
+    if (!action) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        status: 'skipped',
+        reason_code: eligibleForApproval
+          ? 'ARENA_DECISION_MODE_SKIP_VALID'
+          : 'ARENA_DECISION_MODE_SKIP_INVALID',
+        decision_mode: decisionMode,
+      });
+      continue;
+    }
+
+    const idempotencyKey = action === 'approve'
+      ? `arena-desk-approve:${submission.submission_id}`
+      : `arena-desk-reject:${submission.submission_id}`;
+
+    const requestBody: Record<string, unknown> = {
+      requester_did: bounty.requester_did,
+      submission_id: submission.submission_id,
+      idempotency_key: idempotencyKey,
+    };
+
+    if (action === 'reject') {
+      requestBody.reason = rejectReason;
+    }
+
+    if (dryRun) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        status: 'planned',
+        action,
+        idempotency_key: idempotencyKey,
+        requester_did: bounty.requester_did,
+        proof_verify_status: submission.proof_verify_status,
+        commit_proof_verify_status: submission.commit_proof_verify_status,
+      });
+      continue;
+    }
+
+    const innerRequest = new Request(`https://internal/v1/bounties/${encodeURIComponent(bounty.bounty_id)}/${action}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: stableStringify(requestBody),
+    });
+
+    const handlerOptions: RequesterAuthOverrideOptions = {
+      authOverride: buildArenaDeskRequesterAuthContext(bounty.requester_did),
+      controlPlaneCheckOverride: {
+        source: 'arena_desk_decision_loop',
+        loop_id: loopId,
+        decision_mode: decisionMode,
+        action,
+      },
+    };
+
+    const response = action === 'approve'
+      ? await handleApproveBounty(bounty.bounty_id, innerRequest, env, version, handlerOptions)
+      : await handleRejectBounty(bounty.bounty_id, innerRequest, env, version, handlerOptions);
+
+    const responseText = await response.text();
+    let responsePayload: unknown;
+    try {
+      responsePayload = JSON.parse(responseText);
+    } catch {
+      responsePayload = { raw: responseText };
+    }
+
+    if (response.status === 200) {
+      if (action === 'approve') approvedCount += 1;
+      if (action === 'reject') rejectedCount += 1;
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        status: 'applied',
+        action,
+        idempotency_key: idempotencyKey,
+        http_status: response.status,
+        response: responsePayload,
+      });
+    } else {
+      failedCount += 1;
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        submission_id: submission.submission_id,
+        status: 'failed',
+        action,
+        idempotency_key: idempotencyKey,
+        http_status: response.status,
+        response: responsePayload,
+      });
+    }
+  }
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_desk_decision_loop.v1',
+      loop_id: loopId,
+      computed_at: new Date().toISOString(),
+      dry_run: dryRun,
+      decision_mode: decisionMode,
+      limits: {
+        limit,
+        target_decisions: targetDecisions,
+        require_claimed: requireClaimed,
+        bounty_ids: bountyIds,
+      },
+      totals: {
+        candidates: candidateIds.length,
+        decisions: decisions.length,
+        approved: approvedCount,
+        rejected: rejectedCount,
+        failed: failedCount,
+        target_met: (approvedCount + rejectedCount) >= targetDecisions,
+      },
+      decisions,
+    },
+    200,
+    version,
+  );
+}
+
 async function handleGetArenaDeskClaimLocks(
   request: Request,
   env: Env,
@@ -19266,12 +20198,55 @@ async function handlePostArenaDeskSubmissionLoop(
       continue;
     }
 
-    if (bounty.worker_did !== workerDid) {
+    if (!bounty.worker_did) {
+      if (dryRun) {
+        decisions.push({
+          bounty_id: bountyId,
+          status: 'dry_run',
+          reason_code: 'ARENA_SUBMISSION_ASSIGNMENT_RECOVERY_DRY_RUN',
+          expected_worker_did: workerDid,
+        });
+        continue;
+      }
+
+      try {
+        await escrowAssignWorker(env, {
+          escrow_id: bounty.escrow_id,
+          idempotency_key: `arena-autosubmit-bind:${bountyId}:${workerDid}`,
+          worker_did: workerDid,
+        });
+
+        const now = new Date().toISOString();
+        await updateBountyAccepted(env.BOUNTIES_DB, {
+          bounty_id: bountyId,
+          worker_did: workerDid,
+          accepted_at: now,
+          idempotency_key: `arena-autosubmit-bind:${bountyId}:${workerDid}`,
+          cwc_worker_envelope_json: null,
+          cwc_token_scope_hash_b64u: null,
+          job_token_scope_hash_b64u: null,
+          now,
+        });
+
+        bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        decisions.push({
+          bounty_id: bountyId,
+          status: 'failed',
+          reason_code: 'ARENA_SUBMISSION_ASSIGNMENT_RECOVERY_FAILED',
+          error: message,
+        });
+        continue;
+      }
+    }
+
+    if (!bounty || bounty.worker_did !== workerDid) {
       decisions.push({
         bounty_id: bountyId,
         status: 'skipped',
         reason_code: 'WORKER_MISMATCH',
-        bounty_worker_did: bounty.worker_did,
+        bounty_worker_did: bounty?.worker_did ?? null,
       });
       continue;
     }
@@ -21109,6 +22084,10 @@ export default {
         return handleGetArenaMission(url, env, version);
       }
 
+      if (path === '/v1/arena/desk/discover-loop' && method === 'POST') {
+        return handlePostArenaDeskDiscoverLoop(request, env, version);
+      }
+
       if (path === '/v1/arena/desk/claims' && method === 'GET') {
         return handleGetArenaDeskClaimLocks(request, env, version);
       }
@@ -21127,6 +22106,10 @@ export default {
 
       if (path === '/v1/arena/desk/submit-loop' && method === 'POST') {
         return handlePostArenaDeskSubmissionLoop(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/decision-loop' && method === 'POST') {
+        return handlePostArenaDeskDecisionLoop(request, env, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {

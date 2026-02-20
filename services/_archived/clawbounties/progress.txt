@@ -1246,3 +1246,58 @@ Started: 2026-02-02T03:08:26.937005
   - production rollout status: `PROMOTED` (gate pass + policy promotion status `PROMOTED`)
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/summary.json`
+
+## 2026-02-20 - AGP-US-064 autonomous desk discovery
+- Added admin discover loop endpoint:
+  - `POST /v1/arena/desk/discover-loop`
+  - computes open non-code inventory, seeds requester-closure bounties deterministically when below target.
+- Added controlled fallback seeding lane:
+  - when `POST /v1/bounties` seed fails on escrow hold, discover loop can seed from held/unassigned escrow inventory (`seed_source=escrow_reuse`) fail-closed.
+- Added tooling/contracts:
+  - `scripts/arena/run-autonomous-discovery-loop.mjs`
+  - `scripts/arena/run-autonomous-discovery-loop.test.mjs`
+  - `contracts/arena/autonomous-discovery-loop.sample.v1.json`
+- Deployed services:
+  - `clawbounties-staging` version `c2fb8496-b47c-44cb-ba29-c1f60eb9fc00`
+  - `clawbounties` version `24dd0317-4879-43ef-bb36-b20328c5945a`
+- Real-data evidence:
+  - staging discover totals: `open_before=1`, `open_after=3`, `seeded_created=2`, `seeded_failed=5`
+  - production discover totals: `open_before=4`, `open_after=8`, `seeded_created=4`, `seeded_failed=0`
+
+## 2026-02-20 - AGP-US-065/066 autonomous claim+submit throughput
+- Hardened claim-loop worker selection:
+  - claim route/fleet candidates now require marketplace-registered worker DIDs (prevents dead-end claims).
+- Hardened submission autopilot for legacy accepted backlog:
+  - added assignment-recovery path for accepted bounties missing `worker_did` (escrow assign + bounty accept state repair, fail-closed on error).
+- Added tooling updates:
+  - `scripts/arena/run-auto-bounty-grabber.mjs` now supports `--bounty-ids` + `--requested-worker-did` for deterministic autonomous desk execution.
+- Real-data evidence:
+  - staging claim totals: `claimed=2/2` for targeted seeded bounties.
+  - production claim totals: `claimed=4/4` for targeted seeded bounties.
+  - staging submit totals: `successful_pending_review=2/2`.
+  - production submit totals: `successful_pending_review=4/4`.
+
+## 2026-02-20 - AGP-US-067/068 autonomous decision loop
+- Added admin decision loop endpoint:
+  - `POST /v1/arena/desk/decision-loop`
+  - mode-driven review automation (`approve_valid|reject_invalid|mixed`) using internal requester auth override lane.
+- Added tooling/contracts:
+  - `scripts/arena/run-autonomous-decision-loop.mjs`
+  - `scripts/arena/run-autonomous-decision-loop.test.mjs`
+  - `contracts/arena/autonomous-decision-loop.sample.v1.json`
+- Real-data evidence:
+  - staging: decisions attempted `2`, approved `0`, failed `2` (fail-closed `FEE_APPLY_FAILED`).
+  - production: decisions attempted `4`, approved `2`, failed `2` (fail-closed policy-hash mismatch on remaining approvals).
+
+## 2026-02-20 - AGP-US-069 autonomous desk cycle orchestration
+- Added one-shot autonomous desk cycle orchestrator:
+  - `scripts/arena/run-autonomous-desk-cycle.mjs`
+  - flow: discover -> claim -> submit -> decision -> mission -> KPI gate -> self-tune rollout.
+- Added tooling/contracts:
+  - `scripts/arena/run-autonomous-desk-cycle.test.mjs`
+  - `contracts/arena/autonomous-desk-cycle.sample.v1.json`
+- Real-data evidence:
+  - staging cycle completed with fail-closed outcomes (`gate_status=FAIL`, `rollout_status=NOT_READY`).
+  - production cycle completed with live claim+submit and rollout evaluation (`claimed=1`, `submitted=1`, `rollout_status=PROMOTED`).
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T12-32-30Z-agp-us-064-069-autonomous-desk-loop/summary.json`

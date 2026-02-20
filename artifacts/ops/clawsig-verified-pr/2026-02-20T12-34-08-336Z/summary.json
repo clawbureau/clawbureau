@@ -1,0 +1,77 @@
+{
+  "mode": {
+    "enforce": true,
+    "reason": "proofs/**/commit.sig.json present",
+    "labels": []
+  },
+  "inputs": {
+    "changed_files": [
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-explorer.headers",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-explorer.html",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-explorer.status.txt",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-mission.stdout.log",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/prod-mission.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-explorer.headers",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-explorer.html",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-explorer.status.txt",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-mission.stdout.log",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/stage-mission.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/prod-gate.stdout.log",
+      "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/prod-gate.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/stage-gate.stdout.log",
+      "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/stage-gate.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/prod-rollout.stdout.log",
+      "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/prod-rollout.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/stage-rollout.stdout.log",
+      "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/stage-rollout.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/summary.json",
+      "contracts/arena/mission-kpi-gates.sample.v1.json",
+      "contracts/arena/self-tune-rollout.sample.v1.json",
+      "docs/foundations/BOUNTY_ARENA_MVP_RUNBOOK.md",
+      "proofs/feat/arena/AGP-US-061-062-063-mission-control-kpi-self-tune/commit.sig.json",
+      "scripts/arena/run-mission-dashboard-report.mjs",
+      "scripts/arena/run-mission-dashboard-report.test.mjs",
+      "scripts/arena/run-mission-kpi-gates.mjs",
+      "scripts/arena/run-mission-kpi-gates.test.mjs",
+      "scripts/arena/run-self-tuning-rollout.mjs",
+      "scripts/arena/run-self-tuning-rollout.test.mjs",
+      "services/_archived/clawbounties/progress.txt",
+      "services/_archived/clawbounties/src/index.ts",
+      "services/clawsig-explorer/src/api.ts",
+      "services/clawsig-explorer/src/index.ts",
+      "services/clawsig-explorer/src/pages/arena.ts",
+      "services/clawsig-explorer/test/arena-page.test.ts"
+    ],
+    "bundles": [],
+    "commit_sigs": [
+      "proofs/feat/arena/AGP-US-061-062-063-mission-control-kpi-self-tune/commit.sig.json"
+    ],
+    "config_path": "packages/schema/fixtures/clawverify.config.clawbureau.v1.json",
+    "cli_path": "packages/clawverify-cli/dist/cli.js"
+  },
+  "results": {
+    "ok": true,
+    "would_fail": false,
+    "missing_evidence": {
+      "bundles_required_missing": false,
+      "commit_sigs_required_missing": false
+    },
+    "bundles_ok": true,
+    "commit_sigs_ok": true
+  },
+  "bundles": [],
+  "commit_sigs": [
+    {
+      "path": "proofs/feat/arena/AGP-US-061-062-063-mission-control-kpi-self-tune/commit.sig.json",
+      "ok": true,
+      "reason_code": "OK",
+      "reason": "Commit signature verified",
+      "commit_sha": "5f9d632edfef0a2867c329ddd4ffe5d7f47d24ee",
+      "signer_did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+      "message": "commit:5f9d632edfef0a2867c329ddd4ffe5d7f47d24ee"
+    }
+  ],
+  "finished_at": "2026-02-20T12:34:08.335Z"
+}

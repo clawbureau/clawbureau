@@ -1,0 +1,102 @@
+{
+  "ok": true,
+  "story_range": "AGP-US-064..069",
+  "generated_at": "2026-02-20T12:32:30Z",
+  "deployments": {
+    "staging": {
+      "service": "clawbounties-staging",
+      "version_id": "c2fb8496-b47c-44cb-ba29-c1f60eb9fc00"
+    },
+    "production": {
+      "service": "clawbounties",
+      "version_id": "24dd0317-4879-43ef-bb36-b20328c5945a"
+    }
+  },
+  "artifacts": {
+    "staging": {
+      "discover_loop": "artifacts/ops/arena-productization/2026-02-20T12-22-20-697Z-agp-us-064-autonomous-discovery-loop/summary.json",
+      "claim_loop": "artifacts/ops/arena-productization/2026-02-20T12-32-30Z-agp-us-064-069-autonomous-desk-loop/stage-claim-loop.json",
+      "submit_loop": "artifacts/ops/arena-productization/2026-02-20T12-22-59-191Z-agp-us-060-execution-submission-autopilot/summary.json",
+      "decision_loop": "artifacts/ops/arena-productization/2026-02-20T12-23-07-866Z-agp-us-067-068-autonomous-decision-loop/summary.json",
+      "desk_cycle": "artifacts/ops/arena-productization/2026-02-20T12-27-52-511Z-agp-us-069-autonomous-desk-cycle/summary.json"
+    },
+    "production": {
+      "discover_loop": "artifacts/ops/arena-productization/2026-02-20T12-29-48-563Z-agp-us-064-autonomous-discovery-loop/summary.json",
+      "claim_loop": "artifacts/ops/arena-productization/2026-02-20T12-32-30Z-agp-us-064-069-autonomous-desk-loop/prod-claim-loop.json",
+      "submit_loop": "artifacts/ops/arena-productization/2026-02-20T12-30-44-576Z-agp-us-060-execution-submission-autopilot/summary.json",
+      "decision_loop": "artifacts/ops/arena-productization/2026-02-20T12-30-57-103Z-agp-us-067-068-autonomous-decision-loop/summary.json",
+      "desk_cycle": "artifacts/ops/arena-productization/2026-02-20T12-31-15-470Z-agp-us-069-autonomous-desk-cycle/summary.json"
+    }
+  },
+  "metrics": {
+    "staging": {
+      "discover": {
+        "open_before": 1,
+        "open_after": 3,
+        "seeded_created": 2,
+        "seeded_failed": 5,
+        "target_met": false
+      },
+      "claim": {
+        "claimed": 2,
+        "failed": 0,
+        "target_met": true
+      },
+      "submit": {
+        "successful_pending_review": 2,
+        "target_met": true
+      },
+      "decision": {
+        "approved": 0,
+        "rejected": 0,
+        "failed": 2,
+        "target_met": false
+      },
+      "cycle": {
+        "open_after": 1,
+        "claimed": 0,
+        "submitted": 0,
+        "decisions_applied": 0,
+        "gate_status": "FAIL",
+        "rollout_status": "NOT_READY"
+      }
+    },
+    "production": {
+      "discover": {
+        "open_before": 4,
+        "open_after": 8,
+        "seeded_created": 4,
+        "seeded_failed": 0,
+        "target_met": true
+      },
+      "claim": {
+        "claimed": 4,
+        "failed": 0,
+        "target_met": true
+      },
+      "submit": {
+        "successful_pending_review": 4,
+        "target_met": true
+      },
+      "decision": {
+        "approved": 2,
+        "rejected": 0,
+        "failed": 2,
+        "target_met": false
+      },
+      "cycle": {
+        "open_after": 4,
+        "claimed": 1,
+        "submitted": 1,
+        "decisions_applied": 0,
+        "gate_status": "FAIL",
+        "rollout_status": "PROMOTED"
+      }
+    }
+  },
+  "fail_closed_observations": [
+    "Staging discovery fallback exhausted reusable held escrows after two creations; remaining seed attempts failed with NO_ELIGIBLE_ESCROW_CANDIDATE.",
+    "Staging decision loop approvals failed with deterministic FEE_APPLY_FAILED (CUTS policy not found/mismatch).",
+    "Production decision loop partially applied; approvals failed where escrow fee snapshot policy hash mismatched current cuts policy hash."
+  ]
+}
