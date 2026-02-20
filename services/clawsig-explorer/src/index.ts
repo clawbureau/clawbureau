@@ -145,10 +145,12 @@ export default {
 
     // Cache API instance
     const cache = await caches.open("clawsig-explorer");
+    const bountiesBase = env.ARENA_API_BASE ?? 'https://clawbounties.com';
     const apiOpts = {
       vaasBase: env.VAAS_API_BASE,
-      arenaBase: env.ARENA_API_BASE ?? 'https://clawbounties.com',
+      arenaBase: bountiesBase,
       arenaAdminKey: env.ARENA_ADMIN_KEY ?? '',
+      bountiesBase,
       cache,
     };
 
@@ -322,7 +324,10 @@ export default {
         return html(arenaNotFoundPage(arenaId), 404, 20);
       }
 
-      return html(arenaComparePage(report ?? fallbackReport!), 200, 20);
+      // Construct artifacts base URL from the bounties API origin
+      const bountiesBase = apiOpts.bountiesBase?.replace(/\/$/, '') ?? null;
+      const artifactsUrl = bountiesBase ? `${bountiesBase}/v1/arena/artifacts` : null;
+      return html(arenaComparePage(report ?? fallbackReport!, artifactsUrl), 200, 20);
     }
 
     // -- Run detail --

@@ -88,6 +88,9 @@ export interface Env {
 
   /** Optional direct queue producer binding to clawrep events. */
   REP_EVENTS?: Queue;
+
+  /** R2 bucket for arena duel artifacts (screenshots, journeys, lighthouse). */
+  ARENA_ARTIFACTS?: R2Bucket;
 }
 
 type ClosureType = 'test' | 'requester' | 'quorum';
@@ -23592,6 +23595,70 @@ async function handleGetDuelLeague(
   }, 200, version);
 }
 
+async function handleUploadArenaArtifact(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  if (!env.ARENA_ARTIFACTS) {
+    return errorResponse('SERVICE_UNAVAILABLE', 'Artifact storage not configured', 503, undefined, version);
+  }
+
+  const url = new URL(request.url);
+  const key = url.searchParams.get('key')?.trim();
+  const contentType = request.headers.get('content-type') ?? 'application/octet-stream';
+
+  if (!key || key.length < 10 || !key.startsWith('arena/')) {
+    return errorResponse('INVALID_REQUEST', 'key query param required (must start with arena/ and be >=10 chars)', 400, { field: 'key' }, version);
+  }
+
+  const body = await request.arrayBuffer();
+  if (body.byteLength === 0 || body.byteLength > 5 * 1024 * 1024) {
+    return errorResponse('INVALID_REQUEST', 'Body must be 1 byte to 5MB', 400, { size: body.byteLength }, version);
+  }
+
+  await env.ARENA_ARTIFACTS.put(key, body, {
+    httpMetadata: { contentType },
+    customMetadata: { uploaded_at: new Date().toISOString() },
+  });
+
+  const artifactUrl = `${url.origin}/v1/arena/artifacts/${key}`;
+  return jsonResponse({ ok: true, key, url: artifactUrl, size: body.byteLength }, 200, version);
+}
+
+async function handleGetArenaArtifact(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!env.ARENA_ARTIFACTS) {
+    return new Response('Artifact storage not configured', { status: 503 });
+  }
+
+  const url = new URL(request.url);
+  const prefix = '/v1/arena/artifacts/';
+  const key = url.pathname.slice(prefix.length);
+
+  if (!key || !key.startsWith('arena/')) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  const object = await env.ARENA_ARTIFACTS.get(key);
+  if (!object) {
+    return new Response('Not found', { status: 404 });
+  }
+
+  const headers = new Headers();
+  const ct = object.httpMetadata?.contentType ?? 'application/octet-stream';
+  headers.set('content-type', ct);
+  headers.set('cache-control', 'public, max-age=86400, immutable');
+
+  if (ct.startsWith('image/')) {
+    headers.set('content-disposition', 'inline');
+  }
+
+  return new Response(object.body, { status: 200, headers });
+}
+
 async function handleBackfillDuelProofPacks(
   env: Env,
   version: string,
@@ -24221,6 +24288,17 @@ export default {
         const adminError = requireAdmin(request, env, version);
         if (adminError) return adminError;
         return handleBackfillDuelProofPacks(env, version);
+      }
+
+      if (path === '/v1/arena/desk/upload-artifact' && method === 'POST') {
+        const adminError = requireAdmin(request, env, version);
+        if (adminError) return adminError;
+        return handleUploadArenaArtifact(request, env, version);
+      }
+
+      // Public artifact serving (screenshots, journeys, lighthouse)
+      if (path.startsWith('/v1/arena/artifacts/') && method === 'GET') {
+        return handleGetArenaArtifact(request, env);
       }
 
       if (path === '/v1/arena/duel-league' && method === 'GET') {
