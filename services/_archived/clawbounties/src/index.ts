@@ -18397,6 +18397,22 @@ type ArenaMissionKpiThresholds = {
   max_accepted_backlog: number;
 };
 
+const ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS = Object.freeze({
+  min_sample_count: 5,
+  min_first_pass_accept_rate: 0.5,
+  max_override_rate: 0.3,
+  max_rework_rate: 0.2,
+  max_cost_per_accepted_bounty_usd: 2,
+});
+
+type ArenaCircuitBreakerRoiThresholds = {
+  min_sample_count: number;
+  min_first_pass_accept_rate: number;
+  max_override_rate: number;
+  max_rework_rate: number;
+  max_cost_per_accepted_bounty_usd: number;
+};
+
 function asCount(value: unknown): number {
   const numeric = d1Number(value);
   if (numeric !== null && Number.isFinite(numeric)) {
@@ -18491,6 +18507,174 @@ function parseArenaMissionThresholds(body: Record<string, unknown>): {
     thresholds,
     errorField: null,
     errorMessage: null,
+  };
+}
+
+function parseArenaCircuitBreakerRoiThresholds(body: Record<string, unknown>): {
+  thresholds: ArenaCircuitBreakerRoiThresholds | null;
+  errorField: string | null;
+  errorMessage: string | null;
+} {
+  const minSampleCountRaw = d1Number(body.roi_min_sample_count);
+  const minFirstPassAcceptRateRaw = d1Number(body.roi_min_first_pass_accept_rate);
+  const maxOverrideRateRaw = d1Number(body.roi_max_override_rate);
+  const maxReworkRateRaw = d1Number(body.roi_max_rework_rate);
+  const maxCostPerAcceptedRaw = d1Number(body.roi_max_cost_per_accepted_bounty_usd);
+
+  const thresholds: ArenaCircuitBreakerRoiThresholds = {
+    min_sample_count: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.min_sample_count,
+    min_first_pass_accept_rate: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.min_first_pass_accept_rate,
+    max_override_rate: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.max_override_rate,
+    max_rework_rate: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.max_rework_rate,
+    max_cost_per_accepted_bounty_usd: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.max_cost_per_accepted_bounty_usd,
+  };
+
+  if (minSampleCountRaw !== null) {
+    if (!Number.isInteger(minSampleCountRaw) || minSampleCountRaw <= 0) {
+      return { thresholds: null, errorField: 'roi_min_sample_count', errorMessage: 'roi_min_sample_count must be a positive integer' };
+    }
+    thresholds.min_sample_count = Math.min(minSampleCountRaw, 20_000);
+  }
+
+  if (minFirstPassAcceptRateRaw !== null) {
+    if (!Number.isFinite(minFirstPassAcceptRateRaw) || minFirstPassAcceptRateRaw < 0 || minFirstPassAcceptRateRaw > 1) {
+      return { thresholds: null, errorField: 'roi_min_first_pass_accept_rate', errorMessage: 'roi_min_first_pass_accept_rate must be within [0,1]' };
+    }
+    thresholds.min_first_pass_accept_rate = Number(minFirstPassAcceptRateRaw.toFixed(4));
+  }
+
+  if (maxOverrideRateRaw !== null) {
+    if (!Number.isFinite(maxOverrideRateRaw) || maxOverrideRateRaw < 0 || maxOverrideRateRaw > 1) {
+      return { thresholds: null, errorField: 'roi_max_override_rate', errorMessage: 'roi_max_override_rate must be within [0,1]' };
+    }
+    thresholds.max_override_rate = Number(maxOverrideRateRaw.toFixed(4));
+  }
+
+  if (maxReworkRateRaw !== null) {
+    if (!Number.isFinite(maxReworkRateRaw) || maxReworkRateRaw < 0 || maxReworkRateRaw > 1) {
+      return { thresholds: null, errorField: 'roi_max_rework_rate', errorMessage: 'roi_max_rework_rate must be within [0,1]' };
+    }
+    thresholds.max_rework_rate = Number(maxReworkRateRaw.toFixed(4));
+  }
+
+  if (maxCostPerAcceptedRaw !== null) {
+    if (!Number.isFinite(maxCostPerAcceptedRaw) || maxCostPerAcceptedRaw < 0) {
+      return { thresholds: null, errorField: 'roi_max_cost_per_accepted_bounty_usd', errorMessage: 'roi_max_cost_per_accepted_bounty_usd must be >= 0' };
+    }
+    thresholds.max_cost_per_accepted_bounty_usd = Number(maxCostPerAcceptedRaw.toFixed(4));
+  }
+
+  return {
+    thresholds,
+    errorField: null,
+    errorMessage: null,
+  };
+}
+
+type ArenaCircuitBreakerViolation = {
+  code: string;
+  message: string;
+  value: number | boolean | string | null;
+  threshold: number | boolean | string | null;
+};
+
+function evaluateArenaCircuitBreaker(params: {
+  missionSummary: Record<string, unknown>;
+  roiDashboard: Record<string, unknown>;
+  roiThresholds: ArenaCircuitBreakerRoiThresholds;
+}): {
+  status: 'PASS' | 'TRIPPED';
+  reasonCodes: string[];
+  violations: ArenaCircuitBreakerViolation[];
+} {
+  const violations: ArenaCircuitBreakerViolation[] = [];
+  const reasonCodes: string[] = [];
+
+  const missionKpi = isRecord(params.missionSummary.kpi) ? params.missionSummary.kpi : null;
+  const missionGateStatus = d1String(missionKpi?.gate_status) ?? 'FAIL';
+  const missionReasonCodes = parseStringList(missionKpi?.reason_codes, 200, 120, true) ?? [];
+
+  if (missionGateStatus !== 'PASS') {
+    reasonCodes.push('ARENA_CIRCUIT_BREAKER_KPI_GATE_FAIL');
+    violations.push({
+      code: 'ARENA_CIRCUIT_BREAKER_KPI_GATE_FAIL',
+      message: 'Mission KPI gate is not passing; autonomous routing must fail closed.',
+      value: missionGateStatus,
+      threshold: 'PASS',
+    });
+  }
+
+  const roiStatus = d1String(params.roiDashboard.status) ?? 'INSUFFICIENT_SAMPLE';
+  const roiMetrics = isRecord(params.roiDashboard.metrics) ? params.roiDashboard.metrics : null;
+
+  if (roiStatus !== 'available' || !roiMetrics) {
+    reasonCodes.push('ARENA_CIRCUIT_BREAKER_ROI_NOT_READY');
+    violations.push({
+      code: 'ARENA_CIRCUIT_BREAKER_ROI_NOT_READY',
+      message: 'ROI metrics are unavailable or below minimum sample threshold.',
+      value: roiStatus,
+      threshold: 'available',
+    });
+  } else {
+    const firstPassAcceptRate = d1Number(roiMetrics.first_pass_accept_rate) ?? 0;
+    const overrideRate = d1Number(roiMetrics.override_rate) ?? 0;
+    const reworkRate = d1Number(roiMetrics.rework_rate) ?? 0;
+    const costPerAccepted = d1Number(roiMetrics.cost_per_accepted_bounty_usd) ?? 0;
+
+    if (firstPassAcceptRate < params.roiThresholds.min_first_pass_accept_rate) {
+      reasonCodes.push('ARENA_CIRCUIT_BREAKER_ROI_FIRST_PASS_LOW');
+      violations.push({
+        code: 'ARENA_CIRCUIT_BREAKER_ROI_FIRST_PASS_LOW',
+        message: 'First-pass accept rate is below circuit threshold.',
+        value: Number(firstPassAcceptRate.toFixed(4)),
+        threshold: params.roiThresholds.min_first_pass_accept_rate,
+      });
+    }
+
+    if (overrideRate > params.roiThresholds.max_override_rate) {
+      reasonCodes.push('ARENA_CIRCUIT_BREAKER_ROI_OVERRIDE_HIGH');
+      violations.push({
+        code: 'ARENA_CIRCUIT_BREAKER_ROI_OVERRIDE_HIGH',
+        message: 'Override rate exceeds circuit threshold.',
+        value: Number(overrideRate.toFixed(4)),
+        threshold: params.roiThresholds.max_override_rate,
+      });
+    }
+
+    if (reworkRate > params.roiThresholds.max_rework_rate) {
+      reasonCodes.push('ARENA_CIRCUIT_BREAKER_ROI_REWORK_HIGH');
+      violations.push({
+        code: 'ARENA_CIRCUIT_BREAKER_ROI_REWORK_HIGH',
+        message: 'Rework rate exceeds circuit threshold.',
+        value: Number(reworkRate.toFixed(4)),
+        threshold: params.roiThresholds.max_rework_rate,
+      });
+    }
+
+    if (costPerAccepted > params.roiThresholds.max_cost_per_accepted_bounty_usd) {
+      reasonCodes.push('ARENA_CIRCUIT_BREAKER_ROI_COST_HIGH');
+      violations.push({
+        code: 'ARENA_CIRCUIT_BREAKER_ROI_COST_HIGH',
+        message: 'Cost per accepted bounty exceeds threshold.',
+        value: Number(costPerAccepted.toFixed(4)),
+        threshold: params.roiThresholds.max_cost_per_accepted_bounty_usd,
+      });
+    }
+  }
+
+  if (reasonCodes.length === 0) {
+    return {
+      status: 'PASS',
+      reasonCodes: ['ARENA_CIRCUIT_BREAKER_PASS'],
+      violations,
+    };
+  }
+
+  const mergedReasonCodes = dedupeStrings([...reasonCodes, ...missionReasonCodes]);
+  return {
+    status: 'TRIPPED',
+    reasonCodes: mergedReasonCodes,
+    violations,
   };
 }
 
@@ -18859,6 +19043,135 @@ async function handlePostArenaDeskKpiGate(
   };
 
   if (enforce && !gatePassed) {
+    return jsonResponse(payload, 409, version);
+  }
+
+  return jsonResponse(payload, 200, version);
+}
+
+async function handlePostArenaDeskCircuitBreaker(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const objectiveProfileName = d1String(body.objective_profile_name)?.trim() ?? null;
+  const experimentId = d1String(body.experiment_id)?.trim() ?? null;
+  const experimentArm = d1String(body.experiment_arm)?.trim() ?? null;
+
+  if (objectiveProfileName && objectiveProfileName.length > 128) {
+    return errorResponse('INVALID_REQUEST', 'objective_profile_name must be <=128 chars', 400, { field: 'objective_profile_name' }, version);
+  }
+
+  if (experimentId && experimentId.length > 128) {
+    return errorResponse('INVALID_REQUEST', 'experiment_id must be <=128 chars', 400, { field: 'experiment_id' }, version);
+  }
+
+  if (experimentArm && experimentArm.length > 64) {
+    return errorResponse('INVALID_REQUEST', 'experiment_arm must be <=64 chars', 400, { field: 'experiment_arm' }, version);
+  }
+
+  const windowHours = parseArenaMissionWindowHours(d1String(body.window_hours));
+  if (windowHours === null) {
+    return errorResponse('INVALID_REQUEST', 'window_hours must be a positive integer', 400, { field: 'window_hours' }, version);
+  }
+
+  const workerDid = d1String(body.worker_did)?.trim() ?? ARENA_CONFORMANCE_AGENT_DID;
+  if (!workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID', 400, { field: 'worker_did' }, version);
+  }
+
+  const roiLimitRaw = d1Number(body.roi_limit);
+  let roiLimit = 2000;
+  if (roiLimitRaw !== null) {
+    if (!Number.isInteger(roiLimitRaw) || roiLimitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'roi_limit must be a positive integer', 400, { field: 'roi_limit' }, version);
+    }
+    roiLimit = Math.min(roiLimitRaw, 5000);
+  }
+
+  const missionThresholdsResult = parseArenaMissionThresholds(body);
+  if (!missionThresholdsResult.thresholds) {
+    return errorResponse('INVALID_REQUEST', missionThresholdsResult.errorMessage ?? 'Invalid mission thresholds', 400, { field: missionThresholdsResult.errorField }, version);
+  }
+
+  const roiThresholdsResult = parseArenaCircuitBreakerRoiThresholds(body);
+  if (!roiThresholdsResult.thresholds) {
+    return errorResponse('INVALID_REQUEST', roiThresholdsResult.errorMessage ?? 'Invalid ROI thresholds', 400, { field: roiThresholdsResult.errorField }, version);
+  }
+
+  const enforce = body.enforce === true;
+
+  let missionSummary: Record<string, unknown>;
+  let roiDashboard: Record<string, unknown>;
+  try {
+    missionSummary = await buildArenaMissionSummary(env.BOUNTIES_DB, {
+      workerDid,
+      windowHours,
+      thresholds: missionThresholdsResult.thresholds,
+    });
+
+    roiDashboard = await computeArenaRoiDashboard(env.BOUNTIES_DB, {
+      taskFingerprint: normalizeArenaRoiFilterValue(taskFingerprint),
+      objectiveProfileName: normalizeArenaRoiFilterValue(objectiveProfileName),
+      contenderId: '',
+      experimentId: normalizeArenaRoiFilterValue(experimentId),
+      experimentArm: normalizeArenaRoiFilterValue(experimentArm),
+      limit: roiLimit,
+      minSamples: roiThresholdsResult.thresholds.min_sample_count,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  const evaluation = evaluateArenaCircuitBreaker({
+    missionSummary,
+    roiDashboard,
+    roiThresholds: roiThresholdsResult.thresholds,
+  });
+
+  const payload = {
+    schema_version: 'arena_desk_circuit_breaker.v1',
+    computed_at: new Date().toISOString(),
+    task_fingerprint: taskFingerprint,
+    objective_profile_name: objectiveProfileName,
+    experiment_id: experimentId,
+    experiment_arm: experimentArm,
+    worker_did: workerDid,
+    window_hours: windowHours,
+    roi_limit: roiLimit,
+    thresholds: {
+      mission: missionThresholdsResult.thresholds,
+      roi: roiThresholdsResult.thresholds,
+    },
+    circuit: {
+      status: evaluation.status,
+      reason_codes: evaluation.reasonCodes,
+      violations: evaluation.violations,
+      gate: {
+        enforce,
+        passed: evaluation.status === 'PASS',
+        blocked: enforce && evaluation.status !== 'PASS',
+      },
+    },
+    mission: missionSummary,
+    roi: roiDashboard,
+  };
+
+  if (enforce && evaluation.status !== 'PASS') {
     return jsonResponse(payload, 409, version);
   }
 
@@ -22839,6 +23152,10 @@ export default {
 
       if (path === '/v1/arena/desk/kpi-gate' && method === 'POST') {
         return handlePostArenaDeskKpiGate(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/circuit-breaker' && method === 'POST') {
+        return handlePostArenaDeskCircuitBreaker(request, env, version);
       }
 
       if (path === '/v1/arena/desk/self-tune-rollout' && method === 'POST') {
