@@ -1,0 +1,74 @@
+[
+  {
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "harness": "pi",
+    "model": "gpt-5.2-codex",
+    "skills": ["typescript", "arena-routing", "proof-bundle"],
+    "tools": ["bash", "read", "edit", "write", "wrangler"],
+    "objective_profiles": ["balanced", "quality-first"],
+    "cost_tier": "medium",
+    "risk_tier": "low",
+    "availability_status": "online",
+    "metadata": { "owner": "clawbureau", "lane": "mission-desk" }
+  },
+  {
+    "worker_did": "did:key:z6MkFleetCodexPi000000000000000000000001",
+    "harness": "codex",
+    "model": "gpt-5.2-codex",
+    "skills": ["typescript", "cloudflare-workers", "unit-testing"],
+    "tools": ["bash", "read", "edit", "write"],
+    "objective_profiles": ["balanced", "speed-first"],
+    "cost_tier": "medium",
+    "risk_tier": "low",
+    "availability_status": "online",
+    "metadata": { "owner": "clawbureau", "lane": "mission-desk" }
+  },
+  {
+    "worker_did": "did:key:z6MkFleetClaude0000000000000000000000002",
+    "harness": "claude",
+    "model": "claude-opus-4.5",
+    "skills": ["architecture", "reviews", "typescript"],
+    "tools": ["bash", "read", "edit", "write"],
+    "objective_profiles": ["quality-first", "balanced"],
+    "cost_tier": "high",
+    "risk_tier": "medium",
+    "availability_status": "online",
+    "metadata": { "owner": "clawbureau", "lane": "mission-desk" }
+  },
+  {
+    "worker_did": "did:key:z6MkFleetGemini0000000000000000000000003",
+    "harness": "gemini",
+    "model": "gemini-3-pro",
+    "skills": ["frontend", "docs", "analysis"],
+    "tools": ["bash", "read", "edit", "write"],
+    "objective_profiles": ["speed-first", "balanced"],
+    "cost_tier": "low",
+    "risk_tier": "medium",
+    "availability_status": "online",
+    "metadata": { "owner": "clawbureau", "lane": "mission-desk" }
+  },
+  {
+    "worker_did": "did:key:z6MkFleetPiOps00000000000000000000000004",
+    "harness": "pi",
+    "model": "gpt-5.2-codex",
+    "skills": ["ops", "monitoring", "rollback"],
+    "tools": ["bash", "read", "edit", "write", "wrangler"],
+    "objective_profiles": ["reliability-first", "balanced"],
+    "cost_tier": "low",
+    "risk_tier": "low",
+    "availability_status": "online",
+    "metadata": { "owner": "clawbureau", "lane": "mission-desk" }
+  },
+  {
+    "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+    "harness": "codex",
+    "model": "gpt-5.2-codex",
+    "skills": ["python", "automation", "arena-autopilot"],
+    "tools": ["bash", "read", "edit", "write"],
+    "objective_profiles": ["speed-first", "balanced"],
+    "cost_tier": "low",
+    "risk_tier": "low",
+    "availability_status": "online",
+    "metadata": { "owner": "clawbureau", "lane": "mission-desk" }
+  }
+]

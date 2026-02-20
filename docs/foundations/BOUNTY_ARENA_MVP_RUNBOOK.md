@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..057)
+> **Scope:** Bounty Arena MVP (AGP-US-031..058)
 
 # Bounty Arena MVP Runbook
 
@@ -45,6 +45,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: pending
 - AGP-US-057 — arena ROI dashboard from real metrics
   - merge: pending
+- AGP-US-058 — harness fleet identity + capability control
+  - merge: pending
 
 ## 2. Key files
 
@@ -57,6 +59,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/run-policy-optimizer-shadow.mjs`
 - `scripts/arena/run-contract-copilot-from-outcomes.mjs`
 - `scripts/arena/run-roi-dashboard-report.mjs`
+- `scripts/arena/register-harness-fleet-workers.mjs`
 - `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
 
@@ -64,6 +67,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `contracts/arena/real-contender-dispatch.sample.v1.json`
 - `contracts/arena/policy-optimizer.sample.v1.json`
 - `contracts/arena/contract-copilot.sample.v1.json`
+- `contracts/arena/harness-fleet-worker.sample.v1.json`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -79,6 +83,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `services/_archived/clawbounties/migrations/0026_arena_reviewer_decision_capture.sql`
 - `services/_archived/clawbounties/migrations/0027_arena_route_policy_optimizer_state.sql`
 - `services/_archived/clawbounties/migrations/0028_arena_contract_copilot_suggestions.sql`
+- `services/_archived/clawbounties/migrations/0029_arena_harness_fleet_registry.sql`
 - `services/_archived/clawbounties/src/index.ts`
 
 ### Explorer routes
@@ -100,6 +105,16 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `POST /v1/arena/manager/route` (admin)
 - `POST /v1/arena/manager/coach` (admin)
 - `POST /v1/arena/manager/autopilot` (admin)
+
+### Harness fleet control API
+- `POST /v1/arena/fleet/workers/register` (admin)
+  - upserts fleet worker identity/capability profile + optional heartbeat touch
+- `POST /v1/arena/fleet/workers/heartbeat` (admin)
+  - updates live availability state and heartbeat sequence
+- `GET /v1/arena/fleet/workers` (admin)
+  - lists discoverable fleet workers with capability/risk/cost filters
+- `POST /v1/arena/fleet/match` (admin)
+  - computes capability match candidates used by manager route/coach/autopilot payloads
 
 ### Policy learning API
 - `GET /v1/arena/policy-learning` (admin)
@@ -169,6 +184,7 @@ Required migrations for Arena MVP:
 - `0026_arena_reviewer_decision_capture.sql`
 - `0027_arena_route_policy_optimizer_state.sql`
 - `0028_arena_contract_copilot_suggestions.sql`
+- `0029_arena_harness_fleet_registry.sql`
 
 ## 6. End-to-end operator flow
 
@@ -254,6 +270,11 @@ node scripts/arena/get-manager-coach.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
   --objective-profile-name balanced \
   --mode coach
+
+# AGP-US-058: register/heartbeat harness fleet workers
+node scripts/arena/register-harness-fleet-workers.mjs \
+  --workers contracts/arena/harness-fleet-workers.seed.v1.json \
+  --bounties-base https://staging.clawbounties.com
 
 # AGP-US-055: compute shadow policy and promote active policy (fail-closed)
 node scripts/arena/run-policy-optimizer-shadow.mjs \

@@ -1,0 +1,100 @@
+{
+  "schema_version": "arena_harness_fleet_match.v1",
+  "computed_at": "2026-02-20T01:27:34.801Z",
+  "status": "matched",
+  "reason_codes": [
+    "ARENA_FLEET_MATCHED"
+  ],
+  "contender_id": null,
+  "objective_profile_name": "balanced",
+  "harness": "pi",
+  "required_skills": [
+    "typescript"
+  ],
+  "required_tools": [
+    "bash"
+  ],
+  "max_cost_tier": "medium",
+  "max_risk_tier": "medium",
+  "total_online_workers": 2,
+  "candidates": [
+    {
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "harness": "pi",
+      "model": "gpt-5.2-codex",
+      "skills": [
+        "typescript",
+        "arena-routing",
+        "proof-bundle"
+      ],
+      "tools": [
+        "bash",
+        "read",
+        "edit",
+        "write",
+        "wrangler"
+      ],
+      "objective_profiles": [
+        "balanced",
+        "quality-first"
+      ],
+      "cost_tier": "medium",
+      "risk_tier": "low",
+      "availability_status": "online",
+      "heartbeat_at": "2026-02-20T01:27:14.463Z",
+      "heartbeat_seq": 2,
+      "metadata": {
+        "lane": "mission-desk",
+        "owner": "clawbureau"
+      },
+      "created_at": "2026-02-20T01:27:14.271Z",
+      "updated_at": "2026-02-20T01:27:14.463Z",
+      "match_score": 68,
+      "skill_hits": [
+        "typescript"
+      ],
+      "tool_hits": [
+        "bash"
+      ],
+      "objective_matched": true
+    },
+    {
+      "worker_did": "did:key:z6MkFleetPiOps00000000000000000000000004",
+      "harness": "pi",
+      "model": "gpt-5.2-codex",
+      "skills": [
+        "ops",
+        "monitoring",
+        "rollback"
+      ],
+      "tools": [
+        "bash",
+        "read",
+        "edit",
+        "write",
+        "wrangler"
+      ],
+      "objective_profiles": [
+        "reliability-first",
+        "balanced"
+      ],
+      "cost_tier": "low",
+      "risk_tier": "low",
+      "availability_status": "online",
+      "heartbeat_at": "2026-02-20T01:27:15.486Z",
+      "heartbeat_seq": 2,
+      "metadata": {
+        "lane": "mission-desk",
+        "owner": "clawbureau"
+      },
+      "created_at": "2026-02-20T01:27:15.350Z",
+      "updated_at": "2026-02-20T01:27:15.486Z",
+      "match_score": 58,
+      "skill_hits": [],
+      "tool_hits": [
+        "bash"
+      ],
+      "objective_matched": true
+    }
+  ]
+}

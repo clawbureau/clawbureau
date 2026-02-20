@@ -1,0 +1,30 @@
+{
+  "schema_version": "arena_harness_fleet_worker.v1",
+  "worker_did": "did:key:z6MkFleetWorkerPi000000000000000000000001",
+  "harness": "pi",
+  "model": "gpt-5.2-codex",
+  "skills": [
+    "typescript",
+    "cloudflare-workers",
+    "arena-routing"
+  ],
+  "tools": [
+    "bash",
+    "read",
+    "edit",
+    "write",
+    "wrangler"
+  ],
+  "objective_profiles": [
+    "balanced",
+    "quality-first"
+  ],
+  "cost_tier": "medium",
+  "risk_tier": "low",
+  "availability_status": "online",
+  "metadata": {
+    "owner": "clawbureau",
+    "region": "eu-central",
+    "notes": "dogfood worker"
+  }
+}

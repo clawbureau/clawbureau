@@ -1108,3 +1108,36 @@ Started: 2026-02-02T03:08:26.937005
   - `POST /v1/arena/manager/autopilot` => `200`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/summary.json`
+
+## 2026-02-20 - AGP-US-058 harness fleet identity + capability control
+- Added migration:
+  - `services/_archived/clawbounties/migrations/0029_arena_harness_fleet_registry.sql`
+  - new table: `bounty_arena_harness_fleet_workers`
+    - worker DID identity + harness/model profile
+    - skills/tools/objective-profile capability vectors
+    - cost/risk tiers
+    - heartbeat sequence + availability status (`online|offline|paused`)
+- Added fleet APIs:
+  - `POST /v1/arena/fleet/workers/register` (admin)
+  - `POST /v1/arena/fleet/workers/heartbeat` (admin)
+  - `GET /v1/arena/fleet/workers` (admin)
+  - `POST /v1/arena/fleet/match` (admin)
+- Route/coach/autopilot integration:
+  - manager route now computes `fleet_match` candidates for recommended contender
+  - manager route reason codes include fleet status (`ARENA_ROUTING_FLEET_MATCHED|ARENA_ROUTING_FLEET_UNAVAILABLE`)
+  - manager autopilot now includes `fleet_match` and enforces `ARENA_AUTOPILOT_NO_FLEET_WORKER`
+- Added operator tooling/contracts:
+  - `scripts/arena/register-harness-fleet-workers.mjs`
+  - `scripts/arena/register-harness-fleet-workers.test.mjs`
+  - `contracts/arena/harness-fleet-worker.sample.v1.json`
+  - `contracts/arena/harness-fleet-workers.seed.v1.json`
+- Deployed services:
+  - `clawbounties-staging` version `5bc805c1-d717-4845-8ee3-f849e15f5fc1`
+  - `clawbounties` version `e3da42b1-9e5c-48b2-b702-e9df599b2209`
+- Applied migration `0029` in staging + prod D1.
+- Real-data acceptance verified:
+  - staging discoverable online fleet workers: `6` (target `>=5`)
+  - production discoverable online fleet workers: `6` (target `>=3`)
+  - manager route + autopilot include fleet match payloads on staging/prod
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/summary.json`

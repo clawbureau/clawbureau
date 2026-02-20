@@ -601,6 +601,27 @@ interface ArenaRoutePolicyOptimizerStateRecord {
   updated_at: string;
 }
 
+type ArenaFleetCostTier = 'low' | 'medium' | 'high';
+type ArenaFleetRiskTier = 'low' | 'medium' | 'high';
+type ArenaFleetAvailabilityStatus = 'online' | 'offline' | 'paused';
+
+interface ArenaHarnessFleetWorkerRecord {
+  worker_did: string;
+  harness: string;
+  model: string;
+  skills_json: string;
+  tools_json: string;
+  objective_profiles_json: string;
+  cost_tier: ArenaFleetCostTier;
+  risk_tier: ArenaFleetRiskTier;
+  availability_status: ArenaFleetAvailabilityStatus;
+  heartbeat_at: string | null;
+  heartbeat_seq: number;
+  metadata_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -1393,6 +1414,56 @@ function parseStringList(input: unknown, maxItems: number, maxLen: number, allow
   }
 
   return out;
+}
+
+function parseArenaFleetCostTier(input: unknown): ArenaFleetCostTier | null {
+  if (!isNonEmptyString(input)) return null;
+  const value = input.trim().toLowerCase();
+  if (value === 'low' || value === 'medium' || value === 'high') return value;
+  return null;
+}
+
+function parseArenaFleetRiskTier(input: unknown): ArenaFleetRiskTier | null {
+  if (!isNonEmptyString(input)) return null;
+  const value = input.trim().toLowerCase();
+  if (value === 'low' || value === 'medium' || value === 'high') return value;
+  return null;
+}
+
+function parseArenaFleetAvailabilityStatus(input: unknown): ArenaFleetAvailabilityStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const value = input.trim().toLowerCase();
+  if (value === 'online' || value === 'offline' || value === 'paused') return value;
+  return null;
+}
+
+function arenaFleetTierRank(tier: ArenaFleetCostTier | ArenaFleetRiskTier): number {
+  switch (tier) {
+    case 'low':
+      return 1;
+    case 'medium':
+      return 2;
+    case 'high':
+      return 3;
+  }
+}
+
+function parseArenaFleetStringJson(value: string, maxItems: number, maxLength: number): string[] | null {
+  const parsed = parseJsonStringArray(value);
+  if (!parsed) return null;
+
+  const items: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of parsed) {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.length > maxLength) return null;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    items.push(trimmed);
+  }
+
+  if (items.length > maxItems) return null;
+  return items;
 }
 
 function parseWorkerListing(input: unknown): WorkerListingV1 | null {
@@ -7716,6 +7787,349 @@ async function replaceArenaContractCopilotSuggestions(
       )
       .run();
   }
+}
+
+function parseArenaHarnessFleetWorkerRow(row: unknown): ArenaHarnessFleetWorkerRecord | null {
+  if (!isRecord(row)) return null;
+
+  const worker_did = d1String(row.worker_did)?.trim();
+  const harness = d1String(row.harness)?.trim();
+  const model = d1String(row.model)?.trim();
+  const skills_json = d1String(row.skills_json);
+  const tools_json = d1String(row.tools_json);
+  const objective_profiles_json = d1String(row.objective_profiles_json);
+  const cost_tier = parseArenaFleetCostTier(row.cost_tier);
+  const risk_tier = parseArenaFleetRiskTier(row.risk_tier);
+  const availability_status = parseArenaFleetAvailabilityStatus(row.availability_status);
+  const heartbeat_at = d1String(row.heartbeat_at);
+  const heartbeat_seq = d1Number(row.heartbeat_seq);
+  const metadata_json = d1String(row.metadata_json);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !worker_did ||
+    !harness ||
+    !model ||
+    !skills_json ||
+    !tools_json ||
+    !objective_profiles_json ||
+    !cost_tier ||
+    !risk_tier ||
+    !availability_status ||
+    heartbeat_seq === null ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  const skills = parseArenaFleetStringJson(skills_json, 80, 120);
+  const tools = parseArenaFleetStringJson(tools_json, 80, 120);
+  const objectiveProfiles = parseArenaFleetStringJson(objective_profiles_json, 40, 120);
+
+  if (!skills || !tools || !objectiveProfiles) return null;
+
+  return {
+    worker_did,
+    harness,
+    model,
+    skills_json: stableStringify(skills),
+    tools_json: stableStringify(tools),
+    objective_profiles_json: stableStringify(objectiveProfiles),
+    cost_tier,
+    risk_tier,
+    availability_status,
+    heartbeat_at: heartbeat_at ? heartbeat_at.trim() : null,
+    heartbeat_seq,
+    metadata_json,
+    created_at,
+    updated_at,
+  };
+}
+
+function buildArenaHarnessFleetWorkerPayload(record: ArenaHarnessFleetWorkerRecord): Record<string, unknown> {
+  const skills = parseJsonStringArray(record.skills_json) ?? [];
+  const tools = parseJsonStringArray(record.tools_json) ?? [];
+  const objectiveProfiles = parseJsonStringArray(record.objective_profiles_json) ?? [];
+
+  return {
+    worker_did: record.worker_did,
+    harness: record.harness,
+    model: record.model,
+    skills,
+    tools,
+    objective_profiles: objectiveProfiles,
+    cost_tier: record.cost_tier,
+    risk_tier: record.risk_tier,
+    availability_status: record.availability_status,
+    heartbeat_at: record.heartbeat_at,
+    heartbeat_seq: record.heartbeat_seq,
+    metadata: parseJsonObject(record.metadata_json ?? ''),
+    created_at: record.created_at,
+    updated_at: record.updated_at,
+  };
+}
+
+async function getArenaHarnessFleetWorker(
+  db: D1Database,
+  workerDid: string,
+): Promise<ArenaHarnessFleetWorkerRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM bounty_arena_harness_fleet_workers WHERE worker_did = ? LIMIT 1')
+    .bind(workerDid)
+    .first();
+
+  return parseArenaHarnessFleetWorkerRow(row);
+}
+
+async function listArenaHarnessFleetWorkers(
+  db: D1Database,
+  params: {
+    limit: number;
+    availabilityStatus?: ArenaFleetAvailabilityStatus | null;
+    harness?: string | null;
+    objectiveProfileName?: string | null;
+    costTier?: ArenaFleetCostTier | null;
+    riskTier?: ArenaFleetRiskTier | null;
+  },
+): Promise<ArenaHarnessFleetWorkerRecord[]> {
+  let sql = 'SELECT * FROM bounty_arena_harness_fleet_workers';
+  const where: string[] = [];
+  const binds: Array<string | number> = [];
+
+  if (params.availabilityStatus) {
+    where.push('availability_status = ?');
+    binds.push(params.availabilityStatus);
+  }
+
+  if (params.harness) {
+    where.push('harness = ?');
+    binds.push(params.harness);
+  }
+
+  if (params.objectiveProfileName) {
+    where.push('objective_profiles_json LIKE ?');
+    binds.push(`%"${params.objectiveProfileName}"%`);
+  }
+
+  if (params.costTier) {
+    where.push('cost_tier = ?');
+    binds.push(params.costTier);
+  }
+
+  if (params.riskTier) {
+    where.push('risk_tier = ?');
+    binds.push(params.riskTier);
+  }
+
+  if (where.length > 0) {
+    sql += ` WHERE ${where.join(' AND ')}`;
+  }
+
+  sql += ' ORDER BY availability_status ASC, heartbeat_at DESC, updated_at DESC LIMIT ?';
+  binds.push(params.limit);
+
+  const rows = await db.prepare(sql).bind(...binds).all<Record<string, unknown>>();
+  const out: ArenaHarnessFleetWorkerRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaHarnessFleetWorkerRow(row);
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
+async function upsertArenaHarnessFleetWorker(
+  db: D1Database,
+  record: ArenaHarnessFleetWorkerRecord,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO bounty_arena_harness_fleet_workers (
+        worker_did,
+        harness,
+        model,
+        skills_json,
+        tools_json,
+        objective_profiles_json,
+        cost_tier,
+        risk_tier,
+        availability_status,
+        heartbeat_at,
+        heartbeat_seq,
+        metadata_json,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(worker_did)
+      DO UPDATE SET
+        harness = excluded.harness,
+        model = excluded.model,
+        skills_json = excluded.skills_json,
+        tools_json = excluded.tools_json,
+        objective_profiles_json = excluded.objective_profiles_json,
+        cost_tier = excluded.cost_tier,
+        risk_tier = excluded.risk_tier,
+        availability_status = excluded.availability_status,
+        heartbeat_at = excluded.heartbeat_at,
+        heartbeat_seq = excluded.heartbeat_seq,
+        metadata_json = excluded.metadata_json,
+        updated_at = excluded.updated_at`
+    )
+    .bind(
+      record.worker_did,
+      record.harness,
+      record.model,
+      record.skills_json,
+      record.tools_json,
+      record.objective_profiles_json,
+      record.cost_tier,
+      record.risk_tier,
+      record.availability_status,
+      record.heartbeat_at,
+      record.heartbeat_seq,
+      record.metadata_json,
+      record.created_at,
+      record.updated_at,
+    )
+    .run();
+}
+
+async function heartbeatArenaHarnessFleetWorker(
+  db: D1Database,
+  params: {
+    workerDid: string;
+    availabilityStatus: ArenaFleetAvailabilityStatus;
+    metadataJson: string | null;
+    now: string;
+  },
+): Promise<ArenaHarnessFleetWorkerRecord | null> {
+  await db
+    .prepare(
+      `UPDATE bounty_arena_harness_fleet_workers
+          SET availability_status = ?,
+              heartbeat_at = ?,
+              heartbeat_seq = heartbeat_seq + 1,
+              metadata_json = COALESCE(?, metadata_json),
+              updated_at = ?
+        WHERE worker_did = ?`
+    )
+    .bind(
+      params.availabilityStatus,
+      params.now,
+      params.metadataJson,
+      params.now,
+      params.workerDid,
+    )
+    .run();
+
+  return getArenaHarnessFleetWorker(db, params.workerDid);
+}
+
+async function computeArenaFleetCapabilityMatch(
+  db: D1Database,
+  params: {
+    objectiveProfileName?: string | null;
+    harness?: string | null;
+    contenderId?: string | null;
+    requiredSkills?: string[];
+    requiredTools?: string[];
+    maxCostTier?: ArenaFleetCostTier | null;
+    maxRiskTier?: ArenaFleetRiskTier | null;
+    limit: number;
+  },
+): Promise<Record<string, unknown>> {
+  const workers = await listArenaHarnessFleetWorkers(db, {
+    limit: Math.max(params.limit * 4, 40),
+    availabilityStatus: 'online',
+    harness: params.harness?.trim() || null,
+    objectiveProfileName: params.objectiveProfileName?.trim() || null,
+  });
+
+  const requiredSkills = dedupeStrings((params.requiredSkills ?? []).map((entry) => entry.trim()).filter((entry) => entry.length > 0));
+  const requiredTools = dedupeStrings((params.requiredTools ?? []).map((entry) => entry.trim()).filter((entry) => entry.length > 0));
+
+  const maxCostRank = params.maxCostTier ? arenaFleetTierRank(params.maxCostTier) : null;
+  const maxRiskRank = params.maxRiskTier ? arenaFleetTierRank(params.maxRiskTier) : null;
+
+  const candidates = workers
+    .map((worker) => {
+      const skills = parseJsonStringArray(worker.skills_json) ?? [];
+      const tools = parseJsonStringArray(worker.tools_json) ?? [];
+      const objectiveProfiles = parseJsonStringArray(worker.objective_profiles_json) ?? [];
+
+      const skillHits = requiredSkills.filter((entry) => skills.includes(entry));
+      const toolHits = requiredTools.filter((entry) => tools.includes(entry));
+      const objectiveMatched = params.objectiveProfileName
+        ? objectiveProfiles.includes(params.objectiveProfileName)
+        : false;
+
+      const costRank = arenaFleetTierRank(worker.cost_tier);
+      const riskRank = arenaFleetTierRank(worker.risk_tier);
+
+      const costBlocked = maxCostRank !== null && costRank > maxCostRank;
+      const riskBlocked = maxRiskRank !== null && riskRank > maxRiskRank;
+
+      const score =
+        (objectiveMatched ? 35 : 0) +
+        (skillHits.length * 12) +
+        (toolHits.length * 8) +
+        (worker.heartbeat_at ? 10 : 0) +
+        (worker.availability_status === 'online' ? 10 : 0) -
+        (costRank * 2) -
+        (riskRank * 3);
+
+      return {
+        worker,
+        score,
+        skill_hits: skillHits,
+        tool_hits: toolHits,
+        objective_matched: objectiveMatched,
+        cost_blocked: costBlocked,
+        risk_blocked: riskBlocked,
+      };
+    })
+    .filter((entry) => !entry.cost_blocked && !entry.risk_blocked)
+    .sort((a, b) => b.score - a.score || a.worker.worker_did.localeCompare(b.worker.worker_did))
+    .slice(0, params.limit);
+
+  const reasonCodes: string[] = [];
+  if (workers.length === 0) {
+    reasonCodes.push('ARENA_FLEET_EMPTY');
+  }
+  if (workers.length > 0 && candidates.length === 0) {
+    reasonCodes.push('ARENA_FLEET_CAPABILITY_BLOCKED');
+  }
+  if (candidates.length > 0) {
+    reasonCodes.push('ARENA_FLEET_MATCHED');
+  }
+  if (params.contenderId) {
+    reasonCodes.push('ARENA_FLEET_CONTENDER_BOUND');
+  }
+
+  const status = candidates.length > 0 ? 'matched' : 'unavailable';
+
+  return {
+    schema_version: 'arena_harness_fleet_match.v1',
+    computed_at: new Date().toISOString(),
+    status,
+    reason_codes: reasonCodes,
+    contender_id: params.contenderId ?? null,
+    objective_profile_name: params.objectiveProfileName ?? null,
+    harness: params.harness ?? null,
+    required_skills: requiredSkills,
+    required_tools: requiredTools,
+    max_cost_tier: params.maxCostTier ?? null,
+    max_risk_tier: params.maxRiskTier ?? null,
+    total_online_workers: workers.length,
+    candidates: candidates.map((entry) => ({
+      ...buildArenaHarnessFleetWorkerPayload(entry.worker),
+      match_score: Number(entry.score.toFixed(4)),
+      skill_hits: entry.skill_hits,
+      tool_hits: entry.tool_hits,
+      objective_matched: entry.objective_matched,
+    })),
+  };
 }
 
 function parseArenaRoutePolicyOptimizerStateRow(row: unknown): ArenaRoutePolicyOptimizerStateRecord | null {
@@ -16807,6 +17221,270 @@ function buildArenaPolicyOptimizerPayloadFromState(
   };
 }
 
+async function handlePostArenaFleetWorkerRegister(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const workerDid = d1String(body.worker_did)?.trim();
+  const harness = d1String(body.harness)?.trim();
+  const model = d1String(body.model)?.trim();
+  const skills = parseStringList(body.skills, 80, 120, true);
+  const tools = parseStringList(body.tools, 80, 120, true);
+  const objectiveProfiles = parseStringList(body.objective_profiles, 40, 120, true);
+  const costTier = parseArenaFleetCostTier(body.cost_tier ?? 'medium');
+  const riskTier = parseArenaFleetRiskTier(body.risk_tier ?? 'medium');
+  const availabilityStatus = parseArenaFleetAvailabilityStatus(body.availability_status ?? 'online');
+  const metadata = isRecord(body.metadata) ? body.metadata : null;
+  const touchHeartbeat = body.touch_heartbeat !== false;
+
+  if (!workerDid || !workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, { field: 'worker_did' }, version);
+  }
+
+  if (!harness || harness.length > 80) {
+    return errorResponse('INVALID_REQUEST', 'harness is required (<=80 chars)', 400, { field: 'harness' }, version);
+  }
+
+  if (!model || model.length > 200) {
+    return errorResponse('INVALID_REQUEST', 'model is required (<=200 chars)', 400, { field: 'model' }, version);
+  }
+
+  if (!skills || !tools || !objectiveProfiles || !costTier || !riskTier || !availabilityStatus) {
+    return errorResponse('INVALID_REQUEST', 'skills/tools/objective_profiles/cost_tier/risk_tier/availability_status are invalid', 400, undefined, version);
+  }
+
+  const now = new Date().toISOString();
+  const existing = await getArenaHarnessFleetWorker(env.BOUNTIES_DB, workerDid);
+
+  const record: ArenaHarnessFleetWorkerRecord = {
+    worker_did: workerDid,
+    harness,
+    model,
+    skills_json: stableStringify(skills),
+    tools_json: stableStringify(tools),
+    objective_profiles_json: stableStringify(objectiveProfiles),
+    cost_tier: costTier,
+    risk_tier: riskTier,
+    availability_status: availabilityStatus,
+    heartbeat_at: touchHeartbeat ? now : (existing?.heartbeat_at ?? null),
+    heartbeat_seq: existing ? existing.heartbeat_seq + (touchHeartbeat ? 1 : 0) : (touchHeartbeat ? 1 : 0),
+    metadata_json: metadata ? stableStringify(metadata) : null,
+    created_at: existing?.created_at ?? now,
+    updated_at: now,
+  };
+
+  await upsertArenaHarnessFleetWorker(env.BOUNTIES_DB, record);
+  const saved = await getArenaHarnessFleetWorker(env.BOUNTIES_DB, workerDid);
+
+  if (!saved) {
+    return errorResponse('DB_WRITE_FAILED', 'Fleet worker could not be loaded after write', 500, undefined, version);
+  }
+
+  return jsonResponse(
+    {
+      ok: true,
+      replay: existing !== null,
+      worker: buildArenaHarnessFleetWorkerPayload(saved),
+    },
+    existing ? 200 : 201,
+    version,
+  );
+}
+
+async function handlePostArenaFleetWorkerHeartbeat(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const workerDid = d1String(body.worker_did)?.trim();
+  const availabilityStatus = parseArenaFleetAvailabilityStatus(body.availability_status ?? 'online');
+  const metadata = isRecord(body.metadata) ? body.metadata : null;
+
+  if (!workerDid || !workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID string', 400, { field: 'worker_did' }, version);
+  }
+
+  if (!availabilityStatus) {
+    return errorResponse('INVALID_REQUEST', 'availability_status must be online|offline|paused', 400, { field: 'availability_status' }, version);
+  }
+
+  const existing = await getArenaHarnessFleetWorker(env.BOUNTIES_DB, workerDid);
+  if (!existing) {
+    return errorResponse('NOT_FOUND', 'Fleet worker not found', 404, { worker_did: workerDid }, version);
+  }
+
+  const now = new Date().toISOString();
+  const updated = await heartbeatArenaHarnessFleetWorker(env.BOUNTIES_DB, {
+    workerDid,
+    availabilityStatus,
+    metadataJson: metadata ? stableStringify(metadata) : null,
+    now,
+  });
+
+  if (!updated) {
+    return errorResponse('DB_WRITE_FAILED', 'Fleet worker heartbeat update failed', 500, undefined, version);
+  }
+
+  return jsonResponse(
+    {
+      ok: true,
+      worker: buildArenaHarnessFleetWorkerPayload(updated),
+    },
+    200,
+    version,
+  );
+}
+
+async function handleListArenaFleetWorkers(
+  request: Request,
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 50;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 200);
+  }
+
+  const availabilityStatusRaw = d1String(url.searchParams.get('availability_status'))?.trim() ?? null;
+  const harness = d1String(url.searchParams.get('harness'))?.trim() ?? null;
+  const objectiveProfileName = d1String(url.searchParams.get('objective_profile_name'))?.trim() ?? null;
+  const costTierRaw = d1String(url.searchParams.get('cost_tier'))?.trim() ?? null;
+  const riskTierRaw = d1String(url.searchParams.get('risk_tier'))?.trim() ?? null;
+
+  const availabilityStatus = availabilityStatusRaw ? parseArenaFleetAvailabilityStatus(availabilityStatusRaw) : null;
+  const costTier = costTierRaw ? parseArenaFleetCostTier(costTierRaw) : null;
+  const riskTier = riskTierRaw ? parseArenaFleetRiskTier(riskTierRaw) : null;
+
+  if (availabilityStatusRaw && !availabilityStatus) {
+    return errorResponse('INVALID_REQUEST', 'availability_status must be online|offline|paused', 400, { field: 'availability_status' }, version);
+  }
+
+  if (costTierRaw && !costTier) {
+    return errorResponse('INVALID_REQUEST', 'cost_tier must be low|medium|high', 400, { field: 'cost_tier' }, version);
+  }
+
+  if (riskTierRaw && !riskTier) {
+    return errorResponse('INVALID_REQUEST', 'risk_tier must be low|medium|high', 400, { field: 'risk_tier' }, version);
+  }
+
+  const workers = await listArenaHarnessFleetWorkers(env.BOUNTIES_DB, {
+    limit,
+    availabilityStatus,
+    harness,
+    objectiveProfileName,
+    costTier,
+    riskTier,
+  });
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_harness_fleet_workers.v1',
+      computed_at: new Date().toISOString(),
+      filters: {
+        availability_status: availabilityStatus,
+        harness,
+        objective_profile_name: objectiveProfileName,
+        cost_tier: costTier,
+        risk_tier: riskTier,
+        limit,
+      },
+      totals: {
+        workers: workers.length,
+      },
+      workers: workers.map((worker) => buildArenaHarnessFleetWorkerPayload(worker)),
+    },
+    200,
+    version,
+  );
+}
+
+async function handlePostArenaFleetMatch(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const objectiveProfileName = d1String(body.objective_profile_name)?.trim() ?? null;
+  const harness = d1String(body.harness)?.trim() ?? null;
+  const contenderId = d1String(body.contender_id)?.trim() ?? null;
+  const requiredSkills = parseStringList(body.required_skills, 40, 120, true);
+  const requiredTools = parseStringList(body.required_tools, 40, 120, true);
+  const maxCostTier = body.max_cost_tier === undefined || body.max_cost_tier === null
+    ? null
+    : parseArenaFleetCostTier(body.max_cost_tier);
+  const maxRiskTier = body.max_risk_tier === undefined || body.max_risk_tier === null
+    ? null
+    : parseArenaFleetRiskTier(body.max_risk_tier);
+
+  let limit = 5;
+  const limitRaw = body.limit;
+  if (limitRaw !== undefined && limitRaw !== null) {
+    const parsed = d1Number(limitRaw);
+    if (parsed === null || !Number.isInteger(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 20);
+  }
+
+  if (!requiredSkills || !requiredTools) {
+    return errorResponse('INVALID_REQUEST', 'required_skills/required_tools must be string[]', 400, undefined, version);
+  }
+
+  if (body.max_cost_tier !== undefined && body.max_cost_tier !== null && !maxCostTier) {
+    return errorResponse('INVALID_REQUEST', 'max_cost_tier must be low|medium|high', 400, { field: 'max_cost_tier' }, version);
+  }
+
+  if (body.max_risk_tier !== undefined && body.max_risk_tier !== null && !maxRiskTier) {
+    return errorResponse('INVALID_REQUEST', 'max_risk_tier must be low|medium|high', 400, { field: 'max_risk_tier' }, version);
+  }
+
+  const payload = await computeArenaFleetCapabilityMatch(env.BOUNTIES_DB, {
+    objectiveProfileName,
+    harness,
+    contenderId,
+    requiredSkills,
+    requiredTools,
+    maxCostTier,
+    maxRiskTier,
+    limit,
+  });
+
+  return jsonResponse(payload, 200, version);
+}
+
 async function handleGetArenaPolicyOptimizer(
   request: Request,
   url: URL,
@@ -17334,6 +18012,27 @@ async function handleArenaManagerRoute(
   const allowFallback = body.allow_fallback !== false;
   const useActivePolicy = body.use_active_policy !== false;
 
+  const requiredSkills = parseStringList(body.required_skills, 40, 120, true);
+  const requiredTools = parseStringList(body.required_tools, 40, 120, true);
+  const maxFleetCostTier = body.max_fleet_cost_tier === undefined || body.max_fleet_cost_tier === null
+    ? null
+    : parseArenaFleetCostTier(body.max_fleet_cost_tier);
+  const maxFleetRiskTier = body.max_fleet_risk_tier === undefined || body.max_fleet_risk_tier === null
+    ? null
+    : parseArenaFleetRiskTier(body.max_fleet_risk_tier);
+
+  if (!requiredSkills || !requiredTools) {
+    return errorResponse('INVALID_REQUEST', 'required_skills/required_tools must be string[]', 400, undefined, version);
+  }
+
+  if (body.max_fleet_cost_tier !== undefined && body.max_fleet_cost_tier !== null && !maxFleetCostTier) {
+    return errorResponse('INVALID_REQUEST', 'max_fleet_cost_tier must be low|medium|high', 400, { field: 'max_fleet_cost_tier' }, version);
+  }
+
+  if (body.max_fleet_risk_tier !== undefined && body.max_fleet_risk_tier !== null && !maxFleetRiskTier) {
+    return errorResponse('INVALID_REQUEST', 'max_fleet_risk_tier must be low|medium|high', 400, { field: 'max_fleet_risk_tier' }, version);
+  }
+
   const runsRaw = await listCompletedArenaRunsByTaskFingerprint(env.BOUNTIES_DB, taskFingerprint, maxRuns);
   const runs = runsRaw
     .filter((run) => (objectiveProfileName ? getArenaObjectiveProfileNameFromRun(run) === objectiveProfileName : true))
@@ -17637,6 +18336,31 @@ async function handleArenaManagerRoute(
     .filter((entry) => entry.contender_id !== recommended.contender_id)
     .slice(0, 3);
 
+  const fleetMatch = await computeArenaFleetCapabilityMatch(env.BOUNTIES_DB, {
+    objectiveProfileName,
+    harness: recommended.harness,
+    contenderId: recommended.contender_id,
+    requiredSkills,
+    requiredTools,
+    maxCostTier: maxFleetCostTier,
+    maxRiskTier: maxFleetRiskTier,
+    limit: 5,
+  });
+
+  const fleetReasonCodes = Array.isArray(fleetMatch.reason_codes)
+    ? fleetMatch.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  if (fleetReasonCodes.length > 0) {
+    reasonCodes.push(...fleetReasonCodes);
+  }
+
+  if (fleetMatch.status === 'matched') {
+    reasonCodes.push('ARENA_ROUTING_FLEET_MATCHED');
+  } else {
+    reasonCodes.push('ARENA_ROUTING_FLEET_UNAVAILABLE');
+  }
+
   const topWinner = [...winnerCounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? null;
   const winnerStabilityRatio = topWinner && runs.length > 0 ? topWinner[1] / runs.length : 0;
 
@@ -17679,6 +18403,10 @@ async function handleArenaManagerRoute(
         max_runs: maxRuns,
         experiment_id: experimentIdFilter,
         experiment_arm: experimentArmFilter,
+        required_skills: requiredSkills,
+        required_tools: requiredTools,
+        max_fleet_cost_tier: maxFleetCostTier,
+        max_fleet_risk_tier: maxFleetRiskTier,
       },
       recommended: {
         contender_id: recommended.contender_id,
@@ -17716,6 +18444,7 @@ async function handleArenaManagerRoute(
       policy_optimizer: policyOptimizerState
         ? buildArenaPolicyOptimizerPayloadFromState(policyOptimizerState)
         : null,
+      fleet_match: fleetMatch,
       delegation_coach: {
         primary_contender_id: recommended.contender_id,
         backup_contenders: backups.map((entry) => entry.contender_id),
@@ -17751,6 +18480,15 @@ async function buildArenaManagerAutopilotPayload(
   const backupContenders = backupsRaw
     .map((entry) => (isRecord(entry) ? d1String(entry.contender_id)?.trim() ?? null : null))
     .filter((entry): entry is string => Boolean(entry));
+
+  const fleetMatch = isRecord(routePayload.fleet_match) ? routePayload.fleet_match : null;
+  const fleetStatus = d1String(fleetMatch?.status)?.trim() ?? 'unavailable';
+  const fleetCandidates = Array.isArray(fleetMatch?.candidates)
+    ? fleetMatch.candidates.filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    : [];
+  const fleetReasonCodes = Array.isArray(fleetMatch?.reason_codes)
+    ? fleetMatch.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 
   const analyzedRuns = d1Number(routePayload.analyzed_runs) ?? 0;
   const winnerStabilityRatio = d1Number(routePayload.winner_stability_ratio) ?? 0;
@@ -17835,6 +18573,15 @@ async function buildArenaManagerAutopilotPayload(
     });
   }
 
+  if (fleetStatus !== 'matched' || fleetCandidates.length === 0) {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_NO_FLEET_WORKER',
+      message: 'No online fleet worker matched the recommended contender capability profile.',
+      value: fleetCandidates.length,
+      threshold: 1,
+    });
+  }
+
   const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
 
   const globalRecommendations = (() => {
@@ -17873,6 +18620,7 @@ async function buildArenaManagerAutopilotPayload(
         ? routePayload.reason_codes.filter((entry): entry is string => typeof entry === 'string')
         : [],
     },
+    fleet_match: fleetMatch,
     autopilot: {
       status,
       default_contender_id: defaultContenderId,
@@ -17880,8 +18628,8 @@ async function buildArenaManagerAutopilotPayload(
       guardrails,
       violations,
       reason_codes: status === 'auto_route_enabled'
-        ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED']
-        : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED'],
+        ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED', ...fleetReasonCodes]
+        : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED', ...fleetReasonCodes],
       recommendations: globalRecommendations,
       policy_template: {
         route_policy_id: routePolicyId,
@@ -18426,6 +19174,22 @@ export default {
 
       if (path === '/v1/workers/self' && method === 'GET') {
         return handleGetWorkerSelf(request, env, version);
+      }
+
+      if (path === '/v1/arena/fleet/workers/register' && method === 'POST') {
+        return handlePostArenaFleetWorkerRegister(request, env, version);
+      }
+
+      if (path === '/v1/arena/fleet/workers/heartbeat' && method === 'POST') {
+        return handlePostArenaFleetWorkerHeartbeat(request, env, version);
+      }
+
+      if (path === '/v1/arena/fleet/workers' && method === 'GET') {
+        return handleListArenaFleetWorkers(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/fleet/match' && method === 'POST') {
+        return handlePostArenaFleetMatch(request, env, version);
       }
 
       if (path === '/v1/arena/manager/route' && method === 'POST') {

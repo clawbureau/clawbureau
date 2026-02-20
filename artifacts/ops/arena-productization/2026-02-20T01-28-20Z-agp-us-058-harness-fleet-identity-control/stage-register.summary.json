@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "generated_at": "2026-02-20T01:27:08.114Z",
+  "story": "AGP-US-058",
+  "endpoint_base": "https://staging.clawbounties.com",
+  "env": "staging",
+  "dry_run": false,
+  "totals": {
+    "requested_workers": 6,
+    "discovered_workers": 6,
+    "minimum_target_met": true
+  },
+  "endpoints": {
+    "register": "https://staging.clawbounties.com/v1/arena/fleet/workers/register",
+    "heartbeat": "https://staging.clawbounties.com/v1/arena/fleet/workers/heartbeat",
+    "list": "https://staging.clawbounties.com/v1/arena/fleet/workers?availability_status=online&limit=200"
+  },
+  "artifacts": {
+    "workers": "artifacts/ops/arena-productization/2026-02-20T01-27-06-482Z-agp-us-058-fleet-register-staging/workers.json",
+    "roster": "artifacts/ops/arena-productization/2026-02-20T01-27-06-482Z-agp-us-058-fleet-register-staging/roster.json",
+    "summary": "artifacts/ops/arena-productization/2026-02-20T01-27-06-482Z-agp-us-058-fleet-register-staging/summary.json"
+  }
+}
