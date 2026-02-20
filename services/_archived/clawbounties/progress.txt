@@ -980,3 +980,43 @@ Started: 2026-02-02T03:08:26.937005
   - `POST /v1/arena/manager/autopilot` => `200`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T23-19-37Z-agp-us-054-reviewer-truth-capture/summary.json`
+
+## 2026-02-19 - AGP-US-055 policy optimizer shadow/promote (real-data gates)
+- Added migration:
+  - `services/_archived/clawbounties/migrations/0027_arena_route_policy_optimizer_state.sql`
+  - new table: `bounty_arena_route_policy_optimizer_state`
+    - persisted per `(task_fingerprint, environment, objective_profile_name, experiment_id, experiment_arm)`
+    - stores active policy, shadow policy, promotion event, deterministic reason codes, confidence/sample gates
+- Added policy optimizer APIs:
+  - `POST /v1/arena/policy-optimizer` (admin) — computes real-data shadow policy from manager route evidence and promotes active policy only when thresholds pass
+  - `GET /v1/arena/policy-optimizer` (admin) — reads persisted optimizer state for task/environment/objective/experiment scope
+- Routing stack updates:
+  - `POST /v1/arena/manager/route` now accepts `use_active_policy` + `environment`
+  - route selection applies persisted active policy contender when present and eligible (`ARENA_ROUTING_ACTIVE_POLICY_APPLIED`)
+  - route payload now returns `policy_optimizer` snapshot alongside ranked contenders
+- Arena detail + explorer surfacing:
+  - `GET /v1/arena/{arena_id}` now includes `policy_optimizer` preview (`arena_policy_optimizer_preview.v1`)
+  - clawsig-explorer arena page now renders **Routing policy optimizer** panel
+    - promotion status
+    - active/shadow contender IDs
+    - confidence/sample gates
+    - promotion reason codes
+- Added operator tooling:
+  - `scripts/arena/run-policy-optimizer-shadow.mjs`
+  - `scripts/arena/run-policy-optimizer-shadow.test.mjs`
+  - sample request contract: `contracts/arena/policy-optimizer.sample.v1.json`
+- Deployed services:
+  - `clawbounties-staging` version `2f24c3d7-bf3e-407c-8d98-1dff55217aa5`
+  - `clawsig-explorer-staging` version `33747da5-e142-41f4-b011-a9e80b59ea26`
+  - `clawbounties` version `bfba065a-8aad-4a0d-b5fd-9e39d893c243`
+  - `clawsig-explorer` version `16e395f0-4113-4c37-badd-559937309aaa`
+- Applied migration `0027` in staging + prod D1.
+- Real-data gate behavior verified:
+  - staging strict gate (`min_confidence=0.62`) returns deterministic `NOT_READY` with reason `ARENA_POLICY_NOT_READY_CONFIDENCE_BELOW_THRESHOLD`
+  - staging relaxed gate demonstrates promotion path (`PROMOTED`) with active policy pinned to real contender
+  - production promotion path (`PROMOTED`) validated with persisted sample/confidence from real outcomes
+- Endpoint regression checks (staging + prod):
+  - `POST /v1/arena/manager/route` => `200` + `ARENA_ROUTING_ACTIVE_POLICY_APPLIED`
+  - `POST /v1/arena/manager/autopilot` => `200`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/summary.json`

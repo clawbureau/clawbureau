@@ -267,6 +267,51 @@ function renderAutopilotCard(report: ArenaReportView): string {
   `;
 }
 
+function renderPolicyOptimizerCard(report: ArenaReportView): string {
+  const optimizer = report.policy_optimizer;
+  if (!optimizer) {
+    return `
+      <div class="card">
+        <p class="section-title">Routing policy optimizer</p>
+        <p class="dim" style="font-size:0.82rem">No optimizer state available for this arena fingerprint yet.</p>
+      </div>
+    `;
+  }
+
+  const active = optimizer.current_active_policy;
+  const shadow = optimizer.candidate_shadow_policy;
+  const promotion = optimizer.promotion;
+
+  const activeContender = typeof active?.contender_id === 'string' ? active.contender_id : 'none';
+  const shadowContender = typeof shadow?.contender_id === 'string' ? shadow.contender_id : 'none';
+  const promotionStatus = typeof promotion?.status === 'string'
+    ? promotion.status
+    : (optimizer.promotion_status ?? optimizer.status);
+  const promotionReasons = Array.isArray(promotion?.reason_codes)
+    ? promotion.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+    : optimizer.reason_codes;
+
+  return `
+    <div class="card">
+      <p class="section-title">Routing policy optimizer</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:0.55rem">Shadow policy is computed from real outcomes and promoted only when confidence gates pass.</p>
+      <div class="detail-grid" style="margin-bottom:0.55rem">
+        <dt>Status</dt><dd><span class="mono">${esc(optimizer.status)}</span></dd>
+        <dt>Promotion status</dt><dd><span class="mono">${esc(promotionStatus ?? 'unknown')}</span></dd>
+        <dt>Active policy contender</dt><dd class="mono">${esc(activeContender)}</dd>
+        <dt>Shadow policy contender</dt><dd class="mono">${esc(shadowContender)}</dd>
+      </div>
+      <div class="diag-grid" style="grid-template-columns: repeat(4, minmax(120px, 1fr)); gap:0.35rem; margin-bottom:0.45rem">
+        ${renderMetricCell('sample count', String(optimizer.gates.sample_count))}
+        ${renderMetricCell('confidence', `${(optimizer.gates.confidence_score * 100).toFixed(1)}%`)}
+        ${renderMetricCell('min samples', String(optimizer.gates.min_samples))}
+        ${renderMetricCell('min confidence', `${(optimizer.gates.min_confidence * 100).toFixed(1)}%`)}
+      </div>
+      <p class="dim" style="font-size:0.78rem"><strong>Reason codes:</strong> ${esc((promotionReasons ?? []).join(', ') || 'none')}</p>
+    </div>
+  `;
+}
+
 function renderContractLanguageOptimizerCard(report: ArenaReportView): string {
   const optimizer = report.contract_language_optimizer;
   if (!optimizer) {
@@ -477,6 +522,8 @@ export function arenaComparePage(report: ArenaReportView): string {
     ${renderCalibrationCard(report)}
 
     ${renderAutopilotCard(report)}
+
+    ${renderPolicyOptimizerCard(report)}
 
     ${renderContractLanguageOptimizerCard(report)}
 

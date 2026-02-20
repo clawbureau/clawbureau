@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-19
-> **Scope:** Bounty Arena MVP (AGP-US-031..052)
+> **Scope:** Bounty Arena MVP (AGP-US-031..057)
 
 # Bounty Arena MVP Runbook
 
@@ -35,6 +35,12 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: pending
 - AGP-US-046 — historical backtesting + calibration drift analytics
   - merge: pending
+- AGP-US-053 — real contender dispatch orchestrator
+  - merge: pending
+- AGP-US-054 — reviewer truth-capture normalization
+  - merge: pending
+- AGP-US-055 — route policy optimizer shadow/promote
+  - merge: pending
 
 ## 2. Key files
 
@@ -44,11 +50,13 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/lib/arena-runner.mjs`
 - `scripts/arena/lib/proof-pack-v3.mjs`
 - `scripts/arena/generate-policy-learning-report.mjs`
+- `scripts/arena/run-policy-optimizer-shadow.mjs`
 - `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
 
 ### Real contender dispatch config
 - `contracts/arena/real-contender-dispatch.sample.v1.json`
+- `contracts/arena/policy-optimizer.sample.v1.json`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -61,6 +69,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `services/_archived/clawbounties/migrations/0023_arena_outcome_override_reasons.sql`
 - `services/_archived/clawbounties/migrations/0024_arena_contender_registry_pins.sql`
 - `services/_archived/clawbounties/migrations/0025_arena_contract_language_optimizer.sql`
+- `services/_archived/clawbounties/migrations/0026_arena_reviewer_decision_capture.sql`
+- `services/_archived/clawbounties/migrations/0027_arena_route_policy_optimizer_state.sql`
 - `services/_archived/clawbounties/src/index.ts`
 
 ### Explorer routes
@@ -87,6 +97,12 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `GET /v1/arena/policy-learning` (admin)
   - supports `task_fingerprint` and `limit`
   - returns override reason breakdown + contract/prompt rewrite recommendations
+- `POST /v1/arena/policy-optimizer` (admin)
+  - body: `task_fingerprint`, optional `{objective_profile_name,experiment_id,experiment_arm,environment,max_runs,min_samples,min_confidence}`
+  - computes real-data shadow policy from current route evidence and promotes to active only when gates pass
+- `GET /v1/arena/policy-optimizer` (admin)
+  - supports `task_fingerprint`, optional objective/experiment/environment filters
+  - returns persisted shadow/active policy state + promotion event + deterministic reason codes
 - `POST /v1/arena/contract-language-optimizer` (admin)
   - body: `task_fingerprint`, optional `limit`
   - computes + persists contract/prompt rewrite suggestions for failed/overridden outcomes
@@ -132,6 +148,7 @@ Required migrations for Arena MVP:
 - `0024_arena_contender_registry_pins.sql`
 - `0025_arena_contract_language_optimizer.sql`
 - `0026_arena_reviewer_decision_capture.sql`
+- `0027_arena_route_policy_optimizer_state.sql`
 
 ## 6. End-to-end operator flow
 
@@ -217,6 +234,15 @@ node scripts/arena/get-manager-coach.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
   --objective-profile-name balanced \
   --mode coach
+
+# AGP-US-055: compute shadow policy and promote active policy (fail-closed)
+node scripts/arena/run-policy-optimizer-shadow.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --objective-profile-name balanced \
+  --experiment-id exp_api_hardening_live_v1 \
+  --experiment-arm LIVE \
+  --environment staging \
+  --bounties-base https://staging.clawbounties.com
 ```
 
 ### Step F — Explorer UI check

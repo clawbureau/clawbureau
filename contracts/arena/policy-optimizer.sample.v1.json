@@ -1,0 +1,11 @@
+{
+  "schema_version": "arena_policy_optimizer_request.v1",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile_name": "balanced",
+  "experiment_id": "exp_api_hardening_live_v1",
+  "experiment_arm": "LIVE",
+  "environment": "staging",
+  "max_runs": 120,
+  "min_samples": 8,
+  "min_confidence": 0.7
+}

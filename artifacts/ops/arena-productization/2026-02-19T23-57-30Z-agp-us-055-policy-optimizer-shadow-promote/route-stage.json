@@ -1,0 +1,465 @@
+{
+  "schema_version": "arena_manager_route.v2",
+  "computed_at": "2026-02-19T23:57:19.574Z",
+  "mode": "route",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile_name": "balanced",
+  "experiment_id": "exp_api_hardening_live_v1",
+  "experiment_arm": "LIVE",
+  "analyzed_runs": 4,
+  "winner_stability_ratio": 0.5,
+  "policy": {
+    "require_hard_gate_pass": true,
+    "allow_fallback": true,
+    "use_active_policy": true,
+    "environment": "staging",
+    "max_runs": 50,
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE"
+  },
+  "recommended": {
+    "contender_id": "contender_codex_pi",
+    "label": "Codex + Pi + cloudflare skill",
+    "model": "gpt-5.2-codex",
+    "harness": "pi",
+    "routing_score": 66.599993,
+    "reason_codes": [
+      "ARENA_ROUTING_SELECTED",
+      "ARENA_ROUTING_OBJECTIVE_MATCHED",
+      "ARENA_ROUTING_STANDARD_MODE",
+      "ARENA_ROUTING_ACTIVE_POLICY_APPLIED"
+    ],
+    "rationale": "Selected contender_codex_pi with routing_score=66.599993 from 4 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0.4286, top_override_reason=ARENA_OVERRIDE_SCOPE_MISMATCH, calibration_gap=0.7209).",
+    "evidence": {
+      "appearances": 4,
+      "wins": 2,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 97.949,
+      "avg_risk": 8,
+      "avg_quality": 100,
+      "latest_hard_gate_pass": true,
+      "outcome_samples": 7,
+      "empirical_accept_rate": 0.1429,
+      "override_rate": 0.4286,
+      "rework_rate": 0.2857,
+      "avg_predicted_confidence": 0.8637,
+      "calibration_gap": 0.7209,
+      "override_reason_penalty": 0.3571,
+      "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "override_reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 2,
+          "share": 0.2857,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+        },
+        {
+          "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "count": 1,
+          "share": 0.1429,
+          "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+          "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+        }
+      ],
+      "coaching_recommendations": [
+        "High override rate; add human checkpoint before auto-route.",
+        "Frequent rework; tighten task decomposition and acceptance criteria.",
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+        "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+        "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+      ],
+      "last_seen_at": "2026-02-19T22:50:36.460Z",
+      "sample_run_ids": [
+        "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+        "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+        "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+        "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+      ]
+    }
+  },
+  "backups": [
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "appearances": 4,
+      "wins": 0,
+      "win_rate": 0,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 88.5215,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 58.975375,
+      "outcome_samples": 2,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.9705,
+      "calibration_gap": 0.9705,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+      ],
+      "last_seen_at": "2026-02-19T22:50:36.460Z",
+      "sample_run_ids": [
+        "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+        "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+        "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+        "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+      ]
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "appearances": 4,
+      "wins": 2,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 89.2593,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 46.383713,
+      "outcome_samples": 2,
+      "empirical_accept_rate": 0,
+      "override_rate": 0.5,
+      "rework_rate": 1,
+      "avg_predicted_confidence": 0.9793,
+      "calibration_gap": 0.9793,
+      "override_reason_penalty": 0.45,
+      "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+      "override_reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "count": 1,
+          "share": 0.5,
+          "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+          "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+        }
+      ],
+      "coaching_recommendations": [
+        "High override rate; add human checkpoint before auto-route.",
+        "Frequent rework; tighten task decomposition and acceptance criteria.",
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+        "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+        "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+      ],
+      "last_seen_at": "2026-02-19T22:50:36.460Z",
+      "sample_run_ids": [
+        "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+        "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+        "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+        "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+      ]
+    }
+  ],
+  "contenders_ranked": [
+    {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "appearances": 4,
+      "wins": 2,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 97.949,
+      "avg_risk": 8,
+      "avg_quality": 100,
+      "latest_hard_gate_pass": true,
+      "routing_score": 66.599993,
+      "outcome_samples": 7,
+      "empirical_accept_rate": 0.1429,
+      "override_rate": 0.4286,
+      "rework_rate": 0.2857,
+      "avg_predicted_confidence": 0.8637,
+      "calibration_gap": 0.7209,
+      "override_reason_penalty": 0.3571,
+      "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "override_reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 2,
+          "share": 0.2857,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+        },
+        {
+          "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "count": 1,
+          "share": 0.1429,
+          "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+          "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+        }
+      ],
+      "coaching_recommendations": [
+        "High override rate; add human checkpoint before auto-route.",
+        "Frequent rework; tighten task decomposition and acceptance criteria.",
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+        "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+        "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+      ],
+      "last_seen_at": "2026-02-19T22:50:36.460Z",
+      "sample_run_ids": [
+        "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+        "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+        "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+        "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+      ]
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "appearances": 4,
+      "wins": 0,
+      "win_rate": 0,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 88.5215,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 58.975375,
+      "outcome_samples": 2,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.9705,
+      "calibration_gap": 0.9705,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+      ],
+      "last_seen_at": "2026-02-19T22:50:36.460Z",
+      "sample_run_ids": [
+        "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+        "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+        "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+        "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+      ]
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "appearances": 4,
+      "wins": 2,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 89.2593,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 46.383713,
+      "outcome_samples": 2,
+      "empirical_accept_rate": 0,
+      "override_rate": 0.5,
+      "rework_rate": 1,
+      "avg_predicted_confidence": 0.9793,
+      "calibration_gap": 0.9793,
+      "override_reason_penalty": 0.45,
+      "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+      "override_reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "count": 1,
+          "share": 0.5,
+          "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+          "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+        }
+      ],
+      "coaching_recommendations": [
+        "High override rate; add human checkpoint before auto-route.",
+        "Frequent rework; tighten task decomposition and acceptance criteria.",
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+        "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+        "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+      ],
+      "last_seen_at": "2026-02-19T22:50:36.460Z",
+      "sample_run_ids": [
+        "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+        "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+        "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+        "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc"
+      ]
+    }
+  ],
+  "policy_optimizer": {
+    "schema_version": "arena_policy_optimizer.v1",
+    "computed_at": "2026-02-19T23:56:52.436Z",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "environment": "staging",
+    "objective_profile_name": "balanced",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE",
+    "gates": {
+      "min_samples": 6,
+      "min_confidence": 0.3,
+      "sample_count": 7,
+      "confidence_score": 0.3101
+    },
+    "current_active_policy": {
+      "calibration_gap": 0.7209,
+      "computed_at": "2026-02-19T23:56:52.436Z",
+      "confidence_score": 0.3101,
+      "contender_id": "contender_codex_pi",
+      "empirical_accept_rate": 0.1429,
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "objective_profile_name": "balanced",
+      "override_rate": 0.4286,
+      "promoted_at": "2026-02-19T23:56:52.436Z",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rework_rate": 0.2857,
+      "route_policy_id": "arp_shadow_3O2h37BWgPhy2SNh8Y2uDUh6",
+      "routing_score": 66.599993,
+      "sample_count": 7,
+      "schema_version": "arena_route_policy_active.v1",
+      "win_rate": 0.5
+    },
+    "candidate_shadow_policy": {
+      "calibration_gap": 0.7209,
+      "computed_at": "2026-02-19T23:56:52.436Z",
+      "confidence_score": 0.3101,
+      "contender_id": "contender_codex_pi",
+      "empirical_accept_rate": 0.1429,
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "objective_profile_name": "balanced",
+      "override_rate": 0.4286,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rework_rate": 0.2857,
+      "route_policy_id": "arp_shadow_3O2h37BWgPhy2SNh8Y2uDUh6",
+      "routing_score": 66.599993,
+      "sample_count": 7,
+      "schema_version": "arena_route_policy_shadow.v1",
+      "win_rate": 0.5
+    },
+    "promotion": {
+      "active_contender_id": "contender_codex_pi",
+      "computed_at": "2026-02-19T23:56:52.436Z",
+      "confidence_score": 0.3101,
+      "event_id": "arpe_59171cde-8993-497a-b24b-cb24da20ff9f",
+      "min_confidence": 0.3,
+      "min_samples": 6,
+      "previous_contender_id": "contender_codex_pi",
+      "promoted": false,
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+      ],
+      "sample_count": 7,
+      "schema_version": "arena_policy_promotion_event.v1",
+      "shadow_contender_id": "contender_codex_pi",
+      "status": "PROMOTED"
+    },
+    "reason_codes": [
+      "ARENA_POLICY_SHADOW_REFRESHED",
+      "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+    ],
+    "promotion_status": "PROMOTED"
+  },
+  "delegation_coach": {
+    "primary_contender_id": "contender_codex_pi",
+    "backup_contenders": [
+      "contender_gemini_swarm",
+      "contender_claude_codex_cli"
+    ],
+    "global_recommendations": [
+      "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes.",
+      "Primary route has elevated override rate; require manual approval until calibration improves.",
+      "Primary route is over-confident; cap auto-approval confidence thresholds.",
+      "Policy-learning signal (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+      "Prompt-learning signal: Add a scope-check checklist before final answer generation."
+    ],
+    "contender_cards": [
+      {
+        "contender_id": "contender_codex_pi",
+        "routing_score": 66.599993,
+        "override_rate": 0.4286,
+        "rework_rate": 0.2857,
+        "calibration_gap": 0.7209,
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 2,
+            "share": 0.2857,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          },
+          {
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "count": 1,
+            "share": 0.1429,
+            "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+            "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+          }
+        ],
+        "coaching_recommendations": [
+          "High override rate; add human checkpoint before auto-route.",
+          "Frequent rework; tighten task decomposition and acceptance criteria.",
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "routing_score": 58.975375,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "calibration_gap": 0.9705,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+        ]
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "routing_score": 46.383713,
+        "override_rate": 0.5,
+        "rework_rate": 1,
+        "calibration_gap": 0.9793,
+        "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "count": 1,
+            "share": 0.5,
+            "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+            "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+          }
+        ],
+        "coaching_recommendations": [
+          "High override rate; add human checkpoint before auto-route.",
+          "Frequent rework; tighten task decomposition and acceptance criteria.",
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+          "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+        ]
+      }
+    ]
+  }
+}
