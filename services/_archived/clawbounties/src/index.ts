@@ -74,6 +74,15 @@ export interface Env {
   /** Timeout in ms for worker token introspection (defaults to requester timeout). */
   WORKER_AUTH_TIMEOUT_MS?: string;
 
+  /** Enable/disable cron-triggered arena resolver. Defaults to 'true'. */
+  ARENA_RESOLVER_CRON_ENABLED?: string;
+
+  /** Cron resolver: minimum pending age in minutes before resolving. Defaults to '5'. */
+  ARENA_RESOLVER_CRON_MIN_AGE_MINUTES?: string;
+
+  /** Cron resolver: max items to resolve per cycle. Defaults to '80'. */
+  ARENA_RESOLVER_CRON_LIMIT?: string;
+
   /** D1 database binding */
   BOUNTIES_DB: D1Database;
 
@@ -23150,7 +23159,115 @@ async function handleGetSubmissionTrustPulse(
   );
 }
 
+async function executeArenaResolverCron(
+  env: Env,
+  cronLabel: string,
+): Promise<Record<string, unknown>> {
+  const version = env.BOUNTIES_VERSION?.trim().length ? env.BOUNTIES_VERSION.trim() : '0.1.0';
+
+  const enabled = (env.ARENA_RESOLVER_CRON_ENABLED ?? 'true').trim().toLowerCase();
+  if (enabled === 'false' || enabled === '0') {
+    return {
+      schema_version: 'arena_resolver_cron.v1',
+      cron_label: cronLabel,
+      computed_at: new Date().toISOString(),
+      status: 'skipped',
+      reason_code: 'ARENA_RESOLVER_CRON_DISABLED',
+    };
+  }
+
+  const limitRaw = Number.parseInt(env.ARENA_RESOLVER_CRON_LIMIT ?? '80', 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 500) : 80;
+
+  const minAgeRaw = Number.parseFloat(env.ARENA_RESOLVER_CRON_MIN_AGE_MINUTES ?? '5');
+  const minPendingAgeMinutes = Number.isFinite(minAgeRaw) && minAgeRaw >= 0 ? minAgeRaw : 5;
+
+  const adminKey = env.BOUNTIES_ADMIN_KEY?.trim() ?? '';
+  if (!adminKey) {
+    return {
+      schema_version: 'arena_resolver_cron.v1',
+      cron_label: cronLabel,
+      computed_at: new Date().toISOString(),
+      status: 'error',
+      reason_code: 'ARENA_RESOLVER_CRON_NO_ADMIN_KEY',
+    };
+  }
+
+  const origin = env.ENVIRONMENT === 'staging'
+    ? 'https://staging.clawbounties.com'
+    : 'https://clawbounties.com';
+  const loopId = `arena_cron_${cronLabel.replace(/\s+/g, '_')}_${Date.now()}`;
+
+  const syntheticRequest = new Request(`${origin}/v1/arena/desk/resolve-loop`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-admin-key': adminKey,
+    },
+    body: JSON.stringify({
+      limit,
+      target_resolved: limit,
+      min_pending_age_minutes: minPendingAgeMinutes,
+      finalize_unresolved: true,
+      dry_run: false,
+      loop_id: loopId,
+    }),
+  });
+
+  const startMs = Date.now();
+  const response = await handlePostArenaDeskResolveLoop(syntheticRequest, env, version);
+  const durationMs = Date.now() - startMs;
+
+  let resolvePayload: unknown;
+  try {
+    resolvePayload = await response.json();
+  } catch {
+    resolvePayload = null;
+  }
+
+  const totals = isRecord(resolvePayload) && isRecord((resolvePayload as Record<string, unknown>).totals)
+    ? (resolvePayload as Record<string, unknown>).totals as Record<string, unknown>
+    : {};
+
+  const pendingAfter = isRecord(resolvePayload) && isRecord((resolvePayload as Record<string, unknown>).pending_after)
+    ? (resolvePayload as Record<string, unknown>).pending_after as Record<string, unknown>
+    : {};
+
+  return {
+    schema_version: 'arena_resolver_cron.v1',
+    cron_label: cronLabel,
+    computed_at: new Date().toISOString(),
+    loop_id: loopId,
+    status: response.ok ? 'completed' : 'error',
+    http_status: response.status,
+    duration_ms: durationMs,
+    reason_code: response.ok ? 'ARENA_RESOLVER_CRON_COMPLETED' : 'ARENA_RESOLVER_CRON_FAILED',
+    totals: {
+      candidates: d1Number(totals.candidates) ?? 0,
+      resolved_winner: d1Number(totals.resolved_winner) ?? 0,
+      resolved_unresolved: d1Number(totals.resolved_unresolved) ?? 0,
+      unresolved_pending: d1Number(totals.unresolved_pending) ?? 0,
+      failed: d1Number(totals.failed) ?? 0,
+    },
+    pending_after: {
+      total: d1Number(pendingAfter.total) ?? null,
+      oldest_age_minutes: d1Number(pendingAfter.oldest_age_minutes) ?? null,
+      p95_age_minutes: d1Number(pendingAfter.p95_age_minutes) ?? null,
+    },
+  };
+}
+
 export default {
+  async scheduled(
+    controller: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    const result = await executeArenaResolverCron(env, controller.cron);
+    // Log result as structured JSON for Cloudflare log stream
+    console.log(JSON.stringify(result));
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -23284,6 +23401,25 @@ export default {
 
       if (path === '/v1/arena/desk/resolve-loop' && method === 'POST') {
         return handlePostArenaDeskResolveLoop(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/resolver-cron-status' && method === 'GET') {
+        const adminError = requireAdmin(request, env, version);
+        if (adminError) return adminError;
+        const cronEnabled = (env.ARENA_RESOLVER_CRON_ENABLED ?? 'true').trim().toLowerCase();
+        const cronLimit = Number.parseInt(env.ARENA_RESOLVER_CRON_LIMIT ?? '80', 10);
+        const cronMinAge = Number.parseFloat(env.ARENA_RESOLVER_CRON_MIN_AGE_MINUTES ?? '5');
+        const pendingRuns = await listPendingArenaRuns(env.BOUNTIES_DB, { limit: 5000 });
+        const pendingMetrics = buildArenaPendingBacklogMetrics(pendingRuns);
+        return jsonResponse({
+          schema_version: 'arena_resolver_cron_status.v1',
+          computed_at: new Date().toISOString(),
+          cron_enabled: cronEnabled !== 'false' && cronEnabled !== '0',
+          cron_schedule: '*/5 * * * *',
+          cron_limit: cronLimit,
+          cron_min_age_minutes: cronMinAge,
+          pending_backlog: pendingMetrics,
+        }, 200, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {
