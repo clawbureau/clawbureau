@@ -1,0 +1,81 @@
+{
+  "ok": true,
+  "story": "AGP-US-081",
+  "generated_at": "2026-02-20T19:17:29Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "70afd1c8-120a-4690-bf18-972c92fefc77"
+    },
+    "production": {
+      "clawbounties_version_id": "c990bff9-596d-4093-ba93-5b332a1cb171"
+    }
+  },
+  "cron_schedule": "*/5 * * * *",
+  "cron_enabled": true,
+  "staging": {
+    "drained_to_zero": true,
+    "cycles_captured": 3,
+    "snapshots": [
+      {
+        "cycle": 1,
+        "captured_at": "2026-02-20T19:16:37.139Z",
+        "http_status": 200,
+        "cron_enabled": true,
+        "pending_total": 0,
+        "pending_oldest_age_minutes": null,
+        "pending_p95_age_minutes": 0
+      },
+      {
+        "cycle": 2,
+        "captured_at": "2026-02-20T19:16:47.294Z",
+        "http_status": 200,
+        "cron_enabled": true,
+        "pending_total": 0,
+        "pending_oldest_age_minutes": null,
+        "pending_p95_age_minutes": 0
+      },
+      {
+        "cycle": 3,
+        "captured_at": "2026-02-20T19:16:57.380Z",
+        "http_status": 200,
+        "cron_enabled": true,
+        "pending_total": 0,
+        "pending_oldest_age_minutes": null,
+        "pending_p95_age_minutes": 0
+      }
+    ]
+  },
+  "production": {
+    "drained_to_zero": true,
+    "cycles_captured": 3,
+    "snapshots": [
+      {
+        "cycle": 1,
+        "captured_at": "2026-02-20T19:16:57.545Z",
+        "http_status": 200,
+        "cron_enabled": true,
+        "pending_total": 0,
+        "pending_oldest_age_minutes": null,
+        "pending_p95_age_minutes": 0
+      },
+      {
+        "cycle": 2,
+        "captured_at": "2026-02-20T19:17:07.742Z",
+        "http_status": 200,
+        "cron_enabled": true,
+        "pending_total": 0,
+        "pending_oldest_age_minutes": null,
+        "pending_p95_age_minutes": 0
+      },
+      {
+        "cycle": 3,
+        "captured_at": "2026-02-20T19:17:17.847Z",
+        "http_status": 200,
+        "cron_enabled": true,
+        "pending_total": 0,
+        "pending_oldest_age_minutes": null,
+        "pending_p95_age_minutes": 0
+      }
+    ]
+  }
+}

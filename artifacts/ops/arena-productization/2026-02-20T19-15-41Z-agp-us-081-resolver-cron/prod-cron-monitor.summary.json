@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "story": "AGP-US-081",
+  "generated_at": "2026-02-20T19:17:17.847Z",
+  "endpoint_base": "https://clawbounties.com",
+  "cycles_captured": 3,
+  "drained_to_zero": true,
+  "pending_decreasing": true,
+  "all_cron_enabled": true,
+  "snapshots": [
+    {
+      "cycle": 1,
+      "captured_at": "2026-02-20T19:16:57.545Z",
+      "http_status": 200,
+      "cron_enabled": true,
+      "pending_total": 0,
+      "pending_oldest_age_minutes": null,
+      "pending_p95_age_minutes": 0
+    },
+    {
+      "cycle": 2,
+      "captured_at": "2026-02-20T19:17:07.742Z",
+      "http_status": 200,
+      "cron_enabled": true,
+      "pending_total": 0,
+      "pending_oldest_age_minutes": null,
+      "pending_p95_age_minutes": 0
+    },
+    {
+      "cycle": 3,
+      "captured_at": "2026-02-20T19:17:17.847Z",
+      "http_status": 200,
+      "cron_enabled": true,
+      "pending_total": 0,
+      "pending_oldest_age_minutes": null,
+      "pending_p95_age_minutes": 0
+    }
+  ]
+}

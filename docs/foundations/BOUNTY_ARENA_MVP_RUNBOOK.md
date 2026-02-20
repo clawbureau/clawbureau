@@ -390,6 +390,10 @@ node scripts/arena/run-autopilot-circuit-breaker-monitor.mjs \
   --task-fingerprint AEM-FP-UI-DUEL-V1 \
   --objective-profile-name ui_duel
 
+# AGP-US-081: continuous resolver cron monitor (captures 3 cycles)
+node scripts/arena/run-resolver-cron-monitor.mjs \
+  --cycles 3 --interval-ms 60000
+
 # AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
 node scripts/arena/run-ui-duel-evaluator.mjs \
   --base-url https://staging.clawbounties.com \

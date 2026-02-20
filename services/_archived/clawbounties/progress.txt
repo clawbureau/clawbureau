@@ -1518,3 +1518,23 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-081 continuous resolver cron
+- Added Cloudflare scheduled handler to clawbounties: `*/5 * * * *` cron trigger.
+- Resolver runs on schedule via `executeArenaResolverCron()` which calls resolve-loop internally.
+- Configurable via env vars: `ARENA_RESOLVER_CRON_ENABLED`, `ARENA_RESOLVER_CRON_MIN_AGE_MINUTES`, `ARENA_RESOLVER_CRON_LIMIT`.
+- Added GET `/v1/arena/desk/resolver-cron-status` operator endpoint.
+- Manual trigger preserved: POST `/v1/arena/desk/resolve-loop`.
+- Structured log emitted per cron cycle with `arena_resolver_cron.v1` schema.
+- Added monitor script + test:
+  - `scripts/arena/run-resolver-cron-monitor.mjs`
+  - `scripts/arena/run-resolver-cron-monitor.test.mjs`
+- Deploys:
+  - staging `70afd1c8-120a-4690-bf18-972c92fefc77` (schedule: */5 * * * *)
+  - production `c990bff9-596d-4093-ba93-5b332a1cb171` (schedule: */5 * * * *)
+- Real-data verification:
+  - Both envs: pending arenas drained to 0
+  - 3 consecutive cron cycle snapshots captured
+  - cron_enabled=true on both envs
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T19-15-41Z-agp-us-081-resolver-cron/summary.json`

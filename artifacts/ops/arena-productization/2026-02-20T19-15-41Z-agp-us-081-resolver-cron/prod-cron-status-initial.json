@@ -1,0 +1,14 @@
+{
+  "schema_version": "arena_resolver_cron_status.v1",
+  "computed_at": "2026-02-20T19:15:42.771Z",
+  "cron_enabled": true,
+  "cron_schedule": "*/5 * * * *",
+  "cron_limit": 80,
+  "cron_min_age_minutes": 5,
+  "pending_backlog": {
+    "pending_count": 0,
+    "pending_with_reason_code": 0,
+    "pending_without_reason_code": 0,
+    "p95_pending_age_minutes": 0
+  }
+}
