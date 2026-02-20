@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "dependencies": {
+    "@clawbureau/clawsig-sdk": "file:packages/clawsig-sdk",
+    "@clawbureau/clawverify-cli": "file:packages/clawverify-cli",
+    "@clawbureau/clawverify-core": "file:packages/clawverify-core",
+    "clawsig": "file:packages/clawsig"
+  },
+  "scripts": {
+    "clawsig": "node packages/clawsig/bin/clawsig.js"
+  }
+}
