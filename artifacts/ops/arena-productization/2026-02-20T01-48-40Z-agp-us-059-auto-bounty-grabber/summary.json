@@ -1,0 +1,138 @@
+{
+  "ok": true,
+  "story": "AGP-US-059",
+  "generated_at": "2026-02-20T01:48:38.443Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "a33c0a8c-4fa2-4b92-b19f-643ff6790e38",
+      "migration": "0030_arena_auto_claim_locks.sql"
+    },
+    "production": {
+      "clawbounties_version_id": "43b69266-da26-4246-9cfd-0d0a26e8e8f9",
+      "migration": "0030_arena_auto_claim_locks.sql"
+    }
+  },
+  "secrets": {
+    "escrow_service_key_rotated_from": "~/.clawsecrets/escrow/ESCROW_ADMIN_KEY.staging|prod",
+    "reason": "fixed ESCROW_FAILED:401 Invalid admin token during auto-claim"
+  },
+  "done_criteria": {
+    "staging_claimed": 10,
+    "production_claimed": 3,
+    "staging_target_met": true,
+    "production_target_met": true,
+    "staging_duplicate_lock_incidents": 0,
+    "production_duplicate_lock_incidents": 0,
+    "thresholds": {
+      "staging_min_claims": 10,
+      "production_min_claims": 3,
+      "duplicate_lock_incidents": 0
+    }
+  },
+  "real_bounty_claims": {
+    "staging": [
+      {
+        "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "50",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "50",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "50",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "10",
+        "status": "claimed"
+      }
+    ],
+    "production": [
+      {
+        "bounty_id": "bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      },
+      {
+        "bounty_id": "bty_929788a2-f419-4fdd-9731-fb8599d4e9ab",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "reward_amount_minor": "200",
+        "status": "claimed"
+      }
+    ]
+  },
+  "claims_snapshot_totals": {
+    "staging": {
+      "processing": 0,
+      "claimed": 10,
+      "skipped": 0,
+      "failed": 0
+    },
+    "production": {
+      "processing": 0,
+      "claimed": 3,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "artifacts": {
+    "stage_run_summary": "artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/stage-run.summary.json",
+    "prod_run_summary": "artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/prod-run.summary.json",
+    "stage_claims": "artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/stage-claims.json",
+    "prod_claims": "artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/prod-claims.json",
+    "stage_accepted": "artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/stage-accepted-bounties.json",
+    "prod_accepted": "artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/prod-accepted-bounties.json"
+  }
+}

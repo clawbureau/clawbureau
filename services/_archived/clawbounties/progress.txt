@@ -1141,3 +1141,31 @@ Started: 2026-02-02T03:08:26.937005
   - manager route + autopilot include fleet match payloads on staging/prod
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T01-28-20Z-agp-us-058-harness-fleet-identity-control/summary.json`
+
+## 2026-02-20 - AGP-US-059 auto bounty claim loop
+- Added migration:
+  - `services/_archived/clawbounties/migrations/0030_arena_auto_claim_locks.sql`
+  - new table: `bounty_arena_auto_claim_locks` (idempotent claim lock + claim decision ledger)
+- Added desk APIs (admin):
+  - `POST /v1/arena/desk/claim-loop`
+  - `GET /v1/arena/desk/claims`
+- Added deterministic auto-claim loop behavior:
+  - budget gate (`budget_minor`)
+  - cost/risk policy gates (`max_fleet_cost_tier`, `max_fleet_risk_tier`)
+  - route→fleet worker selection with fail-closed fallback (`ARENA_AUTOCLAIM_*` reason codes)
+  - lock replay detection (`duplicate_lock_incidents`)
+- Added operator tooling:
+  - `scripts/arena/run-auto-bounty-grabber.mjs`
+  - `scripts/arena/run-auto-bounty-grabber.test.mjs`
+- Deployed services:
+  - `clawbounties-staging` version `a33c0a8c-4fa2-4b92-b19f-643ff6790e38`
+  - `clawbounties` version `43b69266-da26-4246-9cfd-0d0a26e8e8f9`
+- Applied migration `0030` in staging + prod D1.
+- Ops hardening:
+  - rotated `ESCROW_SERVICE_KEY` in clawbounties staging/prod from `~/.clawsecrets/escrow/ESCROW_ADMIN_KEY.{staging,prod}` after initial `ESCROW_FAILED:401 Invalid admin token` failures.
+- Real-data acceptance verified:
+  - staging claimed bounties: `10` (target `>=10`), duplicate lock incidents: `0`
+  - production claimed bounties: `3` (target `>=3`), duplicate lock incidents: `0`
+  - all claim outcomes persisted in `bounty_arena_auto_claim_locks` and surfaced via `GET /v1/arena/desk/claims`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/summary.json`

@@ -276,6 +276,14 @@ node scripts/arena/register-harness-fleet-workers.mjs \
   --workers contracts/arena/harness-fleet-workers.seed.v1.json \
   --bounties-base https://staging.clawbounties.com
 
+# AGP-US-059: run auto bounty claim loop (idempotent lock + budget/risk/cost guards)
+node scripts/arena/run-auto-bounty-grabber.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --target-claims 10 \
+  --budget-minor 250000 \
+  --max-fleet-cost-tier medium \
+  --max-fleet-risk-tier medium
+
 # AGP-US-055: compute shadow policy and promote active policy (fail-closed)
 node scripts/arena/run-policy-optimizer-shadow.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \

@@ -1,0 +1,67 @@
+{
+  "bounties": [
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9",
+      "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+      "title": "Funding preflight cbt-ops-004-prod-batch200",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:11:20.229Z",
+      "escrow_id": "esc_d8e06a3e-536b-49a7-8b77-dab506e66c1a",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf",
+      "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+      "title": "Funding preflight cbt-ops-004-prod-batch50",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:10:48.357Z",
+      "escrow_id": "esc_68e3dfff-784f-4731-9e2b-761282d827fe",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_929788a2-f419-4fdd-9731-fb8599d4e9ab",
+      "requester_did": "did:key:clawea-recon-smoke-did_mli3pv88_9e03d699",
+      "title": "Funding preflight cbt-ops-004-prod-batch10",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:10:34.072Z",
+      "escrow_id": "esc_ada0c6ac-71cd-49c7-a08d-1e39613be436",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    }
+  ]
+}

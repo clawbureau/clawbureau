@@ -1,0 +1,82 @@
+AUTO_BOUNTY_GRABBER_RESULT /private/tmp/clawbureau-arena-v10/artifacts/ops/arena-productization/2026-02-20T01-47-53Z-agp-us-059-auto-bounty-grabber-production/summary.json
+{
+  "schema_version": "arena_auto_claim_loop.v1",
+  "loop_id": "arena_autoclaim_82a51bb8888f45d2b24bfb9b51cefb0e",
+  "generated_at": "2026-02-20T01:47:55.552Z",
+  "dry_run": false,
+  "objective_profile_name": "balanced",
+  "limits": {
+    "limit": 30,
+    "target_claims": 3,
+    "scan_limit": 240,
+    "budget_minor": "900000",
+    "max_fleet_cost_tier": "high",
+    "max_fleet_risk_tier": "high",
+    "include_code_bounties": false,
+    "allow_route_fallback": true
+  },
+  "totals": {
+    "scanned_open_bounties": 7,
+    "decisions": 3,
+    "claimed": 3,
+    "failed": 0,
+    "skipped": 0,
+    "replay": 0,
+    "duplicate_lock_incidents": 0,
+    "budget_minor_remaining": "899400",
+    "target_met": true
+  },
+  "decisions": [
+    {
+      "bounty_id": "bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "200",
+      "budget_minor_before": "900000",
+      "budget_minor_after": "899800",
+      "error": null
+    },
+    {
+      "bounty_id": "bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "200",
+      "budget_minor_before": "899800",
+      "budget_minor_after": "899600",
+      "error": null
+    },
+    {
+      "bounty_id": "bty_929788a2-f419-4fdd-9731-fb8599d4e9ab",
+      "status": "claimed",
+      "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+      "contender_id": null,
+      "selected_worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+      "route_reason_codes": [
+        "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+      ],
+      "source": "fleet_fallback",
+      "reward_amount_minor": "200",
+      "budget_minor_before": "899600",
+      "budget_minor_after": "899400",
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,533 @@
+{
+  "bounties": [
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Gate requester 2026-02-11T23:10:02.491Z",
+      "reward": {
+        "amount_minor": "50",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:10:03.049Z",
+      "escrow_id": "esc_7462a0ac-075d-4227-a129-6202cea1a8cf",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "prod-gate",
+        "requester-auth"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Gate requester 2026-02-11T23:09:21.733Z",
+      "reward": {
+        "amount_minor": "50",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:09:22.230Z",
+      "escrow_id": "esc_e7486ebe-7da0-47f2-99f2-a194ed33d65d",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "prod-gate",
+        "requester-auth"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Funding preflight cbt-ops-004-staging-batch200",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:07:45.513Z",
+      "escrow_id": "esc_8dea1912-9fa1-4f9d-b7a7-df4d8ae5626e",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Funding preflight cbt-ops-004-staging-batch50",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:06:59.211Z",
+      "escrow_id": "esc_2f0eb91b-4f3d-4678-bf6e-2014a4c867db",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Funding preflight cbt-ops-004-staging-batch10",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T23:06:39.776Z",
+      "escrow_id": "esc_08dd6095-1c03-474e-9c82-889ac817a1a3",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Funding preflight cbt-ops-003-staging-batch200",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T22:15:45.865Z",
+      "escrow_id": "esc_09495419-f378-4aaf-9270-0c5bd985f4bb",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Funding preflight cbt-ops-003-staging-batch50",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T22:15:18.104Z",
+      "escrow_id": "esc_7b729039-0b8d-48ba-8d7e-7db0c40d2590",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Funding preflight cbt-ops-003-staging-batch10",
+      "reward": {
+        "amount_minor": "200",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T22:15:02.752Z",
+      "escrow_id": "esc_561225fc-6523-4ed7-8d3a-ea996fb0bd72",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "funding-preflight"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Gate requester 2026-02-11T22:14:01.214Z",
+      "reward": {
+        "amount_minor": "50",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T22:14:03.666Z",
+      "escrow_id": "esc_d7ff1188-12db-47b8-a1f5-87eeff8a07e4",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "prod-gate",
+        "requester-auth"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_0a55cf5d-1ebf-4a88-beee-610ed2a68437",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "tmp invalid",
+      "reward": {
+        "amount_minor": "250",
+        "currency": "USD"
+      },
+      "closure_type": "test",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T21:14:17.030Z",
+      "escrow_id": "esc_039136cc-c2b0-4dba-92e9-5a3ca6c0c315",
+      "is_code_bounty": true,
+      "tags": [
+        "sim"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_be077247-07ca-4670-b241-530f2496b779",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Invalid harness replay 2026-02-11T21:13:58.236Z",
+      "reward": {
+        "amount_minor": "250",
+        "currency": "USD"
+      },
+      "closure_type": "test",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T21:13:58.855Z",
+      "escrow_id": "esc_dd98c45f-bd19-4f88-a645-74a7240d36be",
+      "is_code_bounty": true,
+      "tags": [
+        "simulation",
+        "invalid-harness"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "probe after redeploy",
+      "reward": {
+        "amount_minor": "10",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T19:28:42.389Z",
+      "escrow_id": "esc_3a0f873d-bd03-483c-a6d9-cde89ea2d92b",
+      "is_code_bounty": false,
+      "tags": [
+        "probe"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_beb4f8f4-dd41-42f3-a5d0-c7befb43efa2",
+      "requester_did": "did:key:zsimrequesterbatch0001",
+      "title": "Requester E2E 2026-02-11T19:22:02.152Z",
+      "reward": {
+        "amount_minor": "250",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T19:22:02.758Z",
+      "escrow_id": "esc_64df58b9-c1ef-482a-a44f-88a0b4662753",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "requester"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_083704c5-0c8a-47bf-ad7e-d9027771ff29",
+      "requester_did": "did:key:smokeclawsettlemli82f3gy54zzg",
+      "title": "Simulation run 3",
+      "reward": {
+        "amount_minor": "100",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T19:20:23.252Z",
+      "escrow_id": "esc_779312e1-7201-4d30-86d5-f7b72f348d7b",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "requester-closure"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_ca0b4d6b-a800-4df5-ab56-a7ea2315f5d8",
+      "requester_did": "did:key:smokeclawsettlemli82f3gy54zzg",
+      "title": "Simulation run 2",
+      "reward": {
+        "amount_minor": "100",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T19:20:22.413Z",
+      "escrow_id": "esc_ea18b86f-85be-44a9-8bfd-9651a4f2f1fd",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "requester-closure"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_b8d87dc0-ca29-4b7a-9ecf-3c7413eed89c",
+      "requester_did": "did:key:smokeclawsettlemli82f3gy54zzg",
+      "title": "Simulation run 1",
+      "reward": {
+        "amount_minor": "100",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-11T19:20:21.593Z",
+      "escrow_id": "esc_e35563d2-27a9-4ae3-8c55-b3c5e433b51e",
+      "is_code_bounty": false,
+      "tags": [
+        "simulation",
+        "requester-closure"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_83c1e285-1811-4ec4-b32e-57ff95dce231",
+      "requester_did": "did:key:z6MkqbudJfprbdJ85DwPP5LskDBPpGeVr57uW8xWa5LjdujY",
+      "title": "Smoke CWC bounty B (POH-US-021)",
+      "reward": {
+        "amount_minor": "1000",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-10T17:30:24.551Z",
+      "escrow_id": "escrow_smoke_0b7c3441-50c1-4a37-9eef-d4e6a72417ca",
+      "is_code_bounty": false,
+      "tags": [
+        "smoke",
+        "cwc",
+        "poh-us-021"
+      ],
+      "min_proof_tier": "gateway"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_d88a7163-2cc2-4feb-b1d5-f4145469c269",
+      "requester_did": "did:key:z6MkmvTm9JRyEJ511P3mQdsZjJbiJQG2DDCySxLe2UN4n5d8",
+      "title": "Smoke CWC bounty B (POH-US-021)",
+      "reward": {
+        "amount_minor": "1000",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-10T16:57:49.248Z",
+      "escrow_id": "escrow_smoke_3fc2c51a-9949-4392-8b61-42c751618792",
+      "is_code_bounty": false,
+      "tags": [
+        "smoke",
+        "cwc",
+        "poh-us-021"
+      ],
+      "min_proof_tier": "gateway"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_39edec89-7fa2-4038-ae4a-c3473bc48cda",
+      "requester_did": "did:key:z6Mkj1ec3fq9p6No4mCvCtAXMcqu9RMGGEm7MFiLEXk5tMub",
+      "title": "Smoke CWC bounty B (POH-US-021)",
+      "reward": {
+        "amount_minor": "1000",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-10T16:23:09.904Z",
+      "escrow_id": "escrow_smoke_f36fc20b-2e69-457d-b51f-921341dc9ac0",
+      "is_code_bounty": false,
+      "tags": [
+        "smoke",
+        "cwc",
+        "poh-us-021"
+      ],
+      "min_proof_tier": "gateway"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_e9925707-ee15-4f83-81f5-e613d5a6b4b5",
+      "requester_did": "did:key:z6MkrXKNyH7CooaQtcro2eRRHnVpVLN6WRqXSY21v3qs6qJT",
+      "title": "Smoke CWC bounty B (POH-US-021)",
+      "reward": {
+        "amount_minor": "1000",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-10T16:13:13.825Z",
+      "escrow_id": "escrow_smoke_fe55f331-4fdb-4a3a-8561-31645562c0fd",
+      "is_code_bounty": false,
+      "tags": [
+        "smoke",
+        "cwc",
+        "poh-us-021"
+      ],
+      "min_proof_tier": "gateway"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_8e8464ff-0af5-4dc7-9b1c-6528cc4c91bd",
+      "requester_did": "did:key:z6MkrXKNyH7CooaQtcro2eRRHnVpVLN6WRqXSY21v3qs6qJT",
+      "title": "Smoke CWC bounty A (POH-US-021)",
+      "reward": {
+        "amount_minor": "1000",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-10T16:13:12.369Z",
+      "escrow_id": "escrow_smoke_6f1bf663-6d73-4e1b-b5d0-a05285c84930",
+      "is_code_bounty": false,
+      "tags": [
+        "smoke",
+        "cwc",
+        "poh-us-021"
+      ],
+      "min_proof_tier": "gateway"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_e0797ce4-ac58-4c1d-b8b7-e4c15c52e9e4",
+      "requester_did": "did:key:zSmokeRequester",
+      "title": "Smoke: trust pulse hash mismatch",
+      "reward": {
+        "amount_minor": "1000",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-09T17:02:05.606Z",
+      "escrow_id": "escrow_smoke_8623f2b5-b534-41c3-b04b-403810f9d82c",
+      "is_code_bounty": false,
+      "tags": [
+        "smoke",
+        "trust-pulse"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "requester_did": "did:key:requester",
+      "title": "Replay test A (D1)",
+      "reward": {
+        "amount_minor": "100",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-09T02:54:53Z",
+      "escrow_id": "escrow_dummy",
+      "is_code_bounty": false,
+      "tags": [
+        "replay"
+      ],
+      "min_proof_tier": "sandbox"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_e267ee58-4750-4c97-8e01-05e52bd94517",
+      "requester_did": "did:key:requester",
+      "title": "Replay test B (D1)",
+      "reward": {
+        "amount_minor": "100",
+        "currency": "USD"
+      },
+      "closure_type": "requester",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-09T02:54:53Z",
+      "escrow_id": "escrow_dummy",
+      "is_code_bounty": false,
+      "tags": [
+        "replay"
+      ],
+      "min_proof_tier": "self"
+    },
+    {
+      "schema_version": "2",
+      "bounty_id": "bty_4cdb06ed-ab62-47bb-89e1-10d857e7f465",
+      "requester_did": "did:key:zReqBountyV21770228175",
+      "title": "Smoke bounty v2",
+      "reward": {
+        "amount_minor": "5000",
+        "currency": "USD"
+      },
+      "closure_type": "test",
+      "difficulty_scalar": 1,
+      "status": "accepted",
+      "created_at": "2026-02-04T18:02:58.749Z",
+      "escrow_id": "esc_e5310d50-19d6-475a-965f-8f0dd541ea72",
+      "is_code_bounty": true,
+      "tags": [
+        "typescript",
+        "testing"
+      ],
+      "min_proof_tier": "self"
+    }
+  ]
+}
