@@ -1,0 +1,61 @@
+{
+  "computed_at": "2026-02-20T00:54:14.069Z",
+  "filters": {
+    "contender_id": null,
+    "experiment_arm": "LIVE",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "limit": 2000,
+    "min_samples": 50,
+    "objective_profile_name": "balanced",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "metrics": null,
+  "reason_code_drilldown": [
+    {
+      "count": 5,
+      "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+      "share": 0.4545
+    },
+    {
+      "count": 2,
+      "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+      "share": 0.1818
+    },
+    {
+      "count": 2,
+      "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "share": 0.1818
+    },
+    {
+      "count": 1,
+      "reason_code": "ARENA_OVERRIDE_POLICY_RISK",
+      "share": 0.0909
+    }
+  ],
+  "reason_codes": [
+    "ARENA_ROI_INSUFFICIENT_SAMPLE"
+  ],
+  "schema_version": "arena_roi_dashboard.v1",
+  "status": "INSUFFICIENT_SAMPLE",
+  "totals": {
+    "arena_count": 4,
+    "available_runs": 4,
+    "sample_count": 11
+  },
+  "trends": {
+    "window_30d": {
+      "reason_codes": [
+        "ARENA_ROI_INSUFFICIENT_SAMPLE"
+      ],
+      "sample_count": 11,
+      "status": "INSUFFICIENT_SAMPLE"
+    },
+    "window_7d": {
+      "reason_codes": [
+        "ARENA_ROI_INSUFFICIENT_SAMPLE"
+      ],
+      "sample_count": 11,
+      "status": "INSUFFICIENT_SAMPLE"
+    }
+  }
+}

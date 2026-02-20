@@ -826,6 +826,43 @@ export interface ArenaPolicyOptimizerView {
   promotion: Record<string, unknown> | null;
 }
 
+export interface ArenaRoiMetricsView {
+  median_review_time_minutes: number;
+  first_pass_accept_rate: number;
+  override_rate: number;
+  rework_rate: number;
+  cost_per_accepted_bounty_usd: number;
+  cycle_time_minutes: number;
+  winner_stability: number;
+}
+
+export interface ArenaRoiWindowView {
+  status: string;
+  sample_count: number;
+  reason_codes: string[];
+  metrics: ArenaRoiMetricsView | null;
+}
+
+export interface ArenaRoiDashboardView {
+  status: string;
+  reason_codes: string[];
+  totals: {
+    sample_count: number;
+    arena_count: number;
+    available_runs: number;
+  };
+  metrics: ArenaRoiMetricsView | null;
+  trends: {
+    window_7d: ArenaRoiWindowView;
+    window_30d: ArenaRoiWindowView;
+  };
+  reason_code_drilldown: Array<{
+    reason_code: string;
+    count: number;
+    share: number;
+  }>;
+}
+
 export interface ArenaContractCopilotEvidenceView {
   arena_id: string;
   outcome_id: string;
@@ -916,6 +953,7 @@ export interface ArenaReportView {
   calibration?: ArenaCalibrationView;
   autopilot?: ArenaAutopilotView;
   policy_optimizer?: ArenaPolicyOptimizerView;
+  roi_dashboard?: ArenaRoiDashboardView;
   contract_copilot?: ArenaContractCopilotView;
   contract_language_optimizer?: ArenaContractLanguageOptimizerView;
 }
@@ -1058,6 +1096,14 @@ interface ArenaReportResponse {
     current_active_policy?: unknown;
     candidate_shadow_policy?: unknown;
     promotion?: unknown;
+  };
+  roi_dashboard?: {
+    status?: unknown;
+    reason_codes?: unknown;
+    totals?: unknown;
+    metrics?: unknown;
+    trends?: unknown;
+    reason_code_drilldown?: unknown;
   };
   contract_copilot?: {
     status?: unknown;
@@ -1420,6 +1466,84 @@ function parsePolicyOptimizer(input: unknown): ArenaPolicyOptimizerView | undefi
   };
 }
 
+function parseRoiMetrics(input: unknown): ArenaRoiMetricsView | null {
+  if (!input || typeof input !== 'object') return null;
+  const rec = input as Record<string, unknown>;
+
+  return {
+    median_review_time_minutes: asNumber(rec.median_review_time_minutes, 0),
+    first_pass_accept_rate: asNumber(rec.first_pass_accept_rate, 0),
+    override_rate: asNumber(rec.override_rate, 0),
+    rework_rate: asNumber(rec.rework_rate, 0),
+    cost_per_accepted_bounty_usd: asNumber(rec.cost_per_accepted_bounty_usd, 0),
+    cycle_time_minutes: asNumber(rec.cycle_time_minutes, 0),
+    winner_stability: asNumber(rec.winner_stability, 0),
+  };
+}
+
+function parseRoiWindow(input: unknown): ArenaRoiWindowView {
+  if (!input || typeof input !== 'object') {
+    return {
+      status: 'unknown',
+      sample_count: 0,
+      reason_codes: [],
+      metrics: null,
+    };
+  }
+
+  const rec = input as Record<string, unknown>;
+  return {
+    status: asString(rec.status) ?? 'unknown',
+    sample_count: asNumber(rec.sample_count, 0),
+    reason_codes: Array.isArray(rec.reason_codes)
+      ? rec.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    metrics: parseRoiMetrics(rec.metrics),
+  };
+}
+
+function parseRoiDashboard(input: unknown): ArenaRoiDashboardView | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+
+  const totalsRaw = rec.totals;
+  const totals = totalsRaw && typeof totalsRaw === 'object'
+    ? totalsRaw as Record<string, unknown>
+    : {};
+
+  return {
+    status: asString(rec.status) ?? 'unknown',
+    reason_codes: Array.isArray(rec.reason_codes)
+      ? rec.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+      : [],
+    totals: {
+      sample_count: asNumber(totals.sample_count, 0),
+      arena_count: asNumber(totals.arena_count, 0),
+      available_runs: asNumber(totals.available_runs, 0),
+    },
+    metrics: parseRoiMetrics(rec.metrics),
+    trends: {
+      window_7d: parseRoiWindow((rec.trends as Record<string, unknown> | undefined)?.window_7d),
+      window_30d: parseRoiWindow((rec.trends as Record<string, unknown> | undefined)?.window_30d),
+    },
+    reason_code_drilldown: Array.isArray(rec.reason_code_drilldown)
+      ? rec.reason_code_drilldown
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const row = entry as Record<string, unknown>;
+          const reasonCode = asString(row.reason_code);
+          if (!reasonCode) return null;
+          return {
+            reason_code: reasonCode,
+            count: asNumber(row.count, 0),
+            share: asNumber(row.share, 0),
+          };
+        })
+        .filter((entry): entry is { reason_code: string; count: number; share: number } => entry !== null)
+      : [],
+  };
+}
+
 function parseContractCopilotSuggestion(input: unknown): ArenaContractCopilotSuggestionView | null {
   if (!input || typeof input !== 'object') return null;
   const rec = input as Record<string, unknown>;
@@ -1688,6 +1812,7 @@ export async function fetchArenaReport(
     calibration: parseCalibration(data.calibration),
     autopilot: parseAutopilot(data.autopilot),
     policy_optimizer: parsePolicyOptimizer(data.policy_optimizer),
+    roi_dashboard: parseRoiDashboard(data.roi_dashboard),
     contract_copilot: parseContractCopilot(data.contract_copilot),
     contract_language_optimizer: parseContractLanguageOptimizer(data.contract_language_optimizer),
   };

@@ -230,6 +230,58 @@ function renderCalibrationCard(report: ArenaReportView): string {
   `;
 }
 
+function renderRoiDashboardCard(report: ArenaReportView): string {
+  const roi = report.roi_dashboard;
+  if (!roi) {
+    return `
+      <div class="card">
+        <p class="section-title">Arena ROI dashboard</p>
+        <p class="dim" style="font-size:0.82rem">ROI metrics are unavailable for this arena payload.</p>
+      </div>
+    `;
+  }
+
+  if (roi.status === 'INSUFFICIENT_SAMPLE' || !roi.metrics) {
+    return `
+      <div class="card">
+        <p class="section-title">Arena ROI dashboard</p>
+        <p class="dim" style="font-size:0.82rem">INSUFFICIENT_SAMPLE — sample_count=${roi.totals.sample_count}, arena_count=${roi.totals.arena_count}.</p>
+        <p class="dim" style="font-size:0.78rem"><strong>Reason codes:</strong> ${esc(roi.reason_codes.join(', ') || 'none')}</p>
+      </div>
+    `;
+  }
+
+  const topReasons = roi.reason_code_drilldown
+    .slice(0, 4)
+    .map((entry) => `${entry.reason_code} (${entry.count})`)
+    .join(', ') || 'none';
+
+  const trend7 = roi.trends.window_7d;
+  const trend30 = roi.trends.window_30d;
+
+  return `
+    <div class="card">
+      <p class="section-title">Arena ROI dashboard</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:0.55rem">Real persisted outcome metrics for autonomy + throughput quality.</p>
+      <div class="diag-grid" style="grid-template-columns: repeat(4, minmax(130px, 1fr)); gap:0.35rem; margin-bottom:0.5rem">
+        ${renderMetricCell('median review min', roi.metrics.median_review_time_minutes.toFixed(2))}
+        ${renderMetricCell('first-pass accept', `${(roi.metrics.first_pass_accept_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('override rate', `${(roi.metrics.override_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('rework rate', `${(roi.metrics.rework_rate * 100).toFixed(1)}%`)}
+        ${renderMetricCell('cost/accepted', `$${roi.metrics.cost_per_accepted_bounty_usd.toFixed(4)}`)}
+        ${renderMetricCell('cycle time min', roi.metrics.cycle_time_minutes.toFixed(2))}
+        ${renderMetricCell('winner stability', `${(roi.metrics.winner_stability * 100).toFixed(1)}%`)}
+        ${renderMetricCell('samples', String(roi.totals.sample_count))}
+      </div>
+      <div class="detail-grid" style="margin-bottom:0.5rem">
+        <dt>Trend 7d</dt><dd><span class="mono">${esc(trend7.status)}</span> (samples=${trend7.sample_count})</dd>
+        <dt>Trend 30d</dt><dd><span class="mono">${esc(trend30.status)}</span> (samples=${trend30.sample_count})</dd>
+      </div>
+      <p class="dim" style="font-size:0.78rem"><strong>Top reason codes:</strong> ${esc(topReasons)}</p>
+    </div>
+  `;
+}
+
 function renderAutopilotCard(report: ArenaReportView): string {
   const autopilot = report.autopilot;
   if (!autopilot) {
@@ -606,6 +658,8 @@ export function arenaComparePage(report: ArenaReportView): string {
 
     ${renderCalibrationCard(report)}
 
+    ${renderRoiDashboardCard(report)}
+
     ${renderAutopilotCard(report)}
 
     ${renderPolicyOptimizerCard(report)}
@@ -952,6 +1006,58 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           { tag: 'outcome:accepted', count: 1, share: 1 },
         ],
       },
+    },
+    roi_dashboard: {
+      status: 'available',
+      reason_codes: ['ARENA_ROI_READY'],
+      totals: {
+        sample_count: 12,
+        arena_count: 4,
+        available_runs: 4,
+      },
+      metrics: {
+        median_review_time_minutes: 19.5,
+        first_pass_accept_rate: 0.6667,
+        override_rate: 0.1667,
+        rework_rate: 0.1667,
+        cost_per_accepted_bounty_usd: 0.7125,
+        cycle_time_minutes: 57,
+        winner_stability: 0.75,
+      },
+      trends: {
+        window_7d: {
+          status: 'available',
+          sample_count: 8,
+          reason_codes: [],
+          metrics: {
+            median_review_time_minutes: 18,
+            first_pass_accept_rate: 0.625,
+            override_rate: 0.25,
+            rework_rate: 0.125,
+            cost_per_accepted_bounty_usd: 0.74,
+            cycle_time_minutes: 55,
+            winner_stability: 0.67,
+          },
+        },
+        window_30d: {
+          status: 'available',
+          sample_count: 12,
+          reason_codes: [],
+          metrics: {
+            median_review_time_minutes: 19.5,
+            first_pass_accept_rate: 0.6667,
+            override_rate: 0.1667,
+            rework_rate: 0.1667,
+            cost_per_accepted_bounty_usd: 0.7125,
+            cycle_time_minutes: 57,
+            winner_stability: 0.75,
+          },
+        },
+      },
+      reason_code_drilldown: [
+        { reason_code: 'ARENA_OVERRIDE_SCOPE_MISMATCH', count: 3, share: 0.25 },
+        { reason_code: 'ARENA_OVERRIDE_TEST_FAILURE', count: 2, share: 0.1667 },
+      ],
     },
     autopilot: {
       status: 'auto_route_enabled',

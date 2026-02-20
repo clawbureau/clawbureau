@@ -1,0 +1,23 @@
+{
+  "checks": {
+    "insufficient_sample_reason_codes_when_insufficient": true,
+    "metrics_present_when_available": true,
+    "sample_count_positive_when_available": true,
+    "status_available_or_insufficient": true
+  },
+  "endpoint_base": "https://clawbounties.com",
+  "generated_at": "2026-02-20T00:55:21.995Z",
+  "ok": true,
+  "output_dir": "artifacts/ops/arena-productization/2026-02-20T00-55-21-363Z-agp-us-057-roi-dashboard-typescript-worker-api-hardening",
+  "reason_codes": [
+    "ARENA_ROI_READY"
+  ],
+  "status": "available",
+  "story": "AGP-US-057",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "totals": {
+    "arena_count": 2,
+    "available_runs": 2,
+    "sample_count": 5
+  }
+}

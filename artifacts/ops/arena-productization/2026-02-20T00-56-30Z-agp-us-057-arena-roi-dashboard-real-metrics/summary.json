@@ -1,0 +1,160 @@
+{
+  "ok": true,
+  "story": "AGP-US-057",
+  "generated_at": "2026-02-20T00:56:45.427Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "fa8d74b1-67d5-478b-8bf7-08ab0278eba8",
+      "clawsig_explorer_version_id": "3dabf789-e85a-430b-ac95-8628c9c6257d"
+    },
+    "production": {
+      "clawbounties_version_id": "83acc688-16da-4022-8408-0296a0d6cb86",
+      "clawsig_explorer_version_id": "aff4c597-6962-4891-9a1f-1a0fa744854a"
+    }
+  },
+  "real_data_evidence": {
+    "staging_available": {
+      "checks": {
+        "insufficient_sample_reason_codes_when_insufficient": true,
+        "metrics_present_when_available": true,
+        "sample_count_positive_when_available": true,
+        "status_available_or_insufficient": true
+      },
+      "endpoint_base": "https://staging.clawbounties.com",
+      "generated_at": "2026-02-20T00:54:04.649Z",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-20T00-54-04-025Z-agp-us-057-roi-dashboard-typescript-worker-api-hardening",
+      "reason_codes": [
+        "ARENA_ROI_READY"
+      ],
+      "status": "available",
+      "story": "AGP-US-057",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "totals": {
+        "arena_count": 4,
+        "available_runs": 4,
+        "sample_count": 11
+      }
+    },
+    "staging_insufficient": {
+      "checks": {
+        "insufficient_sample_reason_codes_when_insufficient": true,
+        "metrics_present_when_available": true,
+        "sample_count_positive_when_available": true,
+        "status_available_or_insufficient": true
+      },
+      "endpoint_base": "https://staging.clawbounties.com",
+      "generated_at": "2026-02-20T00:54:14.092Z",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-20T00-54-13-726Z-agp-us-057-roi-dashboard-typescript-worker-api-hardening",
+      "reason_codes": [
+        "ARENA_ROI_INSUFFICIENT_SAMPLE"
+      ],
+      "status": "INSUFFICIENT_SAMPLE",
+      "story": "AGP-US-057",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "totals": {
+        "arena_count": 4,
+        "available_runs": 4,
+        "sample_count": 11
+      }
+    },
+    "production_available": {
+      "checks": {
+        "insufficient_sample_reason_codes_when_insufficient": true,
+        "metrics_present_when_available": true,
+        "sample_count_positive_when_available": true,
+        "status_available_or_insufficient": true
+      },
+      "endpoint_base": "https://clawbounties.com",
+      "generated_at": "2026-02-20T00:55:21.995Z",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-20T00-55-21-363Z-agp-us-057-roi-dashboard-typescript-worker-api-hardening",
+      "reason_codes": [
+        "ARENA_ROI_READY"
+      ],
+      "status": "available",
+      "story": "AGP-US-057",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "totals": {
+        "arena_count": 2,
+        "available_runs": 2,
+        "sample_count": 5
+      }
+    },
+    "production_insufficient": {
+      "checks": {
+        "insufficient_sample_reason_codes_when_insufficient": true,
+        "metrics_present_when_available": true,
+        "sample_count_positive_when_available": true,
+        "status_available_or_insufficient": true
+      },
+      "endpoint_base": "https://clawbounties.com",
+      "generated_at": "2026-02-20T00:55:29.200Z",
+      "ok": true,
+      "output_dir": "artifacts/ops/arena-productization/2026-02-20T00-55-28-848Z-agp-us-057-roi-dashboard-typescript-worker-api-hardening",
+      "reason_codes": [
+        "ARENA_ROI_INSUFFICIENT_SAMPLE"
+      ],
+      "status": "INSUFFICIENT_SAMPLE",
+      "story": "AGP-US-057",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "totals": {
+        "arena_count": 2,
+        "available_runs": 2,
+        "sample_count": 5
+      }
+    }
+  },
+  "acceptance": {
+    "has_non_empty_metrics": true,
+    "insufficient_sample_state_verified": true,
+    "metrics_from_real_persisted_outcomes": true
+  },
+  "endpoint_regressions": {
+    "staging": {
+      "route_status": 200,
+      "autopilot_status": 200,
+      "route_reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED"
+      ],
+      "autopilot_status_label": "manual_review_required"
+    },
+    "production": {
+      "route_status": 200,
+      "autopilot_status": 200,
+      "route_reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED"
+      ],
+      "autopilot_status_label": "manual_review_required"
+    }
+  },
+  "explorer_render_checks": {
+    "staging_roi_dashboard_card": true,
+    "production_roi_dashboard_card": true
+  },
+  "artifacts": {
+    "stage_available_summary": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/stage-available.summary.json",
+    "stage_available_report": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/stage-available.roi.json",
+    "stage_insufficient_summary": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/stage-insufficient.summary.json",
+    "stage_insufficient_report": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/stage-insufficient.roi.json",
+    "prod_available_summary": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/prod-available.summary.json",
+    "prod_available_report": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/prod-available.roi.json",
+    "prod_insufficient_summary": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/prod-insufficient.summary.json",
+    "prod_insufficient_report": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/prod-insufficient.roi.json",
+    "route_stage": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/route-stage.json",
+    "route_prod": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/route-prod.json",
+    "autopilot_stage": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/autopilot-stage.json",
+    "autopilot_prod": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/autopilot-prod.json",
+    "arena_stage": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/arena-stage.json",
+    "arena_prod": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/arena-prod.json",
+    "explorer_stage": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/explorer-stage.html",
+    "explorer_prod": "artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/explorer-prod.html"
+  }
+}

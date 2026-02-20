@@ -1,0 +1,84 @@
+{
+  "computed_at": "2026-02-20T00:54:04.618Z",
+  "filters": {
+    "contender_id": null,
+    "experiment_arm": "LIVE",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "limit": 2000,
+    "min_samples": 5,
+    "objective_profile_name": "balanced",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "metrics": {
+    "accepted_outcomes": 1,
+    "cost_per_accepted_bounty_usd": 0.0148,
+    "cycle_time_minutes": 22,
+    "first_pass_accept_rate": 0.0909,
+    "median_review_time_minutes": 22,
+    "override_rate": 0.3636,
+    "rework_rate": 0.3636,
+    "winner_stability": 0.5
+  },
+  "reason_code_drilldown": [
+    {
+      "count": 5,
+      "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+      "share": 0.4545
+    },
+    {
+      "count": 2,
+      "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+      "share": 0.1818
+    },
+    {
+      "count": 2,
+      "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "share": 0.1818
+    },
+    {
+      "count": 1,
+      "reason_code": "ARENA_OVERRIDE_POLICY_RISK",
+      "share": 0.0909
+    }
+  ],
+  "reason_codes": [
+    "ARENA_ROI_READY"
+  ],
+  "schema_version": "arena_roi_dashboard.v1",
+  "status": "available",
+  "totals": {
+    "arena_count": 4,
+    "available_runs": 4,
+    "sample_count": 11
+  },
+  "trends": {
+    "window_30d": {
+      "metrics": {
+        "accepted_outcomes": 1,
+        "cost_per_accepted_bounty_usd": 0.0148,
+        "cycle_time_minutes": 22,
+        "first_pass_accept_rate": 0.0909,
+        "median_review_time_minutes": 22,
+        "override_rate": 0.3636,
+        "rework_rate": 0.3636,
+        "winner_stability": 0.5
+      },
+      "sample_count": 11,
+      "status": "available"
+    },
+    "window_7d": {
+      "metrics": {
+        "accepted_outcomes": 1,
+        "cost_per_accepted_bounty_usd": 0.0148,
+        "cycle_time_minutes": 22,
+        "first_pass_accept_rate": 0.0909,
+        "median_review_time_minutes": 22,
+        "override_rate": 0.3636,
+        "rework_rate": 0.3636,
+        "winner_stability": 0.5
+      },
+      "sample_count": 11,
+      "status": "available"
+    }
+  }
+}

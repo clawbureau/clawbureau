@@ -1062,3 +1062,49 @@ Started: 2026-02-02T03:08:26.937005
   - `POST /v1/arena/manager/autopilot` => `200`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T00-38-10Z-agp-us-056-contract-copilot-real-failures/summary.json`
+
+## 2026-02-20 - AGP-US-057 arena ROI dashboard from real metrics
+- Added ROI API:
+  - `GET /v1/arena/roi-dashboard` (admin)
+  - filter support:
+    - `task_fingerprint`
+    - `objective_profile_name`
+    - `contender_id`
+    - `experiment_id`
+    - `experiment_arm`
+    - `min_samples`, `limit`
+- ROI metrics are computed from persisted arena outcomes/runs/contender metrics only:
+  - `median_review_time_minutes`
+  - `first_pass_accept_rate`
+  - `override_rate`
+  - `rework_rate`
+  - `cost_per_accepted_bounty_usd`
+  - `cycle_time_minutes`
+  - `winner_stability`
+- Added trend windows + drilldowns:
+  - `trends.window_7d`
+  - `trends.window_30d`
+  - `reason_code_drilldown`
+- Deterministic insufficient-sample behavior:
+  - top-level `status=INSUFFICIENT_SAMPLE`
+  - deterministic reason code `ARENA_ROI_INSUFFICIENT_SAMPLE`
+  - per-window insufficient states in trend payloads
+- Arena payload + explorer:
+  - `GET /v1/arena/{arena_id}` now includes `roi_dashboard`
+  - clawsig-explorer arena page now renders **Arena ROI dashboard** panel
+- Added operator tooling:
+  - `scripts/arena/run-roi-dashboard-report.mjs`
+  - `scripts/arena/run-roi-dashboard-report.test.mjs`
+- Deployed services:
+  - `clawbounties-staging` version `fa8d74b1-67d5-478b-8bf7-08ab0278eba8`
+  - `clawsig-explorer-staging` version `3dabf789-e85a-430b-ac95-8628c9c6257d`
+  - `clawbounties` version `83acc688-16da-4022-8408-0296a0d6cb86`
+  - `clawsig-explorer` version `aff4c597-6962-4891-9a1f-1a0fa744854a`
+- Real-data acceptance verified:
+  - non-empty metrics response for real fingerprint segment (`status=available`)
+  - deterministic insufficient-sample response for same segment with strict gate (`status=INSUFFICIENT_SAMPLE`)
+- Endpoint regression checks (staging + prod):
+  - `POST /v1/arena/manager/route` => `200`
+  - `POST /v1/arena/manager/autopilot` => `200`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T00-56-30Z-agp-us-057-arena-roi-dashboard-real-metrics/summary.json`

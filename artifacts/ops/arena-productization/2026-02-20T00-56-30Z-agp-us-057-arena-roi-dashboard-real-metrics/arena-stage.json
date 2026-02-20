@@ -1,0 +1,2020 @@
+{
+  "run_id": "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+  "arena_id": "arena_bty_5c048032_stage_053_002",
+  "status": "completed",
+  "generated_at": "2026-02-19T22:50:24.229Z",
+  "contract": {
+    "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+    "contract_id": "contract_arena_bty_5c048032_stage_053_001",
+    "contract_hash_b64u": "ca5wgzPnJuvz963Xc-33w3e_O1lkwCRRMQjoqZCsfUg",
+    "task_fingerprint": "typescript:worker:api-hardening"
+  },
+  "objective_profile": {
+    "name": "balanced",
+    "tie_breakers": [
+      "mandatory_passed",
+      "quality_score",
+      "risk_score_low",
+      "cost_low",
+      "latency_low",
+      "contender_id"
+    ],
+    "weights": {
+      "cost": 0.2,
+      "quality": 0.35,
+      "safety": 0.2,
+      "speed": 0.25
+    }
+  },
+  "registry": {
+    "registry_version": "2026-02-19",
+    "objective_profile_name": "balanced"
+  },
+  "experiment": {
+    "experiment_id": "exp_api_hardening_live_v1",
+    "arm": "LIVE"
+  },
+  "score_explain": {
+    "contender_breakdown": [
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_claude_codex_cli)",
+            "source": "cost",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json"
+          },
+          {
+            "label": "Dispatch trace (contender_claude_codex_cli)",
+            "source": "execution",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json"
+          },
+          {
+            "label": "Git diff (contender_claude_codex_cli)",
+            "source": "git",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt"
+          },
+          {
+            "label": "Test run (contender_claude_codex_cli)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log"
+          },
+          {
+            "label": "Typecheck (contender_claude_codex_cli)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log"
+          }
+        ],
+        "final_score": 97.9145,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ]
+      },
+      {
+        "contender_id": "contender_codex_pi",
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_codex_pi)",
+            "source": "cost",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json"
+          },
+          {
+            "label": "Dispatch trace (contender_codex_pi)",
+            "source": "execution",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json"
+          },
+          {
+            "label": "Git diff (contender_codex_pi)",
+            "source": "git",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt"
+          },
+          {
+            "label": "Test run (contender_codex_pi)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/arena-tests.attempt-1.log"
+          },
+          {
+            "label": "Typecheck (contender_codex_pi)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/cb-typecheck.attempt-1.log"
+          }
+        ],
+        "final_score": 97.86,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_gemini_swarm)",
+            "source": "cost",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json"
+          },
+          {
+            "label": "Dispatch trace (contender_gemini_swarm)",
+            "source": "execution",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json"
+          },
+          {
+            "label": "Git diff (contender_gemini_swarm)",
+            "source": "git",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt"
+          },
+          {
+            "label": "Test run (contender_gemini_swarm)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-tests.attempt-1.log"
+          },
+          {
+            "label": "Typecheck (contender_gemini_swarm)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-typecheck.attempt-1.log"
+          }
+        ],
+        "final_score": 97.003,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ]
+      }
+    ],
+    "formula": {
+      "components": [
+        "quality/risk/efficiency are derived from CI + git + execution traces",
+        "speed is normalized from latency_ms",
+        "cost is normalized from cost_usd",
+        "safety is normalized from risk_score"
+      ],
+      "summary": "final_score = quality*Wq + speed*Ws + cost*Wc + safety*Wsafe - optional_penalty"
+    },
+    "weights": {
+      "cost": 0.2,
+      "quality": 0.35,
+      "safety": 0.2,
+      "speed": 0.25
+    }
+  },
+  "contenders": [
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "tools": [
+        "bash",
+        "edit",
+        "read"
+      ],
+      "skills": [
+        "ai-sdk"
+      ],
+      "plugins": [
+        "did-work"
+      ],
+      "version_pin": "claude-codex-cli-2026-02-19.1",
+      "prompt_template": "arena/claude-codex/fast-delivery.v2",
+      "experiment_arm": "LIVE",
+      "score": 97.9145,
+      "hard_gate_pass": true,
+      "mandatory_failed": 0,
+      "metrics": {
+        "quality_score": 100,
+        "risk_score": 8,
+        "efficiency_score": 98.79,
+        "latency_ms": 2053,
+        "cost_usd": 0.0146,
+        "autonomy_score": 100
+      },
+      "check_results": [
+        {
+          "criterion_id": "ac_contract_binding",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_reason_codes",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_test_coverage",
+          "required": false,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        }
+      ],
+      "score_explain": {
+        "final_score": 97.9145,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ],
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_claude_codex_cli)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json",
+            "source": "cost"
+          },
+          {
+            "label": "Dispatch trace (contender_claude_codex_cli)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json",
+            "source": "execution"
+          },
+          {
+            "label": "Git diff (contender_claude_codex_cli)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt",
+            "source": "git"
+          },
+          {
+            "label": "Test run (contender_claude_codex_cli)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log",
+            "source": "ci"
+          },
+          {
+            "label": "Typecheck (contender_claude_codex_cli)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log",
+            "source": "ci"
+          }
+        ]
+      },
+      "insights": {
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ],
+        "contract_improvements": [
+          "encode successful dispatch checklist as explicit acceptance criteria"
+        ],
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ]
+      },
+      "review_paste": "Decision Summary: APPROVE (97.9% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=98.79, cost=$0.0146, latency=2053ms\nScore Explain: final=97.9145 | weighted=97.9145 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json | Dispatch cost estimate (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json | Dispatch trace (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json | Git diff (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt | Test run (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log | Typecheck (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+      "manager_review_json": {
+        "arena_id": "arena_bty_5c048032_stage_053_002",
+        "confidence": 0.9791,
+        "contender_id": "contender_claude_codex_cli",
+        "decision": "promote",
+        "failed_checks": [],
+        "metrics": {
+          "autonomy_score": 100,
+          "cost_usd": 0.0146,
+          "efficiency_score": 98.79,
+          "latency_ms": 2053,
+          "quality_score": 100,
+          "risk_score": 8
+        },
+        "reason_codes": [
+          "ARENA_READY_TO_PROMOTE"
+        ],
+        "recommended_next_action": "Promote as default contender for this task fingerprint.",
+        "schema_version": "manager_review.v1"
+      }
+    },
+    {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "tools": [
+        "bash",
+        "edit",
+        "read",
+        "wrangler"
+      ],
+      "skills": [
+        "cloudflare",
+        "wrangler"
+      ],
+      "plugins": [
+        "did-work"
+      ],
+      "version_pin": "codex-pi-2026-02-19.1",
+      "prompt_template": "arena/codex-pi/api-hardening.v3",
+      "experiment_arm": "LIVE",
+      "score": 97.86,
+      "hard_gate_pass": true,
+      "mandatory_failed": 0,
+      "metrics": {
+        "quality_score": 100,
+        "risk_score": 8,
+        "efficiency_score": 98.74,
+        "latency_ms": 2307,
+        "cost_usd": 0.0148,
+        "autonomy_score": 100
+      },
+      "check_results": [
+        {
+          "criterion_id": "ac_contract_binding",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_reason_codes",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_test_coverage",
+          "required": false,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        }
+      ],
+      "score_explain": {
+        "final_score": 97.86,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ],
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_codex_pi)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json",
+            "source": "cost"
+          },
+          {
+            "label": "Dispatch trace (contender_codex_pi)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json",
+            "source": "execution"
+          },
+          {
+            "label": "Git diff (contender_codex_pi)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt",
+            "source": "git"
+          },
+          {
+            "label": "Test run (contender_codex_pi)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/arena-tests.attempt-1.log",
+            "source": "ci"
+          },
+          {
+            "label": "Typecheck (contender_codex_pi)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/cb-typecheck.attempt-1.log",
+            "source": "ci"
+          }
+        ]
+      },
+      "insights": {
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ],
+        "contract_improvements": [
+          "encode successful dispatch checklist as explicit acceptance criteria"
+        ],
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ]
+      },
+      "review_paste": "Decision Summary: APPROVE (97.9% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=98.74, cost=$0.0148, latency=2307ms\nScore Explain: final=97.8600 | weighted=97.8600 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json | Dispatch cost estimate (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json | Dispatch trace (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/dispatch-summary.json | Git diff (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/git-diff.numstat.txt | Test run (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/arena-tests.attempt-1.log | Typecheck (contender_codex_pi): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_codex_pi/cb-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+      "manager_review_json": {
+        "arena_id": "arena_bty_5c048032_stage_053_002",
+        "confidence": 0.9786,
+        "contender_id": "contender_codex_pi",
+        "decision": "promote",
+        "failed_checks": [],
+        "metrics": {
+          "autonomy_score": 100,
+          "cost_usd": 0.0148,
+          "efficiency_score": 98.74,
+          "latency_ms": 2307,
+          "quality_score": 100,
+          "risk_score": 8
+        },
+        "reason_codes": [
+          "ARENA_READY_TO_PROMOTE"
+        ],
+        "recommended_next_action": "Promote as default contender for this task fingerprint.",
+        "schema_version": "manager_review.v1"
+      }
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "tools": [
+        "bash",
+        "edit",
+        "parallel",
+        "read"
+      ],
+      "skills": [
+        "deep-think-swarm",
+        "swarm-orchestrator"
+      ],
+      "plugins": [
+        "artifact-tracer",
+        "did-work"
+      ],
+      "version_pin": "gemini-swarm-2026-02-19.1",
+      "prompt_template": "arena/gemini-swarm/broad-explore.v2",
+      "experiment_arm": "LIVE",
+      "score": 97.003,
+      "hard_gate_pass": true,
+      "mandatory_failed": 0,
+      "metrics": {
+        "quality_score": 100,
+        "risk_score": 8,
+        "efficiency_score": 97.93,
+        "latency_ms": 6359,
+        "cost_usd": 0.0181,
+        "autonomy_score": 100
+      },
+      "check_results": [
+        {
+          "criterion_id": "ac_contract_binding",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_reason_codes",
+          "required": true,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        },
+        {
+          "criterion_id": "ac_test_coverage",
+          "required": false,
+          "status": "PASS",
+          "reason_code": "CHECK_OK"
+        }
+      ],
+      "score_explain": {
+        "final_score": 97.003,
+        "reason_codes": [
+          "ARENA_SCORE_EVIDENCE_GROUNDED"
+        ],
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_gemini_swarm)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json",
+            "source": "cost"
+          },
+          {
+            "label": "Dispatch trace (contender_gemini_swarm)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json",
+            "source": "execution"
+          },
+          {
+            "label": "Git diff (contender_gemini_swarm)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt",
+            "source": "git"
+          },
+          {
+            "label": "Test run (contender_gemini_swarm)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-tests.attempt-1.log",
+            "source": "ci"
+          },
+          {
+            "label": "Typecheck (contender_gemini_swarm)",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-typecheck.attempt-1.log",
+            "source": "ci"
+          }
+        ]
+      },
+      "insights": {
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ],
+        "contract_improvements": [
+          "encode successful dispatch checklist as explicit acceptance criteria"
+        ],
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ]
+      },
+      "review_paste": "Decision Summary: APPROVE (97.0% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=97.93, cost=$0.0181, latency=6359ms\nScore Explain: final=97.0030 | weighted=97.0030 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json | Dispatch cost estimate (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json | Dispatch trace (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/dispatch-summary.json | Git diff (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/git-diff.numstat.txt | Test run (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-tests.attempt-1.log | Typecheck (contender_gemini_swarm): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_gemini_swarm/clawverify-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+      "manager_review_json": {
+        "arena_id": "arena_bty_5c048032_stage_053_002",
+        "confidence": 0.97,
+        "contender_id": "contender_gemini_swarm",
+        "decision": "promote",
+        "failed_checks": [],
+        "metrics": {
+          "autonomy_score": 100,
+          "cost_usd": 0.0181,
+          "efficiency_score": 97.93,
+          "latency_ms": 6359,
+          "quality_score": 100,
+          "risk_score": 8
+        },
+        "reason_codes": [
+          "ARENA_READY_TO_PROMOTE"
+        ],
+        "recommended_next_action": "Promote as default contender for this task fingerprint.",
+        "schema_version": "manager_review.v1"
+      }
+    }
+  ],
+  "winner": {
+    "contender_id": "contender_claude_codex_cli",
+    "reason": "Winner contender_claude_codex_cli passed all mandatory checks and achieved top weighted score (97.9145)."
+  },
+  "tradeoffs": [
+    "contender_claude_codex_cli dominates runner-up contender_codex_pi on score and tie-breakers."
+  ],
+  "reason_codes": [
+    "ARENA_WINNER_SELECTED",
+    "ARENA_HARD_GATES_PASSED"
+  ],
+  "delegation_insights": {
+    "winner_hints": [
+      "eligible for autonomous routing when calibration remains stable"
+    ],
+    "winner_bottlenecks": [
+      "dispatch completed without command failures"
+    ],
+    "bottlenecks": [
+      "dispatch completed without command failures"
+    ],
+    "contract_improvements": [
+      "encode successful dispatch checklist as explicit acceptance criteria"
+    ],
+    "next_delegation_hints": [
+      "eligible for autonomous routing when calibration remains stable"
+    ],
+    "manager_routing": {
+      "default_contender_id": "contender_claude_codex_cli",
+      "backup_contenders": [
+        "contender_codex_pi",
+        "contender_gemini_swarm"
+      ]
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "score": 97.9145,
+        "hard_gate_pass": true,
+        "mandatory_failed": 0,
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ],
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ]
+      },
+      {
+        "contender_id": "contender_codex_pi",
+        "score": 97.86,
+        "hard_gate_pass": true,
+        "mandatory_failed": 0,
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ],
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "score": 97.003,
+        "hard_gate_pass": true,
+        "mandatory_failed": 0,
+        "next_delegation_hints": [
+          "eligible for autonomous routing when calibration remains stable"
+        ],
+        "bottlenecks": [
+          "dispatch completed without command failures"
+        ]
+      }
+    ]
+  },
+  "review_thread": [
+    {
+      "thread_entry_id": "ath_feff6ba2-57c1-4f34-a6ab-70e5389b9b5e",
+      "idempotency_key": "arena-thread-auto:ZMKO8khbX4YRUp_4j_MiJTgBDI-m9yQ-lwFeTsV_bG4",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_claude_codex_cli",
+      "recommendation": "APPROVE",
+      "confidence": 0.9791,
+      "body_markdown": "## Arena Auto Decision — Claude Opus + Codex CLI blend (contender_claude_codex_cli)\n\nRecommendation: **APPROVE**\nConfidence: **97.9%**\nManager decision: `promote`\nHard-gate pass: **yes**\nMetrics: quality=100.00, risk=8.00, efficiency=98.79, cost=$0.0146, latency=2053ms\n\n### Reason codes\n- `ARENA_READY_TO_PROMOTE`\n\nNext action: Promote as default contender for this task fingerprint.\n\n---\n\nDecision Summary: APPROVE (97.9% confidence)\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=100.00, risk=8.00, efficiency=98.79, cost=$0.0146, latency=2053ms\nScore Explain: final=97.9145 | weighted=97.9145 | penalty=0.0000\nEvidence: Dispatch cost estimate: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json | Dispatch cost estimate (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json | Dispatch git diff: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt | Dispatch trace: artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json | Dispatch trace (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json | Git diff (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt | Test run (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log | Typecheck (contender_claude_codex_cli): artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log\nRecommendation: eligible for autonomous routing when calibration remains stable",
+      "links": [
+        {
+          "label": "Dispatch cost estimate (contender_claude_codex_cli)",
+          "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json"
+        },
+        {
+          "label": "Dispatch trace (contender_claude_codex_cli)",
+          "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json"
+        },
+        {
+          "label": "Git diff (contender_claude_codex_cli)",
+          "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt"
+        },
+        {
+          "label": "Test run (contender_claude_codex_cli)",
+          "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log"
+        },
+        {
+          "label": "Typecheck (contender_claude_codex_cli)",
+          "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log"
+        },
+        {
+          "label": "Review paste",
+          "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_053_002?contender=contender_claude_codex_cli#review-paste-contender_claude_codex_cli"
+        },
+        {
+          "label": "Manager review",
+          "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_053_002?contender=contender_claude_codex_cli#manager-review-contender_claude_codex_cli"
+        }
+      ],
+      "source": "arena-result-autopost",
+      "metadata": {
+        "auto_posted": true,
+        "evidence_links": [
+          {
+            "label": "Dispatch cost estimate (contender_claude_codex_cli)",
+            "source": "cost",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-cost-estimate.json"
+          },
+          {
+            "label": "Dispatch trace (contender_claude_codex_cli)",
+            "source": "execution",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/dispatch-summary.json"
+          },
+          {
+            "label": "Git diff (contender_claude_codex_cli)",
+            "source": "git",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/git-diff.numstat.txt"
+          },
+          {
+            "label": "Test run (contender_claude_codex_cli)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-tests.attempt-1.log"
+          },
+          {
+            "label": "Typecheck (contender_claude_codex_cli)",
+            "source": "ci",
+            "url": "artifacts/ops/arena-productization/2026-02-19T22-43-56Z-agp-us-053-real-dispatch/runs/arena_bty_5c048032_stage_053_002/dispatch/contender_claude_codex_cli/explorer-typecheck.attempt-1.log"
+          }
+        ],
+        "manager_decision": "promote",
+        "reason_codes": [
+          "ARENA_READY_TO_PROMOTE"
+        ],
+        "review_links": [
+          {
+            "label": "Review paste",
+            "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_053_002?contender=contender_claude_codex_cli#review-paste-contender_claude_codex_cli"
+          },
+          {
+            "label": "Manager review",
+            "url": "https://staging-explorer.clawsig.com/arena/arena_bty_5c048032_stage_053_002?contender=contender_claude_codex_cli#manager-review-contender_claude_codex_cli"
+          }
+        ]
+      },
+      "created_at": "2026-02-19T22:50:25.208Z",
+      "updated_at": "2026-02-19T22:50:25.208Z"
+    }
+  ],
+  "outcomes": [
+    {
+      "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+      "idempotency_key": "agp054-stage-a-04",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 26,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.9786,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Override recorded after human context narrowed scope mid-review.",
+      "decision_taxonomy_tags": [
+        "reviewer-override",
+        "stage-a",
+        "scope-mismatch"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-override",
+          "stage-a",
+          "scope-mismatch"
+        ],
+        "decision_rationale": "Human narrowed scope; outcome captured as override for calibration.",
+        "decision_taxonomy_tags": [
+          "reviewer-override",
+          "stage-a",
+          "scope-mismatch"
+        ],
+        "override_rationale": "Scope mismatch with latest requester clarification.",
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Override recorded after human context narrowed scope mid-review.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:49.298Z",
+      "updated_at": "2026-02-19T23:20:49.298Z"
+    },
+    {
+      "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+      "idempotency_key": "agp054-stage-a-03",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_gemini_swarm",
+      "outcome_status": "REJECTED",
+      "accepted": false,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 14,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.97,
+      "recommendation": "REJECT",
+      "reviewer_decision": "reject",
+      "reviewer_rationale": "Rejected due to mandatory-check failures and missing proof links.",
+      "decision_taxonomy_tags": [
+        "reviewer-reject",
+        "stage-a",
+        "evidence-gap"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-reject",
+          "stage-a",
+          "evidence-gap"
+        ],
+        "decision_rationale": "Mandatory failures require rejection until resolved.",
+        "decision_taxonomy_tags": [
+          "reviewer-reject",
+          "stage-a",
+          "evidence-gap"
+        ],
+        "reviewer_decision": "reject",
+        "reviewer_rationale": "Rejected due to mandatory-check failures and missing proof links.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:48.782Z",
+      "updated_at": "2026-02-19T23:20:48.782Z"
+    },
+    {
+      "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+      "idempotency_key": "agp054-stage-a-02",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_claude_codex_cli",
+      "outcome_status": "REWORK",
+      "accepted": false,
+      "overridden": false,
+      "rework_required": true,
+      "disputed": false,
+      "review_time_minutes": 22,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.9791,
+      "recommendation": "REQUEST_CHANGES",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": "Request changes: tests passed but contract scope notes were incomplete.",
+      "decision_taxonomy_tags": [
+        "reviewer-rework",
+        "stage-a",
+        "scope-clarity"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-rework",
+          "stage-a",
+          "scope-clarity"
+        ],
+        "decision_rationale": "Need explicit out-of-scope constraints before approval.",
+        "decision_taxonomy_tags": [
+          "reviewer-rework",
+          "stage-a",
+          "scope-clarity"
+        ],
+        "reviewer_decision": "request_changes",
+        "reviewer_rationale": "Request changes: tests passed but contract scope notes were incomplete.",
+        "rework_required": true
+      },
+      "created_at": "2026-02-19T23:20:48.240Z",
+      "updated_at": "2026-02-19T23:20:48.240Z"
+    },
+    {
+      "outcome_id": "aot_cc98f761-ca10-4bec-9ece-cd55891e0bae",
+      "idempotency_key": "agp054-stage-a-01",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "ACCEPTED",
+      "accepted": true,
+      "overridden": false,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 18,
+      "time_to_accept_minutes": 18,
+      "predicted_confidence": 0.9786,
+      "recommendation": "APPROVE",
+      "reviewer_decision": "approve",
+      "reviewer_rationale": "Approved after mandatory gates and review thread evidence.",
+      "decision_taxonomy_tags": [
+        "reviewer-accept",
+        "stage-a",
+        "scope-pass"
+      ],
+      "override_reason_code": null,
+      "notes": null,
+      "source": "human-review",
+      "metadata": {
+        "calibration_signal_tags": [
+          "reviewer-accept",
+          "stage-a",
+          "scope-pass"
+        ],
+        "decision_rationale": "Acceptance criteria satisfied with deterministic evidence links.",
+        "decision_taxonomy_tags": [
+          "reviewer-accept",
+          "stage-a",
+          "scope-pass"
+        ],
+        "reviewer_decision": "approve",
+        "reviewer_rationale": "Approved after mandatory gates and review thread evidence.",
+        "rework_required": false
+      },
+      "created_at": "2026-02-19T23:20:47.608Z",
+      "updated_at": "2026-02-19T23:20:47.608Z"
+    },
+    {
+      "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+      "idempotency_key": "arena-outcome:loIO_JWnwwsYtcrm2tPJPh8H9ZT9LMZiUbZk0O6tUtc",
+      "bounty_id": "bty_5c048032-1c54-4db5-947e-b82f68ddaa96",
+      "arena_id": "arena_bty_5c048032_stage_053_002",
+      "contender_id": "contender_codex_pi",
+      "outcome_status": "OVERRIDDEN",
+      "accepted": false,
+      "overridden": true,
+      "rework_required": false,
+      "disputed": false,
+      "review_time_minutes": 28,
+      "time_to_accept_minutes": null,
+      "predicted_confidence": 0.81,
+      "recommendation": "REQUEST_CHANGES",
+      "reviewer_decision": "request_changes",
+      "reviewer_rationale": null,
+      "decision_taxonomy_tags": [
+        "decision:request_changes",
+        "outcome:overridden",
+        "override:arena_override_test_failure"
+      ],
+      "override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+      "notes": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+      "source": "human-review",
+      "metadata": null,
+      "created_at": "2026-02-19T22:51:16.517Z",
+      "updated_at": "2026-02-19T22:51:16.517Z"
+    }
+  ],
+  "calibration": {
+    "totals": {
+      "samples": 5,
+      "accepted": 1,
+      "overridden": 2,
+      "rework": 1,
+      "disputed": 0,
+      "review_time_avg_minutes": 21.6,
+      "time_to_accept_avg_minutes": 18,
+      "cost_per_accepted_bounty_usd": 0.0148,
+      "override_rate": 0.4,
+      "rework_rate": 0.2,
+      "reviewer_decisions": {
+        "approve": 2,
+        "request_changes": 2,
+        "reject": 1
+      }
+    },
+    "contenders": [
+      {
+        "contender_id": "contender_codex_pi",
+        "samples": 3,
+        "average_predicted_confidence": 0.9224,
+        "empirical_accept_rate": 0.3333333333333333,
+        "calibration_gap": 0.5890666666666666,
+        "override_rate": 0.6666666666666666,
+        "rework_rate": 0,
+        "average_review_time_minutes": 24,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "stage-a",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "tag": "decision:request_changes",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "outcome:overridden",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "override:arena_override_test_failure",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.3333
+          }
+        ],
+        "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "count": 1,
+            "share": 0.3333,
+            "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+            "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+          },
+          {
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "count": 1,
+            "share": 0.3333,
+            "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+            "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+          }
+        ],
+        "rationale_samples": 3,
+        "top_rationale_tags": [
+          {
+            "tag": "stage-a",
+            "count": 2,
+            "share": 0.6667
+          },
+          {
+            "tag": "reviewer-accept",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "reviewer-override",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "scope-mismatch",
+            "count": 1,
+            "share": 0.3333
+          },
+          {
+            "tag": "scope-pass",
+            "count": 1,
+            "share": 0.3333
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+            "rationale": "Human narrowed scope; outcome captured as override for calibration.",
+            "override_rationale": "Scope mismatch with latest requester clarification.",
+            "tags": [
+              "reviewer-override",
+              "stage-a",
+              "scope-mismatch"
+            ],
+            "updated_at": "2026-02-19T23:20:49.298Z"
+          },
+          {
+            "outcome_id": "aot_cc98f761-ca10-4bec-9ece-cd55891e0bae",
+            "outcome_status": "ACCEPTED",
+            "override_reason_code": null,
+            "rationale": "Acceptance criteria satisfied with deterministic evidence links.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-accept",
+              "stage-a",
+              "scope-pass"
+            ],
+            "updated_at": "2026-02-19T23:20:47.608Z"
+          },
+          {
+            "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+            "outcome_status": "OVERRIDDEN",
+            "override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+            "rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+            "override_rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+            "tags": [
+              "decision:request_changes",
+              "outcome:overridden",
+              "override:arena_override_test_failure"
+            ],
+            "updated_at": "2026-02-19T22:51:16.517Z"
+          }
+        ]
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "samples": 1,
+        "average_predicted_confidence": 0.9791,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.9791,
+        "override_rate": 0,
+        "rework_rate": 1,
+        "average_review_time_minutes": 22,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 0,
+            "share": 0
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "reviewer-rework",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "scope-clarity",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "reviewer-rework",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "scope-clarity",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+            "outcome_status": "REWORK",
+            "override_reason_code": null,
+            "rationale": "Need explicit out-of-scope constraints before approval.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-rework",
+              "stage-a",
+              "scope-clarity"
+            ],
+            "updated_at": "2026-02-19T23:20:48.240Z"
+          }
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "samples": 1,
+        "average_predicted_confidence": 0.97,
+        "empirical_accept_rate": 0,
+        "calibration_gap": 0.97,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "average_review_time_minutes": 14,
+        "reviewer_decision_breakdown": [
+          {
+            "reviewer_decision": "approve",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "request_changes",
+            "count": 0,
+            "share": 0
+          },
+          {
+            "reviewer_decision": "reject",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_decision_taxonomy_tags": [
+          {
+            "tag": "evidence-gap",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-reject",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "rationale_samples": 1,
+        "top_rationale_tags": [
+          {
+            "tag": "evidence-gap",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "reviewer-reject",
+            "count": 1,
+            "share": 1
+          },
+          {
+            "tag": "stage-a",
+            "count": 1,
+            "share": 1
+          }
+        ],
+        "recent_rationales": [
+          {
+            "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+            "outcome_status": "REJECTED",
+            "override_reason_code": null,
+            "rationale": "Mandatory failures require rejection until resolved.",
+            "override_rationale": null,
+            "tags": [
+              "reviewer-reject",
+              "stage-a",
+              "evidence-gap"
+            ],
+            "updated_at": "2026-02-19T23:20:48.782Z"
+          }
+        ]
+      }
+    ],
+    "override_taxonomy": {
+      "reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "count": 1,
+          "share": 0.2,
+          "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+          "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+          "priority_score": 0.8
+        },
+        {
+          "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "count": 1,
+          "share": 0.2,
+          "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+          "prompt_rewrite": "Force candidate to run and summarize failing tests before final output.",
+          "priority_score": 0.9
+        }
+      ]
+    },
+    "reviewer_decision_capture": {
+      "decision_breakdown": [
+        {
+          "reviewer_decision": "approve",
+          "count": 2,
+          "share": 0.4
+        },
+        {
+          "reviewer_decision": "request_changes",
+          "count": 2,
+          "share": 0.4
+        },
+        {
+          "reviewer_decision": "reject",
+          "count": 1,
+          "share": 0.2
+        }
+      ],
+      "decision_taxonomy_tags": [
+        {
+          "tag": "stage-a",
+          "count": 4,
+          "share": 0.8
+        },
+        {
+          "tag": "decision:request_changes",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "evidence-gap",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "outcome:overridden",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "override:arena_override_test_failure",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-accept",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-reject",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-rework",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-clarity",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-mismatch",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-pass",
+          "count": 1,
+          "share": 0.2
+        }
+      ]
+    },
+    "rationale_signals": {
+      "top_tags": [
+        {
+          "tag": "stage-a",
+          "count": 4,
+          "share": 0.8
+        },
+        {
+          "tag": "evidence-gap",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-accept",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-override",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-reject",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "reviewer-rework",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-clarity",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-mismatch",
+          "count": 1,
+          "share": 0.2
+        },
+        {
+          "tag": "scope-pass",
+          "count": 1,
+          "share": 0.2
+        }
+      ],
+      "recent_decisions": [
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+          "rationale": "Human narrowed scope; outcome captured as override for calibration.",
+          "override_rationale": "Scope mismatch with latest requester clarification.",
+          "tags": [
+            "reviewer-override",
+            "stage-a",
+            "scope-mismatch"
+          ],
+          "updated_at": "2026-02-19T23:20:49.298Z"
+        },
+        {
+          "contender_id": "contender_gemini_swarm",
+          "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+          "outcome_status": "REJECTED",
+          "override_reason_code": null,
+          "rationale": "Mandatory failures require rejection until resolved.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-reject",
+            "stage-a",
+            "evidence-gap"
+          ],
+          "updated_at": "2026-02-19T23:20:48.782Z"
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+          "outcome_status": "REWORK",
+          "override_reason_code": null,
+          "rationale": "Need explicit out-of-scope constraints before approval.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-rework",
+            "stage-a",
+            "scope-clarity"
+          ],
+          "updated_at": "2026-02-19T23:20:48.240Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_cc98f761-ca10-4bec-9ece-cd55891e0bae",
+          "outcome_status": "ACCEPTED",
+          "override_reason_code": null,
+          "rationale": "Acceptance criteria satisfied with deterministic evidence links.",
+          "override_rationale": null,
+          "tags": [
+            "reviewer-accept",
+            "stage-a",
+            "scope-pass"
+          ],
+          "updated_at": "2026-02-19T23:20:47.608Z"
+        },
+        {
+          "contender_id": "contender_codex_pi",
+          "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+          "outcome_status": "OVERRIDDEN",
+          "override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+          "rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+          "override_rationale": "Real reviewer decision: missing deterministic test evidence across edge paths.",
+          "tags": [
+            "decision:request_changes",
+            "outcome:overridden",
+            "override:arena_override_test_failure"
+          ],
+          "updated_at": "2026-02-19T22:51:16.517Z"
+        }
+      ]
+    },
+    "winner_stability": [
+      {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "top_winner_contender_id": "contender_claude_codex_cli",
+        "stability_ratio": 1,
+        "sample_runs": 5
+      }
+    ]
+  },
+  "autopilot": {
+    "schema_version": "arena_autopilot_preview.v1",
+    "status": "manual_review_required",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "default_contender_id": "contender_claude_codex_cli",
+    "backup_contenders": [
+      "contender_codex_pi",
+      "contender_gemini_swarm"
+    ],
+    "guardrails": {
+      "max_override_rate": 0.3,
+      "max_rework_rate": 0.2,
+      "min_winner_stability_ratio": 0.6
+    },
+    "metrics": {
+      "override_rate": 0.4,
+      "rework_rate": 0.2,
+      "winner_stability_ratio": 1
+    },
+    "reason_codes": [
+      "ARENA_AUTOPILOT_PREVIEW_MANUAL_REVIEW"
+    ],
+    "violations": [
+      "ARENA_AUTOPILOT_HIGH_OVERRIDE_RATE"
+    ]
+  },
+  "policy_optimizer": {
+    "schema_version": "arena_policy_optimizer.v1",
+    "status": "available",
+    "computed_at": "2026-02-19T23:56:52.436Z",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "environment": "staging",
+    "objective_profile_name": "balanced",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE",
+    "gates": {
+      "min_samples": 6,
+      "min_confidence": 0.3,
+      "sample_count": 7,
+      "confidence_score": 0.3101
+    },
+    "current_active_policy": {
+      "calibration_gap": 0.7209,
+      "computed_at": "2026-02-19T23:56:52.436Z",
+      "confidence_score": 0.3101,
+      "contender_id": "contender_codex_pi",
+      "empirical_accept_rate": 0.1429,
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "objective_profile_name": "balanced",
+      "override_rate": 0.4286,
+      "promoted_at": "2026-02-19T23:56:52.436Z",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rework_rate": 0.2857,
+      "route_policy_id": "arp_shadow_3O2h37BWgPhy2SNh8Y2uDUh6",
+      "routing_score": 66.599993,
+      "sample_count": 7,
+      "schema_version": "arena_route_policy_active.v1",
+      "win_rate": 0.5
+    },
+    "candidate_shadow_policy": {
+      "calibration_gap": 0.7209,
+      "computed_at": "2026-02-19T23:56:52.436Z",
+      "confidence_score": 0.3101,
+      "contender_id": "contender_codex_pi",
+      "empirical_accept_rate": 0.1429,
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "objective_profile_name": "balanced",
+      "override_rate": 0.4286,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rework_rate": 0.2857,
+      "route_policy_id": "arp_shadow_3O2h37BWgPhy2SNh8Y2uDUh6",
+      "routing_score": 66.599993,
+      "sample_count": 7,
+      "schema_version": "arena_route_policy_shadow.v1",
+      "win_rate": 0.5
+    },
+    "promotion": {
+      "active_contender_id": "contender_codex_pi",
+      "computed_at": "2026-02-19T23:56:52.436Z",
+      "confidence_score": 0.3101,
+      "event_id": "arpe_59171cde-8993-497a-b24b-cb24da20ff9f",
+      "min_confidence": 0.3,
+      "min_samples": 6,
+      "previous_contender_id": "contender_codex_pi",
+      "promoted": false,
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+      ],
+      "sample_count": 7,
+      "schema_version": "arena_policy_promotion_event.v1",
+      "shadow_contender_id": "contender_codex_pi",
+      "status": "PROMOTED"
+    },
+    "reason_codes": [
+      "ARENA_POLICY_SHADOW_REFRESHED",
+      "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+    ],
+    "promotion_status": "PROMOTED"
+  },
+  "roi_dashboard": {
+    "schema_version": "arena_roi_dashboard.v1",
+    "computed_at": "2026-02-20T00:54:25.257Z",
+    "status": "available",
+    "filters": {
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "objective_profile_name": "balanced",
+      "contender_id": null,
+      "experiment_id": "exp_api_hardening_live_v1",
+      "experiment_arm": "LIVE",
+      "limit": 2000,
+      "min_samples": 5
+    },
+    "totals": {
+      "sample_count": 11,
+      "arena_count": 4,
+      "available_runs": 4
+    },
+    "reason_codes": [
+      "ARENA_ROI_READY"
+    ],
+    "metrics": {
+      "median_review_time_minutes": 22,
+      "first_pass_accept_rate": 0.0909,
+      "override_rate": 0.3636,
+      "rework_rate": 0.3636,
+      "cost_per_accepted_bounty_usd": 0.0148,
+      "cycle_time_minutes": 22,
+      "winner_stability": 0.5,
+      "accepted_outcomes": 1
+    },
+    "trends": {
+      "window_7d": {
+        "status": "available",
+        "sample_count": 11,
+        "metrics": {
+          "median_review_time_minutes": 22,
+          "first_pass_accept_rate": 0.0909,
+          "override_rate": 0.3636,
+          "rework_rate": 0.3636,
+          "cost_per_accepted_bounty_usd": 0.0148,
+          "cycle_time_minutes": 22,
+          "winner_stability": 0.5,
+          "accepted_outcomes": 1
+        }
+      },
+      "window_30d": {
+        "status": "available",
+        "sample_count": 11,
+        "metrics": {
+          "median_review_time_minutes": 22,
+          "first_pass_accept_rate": 0.0909,
+          "override_rate": 0.3636,
+          "rework_rate": 0.3636,
+          "cost_per_accepted_bounty_usd": 0.0148,
+          "cycle_time_minutes": 22,
+          "winner_stability": 0.5,
+          "accepted_outcomes": 1
+        }
+      }
+    },
+    "reason_code_drilldown": [
+      {
+        "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+        "count": 5,
+        "share": 0.4545
+      },
+      {
+        "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+        "count": 2,
+        "share": 0.1818
+      },
+      {
+        "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "count": 2,
+        "share": 0.1818
+      },
+      {
+        "reason_code": "ARENA_OVERRIDE_POLICY_RISK",
+        "count": 1,
+        "share": 0.0909
+      }
+    ]
+  },
+  "contract_copilot": {
+    "schema_version": "arena_contract_copilot_preview.v1",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "status": "available",
+    "global_suggestions": [
+      {
+        "suggestion_id": "accs_qoKcysbwRgcwvrcvyobFDWcTB-kBPAe6",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "global",
+        "contender_id": null,
+        "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "before_text": "Current contract language under-specifies scope alignment, creating reviewer friction. Observed 4 real failure outcomes (overrides=4, reworks=0) linked to ARENA_OVERRIDE_SCOPE_MISMATCH. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"scope alignment\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Tighten acceptance criteria and explicit out-of-scope boundaries in the contract. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 4 arenas and 4 outcomes. Observed overrides=4, reworks=0. Root-cause rewrite target: Add a scope-check checklist before final answer generation.",
+        "confidence": 0.75,
+        "expected_impact": {
+          "override_rate_reduction": 0.7,
+          "rework_rate_reduction": 0.135
+        },
+        "evidence_count": 4,
+        "arena_count": 4,
+        "outcome_count": 4,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_001",
+            "outcome_id": "aot_75ecc357-539f-4e5b-82de-aaf4c9dc0e28",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_050_001",
+            "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          },
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_seed_003",
+            "outcome_id": "aot_f14271c0-f00a-4b1f-87b0-2935c537b544",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      },
+      {
+        "suggestion_id": "accs_WtTLb242xk2tQwmYoQT5LXobUNd4qurk",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "global",
+        "contender_id": null,
+        "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+        "before_text": "Current contract language under-specifies test coverage, creating reviewer friction. Observed 5 real failure outcomes (overrides=2, reworks=4) linked to ARENA_OVERRIDE_TEST_FAILURE. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"test coverage\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Require deterministic test-harness pass evidence before recommendation. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 3 arenas and 5 outcomes. Observed overrides=2, reworks=4. Root-cause rewrite target: Force candidate to run and summarize failing tests before final output.",
+        "confidence": 0.74,
+        "expected_impact": {
+          "override_rate_reduction": 0.368,
+          "rework_rate_reduction": 0.5332
+        },
+        "evidence_count": 5,
+        "arena_count": 3,
+        "outcome_count": 5,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+            "outcome_id": "aot_4338dfe8-ed1b-4a9c-b17d-22e29ba331f1",
+            "contender_id": "contender_claude_codex_cli",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+            "outcome_id": "aot_ca1cbe87-2864-4af5-8877-dfd8b34888a3",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+            "contender_id": "contender_claude_codex_cli",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_001",
+            "outcome_id": "aot_372ab43f-171e-4abc-8673-2c12c151a838",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      },
+      {
+        "suggestion_id": "accs_wQyxfOwelgGxwJs9PkQ_yWoP0afMIcVH",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "global",
+        "contender_id": null,
+        "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+        "before_text": "Current contract language under-specifies human context capture, creating reviewer friction. Observed 2 real failure outcomes (overrides=0, reworks=0) linked to ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"human context capture\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Add human-context dependency markers and required reviewer checkpoints. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 1 arenas and 2 outcomes. Observed overrides=0, reworks=0. Root-cause rewrite target: Require ambiguity classification and human-clarification request when context is missing.",
+        "confidence": 0.465,
+        "expected_impact": {
+          "override_rate_reduction": 0.093,
+          "rework_rate_reduction": 0.0837
+        },
+        "evidence_count": 2,
+        "arena_count": 1,
+        "outcome_count": 2,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+            "outcome_id": "aot_5eeb59f0-754b-4821-bf48-ba5a592ee9f0",
+            "contender_id": "contender_gemini_swarm",
+            "criterion_id": "human_context_capture",
+            "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT"
+          },
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+            "outcome_id": "aot_f22eefaa-ae62-4947-9673-0617bd9b2962",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "human_context_capture",
+            "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      },
+      {
+        "suggestion_id": "accs_uQq7HA371uNsnyhWA6zlZw6wjw2eoAoI",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "global",
+        "contender_id": null,
+        "reason_code": "ARENA_OVERRIDE_POLICY_RISK",
+        "before_text": "Current contract language under-specifies policy risk guardrail, creating reviewer friction. Observed 1 real failure outcomes (overrides=0, reworks=0) linked to ARENA_OVERRIDE_POLICY_RISK. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"policy risk guardrail\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Raise safety and policy constraints to mandatory hard-gate checks. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 1 arenas and 1 outcomes. Observed overrides=0, reworks=0. Root-cause rewrite target: Insert explicit policy-risk self-audit and fail-closed escalation path.",
+        "confidence": 0.465,
+        "expected_impact": {
+          "override_rate_reduction": 0.093,
+          "rework_rate_reduction": 0.0837
+        },
+        "evidence_count": 1,
+        "arena_count": 1,
+        "outcome_count": 1,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+            "contender_id": "contender_gemini_swarm",
+            "criterion_id": "policy_risk_guardrail",
+            "reason_code": "ARENA_OVERRIDE_POLICY_RISK"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      }
+    ],
+    "contender_suggestions": [
+      {
+        "suggestion_id": "accs_XDNvzzCn7zIOv7v_9RyD05rcpgplql5E",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "contender",
+        "contender_id": "contender_codex_pi",
+        "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "before_text": "Current contract language under-specifies scope alignment, creating reviewer friction. Observed 4 real failure outcomes (overrides=4, reworks=0) linked to ARENA_OVERRIDE_SCOPE_MISMATCH. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"scope alignment\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Tighten acceptance criteria and explicit out-of-scope boundaries in the contract. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 4 arenas and 4 outcomes. Observed overrides=4, reworks=0. Root-cause rewrite target: Add a scope-check checklist before final answer generation.",
+        "confidence": 0.75,
+        "expected_impact": {
+          "override_rate_reduction": 0.7,
+          "rework_rate_reduction": 0.135
+        },
+        "evidence_count": 4,
+        "arena_count": 4,
+        "outcome_count": 4,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_aa5a93d9-cd2f-43c7-9c16-f6ebb04e75e7",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_001",
+            "outcome_id": "aot_75ecc357-539f-4e5b-82de-aaf4c9dc0e28",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_050_001",
+            "outcome_id": "aot_77afe481-28d2-43fe-971b-ca3d370db30e",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          },
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_seed_003",
+            "outcome_id": "aot_f14271c0-f00a-4b1f-87b0-2935c537b544",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "scope_alignment",
+            "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      },
+      {
+        "suggestion_id": "accs_5BYF06uMRGuds1ETO0jcfKhCjT-zLbzC",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "contender",
+        "contender_id": "contender_codex_pi",
+        "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+        "before_text": "Current contract language under-specifies test coverage, creating reviewer friction. Observed 3 real failure outcomes (overrides=1, reworks=2) linked to ARENA_OVERRIDE_TEST_FAILURE. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"test coverage\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Require deterministic test-harness pass evidence before recommendation. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 3 arenas and 3 outcomes. Observed overrides=1, reworks=2. Root-cause rewrite target: Force candidate to run and summarize failing tests before final output.",
+        "confidence": 0.69,
+        "expected_impact": {
+          "override_rate_reduction": 0.3213,
+          "rework_rate_reduction": 0.4575
+        },
+        "evidence_count": 3,
+        "arena_count": 3,
+        "outcome_count": 3,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+            "outcome_id": "aot_ca1cbe87-2864-4af5-8877-dfd8b34888a3",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_87d10282-3c32-4d9f-99e4-ae5f5f88d761",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_001",
+            "outcome_id": "aot_372ab43f-171e-4abc-8673-2c12c151a838",
+            "contender_id": "contender_codex_pi",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      },
+      {
+        "suggestion_id": "accs_uVI6mOIYuK81xn6lQji8NfaXmI6g63XW",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "contender",
+        "contender_id": "contender_claude_codex_cli",
+        "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+        "before_text": "Current contract language under-specifies test coverage, creating reviewer friction. Observed 2 real failure outcomes (overrides=1, reworks=2) linked to ARENA_OVERRIDE_TEST_FAILURE. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"test coverage\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Require deterministic test-harness pass evidence before recommendation. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 2 arenas and 2 outcomes. Observed overrides=1, reworks=2. Root-cause rewrite target: Force candidate to run and summarize failing tests before final output.",
+        "confidence": 0.625,
+        "expected_impact": {
+          "override_rate_reduction": 0.4,
+          "rework_rate_reduction": 0.6125
+        },
+        "evidence_count": 2,
+        "arena_count": 2,
+        "outcome_count": 2,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_aaaaaaaa_stage_053_002",
+            "outcome_id": "aot_4338dfe8-ed1b-4a9c-b17d-22e29ba331f1",
+            "contender_id": "contender_claude_codex_cli",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          },
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_c4694d66-90f9-40ad-b18f-b5143e332294",
+            "contender_id": "contender_claude_codex_cli",
+            "criterion_id": "test_coverage",
+            "reason_code": "ARENA_OVERRIDE_TEST_FAILURE"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      },
+      {
+        "suggestion_id": "accs_mL4DfLAtYi9Jl7sRQ-2rWl7WaLLbx7JX",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "contender",
+        "contender_id": "contender_gemini_swarm",
+        "reason_code": "ARENA_OVERRIDE_POLICY_RISK",
+        "before_text": "Current contract language under-specifies policy risk guardrail, creating reviewer friction. Observed 1 real failure outcomes (overrides=0, reworks=0) linked to ARENA_OVERRIDE_POLICY_RISK. Failure mode: checklist and acceptance boundaries are ambiguous at review time.",
+        "after_text": "Add explicit acceptance criterion \"policy risk guardrail\" with pass/fail evidence requirements and fail-closed escalation. Rewrite guidance: Raise safety and policy constraints to mandatory hard-gate checks. Require worker output to quote criterion IDs and attach evidence for each mandatory check.",
+        "rationale": "Pattern repeated across 1 arenas and 1 outcomes. Observed overrides=0, reworks=0. Root-cause rewrite target: Insert explicit policy-risk self-audit and fail-closed escalation path.",
+        "confidence": 0.465,
+        "expected_impact": {
+          "override_rate_reduction": 0.093,
+          "rework_rate_reduction": 0.0837
+        },
+        "evidence_count": 1,
+        "arena_count": 1,
+        "outcome_count": 1,
+        "source_evidence": [
+          {
+            "arena_id": "arena_bty_5c048032_stage_053_002",
+            "outcome_id": "aot_f9456b58-8463-4929-83c6-4f4e99e77c26",
+            "contender_id": "contender_gemini_swarm",
+            "criterion_id": "policy_risk_guardrail",
+            "reason_code": "ARENA_OVERRIDE_POLICY_RISK"
+          }
+        ],
+        "computed_at": "2026-02-20T00:35:11.098Z"
+      }
+    ]
+  },
+  "contract_language_optimizer": {
+    "schema_version": "arena_contract_language_optimizer_preview.v1",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "status": "available",
+    "global_suggestions": [
+      {
+        "suggestion_id": "acls_XkYHtDjhYVbhUI3_kmlugFmydA-wAG1B",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "global",
+        "contender_id": null,
+        "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "failures": 2,
+        "overrides": 2,
+        "share": 1,
+        "priority_score": 2.3,
+        "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+        "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+        "contract_language_patch": "Observed 2 failed/overridden outcomes (OVERRIDDEN=2) tied to ARENA_OVERRIDE_SCOPE_MISMATCH. Contract rewrite: Tighten acceptance criteria and explicit out-of-scope boundaries in the contract. Explicitly encode reviewer checks for: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. Fail closed: unresolved checklist items must require manual reviewer approval.",
+        "prompt_language_patch": "Prompt rewrite: Add a scope-check checklist before final answer generation. Require explicit self-check against: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. If any mandatory check fails, emit REQUEST_CHANGES with concrete remediation steps.",
+        "sample_notes": [
+          "Contract lacked strict out-of-scope behavior for fallback edits.",
+          "Scope boundary language missing for fallback behavior."
+        ],
+        "top_tags": [
+          "scope-boundary",
+          "contract-language",
+          "fallback-guard",
+          "human-checkpoint",
+          "reviewer-override"
+        ],
+        "computed_at": "2026-02-19T22:00:10.466Z"
+      }
+    ],
+    "contender_suggestions": [
+      {
+        "suggestion_id": "acls_wO3301zR7Eth9TbBv-UP3YS54P4JlCow",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "scope": "contender",
+        "contender_id": "contender_codex_pi",
+        "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "failures": 2,
+        "overrides": 2,
+        "share": 1,
+        "priority_score": 2.3,
+        "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+        "prompt_rewrite": "Add a scope-check checklist before final answer generation.",
+        "contract_language_patch": "Observed 2 failed/overridden outcomes (OVERRIDDEN=2) tied to ARENA_OVERRIDE_SCOPE_MISMATCH. Contract rewrite: Tighten acceptance criteria and explicit out-of-scope boundaries in the contract. Explicitly encode reviewer checks for: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. Fail closed: unresolved checklist items must require manual reviewer approval.",
+        "prompt_language_patch": "Prompt rewrite: Add a scope-check checklist before final answer generation. Require explicit self-check against: scope-boundary, contract-language, fallback-guard, human-checkpoint, reviewer-override. If any mandatory check fails, emit REQUEST_CHANGES with concrete remediation steps.",
+        "sample_notes": [
+          "Contract lacked strict out-of-scope behavior for fallback edits.",
+          "Scope boundary language missing for fallback behavior."
+        ],
+        "top_tags": [
+          "scope-boundary",
+          "contract-language",
+          "fallback-guard",
+          "human-checkpoint",
+          "reviewer-override"
+        ],
+        "computed_at": "2026-02-19T22:00:10.466Z"
+      }
+    ]
+  }
+}
