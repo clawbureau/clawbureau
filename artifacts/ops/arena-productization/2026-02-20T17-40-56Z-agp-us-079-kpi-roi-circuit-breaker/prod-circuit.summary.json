@@ -1,0 +1,183 @@
+{
+  "ok": false,
+  "story": "AGP-US-079",
+  "generated_at": "2026-02-20T17:41:37.889Z",
+  "endpoint_base": "https://clawbounties.com",
+  "request": {
+    "task_fingerprint": "AEM-FP-UI-DUEL-V1",
+    "objective_profile_name": "ui_duel",
+    "experiment_id": null,
+    "experiment_arm": null,
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "window_hours": 24,
+    "roi_limit": 2000,
+    "min_online_workers": 3,
+    "min_claim_success_rate": 0.8,
+    "min_submission_success_rate": 0.8,
+    "min_proof_valid_rate": 0.95,
+    "max_claim_submission_gap": 5,
+    "max_accepted_backlog": 5,
+    "roi_min_sample_count": 5,
+    "roi_min_first_pass_accept_rate": 0.5,
+    "roi_max_override_rate": 0.3,
+    "roi_max_rework_rate": 0.2,
+    "roi_max_cost_per_accepted_bounty_usd": 2,
+    "enforce": true
+  },
+  "http_status": 409,
+  "circuit_status": "TRIPPED",
+  "reason_codes": [
+    "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+    "ARENA_MISSION_KPI_PASS"
+  ],
+  "gate": {
+    "enforce": true,
+    "passed": false,
+    "blocked": true
+  },
+  "mission_gate_status": "PASS",
+  "roi_status": "INSUFFICIENT_SAMPLE",
+  "roi_metrics": null,
+  "payload": {
+    "schema_version": "arena_desk_circuit_breaker.v1",
+    "computed_at": "2026-02-20T17:41:37.852Z",
+    "task_fingerprint": "AEM-FP-UI-DUEL-V1",
+    "objective_profile_name": "ui_duel",
+    "experiment_id": null,
+    "experiment_arm": null,
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "window_hours": 24,
+    "roi_limit": 2000,
+    "thresholds": {
+      "mission": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "roi": {
+        "min_sample_count": 5,
+        "min_first_pass_accept_rate": 0.5,
+        "max_override_rate": 0.3,
+        "max_rework_rate": 0.2,
+        "max_cost_per_accepted_bounty_usd": 2
+      }
+    },
+    "circuit": {
+      "status": "TRIPPED",
+      "reason_codes": [
+        "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+        "ARENA_MISSION_KPI_PASS"
+      ],
+      "violations": [
+        {
+          "code": "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+          "message": "ROI metrics are unavailable or below minimum sample threshold.",
+          "value": "INSUFFICIENT_SAMPLE",
+          "threshold": "available"
+        }
+      ],
+      "gate": {
+        "enforce": true,
+        "passed": false,
+        "blocked": true
+      }
+    },
+    "mission": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T17:41:37.603Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T17:41:37.251Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 8,
+        "skipped": 3,
+        "failed": 0,
+        "total": 11
+      },
+      "submissions_window": {
+        "total": 8,
+        "with_submission": 8,
+        "pending_review_valid": 6,
+        "pending_review_invalid": 0,
+        "approved": 2,
+        "rejected": 0,
+        "proof_valid": 8,
+        "proof_invalid": 0,
+        "without_submission": 0
+      },
+      "backlog": {
+        "accepted_total": 0,
+        "accepted_without_valid_submission": 0,
+        "claim_submission_gap": 0,
+        "claim_submission_gap_bounty_ids": []
+      },
+      "kpi": {
+        "claim_success_rate": 1,
+        "submission_success_rate": 1,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      }
+    },
+    "roi": {
+      "schema_version": "arena_roi_dashboard.v1",
+      "computed_at": "2026-02-20T17:41:37.852Z",
+      "status": "INSUFFICIENT_SAMPLE",
+      "filters": {
+        "task_fingerprint": "AEM-FP-UI-DUEL-V1",
+        "objective_profile_name": "ui_duel",
+        "contender_id": null,
+        "experiment_id": null,
+        "experiment_arm": null,
+        "limit": 2000,
+        "min_samples": 5
+      },
+      "totals": {
+        "sample_count": 0,
+        "arena_count": 0,
+        "available_runs": 0
+      },
+      "reason_codes": [
+        "ARENA_ROI_INSUFFICIENT_SAMPLE"
+      ],
+      "metrics": null,
+      "trends": {
+        "window_7d": {
+          "status": "INSUFFICIENT_SAMPLE",
+          "sample_count": 0,
+          "reason_codes": [
+            "ARENA_ROI_INSUFFICIENT_SAMPLE"
+          ]
+        },
+        "window_30d": {
+          "status": "INSUFFICIENT_SAMPLE",
+          "sample_count": 0,
+          "reason_codes": [
+            "ARENA_ROI_INSUFFICIENT_SAMPLE"
+          ]
+        }
+      },
+      "reason_code_drilldown": []
+    }
+  }
+}

@@ -1464,3 +1464,30 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-079 KPI+ROI circuit-breaker gate
+- Added new admin endpoint: `POST /v1/arena/desk/circuit-breaker`
+  - combines mission KPI posture + ROI dashboard readiness/quality into one fail-closed gate
+  - response schema: `arena_desk_circuit_breaker.v1`
+  - deterministic reason codes:
+    - `ARENA_CIRCUIT_BREAKER_PASS`
+    - `ARENA_CIRCUIT_BREAKER_KPI_GATE_FAIL`
+    - `ARENA_CIRCUIT_BREAKER_ROI_NOT_READY`
+    - `ARENA_CIRCUIT_BREAKER_ROI_FIRST_PASS_LOW`
+    - `ARENA_CIRCUIT_BREAKER_ROI_OVERRIDE_HIGH`
+    - `ARENA_CIRCUIT_BREAKER_ROI_REWORK_HIGH`
+    - `ARENA_CIRCUIT_BREAKER_ROI_COST_HIGH`
+- Added ROI circuit threshold parsing/validation (strict input validation; fail closed on malformed thresholds).
+- Added operator script + test:
+  - `scripts/arena/run-kpi-roi-circuit-breaker.mjs`
+  - `scripts/arena/run-kpi-roi-circuit-breaker.test.mjs`
+- Deploys:
+  - staging `87d3fc49-aa00-4f7c-ad73-79c958cbf82a`
+  - production `57340e0a-5788-4a36-b7a8-1af661953b33`
+- Real-data verification:
+  - mission KPI gate remained `PASS` on both envs
+  - circuit breaker tripped in enforce mode (`HTTP 409`) on both envs because ROI window not ready (`ARENA_CIRCUIT_BREAKER_ROI_NOT_READY`)
+  - non-enforce observation mode returned `HTTP 200` with same tripped status/reason codes
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/route-status-codes.txt`

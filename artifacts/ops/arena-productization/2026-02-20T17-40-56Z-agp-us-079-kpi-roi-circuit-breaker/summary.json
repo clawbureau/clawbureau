@@ -1,0 +1,67 @@
+{
+  "ok": true,
+  "story": "AGP-US-079",
+  "generated_at": "2026-02-20T17:42:43Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "87d3fc49-aa00-4f7c-ad73-79c958cbf82a"
+    },
+    "production": {
+      "clawbounties_version_id": "57340e0a-5788-4a36-b7a8-1af661953b33"
+    }
+  },
+  "enforced_gate": {
+    "staging": {
+      "http_status": 409,
+      "circuit_status": "TRIPPED",
+      "mission_gate_status": "PASS",
+      "roi_status": "INSUFFICIENT_SAMPLE",
+      "reason_codes": [
+        "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+        "ARENA_MISSION_KPI_PASS"
+      ]
+    },
+    "production": {
+      "http_status": 409,
+      "circuit_status": "TRIPPED",
+      "mission_gate_status": "PASS",
+      "roi_status": "INSUFFICIENT_SAMPLE",
+      "reason_codes": [
+        "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+        "ARENA_MISSION_KPI_PASS"
+      ]
+    }
+  },
+  "observation_mode_no_enforce": {
+    "staging": {
+      "http_status": 200,
+      "circuit_status": "TRIPPED",
+      "reason_codes": [
+        "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+        "ARENA_MISSION_KPI_PASS"
+      ]
+    },
+    "production": {
+      "http_status": 200,
+      "circuit_status": "TRIPPED",
+      "reason_codes": [
+        "ARENA_CIRCUIT_BREAKER_ROI_NOT_READY",
+        "ARENA_MISSION_KPI_PASS"
+      ]
+    }
+  },
+  "acceptance": {
+    "endpoint_live_staging": true,
+    "endpoint_live_production": true,
+    "enforce_blocks_when_tripped": true,
+    "no_enforce_returns_200": true,
+    "mission_gate_remains_pass_while_roi_breaker_trips": true
+  },
+  "artifacts": {
+    "stage_enforce": "artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/stage-circuit.summary.json",
+    "prod_enforce": "artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/prod-circuit.summary.json",
+    "stage_no_enforce": "artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/stage-circuit-no-enforce.summary.json",
+    "prod_no_enforce": "artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/prod-circuit-no-enforce.summary.json",
+    "exit_codes": "artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/exit-codes.txt"
+  }
+}
