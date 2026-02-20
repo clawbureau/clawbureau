@@ -1,0 +1,57 @@
+{
+  "mode": {
+    "enforce": true,
+    "reason": "proofs/**/commit.sig.json present",
+    "labels": []
+  },
+  "inputs": {
+    "changed_files": [
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/axe-results.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/journey.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/01-browse.png",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/02-details.png",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/03-claim.png",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/04-submit.png",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/videos/a48acc99362c2687ca19bb3ba8a0bab8.webm",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.raw.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/manager-review.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/proof-pack.v3.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/review-paste.md",
+      "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/summary.json",
+      "artifacts/ops/arena-productization/AGP-US-072-contender-B/summary.json",
+      "proofs/feat/arena/AGP-US-072-ui-duel-contender-b-codex/commit.sig.json",
+      "services/_archived/clawbounties/progress.txt",
+      "services/_archived/clawbounties/src/ui-duel-page.ts"
+    ],
+    "bundles": [],
+    "commit_sigs": [
+      "proofs/feat/arena/AGP-US-072-ui-duel-contender-b-codex/commit.sig.json"
+    ],
+    "config_path": "packages/schema/fixtures/clawverify.config.clawbureau.v1.json",
+    "cli_path": "packages/clawverify-cli/dist/cli.js"
+  },
+  "results": {
+    "ok": true,
+    "would_fail": false,
+    "missing_evidence": {
+      "bundles_required_missing": false,
+      "commit_sigs_required_missing": false
+    },
+    "bundles_ok": true,
+    "commit_sigs_ok": true
+  },
+  "bundles": [],
+  "commit_sigs": [
+    {
+      "path": "proofs/feat/arena/AGP-US-072-ui-duel-contender-b-codex/commit.sig.json",
+      "ok": true,
+      "reason_code": "OK",
+      "reason": "Commit signature verified",
+      "commit_sha": "32c6322fda8ab325f774c50c9497ff879f0865c2",
+      "signer_did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+      "message": "commit:32c6322fda8ab325f774c50c9497ff879f0865c2"
+    }
+  ],
+  "finished_at": "2026-02-20T14:33:52.784Z"
+}

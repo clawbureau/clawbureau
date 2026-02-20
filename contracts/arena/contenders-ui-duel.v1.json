@@ -1,0 +1,128 @@
+[
+  {
+    "contender_id": "contender_gemini_3_1_pro_preview_pi",
+    "label": "Gemini 3.1 Pro Preview (Pi)",
+    "model": "openrouter/google/gemini-3.1-pro-preview",
+    "harness": "pi",
+    "tools": ["bash", "read", "edit", "write"],
+    "skills": ["frontend-design", "web-design-guidelines"],
+    "plugins": ["did-work"],
+    "prompt": "Implement /duel redesign under contract constraints.",
+    "delivery_summary": "Real UI redesign with live api wiring; evaluator reported submit/runtime hard-gate failure.",
+    "evidence_signals": {
+      "ci": {
+        "typecheck_passed": true,
+        "lint_passed": true,
+        "tests_passed": 2,
+        "tests_failed": 1,
+        "artifacts": [
+          {
+            "label": "AGP-US-071 evaluator summary",
+            "url": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/summary.json"
+          }
+        ]
+      },
+      "git": {
+        "files_changed": 2,
+        "lines_added": 620,
+        "lines_deleted": 180,
+        "churn_hotspots": [
+          "services/_archived/clawbounties/src/ui-duel-page.ts"
+        ],
+        "diff_artifact": {
+          "label": "PR #399 diff",
+          "url": "https://github.com/clawbureau/clawbureau/pull/399/files"
+        }
+      },
+      "execution": {
+        "latency_ms": 31712,
+        "tool_calls": 18,
+        "retries": 1,
+        "manual_interventions": 1,
+        "trace_artifact": {
+          "label": "AGP-US-071 journey",
+          "url": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/journey.json"
+        }
+      },
+      "cost": {
+        "usd": 0.16,
+        "cost_artifact": {
+          "label": "AGP-US-071 review paste",
+          "url": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/review-paste.md"
+        }
+      }
+    },
+    "evidence_links": [
+      {
+        "label": "PR #399",
+        "url": "https://github.com/clawbureau/clawbureau/pull/399"
+      }
+    ],
+    "bottlenecks": ["submit flow timeout in evaluator"],
+    "contract_improvements": ["retain explicit submit completion signal in UI status"],
+    "next_delegation_hints": ["requires hard-gate repair before production routing"]
+  },
+  {
+    "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "label": "GPT-5.3 Codex xhigh (Pi)",
+    "model": "openai-codex/gpt-5.3-codex:xhigh",
+    "harness": "pi",
+    "tools": ["bash", "read", "edit", "write"],
+    "skills": ["frontend-design", "web-design-guidelines"],
+    "plugins": ["did-work"],
+    "prompt": "Implement /duel redesign under contract constraints.",
+    "delivery_summary": "Real UI redesign with live api wiring and hard gate pass under evaluator.",
+    "evidence_signals": {
+      "ci": {
+        "typecheck_passed": true,
+        "lint_passed": true,
+        "tests_passed": 3,
+        "tests_failed": 0,
+        "artifacts": [
+          {
+            "label": "AGP-US-072 evaluator summary",
+            "url": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/summary.json"
+          }
+        ]
+      },
+      "git": {
+        "files_changed": 2,
+        "lines_added": 640,
+        "lines_deleted": 190,
+        "churn_hotspots": [
+          "services/_archived/clawbounties/src/ui-duel-page.ts"
+        ],
+        "diff_artifact": {
+          "label": "PR #400 diff",
+          "url": "https://github.com/clawbureau/clawbureau/pull/400/files"
+        }
+      },
+      "execution": {
+        "latency_ms": 1747,
+        "tool_calls": 17,
+        "retries": 0,
+        "manual_interventions": 0,
+        "trace_artifact": {
+          "label": "AGP-US-072 journey",
+          "url": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/journey.json"
+        }
+      },
+      "cost": {
+        "usd": 0.17,
+        "cost_artifact": {
+          "label": "AGP-US-072 review paste",
+          "url": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/review-paste.md"
+        }
+      }
+    },
+    "evidence_links": [
+      {
+        "label": "PR #400",
+        "url": "https://github.com/clawbureau/clawbureau/pull/400"
+      }
+    ],
+    "bottlenecks": [],
+    "contract_improvements": ["capture explicit rollout hooks after winner merge"],
+    "next_delegation_hints": ["promote as primary route for this fingerprint"]
+  }
+]
