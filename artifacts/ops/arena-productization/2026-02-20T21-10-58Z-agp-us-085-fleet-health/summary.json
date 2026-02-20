@@ -1,0 +1,21 @@
+{
+  "schema_version": "arena_fleet_health_evidence.v1",
+  "story": "AGP-US-085",
+  "generated_at": "2026-02-20T21:10:59Z",
+  "staging": {
+    "deploy_id": "90fff9e0-ba7f-46ac-92f0-5d43a90f186d",
+    "status": "critical",
+    "alert_count": 1,
+    "critical_count": 1,
+    "fleet_workers": 0,
+    "roi_sample_count": 24
+  },
+  "production": {
+    "deploy_id": "c6bb924d-beed-443a-88be-7d6d153dafaf",
+    "status": "critical",
+    "alert_count": 1,
+    "critical_count": 1,
+    "fleet_workers": 0,
+    "roi_sample_count": 16
+  }
+}

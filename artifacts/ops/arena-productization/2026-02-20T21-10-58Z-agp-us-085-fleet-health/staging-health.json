@@ -1,0 +1,25 @@
+{
+  "schema_version": "arena_fleet_health.v1",
+  "computed_at": "2026-02-20T21:10:58.263Z",
+  "status": "critical",
+  "alert_count": 1,
+  "critical_count": 1,
+  "warning_count": 0,
+  "alerts": [
+    {
+      "code": "FLEET_NO_ACTIVE_WORKERS",
+      "severity": "critical",
+      "message": "No active fleet workers registered",
+      "value": 0,
+      "threshold": 1
+    }
+  ],
+  "fleet_summary": {
+    "active_workers": 0,
+    "pending_backlog": 0,
+    "roi_status": "available",
+    "roi_sample_count": 24,
+    "cron_enabled": true,
+    "recent_duel_count": 53
+  }
+}
