@@ -23159,6 +23159,326 @@ async function handleGetSubmissionTrustPulse(
   );
 }
 
+// ---------------------------------------------------------------------------
+// AGP-US-083: Duel batch runner + league table
+// ---------------------------------------------------------------------------
+
+interface DuelLeagueEntry {
+  contender_id: string;
+  label: string;
+  model: string;
+  harness: string;
+  duels: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  win_rate: number;
+  avg_score: number;
+  total_cost_usd: number;
+}
+
+async function listDuelLeague(db: D1Database, limit: number): Promise<DuelLeagueEntry[]> {
+  const rows = await db
+    .prepare(`
+      SELECT
+        c.contender_id,
+        c.label,
+        c.model,
+        c.harness,
+        COUNT(DISTINCT r.run_id) AS duels,
+        SUM(CASE WHEN r.winner_contender_id = c.contender_id THEN 1 ELSE 0 END) AS wins,
+        SUM(CASE WHEN r.winner_contender_id IS NOT NULL AND r.winner_contender_id != c.contender_id THEN 1 ELSE 0 END) AS losses,
+        SUM(CASE WHEN r.winner_contender_id IS NULL THEN 1 ELSE 0 END) AS draws,
+        AVG(c.score) AS avg_score,
+        0 AS total_cost_minor
+      FROM bounty_arena_contenders c
+      JOIN bounty_arena_runs r ON r.run_id = c.run_id
+      WHERE r.status = 'completed'
+      GROUP BY c.contender_id
+      ORDER BY wins DESC, avg_score DESC
+      LIMIT ?
+    `)
+    .bind(limit)
+    .all()
+    .then((result) => result.results ?? []);
+
+  return rows.map((row: Record<string, unknown>) => {
+    const duels = d1Number(row.duels) ?? 0;
+    const wins = d1Number(row.wins) ?? 0;
+    const losses = d1Number(row.losses) ?? 0;
+    const draws = d1Number(row.draws) ?? 0;
+    return {
+      contender_id: d1String(row.contender_id) ?? 'unknown',
+      label: d1String(row.label) ?? '',
+      model: d1String(row.model) ?? '',
+      harness: d1String(row.harness) ?? '',
+      duels,
+      wins,
+      losses,
+      draws,
+      win_rate: duels > 0 ? Number((wins / duels).toFixed(4)) : 0,
+      avg_score: Number((d1Number(row.avg_score) ?? 0).toFixed(4)),
+      total_cost_usd: Number(((d1Number(row.total_cost_minor) ?? 0) / 1_000_000).toFixed(4)),
+    };
+  });
+}
+
+async function handleGetDuelLeague(
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const limitRaw = url.searchParams.get('limit');
+  const limit = limitRaw ? Math.min(Number.parseInt(limitRaw, 10) || 50, 200) : 50;
+
+  const entries = await listDuelLeague(env.BOUNTIES_DB, limit);
+  const leader = entries.length > 0 ? entries[0] ?? null : null;
+
+  return jsonResponse({
+    schema_version: 'arena_duel_league.v1',
+    computed_at: new Date().toISOString(),
+    entries,
+    leader: leader ? {
+      contender_id: leader.contender_id,
+      label: leader.label,
+      wins: leader.wins,
+      win_rate: leader.win_rate,
+      avg_score: leader.avg_score,
+    } : null,
+    reason_codes: entries.length > 0
+      ? ['ARENA_DUEL_LEAGUE_AVAILABLE']
+      : ['ARENA_DUEL_LEAGUE_EMPTY'],
+  }, 200, version);
+}
+
+async function handlePostDuelBatch(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  // Each duel entry must include real evaluator scores — no synthetic/random generation.
+  // Expected shape: { duels: [{ bounty_id, contenders: [{ contender_id, label, model, harness,
+  //   score, hard_gate_pass, metrics, review_paste, evidence_links }] }], task_fingerprint }
+  const duelsInput = Array.isArray(body.duels) ? body.duels : [];
+  if (duelsInput.length === 0) {
+    return errorResponse('INVALID_REQUEST', 'duels[] must be a non-empty array of evaluated duel results', 400, { field: 'duels' }, version);
+  }
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim() ?? 'AEM-FP-UI-DUEL-V1';
+  const dryRun = body.dry_run === true;
+
+  const results: Array<Record<string, unknown>> = [];
+  let completedDuels = 0;
+  let failedDuels = 0;
+
+  for (const duelRaw of duelsInput) {
+    if (!isRecord(duelRaw)) {
+      failedDuels += 1;
+      results.push({ status: 'failed', reason_code: 'ARENA_DUEL_INVALID_ENTRY' });
+      continue;
+    }
+
+    const bountyId = d1String(duelRaw.bounty_id)?.trim() ?? '';
+    if (!bountyId.startsWith('bty_')) {
+      failedDuels += 1;
+      results.push({ bounty_id: bountyId, status: 'failed', reason_code: 'ARENA_DUEL_INVALID_BOUNTY_ID' });
+      continue;
+    }
+
+    const contendersRaw = Array.isArray(duelRaw.contenders) ? duelRaw.contenders : [];
+    if (contendersRaw.length < 2) {
+      failedDuels += 1;
+      results.push({ bounty_id: bountyId, status: 'failed', reason_code: 'ARENA_DUEL_INSUFFICIENT_CONTENDERS' });
+      continue;
+    }
+
+    // Validate every contender has a real score (not null/undefined)
+    const contenders: Array<{
+      contender_id: string; label: string; model: string; harness: string;
+      score: number; hard_gate_pass: boolean; metrics: Record<string, unknown>;
+      review_paste: string; evidence_links: Array<Record<string, unknown>>;
+    }> = [];
+
+    let contenderValidationFailed = false;
+    for (const cRaw of contendersRaw) {
+      if (!isRecord(cRaw)) { contenderValidationFailed = true; break; }
+      const cId = d1String(cRaw.contender_id)?.trim() ?? '';
+      const cScore = d1Number(cRaw.score);
+      if (!cId || cScore === null || cScore === undefined) {
+        contenderValidationFailed = true;
+        break;
+      }
+      contenders.push({
+        contender_id: cId,
+        label: d1String(cRaw.label)?.trim() ?? cId,
+        model: d1String(cRaw.model)?.trim() ?? '',
+        harness: d1String(cRaw.harness)?.trim() ?? 'pi',
+        score: cScore,
+        hard_gate_pass: cRaw.hard_gate_pass === true || cRaw.hard_gate_pass === 1,
+        metrics: isRecord(cRaw.metrics) ? cRaw.metrics : {},
+        review_paste: d1String(cRaw.review_paste)?.trim() ?? '',
+        evidence_links: Array.isArray(cRaw.evidence_links) ? cRaw.evidence_links as Array<Record<string, unknown>> : [],
+      });
+    }
+
+    if (contenderValidationFailed) {
+      failedDuels += 1;
+      results.push({ bounty_id: bountyId, status: 'failed', reason_code: 'ARENA_DUEL_CONTENDER_MISSING_SCORE' });
+      continue;
+    }
+
+    // Verify bounty exists
+    const bountyRow = await getBountyById(env.BOUNTIES_DB, bountyId);
+    if (!bountyRow) {
+      failedDuels += 1;
+      results.push({ bounty_id: bountyId, status: 'failed', reason_code: 'ARENA_DUEL_BOUNTY_NOT_FOUND' });
+      continue;
+    }
+
+    // Check idempotency
+    const existingRuns = await env.BOUNTIES_DB
+      .prepare('SELECT run_id FROM bounty_arena_runs WHERE bounty_id = ? AND task_fingerprint = ? LIMIT 1')
+      .bind(bountyId, taskFingerprint)
+      .all()
+      .then((result) => result.results ?? []);
+
+    if (existingRuns.length > 0) {
+      results.push({
+        bounty_id: bountyId, status: 'skipped',
+        reason_code: 'ARENA_DUEL_ALREADY_EXISTS',
+        existing_run_id: d1String((existingRuns[0] as Record<string, unknown>).run_id),
+      });
+      continue;
+    }
+
+    if (dryRun) {
+      results.push({
+        bounty_id: bountyId, status: 'planned',
+        contenders: contenders.map((c) => ({ contender_id: c.contender_id, score: c.score, hard_gate_pass: c.hard_gate_pass })),
+      });
+      continue;
+    }
+
+    const now = new Date().toISOString();
+    const arenaId = `arena_duel_${bountyId}_${Date.now()}`;
+    const runId = `run_duel_${bountyId}_${Date.now()}`;
+    const contractId = d1String(duelRaw.contract_id)?.trim() ?? `contract_duel_${bountyId}`;
+    const contractHash = await sha256B64uUtf8(`${contractId}:${taskFingerprint}:${now}`);
+
+    // Determine winner: highest score among contenders that passed hard gates.
+    // If no contender passed hard gates, winner is null (draw).
+    const passedContenders = contenders.filter((c) => c.hard_gate_pass);
+    const sorted = [...passedContenders].sort((a, b) => b.score - a.score);
+    const winner = sorted.length > 0 ? sorted[0] : null;
+    const winnerId = winner?.contender_id ?? null;
+    const winnerReason = winner
+      ? `Evaluator scores: ${contenders.map((c) => `${c.contender_id}=${c.score}${c.hard_gate_pass ? '' : '(gate_fail)'}`).join(' vs ')}`
+      : `No contender passed hard gates: ${contenders.map((c) => `${c.contender_id}=${c.score}(gate_fail)`).join(' vs ')}`;
+
+    try {
+      const startIdempotencyKey = `duel-batch-start:${bountyId}:${taskFingerprint}`;
+      const resultIdempotencyKey = `duel-batch:${bountyId}:${taskFingerprint}`;
+      const reasonCodes = winner
+        ? ['ARENA_DUEL_BATCH_COMPLETED', 'ARENA_RESOLVE_LOOP_COMPLETED']
+        : ['ARENA_DUEL_BATCH_COMPLETED', 'ARENA_DUEL_NO_HARD_GATE_PASS'];
+
+      await env.BOUNTIES_DB
+        .prepare(`INSERT INTO bounty_arena_runs
+          (run_id, arena_id, bounty_id, contract_id, contract_hash_b64u, task_fingerprint,
+           objective_profile_json, tradeoffs_json, status,
+           winner_contender_id, winner_reason, result_idempotency_key, reason_codes_json,
+           start_idempotency_key, started_at, completed_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(
+          runId, arenaId, bountyId, contractId, contractHash, taskFingerprint,
+          JSON.stringify({ name: 'evaluator_duel', source: 'real_evaluator_scores' }),
+          JSON.stringify([]),
+          'completed',
+          winnerId, winnerReason, resultIdempotencyKey,
+          JSON.stringify(reasonCodes),
+          startIdempotencyKey, now, now, now, now,
+        )
+        .run();
+
+      for (const c of contenders) {
+        await env.BOUNTIES_DB
+          .prepare(`INSERT INTO bounty_arena_contenders
+            (run_id, contender_id, label, model, harness,
+             tools_json, skills_json, plugins_json,
+             score, hard_gate_pass, mandatory_failed, metrics_json, check_results_json,
+             review_paste, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .bind(
+            runId, c.contender_id, c.label, c.model, c.harness,
+            '[]', '[]', '[]',
+            c.score, c.hard_gate_pass ? 1 : 0, c.hard_gate_pass ? 0 : 1,
+            JSON.stringify(c.metrics),
+            JSON.stringify(c.evidence_links),
+            c.review_paste || `Evaluator score: ${c.score}, hard_gate: ${c.hard_gate_pass}`,
+            now, now,
+          )
+          .run();
+      }
+
+      // Update bounty arena lifecycle
+      await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+        bounty_id: bountyId,
+        arena_status: 'completed',
+        arena_id: arenaId,
+        arena_task_fingerprint: taskFingerprint,
+        arena_winner_contender_id: winnerId ?? '',
+        arena_evidence_links: contenders.flatMap((c) => c.evidence_links.map((e) => ({
+          label: d1String(e.label) ?? c.contender_id,
+          url: d1String(e.path) ?? d1String(e.url) ?? '',
+        }))).filter((link) => link.url),
+        arena_updated_at: now,
+      });
+
+      completedDuels += 1;
+      results.push({
+        bounty_id: bountyId, status: 'completed',
+        arena_id: arenaId, run_id: runId,
+        contenders: contenders.map((c) => ({ contender_id: c.contender_id, score: c.score, hard_gate_pass: c.hard_gate_pass })),
+        winner: winnerId,
+        winner_reason: winnerReason,
+        reason_codes: reasonCodes,
+      });
+    } catch (err) {
+      failedDuels += 1;
+      results.push({
+        bounty_id: bountyId, status: 'failed',
+        reason_code: 'ARENA_DUEL_BATCH_INSERT_FAILED',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Fetch updated league
+  const league = await listDuelLeague(env.BOUNTIES_DB, 20);
+
+  return jsonResponse({
+    schema_version: 'arena_desk_duel_batch.v1',
+    computed_at: new Date().toISOString(),
+    dry_run: dryRun,
+    task_fingerprint: taskFingerprint,
+    totals: {
+      requested: duelsInput.length,
+      completed: completedDuels,
+      failed: failedDuels,
+      skipped: results.filter((r) => r.status === 'skipped').length,
+    },
+    duels: results,
+    league_snapshot: league,
+  }, 200, version);
+}
+
 async function executeArenaResolverCron(
   env: Env,
   cronLabel: string,
@@ -23401,6 +23721,16 @@ export default {
 
       if (path === '/v1/arena/desk/resolve-loop' && method === 'POST') {
         return handlePostArenaDeskResolveLoop(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/duel-batch' && method === 'POST') {
+        return handlePostDuelBatch(request, env, version);
+      }
+
+      if (path === '/v1/arena/duel-league' && method === 'GET') {
+        const adminError2 = requireAdmin(request, env, version);
+        if (adminError2) return adminError2;
+        return handleGetDuelLeague(url, env, version);
       }
 
       if (path === '/v1/arena/desk/resolver-cron-status' && method === 'GET') {

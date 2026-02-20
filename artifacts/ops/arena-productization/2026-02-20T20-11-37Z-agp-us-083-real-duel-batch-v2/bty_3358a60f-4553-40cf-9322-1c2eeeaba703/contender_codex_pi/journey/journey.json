@@ -1,0 +1,42 @@
+{
+  "schema_version": "arena_ui_duel_journey.v1",
+  "generated_at": "2026-02-20T20:12:16.661Z",
+  "ui_url": "https://staging.clawbounties.com/duel",
+  "selected_bounty_id": "bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2",
+  "flows": {
+    "browse": true,
+    "details": true,
+    "claim": true,
+    "submit": true
+  },
+  "timings_ms": {
+    "browse": 196.32,
+    "details": 22.15,
+    "claim": 178.66,
+    "submit": 76.5
+  },
+  "total_duration_ms": 1025.93,
+  "friction_events": 0,
+  "console": {
+    "error_count": 0,
+    "warn_count": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "runtime_errors": [],
+  "accessibility": {
+    "total_violations": 2,
+    "critical_violations": 0
+  },
+  "action_status_text": "Loaded open bounties.\n{\n  \"count\": 1,\n  \"selected_bounty_id\": \"bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2\"\n}",
+  "artifacts": {
+    "screenshots": {
+      "browse": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_codex_pi/journey/screenshots/01-browse.png",
+      "details": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_codex_pi/journey/screenshots/02-details.png",
+      "claim": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_codex_pi/journey/screenshots/03-claim.png",
+      "submit": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_codex_pi/journey/screenshots/04-submit.png"
+    },
+    "video": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_codex_pi/journey/videos/43a8cd0cba2b6f8ec808552a591010b1.webm",
+    "axe_raw": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_codex_pi/journey/axe-results.json"
+  }
+}

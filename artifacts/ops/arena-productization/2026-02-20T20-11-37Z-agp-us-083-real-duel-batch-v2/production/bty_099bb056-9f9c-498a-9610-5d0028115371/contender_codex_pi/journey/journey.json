@@ -1,0 +1,42 @@
+{
+  "schema_version": "arena_ui_duel_journey.v1",
+  "generated_at": "2026-02-20T20:14:07.262Z",
+  "ui_url": "https://clawbounties.com/duel",
+  "selected_bounty_id": "bty_099bb056-9f9c-498a-9610-5d0028115371",
+  "flows": {
+    "browse": true,
+    "details": true,
+    "claim": true,
+    "submit": true
+  },
+  "timings_ms": {
+    "browse": 197.61,
+    "details": 17.66,
+    "claim": 592.52,
+    "submit": 107.23
+  },
+  "total_duration_ms": 1476.04,
+  "friction_events": 0,
+  "console": {
+    "error_count": 0,
+    "warn_count": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "runtime_errors": [],
+  "accessibility": {
+    "total_violations": 2,
+    "critical_violations": 0
+  },
+  "action_status_text": "Loaded open bounties.\n{\n  \"count\": 3,\n  \"selected_bounty_id\": \"bty_099bb056-9f9c-498a-9610-5d0028115371\"\n}",
+  "artifacts": {
+    "screenshots": {
+      "browse": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/bty_099bb056-9f9c-498a-9610-5d0028115371/contender_codex_pi/journey/screenshots/01-browse.png",
+      "details": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/bty_099bb056-9f9c-498a-9610-5d0028115371/contender_codex_pi/journey/screenshots/02-details.png",
+      "claim": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/bty_099bb056-9f9c-498a-9610-5d0028115371/contender_codex_pi/journey/screenshots/03-claim.png",
+      "submit": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/bty_099bb056-9f9c-498a-9610-5d0028115371/contender_codex_pi/journey/screenshots/04-submit.png"
+    },
+    "video": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/bty_099bb056-9f9c-498a-9610-5d0028115371/contender_codex_pi/journey/videos/dec3fdc7cb9413e39257669640379403.webm",
+    "axe_raw": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/bty_099bb056-9f9c-498a-9610-5d0028115371/contender_codex_pi/journey/axe-results.json"
+  }
+}

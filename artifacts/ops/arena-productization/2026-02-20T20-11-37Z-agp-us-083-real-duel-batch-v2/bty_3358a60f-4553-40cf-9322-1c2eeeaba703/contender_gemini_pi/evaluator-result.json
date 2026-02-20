@@ -1,0 +1,58 @@
+{
+  "schema_version": "arena_duel_evaluator_result.v1",
+  "generated_at": "2026-02-20T20:12:14.831Z",
+  "contender_id": "contender_gemini_pi",
+  "bounty_id": "bty_3358a60f-4553-40cf-9322-1c2eeeaba703",
+  "score": 98.4,
+  "hard_gate_pass": true,
+  "weighted_total": 98.4,
+  "metrics": {
+    "flow_success_rate": 1,
+    "flows_passed": 4,
+    "flows_total": 4,
+    "avg_timing_ms": 109.47,
+    "friction_events": 0,
+    "runtime_error_count": 0,
+    "critical_a11y_violations": 0,
+    "lighthouse_cls": 0,
+    "ux_score": 100,
+    "visual_score": 100,
+    "perf_score": 100,
+    "a11y_score": 96,
+    "maint_score": 90,
+    "weighted_total": 98.4,
+    "hard_gates": {
+      "core_flows_pass": true,
+      "no_runtime_errors": true,
+      "no_a11y_critical": true
+    },
+    "reason_codes": []
+  },
+  "reason_codes": [],
+  "evidence_links": [
+    {
+      "label": "journey",
+      "path": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_gemini_pi/journey/journey.json"
+    },
+    {
+      "label": "lighthouse_summary",
+      "path": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_gemini_pi/lighthouse/lighthouse.summary.json"
+    },
+    {
+      "label": "screenshot_browse",
+      "path": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_gemini_pi/journey/screenshots/01-browse.png"
+    },
+    {
+      "label": "screenshot_details",
+      "path": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_gemini_pi/journey/screenshots/02-details.png"
+    },
+    {
+      "label": "screenshot_claim",
+      "path": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_gemini_pi/journey/screenshots/03-claim.png"
+    },
+    {
+      "label": "screenshot_submit",
+      "path": "artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/bty_3358a60f-4553-40cf-9322-1c2eeeaba703/contender_gemini_pi/journey/screenshots/04-submit.png"
+    }
+  ]
+}
