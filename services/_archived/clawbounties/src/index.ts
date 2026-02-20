@@ -16744,8 +16744,90 @@ async function computeArenaRoiDashboard(
       window_30d: window30d,
     },
     reason_code_drilldown: overall.reasonBreakdown,
+
+    // AGP-US-084: enhanced ROI fields
+    cycle_time_percentiles: (() => {
+      const cycleTimes = filteredOutcomes
+        .map((row) => (row.time_to_accept_minutes ?? row.review_time_minutes))
+        .filter((value): value is number => Number.isFinite(value))
+        .sort((a, b) => a - b);
+      if (cycleTimes.length === 0) return null;
+      return {
+        p50: Number(computePercentile(cycleTimes, 50).toFixed(2)),
+        p75: Number(computePercentile(cycleTimes, 75).toFixed(2)),
+        p90: Number(computePercentile(cycleTimes, 90).toFixed(2)),
+        p95: Number(computePercentile(cycleTimes, 95).toFixed(2)),
+        min: Number(cycleTimes[0]!.toFixed(2)),
+        max: Number(cycleTimes[cycleTimes.length - 1]!.toFixed(2)),
+        count: cycleTimes.length,
+      };
+    })(),
+
+    daily_buckets: (() => {
+      const bucketMap = new Map<string, ArenaOutcomeRecord[]>();
+      for (const row of filteredOutcomes) {
+        const day = row.created_at.slice(0, 10);
+        if (!bucketMap.has(day)) bucketMap.set(day, []);
+        bucketMap.get(day)!.push(row);
+      }
+      return [...bucketMap.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, rows]) => {
+          const accepted = rows.filter((r) => r.accepted).length;
+          const total = rows.length;
+          const cycleTimes = rows
+            .map((r) => (r.time_to_accept_minutes ?? r.review_time_minutes))
+            .filter((v): v is number => Number.isFinite(v))
+            .sort((a, b) => a - b);
+          return {
+            date,
+            outcomes: total,
+            accepted,
+            accept_rate: total > 0 ? Number((accepted / total).toFixed(4)) : 0,
+            cycle_time_p50: cycleTimes.length > 0 ? Number(computePercentile(cycleTimes, 50).toFixed(2)) : null,
+          };
+        });
+    })(),
+
+    contender_costs: (() => {
+      const contenderMetrics = new Map<string, { accepted: number; total_cost: number; outcomes: number; wins: number }>();
+      for (const row of filteredOutcomes) {
+        const cId = row.contender_id ?? 'unknown';
+        if (!contenderMetrics.has(cId)) contenderMetrics.set(cId, { accepted: 0, total_cost: 0, outcomes: 0, wins: 0 });
+        const entry = contenderMetrics.get(cId)!;
+        entry.outcomes += 1;
+        if (row.accepted) {
+          entry.accepted += 1;
+          const cost = contenderCostMap.get(`${row.arena_id}::${row.contender_id}`) ?? 0;
+          entry.total_cost += cost;
+        }
+        const run = runMap.get(row.arena_id);
+        if (run && run.winner_contender_id === cId) entry.wins += 1;
+      }
+      return [...contenderMetrics.entries()]
+        .sort((a, b) => b[1].wins - a[1].wins || a[0].localeCompare(b[0]))
+        .map(([contender_id, data]) => ({
+          contender_id,
+          outcomes: data.outcomes,
+          accepted: data.accepted,
+          wins: data.wins,
+          total_cost_usd: Number(data.total_cost.toFixed(4)),
+          cost_per_accepted_usd: data.accepted > 0 ? Number((data.total_cost / data.accepted).toFixed(4)) : null,
+        }));
+    })(),
   };
 }
+
+function computePercentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return 0;
+  const index = (p / 100) * (sortedValues.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sortedValues[lower]!;
+  const weight = index - lower;
+  return sortedValues[lower]! * (1 - weight) + sortedValues[upper]! * weight;
+}
+
 
 async function buildArenaRoiDashboardPreview(
   db: D1Database,

@@ -1,0 +1,25 @@
+{
+  "schema_version": "arena_ops_roi_evidence.v1",
+  "story": "AGP-US-084",
+  "generated_at": "2026-02-20T21:06:01Z",
+  "staging": {
+    "clawbounties_deploy": "72d5ef3f-542d-4a1b-8bc5-8f95cc2296ea",
+    "explorer_deploy": "da507aac-9551-454b-9c96-43d9dbbc98c6",
+    "roi_dashboard_status": "available",
+    "sample_count": 24,
+    "contender_count": 4,
+    "daily_bucket_count": 2,
+    "has_percentiles": true,
+    "explorer_page_renders": true
+  },
+  "production": {
+    "clawbounties_deploy": "b36b85c8-2900-43e2-837e-a7783dc78cca",
+    "explorer_deploy": "3951de6e-c4b7-46d5-8a14-9e10b09e83ce",
+    "roi_dashboard_status": "available",
+    "sample_count": 16,
+    "contender_count": 4,
+    "daily_bucket_count": 2,
+    "has_percentiles": true,
+    "explorer_page_renders": true
+  }
+}

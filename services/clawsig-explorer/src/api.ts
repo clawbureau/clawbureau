@@ -14,6 +14,7 @@ const FETCH_TIMEOUT_MS = 5000;
 interface FetchOptions {
   vaasBase: string;
   arenaBase?: string;
+  arenaAdminKey?: string;
   cache?: Cache;
   cacheTtl?: number;
 }
@@ -861,6 +862,41 @@ export interface ArenaRoiDashboardView {
     count: number;
     share: number;
   }>;
+}
+
+// AGP-US-084: enhanced ROI types
+export interface ArenaRoiCycleTimePercentilesView {
+  p50: number;
+  p75: number;
+  p90: number;
+  p95: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+export interface ArenaRoiDailyBucketView {
+  date: string;
+  outcomes: number;
+  accepted: number;
+  accept_rate: number;
+  cycle_time_p50: number | null;
+}
+
+export interface ArenaRoiContenderCostView {
+  contender_id: string;
+  outcomes: number;
+  accepted: number;
+  wins: number;
+  total_cost_usd: number;
+  cost_per_accepted_usd: number | null;
+}
+
+export interface ArenaRoiEnhancedDashboardView extends ArenaRoiDashboardView {
+  computed_at: string;
+  cycle_time_percentiles: ArenaRoiCycleTimePercentilesView | null;
+  daily_buckets: ArenaRoiDailyBucketView[];
+  contender_costs: ArenaRoiContenderCostView[];
 }
 
 export interface ArenaContractCopilotEvidenceView {
@@ -2079,5 +2115,143 @@ export async function fetchArenaReport(
     roi_dashboard: parseRoiDashboard(data.roi_dashboard),
     contract_copilot: parseContractCopilot(data.contract_copilot),
     contract_language_optimizer: parseContractLanguageOptimizer(data.contract_language_optimizer),
+  };
+}
+
+// AGP-US-084: fetch standalone ROI dashboard with enhanced fields
+export async function fetchArenaRoiDashboard(
+  opts: FetchOptions,
+): Promise<ArenaRoiEnhancedDashboardView | null> {
+  // ROI dashboard requires admin auth -- use authenticated fetch
+  const arenaBase = opts.arenaBase?.trim();
+  const roiBase = arenaBase && arenaBase.length > 0 ? arenaBase : opts.vaasBase;
+  const roiUrl = `${roiBase}/v1/arena/roi-dashboard`;
+  let data: Record<string, unknown> | null = null;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (opts.arenaAdminKey) headers['x-admin-key'] = opts.arenaAdminKey;
+    const res = await fetch(roiUrl, { signal: controller.signal, headers });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    data = await res.json() as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!data) return null;
+
+  const status = typeof data.status === 'string' ? data.status : 'unknown';
+  const computedAt = typeof data.computed_at === 'string' ? data.computed_at : new Date().toISOString();
+  const reasonCodes = Array.isArray(data.reason_codes)
+    ? data.reason_codes.filter((e): e is string => typeof e === 'string')
+    : [];
+
+  const totals = data.totals && typeof data.totals === 'object' && !Array.isArray(data.totals)
+    ? {
+        sample_count: typeof (data.totals as Record<string, unknown>).sample_count === 'number' ? (data.totals as Record<string, unknown>).sample_count as number : 0,
+        arena_count: typeof (data.totals as Record<string, unknown>).arena_count === 'number' ? (data.totals as Record<string, unknown>).arena_count as number : 0,
+        available_runs: typeof (data.totals as Record<string, unknown>).available_runs === 'number' ? (data.totals as Record<string, unknown>).available_runs as number : 0,
+      }
+    : { sample_count: 0, arena_count: 0, available_runs: 0 };
+
+  const parseMetrics = (m: unknown): ArenaRoiMetricsView | null => {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+    const obj = m as Record<string, unknown>;
+    return {
+      median_review_time_minutes: typeof obj.median_review_time_minutes === 'number' ? obj.median_review_time_minutes : 0,
+      first_pass_accept_rate: typeof obj.first_pass_accept_rate === 'number' ? obj.first_pass_accept_rate : 0,
+      override_rate: typeof obj.override_rate === 'number' ? obj.override_rate : 0,
+      rework_rate: typeof obj.rework_rate === 'number' ? obj.rework_rate : 0,
+      cost_per_accepted_bounty_usd: typeof obj.cost_per_accepted_bounty_usd === 'number' ? obj.cost_per_accepted_bounty_usd : 0,
+      cycle_time_minutes: typeof obj.cycle_time_minutes === 'number' ? obj.cycle_time_minutes : 0,
+      winner_stability: typeof obj.winner_stability === 'number' ? obj.winner_stability : 0,
+    };
+  };
+
+  const parseWindow = (w: unknown): ArenaRoiWindowView => {
+    if (!w || typeof w !== 'object' || Array.isArray(w)) {
+      return { status: 'unavailable', sample_count: 0, reason_codes: [], metrics: null };
+    }
+    const obj = w as Record<string, unknown>;
+    return {
+      status: typeof obj.status === 'string' ? obj.status : 'unavailable',
+      sample_count: typeof obj.sample_count === 'number' ? obj.sample_count : 0,
+      reason_codes: Array.isArray(obj.reason_codes) ? obj.reason_codes.filter((e): e is string => typeof e === 'string') : [],
+      metrics: parseMetrics(obj.metrics),
+    };
+  };
+
+  const drilldown = Array.isArray(data.reason_code_drilldown)
+    ? data.reason_code_drilldown
+        .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+        .map((e) => ({
+          reason_code: typeof e.reason_code === 'string' ? e.reason_code : 'UNKNOWN',
+          count: typeof e.count === 'number' ? e.count : 0,
+          share: typeof e.share === 'number' ? e.share : 0,
+        }))
+    : [];
+
+  const trends = data.trends && typeof data.trends === 'object' && !Array.isArray(data.trends)
+    ? {
+        window_7d: parseWindow((data.trends as Record<string, unknown>).window_7d),
+        window_30d: parseWindow((data.trends as Record<string, unknown>).window_30d),
+      }
+    : {
+        window_7d: { status: 'unavailable', sample_count: 0, reason_codes: [], metrics: null } as ArenaRoiWindowView,
+        window_30d: { status: 'unavailable', sample_count: 0, reason_codes: [], metrics: null } as ArenaRoiWindowView,
+      };
+
+  // Enhanced fields
+  const parsePercentiles = (p: unknown): ArenaRoiCycleTimePercentilesView | null => {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const obj = p as Record<string, unknown>;
+    return {
+      p50: typeof obj.p50 === 'number' ? obj.p50 : 0,
+      p75: typeof obj.p75 === 'number' ? obj.p75 : 0,
+      p90: typeof obj.p90 === 'number' ? obj.p90 : 0,
+      p95: typeof obj.p95 === 'number' ? obj.p95 : 0,
+      min: typeof obj.min === 'number' ? obj.min : 0,
+      max: typeof obj.max === 'number' ? obj.max : 0,
+      count: typeof obj.count === 'number' ? obj.count : 0,
+    };
+  };
+
+  const dailyBuckets: ArenaRoiDailyBucketView[] = Array.isArray(data.daily_buckets)
+    ? data.daily_buckets
+        .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+        .map((e) => ({
+          date: typeof e.date === 'string' ? e.date : '',
+          outcomes: typeof e.outcomes === 'number' ? e.outcomes : 0,
+          accepted: typeof e.accepted === 'number' ? e.accepted : 0,
+          accept_rate: typeof e.accept_rate === 'number' ? e.accept_rate : 0,
+          cycle_time_p50: typeof e.cycle_time_p50 === 'number' ? e.cycle_time_p50 : null,
+        }))
+    : [];
+
+  const contenderCosts: ArenaRoiContenderCostView[] = Array.isArray(data.contender_costs)
+    ? data.contender_costs
+        .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+        .map((e) => ({
+          contender_id: typeof e.contender_id === 'string' ? e.contender_id : 'unknown',
+          outcomes: typeof e.outcomes === 'number' ? e.outcomes : 0,
+          accepted: typeof e.accepted === 'number' ? e.accepted : 0,
+          wins: typeof e.wins === 'number' ? e.wins : 0,
+          total_cost_usd: typeof e.total_cost_usd === 'number' ? e.total_cost_usd : 0,
+          cost_per_accepted_usd: typeof e.cost_per_accepted_usd === 'number' ? e.cost_per_accepted_usd : null,
+        }))
+    : [];
+
+  return {
+    status,
+    computed_at: computedAt,
+    reason_codes: reasonCodes,
+    totals,
+    metrics: parseMetrics(data.metrics),
+    trends,
+    reason_code_drilldown: drilldown,
+    cycle_time_percentiles: parsePercentiles(data.cycle_time_percentiles),
+    daily_buckets: dailyBuckets,
+    contender_costs: contenderCosts,
   };
 }
