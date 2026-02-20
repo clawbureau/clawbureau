@@ -1,0 +1,190 @@
+{
+  "schema_version": "arena_weekly_report.v1",
+  "generated_at": "2026-02-20T21:15:09.321Z",
+  "week": {
+    "start": "2026-02-13",
+    "end": "2026-02-20"
+  },
+  "overall_grade": "NEEDS_ATTENTION",
+  "roi": {
+    "status": "available",
+    "sample_count": 16,
+    "metrics": {
+      "median_review_time_minutes": 7.5,
+      "first_pass_accept_rate": 0.75,
+      "override_rate": 0.1875,
+      "rework_rate": 0,
+      "cost_per_accepted_bounty_usd": 0.3594,
+      "cycle_time_minutes": 8.5,
+      "winner_stability": 0.7143,
+      "accepted_outcomes": 12
+    },
+    "cycle_time_percentiles": {
+      "p50": 8.5,
+      "p75": 18.5,
+      "p90": 59.5,
+      "p95": 61.5,
+      "min": 0,
+      "max": 63,
+      "count": 16
+    },
+    "contender_costs": [
+      {
+        "contender_id": "contender_codex_pi",
+        "outcomes": 11,
+        "accepted": 9,
+        "wins": 9,
+        "total_cost_usd": 3.958,
+        "cost_per_accepted_usd": 0.4398
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "outcomes": 2,
+        "accepted": 1,
+        "wins": 2,
+        "total_cost_usd": 0.0144,
+        "cost_per_accepted_usd": 0.0144
+      },
+      {
+        "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "outcomes": 2,
+        "accepted": 2,
+        "wins": 2,
+        "total_cost_usd": 0.34,
+        "cost_per_accepted_usd": 0.17
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "outcomes": 1,
+        "accepted": 0,
+        "wins": 0,
+        "total_cost_usd": 0,
+        "cost_per_accepted_usd": null
+      }
+    ],
+    "daily_buckets": [
+      {
+        "date": "2026-02-19",
+        "outcomes": 8,
+        "accepted": 4,
+        "accept_rate": 0.5,
+        "cycle_time_p50": 20
+      },
+      {
+        "date": "2026-02-20",
+        "outcomes": 8,
+        "accepted": 8,
+        "accept_rate": 1,
+        "cycle_time_p50": 0
+      }
+    ],
+    "reason_code_drilldown": [
+      {
+        "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+        "count": 2,
+        "share": 0.125
+      },
+      {
+        "reason_code": "ARENA_OVERRIDE_POLICY_RISK",
+        "count": 1,
+        "share": 0.0625
+      },
+      {
+        "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+        "count": 1,
+        "share": 0.0625
+      }
+    ]
+  },
+  "fleet": {
+    "active_workers": 0,
+    "pending_backlog": 0,
+    "cron_enabled": true,
+    "recent_duel_count": 45
+  },
+  "duel_league": {
+    "total_contenders": 14,
+    "standings": [
+      {
+        "contender_id": "contender_codex_pi",
+        "wins": 8,
+        "losses": 8,
+        "draws": 0,
+        "total_runs": 16,
+        "win_rate": 0.5
+      },
+      {
+        "contender_id": "contender_gemini_pi",
+        "wins": 7,
+        "losses": 3,
+        "draws": 0,
+        "total_runs": 10,
+        "win_rate": 0.7
+      },
+      {
+        "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "total_runs": 1,
+        "win_rate": 1
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "wins": 1,
+        "losses": 2,
+        "draws": 0,
+        "total_runs": 3,
+        "win_rate": 0.3333
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "wins": 0,
+        "losses": 6,
+        "draws": 0,
+        "total_runs": 6,
+        "win_rate": 0
+      },
+      {
+        "contender_id": "contender_gemini_3_1_pro_preview_pi",
+        "wins": 0,
+        "losses": 1,
+        "draws": 0,
+        "total_runs": 1,
+        "win_rate": 0
+      },
+      {
+        "contender_id": "contender_submission_0b82606cb2cd",
+        "wins": 0,
+        "losses": 0,
+        "draws": 1,
+        "total_runs": 1,
+        "win_rate": 0
+      },
+      {
+        "contender_id": "contender_submission_0d91ef4eafe1",
+        "wins": 0,
+        "losses": 0,
+        "draws": 1,
+        "total_runs": 1,
+        "win_rate": 0
+      },
+      {
+        "contender_id": "contender_submission_2856eed34a09",
+        "wins": 0,
+        "losses": 0,
+        "draws": 1,
+        "total_runs": 1,
+        "win_rate": 0
+      },
+      {
+        "contender_id": "contender_submission_2b9be84add71",
+        "wins": 0,
+        "losses": 0,
+        "draws": 1,
+        "total_runs": 1,
+        "win_rate": 0
+      }
+    ]
+  }
+}

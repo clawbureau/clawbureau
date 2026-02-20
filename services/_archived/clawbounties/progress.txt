@@ -1615,3 +1615,18 @@ Started: 2026-02-02T03:08:26.937005
   - fleet_summary: active_workers, pending_backlog, roi_status, roi_sample_count, cron_enabled, recent_duel_count
 - Added `scripts/arena/run-fleet-health-monitor.mjs` for automated monitoring
   - Exit code 2 = critical, 0 = healthy/degraded, 1 = fetch failure
+
+## 2026-02-20 - AGP-US-086 weekly ops report generator
+- Added `GET /v1/arena/desk/weekly-report` endpoint (admin-only):
+  - Returns `arena_weekly_report.v1` schema
+  - Aggregates ROI metrics, fleet health, duel league standings in one call
+  - overall_grade: EXCELLENT / GOOD / NEEDS_ATTENTION / CRITICAL
+  - Includes cycle_time_percentiles, contender_costs, daily_buckets, reason_code_drilldown
+  - Fleet section: active_workers, pending_backlog, cron_enabled, recent_duel_count
+  - Duel league standings with top-10 contenders
+- Added `scripts/arena/run-weekly-ops-report.mjs` for automated weekly reporting:
+  - Fetches ROI + fleet health + duel league in parallel
+  - Derives overall grade
+  - Generates actionable recommendations based on metrics
+  - Exit code 2 = CRITICAL grade, 0 = others
+- Test: `scripts/arena/run-weekly-ops-report.test.mjs`
