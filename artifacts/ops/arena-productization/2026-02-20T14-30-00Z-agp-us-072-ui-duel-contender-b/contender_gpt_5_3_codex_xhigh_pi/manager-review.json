@@ -1,0 +1,64 @@
+{
+  "schema_version": "arena_manager_review.v1",
+  "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+  "recommendation": "APPROVE",
+  "confidence": 0.994,
+  "reason_codes": [
+    "ARENA_UI_DUEL_HARD_GATES_PASS"
+  ],
+  "score": {
+    "final": 99.4,
+    "weighted_total": 99.4,
+    "weighted_breakdown": {
+      "ux_task_success_friction": 100,
+      "visual_quality_consistency": 100,
+      "performance": 100,
+      "accessibility": 100,
+      "implementation_maintainability": 94
+    }
+  },
+  "hard_gates": {
+    "core_flows_pass": true,
+    "no_critical_runtime_errors": true,
+    "no_critical_accessibility_violations": true
+  },
+  "evidence_links": [
+    {
+      "label": "journey",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/journey.json"
+    },
+    {
+      "label": "axe_raw",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/axe-results.json"
+    },
+    {
+      "label": "lighthouse_summary",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.summary.json"
+    },
+    {
+      "label": "lighthouse_raw",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.raw.json"
+    },
+    {
+      "label": "browse_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/01-browse.png"
+    },
+    {
+      "label": "details_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/02-details.png"
+    },
+    {
+      "label": "claim_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/03-claim.png"
+    },
+    {
+      "label": "submit_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/04-submit.png"
+    },
+    {
+      "label": "journey_video",
+      "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/videos"
+    }
+  ],
+  "reviewed_at": "2026-02-20T14:06:10.829Z"
+}

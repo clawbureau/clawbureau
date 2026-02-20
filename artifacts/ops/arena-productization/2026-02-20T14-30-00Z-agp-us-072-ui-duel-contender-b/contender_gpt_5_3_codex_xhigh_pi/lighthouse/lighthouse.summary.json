@@ -1,0 +1,23 @@
+{
+  "schema_version": "arena_ui_duel_lighthouse.v1",
+  "generated_at": "2026-02-20T14:06:07.220Z",
+  "requested_url": "https://staging.clawbounties.com/duel",
+  "final_url": "https://staging.clawbounties.com/duel",
+  "categories": {
+    "performance_score": 1,
+    "accessibility_score": 1,
+    "best_practices_score": 0.96,
+    "seo_score": 0.91
+  },
+  "metrics": {
+    "fcp_ms": 790.7935,
+    "lcp_ms": 790.7935,
+    "tbt_ms": 0,
+    "cls": 0,
+    "speed_index_ms": 1172.915800259018
+  },
+  "warnings": [],
+  "artifacts": {
+    "raw_lhr_json": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.raw.json"
+  }
+}

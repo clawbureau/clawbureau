@@ -1,17 +1,29 @@
 {
   "schema_version": "arena_ui_duel_contender_evidence.v1",
-  "agp_story": "AGP-US-072",
-  "contender": "B",
-  "contender_id": "contender_gpt_5_3_codex_xhigh",
-  "model": "openai-codex/gpt-5.3-codex:xhigh",
-  "harness": "pi-claude-code",
+  "story_id": "AGP-US-072",
+  "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+  "contender_label": "Contender B — GPT-5.3 Codex xhigh (Pi)",
   "task_fingerprint": "frontend:clawbounties:ux-redesign",
   "contract_id": "contract_clawbounties_ui_duel_v1",
-  "status": "placeholder",
-  "note": "Evidence placeholder. Populate after full evaluator run with Playwright + Lighthouse + axe against deployed staging.",
-  "files_changed": [
-    "services/_archived/clawbounties/src/ui-duel-page.ts",
-    "services/_archived/clawbounties/progress.txt"
-  ],
-  "generated_at": "2026-02-20T13:57:00Z"
+  "branch": "feat/arena/AGP-US-072-ui-duel-contender-b-codex",
+  "staging": {
+    "base_url": "https://staging.clawbounties.com",
+    "deploy_version_id": "8bf51fb6-b3e9-46d6-8b2e-c734feb7b7da"
+  },
+  "evaluation": {
+    "final_score": 99.4,
+    "hard_gate_passed": true,
+    "reason_codes": [],
+    "flow_success_rate": 1,
+    "runtime_error_count": 0,
+    "critical_accessibility_violations": 0
+  },
+  "evidence_bundle": {
+    "summary": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/summary.json",
+    "journey": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/journey.json",
+    "lighthouse": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.summary.json",
+    "proof_pack": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/proof-pack.v3.json",
+    "manager_review": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/manager-review.json"
+  },
+  "generated_at": "2026-02-20T14:07:00Z"
 }
