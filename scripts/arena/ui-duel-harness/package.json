@@ -1,0 +1,16 @@
+{
+  "name": "@clawbureau/arena-ui-duel-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "journey": "node journey.mjs",
+    "lighthouse": "node lighthouse-check.mjs"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.11.0",
+    "@playwright/test": "^1.58.2",
+    "chrome-launcher": "^1.2.1",
+    "lighthouse": "^12.8.2"
+  }
+}

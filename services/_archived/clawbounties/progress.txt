@@ -1301,3 +1301,21 @@ Started: 2026-02-02T03:08:26.937005
   - production cycle completed with live claim+submit and rollout evaluation (`claimed=1`, `submitted=1`, `rollout_status=PROMOTED`).
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T12-32-30Z-agp-us-064-069-autonomous-desk-loop/summary.json`
+
+## 2026-02-20 - AGP-US-070 UI duel bounty contract + evaluator foundation
+- Added canonical duel contract:
+  - `contracts/arena/bounty-ui-duel.clawbounties.v1.json`
+  - defines deterministic hard gates + weighted rubric for `frontend:clawbounties:ux-redesign`.
+- Added duel evaluation tooling:
+  - `scripts/arena/run-ui-duel-evaluator.mjs`
+  - `scripts/arena/lib/ui-duel-score.mjs`
+  - `scripts/arena/run-ui-duel-evaluator.test.mjs`
+  - `scripts/arena/ui-duel-score.test.mjs`
+  - browser harness package under `scripts/arena/ui-duel-harness/` (Playwright + axe + Lighthouse).
+- Added duel workbench route:
+  - `GET /duel` (real browse/details/claim/submit interaction surface wired to live clawbounties endpoints).
+- Deployed staging service:
+  - `clawbounties-staging` version `ca0af7e5-2d60-45ec-bffd-878971aa3055`.
+- Real-data baseline evidence persisted:
+  - `artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/summary.json`
+  - baseline hard gates pass, final score `99.4`.

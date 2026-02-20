@@ -1,0 +1,59 @@
+{
+  "schema_version": "arena_ui_duel_proof_pack.v1",
+  "contender_id": "baseline_ui_duel_infra",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "generated_at": "2026-02-20T13:18:42.416Z",
+  "final_score": 99.4,
+  "hard_gates": {
+    "core_flows_pass": true,
+    "no_critical_runtime_errors": true,
+    "no_critical_accessibility_violations": true
+  },
+  "weighted_scores": {
+    "ux_task_success_friction": 100,
+    "visual_quality_consistency": 100,
+    "performance": 100,
+    "accessibility": 100,
+    "implementation_maintainability": 94
+  },
+  "reason_codes": [],
+  "evidence_links": [
+    {
+      "label": "journey",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/journey.json"
+    },
+    {
+      "label": "axe_raw",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/axe-results.json"
+    },
+    {
+      "label": "lighthouse_summary",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/lighthouse/lighthouse.summary.json"
+    },
+    {
+      "label": "lighthouse_raw",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/lighthouse/lighthouse.raw.json"
+    },
+    {
+      "label": "browse_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/screenshots/01-browse.png"
+    },
+    {
+      "label": "details_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/screenshots/02-details.png"
+    },
+    {
+      "label": "claim_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/screenshots/03-claim.png"
+    },
+    {
+      "label": "submit_screenshot",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/screenshots/04-submit.png"
+    },
+    {
+      "label": "journey_video",
+      "path": "artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/journey/videos"
+    }
+  ]
+}
