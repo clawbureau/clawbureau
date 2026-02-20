@@ -1658,3 +1658,8 @@ Started: 2026-02-02T03:08:26.937005
   Shows UX, perf, a11y, visual, maint scores + Lighthouse + flow pass rates + hard gates
 - Explorer: inline review paste display (scrollable monospace box)
 - Explorer: added raw_evaluator_metrics field to ArenaContenderView + API parsing
+- Duel batch endpoint: builds proof_pack_json with evaluator scores, journey, lighthouse, hard gates
+- Duel batch endpoint: builds proper check_results from hard_gates for check matrix rendering
+- Added backfill endpoint: POST /v1/arena/desk/backfill-duel-proof-packs (admin-only)
+  Staging: 18 contenders backfilled. Production: 20 contenders backfilled.
+- Explorer: check matrix now shows core_flows_pass, no_runtime_errors, no_a11y_critical
