@@ -15195,6 +15195,7 @@ async function handleGetArena(
     run,
     env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
   );
+  const roiDashboard = await buildArenaRoiDashboardPreview(env.BOUNTIES_DB, run);
   const contractCopilot = await buildArenaContractCopilotPreview(env.BOUNTIES_DB, run.task_fingerprint);
   const contractLanguageOptimizer = await buildArenaContractLanguageOptimizerPreview(env.BOUNTIES_DB, run.task_fingerprint);
 
@@ -15206,6 +15207,7 @@ async function handleGetArena(
       calibration,
       autopilot,
       policy_optimizer: policyOptimizer,
+      roi_dashboard: roiDashboard,
       contract_copilot: contractCopilot,
       contract_language_optimizer: contractLanguageOptimizer,
     },
@@ -15407,6 +15409,284 @@ async function handleArenaPolicyLearning(
     200,
     version,
   );
+}
+
+function computeMedian(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    const left = sorted[middle - 1] ?? 0;
+    const right = sorted[middle] ?? left;
+    return (left + right) / 2;
+  }
+  return sorted[middle] ?? 0;
+}
+
+function computeAverage(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+async function buildArenaContenderCostMap(
+  db: D1Database,
+  runs: ArenaRunRecord[],
+): Promise<Map<string, number>> {
+  const costMap = new Map<string, number>();
+
+  for (const run of runs) {
+    const contenders = await listArenaContendersByRunId(db, run.run_id);
+    for (const contender of contenders) {
+      const metrics = parseJsonObject(contender.metrics_json);
+      const costUsd = metrics ? d1Number(metrics.cost_usd) : null;
+      if (costUsd === null) continue;
+      costMap.set(`${run.arena_id}::${contender.contender_id}`, costUsd);
+    }
+  }
+
+  return costMap;
+}
+
+function normalizeArenaRoiFilterValue(value: string | null): string {
+  return value ? value.trim() : '';
+}
+
+async function computeArenaRoiDashboard(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    objectiveProfileName: string;
+    contenderId: string;
+    experimentId: string;
+    experimentArm: string;
+    limit: number;
+    minSamples: number;
+    nowIso?: string;
+  },
+): Promise<Record<string, unknown>> {
+  const outcomes = await listArenaOutcomes(db, params.limit);
+  const runMap = await buildArenaRunMap(db, outcomes.map((row) => row.arena_id));
+
+  const filteredOutcomes = outcomes.filter((row) => {
+    const run = runMap.get(row.arena_id);
+    if (!run) return false;
+
+    if (params.taskFingerprint && run.task_fingerprint !== params.taskFingerprint) return false;
+
+    const objectiveProfileName = normalizeArenaRoiFilterValue(getArenaObjectiveProfileNameFromRun(run));
+    if (params.objectiveProfileName && objectiveProfileName !== params.objectiveProfileName) return false;
+
+    const experimentId = normalizeArenaRoiFilterValue(run.experiment_id);
+    if (params.experimentId && experimentId !== params.experimentId) return false;
+
+    const experimentArm = normalizeArenaRoiFilterValue(run.experiment_arm);
+    if (params.experimentArm && experimentArm !== params.experimentArm) return false;
+
+    if (params.contenderId && row.contender_id !== params.contenderId) return false;
+
+    return true;
+  });
+
+  const filteredRunIds = dedupeStrings(filteredOutcomes.map((row) => row.arena_id));
+  const filteredRuns = filteredRunIds
+    .map((arenaId) => runMap.get(arenaId) ?? null)
+    .filter((run): run is ArenaRunRecord => run !== null);
+
+  const contenderCostMap = await buildArenaContenderCostMap(db, filteredRuns);
+
+  const computeMetricsForRows = (rows: ArenaOutcomeRecord[]) => {
+    const sampleCount = rows.length;
+    const accepted = rows.filter((row) => row.accepted).length;
+    const firstPassAccepted = rows.filter((row) => row.accepted && !row.overridden && !row.rework_required).length;
+    const overridden = rows.filter((row) => row.overridden).length;
+    const rework = rows.filter((row) => row.rework_required).length;
+
+    const reviewTimes = rows.map((row) => row.review_time_minutes).filter((value) => Number.isFinite(value));
+    const cycleTimes = rows
+      .map((row) => (row.time_to_accept_minutes ?? row.review_time_minutes))
+      .filter((value) => Number.isFinite(value));
+
+    const acceptedCosts = rows
+      .filter((row) => row.accepted)
+      .map((row) => contenderCostMap.get(`${row.arena_id}::${row.contender_id}`) ?? null)
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+
+    const rowsRunIds = dedupeStrings(rows.map((row) => row.arena_id));
+    const rowsRuns = rowsRunIds
+      .map((arenaId) => runMap.get(arenaId) ?? null)
+      .filter((run): run is ArenaRunRecord => run !== null);
+
+    const winnerCounts = new Map<string, number>();
+    for (const run of rowsRuns) {
+      const winnerContenderId = run.winner_contender_id?.trim();
+      if (!winnerContenderId) continue;
+      winnerCounts.set(winnerContenderId, (winnerCounts.get(winnerContenderId) ?? 0) + 1);
+    }
+
+    const maxWinnerCount = winnerCounts.size > 0
+      ? Math.max(...winnerCounts.values())
+      : 0;
+    const winnerStability = rowsRuns.length > 0 ? maxWinnerCount / rowsRuns.length : 0;
+
+    const reasonCounts = new Map<string, number>();
+    for (const row of rows) {
+      if (!isArenaFailedOutcome(row)) continue;
+      const reasonCode = normalizeArenaOverrideReasonCode(row.override_reason_code) ?? deriveArenaContractLanguageReasonCode(row);
+      reasonCounts.set(reasonCode, (reasonCounts.get(reasonCode) ?? 0) + 1);
+    }
+
+    const reasonBreakdown = [...reasonCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([reason_code, count]) => ({
+        reason_code,
+        count,
+        share: sampleCount > 0 ? Number((count / sampleCount).toFixed(4)) : 0,
+      }));
+
+    return {
+      sampleCount,
+      arenaCount: rowsRunIds.length,
+      reasonBreakdown,
+      metrics: {
+        median_review_time_minutes: Number(computeMedian(reviewTimes).toFixed(2)),
+        first_pass_accept_rate: sampleCount > 0 ? Number((firstPassAccepted / sampleCount).toFixed(4)) : 0,
+        override_rate: sampleCount > 0 ? Number((overridden / sampleCount).toFixed(4)) : 0,
+        rework_rate: sampleCount > 0 ? Number((rework / sampleCount).toFixed(4)) : 0,
+        cost_per_accepted_bounty_usd: Number(computeAverage(acceptedCosts).toFixed(4)),
+        cycle_time_minutes: Number(computeMedian(cycleTimes).toFixed(2)),
+        winner_stability: Number(winnerStability.toFixed(4)),
+        accepted_outcomes: accepted,
+      },
+    };
+  };
+
+  const now = params.nowIso ? new Date(params.nowIso) : new Date();
+
+  const overall = computeMetricsForRows(filteredOutcomes);
+
+  const buildTrendWindow = (windowDays: number) => {
+    const cutoff = new Date(now.getTime() - (windowDays * 24 * 60 * 60 * 1000));
+    const rows = filteredOutcomes.filter((row) => {
+      const createdAt = new Date(row.created_at);
+      return Number.isFinite(createdAt.getTime()) && createdAt >= cutoff;
+    });
+
+    const metrics = computeMetricsForRows(rows);
+    if (metrics.sampleCount < params.minSamples) {
+      return {
+        status: 'INSUFFICIENT_SAMPLE',
+        sample_count: metrics.sampleCount,
+        reason_codes: ['ARENA_ROI_INSUFFICIENT_SAMPLE'],
+      };
+    }
+
+    return {
+      status: 'available',
+      sample_count: metrics.sampleCount,
+      metrics: metrics.metrics,
+    };
+  };
+
+  const window7d = buildTrendWindow(7);
+  const window30d = buildTrendWindow(30);
+
+  const status = overall.sampleCount >= params.minSamples
+    ? 'available'
+    : 'INSUFFICIENT_SAMPLE';
+
+  const statusReasonCodes = status === 'available'
+    ? ['ARENA_ROI_READY']
+    : ['ARENA_ROI_INSUFFICIENT_SAMPLE'];
+
+  return {
+    schema_version: 'arena_roi_dashboard.v1',
+    computed_at: now.toISOString(),
+    status,
+    filters: {
+      task_fingerprint: params.taskFingerprint || null,
+      objective_profile_name: params.objectiveProfileName || null,
+      contender_id: params.contenderId || null,
+      experiment_id: params.experimentId || null,
+      experiment_arm: params.experimentArm || null,
+      limit: params.limit,
+      min_samples: params.minSamples,
+    },
+    totals: {
+      sample_count: overall.sampleCount,
+      arena_count: overall.arenaCount,
+      available_runs: filteredRuns.length,
+    },
+    reason_codes: statusReasonCodes,
+    metrics: status === 'available' ? overall.metrics : null,
+    trends: {
+      window_7d: window7d,
+      window_30d: window30d,
+    },
+    reason_code_drilldown: overall.reasonBreakdown,
+  };
+}
+
+async function buildArenaRoiDashboardPreview(
+  db: D1Database,
+  run: ArenaRunRecord,
+): Promise<Record<string, unknown>> {
+  return computeArenaRoiDashboard(db, {
+    taskFingerprint: run.task_fingerprint,
+    objectiveProfileName: normalizeArenaRoiFilterValue(getArenaObjectiveProfileNameFromRun(run)),
+    contenderId: '',
+    experimentId: normalizeArenaRoiFilterValue(run.experiment_id),
+    experimentArm: normalizeArenaRoiFilterValue(run.experiment_arm),
+    limit: 2000,
+    minSamples: 5,
+  });
+}
+
+async function handleGetArenaRoiDashboard(
+  request: Request,
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const taskFingerprint = normalizeArenaRoiFilterValue(d1String(url.searchParams.get('task_fingerprint')));
+  const objectiveProfileName = normalizeArenaRoiFilterValue(d1String(url.searchParams.get('objective_profile_name')));
+  const contenderId = normalizeArenaRoiFilterValue(d1String(url.searchParams.get('contender_id')));
+  const experimentId = normalizeArenaRoiFilterValue(d1String(url.searchParams.get('experiment_id')));
+  const experimentArm = normalizeArenaRoiFilterValue(d1String(url.searchParams.get('experiment_arm')));
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 2000;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 5000);
+  }
+
+  const minSamplesRaw = url.searchParams.get('min_samples');
+  let minSamples = 5;
+  if (isNonEmptyString(minSamplesRaw)) {
+    const parsed = Number.parseInt(minSamplesRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'min_samples must be a positive integer', 400, { field: 'min_samples' }, version);
+    }
+    minSamples = Math.min(parsed, 2000);
+  }
+
+  const payload = await computeArenaRoiDashboard(env.BOUNTIES_DB, {
+    taskFingerprint,
+    objectiveProfileName,
+    contenderId,
+    experimentId,
+    experimentArm,
+    limit,
+    minSamples,
+  });
+
+  return jsonResponse(payload, 200, version);
 }
 
 function isArenaFailedOutcome(row: ArenaOutcomeRecord): boolean {
@@ -18166,6 +18446,10 @@ export default {
 
       if (path === '/v1/arena/policy-learning' && method === 'GET') {
         return handleArenaPolicyLearning(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/roi-dashboard' && method === 'GET') {
+        return handleGetArenaRoiDashboard(request, url, env, version);
       }
 
       if (path === '/v1/arena/policy-optimizer' && method === 'GET') {

@@ -1,0 +1,389 @@
+{
+  "schema_version": "arena_manager_route.v2",
+  "computed_at": "2026-02-20T00:55:58.825Z",
+  "mode": "route",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "objective_profile_name": "balanced",
+  "experiment_id": "exp_api_hardening_live_v1",
+  "experiment_arm": "LIVE",
+  "analyzed_runs": 2,
+  "winner_stability_ratio": 0.5,
+  "policy": {
+    "require_hard_gate_pass": true,
+    "allow_fallback": true,
+    "use_active_policy": true,
+    "environment": "production",
+    "max_runs": 50,
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE"
+  },
+  "recommended": {
+    "contender_id": "contender_codex_pi",
+    "label": "Codex + Pi + cloudflare skill",
+    "model": "gpt-5.2-codex",
+    "harness": "pi",
+    "routing_score": 96.408025,
+    "reason_codes": [
+      "ARENA_ROUTING_SELECTED",
+      "ARENA_ROUTING_OBJECTIVE_MATCHED",
+      "ARENA_ROUTING_STANDARD_MODE",
+      "ARENA_ROUTING_ACTIVE_POLICY_APPLIED"
+    ],
+    "rationale": "Selected contender_codex_pi with routing_score=96.408025 from 2 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=-0.1203).",
+    "evidence": {
+      "appearances": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 97.9545,
+      "avg_risk": 8,
+      "avg_quality": 100,
+      "latest_hard_gate_pass": true,
+      "outcome_samples": 3,
+      "empirical_accept_rate": 1,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.8797,
+      "calibration_gap": -0.1203,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Stable performer; keep as primary route for matching fingerprint."
+      ],
+      "last_seen_at": "2026-02-19T22:50:47.268Z",
+      "sample_run_ids": [
+        "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+        "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+      ]
+    }
+  },
+  "backups": [
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "appearances": 2,
+      "wins": 0,
+      "win_rate": 0,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 88.6243,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 59.029763,
+      "outcome_samples": 1,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.972,
+      "calibration_gap": 0.972,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+      ],
+      "last_seen_at": "2026-02-19T22:50:47.268Z",
+      "sample_run_ids": [
+        "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+        "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+      ]
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "appearances": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 89.222,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 48.8567,
+      "outcome_samples": 1,
+      "empirical_accept_rate": 0,
+      "override_rate": 1,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.9797,
+      "calibration_gap": 0.9797,
+      "override_reason_penalty": 0.5,
+      "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+      "override_reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+          "count": 1,
+          "share": 1,
+          "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+          "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+        }
+      ],
+      "coaching_recommendations": [
+        "High override rate; add human checkpoint before auto-route.",
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+        "Top override reason (ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT): Add human-context dependency markers and required reviewer checkpoints.",
+        "Prompt rewrite hint: Require ambiguity classification and human-clarification request when context is missing."
+      ],
+      "last_seen_at": "2026-02-19T22:50:47.268Z",
+      "sample_run_ids": [
+        "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+        "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+      ]
+    }
+  ],
+  "contenders_ranked": [
+    {
+      "contender_id": "contender_codex_pi",
+      "label": "Codex + Pi + cloudflare skill",
+      "model": "gpt-5.2-codex",
+      "harness": "pi",
+      "appearances": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 97.9545,
+      "avg_risk": 8,
+      "avg_quality": 100,
+      "latest_hard_gate_pass": true,
+      "routing_score": 96.408025,
+      "outcome_samples": 3,
+      "empirical_accept_rate": 1,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.8797,
+      "calibration_gap": -0.1203,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Stable performer; keep as primary route for matching fingerprint."
+      ],
+      "last_seen_at": "2026-02-19T22:50:47.268Z",
+      "sample_run_ids": [
+        "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+        "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+      ]
+    },
+    {
+      "contender_id": "contender_gemini_swarm",
+      "label": "Gemini Deep Think + swarm orchestrator",
+      "model": "gemini-3.1-pro-preview",
+      "harness": "swarm-orchestrator",
+      "appearances": 2,
+      "wins": 0,
+      "win_rate": 0,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 88.6243,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 59.029763,
+      "outcome_samples": 1,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.972,
+      "calibration_gap": 0.972,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+      ],
+      "last_seen_at": "2026-02-19T22:50:47.268Z",
+      "sample_run_ids": [
+        "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+        "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+      ]
+    },
+    {
+      "contender_id": "contender_claude_codex_cli",
+      "label": "Claude Opus + Codex CLI blend",
+      "model": "claude-opus-4.5",
+      "harness": "codex-cli",
+      "appearances": 2,
+      "wins": 1,
+      "win_rate": 0.5,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 89.222,
+      "avg_risk": 8,
+      "avg_quality": 75,
+      "latest_hard_gate_pass": true,
+      "routing_score": 48.8567,
+      "outcome_samples": 1,
+      "empirical_accept_rate": 0,
+      "override_rate": 1,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.9797,
+      "calibration_gap": 0.9797,
+      "override_reason_penalty": 0.5,
+      "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+      "override_reason_breakdown": [
+        {
+          "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+          "count": 1,
+          "share": 1,
+          "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+          "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+        }
+      ],
+      "coaching_recommendations": [
+        "High override rate; add human checkpoint before auto-route.",
+        "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+        "Top override reason (ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT): Add human-context dependency markers and required reviewer checkpoints.",
+        "Prompt rewrite hint: Require ambiguity classification and human-clarification request when context is missing."
+      ],
+      "last_seen_at": "2026-02-19T22:50:47.268Z",
+      "sample_run_ids": [
+        "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+        "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+      ]
+    }
+  ],
+  "policy_optimizer": {
+    "schema_version": "arena_policy_optimizer.v1",
+    "computed_at": "2026-02-19T23:57:00.282Z",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "environment": "production",
+    "objective_profile_name": "balanced",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE",
+    "gates": {
+      "min_samples": 3,
+      "min_confidence": 0.3,
+      "sample_count": 3,
+      "confidence_score": 0.813
+    },
+    "current_active_policy": {
+      "calibration_gap": -0.1203,
+      "computed_at": "2026-02-19T23:57:00.282Z",
+      "confidence_score": 0.813,
+      "contender_id": "contender_codex_pi",
+      "empirical_accept_rate": 1,
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "objective_profile_name": "balanced",
+      "override_rate": 0,
+      "promoted_at": "2026-02-19T23:57:00.282Z",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rework_rate": 0,
+      "route_policy_id": "arp_shadow_B2di_u2mcifJR_o48bcaqPES",
+      "routing_score": 96.408025,
+      "sample_count": 3,
+      "schema_version": "arena_route_policy_active.v1",
+      "win_rate": 0.5
+    },
+    "candidate_shadow_policy": {
+      "calibration_gap": -0.1203,
+      "computed_at": "2026-02-19T23:57:00.282Z",
+      "confidence_score": 0.813,
+      "contender_id": "contender_codex_pi",
+      "empirical_accept_rate": 1,
+      "experiment_arm": "LIVE",
+      "experiment_id": "exp_api_hardening_live_v1",
+      "objective_profile_name": "balanced",
+      "override_rate": 0,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE"
+      ],
+      "rework_rate": 0,
+      "route_policy_id": "arp_shadow_B2di_u2mcifJR_o48bcaqPES",
+      "routing_score": 96.408025,
+      "sample_count": 3,
+      "schema_version": "arena_route_policy_shadow.v1",
+      "win_rate": 0.5
+    },
+    "promotion": {
+      "active_contender_id": "contender_codex_pi",
+      "computed_at": "2026-02-19T23:57:00.282Z",
+      "confidence_score": 0.813,
+      "event_id": "arpe_f9b06c22-2eba-4528-90ce-a7b317bcdf67",
+      "min_confidence": 0.3,
+      "min_samples": 3,
+      "previous_contender_id": "contender_codex_pi",
+      "promoted": false,
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+      ],
+      "sample_count": 3,
+      "schema_version": "arena_policy_promotion_event.v1",
+      "shadow_contender_id": "contender_codex_pi",
+      "status": "PROMOTED"
+    },
+    "reason_codes": [
+      "ARENA_POLICY_SHADOW_REFRESHED",
+      "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+    ],
+    "promotion_status": "PROMOTED"
+  },
+  "delegation_coach": {
+    "primary_contender_id": "contender_codex_pi",
+    "backup_contenders": [
+      "contender_gemini_swarm",
+      "contender_claude_codex_cli"
+    ],
+    "global_recommendations": [
+      "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes."
+    ],
+    "contender_cards": [
+      {
+        "contender_id": "contender_codex_pi",
+        "routing_score": 96.408025,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "calibration_gap": -0.1203,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Stable performer; keep as primary route for matching fingerprint."
+        ]
+      },
+      {
+        "contender_id": "contender_gemini_swarm",
+        "routing_score": 59.029763,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "calibration_gap": 0.972,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+        ]
+      },
+      {
+        "contender_id": "contender_claude_codex_cli",
+        "routing_score": 48.8567,
+        "override_rate": 1,
+        "rework_rate": 0,
+        "calibration_gap": 0.9797,
+        "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+        "override_reason_breakdown": [
+          {
+            "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+            "count": 1,
+            "share": 1,
+            "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+            "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+          }
+        ],
+        "coaching_recommendations": [
+          "High override rate; add human checkpoint before auto-route.",
+          "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+          "Top override reason (ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT): Add human-context dependency markers and required reviewer checkpoints.",
+          "Prompt rewrite hint: Require ambiguity classification and human-clarification request when context is missing."
+        ]
+      }
+    ]
+  }
+}

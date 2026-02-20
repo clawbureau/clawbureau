@@ -43,6 +43,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: pending
 - AGP-US-056 — contract copilot from real failures
   - merge: pending
+- AGP-US-057 — arena ROI dashboard from real metrics
+  - merge: pending
 
 ## 2. Key files
 
@@ -54,6 +56,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/generate-policy-learning-report.mjs`
 - `scripts/arena/run-policy-optimizer-shadow.mjs`
 - `scripts/arena/run-contract-copilot-from-outcomes.mjs`
+- `scripts/arena/run-roi-dashboard-report.mjs`
 - `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
 
@@ -102,6 +105,10 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `GET /v1/arena/policy-learning` (admin)
   - supports `task_fingerprint` and `limit`
   - returns override reason breakdown + contract/prompt rewrite recommendations
+- `GET /v1/arena/roi-dashboard` (admin)
+  - supports task/objective/contender/experiment filters + `min_samples`/`limit`
+  - returns real persisted ROI metrics + 7d/30d trend windows + reason-code drilldowns
+  - returns deterministic `INSUFFICIENT_SAMPLE` when sample gates are not met
 - `POST /v1/arena/policy-optimizer` (admin)
   - body: `task_fingerprint`, optional `{objective_profile_name,experiment_id,experiment_arm,environment,max_runs,min_samples,min_confidence}`
   - computes real-data shadow policy from current route evidence and promotes to active only when gates pass
@@ -262,6 +269,14 @@ node scripts/arena/run-contract-copilot-from-outcomes.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
   --min-outcomes 10 \
   --min-arenas 3 \
+  --bounties-base https://staging.clawbounties.com
+
+# AGP-US-057: query ROI dashboard from persisted real outcomes
+node scripts/arena/run-roi-dashboard-report.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --objective-profile-name balanced \
+  --experiment-id exp_api_hardening_live_v1 \
+  --experiment-arm LIVE \
   --bounties-base https://staging.clawbounties.com
 ```
 
