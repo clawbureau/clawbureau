@@ -1,0 +1,8 @@
+{
+  "schema_version": "arena_contract_copilot_generate_request.v1",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "min_outcomes": 10,
+  "min_arenas": 3,
+  "max_suggestions": 8,
+  "limit": 1200
+}

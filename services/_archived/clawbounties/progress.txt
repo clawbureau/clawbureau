@@ -1020,3 +1020,45 @@ Started: 2026-02-02T03:08:26.937005
   - `POST /v1/arena/manager/autopilot` => `200`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-19T23-57-30Z-agp-us-055-policy-optimizer-shadow-promote/summary.json`
+
+## 2026-02-20 - AGP-US-056 contract copilot from real failures
+- Added migration:
+  - `services/_archived/clawbounties/migrations/0028_arena_contract_copilot_suggestions.sql`
+  - new table: `bounty_arena_contract_copilot_suggestions`
+    - deterministic suggestion ids + scope/reason indexing
+    - before/after rewrite snippets
+    - confidence + expected impact
+    - source evidence traceability (`arena_id`, `outcome_id`, `contender_id`, `criterion_id`, `reason_code`)
+- Added contract copilot APIs:
+  - `POST /v1/arena/contract-copilot/generate` (admin)
+    - computes copilot-grade suggestions from real persisted outcomes
+    - deterministic `INSUFFICIENT_SAMPLE` when gates are not met
+  - `GET /v1/arena/contract-copilot` (admin)
+    - reads persisted copilot suggestions by task/contender filters
+- Added arena payload/explorer surfacing:
+  - `GET /v1/arena/{arena_id}` now includes `contract_copilot` preview (`arena_contract_copilot_preview.v1`)
+  - clawsig-explorer arena page now renders **Contract Copilot** card with:
+    - top suggestions
+    - confidence
+    - evidence counts
+    - expected impact (override/rework)
+    - before/after snippets
+- Added operator tooling + sample contract:
+  - `scripts/arena/run-contract-copilot-from-outcomes.mjs`
+  - `scripts/arena/run-contract-copilot-from-outcomes.test.mjs`
+  - `contracts/arena/contract-copilot.sample.v1.json`
+- Deployed services:
+  - `clawbounties-staging` version `6ab2f7a9-59e6-4310-9932-364be1952050`
+  - `clawsig-explorer-staging` version `a9cab140-25bd-470e-8ba9-1cd254a922f2`
+  - `clawbounties` version `f047341f-e19e-4fb6-a3dd-86054cc76684`
+  - `clawsig-explorer` version `eb242263-18f3-49f4-9e67-463519c89cff`
+- Applied migration `0028` in staging + prod D1.
+- Real-data acceptance verified:
+  - staging run consumed 14 real outcomes across 7 arenas and generated 8 suggestions
+  - each suggestion includes source_evidence rows linked to persisted outcomes
+  - deterministic `INSUFFICIENT_SAMPLE` verified with stricter gate run
+- Endpoint regression checks (staging + prod):
+  - `POST /v1/arena/manager/route` => `200`
+  - `POST /v1/arena/manager/autopilot` => `200`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T00-38-10Z-agp-us-056-contract-copilot-real-failures/summary.json`

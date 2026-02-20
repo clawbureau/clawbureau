@@ -1,0 +1,32 @@
+{
+  "checks": {
+    "arenas_at_least_minimum_when_available": true,
+    "evidence_rows_linked_when_available": true,
+    "insufficient_sample_reason_codes_when_insufficient": true,
+    "outcomes_at_least_minimum_when_available": true,
+    "status_available_or_insufficient": true,
+    "suggestions_at_least_three_when_available": true
+  },
+  "endpoint_base": "https://staging.clawbounties.com",
+  "evidence": {
+    "linked_rows": 22,
+    "total_rows": 22,
+    "unique_arenas": 6,
+    "unique_outcomes": 12
+  },
+  "generated_at": "2026-02-20T00:35:11.773Z",
+  "ok": true,
+  "output_dir": "artifacts/ops/arena-productization/2026-02-20T00-35-10-869Z-agp-us-056-contract-copilot-typescript-worker-api-hardening",
+  "reason_codes": [
+    "ARENA_CONTRACT_COPILOT_READY"
+  ],
+  "status": "available",
+  "story": "AGP-US-056",
+  "task_fingerprint": "typescript:worker:api-hardening",
+  "totals": {
+    "arenas": 7,
+    "failed_outcomes": 12,
+    "outcomes": 14,
+    "suggestions": 8
+  }
+}

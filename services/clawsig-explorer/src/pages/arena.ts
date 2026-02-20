@@ -312,6 +312,91 @@ function renderPolicyOptimizerCard(report: ArenaReportView): string {
   `;
 }
 
+function renderContractCopilotCard(report: ArenaReportView): string {
+  const copilot = report.contract_copilot;
+  if (!copilot) {
+    return `
+      <div class="card">
+        <p class="section-title">Contract Copilot</p>
+        <p class="dim" style="font-size:0.82rem">No copilot suggestions available for this arena payload.</p>
+      </div>
+    `;
+  }
+
+  if (copilot.status === 'empty') {
+    return `
+      <div class="card">
+        <p class="section-title">Contract Copilot</p>
+        <p class="dim" style="font-size:0.82rem">No persisted copilot suggestions for this task fingerprint yet.</p>
+      </div>
+    `;
+  }
+
+  if (copilot.status === 'INSUFFICIENT_SAMPLE') {
+    return `
+      <div class="card">
+        <p class="section-title">Contract Copilot</p>
+        <p class="dim" style="font-size:0.82rem">INSUFFICIENT_SAMPLE — waiting for more real failed outcomes before generating rewrite proposals.</p>
+      </div>
+    `;
+  }
+
+  if (copilot.status !== 'available') {
+    return `
+      <div class="card">
+        <p class="section-title">Contract Copilot</p>
+        <p class="dim" style="font-size:0.82rem">Copilot suggestions are temporarily unavailable.</p>
+      </div>
+    `;
+  }
+
+  const rankedSuggestions = [...copilot.global_suggestions, ...copilot.contender_suggestions]
+    .sort((a, b) => b.confidence - a.confidence || b.evidence_count - a.evidence_count)
+    .slice(0, 5);
+
+  const suggestionRows = rankedSuggestions
+    .map((entry) => {
+      const impact = `${(entry.expected_impact.override_rate_reduction * 100).toFixed(1)}% / ${(entry.expected_impact.rework_rate_reduction * 100).toFixed(1)}%`;
+      const sourceCount = entry.source_evidence.length;
+      return `
+        <tr>
+          <td class="mono">${esc(entry.scope === 'global' ? 'global' : (entry.contender_id ?? 'n/a'))}</td>
+          <td class="mono">${esc(entry.reason_code)}</td>
+          <td class="mono">${(entry.confidence * 100).toFixed(1)}%</td>
+          <td class="mono">${entry.evidence_count} (${sourceCount} refs)</td>
+          <td class="mono">${impact}</td>
+          <td>${esc(entry.before_text)}</td>
+          <td>${esc(entry.after_text)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  return `
+    <div class="card">
+      <p class="section-title">Contract Copilot</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:0.55rem">Rewrite proposals distilled from real override/rework evidence with traceable source rows.</p>
+      <p class="dim" style="font-size:0.78rem; margin-bottom:0.4rem"><strong>Task fingerprint:</strong> <span class="mono">${esc(copilot.task_fingerprint ?? 'unknown')}</span></p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Scope</th>
+              <th>Reason code</th>
+              <th>Confidence</th>
+              <th>Evidence</th>
+              <th>Expected impact (override/rework)</th>
+              <th>Before</th>
+              <th>After</th>
+            </tr>
+          </thead>
+          <tbody>${suggestionRows || '<tr><td colspan="7" class="dim">No copilot suggestions available.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 function renderContractLanguageOptimizerCard(report: ArenaReportView): string {
   const optimizer = report.contract_language_optimizer;
   if (!optimizer) {
@@ -524,6 +609,8 @@ export function arenaComparePage(report: ArenaReportView): string {
     ${renderAutopilotCard(report)}
 
     ${renderPolicyOptimizerCard(report)}
+
+    ${renderContractCopilotCard(report)}
 
     ${renderContractLanguageOptimizerCard(report)}
 
@@ -878,6 +965,66 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
         rework_rate: 0,
         winner_stability_ratio: 1,
       },
+    },
+    contract_copilot: {
+      status: 'available',
+      task_fingerprint: 'typescript:worker:api-hardening',
+      global_suggestions: [
+        {
+          suggestion_id: 'accs_sample_global_001',
+          scope: 'global',
+          contender_id: null,
+          reason_code: 'ARENA_OVERRIDE_SCOPE_MISMATCH',
+          before_text: 'Current contract language under-specifies scope alignment checks for reviewer handoff.',
+          after_text: 'Add explicit scope-alignment acceptance criterion with fail-closed escalation and evidence binding.',
+          rationale: 'Observed recurrent scope mismatch overrides across multiple arenas.',
+          confidence: 0.82,
+          evidence_count: 6,
+          arena_count: 3,
+          outcome_count: 6,
+          expected_impact: {
+            override_rate_reduction: 0.34,
+            rework_rate_reduction: 0.21,
+          },
+          source_evidence: [
+            {
+              arena_id: 'arena_bty_arena_001',
+              outcome_id: 'aot_sample_001',
+              contender_id: 'contender_codex_pi',
+              criterion_id: 'scope_alignment',
+              reason_code: 'ARENA_OVERRIDE_SCOPE_MISMATCH',
+            },
+          ],
+        },
+      ],
+      contender_suggestions: [
+        {
+          suggestion_id: 'accs_sample_contender_001',
+          scope: 'contender',
+          contender_id: 'contender_claude_codex_cli',
+          reason_code: 'ARENA_OVERRIDE_TEST_FAILURE',
+          before_text: 'Test completion criteria are too implicit for this contender profile.',
+          after_text: 'Require explicit test matrix completion with criterion IDs and CI evidence links.',
+          rationale: 'Contender-specific failure pattern shows repeated rework from missing coverage detail.',
+          confidence: 0.74,
+          evidence_count: 4,
+          arena_count: 2,
+          outcome_count: 4,
+          expected_impact: {
+            override_rate_reduction: 0.26,
+            rework_rate_reduction: 0.29,
+          },
+          source_evidence: [
+            {
+              arena_id: 'arena_bty_arena_001',
+              outcome_id: 'aot_sample_001',
+              contender_id: 'contender_claude_codex_cli',
+              criterion_id: 'test_coverage',
+              reason_code: 'ARENA_OVERRIDE_TEST_FAILURE',
+            },
+          ],
+        },
+      ],
     },
     contract_language_optimizer: {
       status: 'available',

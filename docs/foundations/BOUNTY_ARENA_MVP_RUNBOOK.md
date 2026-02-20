@@ -41,6 +41,8 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
   - merge: pending
 - AGP-US-055 — route policy optimizer shadow/promote
   - merge: pending
+- AGP-US-056 — contract copilot from real failures
+  - merge: pending
 
 ## 2. Key files
 
@@ -51,12 +53,14 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/lib/proof-pack-v3.mjs`
 - `scripts/arena/generate-policy-learning-report.mjs`
 - `scripts/arena/run-policy-optimizer-shadow.mjs`
+- `scripts/arena/run-contract-copilot-from-outcomes.mjs`
 - `scripts/arena/generate-contract-language-optimizer.mjs`
 - `scripts/arena/run-historical-backtest.mjs`
 
 ### Real contender dispatch config
 - `contracts/arena/real-contender-dispatch.sample.v1.json`
 - `contracts/arena/policy-optimizer.sample.v1.json`
+- `contracts/arena/contract-copilot.sample.v1.json`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -71,6 +75,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `services/_archived/clawbounties/migrations/0025_arena_contract_language_optimizer.sql`
 - `services/_archived/clawbounties/migrations/0026_arena_reviewer_decision_capture.sql`
 - `services/_archived/clawbounties/migrations/0027_arena_route_policy_optimizer_state.sql`
+- `services/_archived/clawbounties/migrations/0028_arena_contract_copilot_suggestions.sql`
 - `services/_archived/clawbounties/src/index.ts`
 
 ### Explorer routes
@@ -103,6 +108,13 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `GET /v1/arena/policy-optimizer` (admin)
   - supports `task_fingerprint`, optional objective/experiment/environment filters
   - returns persisted shadow/active policy state + promotion event + deterministic reason codes
+- `POST /v1/arena/contract-copilot/generate` (admin)
+  - body: `task_fingerprint`, optional `{min_outcomes,min_arenas,max_suggestions,limit}`
+  - computes copilot-grade before/after rewrites from real failed outcomes with source evidence traceability
+  - returns deterministic `INSUFFICIENT_SAMPLE` when real sample gates are not met
+- `GET /v1/arena/contract-copilot` (admin)
+  - supports `task_fingerprint`, `contender_id`, `limit`
+  - returns persisted copilot suggestions + evidence links
 - `POST /v1/arena/contract-language-optimizer` (admin)
   - body: `task_fingerprint`, optional `limit`
   - computes + persists contract/prompt rewrite suggestions for failed/overridden outcomes
@@ -149,6 +161,7 @@ Required migrations for Arena MVP:
 - `0025_arena_contract_language_optimizer.sql`
 - `0026_arena_reviewer_decision_capture.sql`
 - `0027_arena_route_policy_optimizer_state.sql`
+- `0028_arena_contract_copilot_suggestions.sql`
 
 ## 6. End-to-end operator flow
 
@@ -242,6 +255,13 @@ node scripts/arena/run-policy-optimizer-shadow.mjs \
   --experiment-id exp_api_hardening_live_v1 \
   --experiment-arm LIVE \
   --environment staging \
+  --bounties-base https://staging.clawbounties.com
+
+# AGP-US-056: generate contract copilot suggestions from real outcomes
+node scripts/arena/run-contract-copilot-from-outcomes.mjs \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --min-outcomes 10 \
+  --min-arenas 3 \
   --bounties-base https://staging.clawbounties.com
 ```
 
