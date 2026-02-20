@@ -1,0 +1,119 @@
+{
+  "ok": true,
+  "story": "AGP-US-076",
+  "generated_at": "2026-02-20T16:53:21Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "f3c2fc7b-87f3-4623-b99b-34ee7f13f4bd"
+    },
+    "production": {
+      "clawbounties_version_id": "94584182-f370-4739-b8fb-efd5baaca06b"
+    }
+  },
+  "kpi_before_after": {
+    "staging": {
+      "before": {
+        "gate_status": "FAIL",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PROOF_VALIDITY_LOW"
+        ],
+        "submission_success_rate": 0.8,
+        "proof_valid_rate": 0.8
+      },
+      "after": {
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ],
+        "submission_success_rate": 0.8,
+        "proof_valid_rate": 1
+      }
+    },
+    "production": {
+      "before": {
+        "gate_status": "FAIL",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW",
+          "ARENA_MISSION_KPI_PROOF_VALIDITY_LOW"
+        ],
+        "submission_success_rate": 0.75,
+        "proof_valid_rate": 0.75
+      },
+      "after": {
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ],
+        "submission_success_rate": 1,
+        "proof_valid_rate": 1
+      }
+    }
+  },
+  "gate_enforce": {
+    "staging": {
+      "http_status": 200,
+      "passed": true,
+      "blocked": false,
+      "reason_codes": [
+        "ARENA_MISSION_KPI_PASS"
+      ]
+    },
+    "production": {
+      "http_status": 200,
+      "passed": true,
+      "blocked": false,
+      "reason_codes": [
+        "ARENA_MISSION_KPI_PASS"
+      ]
+    }
+  },
+  "kpi_recovery_loop_runs": {
+    "staging": {
+      "run_submit_loop": false,
+      "kpi_gate_http_status": 200,
+      "after_gate_status": "PASS"
+    },
+    "production": {
+      "run_submit_loop": false,
+      "kpi_gate_http_status": 200,
+      "after_gate_status": "PASS"
+    }
+  },
+  "done_criteria": {
+    "staging_kpi_gate_pass": true,
+    "production_kpi_gate_pass": true,
+    "stage_enforce_http_200": true,
+    "prod_enforce_http_200": true
+  },
+  "artifacts": {
+    "stage_before": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-before.mission.json",
+    "stage_after": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-after.mission.json",
+    "prod_before": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-before.mission.json",
+    "prod_after": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-after.mission.json",
+    "stage_gate": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-kpi-gate.enforce.json",
+    "prod_gate": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-kpi-gate.enforce.json",
+    "stage_script": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/stage-kpi-recovery.summary.json",
+    "prod_script": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/prod-kpi-recovery.summary.json",
+    "health_stage": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/health-stage.json",
+    "health_prod": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/health-prod.json",
+    "http_status": "artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/http-status.txt"
+  },
+  "smoke": {
+    "health_stage": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "staging"
+    },
+    "health_prod": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "production"
+    },
+    "duel_http_status": {
+      "staging": 200,
+      "production": 200
+    }
+  }
+}

@@ -366,6 +366,12 @@ node scripts/arena/run-autonomous-resolve-loop.mjs \
   --target-resolved 80 \
   --min-pending-age-minutes 30
 
+# AGP-US-076: KPI gate recovery loop (claim/submission gap + gate enforce)
+node scripts/arena/run-autonomous-kpi-recovery-loop.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --window-hours 24 \
+  --limit 80
+
 # AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
 node scripts/arena/run-ui-duel-evaluator.mjs \
   --base-url https://staging.clawbounties.com \

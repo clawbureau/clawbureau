@@ -18589,6 +18589,7 @@ async function buildArenaMissionSummary(
 
   const submissionsWindow = {
     total: claimedBountyIds.length,
+    with_submission: 0,
     pending_review_valid: 0,
     pending_review_invalid: 0,
     approved: 0,
@@ -18607,6 +18608,7 @@ async function buildArenaMissionSummary(
             MAX(CASE WHEN status = 'pending_review' AND proof_verify_status = 'invalid' THEN 1 ELSE 0 END) AS has_pending_review_invalid,
             MAX(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS has_approved,
             MAX(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS has_rejected,
+            MAX(CASE WHEN proof_verify_status = 'valid' THEN 1 ELSE 0 END) AS has_valid_proof,
             MAX(CASE WHEN proof_verify_status = 'invalid' THEN 1 ELSE 0 END) AS has_invalid_proof
           FROM submissions
          WHERE bounty_id IN (${placeholders})
@@ -18627,22 +18629,25 @@ async function buildArenaMissionSummary(
       const row = submissionByBounty.get(bountyId);
       if (!row) continue;
 
-      const hasValid = asCount(row.has_pending_review_valid) > 0;
+      const hasPendingValid = asCount(row.has_pending_review_valid) > 0;
       const hasPendingInvalid = asCount(row.has_pending_review_invalid) > 0;
       const hasApproved = asCount(row.has_approved) > 0;
       const hasRejected = asCount(row.has_rejected) > 0;
+      const hasValidProof = asCount(row.has_valid_proof) > 0;
       const hasInvalidProof = asCount(row.has_invalid_proof) > 0;
+      const hasActionableSubmission = hasPendingValid || hasPendingInvalid || hasApproved || hasRejected;
 
-      if (hasValid) {
-        submissionsWindow.pending_review_valid += 1;
-        submissionsWindow.proof_valid += 1;
-      } else {
-        if (hasPendingInvalid) submissionsWindow.pending_review_invalid += 1;
-        if (hasInvalidProof) submissionsWindow.proof_invalid += 1;
-      }
-
+      if (hasActionableSubmission) submissionsWindow.with_submission += 1;
+      if (hasPendingValid) submissionsWindow.pending_review_valid += 1;
+      if (hasPendingInvalid) submissionsWindow.pending_review_invalid += 1;
       if (hasApproved) submissionsWindow.approved += 1;
       if (hasRejected) submissionsWindow.rejected += 1;
+
+      if (hasValidProof) {
+        submissionsWindow.proof_valid += 1;
+      } else if (hasInvalidProof) {
+        submissionsWindow.proof_invalid += 1;
+      }
     }
   }
 
@@ -18654,7 +18659,6 @@ async function buildArenaMissionSummary(
             SELECT 1
               FROM submissions s
              WHERE s.bounty_id = b.bounty_id
-               AND s.status = 'pending_review'
                AND s.proof_verify_status = 'valid'
           ) THEN 1 ELSE 0 END) AS accepted_without_valid_submission
         FROM bounties b
@@ -18665,9 +18669,9 @@ async function buildArenaMissionSummary(
     .bind(since)
     .first<Record<string, unknown>>();
 
-  const claimGapRow = await db
+  const claimGapRows = await db
     .prepare(
-      `SELECT COUNT(*) AS claim_submission_gap
+      `SELECT l.bounty_id
          FROM bounty_arena_auto_claim_locks l
         WHERE l.claim_status = 'claimed'
           AND l.created_at >= ?
@@ -18675,18 +18679,25 @@ async function buildArenaMissionSummary(
             SELECT 1
               FROM submissions s
              WHERE s.bounty_id = l.bounty_id
-               AND s.status = 'pending_review'
                AND s.proof_verify_status = 'valid'
-          )`
+          )
+        ORDER BY l.created_at DESC
+        LIMIT 200`
     )
     .bind(since)
-    .first<Record<string, unknown>>();
+    .all<Record<string, unknown>>();
+
+  const claimGapBountyIds = dedupeStrings(
+    (claimGapRows.results ?? [])
+      .map((row) => (isRecord(row) ? d1String(row.bounty_id)?.trim() ?? '' : ''))
+      .filter((entry) => entry.length > 0)
+  );
 
   const claimSuccessRate = computeRatio(claimsWindow.claimed, claimsWindow.claimed + claimsWindow.failed);
-  const submissionSuccessRate = computeRatio(submissionsWindow.pending_review_valid, submissionsWindow.total);
-  const proofValidRate = computeRatio(submissionsWindow.proof_valid, submissionsWindow.total);
+  const submissionSuccessRate = computeRatio(submissionsWindow.with_submission, submissionsWindow.total);
+  const proofValidRate = computeRatio(submissionsWindow.proof_valid, submissionsWindow.with_submission);
 
-  const claimSubmissionGap = asCount(claimGapRow?.claim_submission_gap);
+  const claimSubmissionGap = claimGapBountyIds.length;
   const acceptedBacklog = asCount(backlogRow?.accepted_without_valid_submission);
 
   const kpiReasonCodes: string[] = [];
@@ -18735,11 +18746,15 @@ async function buildArenaMissionSummary(
     thresholds: params.thresholds,
     fleet: fleetTotals,
     claims_window: claimsWindow,
-    submissions_window: submissionsWindow,
+    submissions_window: {
+      ...submissionsWindow,
+      without_submission: Math.max(0, submissionsWindow.total - submissionsWindow.with_submission),
+    },
     backlog: {
       accepted_total: asCount(backlogRow?.accepted_total),
       accepted_without_valid_submission: acceptedBacklog,
       claim_submission_gap: claimSubmissionGap,
+      claim_submission_gap_bounty_ids: claimGapBountyIds.slice(0, 50),
     },
     kpi: {
       claim_success_rate: claimSuccessRate,
@@ -20757,6 +20772,18 @@ async function handlePostArenaDeskSubmissionLoop(
 
   const dryRun = body.dry_run === true;
 
+  const allowWorkerRebindOnMismatchRaw = body.allow_worker_rebind_on_mismatch;
+  if (allowWorkerRebindOnMismatchRaw !== undefined && typeof allowWorkerRebindOnMismatchRaw !== 'boolean') {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'allow_worker_rebind_on_mismatch must be boolean',
+      400,
+      { field: 'allow_worker_rebind_on_mismatch' },
+      version,
+    );
+  }
+  const allowWorkerRebindOnMismatch = allowWorkerRebindOnMismatchRaw === true;
+
   let worker: WorkerRecordV1 | null;
   try {
     worker = await getWorkerByDid(env.BOUNTIES_DB, workerDid);
@@ -20792,8 +20819,8 @@ async function handlePostArenaDeskSubmissionLoop(
     : (await listBounties(env.BOUNTIES_DB, { status: 'accepted', is_code_bounty: false }, Math.max(limit, targetSubmissions * 3)))
         .map((entry) => entry.bounty_id);
 
-  const workerAuthOverride: WorkerAuthContext = {
-    worker_did: workerDid,
+  const makeWorkerAuthOverride = (effectiveWorkerDid: string): WorkerAuthContext => ({
+    worker_did: effectiveWorkerDid,
     auth_mode: 'scoped_token',
     token_hash: null,
     scope: [WORKER_AUTH_SCOPE_BY_ACTION.submit_bounty],
@@ -20801,11 +20828,11 @@ async function handlePostArenaDeskSubmissionLoop(
     token_scope_hash_b64u: null,
     token_lane: 'canonical',
     payment_account_did: null,
-    agent_did: workerDid,
+    agent_did: effectiveWorkerDid,
     iat: null,
     exp: null,
     bearer_token: null,
-  };
+  });
 
   const decisions: Array<Record<string, unknown>> = [];
   for (const bountyId of candidateBountyIds) {
@@ -20876,13 +20903,72 @@ async function handlePostArenaDeskSubmissionLoop(
       }
     }
 
+    let effectiveWorkerDid = workerDid;
+    let effectiveWorker = worker;
+    let workerMismatchDispatched = false;
+    let previousWorkerDid: string | null = null;
+
     if (!bounty || bounty.worker_did !== workerDid) {
-      decisions.push({
-        bounty_id: bountyId,
-        status: 'skipped',
-        reason_code: 'WORKER_MISMATCH',
-        bounty_worker_did: bounty?.worker_did ?? null,
-      });
+      if (!allowWorkerRebindOnMismatch) {
+        decisions.push({
+          bounty_id: bountyId,
+          status: 'skipped',
+          reason_code: 'WORKER_MISMATCH',
+          bounty_worker_did: bounty?.worker_did ?? null,
+        });
+        continue;
+      }
+
+      const assignedWorkerDid = bounty?.worker_did ?? null;
+      if (!assignedWorkerDid || !assignedWorkerDid.startsWith('did:')) {
+        decisions.push({
+          bounty_id: bountyId,
+          status: 'failed',
+          reason_code: 'ARENA_SUBMISSION_WORKER_DISPATCH_FAILED',
+          error: 'Assigned worker DID is missing or invalid for mismatch dispatch',
+        });
+        continue;
+      }
+
+      previousWorkerDid = assignedWorkerDid;
+      effectiveWorkerDid = assignedWorkerDid;
+
+      if (dryRun) {
+        decisions.push({
+          bounty_id: bountyId,
+          status: 'dry_run',
+          reason_code: 'ARENA_SUBMISSION_WORKER_DISPATCH_DRY_RUN',
+          previous_worker_did: previousWorkerDid,
+          effective_worker_did: effectiveWorkerDid,
+          requested_worker_did: workerDid,
+        });
+        continue;
+      }
+
+      try {
+        const assignedWorker = await getWorkerByDid(env.BOUNTIES_DB, effectiveWorkerDid);
+        if (!assignedWorker) {
+          throw new Error('Assigned worker is not registered');
+        }
+        effectiveWorker = assignedWorker;
+        workerMismatchDispatched = true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        decisions.push({
+          bounty_id: bountyId,
+          status: 'failed',
+          reason_code: 'ARENA_SUBMISSION_WORKER_DISPATCH_FAILED',
+          previous_worker_did: previousWorkerDid,
+          effective_worker_did: effectiveWorkerDid,
+          requested_worker_did: workerDid,
+          error: message,
+        });
+        continue;
+      }
+    }
+
+    if (!bounty) {
+      decisions.push({ bounty_id: bountyId, status: 'failed', reason_code: 'BOUNTY_NOT_FOUND_AFTER_ASSIGNMENT' });
       continue;
     }
 
@@ -20891,10 +20977,10 @@ async function handlePostArenaDeskSubmissionLoop(
       continue;
     }
 
-    const idempotencyKey = `arena-autosubmit:${bountyId}:${crypto.randomUUID().replace(/-/g, '')}`;
+    const idempotencyKey = `arena-autosubmit:${bountyId}:${effectiveWorkerDid}:${crypto.randomUUID().replace(/-/g, '')}`;
     let proofArtifacts: { runId: string; proofBundleEnvelope: Record<string, unknown>; urm: Record<string, unknown> };
     try {
-      proofArtifacts = await buildArenaExecutionAutopilotProofArtifacts(workerDid, bountyId, signer);
+      proofArtifacts = await buildArenaExecutionAutopilotProofArtifacts(effectiveWorkerDid, bountyId, signer);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       decisions.push({ bounty_id: bountyId, status: 'failed', reason_code: 'PROOF_BUILD_FAILED', error: message });
@@ -20908,6 +20994,10 @@ async function handlePostArenaDeskSubmissionLoop(
         reason_code: 'ARENA_SUBMISSION_DRY_RUN',
         run_id: proofArtifacts.runId,
         idempotency_key: idempotencyKey,
+        worker_mismatch_dispatch: workerMismatchDispatched,
+        previous_worker_did: previousWorkerDid,
+        effective_worker_did: effectiveWorkerDid,
+        requested_worker_did: workerDid,
       });
       continue;
     }
@@ -20918,7 +21008,7 @@ async function handlePostArenaDeskSubmissionLoop(
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        worker_did: workerDid,
+        worker_did: effectiveWorkerDid,
         idempotency_key: idempotencyKey,
         proof_bundle_envelope: proofArtifacts.proofBundleEnvelope,
         urm: proofArtifacts.urm,
@@ -20935,8 +21025,8 @@ async function handlePostArenaDeskSubmissionLoop(
 
     const submitResponse = await handleSubmitBounty(bountyId, submitRequest, env, version, {
       authOverride: {
-        worker,
-        auth: workerAuthOverride,
+        worker: effectiveWorker,
+        auth: makeWorkerAuthOverride(effectiveWorkerDid),
       },
     });
 
@@ -20965,6 +21055,10 @@ async function handlePostArenaDeskSubmissionLoop(
       proof_verify_status: proofVerifyStatus,
       idempotency_key: idempotencyKey,
       run_id: proofArtifacts.runId,
+      worker_mismatch_dispatch: workerMismatchDispatched,
+      previous_worker_did: previousWorkerDid,
+      effective_worker_did: effectiveWorkerDid,
+      requested_worker_did: workerDid,
       response: submitPayload,
     });
   }
@@ -20972,6 +21066,7 @@ async function handlePostArenaDeskSubmissionLoop(
   const successfulPendingReview = decisions.filter(
     (entry) => entry.submission_status === 'pending_review' && entry.proof_verify_status === 'valid',
   ).length;
+  const workerMismatchDispatchCount = decisions.filter((entry) => entry.worker_mismatch_dispatch === true).length;
 
   return jsonResponse(
     {
@@ -20983,10 +21078,12 @@ async function handlePostArenaDeskSubmissionLoop(
         target_submissions: targetSubmissions,
         limit,
         candidate_bounty_ids: candidateBountyIds,
+        allow_worker_rebind_on_mismatch: allowWorkerRebindOnMismatch,
       },
       totals: {
         decisions: decisions.length,
         successful_pending_review: successfulPendingReview,
+        worker_mismatch_dispatch: workerMismatchDispatchCount,
         target_met: successfulPendingReview >= targetSubmissions,
       },
       decisions,

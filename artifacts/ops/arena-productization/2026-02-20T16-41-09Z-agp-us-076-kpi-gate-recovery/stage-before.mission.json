@@ -1,0 +1,51 @@
+{
+  "schema_version": "arena_mission_summary.v1",
+  "computed_at": "2026-02-20T16:29:10.676Z",
+  "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "window_hours": 24,
+  "window_started_at": "2026-02-19T16:29:10.283Z",
+  "thresholds": {
+    "min_online_workers": 3,
+    "min_claim_success_rate": 0.8,
+    "min_submission_success_rate": 0.8,
+    "min_proof_valid_rate": 0.95,
+    "max_claim_submission_gap": 5,
+    "max_accepted_backlog": 5
+  },
+  "fleet": {
+    "total": 6,
+    "online": 6,
+    "offline": 0,
+    "paused": 0
+  },
+  "claims_window": {
+    "processing": 0,
+    "claimed": 15,
+    "skipped": 0,
+    "failed": 1,
+    "total": 16
+  },
+  "submissions_window": {
+    "total": 15,
+    "pending_review_valid": 12,
+    "pending_review_invalid": 0,
+    "approved": 0,
+    "rejected": 0,
+    "proof_valid": 12,
+    "proof_invalid": 0
+  },
+  "backlog": {
+    "accepted_total": 3,
+    "accepted_without_valid_submission": 3,
+    "claim_submission_gap": 3
+  },
+  "kpi": {
+    "claim_success_rate": 0.9375,
+    "submission_success_rate": 0.8,
+    "proof_valid_rate": 0.8,
+    "gate_status": "FAIL",
+    "reason_codes": [
+      "ARENA_MISSION_KPI_PROOF_VALIDITY_LOW"
+    ]
+  }
+}
