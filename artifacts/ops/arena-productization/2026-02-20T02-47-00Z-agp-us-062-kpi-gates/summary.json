@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "story": "AGP-US-062",
+  "generated_at": "2026-02-20T02:47:04.380Z",
+  "deployment": {
+    "clawbounties_staging_version_id": "e1fef59b-d2af-42d8-89cf-a346b8202105",
+    "clawbounties_production_version_id": "4f31ecfc-94cf-41a3-99e4-d8d7c9046896"
+  },
+  "kpi_gates": {
+    "staging": {
+      "enforce": true,
+      "passed": true,
+      "blocked": false
+    },
+    "production": {
+      "enforce": true,
+      "passed": true,
+      "blocked": false
+    }
+  },
+  "gate_status": {
+    "staging": "PASS",
+    "production": "PASS"
+  },
+  "thresholds": {
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "window_hours": 24,
+    "min_online_workers": 3,
+    "min_claim_success_rate": 0.8,
+    "min_submission_success_rate": 0.8,
+    "min_proof_valid_rate": 0.95,
+    "max_claim_submission_gap": 5,
+    "max_accepted_backlog": 5,
+    "enforce": true
+  },
+  "done_criteria": {
+    "staging_gate_pass": true,
+    "production_gate_pass": true
+  },
+  "artifacts": {
+    "stage": "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/stage-gate.summary.json",
+    "production": "artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/prod-gate.summary.json"
+  }
+}

@@ -1,0 +1,354 @@
+{
+  "ok": true,
+  "generated_at": "2026-02-20T02:51:42.120Z",
+  "dry_run": false,
+  "endpoint": "https://staging.clawbounties.com/v1/arena/desk/self-tune-rollout",
+  "request": {
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "environment": "staging",
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "window_hours": 24,
+    "min_online_workers": 3,
+    "min_claim_success_rate": 0.8,
+    "min_submission_success_rate": 0.8,
+    "min_proof_valid_rate": 0.95,
+    "max_claim_submission_gap": 5,
+    "max_accepted_backlog": 5,
+    "gate_enforce": true,
+    "max_runs": 80,
+    "min_samples": 6,
+    "min_confidence": 0.4,
+    "objective_profile_name": null,
+    "experiment_id": null,
+    "experiment_arm": null
+  },
+  "rollout_result": {
+    "httpStatus": 200,
+    "payload": {
+      "schema_version": "arena_self_tune_rollout.v1",
+      "computed_at": "2026-02-20T02:51:41.894Z",
+      "task_fingerprint": "typescript:worker:api-hardening",
+      "environment": "staging",
+      "rollout_status": "PROMOTED",
+      "promotion_status": "PROMOTED",
+      "reason_codes": [
+        "ARENA_SELF_TUNE_EVALUATED",
+        "ARENA_SELF_TUNE_GATE_PASS",
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE",
+        "ARENA_SELF_TUNE_PROMOTED"
+      ],
+      "gate": {
+        "enforce": true,
+        "passed": true,
+        "blocked": false
+      },
+      "mission_summary": {
+        "schema_version": "arena_mission_summary.v1",
+        "computed_at": "2026-02-20T02:51:41.424Z",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "window_hours": 24,
+        "window_started_at": "2026-02-19T02:51:41.063Z",
+        "thresholds": {
+          "min_online_workers": 3,
+          "min_claim_success_rate": 0.8,
+          "min_submission_success_rate": 0.8,
+          "min_proof_valid_rate": 0.95,
+          "max_claim_submission_gap": 5,
+          "max_accepted_backlog": 5
+        },
+        "fleet": {
+          "total": 6,
+          "online": 6,
+          "offline": 0,
+          "paused": 0
+        },
+        "claims_window": {
+          "processing": 0,
+          "claimed": 10,
+          "skipped": 0,
+          "failed": 0,
+          "total": 10
+        },
+        "submissions_window": {
+          "total": 10,
+          "pending_review_valid": 10,
+          "pending_review_invalid": 0,
+          "approved": 0,
+          "rejected": 0,
+          "proof_valid": 10,
+          "proof_invalid": 0
+        },
+        "backlog": {
+          "accepted_total": 0,
+          "accepted_without_valid_submission": 0,
+          "claim_submission_gap": 0
+        },
+        "kpi": {
+          "claim_success_rate": 1,
+          "submission_success_rate": 1,
+          "proof_valid_rate": 1,
+          "gate_status": "PASS",
+          "reason_codes": [
+            "ARENA_MISSION_KPI_PASS"
+          ]
+        }
+      },
+      "optimizer_request": {
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "environment": "staging",
+        "max_runs": 80,
+        "min_samples": 6,
+        "min_confidence": 0.4
+      },
+      "optimizer_response": {
+        "schema_version": "arena_policy_optimizer.v1",
+        "computed_at": "2026-02-20T02:51:41.833Z",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "environment": "staging",
+        "objective_profile_name": null,
+        "experiment_id": null,
+        "experiment_arm": null,
+        "gates": {
+          "min_samples": 6,
+          "min_confidence": 0.4,
+          "sample_count": 10,
+          "confidence_score": 0.4253
+        },
+        "current_active_policy": {
+          "calibration_gap": 0.6724,
+          "computed_at": "2026-02-20T02:51:41.833Z",
+          "confidence_score": 0.4253,
+          "contender_id": "contender_codex_pi",
+          "empirical_accept_rate": 0.2,
+          "experiment_arm": null,
+          "experiment_id": null,
+          "objective_profile_name": null,
+          "override_rate": 0.5,
+          "promoted_at": "2026-02-20T02:51:41.833Z",
+          "reason_codes": [
+            "ARENA_ROUTING_SELECTED",
+            "ARENA_ROUTING_OBJECTIVE_ANY",
+            "ARENA_ROUTING_STANDARD_MODE",
+            "ARENA_FLEET_MATCHED",
+            "ARENA_FLEET_CONTENDER_BOUND",
+            "ARENA_ROUTING_FLEET_MATCHED"
+          ],
+          "rework_rate": 0.2,
+          "route_policy_id": "arp_shadow_1hfvvpDStRWMmzFYEWNGpJy7",
+          "routing_score": 69.78928,
+          "sample_count": 10,
+          "schema_version": "arena_route_policy_active.v1",
+          "win_rate": 0.75
+        },
+        "candidate_shadow_policy": {
+          "calibration_gap": 0.6724,
+          "computed_at": "2026-02-20T02:51:41.833Z",
+          "confidence_score": 0.4253,
+          "contender_id": "contender_codex_pi",
+          "empirical_accept_rate": 0.2,
+          "experiment_arm": null,
+          "experiment_id": null,
+          "objective_profile_name": null,
+          "override_rate": 0.5,
+          "reason_codes": [
+            "ARENA_ROUTING_SELECTED",
+            "ARENA_ROUTING_OBJECTIVE_ANY",
+            "ARENA_ROUTING_STANDARD_MODE",
+            "ARENA_FLEET_MATCHED",
+            "ARENA_FLEET_CONTENDER_BOUND",
+            "ARENA_ROUTING_FLEET_MATCHED"
+          ],
+          "rework_rate": 0.2,
+          "route_policy_id": "arp_shadow_1hfvvpDStRWMmzFYEWNGpJy7",
+          "routing_score": 69.78928,
+          "sample_count": 10,
+          "schema_version": "arena_route_policy_shadow.v1",
+          "win_rate": 0.75
+        },
+        "promotion": {
+          "active_contender_id": "contender_codex_pi",
+          "computed_at": "2026-02-20T02:51:41.833Z",
+          "confidence_score": 0.4253,
+          "event_id": "arpe_43072868-7725-4f0e-9f29-a57debd109ec",
+          "min_confidence": 0.4,
+          "min_samples": 6,
+          "previous_contender_id": "contender_codex_pi",
+          "promoted": false,
+          "reason_codes": [
+            "ARENA_POLICY_SHADOW_REFRESHED",
+            "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+          ],
+          "sample_count": 10,
+          "schema_version": "arena_policy_promotion_event.v1",
+          "shadow_contender_id": "contender_codex_pi",
+          "status": "PROMOTED"
+        },
+        "reason_codes": [
+          "ARENA_POLICY_SHADOW_REFRESHED",
+          "ARENA_POLICY_PROMOTION_NOOP_ALREADY_ACTIVE"
+        ],
+        "promotion_status": "PROMOTED",
+        "route_snapshot": {
+          "analyzed_runs": 8,
+          "winner_stability_ratio": 0.75,
+          "recommended": {
+            "contender_id": "contender_codex_pi",
+            "label": "Codex + Pi + cloudflare skill",
+            "model": "gpt-5.2-codex",
+            "harness": "pi",
+            "routing_score": 69.78928,
+            "reason_codes": [
+              "ARENA_ROUTING_SELECTED",
+              "ARENA_ROUTING_OBJECTIVE_ANY",
+              "ARENA_ROUTING_STANDARD_MODE",
+              "ARENA_FLEET_MATCHED",
+              "ARENA_FLEET_CONTENDER_BOUND",
+              "ARENA_ROUTING_FLEET_MATCHED"
+            ],
+            "rationale": "Selected contender_codex_pi with routing_score=69.78928 from 8 matched runs (win_rate=0.75, hard_gate_pass_rate=1, override_rate=0.5, top_override_reason=ARENA_OVERRIDE_SCOPE_MISMATCH, calibration_gap=0.6724).",
+            "evidence": {
+              "appearances": 8,
+              "wins": 6,
+              "win_rate": 0.75,
+              "hard_gate_pass_rate": 1,
+              "avg_score": 93.612,
+              "avg_risk": 13.29,
+              "avg_quality": 99.205,
+              "latest_hard_gate_pass": true,
+              "outcome_samples": 10,
+              "empirical_accept_rate": 0.2,
+              "override_rate": 0.5,
+              "rework_rate": 0.2,
+              "avg_predicted_confidence": 0.8724,
+              "calibration_gap": 0.6724,
+              "override_reason_penalty": 0.41,
+              "top_override_reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+              "override_reason_breakdown": [
+                {
+                  "reason_code": "ARENA_OVERRIDE_SCOPE_MISMATCH",
+                  "count": 4,
+                  "share": 0.4,
+                  "contract_rewrite": "Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+                  "prompt_rewrite": "Add a scope-check checklist before final answer generation."
+                },
+                {
+                  "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+                  "count": 1,
+                  "share": 0.1,
+                  "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+                  "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+                }
+              ],
+              "coaching_recommendations": [
+                "High override rate; add human checkpoint before auto-route.",
+                "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+                "Top override reason (ARENA_OVERRIDE_SCOPE_MISMATCH): Tighten acceptance criteria and explicit out-of-scope boundaries in the contract.",
+                "Prompt rewrite hint: Add a scope-check checklist before final answer generation."
+              ],
+              "last_seen_at": "2026-02-19T22:50:36.460Z",
+              "sample_run_ids": [
+                "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+                "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+                "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+                "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc",
+                "arn_1b5cd33a-7400-42b3-899b-e25f9c33ce8d",
+                "arn_91e28675-c7bc-4296-841f-696d506747e2",
+                "arn_42fa7ebb-49c3-464c-bcdf-ec43996511f3",
+                "arn_9c08d55e-8892-4e82-9d11-3487fd83a92d"
+              ]
+            }
+          },
+          "backups": [
+            {
+              "contender_id": "contender_gemini_swarm",
+              "label": "Gemini Deep Think + swarm orchestrator",
+              "model": "gemini-3.1-pro-preview",
+              "harness": "swarm-orchestrator",
+              "appearances": 8,
+              "wins": 0,
+              "win_rate": 0,
+              "hard_gate_pass_rate": 0.5,
+              "avg_score": 77.643,
+              "avg_risk": 34.195,
+              "avg_quality": 65.625,
+              "latest_hard_gate_pass": true,
+              "routing_score": 44.28485,
+              "outcome_samples": 2,
+              "empirical_accept_rate": 0,
+              "override_rate": 0,
+              "rework_rate": 0,
+              "avg_predicted_confidence": 0.9705,
+              "calibration_gap": 0.9705,
+              "override_reason_penalty": 0,
+              "top_override_reason_code": null,
+              "override_reason_breakdown": [],
+              "coaching_recommendations": [
+                "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+                "Mandatory checks not consistently passing; fix contract compliance first."
+              ],
+              "last_seen_at": "2026-02-19T22:50:36.460Z",
+              "sample_run_ids": [
+                "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+                "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+                "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+                "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc",
+                "arn_1b5cd33a-7400-42b3-899b-e25f9c33ce8d",
+                "arn_91e28675-c7bc-4296-841f-696d506747e2",
+                "arn_42fa7ebb-49c3-464c-bcdf-ec43996511f3",
+                "arn_9c08d55e-8892-4e82-9d11-3487fd83a92d"
+              ]
+            },
+            {
+              "contender_id": "contender_claude_codex_cli",
+              "label": "Claude Opus + Codex CLI blend",
+              "model": "claude-opus-4.5",
+              "harness": "codex-cli",
+              "appearances": 5,
+              "wins": 2,
+              "win_rate": 0.4,
+              "hard_gate_pass_rate": 1,
+              "avg_score": 88.6684,
+              "avg_risk": 11.868,
+              "avg_quality": 77.866,
+              "latest_hard_gate_pass": true,
+              "routing_score": 43.11286,
+              "outcome_samples": 2,
+              "empirical_accept_rate": 0,
+              "override_rate": 0.5,
+              "rework_rate": 1,
+              "avg_predicted_confidence": 0.9793,
+              "calibration_gap": 0.9793,
+              "override_reason_penalty": 0.45,
+              "top_override_reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+              "override_reason_breakdown": [
+                {
+                  "reason_code": "ARENA_OVERRIDE_TEST_FAILURE",
+                  "count": 1,
+                  "share": 0.5,
+                  "contract_rewrite": "Require deterministic test-harness pass evidence before recommendation.",
+                  "prompt_rewrite": "Force candidate to run and summarize failing tests before final output."
+                }
+              ],
+              "coaching_recommendations": [
+                "High override rate; add human checkpoint before auto-route.",
+                "Frequent rework; tighten task decomposition and acceptance criteria.",
+                "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+                "Top override reason (ARENA_OVERRIDE_TEST_FAILURE): Require deterministic test-harness pass evidence before recommendation.",
+                "Prompt rewrite hint: Force candidate to run and summarize failing tests before final output."
+              ],
+              "last_seen_at": "2026-02-19T22:50:36.460Z",
+              "sample_run_ids": [
+                "arn_68ca518d-cdfa-4235-8ae4-7183e1fa095b",
+                "arn_366421f1-41b3-4d96-b3dd-3862e69dc696",
+                "arn_0a9dae11-ec10-4234-ade8-45d4a47960f0",
+                "arn_5b1289d6-545f-41a3-bf21-1f47f8786cbc",
+                "arn_9c08d55e-8892-4e82-9d11-3487fd83a92d"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

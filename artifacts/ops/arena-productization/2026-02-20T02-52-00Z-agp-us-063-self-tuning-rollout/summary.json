@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "story": "AGP-US-063",
+  "generated_at": "2026-02-20T02:52:03.712Z",
+  "deployment": {
+    "clawbounties_staging_version_id": "665bb2e5-6b42-4cb5-bc30-0c5a9faabcca",
+    "clawbounties_production_version_id": "ede08cee-00fd-41d2-8f86-9bd5d3f5c0b0"
+  },
+  "rollout": {
+    "staging": "PROMOTED",
+    "production": "PROMOTED"
+  },
+  "promotion_status": {
+    "staging": "PROMOTED",
+    "production": "PROMOTED"
+  },
+  "active_contenders": {
+    "staging": "contender_codex_pi",
+    "production": "contender_codex_pi"
+  },
+  "done_criteria": {
+    "staging_promoted": true,
+    "production_promoted": true,
+    "staging_gate_pass": true,
+    "production_gate_pass": true
+  },
+  "artifacts": {
+    "stage": "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/stage-rollout.summary.json",
+    "production": "artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/prod-rollout.summary.json"
+  }
+}

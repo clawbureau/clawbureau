@@ -1191,3 +1191,58 @@ Started: 2026-02-02T03:08:26.937005
   - production submissions with `pending_review + proof_verify_status=valid`: `3` (target `>=3`)
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json`
+
+## 2026-02-20 - AGP-US-061 mission control UI
+- Added mission control API:
+  - `GET /v1/arena/mission`
+  - returns fleet health, claim/submission throughput, backlog posture, and KPI gate reason codes.
+- Added operator tooling:
+  - `scripts/arena/run-mission-dashboard-report.mjs`
+  - `scripts/arena/run-mission-dashboard-report.test.mjs`
+- Added explorer mission page:
+  - route: `/arena/mission`
+  - includes KPI gate status, throughput/backlog panels, and threshold card.
+- Deployed services:
+  - `clawbounties-staging` versions `4f94b561-a210-4e35-87e0-cf6b9192a7d7` -> `cad62e1b-8332-40ce-8e36-6758153a002a` -> `75a5d1d2-2fed-40e2-82fc-1f49b34c37ad`
+  - `clawbounties` versions `cd0bfb7b-78b6-42be-b0b4-a08b925986d7` -> `b8f3419f-25ef-4649-b397-f5b173b40554` -> `b365232e-fe99-414d-a1d8-b1dd1bb8c517`
+  - `clawsig-explorer-staging` version `9344b92f-e87e-4d1e-a683-4f6a8862cc50`
+  - `clawsig-explorer` version `e93ab2d8-29a1-4d3c-afdd-0018cf4d9e23`
+- Real-data acceptance verified:
+  - mission summary endpoint live on staging/prod with real metrics and reason codes
+  - explorer mission UI live on staging/prod (`HTTP 200`, contains "Arena Mission Control").
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T02-42-20Z-agp-us-061-mission-ui/summary.json`
+
+## 2026-02-20 - AGP-US-062 KPI gates
+- Added admin KPI gate endpoint:
+  - `POST /v1/arena/desk/kpi-gate`
+  - supports enforce mode (`409` fail-closed when gate fails).
+- Added operator tooling/contracts:
+  - `scripts/arena/run-mission-kpi-gates.mjs`
+  - `scripts/arena/run-mission-kpi-gates.test.mjs`
+  - `contracts/arena/mission-kpi-gates.sample.v1.json`
+- Deployed services:
+  - `clawbounties-staging` version `e1fef59b-d2af-42d8-89cf-a346b8202105`
+  - `clawbounties` version `4f31ecfc-94cf-41a3-99e4-d8d7c9046896`
+- Real-data acceptance verified:
+  - staging gate: `PASS` (`enforce=true`, `blocked=false`)
+  - production gate: `PASS` (`enforce=true`, `blocked=false`)
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T02-47-00Z-agp-us-062-kpi-gates/summary.json`
+
+## 2026-02-20 - AGP-US-063 self-tuning rollout
+- Added admin self-tuning rollout endpoint:
+  - `POST /v1/arena/desk/self-tune-rollout`
+  - flow: mission KPI gate -> policy optimizer shadow refresh/promotion -> deterministic rollout status/reason codes.
+- Added operator tooling/contracts:
+  - `scripts/arena/run-self-tuning-rollout.mjs`
+  - `scripts/arena/run-self-tuning-rollout.test.mjs`
+  - `contracts/arena/self-tune-rollout.sample.v1.json`
+- Deployed services:
+  - `clawbounties-staging` version `665bb2e5-6b42-4cb5-bc30-0c5a9faabcca`
+  - `clawbounties` version `ede08cee-00fd-41d2-8f86-9bd5d3f5c0b0`
+- Real-data acceptance verified:
+  - staging rollout status: `PROMOTED` (gate pass + policy promotion status `PROMOTED`)
+  - production rollout status: `PROMOTED` (gate pass + policy promotion status `PROMOTED`)
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T02-52-00Z-agp-us-063-self-tuning-rollout/summary.json`

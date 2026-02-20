@@ -29,6 +29,7 @@ import {
   fetchWorkflowRunHistory,
   fetchRecentFailedRuns,
   fetchArenaIndex,
+  fetchArenaMissionSummary,
   fetchArenaReport,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
@@ -36,7 +37,14 @@ import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
 import { opsDashboardPage } from './pages/ops.js';
-import { arenaComparePage, arenaIndexPage, arenaNotFoundPage, sampleArenaReport } from './pages/arena.js';
+import {
+  arenaComparePage,
+  arenaIndexPage,
+  arenaMissionPage,
+  arenaNotFoundPage,
+  sampleArenaMissionSummary,
+  sampleArenaReport,
+} from './pages/arena.js';
 import { deriveOpsSloHealth } from './slo.js';
 
 export interface Env {
@@ -249,6 +257,16 @@ export default {
     // -- Agents listing (redirect to runs feed for now) --
     if (path === '/agents') {
       return Response.redirect(url.origin + '/runs', 302);
+    }
+
+    // -- Arena mission control --
+    if (path === '/arena/mission') {
+      const mission = await fetchArenaMissionSummary(apiOpts, {
+        workerDid: 'did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7',
+        windowHours: 24,
+      });
+
+      return html(arenaMissionPage(mission ?? sampleArenaMissionSummary()), 200, 20);
     }
 
     // -- Arena index --

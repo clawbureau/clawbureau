@@ -291,6 +291,28 @@ node scripts/arena/run-execution-submission-autopilot.mjs \
   --target-submissions 10 \
   --bounty-ids-file /tmp/agp060-stage-claimed-ids.txt
 
+# AGP-US-061: mission control summary (API + Explorer)
+node scripts/arena/run-mission-dashboard-report.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --worker-did did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7 \
+  --window-hours 24
+
+# AGP-US-062: enforce KPI gates before autonomous rollout
+node scripts/arena/run-mission-kpi-gates.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --window-hours 24 \
+  --enforce
+
+# AGP-US-063: self-tuning rollout (KPI-gated policy optimizer promotion)
+node scripts/arena/run-self-tuning-rollout.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --task-fingerprint "typescript:worker:api-hardening" \
+  --environment staging \
+  --window-hours 24 \
+  --min-samples 6 \
+  --min-confidence 0.4 \
+  --require-promotion
+
 # AGP-US-055: compute shadow policy and promote active policy (fail-closed)
 node scripts/arena/run-policy-optimizer-shadow.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \
@@ -319,6 +341,7 @@ node scripts/arena/run-roi-dashboard-report.mjs \
 ### Step F — Explorer UI check
 
 - `GET /arena`
+- `GET /arena/mission`
 - `GET /arena/{arena_id}`
 
 Explorer env wiring:

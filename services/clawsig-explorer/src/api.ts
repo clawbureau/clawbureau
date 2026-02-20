@@ -921,6 +921,56 @@ export interface ArenaContractLanguageOptimizerView {
   contender_suggestions: ArenaContractLanguageSuggestionView[];
 }
 
+export interface ArenaMissionSummaryView {
+  schema_version: string;
+  computed_at: string;
+  worker_did: string;
+  window_hours: number;
+  window_started_at: string;
+  thresholds: {
+    min_online_workers: number;
+    min_claim_success_rate: number;
+    min_submission_success_rate: number;
+    min_proof_valid_rate: number;
+    max_claim_submission_gap: number;
+    max_accepted_backlog: number;
+  };
+  fleet: {
+    total: number;
+    online: number;
+    offline: number;
+    paused: number;
+  };
+  claims_window: {
+    processing: number;
+    claimed: number;
+    skipped: number;
+    failed: number;
+    total: number;
+  };
+  submissions_window: {
+    total: number;
+    pending_review_valid: number;
+    pending_review_invalid: number;
+    approved: number;
+    rejected: number;
+    proof_valid: number;
+    proof_invalid: number;
+  };
+  backlog: {
+    accepted_total: number;
+    accepted_without_valid_submission: number;
+    claim_submission_gap: number;
+  };
+  kpi: {
+    claim_success_rate: number | null;
+    submission_success_rate: number | null;
+    proof_valid_rate: number | null;
+    gate_status: string;
+    reason_codes: string[];
+  };
+}
+
 export interface ArenaReportView {
   arena_id: string;
   generated_at: string;
@@ -1116,6 +1166,56 @@ interface ArenaReportResponse {
     task_fingerprint?: unknown;
     global_suggestions?: unknown;
     contender_suggestions?: unknown;
+  };
+}
+
+interface ArenaMissionResponse {
+  schema_version?: unknown;
+  computed_at?: unknown;
+  worker_did?: unknown;
+  window_hours?: unknown;
+  window_started_at?: unknown;
+  thresholds?: {
+    min_online_workers?: unknown;
+    min_claim_success_rate?: unknown;
+    min_submission_success_rate?: unknown;
+    min_proof_valid_rate?: unknown;
+    max_claim_submission_gap?: unknown;
+    max_accepted_backlog?: unknown;
+  };
+  fleet?: {
+    total?: unknown;
+    online?: unknown;
+    offline?: unknown;
+    paused?: unknown;
+  };
+  claims_window?: {
+    processing?: unknown;
+    claimed?: unknown;
+    skipped?: unknown;
+    failed?: unknown;
+    total?: unknown;
+  };
+  submissions_window?: {
+    total?: unknown;
+    pending_review_valid?: unknown;
+    pending_review_invalid?: unknown;
+    approved?: unknown;
+    rejected?: unknown;
+    proof_valid?: unknown;
+    proof_invalid?: unknown;
+  };
+  backlog?: {
+    accepted_total?: unknown;
+    accepted_without_valid_submission?: unknown;
+    claim_submission_gap?: unknown;
+  };
+  kpi?: {
+    claim_success_rate?: unknown;
+    submission_success_rate?: unknown;
+    proof_valid_rate?: unknown;
+    gate_status?: unknown;
+    reason_codes?: unknown;
   };
 }
 
@@ -1680,6 +1780,97 @@ function parseContractLanguageOptimizer(input: unknown): ArenaContractLanguageOp
     task_fingerprint: asString(rec.task_fingerprint),
     global_suggestions: globalSuggestions,
     contender_suggestions: contenderSuggestions,
+  };
+}
+
+export async function fetchArenaMissionSummary(
+  opts: FetchOptions,
+  params?: {
+    workerDid?: string;
+    windowHours?: number;
+  },
+): Promise<ArenaMissionSummaryView | null> {
+  const search = new URLSearchParams();
+  if (params?.workerDid) search.set('worker_did', params.workerDid);
+  if (params?.windowHours && Number.isFinite(params.windowHours) && params.windowHours > 0) {
+    search.set('window_hours', String(Math.trunc(params.windowHours)));
+  }
+
+  const qs = search.toString();
+  const path = qs.length > 0 ? `/v1/arena/mission?${qs}` : '/v1/arena/mission';
+
+  const data = await fetchArenaJson<ArenaMissionResponse>(path, {
+    ...opts,
+    cacheTtl: 20,
+  });
+
+  if (!data) return null;
+
+  const schemaVersion = asString(data.schema_version);
+  const computedAt = asString(data.computed_at);
+  const workerDid = asString(data.worker_did);
+  const windowStartedAt = asString(data.window_started_at);
+
+  if (!schemaVersion || !computedAt || !workerDid || !windowStartedAt) {
+    return null;
+  }
+
+  const reasonCodes = Array.isArray(data.kpi?.reason_codes)
+    ? data.kpi?.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  const claimSuccessRateRaw = data.kpi?.claim_success_rate;
+  const submissionSuccessRateRaw = data.kpi?.submission_success_rate;
+  const proofValidRateRaw = data.kpi?.proof_valid_rate;
+
+  return {
+    schema_version: schemaVersion,
+    computed_at: computedAt,
+    worker_did: workerDid,
+    window_hours: asNumber(data.window_hours, 24),
+    window_started_at: windowStartedAt,
+    thresholds: {
+      min_online_workers: asNumber(data.thresholds?.min_online_workers, 3),
+      min_claim_success_rate: asNumber(data.thresholds?.min_claim_success_rate, 0.8),
+      min_submission_success_rate: asNumber(data.thresholds?.min_submission_success_rate, 0.8),
+      min_proof_valid_rate: asNumber(data.thresholds?.min_proof_valid_rate, 0.95),
+      max_claim_submission_gap: asNumber(data.thresholds?.max_claim_submission_gap, 5),
+      max_accepted_backlog: asNumber(data.thresholds?.max_accepted_backlog, 5),
+    },
+    fleet: {
+      total: asNumber(data.fleet?.total, 0),
+      online: asNumber(data.fleet?.online, 0),
+      offline: asNumber(data.fleet?.offline, 0),
+      paused: asNumber(data.fleet?.paused, 0),
+    },
+    claims_window: {
+      processing: asNumber(data.claims_window?.processing, 0),
+      claimed: asNumber(data.claims_window?.claimed, 0),
+      skipped: asNumber(data.claims_window?.skipped, 0),
+      failed: asNumber(data.claims_window?.failed, 0),
+      total: asNumber(data.claims_window?.total, 0),
+    },
+    submissions_window: {
+      total: asNumber(data.submissions_window?.total, 0),
+      pending_review_valid: asNumber(data.submissions_window?.pending_review_valid, 0),
+      pending_review_invalid: asNumber(data.submissions_window?.pending_review_invalid, 0),
+      approved: asNumber(data.submissions_window?.approved, 0),
+      rejected: asNumber(data.submissions_window?.rejected, 0),
+      proof_valid: asNumber(data.submissions_window?.proof_valid, 0),
+      proof_invalid: asNumber(data.submissions_window?.proof_invalid, 0),
+    },
+    backlog: {
+      accepted_total: asNumber(data.backlog?.accepted_total, 0),
+      accepted_without_valid_submission: asNumber(data.backlog?.accepted_without_valid_submission, 0),
+      claim_submission_gap: asNumber(data.backlog?.claim_submission_gap, 0),
+    },
+    kpi: {
+      claim_success_rate: (claimSuccessRateRaw === null || claimSuccessRateRaw === undefined) ? null : asNumber(claimSuccessRateRaw, 0),
+      submission_success_rate: (submissionSuccessRateRaw === null || submissionSuccessRateRaw === undefined) ? null : asNumber(submissionSuccessRateRaw, 0),
+      proof_valid_rate: (proofValidRateRaw === null || proofValidRateRaw === undefined) ? null : asNumber(proofValidRateRaw, 0),
+      gate_status: asString(data.kpi?.gate_status) ?? 'FAIL',
+      reason_codes: reasonCodes,
+    },
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arenaComparePage, arenaIndexPage, sampleArenaReport } from '../src/pages/arena.js';
+import { arenaComparePage, arenaIndexPage, arenaMissionPage, sampleArenaMissionSummary, sampleArenaReport } from '../src/pages/arena.js';
 
 describe('arena pages', () => {
   it('renders contender compare table, check matrix, and copy actions', () => {
@@ -34,6 +34,18 @@ describe('arena pages', () => {
     expect(html).toContain('Outcome feedback feed');
     expect(html).toContain('Reviewer decision');
     expect(html).toContain('Top decision taxonomy tags');
+  });
+
+  it('renders mission control dashboard with KPI gate posture', () => {
+    const html = arenaMissionPage(sampleArenaMissionSummary());
+
+    expect(html).toContain('Arena Mission Control');
+    expect(html).toContain('KPI Gate');
+    expect(html).toContain('claim success');
+    expect(html).toContain('proof valid rate');
+    expect(html).toContain('Throughput + backlog');
+    expect(html).toContain('Gate thresholds');
+    expect(html).toContain('ARENA_MISSION_KPI_PASS');
   });
 
   it('renders arena index rows and fallback empty state', () => {

@@ -1501,6 +1501,7 @@ function inferArenaBountyRiskTier(bounty: BountyV2): ArenaFleetRiskTier {
 }
 
 const ARENA_CONFORMANCE_AGENT_SEED = new Uint8Array(Array.from({ length: 32 }, (_, index) => index + 1));
+const ARENA_CONFORMANCE_AGENT_DID = 'did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7';
 const ARENA_BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function base58Encode(bytes: Uint8Array): string {
@@ -18043,6 +18044,684 @@ async function resolveArenaAutoClaimRouteSelection(
   };
 }
 
+const ARENA_MISSION_DEFAULT_WINDOW_HOURS = 24;
+const ARENA_MISSION_DEFAULT_THRESHOLDS = Object.freeze({
+  min_online_workers: 3,
+  min_claim_success_rate: 0.8,
+  min_submission_success_rate: 0.8,
+  min_proof_valid_rate: 0.95,
+  max_claim_submission_gap: 5,
+  max_accepted_backlog: 5,
+});
+
+type ArenaMissionKpiThresholds = {
+  min_online_workers: number;
+  min_claim_success_rate: number;
+  min_submission_success_rate: number;
+  min_proof_valid_rate: number;
+  max_claim_submission_gap: number;
+  max_accepted_backlog: number;
+};
+
+function asCount(value: unknown): number {
+  const numeric = d1Number(value);
+  if (numeric !== null && Number.isFinite(numeric)) {
+    return Math.max(0, Math.trunc(numeric));
+  }
+
+  const asText = d1String(value);
+  if (asText) {
+    const parsed = Number.parseInt(asText, 10);
+    if (Number.isFinite(parsed)) return Math.max(0, parsed);
+  }
+
+  return 0;
+}
+
+function computeRatio(numerator: number, denominator: number): number | null {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
+  return Number((numerator / denominator).toFixed(4));
+}
+
+function parseArenaMissionWindowHours(raw: string | null): number | null {
+  if (!raw || raw.trim().length === 0) return ARENA_MISSION_DEFAULT_WINDOW_HOURS;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.min(parsed, 24 * 30);
+}
+
+function parseArenaMissionThresholds(body: Record<string, unknown>): {
+  thresholds: ArenaMissionKpiThresholds | null;
+  errorField: string | null;
+  errorMessage: string | null;
+} {
+  const minOnlineWorkersRaw = d1Number(body.min_online_workers);
+  const minClaimSuccessRateRaw = d1Number(body.min_claim_success_rate);
+  const minSubmissionSuccessRateRaw = d1Number(body.min_submission_success_rate);
+  const minProofValidRateRaw = d1Number(body.min_proof_valid_rate);
+  const maxClaimSubmissionGapRaw = d1Number(body.max_claim_submission_gap);
+  const maxAcceptedBacklogRaw = d1Number(body.max_accepted_backlog);
+
+  const thresholds: ArenaMissionKpiThresholds = {
+    min_online_workers: ARENA_MISSION_DEFAULT_THRESHOLDS.min_online_workers,
+    min_claim_success_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_claim_success_rate,
+    min_submission_success_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_submission_success_rate,
+    min_proof_valid_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_proof_valid_rate,
+    max_claim_submission_gap: ARENA_MISSION_DEFAULT_THRESHOLDS.max_claim_submission_gap,
+    max_accepted_backlog: ARENA_MISSION_DEFAULT_THRESHOLDS.max_accepted_backlog,
+  };
+
+  if (minOnlineWorkersRaw !== null) {
+    if (!Number.isInteger(minOnlineWorkersRaw) || minOnlineWorkersRaw <= 0) {
+      return { thresholds: null, errorField: 'min_online_workers', errorMessage: 'min_online_workers must be a positive integer' };
+    }
+    thresholds.min_online_workers = Math.min(minOnlineWorkersRaw, 1000);
+  }
+
+  if (minClaimSuccessRateRaw !== null) {
+    if (!Number.isFinite(minClaimSuccessRateRaw) || minClaimSuccessRateRaw < 0 || minClaimSuccessRateRaw > 1) {
+      return { thresholds: null, errorField: 'min_claim_success_rate', errorMessage: 'min_claim_success_rate must be within [0,1]' };
+    }
+    thresholds.min_claim_success_rate = Number(minClaimSuccessRateRaw.toFixed(4));
+  }
+
+  if (minSubmissionSuccessRateRaw !== null) {
+    if (!Number.isFinite(minSubmissionSuccessRateRaw) || minSubmissionSuccessRateRaw < 0 || minSubmissionSuccessRateRaw > 1) {
+      return { thresholds: null, errorField: 'min_submission_success_rate', errorMessage: 'min_submission_success_rate must be within [0,1]' };
+    }
+    thresholds.min_submission_success_rate = Number(minSubmissionSuccessRateRaw.toFixed(4));
+  }
+
+  if (minProofValidRateRaw !== null) {
+    if (!Number.isFinite(minProofValidRateRaw) || minProofValidRateRaw < 0 || minProofValidRateRaw > 1) {
+      return { thresholds: null, errorField: 'min_proof_valid_rate', errorMessage: 'min_proof_valid_rate must be within [0,1]' };
+    }
+    thresholds.min_proof_valid_rate = Number(minProofValidRateRaw.toFixed(4));
+  }
+
+  if (maxClaimSubmissionGapRaw !== null) {
+    if (!Number.isInteger(maxClaimSubmissionGapRaw) || maxClaimSubmissionGapRaw < 0) {
+      return { thresholds: null, errorField: 'max_claim_submission_gap', errorMessage: 'max_claim_submission_gap must be >= 0' };
+    }
+    thresholds.max_claim_submission_gap = Math.min(maxClaimSubmissionGapRaw, 10_000);
+  }
+
+  if (maxAcceptedBacklogRaw !== null) {
+    if (!Number.isInteger(maxAcceptedBacklogRaw) || maxAcceptedBacklogRaw < 0) {
+      return { thresholds: null, errorField: 'max_accepted_backlog', errorMessage: 'max_accepted_backlog must be >= 0' };
+    }
+    thresholds.max_accepted_backlog = Math.min(maxAcceptedBacklogRaw, 10_000);
+  }
+
+  return {
+    thresholds,
+    errorField: null,
+    errorMessage: null,
+  };
+}
+
+async function buildArenaMissionSummary(
+  db: D1Database,
+  params: {
+    workerDid: string;
+    windowHours: number;
+    thresholds: ArenaMissionKpiThresholds;
+  },
+): Promise<Record<string, unknown>> {
+  const since = new Date(Date.now() - (params.windowHours * 60 * 60 * 1000)).toISOString();
+
+  const fleetRows = await db
+    .prepare(
+      `SELECT availability_status, COUNT(*) AS count
+         FROM bounty_arena_harness_fleet_workers
+        GROUP BY availability_status`
+    )
+    .all<Record<string, unknown>>();
+
+  const fleetTotals = {
+    total: 0,
+    online: 0,
+    offline: 0,
+    paused: 0,
+  };
+
+  for (const row of fleetRows.results ?? []) {
+    if (!isRecord(row)) continue;
+    const status = d1String(row.availability_status);
+    const count = asCount(row.count);
+    fleetTotals.total += count;
+    if (status === 'online') fleetTotals.online += count;
+    if (status === 'offline') fleetTotals.offline += count;
+    if (status === 'paused') fleetTotals.paused += count;
+  }
+
+  const claimRows = await db
+    .prepare(
+      `SELECT claim_status, COUNT(*) AS count
+         FROM bounty_arena_auto_claim_locks
+        WHERE created_at >= ?
+        GROUP BY claim_status`
+    )
+    .bind(since)
+    .all<Record<string, unknown>>();
+
+  const claimsWindow = {
+    processing: 0,
+    claimed: 0,
+    skipped: 0,
+    failed: 0,
+    total: 0,
+  };
+
+  for (const row of claimRows.results ?? []) {
+    if (!isRecord(row)) continue;
+    const status = d1String(row.claim_status);
+    const count = asCount(row.count);
+    claimsWindow.total += count;
+    if (status === 'processing') claimsWindow.processing += count;
+    if (status === 'claimed') claimsWindow.claimed += count;
+    if (status === 'skipped') claimsWindow.skipped += count;
+    if (status === 'failed') claimsWindow.failed += count;
+  }
+
+  const claimedRows = await db
+    .prepare(
+      `SELECT bounty_id
+         FROM bounty_arena_auto_claim_locks
+        WHERE created_at >= ?
+          AND claim_status = 'claimed'
+        ORDER BY created_at DESC
+        LIMIT 600`
+    )
+    .bind(since)
+    .all<Record<string, unknown>>();
+
+  const claimedBountyIds = dedupeStrings(
+    (claimedRows.results ?? [])
+      .map((row) => (isRecord(row) ? d1String(row.bounty_id)?.trim() ?? '' : ''))
+      .filter((entry) => entry.length > 0)
+  );
+
+  const submissionsWindow = {
+    total: claimedBountyIds.length,
+    pending_review_valid: 0,
+    pending_review_invalid: 0,
+    approved: 0,
+    rejected: 0,
+    proof_valid: 0,
+    proof_invalid: 0,
+  };
+
+  if (claimedBountyIds.length > 0) {
+    const placeholders = claimedBountyIds.map(() => '?').join(', ');
+    const submissionRows = await db
+      .prepare(
+        `SELECT
+            bounty_id,
+            MAX(CASE WHEN status = 'pending_review' AND proof_verify_status = 'valid' THEN 1 ELSE 0 END) AS has_pending_review_valid,
+            MAX(CASE WHEN status = 'pending_review' AND proof_verify_status = 'invalid' THEN 1 ELSE 0 END) AS has_pending_review_invalid,
+            MAX(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS has_approved,
+            MAX(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS has_rejected,
+            MAX(CASE WHEN proof_verify_status = 'invalid' THEN 1 ELSE 0 END) AS has_invalid_proof
+          FROM submissions
+         WHERE bounty_id IN (${placeholders})
+         GROUP BY bounty_id`
+      )
+      .bind(...claimedBountyIds)
+      .all<Record<string, unknown>>();
+
+    const submissionByBounty = new Map<string, Record<string, unknown>>();
+    for (const row of submissionRows.results ?? []) {
+      if (!isRecord(row)) continue;
+      const bountyId = d1String(row.bounty_id)?.trim() ?? null;
+      if (!bountyId) continue;
+      submissionByBounty.set(bountyId, row);
+    }
+
+    for (const bountyId of claimedBountyIds) {
+      const row = submissionByBounty.get(bountyId);
+      if (!row) continue;
+
+      const hasValid = asCount(row.has_pending_review_valid) > 0;
+      const hasPendingInvalid = asCount(row.has_pending_review_invalid) > 0;
+      const hasApproved = asCount(row.has_approved) > 0;
+      const hasRejected = asCount(row.has_rejected) > 0;
+      const hasInvalidProof = asCount(row.has_invalid_proof) > 0;
+
+      if (hasValid) {
+        submissionsWindow.pending_review_valid += 1;
+        submissionsWindow.proof_valid += 1;
+      } else {
+        if (hasPendingInvalid) submissionsWindow.pending_review_invalid += 1;
+        if (hasInvalidProof) submissionsWindow.proof_invalid += 1;
+      }
+
+      if (hasApproved) submissionsWindow.approved += 1;
+      if (hasRejected) submissionsWindow.rejected += 1;
+    }
+  }
+
+  const backlogRow = await db
+    .prepare(
+      `SELECT
+          COUNT(*) AS accepted_total,
+          SUM(CASE WHEN NOT EXISTS (
+            SELECT 1
+              FROM submissions s
+             WHERE s.bounty_id = b.bounty_id
+               AND s.status = 'pending_review'
+               AND s.proof_verify_status = 'valid'
+          ) THEN 1 ELSE 0 END) AS accepted_without_valid_submission
+        FROM bounties b
+       WHERE b.status = 'accepted'
+         AND b.is_code_bounty = 0
+         AND b.accepted_at >= ?`
+    )
+    .bind(since)
+    .first<Record<string, unknown>>();
+
+  const claimGapRow = await db
+    .prepare(
+      `SELECT COUNT(*) AS claim_submission_gap
+         FROM bounty_arena_auto_claim_locks l
+        WHERE l.claim_status = 'claimed'
+          AND l.created_at >= ?
+          AND NOT EXISTS (
+            SELECT 1
+              FROM submissions s
+             WHERE s.bounty_id = l.bounty_id
+               AND s.status = 'pending_review'
+               AND s.proof_verify_status = 'valid'
+          )`
+    )
+    .bind(since)
+    .first<Record<string, unknown>>();
+
+  const claimSuccessRate = computeRatio(claimsWindow.claimed, claimsWindow.claimed + claimsWindow.failed);
+  const submissionSuccessRate = computeRatio(submissionsWindow.pending_review_valid, submissionsWindow.total);
+  const proofValidRate = computeRatio(submissionsWindow.proof_valid, submissionsWindow.total);
+
+  const claimSubmissionGap = asCount(claimGapRow?.claim_submission_gap);
+  const acceptedBacklog = asCount(backlogRow?.accepted_without_valid_submission);
+
+  const kpiReasonCodes: string[] = [];
+
+  if (fleetTotals.online < params.thresholds.min_online_workers) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_ONLINE_WORKERS_LOW');
+  }
+
+  if (claimSuccessRate === null) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_CLAIM_SAMPLE_MISSING');
+  } else if (claimSuccessRate < params.thresholds.min_claim_success_rate) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_CLAIM_SUCCESS_LOW');
+  }
+
+  if (submissionSuccessRate === null) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_SUBMISSION_SAMPLE_MISSING');
+  } else if (submissionSuccessRate < params.thresholds.min_submission_success_rate) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW');
+  }
+
+  if (proofValidRate === null) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_PROOF_SAMPLE_MISSING');
+  } else if (proofValidRate < params.thresholds.min_proof_valid_rate) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_PROOF_VALIDITY_LOW');
+  }
+
+  if (claimSubmissionGap > params.thresholds.max_claim_submission_gap) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_CLAIM_SUBMISSION_GAP_HIGH');
+  }
+
+  if (acceptedBacklog > params.thresholds.max_accepted_backlog) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_ACCEPTED_BACKLOG_HIGH');
+  }
+
+  const gateStatus = kpiReasonCodes.length === 0 ? 'PASS' : 'FAIL';
+  if (kpiReasonCodes.length === 0) {
+    kpiReasonCodes.push('ARENA_MISSION_KPI_PASS');
+  }
+
+  return {
+    schema_version: 'arena_mission_summary.v1',
+    computed_at: new Date().toISOString(),
+    worker_did: params.workerDid,
+    window_hours: params.windowHours,
+    window_started_at: since,
+    thresholds: params.thresholds,
+    fleet: fleetTotals,
+    claims_window: claimsWindow,
+    submissions_window: submissionsWindow,
+    backlog: {
+      accepted_total: asCount(backlogRow?.accepted_total),
+      accepted_without_valid_submission: acceptedBacklog,
+      claim_submission_gap: claimSubmissionGap,
+    },
+    kpi: {
+      claim_success_rate: claimSuccessRate,
+      submission_success_rate: submissionSuccessRate,
+      proof_valid_rate: proofValidRate,
+      gate_status: gateStatus,
+      reason_codes: kpiReasonCodes,
+    },
+  };
+}
+
+async function handleGetArenaMission(
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const windowHours = parseArenaMissionWindowHours(url.searchParams.get('window_hours'));
+  if (windowHours === null) {
+    return errorResponse('INVALID_REQUEST', 'window_hours must be a positive integer', 400, { field: 'window_hours' }, version);
+  }
+
+  const workerDid = d1String(url.searchParams.get('worker_did'))?.trim() ?? ARENA_CONFORMANCE_AGENT_DID;
+  if (!workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID', 400, { field: 'worker_did' }, version);
+  }
+
+  let summary: Record<string, unknown>;
+  try {
+    summary = await buildArenaMissionSummary(env.BOUNTIES_DB, {
+      workerDid,
+      windowHours,
+      thresholds: {
+        min_online_workers: ARENA_MISSION_DEFAULT_THRESHOLDS.min_online_workers,
+        min_claim_success_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_claim_success_rate,
+        min_submission_success_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_submission_success_rate,
+        min_proof_valid_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_proof_valid_rate,
+        max_claim_submission_gap: ARENA_MISSION_DEFAULT_THRESHOLDS.max_claim_submission_gap,
+        max_accepted_backlog: ARENA_MISSION_DEFAULT_THRESHOLDS.max_accepted_backlog,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  return jsonResponse(summary, 200, version);
+}
+
+async function handlePostArenaDeskKpiGate(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const windowHours = parseArenaMissionWindowHours(d1String(body.window_hours));
+  if (windowHours === null) {
+    return errorResponse('INVALID_REQUEST', 'window_hours must be a positive integer', 400, { field: 'window_hours' }, version);
+  }
+
+  const workerDid = d1String(body.worker_did)?.trim() ?? ARENA_CONFORMANCE_AGENT_DID;
+  if (!workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID', 400, { field: 'worker_did' }, version);
+  }
+
+  const thresholdsResult = parseArenaMissionThresholds(body);
+  if (!thresholdsResult.thresholds) {
+    return errorResponse('INVALID_REQUEST', thresholdsResult.errorMessage ?? 'Invalid thresholds', 400, { field: thresholdsResult.errorField }, version);
+  }
+
+  const enforce = body.enforce === true;
+
+  let summary: Record<string, unknown>;
+  try {
+    summary = await buildArenaMissionSummary(env.BOUNTIES_DB, {
+      workerDid,
+      windowHours,
+      thresholds: thresholdsResult.thresholds,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  const kpi = isRecord(summary.kpi) ? summary.kpi : null;
+  const gateStatus = d1String(kpi?.gate_status) ?? 'FAIL';
+  const gatePassed = gateStatus === 'PASS';
+
+  const payload = {
+    ...summary,
+    gate: {
+      enforce,
+      passed: gatePassed,
+      blocked: enforce && !gatePassed,
+    },
+  };
+
+  if (enforce && !gatePassed) {
+    return jsonResponse(payload, 409, version);
+  }
+
+  return jsonResponse(payload, 200, version);
+}
+
+async function handlePostArenaDeskSelfTuneRollout(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const workerDid = d1String(body.worker_did)?.trim() ?? ARENA_CONFORMANCE_AGENT_DID;
+  if (!workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did must be a DID', 400, { field: 'worker_did' }, version);
+  }
+
+  const windowHours = parseArenaMissionWindowHours(d1String(body.window_hours));
+  if (windowHours === null) {
+    return errorResponse('INVALID_REQUEST', 'window_hours must be a positive integer', 400, { field: 'window_hours' }, version);
+  }
+
+  const thresholdsResult = parseArenaMissionThresholds(body);
+  if (!thresholdsResult.thresholds) {
+    return errorResponse('INVALID_REQUEST', thresholdsResult.errorMessage ?? 'Invalid thresholds', 400, { field: thresholdsResult.errorField }, version);
+  }
+
+  const gateEnforce = body.gate_enforce !== false;
+
+  const environment = normalizeArenaPolicyOptimizerEnvironment(
+    body.environment,
+    env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
+  );
+
+  const objectiveProfileName = normalizeArenaPolicyDimensionValue(
+    d1String(body.objective_profile_name)?.trim() ?? null,
+  );
+  const experimentId = normalizeArenaPolicyDimensionValue(
+    d1String(body.experiment_id)?.trim() ?? null,
+  );
+  const experimentArm = normalizeArenaPolicyDimensionValue(
+    d1String(body.experiment_arm)?.trim() ?? null,
+  );
+
+  const maxRunsRaw = d1Number(body.max_runs);
+  let maxRuns = 80;
+  if (maxRunsRaw !== null) {
+    if (!Number.isInteger(maxRunsRaw) || maxRunsRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'max_runs must be a positive integer', 400, { field: 'max_runs' }, version);
+    }
+    maxRuns = Math.min(maxRunsRaw, 200);
+  }
+
+  const minSamplesRaw = d1Number(body.min_samples);
+  let minSamples = 6;
+  if (minSamplesRaw !== null) {
+    if (!Number.isInteger(minSamplesRaw) || minSamplesRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'min_samples must be a positive integer', 400, { field: 'min_samples' }, version);
+    }
+    minSamples = Math.min(minSamplesRaw, 200);
+  }
+
+  const minConfidenceRaw = d1Number(body.min_confidence);
+  let minConfidence = 0.62;
+  if (minConfidenceRaw !== null) {
+    if (!Number.isFinite(minConfidenceRaw) || minConfidenceRaw < 0 || minConfidenceRaw > 1) {
+      return errorResponse('INVALID_REQUEST', 'min_confidence must be within [0,1]', 400, { field: 'min_confidence' }, version);
+    }
+    minConfidence = minConfidenceRaw;
+  }
+
+  let missionSummary: Record<string, unknown>;
+  try {
+    missionSummary = await buildArenaMissionSummary(env.BOUNTIES_DB, {
+      workerDid,
+      windowHours,
+      thresholds: thresholdsResult.thresholds,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  const missionKpi = isRecord(missionSummary.kpi) ? missionSummary.kpi : null;
+  const gateStatus = d1String(missionKpi?.gate_status) ?? 'FAIL';
+  const gatePassed = gateStatus === 'PASS';
+
+  const reasonCodes: string[] = ['ARENA_SELF_TUNE_EVALUATED'];
+  if (gatePassed) {
+    reasonCodes.push('ARENA_SELF_TUNE_GATE_PASS');
+  } else if (gateEnforce) {
+    reasonCodes.push('ARENA_SELF_TUNE_GATE_BLOCKED');
+  } else {
+    reasonCodes.push('ARENA_SELF_TUNE_GATE_WARN_ONLY');
+  }
+
+  if (gateEnforce && !gatePassed) {
+    return jsonResponse(
+      {
+        schema_version: 'arena_self_tune_rollout.v1',
+        computed_at: new Date().toISOString(),
+        task_fingerprint: taskFingerprint,
+        environment,
+        rollout_status: 'BLOCKED',
+        reason_codes: reasonCodes,
+        mission_summary: missionSummary,
+        gate: {
+          enforce: gateEnforce,
+          passed: gatePassed,
+          blocked: true,
+        },
+      },
+      409,
+      version,
+    );
+  }
+
+  if (!env.BOUNTIES_ADMIN_KEY || env.BOUNTIES_ADMIN_KEY.trim().length === 0) {
+    return errorResponse('CONFIG_ERROR', 'BOUNTIES_ADMIN_KEY secret is required for self-tune rollout', 500, undefined, version);
+  }
+
+  const optimizerRequestBody = {
+    task_fingerprint: taskFingerprint,
+    environment,
+    objective_profile_name: objectiveProfileName || undefined,
+    experiment_id: experimentId || undefined,
+    experiment_arm: experimentArm || undefined,
+    max_runs: maxRuns,
+    min_samples: minSamples,
+    min_confidence: minConfidence,
+  };
+
+  const optimizerRequest = new Request('https://internal/v1/arena/policy-optimizer', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-admin-key': env.BOUNTIES_ADMIN_KEY,
+    },
+    body: stableStringify(optimizerRequestBody),
+  });
+
+  const optimizerResponse = await handlePostArenaPolicyOptimizer(optimizerRequest, env, version);
+  const optimizerText = await optimizerResponse.text();
+  let optimizerPayload: unknown;
+  try {
+    optimizerPayload = JSON.parse(optimizerText);
+  } catch {
+    optimizerPayload = { raw: optimizerText };
+  }
+
+  if (optimizerResponse.status !== 200) {
+    return jsonResponse(
+      {
+        schema_version: 'arena_self_tune_rollout.v1',
+        computed_at: new Date().toISOString(),
+        task_fingerprint: taskFingerprint,
+        environment,
+        rollout_status: 'FAILED',
+        reason_codes: [...reasonCodes, 'ARENA_SELF_TUNE_POLICY_OPTIMIZER_FAILED'],
+        mission_summary: missionSummary,
+        gate: {
+          enforce: gateEnforce,
+          passed: gatePassed,
+          blocked: false,
+        },
+        optimizer_http_status: optimizerResponse.status,
+        optimizer_response: optimizerPayload,
+      },
+      optimizerResponse.status,
+      version,
+    );
+  }
+
+  const optimizerRecord = isRecord(optimizerPayload) ? optimizerPayload : null;
+  const optimizerReasonCodes = Array.isArray(optimizerRecord?.reason_codes)
+    ? optimizerRecord.reason_codes.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+
+  const promotionStatus = d1String(optimizerRecord?.promotion_status) ?? 'NOT_READY';
+  const rolloutStatus = promotionStatus === 'PROMOTED' ? 'PROMOTED' : 'NOT_READY';
+
+  reasonCodes.push(...optimizerReasonCodes);
+  if (rolloutStatus === 'PROMOTED') {
+    reasonCodes.push('ARENA_SELF_TUNE_PROMOTED');
+  } else {
+    reasonCodes.push('ARENA_SELF_TUNE_NOT_READY');
+  }
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_self_tune_rollout.v1',
+      computed_at: new Date().toISOString(),
+      task_fingerprint: taskFingerprint,
+      environment,
+      rollout_status: rolloutStatus,
+      promotion_status: promotionStatus,
+      reason_codes: dedupeStrings(reasonCodes),
+      gate: {
+        enforce: gateEnforce,
+        passed: gatePassed,
+        blocked: false,
+      },
+      mission_summary: missionSummary,
+      optimizer_request: optimizerRequestBody,
+      optimizer_response: optimizerPayload,
+    },
+    200,
+    version,
+  );
+}
+
 async function handleGetArenaDeskClaimLocks(
   request: Request,
   env: Env,
@@ -20426,8 +21105,20 @@ export default {
         return handleArenaManagerRoute(request, env, version, 'coach');
       }
 
+      if (path === '/v1/arena/mission' && method === 'GET') {
+        return handleGetArenaMission(url, env, version);
+      }
+
       if (path === '/v1/arena/desk/claims' && method === 'GET') {
         return handleGetArenaDeskClaimLocks(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/kpi-gate' && method === 'POST') {
+        return handlePostArenaDeskKpiGate(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/self-tune-rollout' && method === 'POST') {
+        return handlePostArenaDeskSelfTuneRollout(request, env, version);
       }
 
       if (path === '/v1/arena/desk/claim-loop' && method === 'POST') {
