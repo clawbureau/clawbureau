@@ -622,6 +622,23 @@ interface ArenaHarnessFleetWorkerRecord {
   updated_at: string;
 }
 
+interface ArenaAutoClaimLockRecord {
+  bounty_id: string;
+  lock_id: string;
+  loop_id: string;
+  claim_status: 'processing' | 'claimed' | 'skipped' | 'failed';
+  worker_did: string | null;
+  contender_id: string | null;
+  reason_code: string;
+  claim_idempotency_key: string;
+  budget_minor_before: string;
+  budget_minor_after: string;
+  route_reason_codes_json: string;
+  metadata_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface BountyListItemV2 {
   schema_version: '2';
   bounty_id: string;
@@ -1464,6 +1481,23 @@ function parseArenaFleetStringJson(value: string, maxItems: number, maxLength: n
 
   if (items.length > maxItems) return null;
   return items;
+}
+
+function inferArenaBountyCostTier(amountMinor: string): ArenaFleetCostTier {
+  const parsed = parsePositiveMinor(amountMinor);
+  if (parsed === null) return 'high';
+  if (parsed <= 1_000n) return 'low';
+  if (parsed <= 10_000n) return 'medium';
+  return 'high';
+}
+
+function inferArenaBountyRiskTier(bounty: BountyV2): ArenaFleetRiskTier {
+  if (bounty.min_proof_tier === 'sandbox') return 'high';
+  if (bounty.tags.some((tag) => tag.toLowerCase().includes('security'))) return 'high';
+  if (bounty.tags.some((tag) => tag.toLowerCase().includes('ops'))) return 'medium';
+  if (bounty.difficulty_scalar >= 3) return 'high';
+  if (bounty.difficulty_scalar >= 1.6) return 'medium';
+  return 'low';
 }
 
 function parseWorkerListing(input: unknown): WorkerListingV1 | null {
@@ -8130,6 +8164,187 @@ async function computeArenaFleetCapabilityMatch(
       objective_matched: entry.objective_matched,
     })),
   };
+}
+
+function parseArenaAutoClaimLockRow(row: unknown): ArenaAutoClaimLockRecord | null {
+  if (!isRecord(row)) return null;
+
+  const bounty_id = d1String(row.bounty_id);
+  const lock_id = d1String(row.lock_id);
+  const loop_id = d1String(row.loop_id);
+  const claim_status = d1String(row.claim_status);
+  const worker_did = d1String(row.worker_did);
+  const contender_id = d1String(row.contender_id);
+  const reason_code = d1String(row.reason_code);
+  const claim_idempotency_key = d1String(row.claim_idempotency_key);
+  const budget_minor_before = d1String(row.budget_minor_before);
+  const budget_minor_after = d1String(row.budget_minor_after);
+  const route_reason_codes_json = d1String(row.route_reason_codes_json);
+  const metadata_json = d1String(row.metadata_json);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !bounty_id ||
+    !lock_id ||
+    !loop_id ||
+    !claim_status ||
+    !reason_code ||
+    !claim_idempotency_key ||
+    !budget_minor_before ||
+    !budget_minor_after ||
+    !route_reason_codes_json ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  if (claim_status !== 'processing' && claim_status !== 'claimed' && claim_status !== 'skipped' && claim_status !== 'failed') {
+    return null;
+  }
+
+  return {
+    bounty_id,
+    lock_id,
+    loop_id,
+    claim_status,
+    worker_did,
+    contender_id,
+    reason_code,
+    claim_idempotency_key,
+    budget_minor_before,
+    budget_minor_after,
+    route_reason_codes_json,
+    metadata_json,
+    created_at,
+    updated_at,
+  };
+}
+
+async function getArenaAutoClaimLockByBountyId(
+  db: D1Database,
+  bountyId: string,
+): Promise<ArenaAutoClaimLockRecord | null> {
+  const row = await db
+    .prepare('SELECT * FROM bounty_arena_auto_claim_locks WHERE bounty_id = ? LIMIT 1')
+    .bind(bountyId)
+    .first();
+
+  return parseArenaAutoClaimLockRow(row);
+}
+
+async function listArenaAutoClaimLocks(
+  db: D1Database,
+  params: {
+    limit: number;
+    claimStatus?: ArenaAutoClaimLockRecord['claim_status'] | null;
+  },
+): Promise<ArenaAutoClaimLockRecord[]> {
+  let sql = 'SELECT * FROM bounty_arena_auto_claim_locks';
+  const binds: Array<string | number> = [];
+
+  if (params.claimStatus) {
+    sql += ' WHERE claim_status = ?';
+    binds.push(params.claimStatus);
+  }
+
+  sql += ' ORDER BY updated_at DESC, created_at DESC LIMIT ?';
+  binds.push(params.limit);
+
+  const rows = await db.prepare(sql).bind(...binds).all<Record<string, unknown>>();
+  const out: ArenaAutoClaimLockRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaAutoClaimLockRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
+async function tryInsertArenaAutoClaimProcessingLock(
+  db: D1Database,
+  lock: ArenaAutoClaimLockRecord,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `INSERT OR IGNORE INTO bounty_arena_auto_claim_locks (
+        bounty_id,
+        lock_id,
+        loop_id,
+        claim_status,
+        worker_did,
+        contender_id,
+        reason_code,
+        claim_idempotency_key,
+        budget_minor_before,
+        budget_minor_after,
+        route_reason_codes_json,
+        metadata_json,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      lock.bounty_id,
+      lock.lock_id,
+      lock.loop_id,
+      lock.claim_status,
+      lock.worker_did,
+      lock.contender_id,
+      lock.reason_code,
+      lock.claim_idempotency_key,
+      lock.budget_minor_before,
+      lock.budget_minor_after,
+      lock.route_reason_codes_json,
+      lock.metadata_json,
+      lock.created_at,
+      lock.updated_at,
+    )
+    .run();
+
+  return Boolean(result?.meta?.changes && result.meta.changes > 0);
+}
+
+async function finalizeArenaAutoClaimLock(
+  db: D1Database,
+  params: {
+    bountyId: string;
+    claimStatus: ArenaAutoClaimLockRecord['claim_status'];
+    workerDid: string | null;
+    contenderId: string | null;
+    reasonCode: string;
+    budgetMinorAfter: string;
+    routeReasonCodes: string[];
+    metadataJson: string | null;
+    now: string;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE bounty_arena_auto_claim_locks
+          SET claim_status = ?,
+              worker_did = ?,
+              contender_id = ?,
+              reason_code = ?,
+              budget_minor_after = ?,
+              route_reason_codes_json = ?,
+              metadata_json = ?,
+              updated_at = ?
+        WHERE bounty_id = ?`
+    )
+    .bind(
+      params.claimStatus,
+      params.workerDid,
+      params.contenderId,
+      params.reasonCode,
+      params.budgetMinorAfter,
+      stableStringify(params.routeReasonCodes),
+      params.metadataJson,
+      params.now,
+      params.bountyId,
+    )
+    .run();
 }
 
 function parseArenaRoutePolicyOptimizerStateRow(row: unknown): ArenaRoutePolicyOptimizerStateRecord | null {
@@ -17485,6 +17700,572 @@ async function handlePostArenaFleetMatch(
   return jsonResponse(payload, 200, version);
 }
 
+function parseArenaAutoClaimLockStatus(raw: unknown): ArenaAutoClaimLockRecord['claim_status'] | null {
+  if (raw === 'processing' || raw === 'claimed' || raw === 'skipped' || raw === 'failed') {
+    return raw;
+  }
+
+  return null;
+}
+
+function mapArenaAutoClaimFailureReason(message: string): string {
+  if (message.includes('ESCROW_FAILED:409')) return 'ARENA_AUTOCLAIM_ESCROW_CONFLICT';
+  if (message.includes('ESCROW_FAILED:401')) return 'ARENA_AUTOCLAIM_ESCROW_UNAUTHORIZED';
+  if (message.includes('ESCROW_SERVICE_KEY_NOT_CONFIGURED')) return 'ARENA_AUTOCLAIM_ESCROW_NOT_CONFIGURED';
+  if (message.includes('BOUNTY_ACCEPT_STATE_MISMATCH')) return 'ARENA_AUTOCLAIM_STATE_MISMATCH';
+  return 'ARENA_AUTOCLAIM_CLAIM_FAILED';
+}
+
+async function resolveArenaAutoClaimRouteSelection(
+  env: Env,
+  version: string,
+  params: {
+    bounty: BountyV2;
+    objectiveProfileName: string | null;
+    maxFleetCostTier: ArenaFleetCostTier | null;
+    maxFleetRiskTier: ArenaFleetRiskTier | null;
+    allowRouteFallback: boolean;
+  },
+): Promise<{
+  source: 'route' | 'fleet_fallback' | 'none';
+  contenderId: string | null;
+  workerDid: string | null;
+  routeReasonCodes: string[];
+  fleetStatus: string;
+}> {
+  const objectiveFromBounty = buildLiveArenaObjectiveProfile(params.bounty);
+  const objectiveProfileName = params.objectiveProfileName ?? d1String(objectiveFromBounty.name)?.trim() ?? null;
+  const requiredSkills = params.bounty.tags.slice(0, 6).map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0);
+  const requiredTools = ['bash'];
+
+  let contenderId: string | null = null;
+  let contenderHarness: string | null = null;
+  let routeReasonCodes: string[] = [];
+
+  if (env.BOUNTIES_ADMIN_KEY && env.BOUNTIES_ADMIN_KEY.trim().length > 0) {
+    const routeBody = {
+      task_fingerprint: deriveLiveArenaTaskFingerprint(params.bounty),
+      objective_profile_name: objectiveProfileName ?? undefined,
+      required_skills: requiredSkills,
+      required_tools: requiredTools,
+      max_fleet_cost_tier: params.maxFleetCostTier ?? undefined,
+      max_fleet_risk_tier: params.maxFleetRiskTier ?? undefined,
+      allow_fallback: true,
+      require_hard_gate_pass: true,
+      use_active_policy: true,
+    };
+
+    const internalRouteRequest = new Request('https://internal/v1/arena/manager/route', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-admin-key': env.BOUNTIES_ADMIN_KEY,
+      },
+      body: stableStringify(routeBody),
+    });
+
+    const routeResponse = await handleArenaManagerRoute(internalRouteRequest, env, version, 'route');
+    if (routeResponse.status === 200) {
+      const routePayload = await routeResponse.json();
+      if (isRecord(routePayload)) {
+        const recommended = isRecord(routePayload.recommended) ? routePayload.recommended : null;
+        const contenderSnapshot = recommended && isRecord(recommended.contender_snapshot) ? recommended.contender_snapshot : null;
+        contenderId = d1String(recommended?.contender_id)?.trim() ?? null;
+        contenderHarness = d1String(contenderSnapshot?.harness)?.trim() ?? null;
+
+        const reasonCodes = parseStringList(routePayload.reason_codes, 120, 160, true);
+        routeReasonCodes = reasonCodes ?? [];
+
+        const fleetMatch = isRecord(routePayload.fleet_match) ? routePayload.fleet_match : null;
+        const candidates = Array.isArray(fleetMatch?.candidates) ? fleetMatch.candidates : [];
+        for (const candidate of candidates) {
+          if (!isRecord(candidate)) continue;
+          const workerDid = d1String(candidate.worker_did)?.trim() ?? null;
+          if (!workerDid) continue;
+          return {
+            source: 'route',
+            contenderId,
+            workerDid,
+            routeReasonCodes,
+            fleetStatus: d1String(fleetMatch?.status) ?? 'matched',
+          };
+        }
+      }
+    } else {
+      routeReasonCodes = ['ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE'];
+    }
+  } else {
+    routeReasonCodes = ['ARENA_AUTOCLAIM_ADMIN_KEY_UNAVAILABLE'];
+  }
+
+  if (!params.allowRouteFallback) {
+    return {
+      source: 'none',
+      contenderId,
+      workerDid: null,
+      routeReasonCodes,
+      fleetStatus: 'unmatched',
+    };
+  }
+
+  const fallbackMatch = await computeArenaFleetCapabilityMatch(env.BOUNTIES_DB, {
+    objectiveProfileName,
+    harness: contenderHarness,
+    contenderId,
+    requiredSkills,
+    requiredTools,
+    maxCostTier: params.maxFleetCostTier,
+    maxRiskTier: params.maxFleetRiskTier,
+    limit: 3,
+  });
+
+  const fallbackStatus = d1String(fallbackMatch.status) ?? 'unmatched';
+  const fallbackReasonCodes = parseStringList(fallbackMatch.reason_codes, 120, 160, true) ?? [];
+  const fallbackCandidatesRaw = Array.isArray(fallbackMatch.candidates) ? fallbackMatch.candidates : [];
+  let fallbackWorker: string | null = null;
+  for (const candidate of fallbackCandidatesRaw) {
+    if (!isRecord(candidate)) continue;
+    const workerDid = d1String(candidate.worker_did)?.trim() ?? null;
+    if (!workerDid) continue;
+    fallbackWorker = workerDid;
+    break;
+  }
+
+  if (fallbackWorker) {
+    return {
+      source: 'fleet_fallback',
+      contenderId,
+      workerDid: fallbackWorker,
+      routeReasonCodes: [...routeReasonCodes, ...fallbackReasonCodes, 'ARENA_AUTOCLAIM_FLEET_FALLBACK'],
+      fleetStatus: fallbackStatus,
+    };
+  }
+
+  return {
+    source: 'none',
+    contenderId,
+    workerDid: null,
+    routeReasonCodes: [...routeReasonCodes, ...fallbackReasonCodes, 'ARENA_AUTOCLAIM_NO_ELIGIBLE_WORKER'],
+    fleetStatus: fallbackStatus,
+  };
+}
+
+async function handleGetArenaDeskClaimLocks(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const url = new URL(request.url);
+  const limitRaw = d1String(url.searchParams.get('limit'))?.trim();
+  let limit = 50;
+  if (limitRaw) {
+    const parsed = Number.parseInt(limitRaw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 200);
+  }
+
+  const statusRaw = d1String(url.searchParams.get('status'))?.trim() ?? null;
+  const claimStatus = statusRaw ? parseArenaAutoClaimLockStatus(statusRaw) : null;
+  if (statusRaw && !claimStatus) {
+    return errorResponse('INVALID_REQUEST', 'status must be processing|claimed|skipped|failed', 400, { field: 'status' }, version);
+  }
+
+  const rows = await listArenaAutoClaimLocks(env.BOUNTIES_DB, {
+    limit,
+    claimStatus,
+  });
+
+  const totals = {
+    processing: 0,
+    claimed: 0,
+    skipped: 0,
+    failed: 0,
+  };
+
+  for (const row of rows) {
+    totals[row.claim_status] += 1;
+  }
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_auto_claim_locks.v1',
+      computed_at: new Date().toISOString(),
+      filters: {
+        status: claimStatus,
+        limit,
+      },
+      totals,
+      locks: rows.map((row) => ({
+        bounty_id: row.bounty_id,
+        lock_id: row.lock_id,
+        loop_id: row.loop_id,
+        claim_status: row.claim_status,
+        worker_did: row.worker_did,
+        contender_id: row.contender_id,
+        reason_code: row.reason_code,
+        claim_idempotency_key: row.claim_idempotency_key,
+        budget_minor_before: row.budget_minor_before,
+        budget_minor_after: row.budget_minor_after,
+        route_reason_codes: parseJsonStringArray(row.route_reason_codes_json) ?? [],
+        metadata: row.metadata_json ? parseJsonObject(row.metadata_json) : null,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      })),
+    },
+    200,
+    version,
+  );
+}
+
+async function handlePostArenaDeskClaimLoop(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const limitRaw = d1Number(body.limit);
+  let limit = 20;
+  if (limitRaw !== null) {
+    if (!Number.isInteger(limitRaw) || limitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(limitRaw, 120);
+  }
+
+  const targetClaimsRaw = d1Number(body.target_claims);
+  let targetClaims = Math.min(limit, 20);
+  if (targetClaimsRaw !== null) {
+    if (!Number.isInteger(targetClaimsRaw) || targetClaimsRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'target_claims must be a positive integer', 400, { field: 'target_claims' }, version);
+    }
+    targetClaims = Math.min(targetClaimsRaw, limit);
+  }
+
+  const budgetMinorRaw = d1String(body.budget_minor)?.trim() ?? '1000000';
+  const budgetMinor = parsePositiveMinor(budgetMinorRaw);
+  if (budgetMinor === null) {
+    return errorResponse('INVALID_REQUEST', 'budget_minor must be a positive integer string', 400, { field: 'budget_minor' }, version);
+  }
+
+  const maxFleetCostTier = body.max_fleet_cost_tier === undefined || body.max_fleet_cost_tier === null
+    ? null
+    : parseArenaFleetCostTier(body.max_fleet_cost_tier);
+  const maxFleetRiskTier = body.max_fleet_risk_tier === undefined || body.max_fleet_risk_tier === null
+    ? null
+    : parseArenaFleetRiskTier(body.max_fleet_risk_tier);
+
+  if (body.max_fleet_cost_tier !== undefined && body.max_fleet_cost_tier !== null && !maxFleetCostTier) {
+    return errorResponse('INVALID_REQUEST', 'max_fleet_cost_tier must be low|medium|high', 400, { field: 'max_fleet_cost_tier' }, version);
+  }
+
+  if (body.max_fleet_risk_tier !== undefined && body.max_fleet_risk_tier !== null && !maxFleetRiskTier) {
+    return errorResponse('INVALID_REQUEST', 'max_fleet_risk_tier must be low|medium|high', 400, { field: 'max_fleet_risk_tier' }, version);
+  }
+
+  const objectiveProfileName = d1String(body.objective_profile_name)?.trim() ?? null;
+  const allowRouteFallback = body.allow_route_fallback !== false;
+  const includeCodeBounties = body.include_code_bounties === true;
+  const dryRun = body.dry_run === true;
+
+  const loopIdRaw = d1String(body.loop_id)?.trim() ?? null;
+  const loopId = loopIdRaw && loopIdRaw.length <= 120
+    ? loopIdRaw
+    : `arena_autoclaim_${crypto.randomUUID().replace(/-/g, '')}`;
+
+  const scanLimit = Math.min(Math.max(limit * 8, targetClaims * 10), 300);
+  const openBounties = await listBounties(
+    env.BOUNTIES_DB,
+    includeCodeBounties ? { status: 'open' } : { status: 'open', is_code_bounty: false },
+    scanLimit,
+  );
+
+  let remainingBudgetMinor = budgetMinor;
+  let claimedCount = 0;
+  let duplicateLockIncidents = 0;
+  const decisions: Array<Record<string, unknown>> = [];
+
+  for (const bountyItem of openBounties) {
+    if (decisions.length >= limit) break;
+    if (claimedCount >= targetClaims) break;
+
+    const bounty = await getBountyById(env.BOUNTIES_DB, bountyItem.bounty_id);
+    if (!bounty) continue;
+
+    const rewardMinor = parsePositiveMinor(bounty.reward.amount_minor);
+    if (rewardMinor === null) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_INVALID_REWARD',
+      });
+      continue;
+    }
+
+    if (bounty.status !== 'open' || bounty.worker_did !== null) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_NOT_OPEN',
+      });
+      continue;
+    }
+
+    const budgetBefore = remainingBudgetMinor.toString();
+    if (rewardMinor > remainingBudgetMinor) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_BUDGET_EXCEEDED',
+        reward_amount_minor: bounty.reward.amount_minor,
+        budget_minor_before: budgetBefore,
+      });
+      continue;
+    }
+
+    const bountyCostTier = inferArenaBountyCostTier(bounty.reward.amount_minor);
+    const bountyRiskTier = inferArenaBountyRiskTier(bounty);
+
+    if (maxFleetCostTier && arenaFleetTierRank(bountyCostTier) > arenaFleetTierRank(maxFleetCostTier)) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_COST_GUARD',
+        bounty_cost_tier: bountyCostTier,
+      });
+      continue;
+    }
+
+    if (maxFleetRiskTier && arenaFleetTierRank(bountyRiskTier) > arenaFleetTierRank(maxFleetRiskTier)) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_RISK_GUARD',
+        bounty_risk_tier: bountyRiskTier,
+      });
+      continue;
+    }
+
+    const routeSelection = await resolveArenaAutoClaimRouteSelection(env, version, {
+      bounty,
+      objectiveProfileName,
+      maxFleetCostTier,
+      maxFleetRiskTier,
+      allowRouteFallback,
+    });
+
+    if (!routeSelection.workerDid) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_NO_ELIGIBLE_WORKER',
+        route_reason_codes: routeSelection.routeReasonCodes,
+      });
+      continue;
+    }
+
+    const requestedWorkerDid = d1String(bounty.metadata.requested_worker_did)?.trim() ?? null;
+    if (requestedWorkerDid && requestedWorkerDid !== routeSelection.workerDid) {
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_REQUESTED_WORKER_MISMATCH',
+        requested_worker_did: requestedWorkerDid,
+        selected_worker_did: routeSelection.workerDid,
+      });
+      continue;
+    }
+
+    const claimIdempotencyKey = `arena-autoclaim:${bounty.bounty_id}`;
+    const lockNow = new Date().toISOString();
+    const lock: ArenaAutoClaimLockRecord = {
+      bounty_id: bounty.bounty_id,
+      lock_id: `aclk_${crypto.randomUUID().replace(/-/g, '')}`,
+      loop_id: loopId,
+      claim_status: 'processing',
+      worker_did: null,
+      contender_id: routeSelection.contenderId,
+      reason_code: 'ARENA_AUTOCLAIM_PROCESSING',
+      claim_idempotency_key: claimIdempotencyKey,
+      budget_minor_before: budgetBefore,
+      budget_minor_after: budgetBefore,
+      route_reason_codes_json: stableStringify(routeSelection.routeReasonCodes),
+      metadata_json: stableStringify({
+        source: routeSelection.source,
+        fleet_status: routeSelection.fleetStatus,
+      }),
+      created_at: lockNow,
+      updated_at: lockNow,
+    };
+
+    const acquired = await tryInsertArenaAutoClaimProcessingLock(env.BOUNTIES_DB, lock);
+    if (!acquired) {
+      duplicateLockIncidents += 1;
+      const existing = await getArenaAutoClaimLockByBountyId(env.BOUNTIES_DB, bounty.bounty_id);
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'replay',
+        reason_code: existing?.reason_code ?? 'ARENA_AUTOCLAIM_LOCK_EXISTS',
+        existing_claim_status: existing?.claim_status ?? null,
+      });
+      continue;
+    }
+
+    const currentBounty = await getBountyById(env.BOUNTIES_DB, bounty.bounty_id);
+    if (!currentBounty || currentBounty.status !== 'open' || currentBounty.worker_did !== null) {
+      await finalizeArenaAutoClaimLock(env.BOUNTIES_DB, {
+        bountyId: bounty.bounty_id,
+        claimStatus: 'skipped',
+        workerDid: routeSelection.workerDid,
+        contenderId: routeSelection.contenderId,
+        reasonCode: 'ARENA_AUTOCLAIM_RACE_NOT_OPEN',
+        budgetMinorAfter: budgetBefore,
+        routeReasonCodes: routeSelection.routeReasonCodes,
+        metadataJson: stableStringify({ source: routeSelection.source, fleet_status: routeSelection.fleetStatus }),
+        now: new Date().toISOString(),
+      });
+
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_RACE_NOT_OPEN',
+      });
+      continue;
+    }
+
+    if (dryRun) {
+      await finalizeArenaAutoClaimLock(env.BOUNTIES_DB, {
+        bountyId: bounty.bounty_id,
+        claimStatus: 'skipped',
+        workerDid: routeSelection.workerDid,
+        contenderId: routeSelection.contenderId,
+        reasonCode: 'ARENA_AUTOCLAIM_DRY_RUN',
+        budgetMinorAfter: budgetBefore,
+        routeReasonCodes: routeSelection.routeReasonCodes,
+        metadataJson: stableStringify({ source: routeSelection.source, fleet_status: routeSelection.fleetStatus }),
+        now: new Date().toISOString(),
+      });
+
+      decisions.push({
+        bounty_id: bounty.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_AUTOCLAIM_DRY_RUN',
+        selected_worker_did: routeSelection.workerDid,
+      });
+      continue;
+    }
+
+    let finalStatus: ArenaAutoClaimLockRecord['claim_status'] = 'claimed';
+    let finalReason = 'ARENA_AUTOCLAIM_CLAIMED';
+    let claimError: string | null = null;
+
+    try {
+      await escrowAssignWorker(env, {
+        escrow_id: currentBounty.escrow_id,
+        idempotency_key: claimIdempotencyKey,
+        worker_did: routeSelection.workerDid,
+      });
+
+      const acceptedAt = new Date().toISOString();
+      await updateBountyAccepted(env.BOUNTIES_DB, {
+        bounty_id: currentBounty.bounty_id,
+        worker_did: routeSelection.workerDid,
+        accepted_at: acceptedAt,
+        idempotency_key: claimIdempotencyKey,
+        cwc_worker_envelope_json: null,
+        cwc_token_scope_hash_b64u: null,
+        job_token_scope_hash_b64u: null,
+        now: acceptedAt,
+      });
+
+      const updated = await getBountyById(env.BOUNTIES_DB, currentBounty.bounty_id);
+      if (!updated || updated.status !== 'accepted' || updated.worker_did !== routeSelection.workerDid) {
+        throw new Error('BOUNTY_ACCEPT_STATE_MISMATCH');
+      }
+
+      remainingBudgetMinor -= rewardMinor;
+      claimedCount += 1;
+    } catch (err) {
+      finalStatus = 'failed';
+      claimError = err instanceof Error ? err.message : 'Unknown error';
+      finalReason = mapArenaAutoClaimFailureReason(claimError);
+    }
+
+    await finalizeArenaAutoClaimLock(env.BOUNTIES_DB, {
+      bountyId: bounty.bounty_id,
+      claimStatus: finalStatus,
+      workerDid: routeSelection.workerDid,
+      contenderId: routeSelection.contenderId,
+      reasonCode: finalReason,
+      budgetMinorAfter: remainingBudgetMinor.toString(),
+      routeReasonCodes: routeSelection.routeReasonCodes,
+      metadataJson: stableStringify({
+        source: routeSelection.source,
+        fleet_status: routeSelection.fleetStatus,
+        claim_error: claimError,
+      }),
+      now: new Date().toISOString(),
+    });
+
+    decisions.push({
+      bounty_id: bounty.bounty_id,
+      status: finalStatus,
+      reason_code: finalReason,
+      contender_id: routeSelection.contenderId,
+      selected_worker_did: routeSelection.workerDid,
+      route_reason_codes: routeSelection.routeReasonCodes,
+      source: routeSelection.source,
+      reward_amount_minor: bounty.reward.amount_minor,
+      budget_minor_before: budgetBefore,
+      budget_minor_after: remainingBudgetMinor.toString(),
+      error: claimError,
+    });
+  }
+
+  const summary = {
+    schema_version: 'arena_auto_claim_loop.v1',
+    loop_id: loopId,
+    generated_at: new Date().toISOString(),
+    dry_run: dryRun,
+    objective_profile_name: objectiveProfileName,
+    limits: {
+      limit,
+      target_claims: targetClaims,
+      scan_limit: scanLimit,
+      budget_minor: budgetMinor.toString(),
+      max_fleet_cost_tier: maxFleetCostTier,
+      max_fleet_risk_tier: maxFleetRiskTier,
+      include_code_bounties: includeCodeBounties,
+      allow_route_fallback: allowRouteFallback,
+    },
+    totals: {
+      scanned_open_bounties: openBounties.length,
+      decisions: decisions.length,
+      claimed: claimedCount,
+      failed: decisions.filter((entry) => entry.status === 'failed').length,
+      skipped: decisions.filter((entry) => entry.status === 'skipped').length,
+      replay: decisions.filter((entry) => entry.status === 'replay').length,
+      duplicate_lock_incidents: duplicateLockIncidents,
+      budget_minor_remaining: remainingBudgetMinor.toString(),
+      target_met: claimedCount >= targetClaims,
+    },
+    decisions,
+  };
+
+  return jsonResponse(summary, 200, version);
+}
+
 async function handleGetArenaPolicyOptimizer(
   request: Request,
   url: URL,
@@ -19202,6 +19983,14 @@ export default {
 
       if (path === '/v1/arena/manager/coach' && method === 'POST') {
         return handleArenaManagerRoute(request, env, version, 'coach');
+      }
+
+      if (path === '/v1/arena/desk/claims' && method === 'GET') {
+        return handleGetArenaDeskClaimLocks(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/claim-loop' && method === 'POST') {
+        return handlePostArenaDeskClaimLoop(request, env, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {

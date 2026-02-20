@@ -1,0 +1,12 @@
+{
+  "schema_version": "arena_auto_claim_loop_config.v1",
+  "limit": 50,
+  "target_claims": 10,
+  "budget_minor": "900000",
+  "objective_profile_name": "balanced",
+  "max_fleet_cost_tier": "high",
+  "max_fleet_risk_tier": "high",
+  "allow_route_fallback": true,
+  "include_code_bounties": false,
+  "dry_run": false
+}
