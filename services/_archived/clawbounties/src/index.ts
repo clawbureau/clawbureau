@@ -560,6 +560,27 @@ interface ArenaContractLanguageSuggestionRecord {
   updated_at: string;
 }
 
+interface ArenaContractCopilotSuggestionRecord {
+  suggestion_id: string;
+  task_fingerprint: string;
+  scope: 'global' | 'contender';
+  contender_id: string;
+  reason_code: ArenaOverrideReasonCode;
+  before_text: string;
+  after_text: string;
+  rationale: string;
+  confidence: number;
+  expected_override_reduction: number;
+  expected_rework_reduction: number;
+  evidence_count: number;
+  arena_count: number;
+  outcome_count: number;
+  source_evidence_json: string;
+  computed_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface ArenaRoutePolicyOptimizerStateRecord {
   state_id: string;
   task_fingerprint: string;
@@ -7460,6 +7481,235 @@ async function replaceArenaContractLanguageSuggestions(
         suggestion.prompt_language_patch,
         suggestion.sample_notes_json,
         suggestion.tags_json,
+        suggestion.computed_at,
+        suggestion.created_at,
+        suggestion.updated_at,
+      )
+      .run();
+  }
+}
+
+function parseArenaContractCopilotSourceEvidence(
+  input: string,
+): Array<{
+  arena_id: string;
+  outcome_id: string;
+  contender_id: string;
+  criterion_id: string;
+  reason_code: ArenaOverrideReasonCode;
+}> {
+  try {
+    const parsed = JSON.parse(input);
+    if (!Array.isArray(parsed)) return [];
+
+    const entries = parsed
+      .map((entry) => {
+        if (!isRecord(entry)) return null;
+        const arena_id = d1String(entry.arena_id)?.trim();
+        const outcome_id = d1String(entry.outcome_id)?.trim();
+        const contender_id = d1String(entry.contender_id)?.trim();
+        const criterion_id = d1String(entry.criterion_id)?.trim();
+        const reason_code_raw = d1String(entry.reason_code);
+        const reason_code = normalizeArenaOverrideReasonCode(reason_code_raw);
+
+        if (!arena_id || !outcome_id || !contender_id || !criterion_id || !reason_code) {
+          return null;
+        }
+
+        return {
+          arena_id,
+          outcome_id,
+          contender_id,
+          criterion_id,
+          reason_code,
+        };
+      })
+      .filter((entry): entry is {
+        arena_id: string;
+        outcome_id: string;
+        contender_id: string;
+        criterion_id: string;
+        reason_code: ArenaOverrideReasonCode;
+      } => entry !== null);
+
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+function parseArenaContractCopilotSuggestionRow(row: unknown): ArenaContractCopilotSuggestionRecord | null {
+  if (!isRecord(row)) return null;
+
+  const suggestion_id = d1String(row.suggestion_id);
+  const task_fingerprint = d1String(row.task_fingerprint);
+  const scope = d1String(row.scope);
+  const contender_id = d1String(row.contender_id);
+  const reason_code_raw = d1String(row.reason_code);
+  const before_text = d1String(row.before_text);
+  const after_text = d1String(row.after_text);
+  const rationale = d1String(row.rationale);
+  const confidence = d1Number(row.confidence);
+  const expected_override_reduction = d1Number(row.expected_override_reduction);
+  const expected_rework_reduction = d1Number(row.expected_rework_reduction);
+  const evidence_count = d1Number(row.evidence_count);
+  const arena_count = d1Number(row.arena_count);
+  const outcome_count = d1Number(row.outcome_count);
+  const source_evidence_json = d1String(row.source_evidence_json);
+  const computed_at = d1String(row.computed_at);
+  const created_at = d1String(row.created_at);
+  const updated_at = d1String(row.updated_at);
+
+  if (
+    !suggestion_id ||
+    !task_fingerprint ||
+    !scope ||
+    contender_id === null ||
+    !reason_code_raw ||
+    !before_text ||
+    !after_text ||
+    !rationale ||
+    confidence === null ||
+    expected_override_reduction === null ||
+    expected_rework_reduction === null ||
+    evidence_count === null ||
+    arena_count === null ||
+    outcome_count === null ||
+    !source_evidence_json ||
+    !computed_at ||
+    !created_at ||
+    !updated_at
+  ) {
+    return null;
+  }
+
+  if (scope !== 'global' && scope !== 'contender') return null;
+
+  const reason_code = normalizeArenaOverrideReasonCode(reason_code_raw);
+  if (!reason_code) return null;
+
+  if (parseArenaContractCopilotSourceEvidence(source_evidence_json).length === 0) {
+    return null;
+  }
+
+  return {
+    suggestion_id,
+    task_fingerprint,
+    scope,
+    contender_id,
+    reason_code,
+    before_text,
+    after_text,
+    rationale,
+    confidence,
+    expected_override_reduction,
+    expected_rework_reduction,
+    evidence_count,
+    arena_count,
+    outcome_count,
+    source_evidence_json,
+    computed_at,
+    created_at,
+    updated_at,
+  };
+}
+
+async function listArenaContractCopilotSuggestions(
+  db: D1Database,
+  params: {
+    taskFingerprint?: string | null;
+    contenderId?: string | null;
+    limit: number;
+  },
+): Promise<ArenaContractCopilotSuggestionRecord[]> {
+  const taskFingerprint = params.taskFingerprint?.trim() ?? null;
+  const contenderId = params.contenderId?.trim() ?? null;
+
+  let sql = 'SELECT * FROM bounty_arena_contract_copilot_suggestions';
+  const binds: Array<string | number> = [];
+  const where: string[] = [];
+
+  if (taskFingerprint) {
+    where.push('task_fingerprint = ?');
+    binds.push(taskFingerprint);
+  }
+
+  if (contenderId) {
+    where.push('contender_id = ?');
+    binds.push(contenderId);
+  }
+
+  if (where.length > 0) {
+    sql += ` WHERE ${where.join(' AND ')}`;
+  }
+
+  sql += ' ORDER BY confidence DESC, evidence_count DESC, updated_at DESC, suggestion_id ASC LIMIT ?';
+  binds.push(params.limit);
+
+  const rows = await db
+    .prepare(sql)
+    .bind(...binds)
+    .all<Record<string, unknown>>();
+
+  const out: ArenaContractCopilotSuggestionRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaContractCopilotSuggestionRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
+async function replaceArenaContractCopilotSuggestions(
+  db: D1Database,
+  taskFingerprint: string,
+  suggestions: ArenaContractCopilotSuggestionRecord[],
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM bounty_arena_contract_copilot_suggestions WHERE task_fingerprint = ?')
+    .bind(taskFingerprint)
+    .run();
+
+  for (const suggestion of suggestions) {
+    await db
+      .prepare(
+        `INSERT INTO bounty_arena_contract_copilot_suggestions (
+          suggestion_id,
+          task_fingerprint,
+          scope,
+          contender_id,
+          reason_code,
+          before_text,
+          after_text,
+          rationale,
+          confidence,
+          expected_override_reduction,
+          expected_rework_reduction,
+          evidence_count,
+          arena_count,
+          outcome_count,
+          source_evidence_json,
+          computed_at,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        suggestion.suggestion_id,
+        suggestion.task_fingerprint,
+        suggestion.scope,
+        suggestion.contender_id,
+        suggestion.reason_code,
+        suggestion.before_text,
+        suggestion.after_text,
+        suggestion.rationale,
+        suggestion.confidence,
+        suggestion.expected_override_reduction,
+        suggestion.expected_rework_reduction,
+        suggestion.evidence_count,
+        suggestion.arena_count,
+        suggestion.outcome_count,
+        suggestion.source_evidence_json,
         suggestion.computed_at,
         suggestion.created_at,
         suggestion.updated_at,
@@ -14945,6 +15195,7 @@ async function handleGetArena(
     run,
     env.ENVIRONMENT?.trim().toLowerCase() ?? 'production',
   );
+  const contractCopilot = await buildArenaContractCopilotPreview(env.BOUNTIES_DB, run.task_fingerprint);
   const contractLanguageOptimizer = await buildArenaContractLanguageOptimizerPreview(env.BOUNTIES_DB, run.task_fingerprint);
 
   return jsonResponse(
@@ -14955,6 +15206,7 @@ async function handleGetArena(
       calibration,
       autopilot,
       policy_optimizer: policyOptimizer,
+      contract_copilot: contractCopilot,
       contract_language_optimizer: contractLanguageOptimizer,
     },
     200,
@@ -15476,6 +15728,636 @@ async function computeAndPersistArenaContractLanguageOptimizer(
       mode: 'replace_by_task_fingerprint',
     },
   };
+}
+
+function deriveArenaContractCopilotCriterionId(
+  row: ArenaOutcomeRecord,
+  reasonCode: ArenaOverrideReasonCode,
+): string {
+  const decisionTaxonomyTags = parseJsonStringArray(row.decision_taxonomy_json) ?? [];
+  const metadata = parseArenaOutcomeMetadata(row.metadata_json);
+
+  const candidateTags = dedupeStrings([
+    ...decisionTaxonomyTags,
+    ...metadata.calibration_signal_tags,
+  ]);
+
+  for (const tag of candidateTags) {
+    const trimmed = tag.trim().toLowerCase();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith('criterion:')) {
+      const criterion = trimmed.slice('criterion:'.length).trim();
+      if (criterion) return criterion;
+    }
+
+    if (trimmed.startsWith('ac_')) {
+      return trimmed;
+    }
+  }
+
+  if (reasonCode === 'ARENA_OVERRIDE_SCOPE_MISMATCH') return 'scope_alignment';
+  if (reasonCode === 'ARENA_OVERRIDE_TEST_FAILURE') return 'test_coverage';
+  if (reasonCode === 'ARENA_OVERRIDE_POLICY_RISK') return 'policy_risk_guardrail';
+  if (reasonCode === 'ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT') return 'human_context_capture';
+
+  return 'acceptance_checklist';
+}
+
+function buildArenaContractCopilotBeforeText(params: {
+  reasonCode: ArenaOverrideReasonCode;
+  criterionId: string;
+  evidenceCount: number;
+  overrides: number;
+  reworks: number;
+}): string {
+  const criterion = params.criterionId.replace(/_/g, ' ');
+  return [
+    `Current contract language under-specifies ${criterion}, creating reviewer friction.`,
+    `Observed ${params.evidenceCount} real failure outcomes (overrides=${params.overrides}, reworks=${params.reworks}) linked to ${params.reasonCode}.`,
+    'Failure mode: checklist and acceptance boundaries are ambiguous at review time.',
+  ].join(' ');
+}
+
+function buildArenaContractCopilotAfterText(params: {
+  reasonCode: ArenaOverrideReasonCode;
+  criterionId: string;
+}): string {
+  const reasonInfo = ARENA_OVERRIDE_REASON_REGISTRY[params.reasonCode];
+  const criterion = params.criterionId.replace(/_/g, ' ');
+
+  return [
+    `Add explicit acceptance criterion "${criterion}" with pass/fail evidence requirements and fail-closed escalation.`,
+    `Rewrite guidance: ${reasonInfo.contract_rewrite}`,
+    'Require worker output to quote criterion IDs and attach evidence for each mandatory check.',
+  ].join(' ');
+}
+
+function buildArenaContractCopilotRationale(params: {
+  reasonCode: ArenaOverrideReasonCode;
+  evidenceCount: number;
+  arenaCount: number;
+  overrides: number;
+  reworks: number;
+}): string {
+  const reasonInfo = ARENA_OVERRIDE_REASON_REGISTRY[params.reasonCode];
+  return [
+    `Pattern repeated across ${params.arenaCount} arenas and ${params.evidenceCount} outcomes.`,
+    `Observed overrides=${params.overrides}, reworks=${params.reworks}.`,
+    `Root-cause rewrite target: ${reasonInfo.prompt_rewrite}`,
+  ].join(' ');
+}
+
+function computeArenaContractCopilotConfidence(params: {
+  evidenceCount: number;
+  arenaCount: number;
+  overrideRate: number;
+  reworkRate: number;
+  reasonWeight: number;
+}): number {
+  const coverageScore = Math.min(1, params.evidenceCount / 12);
+  const arenaScore = Math.min(1, params.arenaCount / 5);
+  const severityScore = Math.min(1, params.overrideRate + params.reworkRate);
+
+  const weighted =
+    0.35 +
+    (coverageScore * 0.3) +
+    (arenaScore * 0.2) +
+    (severityScore * 0.1) +
+    (Math.min(1, params.reasonWeight) * 0.05);
+
+  return Number(Math.max(0, Math.min(0.99, weighted)).toFixed(4));
+}
+
+function computeArenaContractCopilotExpectedImpact(params: {
+  confidence: number;
+  overrideRate: number;
+  reworkRate: number;
+}): { expectedOverrideReduction: number; expectedReworkReduction: number } {
+  const expectedOverrideReduction = Number(
+    Math.max(0, Math.min(0.75, params.overrideRate * 0.55 + params.confidence * 0.2)).toFixed(4),
+  );
+  const expectedReworkReduction = Number(
+    Math.max(0, Math.min(0.7, params.reworkRate * 0.5 + params.confidence * 0.18)).toFixed(4),
+  );
+
+  return {
+    expectedOverrideReduction,
+    expectedReworkReduction,
+  };
+}
+
+async function buildArenaContractCopilotSuggestionId(params: {
+  taskFingerprint: string;
+  scope: 'global' | 'contender';
+  contenderId: string;
+  reasonCode: ArenaOverrideReasonCode;
+  criterionId: string;
+}): Promise<string> {
+  const material = stableStringify({
+    task_fingerprint: params.taskFingerprint,
+    scope: params.scope,
+    contender_id: params.contenderId,
+    reason_code: params.reasonCode,
+    criterion_id: params.criterionId,
+  });
+  return `accs_${(await sha256B64uUtf8(material)).slice(0, 32)}`;
+}
+
+function buildArenaContractCopilotSuggestionPayload(
+  suggestion: ArenaContractCopilotSuggestionRecord,
+): Record<string, unknown> {
+  return {
+    suggestion_id: suggestion.suggestion_id,
+    task_fingerprint: suggestion.task_fingerprint,
+    scope: suggestion.scope,
+    contender_id: suggestion.scope === 'global' ? null : suggestion.contender_id,
+    reason_code: suggestion.reason_code,
+    before_text: suggestion.before_text,
+    after_text: suggestion.after_text,
+    rationale: suggestion.rationale,
+    confidence: Number(suggestion.confidence.toFixed(4)),
+    expected_impact: {
+      override_rate_reduction: Number(suggestion.expected_override_reduction.toFixed(4)),
+      rework_rate_reduction: Number(suggestion.expected_rework_reduction.toFixed(4)),
+    },
+    evidence_count: suggestion.evidence_count,
+    arena_count: suggestion.arena_count,
+    outcome_count: suggestion.outcome_count,
+    source_evidence: parseArenaContractCopilotSourceEvidence(suggestion.source_evidence_json),
+    computed_at: suggestion.computed_at,
+  };
+}
+
+async function computeArenaContractCopilot(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    limit: number;
+    minOutcomes: number;
+    minArenas: number;
+    maxSuggestions: number;
+  },
+): Promise<{
+  payload: Record<string, unknown>;
+  suggestions: ArenaContractCopilotSuggestionRecord[];
+}> {
+  const outcomes = await listArenaOutcomes(db, params.limit);
+  const runMap = await buildArenaRunMap(db, outcomes.map((row) => row.arena_id));
+
+  const filtered = outcomes.filter((row) => {
+    const run = runMap.get(row.arena_id);
+    return Boolean(run && run.task_fingerprint === params.taskFingerprint);
+  });
+
+  const uniqueArenaIds = new Set(filtered.map((row) => row.arena_id));
+  const reasonCodes: string[] = [];
+
+  if (filtered.length < params.minOutcomes) {
+    reasonCodes.push('ARENA_CONTRACT_COPILOT_INSUFFICIENT_OUTCOMES');
+  }
+  if (uniqueArenaIds.size < params.minArenas) {
+    reasonCodes.push('ARENA_CONTRACT_COPILOT_INSUFFICIENT_ARENAS');
+  }
+
+  if (reasonCodes.length > 0) {
+    return {
+      payload: {
+        schema_version: 'arena_contract_copilot.v1',
+        status: 'INSUFFICIENT_SAMPLE',
+        computed_at: new Date().toISOString(),
+        task_fingerprint: params.taskFingerprint,
+        minimums: {
+          min_outcomes: params.minOutcomes,
+          min_arenas: params.minArenas,
+        },
+        totals: {
+          outcomes: filtered.length,
+          arenas: uniqueArenaIds.size,
+          failed_outcomes: 0,
+          suggestions: 0,
+        },
+        reason_codes: reasonCodes,
+        suggestions: [],
+      },
+      suggestions: [],
+    };
+  }
+
+  const failed = filtered.filter((row) => isArenaFailedOutcome(row));
+  if (failed.length === 0) {
+    return {
+      payload: {
+        schema_version: 'arena_contract_copilot.v1',
+        status: 'INSUFFICIENT_SAMPLE',
+        computed_at: new Date().toISOString(),
+        task_fingerprint: params.taskFingerprint,
+        minimums: {
+          min_outcomes: params.minOutcomes,
+          min_arenas: params.minArenas,
+        },
+        totals: {
+          outcomes: filtered.length,
+          arenas: uniqueArenaIds.size,
+          failed_outcomes: 0,
+          suggestions: 0,
+        },
+        reason_codes: ['ARENA_CONTRACT_COPILOT_NO_FAILURE_SIGNAL'],
+        suggestions: [],
+      },
+      suggestions: [],
+    };
+  }
+
+  type EvidenceEntry = {
+    arena_id: string;
+    outcome_id: string;
+    contender_id: string;
+    criterion_id: string;
+    reason_code: ArenaOverrideReasonCode;
+    overridden: boolean;
+    rework_required: boolean;
+  };
+
+  type Aggregate = {
+    evidence: EvidenceEntry[];
+    arenaIds: Set<string>;
+    overrides: number;
+    reworks: number;
+    criterionCounts: Map<string, number>;
+  };
+
+  const ensureAggregate = (): Aggregate => ({
+    evidence: [],
+    arenaIds: new Set<string>(),
+    overrides: 0,
+    reworks: 0,
+    criterionCounts: new Map<string, number>(),
+  });
+
+  const globalAggregates = new Map<ArenaOverrideReasonCode, Aggregate>();
+  const contenderAggregates = new Map<string, Map<ArenaOverrideReasonCode, Aggregate>>();
+
+  for (const row of failed) {
+    const reasonCode = deriveArenaContractLanguageReasonCode(row);
+    const criterionId = deriveArenaContractCopilotCriterionId(row, reasonCode);
+
+    const evidence: EvidenceEntry = {
+      arena_id: row.arena_id,
+      outcome_id: row.outcome_id,
+      contender_id: row.contender_id,
+      criterion_id: criterionId,
+      reason_code: reasonCode,
+      overridden: row.overridden,
+      rework_required: row.rework_required,
+    };
+
+    const update = (aggregate: Aggregate) => {
+      aggregate.evidence.push(evidence);
+      aggregate.arenaIds.add(row.arena_id);
+      if (row.overridden) aggregate.overrides += 1;
+      if (row.rework_required) aggregate.reworks += 1;
+      aggregate.criterionCounts.set(criterionId, (aggregate.criterionCounts.get(criterionId) ?? 0) + 1);
+    };
+
+    const global = globalAggregates.get(reasonCode) ?? ensureAggregate();
+    update(global);
+    globalAggregates.set(reasonCode, global);
+
+    const contenderMap = contenderAggregates.get(row.contender_id) ?? new Map<ArenaOverrideReasonCode, Aggregate>();
+    const contenderAggregate = contenderMap.get(reasonCode) ?? ensureAggregate();
+    update(contenderAggregate);
+    contenderMap.set(reasonCode, contenderAggregate);
+    contenderAggregates.set(row.contender_id, contenderMap);
+  }
+
+  const now = new Date().toISOString();
+  const suggestions: ArenaContractCopilotSuggestionRecord[] = [];
+
+  const topCriterionForAggregate = (aggregate: Aggregate): string => {
+    const sorted = [...aggregate.criterionCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    return sorted[0]?.[0] ?? 'acceptance_checklist';
+  };
+
+  const addSuggestion = async (
+    scope: 'global' | 'contender',
+    contenderId: string,
+    reasonCode: ArenaOverrideReasonCode,
+    aggregate: Aggregate,
+  ) => {
+    if (aggregate.evidence.length === 0) return;
+
+    const evidenceCount = aggregate.evidence.length;
+    const arenaCount = aggregate.arenaIds.size;
+    const outcomeCount = evidenceCount;
+    const overrideRate = evidenceCount > 0 ? aggregate.overrides / evidenceCount : 0;
+    const reworkRate = evidenceCount > 0 ? aggregate.reworks / evidenceCount : 0;
+    const criterionId = topCriterionForAggregate(aggregate);
+    const reasonWeight = ARENA_OVERRIDE_REASON_REGISTRY[reasonCode].weight;
+
+    const confidence = computeArenaContractCopilotConfidence({
+      evidenceCount,
+      arenaCount,
+      overrideRate,
+      reworkRate,
+      reasonWeight,
+    });
+
+    const expectedImpact = computeArenaContractCopilotExpectedImpact({
+      confidence,
+      overrideRate,
+      reworkRate,
+    });
+
+    const beforeText = buildArenaContractCopilotBeforeText({
+      reasonCode,
+      criterionId,
+      evidenceCount,
+      overrides: aggregate.overrides,
+      reworks: aggregate.reworks,
+    });
+
+    const afterText = buildArenaContractCopilotAfterText({
+      reasonCode,
+      criterionId,
+    });
+
+    const rationale = buildArenaContractCopilotRationale({
+      reasonCode,
+      evidenceCount,
+      arenaCount,
+      overrides: aggregate.overrides,
+      reworks: aggregate.reworks,
+    });
+
+    suggestions.push({
+      suggestion_id: await buildArenaContractCopilotSuggestionId({
+        taskFingerprint: params.taskFingerprint,
+        scope,
+        contenderId,
+        reasonCode,
+        criterionId,
+      }),
+      task_fingerprint: params.taskFingerprint,
+      scope,
+      contender_id: contenderId,
+      reason_code: reasonCode,
+      before_text: beforeText,
+      after_text: afterText,
+      rationale,
+      confidence,
+      expected_override_reduction: expectedImpact.expectedOverrideReduction,
+      expected_rework_reduction: expectedImpact.expectedReworkReduction,
+      evidence_count: evidenceCount,
+      arena_count: arenaCount,
+      outcome_count: outcomeCount,
+      source_evidence_json: stableStringify(
+        aggregate.evidence
+          .slice(0, 24)
+          .map((entry) => ({
+            arena_id: entry.arena_id,
+            outcome_id: entry.outcome_id,
+            contender_id: entry.contender_id,
+            criterion_id: entry.criterion_id,
+            reason_code: entry.reason_code,
+          })),
+      ),
+      computed_at: now,
+      created_at: now,
+      updated_at: now,
+    });
+  };
+
+  const sortedGlobal = [...globalAggregates.entries()]
+    .sort((a, b) => b[1].evidence.length - a[1].evidence.length || a[0].localeCompare(b[0]))
+    .slice(0, 4);
+
+  for (const [reasonCode, aggregate] of sortedGlobal) {
+    await addSuggestion('global', '__global__', reasonCode, aggregate);
+  }
+
+  const contenderSuggestionCandidates: Array<{
+    contenderId: string;
+    reasonCode: ArenaOverrideReasonCode;
+    aggregate: Aggregate;
+  }> = [];
+
+  for (const [contenderId, reasonMap] of contenderAggregates.entries()) {
+    const topReasons = [...reasonMap.entries()]
+      .sort((a, b) => b[1].evidence.length - a[1].evidence.length || a[0].localeCompare(b[0]))
+      .slice(0, 2);
+
+    for (const [reasonCode, aggregate] of topReasons) {
+      contenderSuggestionCandidates.push({ contenderId, reasonCode, aggregate });
+    }
+  }
+
+  contenderSuggestionCandidates
+    .sort((a, b) => b.aggregate.evidence.length - a.aggregate.evidence.length || a.contenderId.localeCompare(b.contenderId));
+
+  for (const candidate of contenderSuggestionCandidates.slice(0, Math.max(0, params.maxSuggestions - suggestions.length))) {
+    await addSuggestion('contender', candidate.contenderId, candidate.reasonCode, candidate.aggregate);
+  }
+
+  const rankedSuggestions = suggestions
+    .sort((a, b) => b.confidence - a.confidence || b.evidence_count - a.evidence_count || a.suggestion_id.localeCompare(b.suggestion_id))
+    .slice(0, params.maxSuggestions);
+
+  const status = rankedSuggestions.length >= 3 ? 'available' : 'INSUFFICIENT_SAMPLE';
+  const payloadReasonCodes = status === 'available'
+    ? ['ARENA_CONTRACT_COPILOT_READY']
+    : ['ARENA_CONTRACT_COPILOT_INSUFFICIENT_SIGNAL_VARIETY'];
+
+  return {
+    payload: {
+      schema_version: 'arena_contract_copilot.v1',
+      status,
+      computed_at: now,
+      task_fingerprint: params.taskFingerprint,
+      minimums: {
+        min_outcomes: params.minOutcomes,
+        min_arenas: params.minArenas,
+      },
+      totals: {
+        outcomes: filtered.length,
+        arenas: uniqueArenaIds.size,
+        failed_outcomes: failed.length,
+        suggestions: rankedSuggestions.length,
+      },
+      reason_codes: payloadReasonCodes,
+      suggestions: rankedSuggestions.map((entry) => buildArenaContractCopilotSuggestionPayload(entry)),
+    },
+    suggestions: status === 'available' ? rankedSuggestions : [],
+  };
+}
+
+async function computeAndPersistArenaContractCopilot(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    limit: number;
+    minOutcomes: number;
+    minArenas: number;
+    maxSuggestions: number;
+  },
+): Promise<Record<string, unknown>> {
+  const copilot = await computeArenaContractCopilot(db, params);
+  await replaceArenaContractCopilotSuggestions(db, params.taskFingerprint, copilot.suggestions);
+
+  return {
+    ...copilot.payload,
+    persistence: {
+      table: 'bounty_arena_contract_copilot_suggestions',
+      rows_written: copilot.suggestions.length,
+      mode: 'replace_by_task_fingerprint',
+    },
+  };
+}
+
+async function buildArenaContractCopilotPreview(
+  db: D1Database,
+  taskFingerprint: string,
+): Promise<Record<string, unknown>> {
+  try {
+    const rows = await listArenaContractCopilotSuggestions(db, {
+      taskFingerprint,
+      limit: 10,
+    });
+
+    const globalSuggestions = rows
+      .filter((entry) => entry.scope === 'global')
+      .map((entry) => buildArenaContractCopilotSuggestionPayload(entry));
+
+    const contenderSuggestions = rows
+      .filter((entry) => entry.scope === 'contender')
+      .map((entry) => buildArenaContractCopilotSuggestionPayload(entry));
+
+    return {
+      schema_version: 'arena_contract_copilot_preview.v1',
+      task_fingerprint: taskFingerprint,
+      status: rows.length > 0 ? 'available' : 'empty',
+      global_suggestions: globalSuggestions,
+      contender_suggestions: contenderSuggestions,
+    };
+  } catch {
+    return {
+      schema_version: 'arena_contract_copilot_preview.v1',
+      task_fingerprint: taskFingerprint,
+      status: 'unavailable',
+      global_suggestions: [],
+      contender_suggestions: [],
+    };
+  }
+}
+
+async function handleGetArenaContractCopilot(
+  request: Request,
+  url: URL,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const taskFingerprint = d1String(url.searchParams.get('task_fingerprint'))?.trim() ?? null;
+  const contenderId = d1String(url.searchParams.get('contender_id'))?.trim() ?? null;
+
+  const limitRaw = url.searchParams.get('limit');
+  let limit = 100;
+  if (isNonEmptyString(limitRaw)) {
+    const parsed = Number.parseInt(limitRaw.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(parsed, 500);
+  }
+
+  const rows = await listArenaContractCopilotSuggestions(env.BOUNTIES_DB, {
+    taskFingerprint,
+    contenderId,
+    limit,
+  });
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_contract_copilot_store.v1',
+      computed_at: new Date().toISOString(),
+      task_fingerprint: taskFingerprint,
+      contender_id: contenderId,
+      status: rows.length > 0 ? 'available' : 'empty',
+      totals: {
+        suggestions: rows.length,
+      },
+      suggestions: rows.map((row) => buildArenaContractCopilotSuggestionPayload(row)),
+    },
+    200,
+    version,
+  );
+}
+
+async function handlePostArenaContractCopilot(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const taskFingerprint = d1String(body.task_fingerprint)?.trim();
+  if (!taskFingerprint || taskFingerprint.length > 256) {
+    return errorResponse('INVALID_REQUEST', 'task_fingerprint is required (<=256 chars)', 400, { field: 'task_fingerprint' }, version);
+  }
+
+  const limitRaw = d1Number(body.limit);
+  let limit = 1000;
+  if (limitRaw !== null) {
+    if (!Number.isInteger(limitRaw) || limitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(limitRaw, 5000);
+  }
+
+  const minOutcomesRaw = d1Number(body.min_outcomes);
+  let minOutcomes = 10;
+  if (minOutcomesRaw !== null) {
+    if (!Number.isInteger(minOutcomesRaw) || minOutcomesRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'min_outcomes must be a positive integer', 400, { field: 'min_outcomes' }, version);
+    }
+    minOutcomes = Math.min(minOutcomesRaw, 5000);
+  }
+
+  const minArenasRaw = d1Number(body.min_arenas);
+  let minArenas = 3;
+  if (minArenasRaw !== null) {
+    if (!Number.isInteger(minArenasRaw) || minArenasRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'min_arenas must be a positive integer', 400, { field: 'min_arenas' }, version);
+    }
+    minArenas = Math.min(minArenasRaw, 200);
+  }
+
+  const maxSuggestionsRaw = d1Number(body.max_suggestions);
+  let maxSuggestions = 12;
+  if (maxSuggestionsRaw !== null) {
+    if (!Number.isInteger(maxSuggestionsRaw) || maxSuggestionsRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'max_suggestions must be a positive integer', 400, { field: 'max_suggestions' }, version);
+    }
+    maxSuggestions = Math.min(maxSuggestionsRaw, 50);
+  }
+
+  const copilot = await computeAndPersistArenaContractCopilot(env.BOUNTIES_DB, {
+    taskFingerprint,
+    limit,
+    minOutcomes,
+    minArenas,
+    maxSuggestions,
+  });
+
+  return jsonResponse(copilot, 200, version);
 }
 
 async function buildArenaContractLanguageOptimizerPreview(
@@ -17292,6 +18174,14 @@ export default {
 
       if (path === '/v1/arena/policy-optimizer' && method === 'POST') {
         return handlePostArenaPolicyOptimizer(request, env, version);
+      }
+
+      if (path === '/v1/arena/contract-copilot' && method === 'GET') {
+        return handleGetArenaContractCopilot(request, url, env, version);
+      }
+
+      if (path === '/v1/arena/contract-copilot/generate' && method === 'POST') {
+        return handlePostArenaContractCopilot(request, env, version);
       }
 
       if (path === '/v1/arena/contract-language-optimizer' && method === 'GET') {

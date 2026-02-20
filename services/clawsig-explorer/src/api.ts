@@ -826,6 +826,40 @@ export interface ArenaPolicyOptimizerView {
   promotion: Record<string, unknown> | null;
 }
 
+export interface ArenaContractCopilotEvidenceView {
+  arena_id: string;
+  outcome_id: string;
+  contender_id: string;
+  criterion_id: string;
+  reason_code: string;
+}
+
+export interface ArenaContractCopilotSuggestionView {
+  suggestion_id: string;
+  scope: 'global' | 'contender';
+  contender_id: string | null;
+  reason_code: string;
+  before_text: string;
+  after_text: string;
+  rationale: string;
+  confidence: number;
+  evidence_count: number;
+  arena_count: number;
+  outcome_count: number;
+  expected_impact: {
+    override_rate_reduction: number;
+    rework_rate_reduction: number;
+  };
+  source_evidence: ArenaContractCopilotEvidenceView[];
+}
+
+export interface ArenaContractCopilotView {
+  status: string;
+  task_fingerprint: string | null;
+  global_suggestions: ArenaContractCopilotSuggestionView[];
+  contender_suggestions: ArenaContractCopilotSuggestionView[];
+}
+
 export interface ArenaContractLanguageSuggestionView {
   suggestion_id: string;
   scope: 'global' | 'contender';
@@ -882,6 +916,7 @@ export interface ArenaReportView {
   calibration?: ArenaCalibrationView;
   autopilot?: ArenaAutopilotView;
   policy_optimizer?: ArenaPolicyOptimizerView;
+  contract_copilot?: ArenaContractCopilotView;
   contract_language_optimizer?: ArenaContractLanguageOptimizerView;
 }
 
@@ -1023,6 +1058,12 @@ interface ArenaReportResponse {
     current_active_policy?: unknown;
     candidate_shadow_policy?: unknown;
     promotion?: unknown;
+  };
+  contract_copilot?: {
+    status?: unknown;
+    task_fingerprint?: unknown;
+    global_suggestions?: unknown;
+    contender_suggestions?: unknown;
   };
   contract_language_optimizer?: {
     status?: unknown;
@@ -1379,6 +1420,88 @@ function parsePolicyOptimizer(input: unknown): ArenaPolicyOptimizerView | undefi
   };
 }
 
+function parseContractCopilotSuggestion(input: unknown): ArenaContractCopilotSuggestionView | null {
+  if (!input || typeof input !== 'object') return null;
+  const rec = input as Record<string, unknown>;
+
+  const suggestionId = asString(rec.suggestion_id);
+  const scope = asString(rec.scope);
+  const reasonCode = asString(rec.reason_code);
+
+  if (!suggestionId || !scope || !reasonCode) return null;
+  if (scope !== 'global' && scope !== 'contender') return null;
+
+  const impactRaw = rec.expected_impact;
+  const impact = impactRaw && typeof impactRaw === 'object'
+    ? impactRaw as Record<string, unknown>
+    : {};
+
+  const sourceEvidence = Array.isArray(rec.source_evidence)
+    ? rec.source_evidence
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const row = entry as Record<string, unknown>;
+        const arenaId = asString(row.arena_id);
+        const outcomeId = asString(row.outcome_id);
+        const contenderId = asString(row.contender_id);
+        const criterionId = asString(row.criterion_id);
+        const evidenceReasonCode = asString(row.reason_code);
+        if (!arenaId || !outcomeId || !contenderId || !criterionId || !evidenceReasonCode) return null;
+        return {
+          arena_id: arenaId,
+          outcome_id: outcomeId,
+          contender_id: contenderId,
+          criterion_id: criterionId,
+          reason_code: evidenceReasonCode,
+        } as ArenaContractCopilotEvidenceView;
+      })
+      .filter((entry): entry is ArenaContractCopilotEvidenceView => entry !== null)
+    : [];
+
+  return {
+    suggestion_id: suggestionId,
+    scope,
+    contender_id: asString(rec.contender_id),
+    reason_code: reasonCode,
+    before_text: asString(rec.before_text) ?? '',
+    after_text: asString(rec.after_text) ?? '',
+    rationale: asString(rec.rationale) ?? '',
+    confidence: asNumber(rec.confidence, 0),
+    evidence_count: asNumber(rec.evidence_count, 0),
+    arena_count: asNumber(rec.arena_count, 0),
+    outcome_count: asNumber(rec.outcome_count, 0),
+    expected_impact: {
+      override_rate_reduction: asNumber(impact.override_rate_reduction, 0),
+      rework_rate_reduction: asNumber(impact.rework_rate_reduction, 0),
+    },
+    source_evidence: sourceEvidence,
+  };
+}
+
+function parseContractCopilot(input: unknown): ArenaContractCopilotView | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const rec = input as Record<string, unknown>;
+
+  const globalSuggestions = Array.isArray(rec.global_suggestions)
+    ? rec.global_suggestions
+      .map((entry) => parseContractCopilotSuggestion(entry))
+      .filter((entry): entry is ArenaContractCopilotSuggestionView => entry !== null)
+    : [];
+
+  const contenderSuggestions = Array.isArray(rec.contender_suggestions)
+    ? rec.contender_suggestions
+      .map((entry) => parseContractCopilotSuggestion(entry))
+      .filter((entry): entry is ArenaContractCopilotSuggestionView => entry !== null)
+    : [];
+
+  return {
+    status: asString(rec.status) ?? 'unknown',
+    task_fingerprint: asString(rec.task_fingerprint),
+    global_suggestions: globalSuggestions,
+    contender_suggestions: contenderSuggestions,
+  };
+}
+
 function parseContractLanguageSuggestion(input: unknown): ArenaContractLanguageSuggestionView | null {
   if (!input || typeof input !== 'object') return null;
   const rec = input as Record<string, unknown>;
@@ -1565,6 +1688,7 @@ export async function fetchArenaReport(
     calibration: parseCalibration(data.calibration),
     autopilot: parseAutopilot(data.autopilot),
     policy_optimizer: parsePolicyOptimizer(data.policy_optimizer),
+    contract_copilot: parseContractCopilot(data.contract_copilot),
     contract_language_optimizer: parseContractLanguageOptimizer(data.contract_language_optimizer),
   };
 }

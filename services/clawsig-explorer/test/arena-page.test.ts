@@ -27,6 +27,7 @@ describe('arena pages', () => {
     expect(html).toContain('Routing autopilot');
     expect(html).toContain('winner stability');
     expect(html).toContain('Routing policy optimizer');
+    expect(html).toContain('Contract Copilot');
     expect(html).toContain('Contract language optimizer');
     expect(html).toContain('Global contract rewrites');
     expect(html).toContain('Outcome feedback feed');
