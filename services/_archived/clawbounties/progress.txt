@@ -1654,3 +1654,7 @@ Started: 2026-02-02T03:08:26.937005
   - Added `raw_evaluator_metrics` field to contender output for full transparency.
 - Result: `GET /v1/arena/{arena_id}` now works for duel batch entries, showing
   contender models, scores, hard_gate_pass, and raw Playwright evaluator metrics.
+- Explorer: replaced canonical metric grid with real evaluator metrics for duel arenas
+  Shows UX, perf, a11y, visual, maint scores + Lighthouse + flow pass rates + hard gates
+- Explorer: inline review paste display (scrollable monospace box)
+- Explorer: added raw_evaluator_metrics field to ArenaContenderView + API parsing
