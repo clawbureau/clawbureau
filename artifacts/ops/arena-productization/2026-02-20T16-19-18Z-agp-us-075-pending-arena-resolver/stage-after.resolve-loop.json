@@ -1,0 +1,35 @@
+{
+  "schema_version": "arena_desk_resolve_loop.v1",
+  "loop_id": "arena_resolve_2bcaf9dedff3497e83191d58f2139359",
+  "computed_at": "2026-02-20T16:20:09.693Z",
+  "dry_run": true,
+  "limits": {
+    "limit": 500,
+    "target_resolved": 500,
+    "min_pending_age_minutes": 30,
+    "finalize_unresolved": true,
+    "arena_ids": []
+  },
+  "totals": {
+    "candidates": 0,
+    "processed": 0,
+    "resolved_winner": 0,
+    "resolved_unresolved": 0,
+    "unresolved_pending": 0,
+    "failed": 0,
+    "target_met": false
+  },
+  "pending_before": {
+    "pending_count": 0,
+    "pending_with_reason_code": 0,
+    "pending_without_reason_code": 0,
+    "p95_pending_age_minutes": 0
+  },
+  "pending_after": {
+    "pending_count": 0,
+    "pending_with_reason_code": 0,
+    "pending_without_reason_code": 0,
+    "p95_pending_age_minutes": 0
+  },
+  "decisions": []
+}

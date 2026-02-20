@@ -7293,6 +7293,42 @@ async function listArenaRuns(
   return out;
 }
 
+async function listPendingArenaRuns(
+  db: D1Database,
+  params: {
+    limit: number;
+    arenaIds?: string[];
+  },
+): Promise<ArenaRunRecord[]> {
+  const arenaIds = params.arenaIds ?? [];
+
+  let query = `SELECT *
+                 FROM bounty_arena_runs
+                WHERE status = 'started'`;
+
+  const binds: unknown[] = [];
+  if (arenaIds.length > 0) {
+    query += ` AND arena_id IN (${arenaIds.map(() => '?').join(', ')})`;
+    binds.push(...arenaIds);
+  }
+
+  query += ' ORDER BY started_at ASC, run_id ASC LIMIT ?';
+  binds.push(params.limit);
+
+  const rows = await db
+    .prepare(query)
+    .bind(...binds)
+    .all<Record<string, unknown>>();
+
+  const out: ArenaRunRecord[] = [];
+  for (const row of rows.results ?? []) {
+    const parsed = parseArenaRunRow(row);
+    if (parsed) out.push(parsed);
+  }
+
+  return out;
+}
+
 async function listCompletedArenaRunsByTaskFingerprint(
   db: D1Database,
   taskFingerprint: string,
@@ -8870,6 +8906,73 @@ async function writeArenaContenderRecords(
       )
       .run();
   }
+}
+
+async function annotatePendingArenaRunReasonCodes(
+  db: D1Database,
+  params: {
+    runId: string;
+    reasonCodes: string[];
+    now: string;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE bounty_arena_runs
+          SET reason_codes_json = ?,
+              updated_at = ?
+        WHERE run_id = ?
+          AND status = 'started'`
+    )
+    .bind(stableStringify(params.reasonCodes), params.now, params.runId)
+    .run();
+}
+
+async function finalizeArenaRunResolution(
+  db: D1Database,
+  params: {
+    runId: string;
+    winnerContenderId: string | null;
+    winnerReason: string;
+    reasonCodes: string[];
+    tradeoffs: string[];
+    resultIdempotencyKey: string;
+    arenaReport: Record<string, unknown> | null;
+    now: string;
+  },
+): Promise<void> {
+  const reportCanonical = params.arenaReport ? stableStringify(params.arenaReport) : null;
+  const reportHash = reportCanonical ? await sha256B64uUtf8(reportCanonical) : null;
+
+  await db
+    .prepare(
+      `UPDATE bounty_arena_runs
+          SET status = 'completed',
+              winner_contender_id = ?,
+              winner_reason = ?,
+              reason_codes_json = ?,
+              tradeoffs_json = ?,
+              arena_report_json = ?,
+              result_idempotency_key = ?,
+              report_hash_b64u = ?,
+              completed_at = ?,
+              updated_at = ?
+        WHERE run_id = ?
+          AND status = 'started'`
+    )
+    .bind(
+      params.winnerContenderId,
+      params.winnerReason,
+      stableStringify(params.reasonCodes),
+      stableStringify(params.tradeoffs),
+      reportCanonical,
+      params.resultIdempotencyKey,
+      reportHash,
+      params.now,
+      params.now,
+      params.runId,
+    )
+    .run();
 }
 
 function sanitizeArenaTaskFingerprint(input: string): string {
@@ -17772,6 +17875,36 @@ function parseArenaPolicyReasonCodes(input: string): string[] {
   return parseJsonStringArray(input) ?? [];
 }
 
+function parseArenaRunReasonCodes(input: string | null): string[] {
+  if (!input) return [];
+  return parseJsonStringArray(input) ?? [];
+}
+
+function arenaRunHasUnresolvedReasonCode(run: ArenaRunRecord): boolean {
+  const reasonCodes = parseArenaRunReasonCodes(run.reason_codes_json);
+  return reasonCodes.some((code) => code.startsWith('ARENA_RESOLVE_UNRESOLVED_'));
+}
+
+function isArenaRunRoutingEligible(run: ArenaRunRecord): boolean {
+  if (run.status !== 'completed') return false;
+  if (!run.winner_contender_id) return false;
+  if (arenaRunHasUnresolvedReasonCode(run)) return false;
+  return true;
+}
+
+function parseIsoTimestamp(value: string): number | null {
+  const epochMs = Date.parse(value);
+  if (!Number.isFinite(epochMs)) return null;
+  return epochMs;
+}
+
+function computeP95MinutesFromDurations(minutes: number[]): number {
+  if (minutes.length === 0) return 0;
+  const sorted = [...minutes].sort((a, b) => a - b);
+  const idx = Math.max(0, Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1));
+  return Number((sorted[idx] ?? 0).toFixed(2));
+}
+
 function computeArenaPolicyOptimizerConfidence(params: {
   winRate: number;
   acceptRate: number;
@@ -19730,6 +19863,504 @@ async function handleGetArenaDeskClaimLocks(
   );
 }
 
+function deriveArenaResolveUnresolvedReasonCode(outcomes: ArenaOutcomeRecord[]): string {
+  if (outcomes.length === 0) return 'ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES';
+  if (outcomes.some((entry) => entry.disputed)) return 'ARENA_RESOLVE_UNRESOLVED_DISPUTED';
+  if (outcomes.some((entry) => entry.rework_required)) return 'ARENA_RESOLVE_UNRESOLVED_REWORK_REQUIRED';
+  if (outcomes.some((entry) => entry.overridden)) return 'ARENA_RESOLVE_UNRESOLVED_OVERRIDDEN_NO_ACCEPTED';
+  if (outcomes.some((entry) => entry.outcome_status === 'REJECTED')) return 'ARENA_RESOLVE_UNRESOLVED_REJECTED';
+  return 'ARENA_RESOLVE_UNRESOLVED_NO_ACCEPTED_OUTCOME';
+}
+
+function buildArenaPendingBacklogMetrics(runs: ArenaRunRecord[]): {
+  pending_count: number;
+  pending_with_reason_code: number;
+  pending_without_reason_code: number;
+  p95_pending_age_minutes: number;
+} {
+  const nowMs = Date.now();
+  const ages: number[] = [];
+  let withReason = 0;
+
+  for (const run of runs) {
+    const reasonCodes = parseArenaRunReasonCodes(run.reason_codes_json);
+    if (reasonCodes.length > 0) withReason += 1;
+
+    const startedAtEpoch = parseIsoTimestamp(run.started_at);
+    if (startedAtEpoch !== null) {
+      const ageMinutes = Math.max(0, (nowMs - startedAtEpoch) / 60000);
+      ages.push(ageMinutes);
+    }
+  }
+
+  return {
+    pending_count: runs.length,
+    pending_with_reason_code: withReason,
+    pending_without_reason_code: Math.max(0, runs.length - withReason),
+    p95_pending_age_minutes: computeP95MinutesFromDurations(ages),
+  };
+}
+
+async function handlePostArenaDeskResolveLoop(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const limitRaw = d1Number(body.limit);
+  let limit = 150;
+  if (limitRaw !== null) {
+    if (!Number.isInteger(limitRaw) || limitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(limitRaw, 500);
+  }
+
+  const targetResolvedRaw = d1Number(body.target_resolved);
+  let targetResolved = Math.min(limit, 80);
+  if (targetResolvedRaw !== null) {
+    if (!Number.isInteger(targetResolvedRaw) || targetResolvedRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'target_resolved must be a positive integer', 400, { field: 'target_resolved' }, version);
+    }
+    targetResolved = Math.min(targetResolvedRaw, limit);
+  }
+
+  const minPendingAgeMinutesRaw = d1Number(body.min_pending_age_minutes);
+  let minPendingAgeMinutes = 30;
+  if (minPendingAgeMinutesRaw !== null) {
+    if (!Number.isFinite(minPendingAgeMinutesRaw) || minPendingAgeMinutesRaw < 0) {
+      return errorResponse('INVALID_REQUEST', 'min_pending_age_minutes must be >= 0', 400, { field: 'min_pending_age_minutes' }, version);
+    }
+    minPendingAgeMinutes = Math.min(minPendingAgeMinutesRaw, 24 * 60);
+  }
+
+  const finalizeUnresolved = body.finalize_unresolved !== false;
+  const dryRun = body.dry_run === true;
+
+  const arenaIdsRaw = body.arena_ids;
+  const parsedArenaIds = arenaIdsRaw === undefined || arenaIdsRaw === null
+    ? []
+    : parseStringList(arenaIdsRaw, 500, 160, true);
+
+  if (arenaIdsRaw !== undefined && arenaIdsRaw !== null && parsedArenaIds === null) {
+    return errorResponse('INVALID_REQUEST', 'arena_ids must be string[]', 400, { field: 'arena_ids' }, version);
+  }
+
+  const arenaIds = dedupeStrings((parsedArenaIds ?? []).map((entry) => entry.trim()));
+  if (arenaIds.some((entry) => !entry.startsWith('arena_'))) {
+    return errorResponse('INVALID_REQUEST', 'arena_ids must contain arena IDs (arena_*)', 400, { field: 'arena_ids' }, version);
+  }
+
+  const loopIdRaw = d1String(body.loop_id)?.trim() ?? null;
+  const loopId = loopIdRaw && loopIdRaw.length <= 120
+    ? loopIdRaw
+    : `arena_resolve_${crypto.randomUUID().replace(/-/g, '')}`;
+
+  const pendingBeforeRuns = await listPendingArenaRuns(env.BOUNTIES_DB, {
+    limit: 5000,
+  });
+  const pendingBefore = buildArenaPendingBacklogMetrics(pendingBeforeRuns);
+
+  const candidates = await listPendingArenaRuns(env.BOUNTIES_DB, {
+    limit,
+    arenaIds,
+  });
+
+  let resolvedWinnerCount = 0;
+  let resolvedUnresolvedCount = 0;
+  let unresolvedPendingCount = 0;
+  let failedCount = 0;
+
+  const decisions: Array<Record<string, unknown>> = [];
+
+  for (const run of candidates) {
+    if ((resolvedWinnerCount + resolvedUnresolvedCount) >= targetResolved) {
+      break;
+    }
+
+    const now = new Date().toISOString();
+    const nowMs = Date.now();
+    const startedAtEpoch = parseIsoTimestamp(run.started_at);
+    const ageMinutes = startedAtEpoch === null
+      ? null
+      : Number(Math.max(0, (nowMs - startedAtEpoch) / 60000).toFixed(2));
+
+    const existingReasonCodes = parseArenaRunReasonCodes(run.reason_codes_json);
+
+    if (ageMinutes !== null && ageMinutes < minPendingAgeMinutes) {
+      const reasonCodes = dedupeStrings([...existingReasonCodes, 'ARENA_RESOLVE_PENDING_RECENT']);
+      if (!dryRun) {
+        await annotatePendingArenaRunReasonCodes(env.BOUNTIES_DB, {
+          runId: run.run_id,
+          reasonCodes,
+          now,
+        });
+      }
+
+      decisions.push({
+        arena_id: run.arena_id,
+        run_id: run.run_id,
+        bounty_id: run.bounty_id,
+        status: 'skipped',
+        reason_code: 'ARENA_RESOLVE_PENDING_RECENT',
+        age_minutes: ageMinutes,
+      });
+      continue;
+    }
+
+    const contenderRows = await listArenaContendersByRunId(env.BOUNTIES_DB, run.run_id);
+    const contenderViews: ArenaContenderResult[] = [];
+    let invalidContenderPayload = false;
+    for (const contenderRow of contenderRows) {
+      const contender = parseArenaContenderResult(contenderRow);
+      if (!contender) {
+        invalidContenderPayload = true;
+        break;
+      }
+      contenderViews.push(contender);
+    }
+
+    if (invalidContenderPayload) {
+      failedCount += 1;
+      const reasonCodes = dedupeStrings([...existingReasonCodes, 'ARENA_RESOLVE_FAILED_INVALID_CONTENDER_PAYLOAD']);
+      if (!dryRun) {
+        await annotatePendingArenaRunReasonCodes(env.BOUNTIES_DB, {
+          runId: run.run_id,
+          reasonCodes,
+          now,
+        });
+      }
+
+      decisions.push({
+        arena_id: run.arena_id,
+        run_id: run.run_id,
+        bounty_id: run.bounty_id,
+        status: 'failed',
+        reason_code: 'ARENA_RESOLVE_FAILED_INVALID_CONTENDER_PAYLOAD',
+      });
+      continue;
+    }
+
+    const outcomes = await listArenaOutcomesByArenaId(env.BOUNTIES_DB, run.arena_id, 200);
+    const acceptedOutcomes = outcomes
+      .filter((entry) => entry.accepted)
+      .sort((a, b) => {
+        if (a.updated_at !== b.updated_at) return b.updated_at.localeCompare(a.updated_at);
+        return a.outcome_id.localeCompare(b.outcome_id);
+      });
+
+    const objectiveProfile = parseJsonObject(run.objective_profile_json) ?? {
+      name: 'unknown',
+      weights: { quality: 0.25, speed: 0.25, cost: 0.25, safety: 0.25 },
+      tie_breakers: ['contender_id'],
+    };
+
+    const baseTradeoffs = parseJsonStringArray(run.tradeoffs_json ?? '[]') ?? [];
+
+    const buildContenderReportRows = () => contenderViews.map((entry) => ({
+      contender_id: entry.contender_id,
+      label: entry.label,
+      score: entry.score,
+      hard_gate_pass: entry.hard_gate_pass,
+      mandatory_failed: entry.mandatory_failed,
+      version_pin: entry.version_pin,
+      prompt_template: entry.prompt_template,
+      experiment_arm: entry.experiment_arm,
+      metrics: entry.metrics,
+      check_results: entry.check_results,
+      score_explain: entry.score_explain,
+    }));
+
+    if (acceptedOutcomes.length > 0) {
+      const selected = acceptedOutcomes[0] ?? null;
+      const winnerContenderId = selected?.contender_id ?? null;
+      const winnerContender = winnerContenderId
+        ? contenderViews.find((entry) => entry.contender_id === winnerContenderId) ?? null
+        : null;
+
+      if (!winnerContenderId || !winnerContender) {
+        const unresolvedReason = 'ARENA_RESOLVE_UNRESOLVED_WINNER_NOT_IN_CONTENDERS';
+        const reasonCodes = dedupeStrings([...existingReasonCodes, unresolvedReason]);
+
+        if (finalizeUnresolved) {
+          const terminalReasonCodes = dedupeStrings([...reasonCodes, 'ARENA_RESOLVE_UNRESOLVED_FINALIZED']);
+          const unresolvedReport = {
+            schema_version: 'arena_report.resolve.v1',
+            generated_at: now,
+            arena_id: run.arena_id,
+            contract: {
+              bounty_id: run.bounty_id,
+              contract_id: run.contract_id,
+              contract_hash_b64u: run.contract_hash_b64u,
+              task_fingerprint: run.task_fingerprint,
+            },
+            objective_profile: objectiveProfile,
+            contenders: buildContenderReportRows(),
+            winner: {
+              contender_id: null,
+              reason: `Unresolved: ${unresolvedReason}`,
+            },
+            tradeoffs: baseTradeoffs,
+            reason_codes: terminalReasonCodes,
+          };
+
+          if (!dryRun) {
+            const resultIdempotencyKey = run.result_idempotency_key ?? `arena-resolve-unresolved:${await sha256B64uUtf8(`${run.run_id}:${unresolvedReason}`)}`;
+            await finalizeArenaRunResolution(env.BOUNTIES_DB, {
+              runId: run.run_id,
+              winnerContenderId: null,
+              winnerReason: `Unresolved: ${unresolvedReason}`,
+              reasonCodes: terminalReasonCodes,
+              tradeoffs: baseTradeoffs,
+              resultIdempotencyKey,
+              arenaReport: unresolvedReport,
+              now,
+            });
+
+            await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+              bounty_id: run.bounty_id,
+              arena_status: 'failed',
+              arena_id: run.arena_id,
+              arena_task_fingerprint: run.task_fingerprint,
+              arena_winner_contender_id: null,
+              arena_evidence_links: [],
+              arena_updated_at: now,
+            });
+          }
+
+          resolvedUnresolvedCount += 1;
+          decisions.push({
+            arena_id: run.arena_id,
+            run_id: run.run_id,
+            bounty_id: run.bounty_id,
+            status: 'resolved_unresolved',
+            reason_code: unresolvedReason,
+            outcome_count: outcomes.length,
+            accepted_outcome_count: acceptedOutcomes.length,
+            age_minutes: ageMinutes,
+          });
+          continue;
+        }
+
+        if (!dryRun) {
+          await annotatePendingArenaRunReasonCodes(env.BOUNTIES_DB, {
+            runId: run.run_id,
+            reasonCodes,
+            now,
+          });
+        }
+
+        unresolvedPendingCount += 1;
+        decisions.push({
+          arena_id: run.arena_id,
+          run_id: run.run_id,
+          bounty_id: run.bounty_id,
+          status: 'unresolved',
+          reason_code: unresolvedReason,
+          age_minutes: ageMinutes,
+        });
+        continue;
+      }
+
+      const resolveReason = acceptedOutcomes.length > 1
+        ? 'ARENA_RESOLVE_FROM_ACCEPTED_OUTCOME_LATEST'
+        : 'ARENA_RESOLVE_FROM_ACCEPTED_OUTCOME';
+      const reasonCodes = dedupeStrings([...existingReasonCodes, resolveReason, 'ARENA_RESOLVE_LOOP_COMPLETED']);
+
+      const resolvedReport = {
+        schema_version: 'arena_report.resolve.v1',
+        generated_at: now,
+        arena_id: run.arena_id,
+        contract: {
+          bounty_id: run.bounty_id,
+          contract_id: run.contract_id,
+          contract_hash_b64u: run.contract_hash_b64u,
+          task_fingerprint: run.task_fingerprint,
+        },
+        objective_profile: objectiveProfile,
+        contenders: buildContenderReportRows(),
+        winner: {
+          contender_id: winnerContenderId,
+          reason: `Resolved from outcome ${selected?.outcome_id ?? 'unknown'}`,
+        },
+        tradeoffs: baseTradeoffs,
+        reason_codes: reasonCodes,
+      };
+
+      if (!dryRun) {
+        const resultIdempotencyKey = run.result_idempotency_key ?? `arena-resolve:${await sha256B64uUtf8(`${run.run_id}:${selected?.outcome_id ?? winnerContenderId}`)}`;
+        await finalizeArenaRunResolution(env.BOUNTIES_DB, {
+          runId: run.run_id,
+          winnerContenderId,
+          winnerReason: `Resolved from outcome ${selected?.outcome_id ?? 'unknown'}`,
+          reasonCodes,
+          tradeoffs: baseTradeoffs,
+          resultIdempotencyKey,
+          arenaReport: resolvedReport,
+          now,
+        });
+
+        await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+          bounty_id: run.bounty_id,
+          arena_status: 'completed',
+          arena_id: run.arena_id,
+          arena_task_fingerprint: run.task_fingerprint,
+          arena_winner_contender_id: winnerContenderId,
+          arena_evidence_links: getWinnerEvidenceLinks(contenderViews, winnerContenderId),
+          arena_updated_at: now,
+        });
+
+        await autoPostArenaWinnerReviewThread(env.BOUNTIES_DB, {
+          bounty_id: run.bounty_id,
+          arena_id: run.arena_id,
+          result_idempotency_key: resultIdempotencyKey,
+          contender: winnerContender,
+          source: 'arena-resolve-loop-autopost',
+          now,
+          arena_explorer_base_url: resolveArenaExplorerBaseUrl(env),
+        });
+      }
+
+      resolvedWinnerCount += 1;
+      decisions.push({
+        arena_id: run.arena_id,
+        run_id: run.run_id,
+        bounty_id: run.bounty_id,
+        status: 'resolved',
+        reason_code: resolveReason,
+        winner_contender_id: winnerContenderId,
+        outcome_id: selected?.outcome_id ?? null,
+        age_minutes: ageMinutes,
+      });
+      continue;
+    }
+
+    const unresolvedReason = deriveArenaResolveUnresolvedReasonCode(outcomes);
+    const reasonCodes = dedupeStrings([...existingReasonCodes, unresolvedReason]);
+
+    if (finalizeUnresolved) {
+      const terminalReasonCodes = dedupeStrings([...reasonCodes, 'ARENA_RESOLVE_UNRESOLVED_FINALIZED']);
+      const unresolvedReport = {
+        schema_version: 'arena_report.resolve.v1',
+        generated_at: now,
+        arena_id: run.arena_id,
+        contract: {
+          bounty_id: run.bounty_id,
+          contract_id: run.contract_id,
+          contract_hash_b64u: run.contract_hash_b64u,
+          task_fingerprint: run.task_fingerprint,
+        },
+        objective_profile: objectiveProfile,
+        contenders: buildContenderReportRows(),
+        winner: {
+          contender_id: null,
+          reason: `Unresolved: ${unresolvedReason}`,
+        },
+        tradeoffs: baseTradeoffs,
+        reason_codes: terminalReasonCodes,
+      };
+
+      if (!dryRun) {
+        const resultIdempotencyKey = run.result_idempotency_key ?? `arena-resolve-unresolved:${await sha256B64uUtf8(`${run.run_id}:${unresolvedReason}`)}`;
+        await finalizeArenaRunResolution(env.BOUNTIES_DB, {
+          runId: run.run_id,
+          winnerContenderId: null,
+          winnerReason: `Unresolved: ${unresolvedReason}`,
+          reasonCodes: terminalReasonCodes,
+          tradeoffs: baseTradeoffs,
+          resultIdempotencyKey,
+          arenaReport: unresolvedReport,
+          now,
+        });
+
+        await updateBountyArenaLifecycle(env.BOUNTIES_DB, {
+          bounty_id: run.bounty_id,
+          arena_status: 'failed',
+          arena_id: run.arena_id,
+          arena_task_fingerprint: run.task_fingerprint,
+          arena_winner_contender_id: null,
+          arena_evidence_links: [],
+          arena_updated_at: now,
+        });
+      }
+
+      resolvedUnresolvedCount += 1;
+      decisions.push({
+        arena_id: run.arena_id,
+        run_id: run.run_id,
+        bounty_id: run.bounty_id,
+        status: 'resolved_unresolved',
+        reason_code: unresolvedReason,
+        outcome_count: outcomes.length,
+        accepted_outcome_count: 0,
+        age_minutes: ageMinutes,
+      });
+      continue;
+    }
+
+    if (!dryRun) {
+      await annotatePendingArenaRunReasonCodes(env.BOUNTIES_DB, {
+        runId: run.run_id,
+        reasonCodes,
+        now,
+      });
+    }
+
+    unresolvedPendingCount += 1;
+    decisions.push({
+      arena_id: run.arena_id,
+      run_id: run.run_id,
+      bounty_id: run.bounty_id,
+      status: 'unresolved',
+      reason_code: unresolvedReason,
+      age_minutes: ageMinutes,
+      outcome_count: outcomes.length,
+    });
+  }
+
+  const pendingAfterRuns = dryRun
+    ? pendingBeforeRuns
+    : await listPendingArenaRuns(env.BOUNTIES_DB, { limit: 5000 });
+  const pendingAfter = buildArenaPendingBacklogMetrics(pendingAfterRuns);
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_desk_resolve_loop.v1',
+      loop_id: loopId,
+      computed_at: new Date().toISOString(),
+      dry_run: dryRun,
+      limits: {
+        limit,
+        target_resolved: targetResolved,
+        min_pending_age_minutes: minPendingAgeMinutes,
+        finalize_unresolved: finalizeUnresolved,
+        arena_ids: arenaIds,
+      },
+      totals: {
+        candidates: candidates.length,
+        processed: decisions.length,
+        resolved_winner: resolvedWinnerCount,
+        resolved_unresolved: resolvedUnresolvedCount,
+        unresolved_pending: unresolvedPendingCount,
+        failed: failedCount,
+        target_met: (resolvedWinnerCount + resolvedUnresolvedCount) >= targetResolved,
+      },
+      pending_before: pendingBefore,
+      pending_after: pendingAfter,
+      decisions,
+    },
+    200,
+    version,
+  );
+}
+
 async function handlePostArenaDeskClaimLoop(
   request: Request,
   env: Env,
@@ -20915,6 +21546,7 @@ async function handleArenaManagerRoute(
 
   const runsRaw = await listCompletedArenaRunsByTaskFingerprint(env.BOUNTIES_DB, taskFingerprint, maxRuns);
   const runs = runsRaw
+    .filter((run) => isArenaRunRoutingEligible(run))
     .filter((run) => (objectiveProfileName ? getArenaObjectiveProfileNameFromRun(run) === objectiveProfileName : true))
     .filter((run) => (experimentIdFilter ? run.experiment_id === experimentIdFilter : true))
     .filter((run) => (experimentArmFilter ? run.experiment_arm === experimentArmFilter : true));
@@ -22126,6 +22758,10 @@ export default {
 
       if (path === '/v1/arena/desk/decision-loop' && method === 'POST') {
         return handlePostArenaDeskDecisionLoop(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/resolve-loop' && method === 'POST') {
+        return handlePostArenaDeskResolveLoop(request, env, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {

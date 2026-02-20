@@ -1369,3 +1369,26 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-075 pending arena resolver
+- Added autonomous resolver endpoint + operator script:
+  - `POST /v1/arena/desk/resolve-loop`
+  - `scripts/arena/run-autonomous-resolve-loop.mjs`
+  - `scripts/arena/run-autonomous-resolve-loop.test.mjs`
+- Resolver behavior:
+  - scans pending arena runs (`status=started`),
+  - resolves winner from accepted arena outcomes when available,
+  - finalizes unresolved stale runs with deterministic unresolved reason codes,
+  - annotates recent pending runs with explicit pending reason code.
+- Routing hardening:
+  - manager route now excludes unresolved/no-winner completed runs from routing candidate aggregation.
+- Deployed clawbounties service:
+  - staging version `d1e52ff5-c9d6-4586-9462-fa8dcbdf2fa9`
+  - production version `f3a1c1eb-2809-47ab-934a-0f28cf30ba8b`
+- Real-data resolver outcomes:
+  - staging pending backlog: `12 -> 0`, p95 age `843.84m -> 0m`
+  - production pending backlog: `8 -> 0`, p95 age `843.01m -> 0m`
+  - pending runs without reason code after resolver: `0` (staging/prod)
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/route-status-codes.txt`
