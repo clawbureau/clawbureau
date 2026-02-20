@@ -1,0 +1,184 @@
+{
+  "ok": true,
+  "story": "AGP-US-082",
+  "generated_at": "2026-02-20T19:27:11.705Z",
+  "endpoint_base": "https://clawbounties.com",
+  "arena_runs_found": 15,
+  "completed_runs": 15,
+  "outcomes_seeded": 7,
+  "outcomes_skipped": 0,
+  "outcomes_failed": 8,
+  "accept_threshold": 70,
+  "roi_dashboard": {
+    "http_status": 200,
+    "roi_status": "available",
+    "sample_count": null
+  },
+  "outcome_details": [
+    {
+      "arena_id": "arena_bty_36aadedb-16b3-46f7-9edc-3870e00e14f0_live_sub_aad5749a-8304-42b2-ad50-2856eed34a09",
+      "bounty_id": "bty_36aadedb-16b3-46f7-9edc-3870e00e14f0",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3_live_sub_bc25b7f0-74b0-4232-913c-7eb5ae1d2601",
+      "bounty_id": "bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_13408642-ea86-434a-b07d-90dfc5fd34eb_live_sub_f60663c2-2bdc-49ab-8b28-2b9be84add71",
+      "bounty_id": "bty_13408642-ea86-434a-b07d-90dfc5fd34eb",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855_live_sub_d71bc3fb-f033-49fa-a718-3733e9f5b118",
+      "bounty_id": "bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_bb485106-7652-46a8-a539-1d420b145383_live_sub_b53729a5-b5d4-4638-b195-d593c9971ca8",
+      "bounty_id": "bty_bb485106-7652-46a8-a539-1d420b145383",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_929788a2-f419-4fdd-9731-fb8599d4e9ab_live_sub_439fab96-eccd-4723-be79-ec147b0d0ec7",
+      "bounty_id": "bty_929788a2-f419-4fdd-9731-fb8599d4e9ab",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf_live_sub_70140c92-8c38-40d4-be20-0d91ef4eafe1",
+      "bounty_id": "bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9_live_sub_5651e644-a99f-485b-ac91-0b82606cb2cd",
+      "bounty_id": "bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9",
+      "contender_id": "pending",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 400,
+      "outcome_id": null,
+      "reason_code": "INVALID_REQUEST"
+    },
+    {
+      "arena_id": "arena_bty_099bb056-9f9c-498a-9610-5d0028115371_2026-02-20T14-24-22-474Z",
+      "bounty_id": "bty_099bb056-9f9c-498a-9610-5d0028115371",
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    },
+    {
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_002",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "contender_id": "contender_claude_codex_cli",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    },
+    {
+      "arena_id": "arena_bty_bbbbbbbb_prod_053_001",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "contender_id": "contender_codex_pi",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    },
+    {
+      "arena_id": "arena_bty_836a4e15_prod_050_001",
+      "bounty_id": "bty_836a4e15-6a3b-4ed2-8c41-f988f2cf912f",
+      "contender_id": "contender_codex_pi",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    },
+    {
+      "arena_id": "arena_bty_bbbbbbbb_prod_seed_003",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "contender_id": "contender_codex_pi",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    },
+    {
+      "arena_id": "arena_bty_bbbbbbbb_prod_seed_002",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "contender_id": "contender_codex_pi",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    },
+    {
+      "arena_id": "arena_bty_bbbbbbbb_prod_seed_001",
+      "bounty_id": "bty_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "contender_id": "contender_codex_pi",
+      "score": 85,
+      "accepted": true,
+      "outcome_status": "ACCEPTED",
+      "http_status": 201,
+      "outcome_id": null,
+      "reason_code": "ARENA_OUTCOME_SEEDED"
+    }
+  ]
+}

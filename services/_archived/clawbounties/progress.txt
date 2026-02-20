@@ -1538,3 +1538,16 @@ Started: 2026-02-02T03:08:26.937005
   - cron_enabled=true on both envs
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T19-15-41Z-agp-us-081-resolver-cron/summary.json`
+
+## 2026-02-20 - AGP-US-082 outcome seeder real decisions
+- Created outcome seeder script that posts real arena outcomes for completed arena runs.
+- Seeds ACCEPTED/REJECTED decisions based on contender scores vs threshold.
+- Deduplicates by `arena_id:contender_id` to prevent double-seeding.
+- Each decision has deterministic reason codes + audit trail.
+- Script: `scripts/arena/run-outcome-seeder.mjs` + test `scripts/arena/run-outcome-seeder.test.mjs`
+- Real-data verification:
+  - Staging: 24 total outcome samples, ROI status `ARENA_ROI_READY`
+  - Production: 16 total outcome samples, ROI status `ARENA_ROI_READY`
+  - Both envs exited `INSUFFICIENT_SAMPLE`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T19-26-15Z-agp-us-082-outcome-seeder/summary.json`
