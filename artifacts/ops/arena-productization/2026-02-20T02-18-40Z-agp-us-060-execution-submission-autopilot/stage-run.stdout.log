@@ -1,0 +1,6 @@
+ARENA_EXEC_SUBMISSION_AUTOPILOT_RESULT /private/tmp/clawbureau-arena-v10/artifacts/ops/arena-productization/2026-02-20T02-15-56Z-agp-us-060-execution-submission-autopilot-staging/summary.json
+{
+  "decisions": 10,
+  "successful_pending_review": 0,
+  "target_met": false
+}

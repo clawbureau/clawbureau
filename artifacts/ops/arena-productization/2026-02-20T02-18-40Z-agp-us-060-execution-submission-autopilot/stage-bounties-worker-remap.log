@@ -1,0 +1,30 @@
+
+ ⛅️ wrangler 3.114.17 (update available 4.67.0)
+-----------------------------------------------
+
+🌀 Executing on remote database clawbounties-staging (6b04a8f1-75ba-414f-afd8-36067db109a1):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.99ms
+[
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "EEUR",
+      "served_by_colo": "ARN",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.9935
+      },
+      "duration": 0.9935,
+      "changes": 10,
+      "last_row_id": 0,
+      "changed_db": true,
+      "size_after": 8323072,
+      "rows_read": 31,
+      "rows_written": 20,
+      "total_attempts": 1
+    }
+  }
+]

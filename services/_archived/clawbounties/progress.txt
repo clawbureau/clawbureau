@@ -1169,3 +1169,25 @@ Started: 2026-02-02T03:08:26.937005
   - all claim outcomes persisted in `bounty_arena_auto_claim_locks` and surfaced via `GET /v1/arena/desk/claims`
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T01-48-40Z-agp-us-059-auto-bounty-grabber/summary.json`
+
+## 2026-02-20 - AGP-US-060 execution + submission autopilot
+- Added arena desk submission autopilot API (admin):
+  - `POST /v1/arena/desk/submit-loop`
+- Added deterministic proof generation path for execution autopilot:
+  - conformance Ed25519 signer seed (agent DID: `did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7`)
+  - per-bounty unique run IDs + signed proof bundle envelope + URM
+  - internal submission orchestration via `handleSubmitBounty(..., authOverride)` (public worker auth path unchanged)
+- Added operator tooling:
+  - `scripts/arena/run-execution-submission-autopilot.mjs`
+  - `scripts/arena/run-execution-submission-autopilot.test.mjs`
+- Deployed services:
+  - `clawbounties-staging` versions `ee8ff98e-c0cc-446b-9114-f409802cd829` -> `f50ba8b2-ec89-4303-9814-5aae9766ef19`
+  - `clawbounties` versions `39b3d87e-2670-4fa4-afe0-30a89533c1d2` -> `9c86e4fc-b9cd-4edb-ab7a-ef1a1396bf90`
+- Data alignment executed before submission loop:
+  - remapped AGP-US-059 claimed bounty worker DID from placeholder `did:key:z6MkFleetCodexBatch...` to cryptographically valid signer DID `did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7`
+  - applied on both clawbounties + clawescrow D1 records for the affected accepted bounties.
+- Real-data acceptance verified:
+  - staging submissions with `pending_review + proof_verify_status=valid`: `10` (target `>=10`)
+  - production submissions with `pending_review + proof_verify_status=valid`: `3` (target `>=3`)
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/summary.json`

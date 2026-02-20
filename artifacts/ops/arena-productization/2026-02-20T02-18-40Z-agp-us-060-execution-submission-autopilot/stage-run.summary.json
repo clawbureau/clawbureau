@@ -1,0 +1,530 @@
+{
+  "ok": true,
+  "story": "AGP-US-060",
+  "generated_at": "2026-02-20T02:16:02.754Z",
+  "dry_run": false,
+  "endpoint": "https://staging.clawbounties.com/v1/arena/desk/submit-loop",
+  "request": {
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "target_submissions": 10,
+    "limit": 40,
+    "bounty_ids": [
+      "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+      "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+      "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+      "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+      "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+      "bty_b4c66713-625b-48a0-9147-98b704125f17",
+      "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+      "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+      "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+      "bty_154d2336-4047-4b28-ad68-aed5fc0be787"
+    ],
+    "dry_run": false
+  },
+  "loop_result": {
+    "schema_version": "arena_execution_submission_autopilot.v1",
+    "computed_at": "2026-02-20T02:16:02.589Z",
+    "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+    "dry_run": false,
+    "limits": {
+      "target_submissions": 10,
+      "limit": 40,
+      "candidate_bounty_ids": [
+        "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "bty_154d2336-4047-4b28-ad68-aed5fc0be787"
+      ]
+    },
+    "totals": {
+      "decisions": 10,
+      "successful_pending_review": 0,
+      "target_met": false
+    },
+    "decisions": [
+      {
+        "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d:30affb17d80e4924a6d8678c589a0b4b",
+        "run_id": "arena_exec_bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d_54faaf866d804357a9bcbae6fdb5dd7d",
+        "response": {
+          "submission_id": "sub_202c1c0d-f80d-42d1-bfed-e9405ddc8bfd",
+          "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:15:57.399Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa:060d214a2d0a40c1b69e7e79d417294d",
+        "run_id": "arena_exec_bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa_fc560d54f4b249338368de38d80153ba",
+        "response": {
+          "submission_id": "sub_9b710619-f799-42de-8ca0-8878a1990b5b",
+          "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:15:58.812Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_7b392878-8628-4bec-91bc-0f8f11e0f45f:38b06b926ab64e68a93c668c3af77a90",
+        "run_id": "arena_exec_bty_7b392878-8628-4bec-91bc-0f8f11e0f45f_ccd26bc1521e4685a436ca204c4886fc",
+        "response": {
+          "submission_id": "sub_b272bd90-a3ea-435e-8057-5f7b4eb88639",
+          "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:15:59.255Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_7e86b6f9-6906-49ff-9707-597ec0cb3003:9d6925ffc80f4a908693ab902b505e40",
+        "run_id": "arena_exec_bty_7e86b6f9-6906-49ff-9707-597ec0cb3003_e103c794d0db4315ab5d604083fccbbf",
+        "response": {
+          "submission_id": "sub_f94724ae-6a71-4811-a3b7-2ab020d0d41b",
+          "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:15:59.688Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_5d317637-3ac5-4f2f-894f-003082fa167e:3a25155294e64d3f8b89a20715a0ffda",
+        "run_id": "arena_exec_bty_5d317637-3ac5-4f2f-894f-003082fa167e_781d34533a784050a830c23cae449437",
+        "response": {
+          "submission_id": "sub_defb06bf-5ca9-44b5-ad46-07741f3c4fd0",
+          "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:16:00.118Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_b4c66713-625b-48a0-9147-98b704125f17:1ead9b7d66fa423f8e5d9f99b6fb970a",
+        "run_id": "arena_exec_bty_b4c66713-625b-48a0-9147-98b704125f17_286fce891a6b4d9da2b92f50acbfa734",
+        "response": {
+          "submission_id": "sub_34c94469-4212-42b7-b43c-e97607ed1ca4",
+          "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:16:00.539Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173:ea44ed2f63004a60bdc19c3808313951",
+        "run_id": "arena_exec_bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173_b4d034da2b86449986817b36b6b13ccf",
+        "response": {
+          "submission_id": "sub_28e4debc-e3a0-4729-8e69-aa5066610cba",
+          "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:16:00.969Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_87d0bfad-741b-4f80-afc8-aa124f623910:d1a40af1b2424dfebfa02680cf566a3a",
+        "run_id": "arena_exec_bty_87d0bfad-741b-4f80-afc8-aa124f623910_3998467936854deaa656f491f1529ff0",
+        "response": {
+          "submission_id": "sub_2cabdfce-d0f8-49bc-9712-d4c98f476750",
+          "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:16:01.395Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_e92a7fab-2d78-4921-b582-15d22c5aebb9:2f1f3169005e4054b5b5e01186a2e38e",
+        "run_id": "arena_exec_bty_e92a7fab-2d78-4921-b582-15d22c5aebb9_4ffa9b87403541578067ff4f3ca02dd6",
+        "response": {
+          "submission_id": "sub_1c751261-6438-4be8-b802-60a3ecb92664",
+          "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:16:01.823Z",
+              "tier": "self"
+            }
+          }
+        }
+      },
+      {
+        "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+        "http_status": 201,
+        "submission_id": null,
+        "submission_status": "pending_review",
+        "proof_verify_status": null,
+        "idempotency_key": "arena-autosubmit:bty_154d2336-4047-4b28-ad68-aed5fc0be787:7f18365b54ed48d78bddc498f31b972c",
+        "run_id": "arena_exec_bty_154d2336-4047-4b28-ad68-aed5fc0be787_55b20bb12a94463e91e58c7303153ca9",
+        "response": {
+          "submission_id": "sub_d8085eab-d2f7-4cca-8f2c-1db4189fc0cc",
+          "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+          "status": "pending_review",
+          "verification": {
+            "proof_bundle": {
+              "status": "valid",
+              "reason": "Proof bundle verified successfully",
+              "verified_at": "2026-02-20T02:16:02.265Z",
+              "tier": "self"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "claims_snapshot": {
+    "schema_version": "arena_auto_claim_locks.v1",
+    "computed_at": "2026-02-20T02:16:02.749Z",
+    "filters": {
+      "status": null,
+      "limit": 200
+    },
+    "totals": {
+      "processing": 0,
+      "claimed": 10,
+      "skipped": 0,
+      "failed": 0
+    },
+    "locks": [
+      {
+        "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+        "lock_id": "aclk_f9fe9f84d6d44b22b25b17af1088c890",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+        "budget_minor_before": "898650",
+        "budget_minor_after": "898640",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:45.628Z",
+        "updated_at": "2026-02-20T01:47:45.858Z"
+      },
+      {
+        "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "lock_id": "aclk_7859897254fd41d492eeb4fe41e16163",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "budget_minor_before": "898700",
+        "budget_minor_after": "898650",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:45.307Z",
+        "updated_at": "2026-02-20T01:47:45.539Z"
+      },
+      {
+        "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "lock_id": "aclk_6f471af8738f40ea9c2f33592aa5f387",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "budget_minor_before": "898900",
+        "budget_minor_after": "898700",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:44.977Z",
+        "updated_at": "2026-02-20T01:47:45.216Z"
+      },
+      {
+        "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "lock_id": "aclk_22cd861e6eea4457add5aff15463c12d",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "budget_minor_before": "899100",
+        "budget_minor_after": "898900",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:44.665Z",
+        "updated_at": "2026-02-20T01:47:44.886Z"
+      },
+      {
+        "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "lock_id": "aclk_ecc479b91ed3413ba4ce30ea263df98c",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "budget_minor_before": "899300",
+        "budget_minor_after": "899100",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:44.353Z",
+        "updated_at": "2026-02-20T01:47:44.571Z"
+      },
+      {
+        "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "lock_id": "aclk_840d9fc529af43d5b707d121e81f0507",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "budget_minor_before": "899500",
+        "budget_minor_after": "899300",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:44.044Z",
+        "updated_at": "2026-02-20T01:47:44.264Z"
+      },
+      {
+        "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "lock_id": "aclk_9dabf6853a09470bbf5d6fef317a1510",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "budget_minor_before": "899700",
+        "budget_minor_after": "899500",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:43.738Z",
+        "updated_at": "2026-02-20T01:47:43.955Z"
+      },
+      {
+        "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "lock_id": "aclk_1f13a22e94da48c390b9d2bd341a6931",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "budget_minor_before": "899900",
+        "budget_minor_after": "899700",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:43.429Z",
+        "updated_at": "2026-02-20T01:47:43.648Z"
+      },
+      {
+        "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "lock_id": "aclk_553b42c3cd6b4a79b3a37452caf192ca",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "budget_minor_before": "899950",
+        "budget_minor_after": "899900",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:43.114Z",
+        "updated_at": "2026-02-20T01:47:43.341Z"
+      },
+      {
+        "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "lock_id": "aclk_a6ca0ebc7a6a44a0ae3223c5544b5e50",
+        "loop_id": "arena_autoclaim_45304688450346e9868de38f52e4cef9",
+        "claim_status": "claimed",
+        "worker_did": "did:key:z6MkFleetCodexBatch000000000000000000005",
+        "contender_id": null,
+        "reason_code": "ARENA_AUTOCLAIM_CLAIMED",
+        "claim_idempotency_key": "arena-autoclaim:bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "budget_minor_before": "900000",
+        "budget_minor_after": "899950",
+        "route_reason_codes": [
+          "ARENA_AUTOCLAIM_ROUTE_UNAVAILABLE",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_AUTOCLAIM_FLEET_FALLBACK"
+        ],
+        "metadata": {
+          "claim_error": null,
+          "fleet_status": "matched",
+          "source": "fleet_fallback"
+        },
+        "created_at": "2026-02-20T01:47:42.047Z",
+        "updated_at": "2026-02-20T01:47:43.030Z"
+      }
+    ]
+  }
+}

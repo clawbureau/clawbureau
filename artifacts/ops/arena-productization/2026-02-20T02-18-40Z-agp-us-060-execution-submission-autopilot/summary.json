@@ -1,0 +1,150 @@
+{
+  "ok": true,
+  "story": "AGP-US-060",
+  "generated_at": "2026-02-20T02:18:23.772Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "f50ba8b2-ec89-4303-9814-5aae9766ef19"
+    },
+    "production": {
+      "clawbounties_version_id": "9c86e4fc-b9cd-4edb-ab7a-ef1a1396bf90"
+    }
+  },
+  "data_alignment": {
+    "worker_did_remap": {
+      "from": "did:key:z6MkFleetCodexBatch000000000000000000005",
+      "to": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "reason": "submission autopilot requires cryptographically valid signer DID"
+    }
+  },
+  "done_criteria": {
+    "staging_pending_review_valid": 10,
+    "production_pending_review_valid": 3,
+    "thresholds": {
+      "staging_min": 10,
+      "production_min": 3
+    },
+    "staging_target_met": true,
+    "production_target_met": true
+  },
+  "submissions": {
+    "staging": [
+      {
+        "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "submission_id": "sub_202c1c0d-f80d-42d1-bfed-e9405ddc8bfd",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:15:57.366Z"
+      },
+      {
+        "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "submission_id": "sub_9b710619-f799-42de-8ca0-8878a1990b5b",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:15:58.781Z"
+      },
+      {
+        "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "submission_id": "sub_b272bd90-a3ea-435e-8057-5f7b4eb88639",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:15:59.210Z"
+      },
+      {
+        "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "submission_id": "sub_f94724ae-6a71-4811-a3b7-2ab020d0d41b",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:15:59.635Z"
+      },
+      {
+        "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "submission_id": "sub_defb06bf-5ca9-44b5-ad46-07741f3c4fd0",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:16:00.059Z"
+      },
+      {
+        "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "submission_id": "sub_34c94469-4212-42b7-b43c-e97607ed1ca4",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:16:00.474Z"
+      },
+      {
+        "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "submission_id": "sub_28e4debc-e3a0-4729-8e69-aa5066610cba",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:16:00.902Z"
+      },
+      {
+        "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "submission_id": "sub_2cabdfce-d0f8-49bc-9712-d4c98f476750",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:16:01.328Z"
+      },
+      {
+        "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "submission_id": "sub_1c751261-6438-4be8-b802-60a3ecb92664",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:16:01.757Z"
+      },
+      {
+        "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+        "submission_id": "sub_d8085eab-d2f7-4cca-8f2c-1db4189fc0cc",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:16:02.196Z"
+      }
+    ],
+    "production": [
+      {
+        "bounty_id": "bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9",
+        "submission_id": "sub_5651e644-a99f-485b-ac91-0b82606cb2cd",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:17:18.852Z"
+      },
+      {
+        "bounty_id": "bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf",
+        "submission_id": "sub_70140c92-8c38-40d4-be20-0d91ef4eafe1",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:17:20.003Z"
+      },
+      {
+        "bounty_id": "bty_929788a2-f419-4fdd-9731-fb8599d4e9ab",
+        "submission_id": "sub_439fab96-eccd-4723-be79-ec147b0d0ec7",
+        "submission_status": "pending_review",
+        "proof_verify_status": "valid",
+        "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+        "created_at": "2026-02-20T02:17:20.432Z"
+      }
+    ]
+  },
+  "artifacts": {
+    "stage_run_summary": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/stage-run.summary.json",
+    "prod_run_summary": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/prod-run.summary.json",
+    "stage_submissions": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/stage-submissions.json",
+    "prod_submissions": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/prod-submissions.json",
+    "stage_bounty_remap_log": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/stage-bounties-worker-remap.log",
+    "prod_bounty_remap_log": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/prod-bounties-worker-remap.log",
+    "stage_escrow_remap_log": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/stage-escrow-worker-remap.log",
+    "prod_escrow_remap_log": "artifacts/ops/arena-productization/2026-02-20T02-18-40Z-agp-us-060-execution-submission-autopilot/prod-escrow-worker-remap.log"
+  }
+}
