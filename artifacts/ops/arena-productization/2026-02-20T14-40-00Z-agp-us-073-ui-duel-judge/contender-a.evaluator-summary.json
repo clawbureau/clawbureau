@@ -1,0 +1,92 @@
+{
+  "ok": true,
+  "dry_run": false,
+  "schema_version": "arena_ui_duel_evaluator.v1",
+  "generated_at": "2026-02-20T14:05:05.523Z",
+  "contender_id": "contender_gemini_3_1_pro_preview_pi",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "ui_url": "https://staging.clawbounties.com/duel",
+  "hard_gates": {
+    "core_flows_pass": false,
+    "no_critical_runtime_errors": false,
+    "no_critical_accessibility_violations": true
+  },
+  "hard_gate_passed": false,
+  "weighted_scores": {
+    "ux_task_success_friction": 69,
+    "visual_quality_consistency": 100,
+    "performance": 100,
+    "accessibility": 97.19999999999999,
+    "implementation_maintainability": 94
+  },
+  "weighted_total": 88.13,
+  "final_score": 0,
+  "reason_codes": [
+    "ARENA_UI_DUEL_GATE_CORE_FLOWS_FAIL",
+    "ARENA_UI_DUEL_GATE_RUNTIME_ERRORS"
+  ],
+  "diagnostics": {
+    "flow_success_count": 3,
+    "flow_total": 4,
+    "flow_success_rate": 0.75,
+    "avg_timing_ms": 339.04,
+    "friction_events": 1,
+    "console_error_count": 0,
+    "runtime_error_count": 1,
+    "critical_accessibility_violations": 0,
+    "cls": 0,
+    "maintainability_signals": {
+      "source_bytes": 21047,
+      "inline_script_lines": 231,
+      "inline_style_blocks": 1,
+      "dom_node_count": 58,
+      "eval_occurrences": 0
+    },
+    "maintainability_inferred_score": 94,
+    "ui_http_status": 200
+  },
+  "artifacts": {
+    "journey": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/journey.json",
+    "lighthouse_summary": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/lighthouse/lighthouse.summary.json",
+    "output_dir": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi",
+    "evidence_links": [
+      {
+        "label": "journey",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/journey.json"
+      },
+      {
+        "label": "axe_raw",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/axe-results.json"
+      },
+      {
+        "label": "lighthouse_summary",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/lighthouse/lighthouse.summary.json"
+      },
+      {
+        "label": "lighthouse_raw",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/lighthouse/lighthouse.raw.json"
+      },
+      {
+        "label": "browse_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/01-browse.png"
+      },
+      {
+        "label": "details_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/02-details.png"
+      },
+      {
+        "label": "claim_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/03-claim.png"
+      },
+      {
+        "label": "submit_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/04-submit.png"
+      },
+      {
+        "label": "journey_video",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/videos"
+      }
+    ]
+  }
+}

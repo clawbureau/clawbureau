@@ -1,0 +1,69 @@
+{
+  "schema_version": "arena_ui_duel_judgement.v1",
+  "story_id": "AGP-US-073",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "method": "fail-closed hard gates then weighted score",
+  "contenders": [
+    {
+      "contender_id": "contender_gemini_3_1_pro_preview_pi",
+      "story_id": "AGP-US-071",
+      "branch": "feat/arena/AGP-US-071-ui-duel-contender-a-gemini",
+      "pr": {
+        "number": 399,
+        "url": "https://github.com/clawbureau/clawbureau/pull/399"
+      },
+      "staging_deploy_version_id": "65ec0fce-58bf-4f0e-a298-41879c3d0418",
+      "result": {
+        "final_score": 0,
+        "hard_gate_passed": false,
+        "reason_codes": [
+          "ARENA_UI_DUEL_GATE_CORE_FLOWS_FAIL",
+          "ARENA_UI_DUEL_GATE_RUNTIME_ERRORS"
+        ]
+      },
+      "evidence": {
+        "contender_summary": "artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/contender-a.summary.json",
+        "evaluator_summary": "artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/contender-a.evaluator-summary.json"
+      }
+    },
+    {
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "story_id": "AGP-US-072",
+      "branch": "feat/arena/AGP-US-072-ui-duel-contender-b-codex",
+      "pr": {
+        "number": 400,
+        "url": "https://github.com/clawbureau/clawbureau/pull/400"
+      },
+      "staging_deploy_version_id": "8bf51fb6-b3e9-46d6-8b2e-c734feb7b7da",
+      "result": {
+        "final_score": 99.4,
+        "hard_gate_passed": true,
+        "reason_codes": []
+      },
+      "evidence": {
+        "contender_summary": "artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/contender-b.summary.json",
+        "evaluator_summary": "artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/contender-b.evaluator-summary.json"
+      }
+    }
+  ],
+  "winner": {
+    "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "story_id": "AGP-US-072",
+    "branch": "feat/arena/AGP-US-072-ui-duel-contender-b-codex",
+    "pr_number": 400,
+    "decision_reason": "Only contender B passed all hard gates; contender A failed fail-closed submit/runtime gates."
+  },
+  "loser": {
+    "contender_id": "contender_gemini_3_1_pro_preview_pi",
+    "story_id": "AGP-US-071",
+    "pr_number": 399,
+    "close_reason": "Hard-gate failure under evaluator contract."
+  },
+  "audit_trail": {
+    "judge_report_markdown": "artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/report.md",
+    "winner_merge_policy": "merge-commit-only",
+    "evidence_mode": "real-data"
+  },
+  "generated_at": "2026-02-20T14:10:00Z"
+}

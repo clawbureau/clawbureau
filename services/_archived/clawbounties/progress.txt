@@ -1336,3 +1336,13 @@ Started: 2026-02-02T03:08:26.937005
   - full evaluator bundle: `artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/summary.json`
   - staging deploy version: `8bf51fb6-b3e9-46d6-8b2e-c734feb7b7da`
   - result: `final_score=99.4`, `hard_gate_passed=true`
+
+## 2026-02-20 - AGP-US-073 UI duel judge decision
+- Compared contenders with fail-closed contract scoring under real staging evidence:
+  - AGP-US-071 (Gemini): `final_score=0`, `hard_gate_passed=false`.
+  - AGP-US-072 (Codex): `final_score=99.4`, `hard_gate_passed=true`.
+- Winner selected: `contender_gpt_5_3_codex_xhigh_pi` (AGP-US-072).
+- Audit report bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T14-40-00Z-agp-us-073-ui-duel-judge/report.md`
+- Merge policy: merge-commit winner only, loser remains unmerged due hard-gate failure.
