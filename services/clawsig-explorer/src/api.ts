@@ -950,6 +950,8 @@ export interface ArenaMissionSummaryView {
   };
   submissions_window: {
     total: number;
+    with_submission: number;
+    without_submission: number;
     pending_review_valid: number;
     pending_review_invalid: number;
     approved: number;
@@ -961,6 +963,7 @@ export interface ArenaMissionSummaryView {
     accepted_total: number;
     accepted_without_valid_submission: number;
     claim_submission_gap: number;
+    claim_submission_gap_bounty_ids: string[];
   };
   kpi: {
     claim_success_rate: number | null;
@@ -969,6 +972,37 @@ export interface ArenaMissionSummaryView {
     gate_status: string;
     reason_codes: string[];
   };
+}
+
+export interface ArenaCoachSnapshotView {
+  schema_version: string;
+  computed_at: string;
+  task_fingerprint: string;
+  objective_profile_name: string | null;
+  analyzed_runs: number;
+  recommended: {
+    contender_id: string;
+    label: string;
+    reason_codes: string[];
+    evidence: {
+      appearances: number;
+      wins: number;
+      win_rate: number;
+      hard_gate_pass_rate: number;
+      avg_score: number;
+      last_seen_at: string | null;
+    };
+  };
+  backups: Array<{
+    contender_id: string;
+    label: string;
+    appearances: number;
+    wins: number;
+    win_rate: number;
+    hard_gate_pass_rate: number;
+    avg_score: number;
+    last_seen_at: string | null;
+  }>;
 }
 
 export interface ArenaReportView {
@@ -1198,6 +1232,8 @@ interface ArenaMissionResponse {
   };
   submissions_window?: {
     total?: unknown;
+    with_submission?: unknown;
+    without_submission?: unknown;
     pending_review_valid?: unknown;
     pending_review_invalid?: unknown;
     approved?: unknown;
@@ -1209,6 +1245,7 @@ interface ArenaMissionResponse {
     accepted_total?: unknown;
     accepted_without_valid_submission?: unknown;
     claim_submission_gap?: unknown;
+    claim_submission_gap_bounty_ids?: unknown;
   };
   kpi?: {
     claim_success_rate?: unknown;
@@ -1217,6 +1254,37 @@ interface ArenaMissionResponse {
     gate_status?: unknown;
     reason_codes?: unknown;
   };
+}
+
+interface ArenaManagerCoachResponse {
+  schema_version?: unknown;
+  computed_at?: unknown;
+  task_fingerprint?: unknown;
+  objective_profile_name?: unknown;
+  analyzed_runs?: unknown;
+  recommended?: {
+    contender_id?: unknown;
+    label?: unknown;
+    reason_codes?: unknown;
+    evidence?: {
+      appearances?: unknown;
+      wins?: unknown;
+      win_rate?: unknown;
+      hard_gate_pass_rate?: unknown;
+      avg_score?: unknown;
+      last_seen_at?: unknown;
+    };
+  };
+  backups?: Array<{
+    contender_id?: unknown;
+    label?: unknown;
+    appearances?: unknown;
+    wins?: unknown;
+    win_rate?: unknown;
+    hard_gate_pass_rate?: unknown;
+    avg_score?: unknown;
+    last_seen_at?: unknown;
+  }>;
 }
 
 function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>[number]): ArenaContenderView | null {
@@ -1852,6 +1920,8 @@ export async function fetchArenaMissionSummary(
     },
     submissions_window: {
       total: asNumber(data.submissions_window?.total, 0),
+      with_submission: asNumber(data.submissions_window?.with_submission, 0),
+      without_submission: asNumber(data.submissions_window?.without_submission, 0),
       pending_review_valid: asNumber(data.submissions_window?.pending_review_valid, 0),
       pending_review_invalid: asNumber(data.submissions_window?.pending_review_invalid, 0),
       approved: asNumber(data.submissions_window?.approved, 0),
@@ -1863,6 +1933,9 @@ export async function fetchArenaMissionSummary(
       accepted_total: asNumber(data.backlog?.accepted_total, 0),
       accepted_without_valid_submission: asNumber(data.backlog?.accepted_without_valid_submission, 0),
       claim_submission_gap: asNumber(data.backlog?.claim_submission_gap, 0),
+      claim_submission_gap_bounty_ids: Array.isArray(data.backlog?.claim_submission_gap_bounty_ids)
+        ? data.backlog?.claim_submission_gap_bounty_ids.filter((entry): entry is string => typeof entry === 'string')
+        : [],
     },
     kpi: {
       claim_success_rate: (claimSuccessRateRaw === null || claimSuccessRateRaw === undefined) ? null : asNumber(claimSuccessRateRaw, 0),

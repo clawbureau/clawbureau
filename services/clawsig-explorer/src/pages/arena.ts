@@ -606,6 +606,12 @@ function pct(value: number | null): string {
 
 export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
   const gateBadge = statusBadge(summary.kpi.gate_status === 'PASS' ? 'PASS' : 'FAIL');
+  const submissionCoverageRate = summary.submissions_window.total > 0
+    ? summary.submissions_window.with_submission / summary.submissions_window.total
+    : null;
+
+  const gapBountyIds = summary.backlog.claim_submission_gap_bounty_ids.slice(0, 6);
+  const gateReasonCodes = summary.kpi.reason_codes.join(', ') || 'none';
 
   const meta: PageMeta = {
     title: 'Arena Mission Control',
@@ -615,7 +621,7 @@ export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
 
   return layout(meta, `
     <h1 class="page-title">Arena Mission Control</h1>
-    <p class="page-subtitle">Live mission posture for claim → submit autopilot throughput, proof validity, and backlog risk.</p>
+    <p class="page-subtitle">Operational cockpit for claim → submit throughput, proof quality, and live backlog pressure.</p>
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -627,47 +633,65 @@ export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
         <div class="label">Fleet Online</div>
       </div>
       <div class="stat-card">
-        <div class="value">${fmtNum(summary.claims_window.claimed)}</div>
-        <div class="label">Claims (window)</div>
+        <div class="value">${pct(submissionCoverageRate)}</div>
+        <div class="label">Submission Coverage</div>
       </div>
       <div class="stat-card">
-        <div class="value">${fmtNum(summary.submissions_window.pending_review_valid)}</div>
-        <div class="label">Valid Pending Review</div>
+        <div class="value">${pct(summary.kpi.proof_valid_rate)}</div>
+        <div class="label">Proof Validity</div>
       </div>
     </div>
 
     <div class="card">
-      <p class="section-title">Mission scope</p>
+      <p class="section-title">Mission scope + gate rationale</p>
       <div class="detail-grid">
         <dt>Worker DID</dt><dd class="mono">${esc(summary.worker_did)}</dd>
         <dt>Window</dt><dd>${fmtNum(summary.window_hours)}h (since ${relativeTime(summary.window_started_at)})</dd>
         <dt>Computed</dt><dd>${relativeTime(summary.computed_at)}</dd>
       </div>
-      <p class="dim" style="font-size:0.8rem; margin-top:0.5rem">Reason codes: ${esc(summary.kpi.reason_codes.join(', ') || 'none')}</p>
+      <p class="dim" style="font-size:0.8rem; margin-top:0.55rem"><strong>Reason codes:</strong> ${esc(gateReasonCodes)}</p>
     </div>
 
     <div class="card">
-      <p class="section-title">Core KPI rates</p>
-      <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(160px, 1fr)); gap:0.4rem">
+      <p class="section-title">KPI posture</p>
+      <div class="diag-grid" style="grid-template-columns: repeat(4, minmax(140px, 1fr)); gap:0.4rem">
         ${renderMetricCell('claim success', pct(summary.kpi.claim_success_rate))}
         ${renderMetricCell('submission success', pct(summary.kpi.submission_success_rate))}
         ${renderMetricCell('proof valid rate', pct(summary.kpi.proof_valid_rate))}
+        ${renderMetricCell('claim→submit gap', String(summary.backlog.claim_submission_gap))}
+      </div>
+      <p class="dim" style="font-size:0.78rem; margin-top:0.45rem">Submission coverage is measured from actionable submissions (pending/approved/rejected) over claimed sample.</p>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Pipeline throughput</p>
+      <div class="diag-grid" style="grid-template-columns: repeat(4, minmax(125px, 1fr)); gap:0.35rem">
+        ${renderMetricCell('claims total', String(summary.claims_window.total))}
+        ${renderMetricCell('claims failed', String(summary.claims_window.failed))}
+        ${renderMetricCell('claims skipped', String(summary.claims_window.skipped))}
+        ${renderMetricCell('claims processing', String(summary.claims_window.processing))}
+        ${renderMetricCell('submissions total', String(summary.submissions_window.total))}
+        ${renderMetricCell('with submission', String(summary.submissions_window.with_submission))}
+        ${renderMetricCell('without submission', String(summary.submissions_window.without_submission))}
+        ${renderMetricCell('proof invalid', String(summary.submissions_window.proof_invalid))}
+        ${renderMetricCell('valid pending', String(summary.submissions_window.pending_review_valid))}
+        ${renderMetricCell('pending invalid', String(summary.submissions_window.pending_review_invalid))}
+        ${renderMetricCell('approved/rejected', `${summary.submissions_window.approved}/${summary.submissions_window.rejected}`)}
+        ${renderMetricCell('accepted backlog', String(summary.backlog.accepted_without_valid_submission))}
       </div>
     </div>
 
     <div class="card">
-      <p class="section-title">Throughput + backlog</p>
-      <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(140px, 1fr)); gap:0.4rem">
-        ${renderMetricCell('claims total', String(summary.claims_window.total))}
-        ${renderMetricCell('claims failed', String(summary.claims_window.failed))}
-        ${renderMetricCell('claims skipped', String(summary.claims_window.skipped))}
-        ${renderMetricCell('submissions total', String(summary.submissions_window.total))}
-        ${renderMetricCell('proof invalid', String(summary.submissions_window.proof_invalid))}
-        ${renderMetricCell('approved/rejected', `${summary.submissions_window.approved}/${summary.submissions_window.rejected}`)}
-        ${renderMetricCell('accepted total', String(summary.backlog.accepted_total))}
-        ${renderMetricCell('accepted backlog', String(summary.backlog.accepted_without_valid_submission))}
-        ${renderMetricCell('claim→submit gap', String(summary.backlog.claim_submission_gap))}
-      </div>
+      <p class="section-title">Claim gap queue</p>
+      ${gapBountyIds.length === 0
+        ? '<p class="dim" style="font-size:0.82rem">No claim→submission gaps currently tracked in the mission window.</p>'
+        : `
+          <p class="dim" style="font-size:0.8rem; margin-bottom:0.45rem">Top bounty IDs currently counted in claim→submission gap:</p>
+          <ul style="margin-left:1.1rem; display:grid; gap:0.25rem">
+            ${gapBountyIds.map((bountyId) => `<li class="mono">${esc(bountyId)}</li>`).join('')}
+          </ul>
+        `
+      }
     </div>
 
     <div class="card">
@@ -897,6 +921,8 @@ export function sampleArenaMissionSummary(): ArenaMissionSummaryView {
     },
     submissions_window: {
       total: 10,
+      with_submission: 10,
+      without_submission: 0,
       pending_review_valid: 10,
       pending_review_invalid: 0,
       approved: 0,
@@ -908,6 +934,7 @@ export function sampleArenaMissionSummary(): ArenaMissionSummaryView {
       accepted_total: 0,
       accepted_without_valid_submission: 0,
       claim_submission_gap: 0,
+      claim_submission_gap_bounty_ids: [],
     },
     kpi: {
       claim_success_rate: 1,

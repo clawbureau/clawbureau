@@ -377,6 +377,9 @@ node scripts/arena/run-ui-duel-league-monitor.mjs \
   --rounds 3 \
   --interval-seconds 10
 
+# AGP-US-078: mission cockpit UX smoke
+curl -sS https://staging-explorer.clawsig.com/arena/mission | rg "Submission Coverage|Pipeline throughput|Claim gap queue"
+
 # AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
 node scripts/arena/run-ui-duel-evaluator.mjs \
   --base-url https://staging.clawbounties.com \

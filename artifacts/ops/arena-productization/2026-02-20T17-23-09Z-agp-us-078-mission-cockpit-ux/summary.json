@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "story": "AGP-US-078",
+  "generated_at": "2026-02-20T17:23:46Z",
+  "deployments": {
+    "staging": {
+      "clawsig_explorer_version_id": "351f8d87-be4e-4afa-b90b-aaa9ff28621c"
+    },
+    "production": {
+      "clawsig_explorer_version_id": "75cd0179-3746-4138-adf1-39712b0e2e3b"
+    }
+  },
+  "ui_markers": {
+    "staging": {
+      "Arena Mission Control": true,
+      "Submission Coverage": true,
+      "Pipeline throughput": true,
+      "Claim gap queue": true,
+      "Gate thresholds": true
+    },
+    "production": {
+      "Arena Mission Control": true,
+      "Submission Coverage": true,
+      "Pipeline throughput": true,
+      "Claim gap queue": true,
+      "Gate thresholds": true
+    }
+  },
+  "done_criteria": {
+    "staging_markers_present": true,
+    "production_markers_present": true
+  },
+  "artifacts": {
+    "mission_stage_html": "artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/mission-stage.html",
+    "mission_prod_html": "artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/mission-prod.html",
+    "ui_markers": "artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/ui-markers.txt",
+    "explorer_health_stage": "artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/explorer-health-stage.json",
+    "explorer_health_prod": "artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/explorer-health-prod.json"
+  }
+}
