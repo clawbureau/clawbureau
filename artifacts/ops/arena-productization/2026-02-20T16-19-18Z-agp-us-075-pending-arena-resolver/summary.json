@@ -1,0 +1,150 @@
+{
+  "ok": true,
+  "story": "AGP-US-075",
+  "generated_at": "2026-02-20T16:22:49Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "d1e52ff5-c9d6-4586-9462-fa8dcbdf2fa9"
+    },
+    "production": {
+      "clawbounties_version_id": "f3a1c1eb-2809-47ab-934a-0f28cf30ba8b"
+    }
+  },
+  "resolver": {
+    "staging": {
+      "before": {
+        "pending_count": 12,
+        "pending_with_reason_code": 0,
+        "pending_without_reason_code": 12,
+        "p95_pending_age_minutes": 843.84
+      },
+      "after": {
+        "pending_count": 0,
+        "pending_with_reason_code": 0,
+        "pending_without_reason_code": 0,
+        "p95_pending_age_minutes": 0
+      },
+      "totals": {
+        "candidates": 12,
+        "processed": 12,
+        "resolved_winner": 0,
+        "resolved_unresolved": 12,
+        "unresolved_pending": 0,
+        "failed": 0,
+        "target_met": false
+      },
+      "resolved_arena_ids": [
+        "arena_bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d_live_sub_202c1c0d-f80d-42d1-bfed-e9405ddc8bfd",
+        "arena_bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa_live_sub_9b710619-f799-42de-8ca0-8878a1990b5b",
+        "arena_bty_7b392878-8628-4bec-91bc-0f8f11e0f45f_live_sub_b272bd90-a3ea-435e-8057-5f7b4eb88639",
+        "arena_bty_7e86b6f9-6906-49ff-9707-597ec0cb3003_live_sub_f94724ae-6a71-4811-a3b7-2ab020d0d41b",
+        "arena_bty_5d317637-3ac5-4f2f-894f-003082fa167e_live_sub_defb06bf-5ca9-44b5-ad46-07741f3c4fd0",
+        "arena_bty_b4c66713-625b-48a0-9147-98b704125f17_live_sub_34c94469-4212-42b7-b43c-e97607ed1ca4",
+        "arena_bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173_live_sub_28e4debc-e3a0-4729-8e69-aa5066610cba",
+        "arena_bty_87d0bfad-741b-4f80-afc8-aa124f623910_live_sub_2cabdfce-d0f8-49bc-9712-d4c98f476750",
+        "arena_bty_e92a7fab-2d78-4921-b582-15d22c5aebb9_live_sub_1c751261-6438-4be8-b802-60a3ecb92664",
+        "arena_bty_154d2336-4047-4b28-ad68-aed5fc0be787_live_sub_d8085eab-d2f7-4cca-8f2c-1db4189fc0cc",
+        "arena_bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e_live_sub_e523076c-fb10-4fa9-99b0-aa2270b77856",
+        "arena_bty_4265f754-718b-4d59-a559-4aaa958a4597_live_sub_bd7b311a-aa45-4326-a565-e8af4e527191"
+      ]
+    },
+    "production": {
+      "before": {
+        "pending_count": 8,
+        "pending_with_reason_code": 0,
+        "pending_without_reason_code": 8,
+        "p95_pending_age_minutes": 843.01
+      },
+      "after": {
+        "pending_count": 0,
+        "pending_with_reason_code": 0,
+        "pending_without_reason_code": 0,
+        "p95_pending_age_minutes": 0
+      },
+      "totals": {
+        "candidates": 8,
+        "processed": 8,
+        "resolved_winner": 0,
+        "resolved_unresolved": 8,
+        "unresolved_pending": 0,
+        "failed": 0,
+        "target_met": false
+      },
+      "resolved_arena_ids": [
+        "arena_bty_20ce0b6b-f728-4c45-ab2c-9300c72fb5b9_live_sub_5651e644-a99f-485b-ac91-0b82606cb2cd",
+        "arena_bty_e4df2ccf-1d9d-4add-bcbf-4a3adade59cf_live_sub_70140c92-8c38-40d4-be20-0d91ef4eafe1",
+        "arena_bty_929788a2-f419-4fdd-9731-fb8599d4e9ab_live_sub_439fab96-eccd-4723-be79-ec147b0d0ec7",
+        "arena_bty_bb485106-7652-46a8-a539-1d420b145383_live_sub_b53729a5-b5d4-4638-b195-d593c9971ca8",
+        "arena_bty_818fe1d5-c3a6-4dd5-9f9f-808675c60855_live_sub_d71bc3fb-f033-49fa-a718-3733e9f5b118",
+        "arena_bty_13408642-ea86-434a-b07d-90dfc5fd34eb_live_sub_f60663c2-2bdc-49ab-8b28-2b9be84add71",
+        "arena_bty_143a239b-c3ed-4a8c-aef2-e68e386ac5c3_live_sub_bc25b7f0-74b0-4232-913c-7eb5ae1d2601",
+        "arena_bty_36aadedb-16b3-46f7-9edc-3870e00e14f0_live_sub_aad5749a-8304-42b2-ad50-2856eed34a09"
+      ]
+    }
+  },
+  "done_criteria": {
+    "production_pending_le_3": true,
+    "staging_pending_le_5": true,
+    "production_p95_pending_age_lt_30m": true,
+    "staging_p95_pending_age_lt_30m": true,
+    "no_pending_without_reason_code_staging": true,
+    "no_pending_without_reason_code_production": true
+  },
+  "routing_regression_check": {
+    "staging": {
+      "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "analyzed_runs": 1
+    },
+    "production": {
+      "recommended_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "analyzed_runs": 1
+    }
+  },
+  "smoke": {
+    "health_stage": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "staging"
+    },
+    "health_prod": {
+      "status": "ok",
+      "service": "clawbounties",
+      "version": "0.8.0",
+      "environment": "production"
+    },
+    "duel_http_status": {
+      "staging": 200,
+      "production": 200
+    }
+  },
+  "artifacts": {
+    "stage_before": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/stage-before.resolve-loop.json",
+    "stage_live": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/stage-resolve-live.summary.json",
+    "stage_after": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/stage-after.resolve-loop.json",
+    "prod_before": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/prod-before.resolve-loop.json",
+    "prod_live": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/prod-resolve-live.summary.json",
+    "prod_after": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/prod-after.resolve-loop.json",
+    "route_stage": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/route-stage.json",
+    "route_prod": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/route-prod.json",
+    "http_status": "artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/http-status.txt"
+  }
+}

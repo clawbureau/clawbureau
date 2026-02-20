@@ -1,0 +1,260 @@
+{
+  "schema_version": "arena_manager_route.v2",
+  "computed_at": "2026-02-20T16:21:19.937Z",
+  "mode": "route",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "objective_profile_name": "ui-duel-balanced",
+  "experiment_id": null,
+  "experiment_arm": null,
+  "analyzed_runs": 1,
+  "winner_stability_ratio": 1,
+  "policy": {
+    "require_hard_gate_pass": true,
+    "allow_fallback": true,
+    "use_active_policy": true,
+    "environment": "production",
+    "max_runs": 80,
+    "experiment_id": null,
+    "experiment_arm": null,
+    "required_skills": [],
+    "required_tools": [],
+    "max_fleet_cost_tier": null,
+    "max_fleet_risk_tier": null
+  },
+  "recommended": {
+    "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "label": "GPT-5.3 Codex xhigh (Pi)",
+    "model": "openai-codex/gpt-5.3-codex:xhigh",
+    "harness": "pi",
+    "routing_score": 102.7002,
+    "reason_codes": [
+      "ARENA_ROUTING_SELECTED",
+      "ARENA_ROUTING_OBJECTIVE_MATCHED",
+      "ARENA_ROUTING_STANDARD_MODE",
+      "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+      "ARENA_FLEET_EMPTY",
+      "ARENA_FLEET_CONTENDER_BOUND",
+      "ARENA_ROUTING_FLEET_UNAVAILABLE"
+    ],
+    "rationale": "Selected contender_gpt_5_3_codex_xhigh_pi with routing_score=102.7002 from 1 matched runs (win_rate=1, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=-0.2245).",
+    "evidence": {
+      "appearances": 1,
+      "wins": 1,
+      "win_rate": 1,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 92.548,
+      "avg_risk": 26.6,
+      "avg_quality": 100,
+      "latest_hard_gate_pass": true,
+      "outcome_samples": 1,
+      "empirical_accept_rate": 1,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.7755,
+      "calibration_gap": -0.2245,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Predicted confidence appears conservative; contender may be under-utilized."
+      ],
+      "last_seen_at": "2026-02-20T14:24:23.332Z",
+      "sample_run_ids": [
+        "arn_e5dc6be3-c371-4179-824e-91db3660b262"
+      ]
+    }
+  },
+  "backups": [],
+  "contenders_ranked": [
+    {
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "label": "GPT-5.3 Codex xhigh (Pi)",
+      "model": "openai-codex/gpt-5.3-codex:xhigh",
+      "harness": "pi",
+      "appearances": 1,
+      "wins": 1,
+      "win_rate": 1,
+      "hard_gate_pass_rate": 1,
+      "avg_score": 92.548,
+      "avg_risk": 26.6,
+      "avg_quality": 100,
+      "latest_hard_gate_pass": true,
+      "routing_score": 102.7002,
+      "outcome_samples": 1,
+      "empirical_accept_rate": 1,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0.7755,
+      "calibration_gap": -0.2245,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Predicted confidence appears conservative; contender may be under-utilized."
+      ],
+      "last_seen_at": "2026-02-20T14:24:23.332Z",
+      "sample_run_ids": [
+        "arn_e5dc6be3-c371-4179-824e-91db3660b262"
+      ]
+    },
+    {
+      "contender_id": "contender_gemini_3_1_pro_preview_pi",
+      "label": "Gemini 3.1 Pro Preview (Pi)",
+      "model": "openrouter/google/gemini-3.1-pro-preview",
+      "harness": "pi",
+      "appearances": 1,
+      "wins": 0,
+      "win_rate": 0,
+      "hard_gate_pass_rate": 0,
+      "avg_score": 66.929,
+      "avg_risk": 36.5,
+      "avg_quality": 62.67,
+      "latest_hard_gate_pass": false,
+      "routing_score": 39.85385,
+      "outcome_samples": 0,
+      "empirical_accept_rate": 0,
+      "override_rate": 0,
+      "rework_rate": 0,
+      "avg_predicted_confidence": 0,
+      "calibration_gap": 0,
+      "override_reason_penalty": 0,
+      "top_override_reason_code": null,
+      "override_reason_breakdown": [],
+      "coaching_recommendations": [
+        "Mandatory checks not consistently passing; fix contract compliance first."
+      ],
+      "last_seen_at": "2026-02-20T14:24:23.332Z",
+      "sample_run_ids": [
+        "arn_e5dc6be3-c371-4179-824e-91db3660b262"
+      ]
+    }
+  ],
+  "policy_optimizer": {
+    "schema_version": "arena_policy_optimizer.v1",
+    "computed_at": "2026-02-20T14:29:19.780Z",
+    "task_fingerprint": "frontend:clawbounties:ux-redesign",
+    "environment": "production",
+    "objective_profile_name": "ui-duel-balanced",
+    "experiment_id": null,
+    "experiment_arm": null,
+    "gates": {
+      "min_samples": 1,
+      "min_confidence": 0.62,
+      "sample_count": 1,
+      "confidence_score": 0.9775
+    },
+    "current_active_policy": {
+      "calibration_gap": -0.2245,
+      "computed_at": "2026-02-20T14:29:19.780Z",
+      "confidence_score": 0.9775,
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "empirical_accept_rate": 1,
+      "experiment_arm": null,
+      "experiment_id": null,
+      "objective_profile_name": "ui-duel-balanced",
+      "override_rate": 0,
+      "promoted_at": "2026-02-20T14:29:19.780Z",
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "rework_rate": 0,
+      "route_policy_id": "arp_shadow__ZFsRSbZHuWs33pCDyt3yTH1",
+      "routing_score": 102.7002,
+      "sample_count": 1,
+      "schema_version": "arena_route_policy_active.v1",
+      "win_rate": 1
+    },
+    "candidate_shadow_policy": {
+      "calibration_gap": -0.2245,
+      "computed_at": "2026-02-20T14:29:19.780Z",
+      "confidence_score": 0.9775,
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "empirical_accept_rate": 1,
+      "experiment_arm": null,
+      "experiment_id": null,
+      "objective_profile_name": "ui-duel-balanced",
+      "override_rate": 0,
+      "reason_codes": [
+        "ARENA_ROUTING_SELECTED",
+        "ARENA_ROUTING_OBJECTIVE_MATCHED",
+        "ARENA_ROUTING_STANDARD_MODE",
+        "ARENA_FLEET_EMPTY",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_ROUTING_FLEET_UNAVAILABLE"
+      ],
+      "rework_rate": 0,
+      "route_policy_id": "arp_shadow__ZFsRSbZHuWs33pCDyt3yTH1",
+      "routing_score": 102.7002,
+      "sample_count": 1,
+      "schema_version": "arena_route_policy_shadow.v1",
+      "win_rate": 1
+    },
+    "promotion": {
+      "active_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "computed_at": "2026-02-20T14:29:19.780Z",
+      "confidence_score": 0.9775,
+      "event_id": "arpe_e2e5bb85-ffed-44d0-a840-bb7184c23601",
+      "min_confidence": 0.62,
+      "min_samples": 1,
+      "previous_contender_id": null,
+      "promoted": true,
+      "reason_codes": [
+        "ARENA_POLICY_SHADOW_REFRESHED",
+        "ARENA_POLICY_PROMOTED_INITIAL_ACTIVE"
+      ],
+      "sample_count": 1,
+      "schema_version": "arena_policy_promotion_event.v1",
+      "shadow_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "status": "PROMOTED"
+    },
+    "reason_codes": [
+      "ARENA_POLICY_SHADOW_REFRESHED",
+      "ARENA_POLICY_PROMOTED_INITIAL_ACTIVE"
+    ],
+    "promotion_status": "PROMOTED"
+  },
+  "fleet_match": {
+    "schema_version": "arena_harness_fleet_match.v1",
+    "computed_at": "2026-02-20T16:21:19.937Z",
+    "status": "unavailable",
+    "reason_codes": [
+      "ARENA_FLEET_EMPTY",
+      "ARENA_FLEET_CONTENDER_BOUND"
+    ],
+    "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "objective_profile_name": "ui-duel-balanced",
+    "harness": "pi",
+    "required_skills": [],
+    "required_tools": [],
+    "max_cost_tier": null,
+    "max_risk_tier": null,
+    "total_online_workers": 0,
+    "candidates": []
+  },
+  "delegation_coach": {
+    "primary_contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+    "backup_contenders": [],
+    "global_recommendations": [
+      "Routing profile appears stable; continue autonomous routing with periodic calibration checks."
+    ],
+    "contender_cards": [
+      {
+        "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+        "routing_score": 102.7002,
+        "override_rate": 0,
+        "rework_rate": 0,
+        "calibration_gap": -0.2245,
+        "top_override_reason_code": null,
+        "override_reason_breakdown": [],
+        "coaching_recommendations": [
+          "Predicted confidence appears conservative; contender may be under-utilized."
+        ]
+      }
+    ]
+  }
+}

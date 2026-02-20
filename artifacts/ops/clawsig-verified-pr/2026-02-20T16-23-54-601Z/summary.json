@@ -1,0 +1,60 @@
+{
+  "mode": {
+    "enforce": true,
+    "reason": "proofs/**/commit.sig.json present",
+    "labels": []
+  },
+  "inputs": {
+    "changed_files": [
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/autopilot-prod.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/autopilot-stage.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/health-prod.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/health-stage.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/http-status.txt",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/prod-outcomes.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/prod-policy-promoted.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-prod.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-stage.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/route-status-codes.txt",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/stage-outcomes.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/stage-policy-not-ready.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/stage-policy-promoted.summary.json",
+      "artifacts/ops/arena-productization/2026-02-20T14-31-20Z-agp-us-074-ui-duel-routing-policy/summary.json",
+      "artifacts/ops/clawsig-verified-pr/2026-02-20T14-33-52-785Z/summary.json",
+      "contracts/arena/bounty-ui-duel-routing.production.v1.json",
+      "contracts/arena/bounty-ui-duel-routing.staging.v1.json",
+      "contracts/arena/contenders-ui-duel.v1.json",
+      "proofs/feat/arena/AGP-US-074-ui-duel-routing-policy/commit.sig.json",
+      "services/_archived/clawbounties/progress.txt"
+    ],
+    "bundles": [],
+    "commit_sigs": [
+      "proofs/feat/arena/AGP-US-074-ui-duel-routing-policy/commit.sig.json"
+    ],
+    "config_path": "packages/schema/fixtures/clawverify.config.clawbureau.v1.json",
+    "cli_path": "packages/clawverify-cli/dist/cli.js"
+  },
+  "results": {
+    "ok": true,
+    "would_fail": false,
+    "missing_evidence": {
+      "bundles_required_missing": false,
+      "commit_sigs_required_missing": false
+    },
+    "bundles_ok": true,
+    "commit_sigs_ok": true
+  },
+  "bundles": [],
+  "commit_sigs": [
+    {
+      "path": "proofs/feat/arena/AGP-US-074-ui-duel-routing-policy/commit.sig.json",
+      "ok": true,
+      "reason_code": "OK",
+      "reason": "Commit signature verified",
+      "commit_sha": "f0873ab6667220936519fc03d0bc4d2febfa9b25",
+      "signer_did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+      "message": "commit:f0873ab6667220936519fc03d0bc4d2febfa9b25"
+    }
+  ],
+  "finished_at": "2026-02-20T16:23:54.600Z"
+}

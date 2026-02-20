@@ -1,0 +1,172 @@
+{
+  "ok": true,
+  "story": "AGP-US-075",
+  "generated_at": "2026-02-20T16:19:59.468Z",
+  "endpoint": "https://staging.clawbounties.com/v1/arena/desk/resolve-loop",
+  "dry_run": false,
+  "request": {
+    "limit": 500,
+    "target_resolved": 500,
+    "min_pending_age_minutes": 30,
+    "finalize_unresolved": true,
+    "arena_ids": [],
+    "loop_id": null,
+    "dry_run": false
+  },
+  "loop_result": {
+    "schema_version": "arena_desk_resolve_loop.v1",
+    "loop_id": "arena_resolve_a285f3cc17dc4567b484b678c7c12571",
+    "computed_at": "2026-02-20T16:19:59.375Z",
+    "dry_run": false,
+    "limits": {
+      "limit": 500,
+      "target_resolved": 500,
+      "min_pending_age_minutes": 30,
+      "finalize_unresolved": true,
+      "arena_ids": []
+    },
+    "totals": {
+      "candidates": 12,
+      "processed": 12,
+      "resolved_winner": 0,
+      "resolved_unresolved": 12,
+      "unresolved_pending": 0,
+      "failed": 0,
+      "target_met": false
+    },
+    "pending_before": {
+      "pending_count": 12,
+      "pending_with_reason_code": 0,
+      "pending_without_reason_code": 12,
+      "p95_pending_age_minutes": 844
+    },
+    "pending_after": {
+      "pending_count": 0,
+      "pending_with_reason_code": 0,
+      "pending_without_reason_code": 0,
+      "p95_pending_age_minutes": 0
+    },
+    "decisions": [
+      {
+        "arena_id": "arena_bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d_live_sub_202c1c0d-f80d-42d1-bfed-e9405ddc8bfd",
+        "run_id": "arn_12d9cb36-4c77-438d-ba0d-f3a1bef1f44a",
+        "bounty_id": "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 844
+      },
+      {
+        "arena_id": "arena_bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa_live_sub_9b710619-f799-42de-8ca0-8878a1990b5b",
+        "run_id": "arn_f905fb4c-dd98-4e85-846e-89a6acf7211d",
+        "bounty_id": "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.98
+      },
+      {
+        "arena_id": "arena_bty_7b392878-8628-4bec-91bc-0f8f11e0f45f_live_sub_b272bd90-a3ea-435e-8057-5f7b4eb88639",
+        "run_id": "arn_92101f8a-9db4-4c93-ae09-f116899a41f3",
+        "bounty_id": "bty_7b392878-8628-4bec-91bc-0f8f11e0f45f",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.98
+      },
+      {
+        "arena_id": "arena_bty_7e86b6f9-6906-49ff-9707-597ec0cb3003_live_sub_f94724ae-6a71-4811-a3b7-2ab020d0d41b",
+        "run_id": "arn_0c2ec3bc-6d21-404f-9d1d-c759cfe131ca",
+        "bounty_id": "bty_7e86b6f9-6906-49ff-9707-597ec0cb3003",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.97
+      },
+      {
+        "arena_id": "arena_bty_5d317637-3ac5-4f2f-894f-003082fa167e_live_sub_defb06bf-5ca9-44b5-ad46-07741f3c4fd0",
+        "run_id": "arn_7401ff96-5679-4748-bb41-b59e0b2da140",
+        "bounty_id": "bty_5d317637-3ac5-4f2f-894f-003082fa167e",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.97
+      },
+      {
+        "arena_id": "arena_bty_b4c66713-625b-48a0-9147-98b704125f17_live_sub_34c94469-4212-42b7-b43c-e97607ed1ca4",
+        "run_id": "arn_a9076581-6e2c-404e-89b7-c57a4cb4c7c5",
+        "bounty_id": "bty_b4c66713-625b-48a0-9147-98b704125f17",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.96
+      },
+      {
+        "arena_id": "arena_bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173_live_sub_28e4debc-e3a0-4729-8e69-aa5066610cba",
+        "run_id": "arn_41e3cc0d-8001-4105-af50-6910e3785585",
+        "bounty_id": "bty_7e8fadef-24e0-4cbe-ac8e-ae24cebb9173",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.96
+      },
+      {
+        "arena_id": "arena_bty_87d0bfad-741b-4f80-afc8-aa124f623910_live_sub_2cabdfce-d0f8-49bc-9712-d4c98f476750",
+        "run_id": "arn_79bb1818-de6b-4712-bb10-3c2ce6a85c47",
+        "bounty_id": "bty_87d0bfad-741b-4f80-afc8-aa124f623910",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.95
+      },
+      {
+        "arena_id": "arena_bty_e92a7fab-2d78-4921-b582-15d22c5aebb9_live_sub_1c751261-6438-4be8-b802-60a3ecb92664",
+        "run_id": "arn_71b4e045-a194-4dfa-a747-6e27d88d3f5d",
+        "bounty_id": "bty_e92a7fab-2d78-4921-b582-15d22c5aebb9",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.95
+      },
+      {
+        "arena_id": "arena_bty_154d2336-4047-4b28-ad68-aed5fc0be787_live_sub_d8085eab-d2f7-4cca-8f2c-1db4189fc0cc",
+        "run_id": "arn_762ef213-b347-4131-817c-639491f4142b",
+        "bounty_id": "bty_154d2336-4047-4b28-ad68-aed5fc0be787",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 843.95
+      },
+      {
+        "arena_id": "arena_bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e_live_sub_e523076c-fb10-4fa9-99b0-aa2270b77856",
+        "run_id": "arn_9026191c-84b2-4527-be1b-4830eb065a19",
+        "bounty_id": "bty_f31dd43d-744d-4231-bd7b-4cac4075bc3e",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 237.03
+      },
+      {
+        "arena_id": "arena_bty_4265f754-718b-4d59-a559-4aaa958a4597_live_sub_bd7b311a-aa45-4326-a565-e8af4e527191",
+        "run_id": "arn_72c204c4-fd34-4449-a1bd-89462ed606e4",
+        "bounty_id": "bty_4265f754-718b-4d59-a559-4aaa958a4597",
+        "status": "resolved_unresolved",
+        "reason_code": "ARENA_RESOLVE_UNRESOLVED_NO_OUTCOMES",
+        "outcome_count": 0,
+        "accepted_outcome_count": 0,
+        "age_minutes": 237.01
+      }
+    ]
+  }
+}

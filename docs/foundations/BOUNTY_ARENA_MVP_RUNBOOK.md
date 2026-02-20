@@ -359,6 +359,13 @@ node scripts/arena/run-autonomous-desk-cycle.mjs \
   --target-submissions 15 \
   --target-decisions 15
 
+# AGP-US-075: pending arena resolver loop (deterministic winner/unresolved closure)
+node scripts/arena/run-autonomous-resolve-loop.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --limit 150 \
+  --target-resolved 80 \
+  --min-pending-age-minutes 30
+
 # AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
 node scripts/arena/run-ui-duel-evaluator.mjs \
   --base-url https://staging.clawbounties.com \
