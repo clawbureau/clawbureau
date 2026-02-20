@@ -53,6 +53,10 @@ binding = "BOUNTIES_DB"
 database_name = "clawbounties-staging"
 database_id = "6b04a8f1-75ba-414f-afd8-36067db109a1"
 
+[[env.staging.r2_buckets]]
+binding = "ARENA_ARTIFACTS"
+bucket_name = "arena-artifacts"
+
 [[env.staging.queues.producers]]
 binding = "REP_EVENTS"
 queue = "clawrep-events-staging"
@@ -88,3 +92,8 @@ WORKER_AUTH_TIMEOUT_MS = "5000"
 # - TRIALS_SERVICE_KEY
 # - CLAWREP_INGEST_KEY
 # - SCOPE_ADMIN_KEY
+
+# Arena duel artifacts (screenshots, journeys, lighthouse reports)
+[[r2_buckets]]
+binding = "ARENA_ARTIFACTS"
+bucket_name = "arena-artifacts"

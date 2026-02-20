@@ -11,10 +11,11 @@ import type { GlobalStats, RecentRun } from './pages/home.js';
 
 const FETCH_TIMEOUT_MS = 5000;
 
-interface FetchOptions {
+export interface FetchOptions {
   vaasBase: string;
   arenaBase?: string;
   arenaAdminKey?: string;
+  bountiesBase?: string;
   cache?: Cache;
   cacheTtl?: number;
 }

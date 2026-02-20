@@ -1663,3 +1663,13 @@ Started: 2026-02-02T03:08:26.937005
 - Added backfill endpoint: POST /v1/arena/desk/backfill-duel-proof-packs (admin-only)
   Staging: 18 contenders backfilled. Production: 20 contenders backfilled.
 - Explorer: check matrix now shows core_flows_pass, no_runtime_errors, no_a11y_critical
+
+## 2026-02-20 - Arena visual evidence (R2 artifacts)
+- Created R2 bucket: arena-artifacts
+- Added ARENA_ARTIFACTS R2Bucket binding to Env + wrangler.toml (staging + production)
+- POST /v1/arena/desk/upload-artifact (admin-only): upload screenshots/JSON to R2
+- GET /v1/arena/artifacts/{key} (public): serve images with cache-control, inline display
+- Explorer: added side-by-side screenshot comparison for each UI flow step
+- Explorer: added Journey + Lighthouse data table with links to raw JSON
+- Upload script: scripts/arena/upload-duel-artifacts-to-r2.mjs
+- Uploaded 118 staging + 73 production artifact files from duel batch v2

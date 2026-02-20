@@ -772,7 +772,87 @@ export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
   `);
 }
 
-export function arenaComparePage(report: ArenaReportView): string {
+function renderVisualEvidence(report: ArenaReportView, artifactsBaseUrl: string | null): string {
+  if (!artifactsBaseUrl || !report.contract?.bounty_id) return '';
+
+  const bountyId = report.contract.bounty_id;
+  const steps = ['browse', 'details', 'claim', 'submit'] as const;
+  const stepFiles = ['01-browse.png', '02-details.png', '03-claim.png', '04-submit.png'];
+
+  // Build side-by-side screenshot comparisons
+  const rows = steps.map((step, idx) => {
+    const cols = report.contenders.map((c) => {
+      const url = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/screenshots/${stepFiles[idx]}`;
+      return `
+        <div style="flex:1; min-width:300px">
+          <div class="dim" style="font-size:0.78rem; margin-bottom:0.3rem">${esc(c.contender_id)} &mdash; ${esc(c.label)}</div>
+          <a href="${esc(url)}" target="_blank" rel="noreferrer">
+            <img src="${esc(url)}" alt="${esc(step)} screenshot for ${esc(c.contender_id)}"
+                 style="width:100%; border-radius:var(--radius); border:1px solid var(--border)"
+                 loading="lazy" onerror="this.parentElement.innerHTML='<span class=dim>Screenshot not available</span>'" />
+          </a>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div style="margin-bottom:1.5rem">
+        <p style="font-weight:600; font-size:0.88rem; margin-bottom:0.5rem; text-transform:capitalize">${step}</p>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap">
+          ${cols}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Journey timing comparison
+  const timingRows = report.contenders.map((c) => {
+    const raw = c.raw_evaluator_metrics;
+    const avgMs = raw && typeof raw.avg_timing_ms === 'number' ? raw.avg_timing_ms.toFixed(0) + 'ms' : 'N/A';
+    const friction = raw && typeof raw.friction_events === 'number' ? String(raw.friction_events) : 'N/A';
+    const rtErrors = raw && typeof raw.runtime_error_count === 'number' ? String(raw.runtime_error_count) : 'N/A';
+    const journeyUrl = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/journey.json`;
+    const lighthouseUrl = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/lighthouse/lighthouse.summary.json`;
+    return `
+      <tr>
+        <td class="mono">${esc(c.contender_id)}</td>
+        <td>${esc(c.model)}</td>
+        <td class="mono">${avgMs}</td>
+        <td>${friction}</td>
+        <td>${rtErrors}</td>
+        <td>
+          <a href="${esc(journeyUrl)}" target="_blank" class="dim" style="font-size:0.75rem">journey.json ↗</a>
+          &middot;
+          <a href="${esc(lighthouseUrl)}" target="_blank" class="dim" style="font-size:0.75rem">lighthouse ↗</a>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="card">
+      <p class="section-title">Visual evidence — side-by-side screenshots</p>
+      <p class="dim" style="font-size:0.78rem; margin-bottom:1rem">Playwright captured each UI flow step. Click to view full size.</p>
+      ${rows}
+    </div>
+
+    <div class="card">
+      <p class="section-title">Journey + Lighthouse data</p>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr><th>Contender</th><th>Model</th><th>Avg Timing</th><th>Friction</th><th>RT Errors</th><th>Raw Data</th></tr>
+          </thead>
+          <tbody>
+            ${timingRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: string | null = null): string {
   const meta: PageMeta = {
     title: `Arena ${report.arena_id}`,
     description: `Bounty Arena comparison for ${report.contract.bounty_id}`,
@@ -877,6 +957,9 @@ export function arenaComparePage(report: ArenaReportView): string {
       <p class="section-title">Contract check matrix</p>
       ${contractCheckMatrix(report)}
     </div>
+
+    ${renderVisualEvidence(report, artifactsBaseUrl)}
+
   `);
 }
 
