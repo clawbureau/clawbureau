@@ -23592,6 +23592,100 @@ async function handleGetDuelLeague(
   }, 200, version);
 }
 
+async function handleBackfillDuelProofPacks(
+  env: Env,
+  version: string,
+): Promise<Response> {
+  // Find all duel contender records that lack a proof_pack_json
+  const rows = await env.BOUNTIES_DB
+    .prepare(`SELECT c.run_id, c.contender_id, c.score, c.hard_gate_pass, c.metrics_json, c.check_results_json, c.proof_pack_json
+              FROM bounty_arena_contenders c
+              INNER JOIN bounty_arena_runs r ON c.run_id = r.run_id
+              WHERE r.run_id LIKE 'run_duel_%'
+              AND (c.proof_pack_json IS NULL OR c.proof_pack_json = '')
+              LIMIT 500`)
+    .all()
+    .then((result) => result.results ?? []);
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    const rec = row as Record<string, unknown>;
+    const runId = d1String(rec.run_id);
+    const contenderId = d1String(rec.contender_id);
+    const score = d1Number(rec.score) ?? 0;
+    const metricsObj = parseJsonObject(d1String(rec.metrics_json) ?? '{}') ?? {};
+
+    if (!runId || !contenderId) { skipped += 1; continue; }
+
+    // Build proof_pack from existing metrics
+    const proofPack: Record<string, unknown> = {
+      schema_version: 'arena_duel_proof_pack.v1',
+      generated_at: new Date().toISOString(),
+      contender_id: contenderId,
+      evaluator_source: 'duel_batch_backfill',
+      score_explain: {
+        derived: { final_score: score },
+        reason_codes: Array.isArray(metricsObj.reason_codes) ? metricsObj.reason_codes : [],
+        evidence_links: [],
+      },
+      journey: {
+        flow_success_rate: d1Number(metricsObj.flow_success_rate) ?? null,
+        flows_passed: d1Number(metricsObj.flows_passed) ?? null,
+        flows_total: d1Number(metricsObj.flows_total) ?? null,
+        avg_timing_ms: d1Number(metricsObj.avg_timing_ms) ?? null,
+        friction_events: d1Number(metricsObj.friction_events) ?? null,
+        runtime_error_count: d1Number(metricsObj.runtime_error_count) ?? null,
+      },
+      lighthouse: {
+        performance: d1Number(metricsObj.lighthouse_performance) ?? null,
+        accessibility: d1Number(metricsObj.lighthouse_accessibility) ?? null,
+        cls: d1Number(metricsObj.lighthouse_cls) ?? null,
+      },
+      scores: {
+        ux_score: d1Number(metricsObj.ux_score) ?? null,
+        perf_score: d1Number(metricsObj.perf_score) ?? null,
+        a11y_score: d1Number(metricsObj.a11y_score) ?? null,
+        visual_score: d1Number(metricsObj.visual_score) ?? null,
+        maint_score: d1Number(metricsObj.maint_score) ?? null,
+        weighted_total: d1Number(metricsObj.weighted_total) ?? null,
+      },
+      hard_gates: isRecord(metricsObj.hard_gates) ? metricsObj.hard_gates : null,
+    };
+
+    // Also build check_results from hard_gates
+    const checkResults: Array<Record<string, unknown>> = [];
+    if (isRecord(metricsObj.hard_gates)) {
+      const hg = metricsObj.hard_gates;
+      if (typeof hg.core_flows_pass === 'boolean') {
+        checkResults.push({ criterion_id: 'core_flows_pass', required: true, status: hg.core_flows_pass ? 'PASS' : 'FAIL', reason_code: hg.core_flows_pass ? 'ARENA_CORE_FLOWS_PASS' : 'ARENA_CORE_FLOWS_FAIL' });
+      }
+      if (typeof hg.no_runtime_errors === 'boolean') {
+        checkResults.push({ criterion_id: 'no_runtime_errors', required: true, status: hg.no_runtime_errors ? 'PASS' : 'FAIL', reason_code: hg.no_runtime_errors ? 'ARENA_NO_RUNTIME_ERRORS' : 'ARENA_RUNTIME_ERRORS_FOUND' });
+      }
+      if (typeof hg.no_a11y_critical === 'boolean') {
+        checkResults.push({ criterion_id: 'no_a11y_critical', required: true, status: hg.no_a11y_critical ? 'PASS' : 'FAIL', reason_code: hg.no_a11y_critical ? 'ARENA_NO_A11Y_CRITICAL' : 'ARENA_A11Y_CRITICAL_FOUND' });
+      }
+    }
+
+    await env.BOUNTIES_DB
+      .prepare('UPDATE bounty_arena_contenders SET proof_pack_json = ?, check_results_json = ? WHERE run_id = ? AND contender_id = ?')
+      .bind(JSON.stringify(proofPack), JSON.stringify(checkResults), runId, contenderId)
+      .run();
+    updated += 1;
+  }
+
+  return jsonResponse({
+    schema_version: 'arena_duel_backfill.v1',
+    computed_at: new Date().toISOString(),
+    total_found: rows.length,
+    updated,
+    skipped,
+    reason_codes: ['ARENA_DUEL_PROOF_PACK_BACKFILL_COMPLETED'],
+  }, 200, version);
+}
+
 async function handlePostDuelBatch(
   request: Request,
   env: Env,
@@ -23749,19 +23843,74 @@ async function handlePostDuelBatch(
         .run();
 
       for (const c of contenders) {
+        // Build proof_pack from duel evaluator data so the arena report renders evidence
+        const proofPack: Record<string, unknown> = {
+          schema_version: 'arena_duel_proof_pack.v1',
+          generated_at: now,
+          contender_id: c.contender_id,
+          evaluator_source: 'duel_batch_real_scores',
+          score_explain: {
+            derived: { final_score: c.score },
+            reason_codes: Array.isArray(c.metrics.reason_codes) ? c.metrics.reason_codes : [],
+            evidence_links: c.evidence_links.map((link) => ({
+              label: isRecord(link) ? d1String(link.label) ?? 'evidence' : 'evidence',
+              url: isRecord(link) ? d1String(link.path) ?? d1String(link.url) ?? '' : '',
+              source: 'duel_evaluator',
+            })),
+          },
+          journey: {
+            flow_success_rate: d1Number(c.metrics.flow_success_rate) ?? null,
+            flows_passed: d1Number(c.metrics.flows_passed) ?? null,
+            flows_total: d1Number(c.metrics.flows_total) ?? null,
+            avg_timing_ms: d1Number(c.metrics.avg_timing_ms) ?? null,
+            friction_events: d1Number(c.metrics.friction_events) ?? null,
+            runtime_error_count: d1Number(c.metrics.runtime_error_count) ?? null,
+          },
+          lighthouse: {
+            performance: d1Number(c.metrics.lighthouse_performance) ?? null,
+            accessibility: d1Number(c.metrics.lighthouse_accessibility) ?? null,
+            cls: d1Number(c.metrics.lighthouse_cls) ?? null,
+          },
+          scores: {
+            ux_score: d1Number(c.metrics.ux_score) ?? null,
+            perf_score: d1Number(c.metrics.perf_score) ?? null,
+            a11y_score: d1Number(c.metrics.a11y_score) ?? null,
+            visual_score: d1Number(c.metrics.visual_score) ?? null,
+            maint_score: d1Number(c.metrics.maint_score) ?? null,
+            weighted_total: d1Number(c.metrics.weighted_total) ?? null,
+          },
+          hard_gates: isRecord(c.metrics.hard_gates) ? c.metrics.hard_gates : null,
+        };
+
+        // Build check_results from hard_gates for the check matrix
+        const checkResults: Array<Record<string, unknown>> = [];
+        if (isRecord(c.metrics.hard_gates)) {
+          const hg = c.metrics.hard_gates;
+          if (typeof hg.core_flows_pass === 'boolean') {
+            checkResults.push({ criterion_id: 'core_flows_pass', required: true, status: hg.core_flows_pass ? 'PASS' : 'FAIL', reason_code: hg.core_flows_pass ? 'ARENA_CORE_FLOWS_PASS' : 'ARENA_CORE_FLOWS_FAIL' });
+          }
+          if (typeof hg.no_runtime_errors === 'boolean') {
+            checkResults.push({ criterion_id: 'no_runtime_errors', required: true, status: hg.no_runtime_errors ? 'PASS' : 'FAIL', reason_code: hg.no_runtime_errors ? 'ARENA_NO_RUNTIME_ERRORS' : 'ARENA_RUNTIME_ERRORS_FOUND' });
+          }
+          if (typeof hg.no_a11y_critical === 'boolean') {
+            checkResults.push({ criterion_id: 'no_a11y_critical', required: true, status: hg.no_a11y_critical ? 'PASS' : 'FAIL', reason_code: hg.no_a11y_critical ? 'ARENA_NO_A11Y_CRITICAL' : 'ARENA_A11Y_CRITICAL_FOUND' });
+          }
+        }
+
         await env.BOUNTIES_DB
           .prepare(`INSERT INTO bounty_arena_contenders
             (run_id, contender_id, label, model, harness,
              tools_json, skills_json, plugins_json,
              score, hard_gate_pass, mandatory_failed, metrics_json, check_results_json,
-             review_paste, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+             proof_pack_json, review_paste, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(
             runId, c.contender_id, c.label, c.model, c.harness,
             '[]', '[]', '[]',
             c.score, c.hard_gate_pass ? 1 : 0, c.hard_gate_pass ? 0 : 1,
             JSON.stringify(c.metrics),
-            JSON.stringify(c.evidence_links),
+            JSON.stringify(checkResults),
+            JSON.stringify(proofPack),
             c.review_paste || `Evaluator score: ${c.score}, hard_gate: ${c.hard_gate_pass}`,
             now, now,
           )
@@ -24066,6 +24215,12 @@ export default {
 
       if (path === '/v1/arena/desk/duel-batch' && method === 'POST') {
         return handlePostDuelBatch(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/backfill-duel-proof-packs' && method === 'POST') {
+        const adminError = requireAdmin(request, env, version);
+        if (adminError) return adminError;
+        return handleBackfillDuelProofPacks(env, version);
       }
 
       if (path === '/v1/arena/duel-league' && method === 'GET') {
