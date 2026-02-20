@@ -1,0 +1,94 @@
+{
+  "schema_version": "arena_bounty_ui_duel_contract.v1",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "objective_profile": {
+    "name": "ui-duel-balanced",
+    "description": "Deterministic UI duel contract for clawbounties browse/detail/claim/submit journey quality.",
+    "hard_gates": [
+      {
+        "id": "core_flows_pass",
+        "description": "Playwright core journey flows must pass: browse list, open details, claim path, submit path."
+      },
+      {
+        "id": "no_critical_runtime_errors",
+        "description": "No critical runtime/console errors during evaluated journeys."
+      },
+      {
+        "id": "no_critical_accessibility_violations",
+        "description": "Critical accessibility violations must be zero."
+      }
+    ],
+    "weighted_rubric": [
+      {
+        "id": "ux_task_success_friction",
+        "weight_percent": 35,
+        "description": "Journey success and low friction across task steps."
+      },
+      {
+        "id": "visual_quality_consistency",
+        "weight_percent": 20,
+        "description": "Visual consistency and low layout instability under interaction."
+      },
+      {
+        "id": "performance",
+        "weight_percent": 20,
+        "description": "Lighthouse performance posture for the duel UI route."
+      },
+      {
+        "id": "accessibility",
+        "weight_percent": 15,
+        "description": "Accessibility score and issue profile from automated checks."
+      },
+      {
+        "id": "implementation_maintainability",
+        "weight_percent": 10,
+        "description": "Maintainability signals inferred from delivered UI payload complexity."
+      }
+    ]
+  },
+  "ui_contract": {
+    "route_path": "/duel",
+    "required_dom_ids": [
+      "adminKey",
+      "workerDid",
+      "loadBounties",
+      "claimBounty",
+      "submitBounty",
+      "actionStatus"
+    ],
+    "required_data_testids": [
+      "bounty-row"
+    ]
+  },
+  "contender_constraints": {
+    "same_prompt_required": true,
+    "same_tool_budget_required": true,
+    "tool_budget": {
+      "max_minutes": 45,
+      "read_calls": 40,
+      "bash_calls": 25,
+      "edit_calls": 30,
+      "write_calls": 15
+    },
+    "same_bounty_contract_required": true,
+    "disallowed": [
+      "mock-only acceptance evidence",
+      "synthetic scoring-only winner selection"
+    ]
+  },
+  "contenders": [
+    {
+      "contender_id": "contender_gemini_3_1_pro_preview_pi",
+      "harness": "pi",
+      "model": "openrouter/google/gemini-3.1-pro-preview",
+      "thinking": "high"
+    },
+    {
+      "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+      "harness": "pi",
+      "model": "openai-codex/gpt-5.3-codex",
+      "thinking": "xhigh"
+    }
+  ]
+}

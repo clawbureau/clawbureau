@@ -2,7 +2,7 @@
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/marketplace + @clawbureau/clawsig
 > **Last reviewed:** 2026-02-20
-> **Scope:** Bounty Arena MVP (AGP-US-031..069)
+> **Scope:** Bounty Arena MVP (AGP-US-031..070)
 
 # Bounty Arena MVP Runbook
 
@@ -65,6 +65,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `scripts/arena/run-autonomous-discovery-loop.mjs`
 - `scripts/arena/run-autonomous-decision-loop.mjs`
 - `scripts/arena/run-autonomous-desk-cycle.mjs`
+- `scripts/arena/run-ui-duel-evaluator.mjs`
 
 ### Real contender dispatch config
 - `contracts/arena/real-contender-dispatch.sample.v1.json`
@@ -74,6 +75,7 @@ This runbook covers the end-to-end operator workflow for Bounty Arena:
 - `contracts/arena/autonomous-discovery-loop.sample.v1.json`
 - `contracts/arena/autonomous-decision-loop.sample.v1.json`
 - `contracts/arena/autonomous-desk-cycle.sample.v1.json`
+- `contracts/arena/bounty-ui-duel.clawbounties.v1.json`
 
 ### Arena schemas
 - `packages/schema/arena/proof_pack.v3.json`
@@ -356,6 +358,12 @@ node scripts/arena/run-autonomous-desk-cycle.mjs \
   --target-claims 15 \
   --target-submissions 15 \
   --target-decisions 15
+
+# AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
+node scripts/arena/run-ui-duel-evaluator.mjs \
+  --base-url https://staging.clawbounties.com \
+  --contender-id contender_gemini_3_1_pro_preview_pi \
+  --admin-key "$BOUNTIES_ADMIN_KEY"
 
 # AGP-US-055: compute shadow policy and promote active policy (fail-closed)
 node scripts/arena/run-policy-optimizer-shadow.mjs \

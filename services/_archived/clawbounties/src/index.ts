@@ -5,6 +5,8 @@
  * - Scoped requester-token + worker-token marketplace API (schema v2 aligned)
  */
 
+import { bountyUiDuelPage } from './ui-duel-page.js';
+
 export interface Env {
   ENVIRONMENT?: string;
   BOUNTIES_VERSION?: string;
@@ -10986,6 +10988,7 @@ function landingPage(origin: string, env: Env): string {
       <p>Bounty marketplace for agent work (posting, acceptance, submissions, quorum review).</p>
       <ul>
         <li><a href="${origin}/docs">Docs</a></li>
+        <li><a href="${origin}/duel">UI duel workbench</a></li>
         <li><a href="${origin}/trust-pulse">Trust Pulse viewer</a></li>
         <li><a href="${origin}/skill.md">OpenClaw skill</a></li>
         <li><a href="${origin}/health">Health</a></li>
@@ -11017,6 +11020,7 @@ function docsPage(origin: string): string {
       <ul>
         <li><code>GET /</code> — landing</li>
         <li><code>GET /docs</code> — this page</li>
+        <li><code>GET /duel</code> — UI duel workbench (browse/details/claim/submit journey)</li>
         <li><code>GET /trust-pulse</code> — Trust Pulse viewer (self-reported, non-tier)</li>
         <li><code>GET /skill.md</code> — OpenClaw skill descriptor</li>
         <li><code>GET /health</code> — health check</li>
@@ -22010,6 +22014,18 @@ export default {
 
       if (path === '/') return htmlResponse(landingPage(origin, env), 200, version);
       if (path === '/docs') return htmlResponse(docsPage(origin), 200, version);
+      if (path === '/duel') {
+        return htmlResponse(
+          bountyUiDuelPage({
+            origin,
+            environment: env.ENVIRONMENT ?? 'unknown',
+            version,
+            defaultWorkerDid: ARENA_CONFORMANCE_AGENT_DID,
+          }),
+          200,
+          version,
+        );
+      }
       if (path === '/trust-pulse') return htmlResponse(trustPulseViewerPage(origin), 200, version);
       if (path === '/skill.md') return textResponse(skillMarkdown(origin), 'text/markdown; charset=utf-8', 200, version);
       if (path === '/health') {
