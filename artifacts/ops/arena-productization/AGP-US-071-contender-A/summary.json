@@ -1,65 +1,32 @@
 {
-  "schema_version": "arena_ui_duel_contender_summary.v1",
+  "schema_version": "arena_ui_duel_contender_evidence.v1",
   "story_id": "AGP-US-071",
   "contender_id": "contender_gemini_3_1_pro_preview_pi",
   "contender_label": "Contender A — Gemini 3.1 Pro Preview (Pi)",
-  "contract_id": "contract_clawbounties_ui_duel_v1",
   "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
   "branch": "feat/arena/AGP-US-071-ui-duel-contender-a-gemini",
-  "generated_at": "2026-02-20T13:57:00Z",
-  "implementation": {
-    "ui_route": "/duel",
-    "file_changed": "services/_archived/clawbounties/src/ui-duel-page.ts",
-    "preserved_dom_ids": [
-      "adminKey",
-      "workerDid",
-      "loadBounties",
-      "claimBounty",
-      "submitBounty",
-      "actionStatus"
-    ],
-    "preserved_data_testids": [
-      "bounty-row"
-    ],
-    "core_flows_wired": [
-      "browse",
-      "details",
-      "claim",
-      "submit"
-    ],
-    "mock_data": false,
-    "fail_closed_errors": true
+  "staging": {
+    "base_url": "https://staging.clawbounties.com",
+    "deploy_version_id": "65ec0fce-58bf-4f0e-a298-41879c3d0418"
   },
-  "validations": {
-    "typecheck": {
-      "command": "npm run typecheck",
-      "status": "PASS"
-    },
-    "evaluator_test": {
-      "command": "node --test scripts/arena/run-ui-duel-evaluator.test.mjs",
-      "status": "PASS",
-      "tests_passed": 1,
-      "tests_total": 1
-    },
-    "score_test": {
-      "command": "node --test scripts/arena/ui-duel-score.test.mjs",
-      "status": "PASS",
-      "tests_passed": 2,
-      "tests_total": 2
-    }
+  "evaluation": {
+    "final_score": 0,
+    "hard_gate_passed": false,
+    "reason_codes": [
+      "ARENA_UI_DUEL_GATE_CORE_FLOWS_FAIL",
+      "ARENA_UI_DUEL_GATE_RUNTIME_ERRORS"
+    ],
+    "flow_success_rate": 0.75,
+    "runtime_error_count": 1,
+    "critical_accessibility_violations": 0
   },
-  "design_changes": [
-    "Card-based layout with header navigation bar",
-    "Environment badge with semantic color coding",
-    "ARIA roles: listbox/option with aria-selected state",
-    "Status pills with color-coded semantics (open=green, accepted=blue, pending=amber)",
-    "Reward formatting from minor units to dollar display",
-    "Focus-visible outlines on all interactive elements",
-    "Responsive grid with mobile breakpoint at 900px",
-    "Structured detail grid with labeled cells",
-    "Custom scrollbar styling for bounty list",
-    "Screen-reader-only utility class"
-  ],
-  "evidence_status": "PLACEHOLDER",
-  "notes": "Full evaluator run (journey + Lighthouse + axe) pending live staging deployment."
+  "evidence_bundle": {
+    "summary": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/summary.json",
+    "journey": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/journey.json",
+    "lighthouse": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/lighthouse/lighthouse.summary.json",
+    "proof_pack": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/proof-pack.v3.json",
+    "manager_review": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/manager-review.json"
+  },
+  "generated_at": "2026-02-20T14:07:00Z"
 }

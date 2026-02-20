@@ -1,0 +1,44 @@
+{
+  "schema_version": "arena_ui_duel_journey.v1",
+  "generated_at": "2026-02-20T14:04:53.147Z",
+  "ui_url": "https://staging.clawbounties.com/duel",
+  "selected_bounty_id": null,
+  "flows": {
+    "browse": true,
+    "details": true,
+    "claim": true,
+    "submit": false
+  },
+  "timings_ms": {
+    "browse": 811.89,
+    "details": 20.03,
+    "claim": 185.2,
+    "submit": 0
+  },
+  "total_duration_ms": 31711.7,
+  "friction_events": 1,
+  "console": {
+    "error_count": 0,
+    "warn_count": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "runtime_errors": [
+    "page.waitForFunction: Timeout 30000ms exceeded."
+  ],
+  "accessibility": {
+    "total_violations": 1,
+    "critical_violations": 0
+  },
+  "action_status_text": "Loaded 1 open bounties.\n{\n  \"count\": 1,\n  \"selected_bounty_id\": \"bty_1c4c6c72-fcbf-4c93-acef-11599bf91ad2\"\n}",
+  "artifacts": {
+    "screenshots": {
+      "browse": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/01-browse.png",
+      "details": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/02-details.png",
+      "claim": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/03-claim.png",
+      "submit": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/screenshots/04-submit.png"
+    },
+    "video": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/videos/be51786190b6b2595185e09592e12cdd.webm",
+    "axe_raw": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/axe-results.json"
+  }
+}

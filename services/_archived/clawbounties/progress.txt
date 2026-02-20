@@ -1334,4 +1334,8 @@ Started: 2026-02-02T03:08:26.937005
 - Fail-closed error handling: admin key required before any API call, all errors surfaced to #actionStatus.
 - Typecheck: npm run typecheck passes clean.
 - Evaluator tests: run-ui-duel-evaluator.test.mjs (1/1) + ui-duel-score.test.mjs (2/2) all pass.
-- Evidence placeholder: artifacts/ops/arena-productization/AGP-US-071-contender-A/summary.json
+- Real-data evidence:
+  - contender summary: artifacts/ops/arena-productization/AGP-US-071-contender-A/summary.json
+  - full evaluator bundle: artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/summary.json
+  - staging deploy version: `65ec0fce-58bf-4f0e-a298-41879c3d0418`
+  - result: `final_score=0`, `hard_gate_passed=false`, reasons `ARENA_UI_DUEL_GATE_CORE_FLOWS_FAIL`, `ARENA_UI_DUEL_GATE_RUNTIME_ERRORS`
