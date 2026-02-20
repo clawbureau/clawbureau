@@ -1580,3 +1580,23 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundles:
   - `artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/summary.json` (staging)
   - `artifacts/ops/arena-productization/2026-02-20T20-11-37Z-agp-us-083-real-duel-batch-v2/production/summary.json` (production)
+
+## 2026-02-20 - AGP-US-084 ops dashboard real ROI
+- Enhanced `GET /v1/arena/roi-dashboard` with three new response fields:
+  - `cycle_time_percentiles`: p50, p75, p90, p95, min, max, count
+  - `daily_buckets`: per-day outcomes, accepted, accept_rate, cycle_time_p50
+  - `contender_costs`: per-contender outcomes, accepted, wins, total_cost_usd, cost_per_accepted_usd
+- Added `computePercentile()` helper for sorted-array percentile calculation
+- Added explorer page at `/arena/roi`:
+  - Key metrics with color-coded thresholds (green/yellow/red)
+  - Cycle time distribution table
+  - 7d/30d trend windows
+  - Daily throughput table
+  - Contender cost comparison table
+  - Failure reason drilldown
+- Added `fetchArenaRoiDashboard()` to explorer api.ts with full type parsing
+- Added `scripts/arena/run-ops-roi-dashboard.mjs` for automated ops reporting:
+  - Fetches dashboard, assesses health (HEALTHY/WARN/CRITICAL)
+  - Exit code 2 = critical, 0 = healthy/warn
+  - Writes summary.json + full-dashboard.json to OUT_DIR
+- Test: `scripts/arena/run-ops-roi-dashboard.test.mjs`

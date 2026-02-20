@@ -31,6 +31,7 @@ import {
   fetchArenaIndex,
   fetchArenaMissionSummary,
   fetchArenaReport,
+  fetchArenaRoiDashboard,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
 import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
@@ -45,12 +46,14 @@ import {
   sampleArenaMissionSummary,
   sampleArenaReport,
 } from './pages/arena.js';
+import { arenaRoiPage, arenaRoiUnavailablePage } from './pages/arena-roi.js';
 import { deriveOpsSloHealth } from './slo.js';
 
 export interface Env {
   ENVIRONMENT: string;
   VAAS_API_BASE: string;
   ARENA_API_BASE?: string;
+  ARENA_ADMIN_KEY?: string;
 }
 
 function json(data: unknown, status = 200): Response {
@@ -143,6 +146,7 @@ export default {
     const apiOpts = {
       vaasBase: env.VAAS_API_BASE,
       arenaBase: env.ARENA_API_BASE ?? 'https://clawbounties.com',
+      arenaAdminKey: env.ARENA_ADMIN_KEY ?? '',
       cache,
     };
 
@@ -257,6 +261,15 @@ export default {
     // -- Agents listing (redirect to runs feed for now) --
     if (path === '/agents') {
       return Response.redirect(url.origin + '/runs', 302);
+    }
+
+    // -- Arena ROI dashboard (AGP-US-084) --
+    if (path === '/arena/roi') {
+      const roiData = await fetchArenaRoiDashboard(apiOpts);
+      if (!roiData) {
+        return html(arenaRoiUnavailablePage(), 200, 30);
+      }
+      return html(arenaRoiPage(roiData), 200, 30);
     }
 
     // -- Arena mission control --
