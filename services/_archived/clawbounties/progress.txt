@@ -1491,3 +1491,30 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T17-40-56Z-agp-us-079-kpi-roi-circuit-breaker/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-080 manager autopilot circuit-breaker hardening
+- Hardened manager autopilot response to bind KPI+ROI circuit-breaker state into routing decisions.
+- Refactored shared circuit-breaker computation into reusable helper:
+  - `computeArenaDeskCircuitBreakerPayload(...)`
+  - reused by `/v1/arena/desk/circuit-breaker` and `/v1/arena/manager/autopilot`
+- Autopilot now emits circuit-breaker contract fields:
+  - `autopilot.circuit_breaker.status`
+  - `autopilot.circuit_breaker.reason_codes`
+  - `autopilot.circuit_breaker.mission_gate_status`
+  - `autopilot.circuit_breaker.roi_status`
+- Added deterministic autopilot reason codes:
+  - `ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS`
+  - `ARENA_AUTOPILOT_CIRCUIT_BREAKER_TRIPPED`
+- Added hardening monitor script + test:
+  - `scripts/arena/run-autopilot-circuit-breaker-monitor.mjs`
+  - `scripts/arena/run-autopilot-circuit-breaker-monitor.test.mjs`
+- Deploys:
+  - staging `cd28cec4-84e2-4fd9-a73c-950df09b4984`
+  - production `a3067dac-515c-45e4-a996-a6bfb24d5a0a`
+- Real-data verification (same task fingerprint, objective, experiment filters):
+  - staging autopilot emitted `ARENA_AUTOPILOT_CIRCUIT_BREAKER_TRIPPED`
+  - production autopilot emitted `ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS`
+  - both responses included full `autopilot.circuit_breaker.*` contract fields
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/route-status-codes.txt`

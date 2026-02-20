@@ -18678,6 +18678,72 @@ function evaluateArenaCircuitBreaker(params: {
   };
 }
 
+async function computeArenaDeskCircuitBreakerPayload(
+  db: D1Database,
+  params: {
+    taskFingerprint: string;
+    objectiveProfileName: string | null;
+    experimentId: string | null;
+    experimentArm: string | null;
+    workerDid: string;
+    windowHours: number;
+    roiLimit: number;
+    missionThresholds: ArenaMissionKpiThresholds;
+    roiThresholds: ArenaCircuitBreakerRoiThresholds;
+    enforce: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  const missionSummary = await buildArenaMissionSummary(db, {
+    workerDid: params.workerDid,
+    windowHours: params.windowHours,
+    thresholds: params.missionThresholds,
+  });
+
+  const roiDashboard = await computeArenaRoiDashboard(db, {
+    taskFingerprint: normalizeArenaRoiFilterValue(params.taskFingerprint),
+    objectiveProfileName: normalizeArenaRoiFilterValue(params.objectiveProfileName),
+    contenderId: '',
+    experimentId: normalizeArenaRoiFilterValue(params.experimentId),
+    experimentArm: normalizeArenaRoiFilterValue(params.experimentArm),
+    limit: params.roiLimit,
+    minSamples: params.roiThresholds.min_sample_count,
+  });
+
+  const evaluation = evaluateArenaCircuitBreaker({
+    missionSummary,
+    roiDashboard,
+    roiThresholds: params.roiThresholds,
+  });
+
+  return {
+    schema_version: 'arena_desk_circuit_breaker.v1',
+    computed_at: new Date().toISOString(),
+    task_fingerprint: params.taskFingerprint,
+    objective_profile_name: params.objectiveProfileName,
+    experiment_id: params.experimentId,
+    experiment_arm: params.experimentArm,
+    worker_did: params.workerDid,
+    window_hours: params.windowHours,
+    roi_limit: params.roiLimit,
+    thresholds: {
+      mission: params.missionThresholds,
+      roi: params.roiThresholds,
+    },
+    circuit: {
+      status: evaluation.status,
+      reason_codes: evaluation.reasonCodes,
+      violations: evaluation.violations,
+      gate: {
+        enforce: params.enforce,
+        passed: evaluation.status === 'PASS',
+        blocked: params.enforce && evaluation.status !== 'PASS',
+      },
+    },
+    mission: missionSummary,
+    roi: roiDashboard,
+  };
+}
+
 type ArenaDeskDecisionMode = 'approve_valid' | 'reject_invalid' | 'mixed';
 
 function parseArenaDeskDecisionMode(raw: unknown): ArenaDeskDecisionMode | null {
@@ -19114,64 +19180,29 @@ async function handlePostArenaDeskCircuitBreaker(
 
   const enforce = body.enforce === true;
 
-  let missionSummary: Record<string, unknown>;
-  let roiDashboard: Record<string, unknown>;
+  let payload: Record<string, unknown>;
   try {
-    missionSummary = await buildArenaMissionSummary(env.BOUNTIES_DB, {
+    payload = await computeArenaDeskCircuitBreakerPayload(env.BOUNTIES_DB, {
+      taskFingerprint,
+      objectiveProfileName,
+      experimentId,
+      experimentArm,
       workerDid,
       windowHours,
-      thresholds: missionThresholdsResult.thresholds,
-    });
-
-    roiDashboard = await computeArenaRoiDashboard(env.BOUNTIES_DB, {
-      taskFingerprint: normalizeArenaRoiFilterValue(taskFingerprint),
-      objectiveProfileName: normalizeArenaRoiFilterValue(objectiveProfileName),
-      contenderId: '',
-      experimentId: normalizeArenaRoiFilterValue(experimentId),
-      experimentArm: normalizeArenaRoiFilterValue(experimentArm),
-      limit: roiLimit,
-      minSamples: roiThresholdsResult.thresholds.min_sample_count,
+      roiLimit,
+      missionThresholds: missionThresholdsResult.thresholds,
+      roiThresholds: roiThresholdsResult.thresholds,
+      enforce,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
   }
 
-  const evaluation = evaluateArenaCircuitBreaker({
-    missionSummary,
-    roiDashboard,
-    roiThresholds: roiThresholdsResult.thresholds,
-  });
+  const circuit = isRecord(payload.circuit) ? payload.circuit : null;
+  const circuitStatus = d1String(circuit?.status) ?? 'TRIPPED';
 
-  const payload = {
-    schema_version: 'arena_desk_circuit_breaker.v1',
-    computed_at: new Date().toISOString(),
-    task_fingerprint: taskFingerprint,
-    objective_profile_name: objectiveProfileName,
-    experiment_id: experimentId,
-    experiment_arm: experimentArm,
-    worker_did: workerDid,
-    window_hours: windowHours,
-    roi_limit: roiLimit,
-    thresholds: {
-      mission: missionThresholdsResult.thresholds,
-      roi: roiThresholdsResult.thresholds,
-    },
-    circuit: {
-      status: evaluation.status,
-      reason_codes: evaluation.reasonCodes,
-      violations: evaluation.violations,
-      gate: {
-        enforce,
-        passed: evaluation.status === 'PASS',
-        blocked: enforce && evaluation.status !== 'PASS',
-      },
-    },
-    mission: missionSummary,
-    roi: roiDashboard,
-  };
-
-  if (enforce && evaluation.status !== 'PASS') {
+  if (enforce && circuitStatus !== 'PASS') {
     return jsonResponse(payload, 409, version);
   }
 
@@ -22390,6 +22421,7 @@ async function handleArenaManagerRoute(
 
 async function buildArenaManagerAutopilotPayload(
   routePayload: Record<string, unknown>,
+  circuitBreakerPayload: Record<string, unknown> | null,
 ): Promise<Record<string, unknown> | null> {
   const recommended = isRecord(routePayload.recommended) ? routePayload.recommended : null;
   if (!recommended) return null;
@@ -22431,7 +22463,7 @@ async function buildArenaManagerAutopilotPayload(
     require_latest_hard_gate_pass: true,
   };
 
-  const violations: Array<{ code: string; message: string; value: number | boolean; threshold: number | boolean }> = [];
+  const violations: Array<{ code: string; message: string; value: number | boolean | string | null; threshold: number | boolean | string | null }> = [];
   if (analyzedRuns < guardrails.min_runs) {
     violations.push({
       code: 'ARENA_AUTOPILOT_INSUFFICIENT_RUNS',
@@ -22504,6 +22536,19 @@ async function buildArenaManagerAutopilotPayload(
     });
   }
 
+  const circuit = isRecord(circuitBreakerPayload?.circuit) ? circuitBreakerPayload.circuit : null;
+  const circuitStatus = d1String(circuit?.status) ?? null;
+  const circuitReasonCodes = parseStringList(circuit?.reason_codes, 120, 160, true) ?? [];
+
+  if (circuitStatus !== null && circuitStatus !== 'PASS') {
+    violations.push({
+      code: 'ARENA_AUTOPILOT_CIRCUIT_BREAKER_TRIPPED',
+      message: 'KPI+ROI circuit breaker is tripped; autopilot must fail closed.',
+      value: circuitStatus,
+      threshold: 'PASS',
+    });
+  }
+
   const status = violations.length === 0 ? 'auto_route_enabled' : 'manual_review_required';
 
   const globalRecommendations = (() => {
@@ -22524,6 +22569,22 @@ async function buildArenaManagerAutopilotPayload(
     computed_at: computedAt,
   });
   const routePolicyId = `arp_${(await sha256B64uUtf8(routePolicyMaterial)).slice(0, 32)}`;
+
+  const reasonCodes = status === 'auto_route_enabled'
+    ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED', ...fleetReasonCodes]
+    : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED', ...fleetReasonCodes];
+
+  if (circuitStatus !== null) {
+    reasonCodes.push(circuitStatus === 'PASS'
+      ? 'ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS'
+      : 'ARENA_AUTOPILOT_CIRCUIT_BREAKER_TRIPPED');
+  }
+
+  const circuitMission = isRecord(circuitBreakerPayload?.mission) ? circuitBreakerPayload.mission : null;
+  const circuitMissionKpi = isRecord(circuitMission?.kpi) ? circuitMission.kpi : null;
+  const circuitMissionGateStatus = d1String(circuitMissionKpi?.gate_status) ?? null;
+  const circuitRoi = isRecord(circuitBreakerPayload?.roi) ? circuitBreakerPayload.roi : null;
+  const circuitRoiStatus = d1String(circuitRoi?.status) ?? null;
 
   return {
     schema_version: 'arena_manager_autopilot.v1',
@@ -22549,9 +22610,15 @@ async function buildArenaManagerAutopilotPayload(
       backup_contenders: backupContenders,
       guardrails,
       violations,
-      reason_codes: status === 'auto_route_enabled'
-        ? ['ARENA_AUTOPILOT_ENABLED', 'ARENA_AUTOPILOT_GUARDRAILS_PASSED', ...fleetReasonCodes]
-        : ['ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED', ...fleetReasonCodes],
+      reason_codes: dedupeStrings(reasonCodes),
+      circuit_breaker: circuit
+        ? {
+            status: circuitStatus,
+            reason_codes: circuitReasonCodes,
+            mission_gate_status: circuitMissionGateStatus,
+            roi_status: circuitRoiStatus,
+          }
+        : null,
       recommendations: globalRecommendations,
       policy_template: {
         route_policy_id: routePolicyId,
@@ -22586,7 +22653,48 @@ async function handleArenaManagerAutopilot(
     return errorResponse('DATA_INTEGRITY_ERROR', 'Manager route payload is invalid', 500, undefined, version);
   }
 
-  const autopilot = await buildArenaManagerAutopilotPayload(routePayload);
+  const taskFingerprint = d1String(routePayload.task_fingerprint)?.trim() ?? null;
+  if (!taskFingerprint) {
+    return errorResponse('DATA_INTEGRITY_ERROR', 'Autopilot routing payload is missing task_fingerprint', 500, undefined, version);
+  }
+
+  const objectiveProfileName = d1String(routePayload.objective_profile_name)?.trim() ?? null;
+  const experimentId = d1String(routePayload.experiment_id)?.trim() ?? null;
+  const experimentArm = d1String(routePayload.experiment_arm)?.trim() ?? null;
+
+  let circuitBreakerPayload: Record<string, unknown> | null = null;
+  try {
+    circuitBreakerPayload = await computeArenaDeskCircuitBreakerPayload(env.BOUNTIES_DB, {
+      taskFingerprint,
+      objectiveProfileName,
+      experimentId,
+      experimentArm,
+      workerDid: ARENA_CONFORMANCE_AGENT_DID,
+      windowHours: ARENA_MISSION_DEFAULT_WINDOW_HOURS,
+      roiLimit: 2000,
+      missionThresholds: {
+        min_online_workers: ARENA_MISSION_DEFAULT_THRESHOLDS.min_online_workers,
+        min_claim_success_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_claim_success_rate,
+        min_submission_success_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_submission_success_rate,
+        min_proof_valid_rate: ARENA_MISSION_DEFAULT_THRESHOLDS.min_proof_valid_rate,
+        max_claim_submission_gap: ARENA_MISSION_DEFAULT_THRESHOLDS.max_claim_submission_gap,
+        max_accepted_backlog: ARENA_MISSION_DEFAULT_THRESHOLDS.max_accepted_backlog,
+      },
+      roiThresholds: {
+        min_sample_count: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.min_sample_count,
+        min_first_pass_accept_rate: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.min_first_pass_accept_rate,
+        max_override_rate: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.max_override_rate,
+        max_rework_rate: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.max_rework_rate,
+        max_cost_per_accepted_bounty_usd: ARENA_CIRCUIT_BREAKER_DEFAULT_ROI_THRESHOLDS.max_cost_per_accepted_bounty_usd,
+      },
+      enforce: false,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  const autopilot = await buildArenaManagerAutopilotPayload(routePayload, circuitBreakerPayload);
   if (!autopilot) {
     return errorResponse('DATA_INTEGRITY_ERROR', 'Autopilot payload could not be computed', 500, undefined, version);
   }

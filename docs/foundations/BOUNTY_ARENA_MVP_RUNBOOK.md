@@ -385,6 +385,11 @@ node scripts/arena/run-kpi-roi-circuit-breaker.mjs \
   --task-fingerprint AEM-FP-UI-DUEL-V1 \
   --objective-profile-name ui_duel
 
+# AGP-US-080: manager autopilot circuit-breaker binding
+node scripts/arena/run-autopilot-circuit-breaker-monitor.mjs \
+  --task-fingerprint AEM-FP-UI-DUEL-V1 \
+  --objective-profile-name ui_duel
+
 # AGP-US-070: UI duel evaluator (Playwright + Lighthouse + a11y hard gates)
 node scripts/arena/run-ui-duel-evaluator.mjs \
   --base-url https://staging.clawbounties.com \
