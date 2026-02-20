@@ -1,0 +1,222 @@
+{
+  "ok": true,
+  "story": "AGP-US-076",
+  "generated_at": "2026-02-20T16:51:36.988Z",
+  "endpoint_base": "https://staging.clawbounties.com",
+  "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "window_hours": 24,
+  "run_submit_loop": false,
+  "before": {
+    "gate_status": "PASS",
+    "reason_codes": [
+      "ARENA_MISSION_KPI_PASS"
+    ],
+    "submission_success_rate": 0.8,
+    "proof_valid_rate": 1,
+    "claim_submission_gap": 3,
+    "claim_submission_gap_bounty_ids": [
+      "bty_761e5779-1f69-4e08-b6e8-9e3d6c778c87",
+      "bty_738eaa86-fd17-4081-965a-83e1d3907749",
+      "bty_1997ec57-5231-4989-bf3c-2836e55aa77b"
+    ],
+    "raw": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T16:51:36.597Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T16:51:36.493Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 15,
+        "skipped": 0,
+        "failed": 1,
+        "total": 16
+      },
+      "submissions_window": {
+        "total": 15,
+        "with_submission": 12,
+        "pending_review_valid": 12,
+        "pending_review_invalid": 0,
+        "approved": 0,
+        "rejected": 0,
+        "proof_valid": 12,
+        "proof_invalid": 3,
+        "without_submission": 3
+      },
+      "backlog": {
+        "accepted_total": 3,
+        "accepted_without_valid_submission": 3,
+        "claim_submission_gap": 3,
+        "claim_submission_gap_bounty_ids": [
+          "bty_761e5779-1f69-4e08-b6e8-9e3d6c778c87",
+          "bty_738eaa86-fd17-4081-965a-83e1d3907749",
+          "bty_1997ec57-5231-4989-bf3c-2836e55aa77b"
+        ]
+      },
+      "kpi": {
+        "claim_success_rate": 0.9375,
+        "submission_success_rate": 0.8,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      }
+    }
+  },
+  "submit_loop": {
+    "skipped": true,
+    "reason": "SUBMIT_LOOP_DISABLED",
+    "request": null,
+    "response": null
+  },
+  "after": {
+    "gate_status": "PASS",
+    "reason_codes": [
+      "ARENA_MISSION_KPI_PASS"
+    ],
+    "submission_success_rate": 0.8,
+    "proof_valid_rate": 1,
+    "claim_submission_gap": 3,
+    "raw": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T16:51:36.754Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T16:51:36.636Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 15,
+        "skipped": 0,
+        "failed": 1,
+        "total": 16
+      },
+      "submissions_window": {
+        "total": 15,
+        "with_submission": 12,
+        "pending_review_valid": 12,
+        "pending_review_invalid": 0,
+        "approved": 0,
+        "rejected": 0,
+        "proof_valid": 12,
+        "proof_invalid": 3,
+        "without_submission": 3
+      },
+      "backlog": {
+        "accepted_total": 3,
+        "accepted_without_valid_submission": 3,
+        "claim_submission_gap": 3,
+        "claim_submission_gap_bounty_ids": [
+          "bty_761e5779-1f69-4e08-b6e8-9e3d6c778c87",
+          "bty_738eaa86-fd17-4081-965a-83e1d3907749",
+          "bty_1997ec57-5231-4989-bf3c-2836e55aa77b"
+        ]
+      },
+      "kpi": {
+        "claim_success_rate": 0.9375,
+        "submission_success_rate": 0.8,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      }
+    }
+  },
+  "kpi_gate": {
+    "enforce": true,
+    "http_status": 200,
+    "gate_status": "PASS",
+    "payload": {
+      "schema_version": "arena_mission_summary.v1",
+      "computed_at": "2026-02-20T16:51:36.974Z",
+      "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+      "window_hours": 24,
+      "window_started_at": "2026-02-19T16:51:36.876Z",
+      "thresholds": {
+        "min_online_workers": 3,
+        "min_claim_success_rate": 0.8,
+        "min_submission_success_rate": 0.8,
+        "min_proof_valid_rate": 0.95,
+        "max_claim_submission_gap": 5,
+        "max_accepted_backlog": 5
+      },
+      "fleet": {
+        "total": 6,
+        "online": 6,
+        "offline": 0,
+        "paused": 0
+      },
+      "claims_window": {
+        "processing": 0,
+        "claimed": 15,
+        "skipped": 0,
+        "failed": 1,
+        "total": 16
+      },
+      "submissions_window": {
+        "total": 15,
+        "with_submission": 12,
+        "pending_review_valid": 12,
+        "pending_review_invalid": 0,
+        "approved": 0,
+        "rejected": 0,
+        "proof_valid": 12,
+        "proof_invalid": 3,
+        "without_submission": 3
+      },
+      "backlog": {
+        "accepted_total": 3,
+        "accepted_without_valid_submission": 3,
+        "claim_submission_gap": 3,
+        "claim_submission_gap_bounty_ids": [
+          "bty_761e5779-1f69-4e08-b6e8-9e3d6c778c87",
+          "bty_738eaa86-fd17-4081-965a-83e1d3907749",
+          "bty_1997ec57-5231-4989-bf3c-2836e55aa77b"
+        ]
+      },
+      "kpi": {
+        "claim_success_rate": 0.9375,
+        "submission_success_rate": 0.8,
+        "proof_valid_rate": 1,
+        "gate_status": "PASS",
+        "reason_codes": [
+          "ARENA_MISSION_KPI_PASS"
+        ]
+      },
+      "gate": {
+        "enforce": true,
+        "passed": true,
+        "blocked": false
+      }
+    }
+  }
+}

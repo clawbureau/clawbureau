@@ -1,0 +1,8 @@
+stage-before-gate FAIL
+stage-after-gate PASS
+stage-before-reasons ARENA_MISSION_KPI_PROOF_VALIDITY_LOW
+stage-after-reasons ARENA_MISSION_KPI_PASS
+prod-before-gate FAIL
+prod-after-gate PASS
+prod-before-reasons ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW,ARENA_MISSION_KPI_PROOF_VALIDITY_LOW
+prod-after-reasons ARENA_MISSION_KPI_PASS

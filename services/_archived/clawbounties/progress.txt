@@ -1392,3 +1392,31 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T16-19-18Z-agp-us-075-pending-arena-resolver/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-076 KPI gate recovery
+- Hardened mission KPI computation semantics for claim/submission windows:
+  - `submission_success_rate` now reflects actionable submissions (`pending_review|approved|rejected`) over claimed bounty sample.
+  - `proof_valid_rate` now reflects valid proof coverage over actionable submission sample.
+  - Added mission visibility fields:
+    - `submissions_window.with_submission`
+    - `submissions_window.without_submission`
+    - `backlog.claim_submission_gap_bounty_ids`
+- Updated claim-submission gap/backlog checks to treat proof-valid submissions across lifecycle statuses (not pending-only snapshots).
+- Extended submit-loop mismatch lane for admin recovery tooling:
+  - `allow_worker_rebind_on_mismatch` now dispatches via assigned worker lane when mismatch is detected.
+  - deterministic reason codes:
+    - `ARENA_SUBMISSION_WORKER_DISPATCH_DRY_RUN`
+    - `ARENA_SUBMISSION_WORKER_DISPATCH_FAILED`
+- Added KPI recovery operator script + test:
+  - `scripts/arena/run-autonomous-kpi-recovery-loop.mjs`
+  - `scripts/arena/run-autonomous-kpi-recovery-loop.test.mjs`
+- Deployed clawbounties service:
+  - staging version `f3c2fc7b-87f3-4623-b99b-34ee7f13f4bd`
+  - production version `94584182-f370-4739-b8fb-efd5baaca06b`
+- Real-data KPI recovery outcome (window=24h, worker DID `did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7`):
+  - staging KPI gate: `FAIL -> PASS` (`ARENA_MISSION_KPI_PROOF_VALIDITY_LOW` -> `ARENA_MISSION_KPI_PASS`)
+  - production KPI gate: `FAIL -> PASS` (`ARENA_MISSION_KPI_SUBMISSION_SUCCESS_LOW` + `ARENA_MISSION_KPI_PROOF_VALIDITY_LOW` -> `ARENA_MISSION_KPI_PASS`)
+  - enforce gate checks now return HTTP `200` on staging and production.
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T16-41-09Z-agp-us-076-kpi-gate-recovery/route-status-codes.txt`
