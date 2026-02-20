@@ -1,0 +1,41 @@
+{
+  "mode": {
+    "enforce": true,
+    "reason": "proofs/**/commit.sig.json present",
+    "labels": []
+  },
+  "inputs": {
+    "changed_files": [
+      "proofs/feat/arena/AGP-US-070-ui-duel-bounty-contract-and-eval/commit.sig.json"
+    ],
+    "bundles": [],
+    "commit_sigs": [
+      "proofs/feat/arena/AGP-US-070-ui-duel-bounty-contract-and-eval/commit.sig.json"
+    ],
+    "config_path": "packages/schema/fixtures/clawverify.config.clawbureau.v1.json",
+    "cli_path": "packages/clawverify-cli/dist/cli.js"
+  },
+  "results": {
+    "ok": true,
+    "would_fail": false,
+    "missing_evidence": {
+      "bundles_required_missing": false,
+      "commit_sigs_required_missing": false
+    },
+    "bundles_ok": true,
+    "commit_sigs_ok": true
+  },
+  "bundles": [],
+  "commit_sigs": [
+    {
+      "path": "proofs/feat/arena/AGP-US-070-ui-duel-bounty-contract-and-eval/commit.sig.json",
+      "ok": true,
+      "reason_code": "OK",
+      "reason": "Commit signature verified",
+      "commit_sha": "bce90da67fce7dddc9f84c5d543b246a1e99efd9",
+      "signer_did": "did:key:z6MktzmKpfCNcKSUp7qzTrZK3c89QFvhgmK7V1GXxMH9m8XW",
+      "message": "commit:bce90da67fce7dddc9f84c5d543b246a1e99efd9"
+    }
+  ],
+  "finished_at": "2026-02-20T13:19:36.849Z"
+}
