@@ -1,0 +1,17 @@
+{
+  "schema_version": "arena_duel_league_explorer_evidence.v1",
+  "story": "AGP-US-087",
+  "generated_at": "2026-02-20T21:19:23Z",
+  "staging": {
+    "explorer_deploy": "96b6f77c-9f38-4efd-89c1-57ee416e4cc9",
+    "contender_count": 18,
+    "leader": "contender_codex_pi",
+    "page_renders": true
+  },
+  "production": {
+    "explorer_deploy": "9e7b199b-d1f5-4db2-88e7-4547f2c700b5",
+    "contender_count": 14,
+    "leader": "contender_codex_pi",
+    "page_renders": true
+  }
+}

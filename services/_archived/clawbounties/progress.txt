@@ -1630,3 +1630,14 @@ Started: 2026-02-02T03:08:26.937005
   - Generates actionable recommendations based on metrics
   - Exit code 2 = CRITICAL grade, 0 = others
 - Test: `scripts/arena/run-weekly-ops-report.test.mjs`
+
+## 2026-02-20 - AGP-US-087 duel league leaderboard explorer
+- Added `/arena/league` explorer page:
+  - Fetches duel league data via authenticated API call
+  - Renders leader card with trophy, name, wins, win rate, avg score
+  - Full standings table: rank badges (gold/silver/bronze), contender, record (W/L/D),
+    win rate (color-coded), duels, avg score, model, harness, cost
+  - Handles unavailable/empty league gracefully
+- Added `fetchDuelLeague()` to explorer api.ts with typed parsing
+- Added `DuelLeagueView` and `DuelLeagueEntryView` types
+- Test: `scripts/arena/run-duel-league-explorer.test.mjs`

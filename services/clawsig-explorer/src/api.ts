@@ -864,6 +864,28 @@ export interface ArenaRoiDashboardView {
   }>;
 }
 
+// AGP-US-087: duel league types
+export interface DuelLeagueEntryView {
+  contender_id: string;
+  label: string;
+  model: string;
+  harness: string;
+  duels: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  win_rate: number;
+  avg_score: number;
+  total_cost_usd: number;
+}
+
+export interface DuelLeagueView {
+  computed_at: string;
+  leader: { contender_id: string; label: string; wins: number; win_rate: number; avg_score: number } | null;
+  entries: DuelLeagueEntryView[];
+  reason_codes: string[];
+}
+
 // AGP-US-084: enhanced ROI types
 export interface ArenaRoiCycleTimePercentilesView {
   p50: number;
@@ -2254,4 +2276,63 @@ export async function fetchArenaRoiDashboard(
     daily_buckets: dailyBuckets,
     contender_costs: contenderCosts,
   };
+}
+
+// AGP-US-087: fetch duel league
+export async function fetchDuelLeague(
+  opts: FetchOptions,
+): Promise<DuelLeagueView | null> {
+  const arenaBase = opts.arenaBase?.trim();
+  const base = arenaBase && arenaBase.length > 0 ? arenaBase : opts.vaasBase;
+  const url = `${base}/v1/arena/duel-league`;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (opts.arenaAdminKey) headers['x-admin-key'] = opts.arenaAdminKey;
+    const res = await fetch(url, { signal: controller.signal, headers });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = await res.json() as Record<string, unknown>;
+
+    const entries: DuelLeagueEntryView[] = Array.isArray(data.entries)
+      ? data.entries
+          .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+          .map((e) => ({
+            contender_id: typeof e.contender_id === 'string' ? e.contender_id : 'unknown',
+            label: typeof e.label === 'string' ? e.label : '',
+            model: typeof e.model === 'string' ? e.model : '',
+            harness: typeof e.harness === 'string' ? e.harness : '',
+            duels: typeof e.duels === 'number' ? e.duels : 0,
+            wins: typeof e.wins === 'number' ? e.wins : 0,
+            losses: typeof e.losses === 'number' ? e.losses : 0,
+            draws: typeof e.draws === 'number' ? e.draws : 0,
+            win_rate: typeof e.win_rate === 'number' ? e.win_rate : 0,
+            avg_score: typeof e.avg_score === 'number' ? e.avg_score : 0,
+            total_cost_usd: typeof e.total_cost_usd === 'number' ? e.total_cost_usd : 0,
+          }))
+      : [];
+
+    const leaderRaw = data.leader && typeof data.leader === 'object' && !Array.isArray(data.leader)
+      ? data.leader as Record<string, unknown>
+      : null;
+    const leader = leaderRaw ? {
+      contender_id: typeof leaderRaw.contender_id === 'string' ? leaderRaw.contender_id : '',
+      label: typeof leaderRaw.label === 'string' ? leaderRaw.label : '',
+      wins: typeof leaderRaw.wins === 'number' ? leaderRaw.wins : 0,
+      win_rate: typeof leaderRaw.win_rate === 'number' ? leaderRaw.win_rate : 0,
+      avg_score: typeof leaderRaw.avg_score === 'number' ? leaderRaw.avg_score : 0,
+    } : null;
+
+    return {
+      computed_at: typeof data.computed_at === 'string' ? data.computed_at : new Date().toISOString(),
+      leader,
+      entries,
+      reason_codes: Array.isArray(data.reason_codes)
+        ? data.reason_codes.filter((e): e is string => typeof e === 'string')
+        : [],
+    };
+  } catch {
+    return null;
+  }
 }
