@@ -1,0 +1,317 @@
+{
+  "ok": true,
+  "story": "AGP-US-080",
+  "generated_at": "2026-02-20T17:59:16.613Z",
+  "endpoint_base": "https://clawbounties.com",
+  "request": {
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "objective_profile_name": "balanced",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE",
+    "max_runs": 50,
+    "require_hard_gate_pass": true,
+    "allow_fallback": true,
+    "use_active_policy": true,
+    "required_skills": [],
+    "required_tools": []
+  },
+  "http_status": 200,
+  "autopilot_status": "manual_review_required",
+  "reason_codes": [
+    "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+    "ARENA_FLEET_MATCHED",
+    "ARENA_FLEET_CONTENDER_BOUND",
+    "ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS"
+  ],
+  "circuit_breaker": {
+    "status": "PASS",
+    "reason_codes": [
+      "ARENA_CIRCUIT_BREAKER_PASS"
+    ],
+    "mission_gate_status": "PASS",
+    "roi_status": "available"
+  },
+  "payload": {
+    "schema_version": "arena_manager_autopilot.v1",
+    "computed_at": "2026-02-20T17:59:16.553Z",
+    "mode": "autopilot",
+    "task_fingerprint": "typescript:worker:api-hardening",
+    "objective_profile_name": "balanced",
+    "experiment_id": "exp_api_hardening_live_v1",
+    "experiment_arm": "LIVE",
+    "analyzed_runs": 2,
+    "winner_stability_ratio": 0.5,
+    "route": {
+      "recommended": {
+        "contender_id": "contender_codex_pi",
+        "label": "Codex + Pi + cloudflare skill",
+        "model": "gpt-5.2-codex",
+        "harness": "pi",
+        "routing_score": 96.408025,
+        "reason_codes": [
+          "ARENA_ROUTING_SELECTED",
+          "ARENA_ROUTING_OBJECTIVE_MATCHED",
+          "ARENA_ROUTING_STANDARD_MODE",
+          "ARENA_ROUTING_ACTIVE_POLICY_APPLIED",
+          "ARENA_FLEET_MATCHED",
+          "ARENA_FLEET_CONTENDER_BOUND",
+          "ARENA_ROUTING_FLEET_MATCHED"
+        ],
+        "rationale": "Selected contender_codex_pi with routing_score=96.408025 from 2 matched runs (win_rate=0.5, hard_gate_pass_rate=1, override_rate=0, top_override_reason=none, calibration_gap=-0.1203).",
+        "evidence": {
+          "appearances": 2,
+          "wins": 1,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 97.9545,
+          "avg_risk": 8,
+          "avg_quality": 100,
+          "latest_hard_gate_pass": true,
+          "outcome_samples": 3,
+          "empirical_accept_rate": 1,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0.8797,
+          "calibration_gap": -0.1203,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Stable performer; keep as primary route for matching fingerprint."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        }
+      },
+      "backups": [
+        {
+          "contender_id": "contender_gemini_swarm",
+          "label": "Gemini Deep Think + swarm orchestrator",
+          "model": "gemini-3.1-pro-preview",
+          "harness": "swarm-orchestrator",
+          "appearances": 2,
+          "wins": 0,
+          "win_rate": 0,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 88.6243,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 59.029763,
+          "outcome_samples": 1,
+          "empirical_accept_rate": 0,
+          "override_rate": 0,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0.972,
+          "calibration_gap": 0.972,
+          "override_reason_penalty": 0,
+          "top_override_reason_code": null,
+          "override_reason_breakdown": [],
+          "coaching_recommendations": [
+            "Predicted confidence appears over-optimistic; down-weight autonomy claims."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        },
+        {
+          "contender_id": "contender_claude_codex_cli",
+          "label": "Claude Opus + Codex CLI blend",
+          "model": "claude-opus-4.5",
+          "harness": "codex-cli",
+          "appearances": 2,
+          "wins": 1,
+          "win_rate": 0.5,
+          "hard_gate_pass_rate": 1,
+          "avg_score": 89.222,
+          "avg_risk": 8,
+          "avg_quality": 75,
+          "latest_hard_gate_pass": true,
+          "routing_score": 48.8567,
+          "outcome_samples": 1,
+          "empirical_accept_rate": 0,
+          "override_rate": 1,
+          "rework_rate": 0,
+          "avg_predicted_confidence": 0.9797,
+          "calibration_gap": 0.9797,
+          "override_reason_penalty": 0.5,
+          "top_override_reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+          "override_reason_breakdown": [
+            {
+              "reason_code": "ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT",
+              "count": 1,
+              "share": 1,
+              "contract_rewrite": "Add human-context dependency markers and required reviewer checkpoints.",
+              "prompt_rewrite": "Require ambiguity classification and human-clarification request when context is missing."
+            }
+          ],
+          "coaching_recommendations": [
+            "High override rate; add human checkpoint before auto-route.",
+            "Predicted confidence appears over-optimistic; down-weight autonomy claims.",
+            "Top override reason (ARENA_OVERRIDE_REQUIRE_HUMAN_CONTEXT): Add human-context dependency markers and required reviewer checkpoints.",
+            "Prompt rewrite hint: Require ambiguity classification and human-clarification request when context is missing."
+          ],
+          "last_seen_at": "2026-02-19T22:50:47.268Z",
+          "sample_run_ids": [
+            "arn_8fdb58b4-19e0-4774-913c-8a95155c46d4",
+            "arn_cc9fe3d2-630c-4bd5-874b-5d17fa079f01"
+          ]
+        }
+      ],
+      "reason_codes": []
+    },
+    "fleet_match": {
+      "schema_version": "arena_harness_fleet_match.v1",
+      "computed_at": "2026-02-20T17:59:16.117Z",
+      "status": "matched",
+      "reason_codes": [
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND"
+      ],
+      "contender_id": "contender_codex_pi",
+      "objective_profile_name": "balanced",
+      "harness": "pi",
+      "required_skills": [],
+      "required_tools": [],
+      "max_cost_tier": null,
+      "max_risk_tier": null,
+      "total_online_workers": 2,
+      "candidates": [
+        {
+          "worker_did": "did:key:z6MkFleetPiOps00000000000000000000000004",
+          "harness": "pi",
+          "model": "gpt-5.2-codex",
+          "skills": [
+            "ops",
+            "monitoring",
+            "rollback"
+          ],
+          "tools": [
+            "bash",
+            "read",
+            "edit",
+            "write",
+            "wrangler"
+          ],
+          "objective_profiles": [
+            "reliability-first",
+            "balanced"
+          ],
+          "cost_tier": "low",
+          "risk_tier": "low",
+          "availability_status": "online",
+          "heartbeat_at": "2026-02-20T01:27:15.486Z",
+          "heartbeat_seq": 2,
+          "metadata": {
+            "lane": "mission-desk",
+            "owner": "clawbureau"
+          },
+          "created_at": "2026-02-20T01:27:15.350Z",
+          "updated_at": "2026-02-20T01:27:15.486Z",
+          "match_score": 50,
+          "skill_hits": [],
+          "tool_hits": [],
+          "objective_matched": true
+        },
+        {
+          "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+          "harness": "pi",
+          "model": "gpt-5.2-codex",
+          "skills": [
+            "arena",
+            "autonomous",
+            "typescript",
+            "simulation",
+            "requester-closure",
+            "seed"
+          ],
+          "tools": [
+            "bash",
+            "read",
+            "edit",
+            "write"
+          ],
+          "objective_profiles": [
+            "balanced",
+            "safety-first",
+            "latency-balanced",
+            "arena-autonomous"
+          ],
+          "cost_tier": "medium",
+          "risk_tier": "low",
+          "availability_status": "online",
+          "heartbeat_at": "2026-02-20T12:30:16.594Z",
+          "heartbeat_seq": 3,
+          "metadata": {
+            "owner": "arena-v11",
+            "source": "prod-autonomous-loop"
+          },
+          "created_at": "2026-02-20T01:27:14.271Z",
+          "updated_at": "2026-02-20T12:30:16.594Z",
+          "match_score": 48,
+          "skill_hits": [],
+          "tool_hits": [],
+          "objective_matched": true
+        }
+      ]
+    },
+    "autopilot": {
+      "status": "manual_review_required",
+      "default_contender_id": "contender_codex_pi",
+      "backup_contenders": [
+        "contender_gemini_swarm",
+        "contender_claude_codex_cli"
+      ],
+      "guardrails": {
+        "min_runs": 2,
+        "min_winner_stability_ratio": 0.6,
+        "min_win_rate": 0.5,
+        "max_override_rate": 0.3,
+        "max_rework_rate": 0.2,
+        "max_abs_calibration_gap": 0.2,
+        "require_latest_hard_gate_pass": true
+      },
+      "violations": [
+        {
+          "code": "ARENA_AUTOPILOT_LOW_WINNER_STABILITY",
+          "message": "Winner stability is below autopilot threshold.",
+          "value": 0.5,
+          "threshold": 0.6
+        }
+      ],
+      "reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS"
+      ],
+      "circuit_breaker": {
+        "status": "PASS",
+        "reason_codes": [
+          "ARENA_CIRCUIT_BREAKER_PASS"
+        ],
+        "mission_gate_status": "PASS",
+        "roi_status": "available"
+      },
+      "recommendations": [
+        "Winner stability is low for this fingerprint; run arena more frequently before defaulting routes."
+      ],
+      "policy_template": {
+        "route_policy_id": "arp_vGwRyxxFoHv2i-sHMdxGDPCQ7ZEZD0V4",
+        "task_fingerprint": "typescript:worker:api-hardening",
+        "default_contender_id": "contender_codex_pi",
+        "backup_contenders": [
+          "contender_gemini_swarm",
+          "contender_claude_codex_cli"
+        ],
+        "require_manual_approval": true,
+        "generated_at": "2026-02-20T17:59:16.553Z"
+      }
+    }
+  }
+}

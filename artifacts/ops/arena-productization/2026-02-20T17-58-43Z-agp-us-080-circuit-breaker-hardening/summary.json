@@ -1,0 +1,67 @@
+{
+  "ok": true,
+  "story": "AGP-US-080",
+  "generated_at": "2026-02-20T18:00:01Z",
+  "deployments": {
+    "staging": {
+      "clawbounties_version_id": "cd28cec4-84e2-4fd9-a73c-950df09b4984"
+    },
+    "production": {
+      "clawbounties_version_id": "a3067dac-515c-45e4-a996-a6bfb24d5a0a"
+    }
+  },
+  "autopilot_circuit_binding": {
+    "staging": {
+      "http_status": 200,
+      "autopilot_status": "manual_review_required",
+      "reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_AUTOPILOT_CIRCUIT_BREAKER_TRIPPED"
+      ],
+      "circuit_breaker": {
+        "status": "TRIPPED",
+        "reason_codes": [
+          "ARENA_CIRCUIT_BREAKER_ROI_FIRST_PASS_LOW",
+          "ARENA_CIRCUIT_BREAKER_ROI_OVERRIDE_HIGH",
+          "ARENA_CIRCUIT_BREAKER_ROI_REWORK_HIGH",
+          "ARENA_MISSION_KPI_PASS"
+        ],
+        "mission_gate_status": "PASS",
+        "roi_status": "available"
+      }
+    },
+    "production": {
+      "http_status": 200,
+      "autopilot_status": "manual_review_required",
+      "reason_codes": [
+        "ARENA_AUTOPILOT_MANUAL_REVIEW_REQUIRED",
+        "ARENA_FLEET_MATCHED",
+        "ARENA_FLEET_CONTENDER_BOUND",
+        "ARENA_AUTOPILOT_CIRCUIT_BREAKER_PASS"
+      ],
+      "circuit_breaker": {
+        "status": "PASS",
+        "reason_codes": [
+          "ARENA_CIRCUIT_BREAKER_PASS"
+        ],
+        "mission_gate_status": "PASS",
+        "roi_status": "available"
+      }
+    }
+  },
+  "acceptance": {
+    "autopilot_returns_circuit_breaker_staging": true,
+    "autopilot_returns_circuit_breaker_production": true,
+    "reason_codes_include_circuit_binding_staging": true,
+    "reason_codes_include_circuit_binding_production": true,
+    "fail_closed_when_tripped_staging": true,
+    "pass_signal_when_healthy_production": true
+  },
+  "artifacts": {
+    "stage_autopilot": "artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/stage-autopilot.summary.json",
+    "prod_autopilot": "artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/prod-autopilot.summary.json",
+    "exit_codes": "artifacts/ops/arena-productization/2026-02-20T17-58-43Z-agp-us-080-circuit-breaker-hardening/exit-codes.txt"
+  }
+}
