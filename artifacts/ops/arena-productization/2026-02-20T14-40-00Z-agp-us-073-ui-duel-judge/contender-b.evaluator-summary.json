@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "dry_run": false,
+  "schema_version": "arena_ui_duel_evaluator.v1",
+  "generated_at": "2026-02-20T14:06:10.828Z",
+  "contender_id": "contender_gpt_5_3_codex_xhigh_pi",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "ui_url": "https://staging.clawbounties.com/duel",
+  "hard_gates": {
+    "core_flows_pass": true,
+    "no_critical_runtime_errors": true,
+    "no_critical_accessibility_violations": true
+  },
+  "hard_gate_passed": true,
+  "weighted_scores": {
+    "ux_task_success_friction": 100,
+    "visual_quality_consistency": 100,
+    "performance": 100,
+    "accessibility": 100,
+    "implementation_maintainability": 94
+  },
+  "weighted_total": 99.4,
+  "final_score": 99.4,
+  "reason_codes": [],
+  "diagnostics": {
+    "flow_success_count": 4,
+    "flow_total": 4,
+    "flow_success_rate": 1,
+    "avg_timing_ms": 280.33,
+    "friction_events": 0,
+    "console_error_count": 0,
+    "runtime_error_count": 0,
+    "critical_accessibility_violations": 0,
+    "cls": 0,
+    "maintainability_signals": {
+      "source_bytes": 25831,
+      "inline_script_lines": 278,
+      "inline_style_blocks": 1,
+      "dom_node_count": 62,
+      "eval_occurrences": 0
+    },
+    "maintainability_inferred_score": 94,
+    "ui_http_status": 200
+  },
+  "artifacts": {
+    "journey": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/journey.json",
+    "lighthouse_summary": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.summary.json",
+    "output_dir": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi",
+    "evidence_links": [
+      {
+        "label": "journey",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/journey.json"
+      },
+      {
+        "label": "axe_raw",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/axe-results.json"
+      },
+      {
+        "label": "lighthouse_summary",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.summary.json"
+      },
+      {
+        "label": "lighthouse_raw",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/lighthouse/lighthouse.raw.json"
+      },
+      {
+        "label": "browse_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/01-browse.png"
+      },
+      {
+        "label": "details_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/02-details.png"
+      },
+      {
+        "label": "claim_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/03-claim.png"
+      },
+      {
+        "label": "submit_screenshot",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/screenshots/04-submit.png"
+      },
+      {
+        "label": "journey_video",
+        "path": "artifacts/ops/arena-productization/2026-02-20T14-30-00Z-agp-us-072-ui-duel-contender-b/contender_gpt_5_3_codex_xhigh_pi/journey/videos"
+      }
+    ]
+  }
+}
