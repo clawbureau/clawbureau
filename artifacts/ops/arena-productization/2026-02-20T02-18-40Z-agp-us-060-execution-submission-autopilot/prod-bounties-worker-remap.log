@@ -1,0 +1,30 @@
+
+ ⛅️ wrangler 3.114.17 (update available 4.67.0)
+-----------------------------------------------
+
+🌀 Executing on remote database clawbounties (cfdc9fe2-cbed-4d13-9362-67363a8857df):
+🌀 To execute on your local development database, remove the --remote flag from your wrangler command.
+🚣 Executed 1 command in 0.86ms
+[
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "WEUR",
+      "served_by_colo": "AMS",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 0.8575
+      },
+      "duration": 0.8575,
+      "changes": 3,
+      "last_row_id": 0,
+      "changed_db": true,
+      "size_after": 6774784,
+      "rows_read": 10,
+      "rows_written": 6,
+      "total_attempts": 1
+    }
+  }
+]

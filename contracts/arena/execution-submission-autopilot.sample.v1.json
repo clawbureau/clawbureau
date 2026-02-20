@@ -1,0 +1,11 @@
+{
+  "schema_version": "arena_execution_submission_autopilot_config.v1",
+  "worker_did": "did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7",
+  "target_submissions": 10,
+  "limit": 40,
+  "bounty_ids": [
+    "bty_bb985bbc-79c0-4e6e-965e-d6c264c35f1d",
+    "bty_38e8d1bf-971d-48cf-b663-f72a5fe3f3fa"
+  ],
+  "dry_run": false
+}

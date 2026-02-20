@@ -284,6 +284,13 @@ node scripts/arena/run-auto-bounty-grabber.mjs \
   --max-fleet-cost-tier medium \
   --max-fleet-risk-tier medium
 
+# AGP-US-060: run execution + submission autopilot from accepted claims
+node scripts/arena/run-execution-submission-autopilot.mjs \
+  --bounties-base https://staging.clawbounties.com \
+  --worker-did did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7 \
+  --target-submissions 10 \
+  --bounty-ids-file /tmp/agp060-stage-claimed-ids.txt
+
 # AGP-US-055: compute shadow policy and promote active policy (fail-closed)
 node scripts/arena/run-policy-optimizer-shadow.mjs \
   --task-fingerprint "typescript:worker:api-hardening" \

@@ -1500,6 +1500,191 @@ function inferArenaBountyRiskTier(bounty: BountyV2): ArenaFleetRiskTier {
   return 'low';
 }
 
+const ARENA_CONFORMANCE_AGENT_SEED = new Uint8Array(Array.from({ length: 32 }, (_, index) => index + 1));
+const ARENA_BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58Encode(bytes: Uint8Array): string {
+  if (bytes.length === 0) return '';
+
+  const digits = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i += 1) {
+      const current = digits[i] ?? 0;
+      const x = current * 256 + carry;
+      digits[i] = x % 58;
+      carry = Math.floor(x / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+
+  for (let i = 0; i < bytes.length && bytes[i] === 0; i += 1) {
+    digits.push(0);
+  }
+
+  return digits.reverse().map((digit) => ARENA_BASE58_ALPHABET[digit] ?? '').join('');
+}
+
+function base64UrlEncodeBytes(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  const base64 = btoa(binary);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function base64UrlDecodeToBytes(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function makeArenaConformanceSignerFromSeed(seed: Uint8Array): Promise<{ did: string; privateKey: CryptoKey }> {
+  if (seed.length !== 32) {
+    throw new Error('ARENA_CONFORMANCE_SEED_INVALID');
+  }
+
+  const pkcs8Header = new Uint8Array([
+    0x30, 0x2e,
+    0x02, 0x01, 0x00,
+    0x30, 0x05,
+    0x06, 0x03, 0x2b, 0x65, 0x70,
+    0x04, 0x22,
+    0x04, 0x20,
+  ]);
+
+  const pkcs8Key = new Uint8Array(pkcs8Header.length + seed.length);
+  pkcs8Key.set(pkcs8Header);
+  pkcs8Key.set(seed, pkcs8Header.length);
+
+  const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8Key, { name: 'Ed25519' }, true, ['sign']);
+  const jwk = (await crypto.subtle.exportKey('jwk', privateKey)) as JsonWebKey;
+  const x = typeof jwk.x === 'string' ? jwk.x : null;
+  if (!x) {
+    throw new Error('ARENA_CONFORMANCE_DID_DERIVE_FAILED');
+  }
+
+  const publicKeyBytes = base64UrlDecodeToBytes(x);
+  const prefixed = new Uint8Array(2 + publicKeyBytes.length);
+  prefixed[0] = 0xed;
+  prefixed[1] = 0x01;
+  prefixed.set(publicKeyBytes, 2);
+
+  return {
+    did: `did:key:z${base58Encode(prefixed)}`,
+    privateKey,
+  };
+}
+
+async function buildArenaExecutionAutopilotProofArtifacts(
+  workerDid: string,
+  bountyId: string,
+  signer: { did: string; privateKey: CryptoKey },
+): Promise<{ runId: string; proofBundleEnvelope: Record<string, unknown>; urm: Record<string, unknown> }> {
+  const runId = `arena_exec_${bountyId}_${crypto.randomUUID().replace(/-/g, '')}`;
+  const nowMs = Date.now();
+  const t0 = new Date(nowMs).toISOString();
+  const t1 = new Date(nowMs + 1000).toISOString();
+
+  const eventAHeader = {
+    event_id: `evt_${crypto.randomUUID()}`,
+    run_id: runId,
+    event_type: 'run_start',
+    timestamp: t0,
+    payload_hash_b64u: await sha256B64uUtf8(JSON.stringify({ event: 'run_start' })),
+    prev_hash_b64u: null,
+  };
+  const eventAHash = await sha256B64uUtf8(JSON.stringify(eventAHeader));
+
+  const eventBHeader = {
+    event_id: `evt_${crypto.randomUUID()}`,
+    run_id: runId,
+    event_type: 'run_end',
+    timestamp: t1,
+    payload_hash_b64u: await sha256B64uUtf8(JSON.stringify({ event: 'run_end' })),
+    prev_hash_b64u: eventAHash,
+  };
+  const eventBHash = await sha256B64uUtf8(JSON.stringify(eventBHeader));
+
+  const eventChain = [
+    { ...eventAHeader, event_hash_b64u: eventAHash },
+    { ...eventBHeader, event_hash_b64u: eventBHash },
+  ];
+
+  const harness = {
+    id: 'arena-submission-autopilot',
+    version: '1',
+    runtime: 'simulation',
+  };
+
+  const harnessConfigHash = await sha256B64uUtf8(JSON.stringify(harness));
+
+  const urm: Record<string, unknown> = {
+    urm_version: '1',
+    urm_id: `urm_${crypto.randomUUID()}`,
+    run_id: runId,
+    agent_did: workerDid,
+    issued_at: new Date(nowMs + 1500).toISOString(),
+    harness: {
+      id: harness.id,
+      version: harness.version,
+      runtime: harness.runtime,
+      config_hash_b64u: harnessConfigHash,
+    },
+    inputs: [],
+    outputs: [],
+    event_chain_root_hash_b64u: eventAHash,
+    metadata: { harness },
+  };
+
+  const urmHash = await sha256B64uUtf8(JSON.stringify(urm));
+
+  const payload: Record<string, unknown> = {
+    bundle_version: '1',
+    bundle_id: `bundle_${crypto.randomUUID()}`,
+    agent_did: workerDid,
+    urm: {
+      urm_version: '1',
+      urm_id: String(urm.urm_id),
+      resource_type: 'universal_run_manifest',
+      resource_hash_b64u: urmHash,
+    },
+    event_chain: eventChain,
+    metadata: { harness },
+  };
+
+  const payloadHash = await sha256B64uUtf8(JSON.stringify(payload));
+  const signatureBuffer = await crypto.subtle.sign('Ed25519', signer.privateKey, new TextEncoder().encode(payloadHash));
+  const signature = base64UrlEncodeBytes(new Uint8Array(signatureBuffer));
+
+  const proofBundleEnvelope: Record<string, unknown> = {
+    envelope_version: '1',
+    envelope_type: 'proof_bundle',
+    payload,
+    payload_hash_b64u: payloadHash,
+    hash_algorithm: 'SHA-256',
+    signature_b64u: signature,
+    algorithm: 'Ed25519',
+    signer_did: signer.did,
+    issued_at: new Date(nowMs + 2000).toISOString(),
+  };
+
+  return {
+    runId,
+    proofBundleEnvelope,
+    urm,
+  };
+}
+
 function parseWorkerListing(input: unknown): WorkerListingV1 | null {
   if (!isRecord(input)) return null;
 
@@ -12166,10 +12351,18 @@ async function handleIssueBountyCst(bountyId: string, request: Request, env: Env
   return jsonResponse(response, 200, version);
 }
 
-async function handleSubmitBounty(bountyId: string, request: Request, env: Env, version: string): Promise<Response> {
-  const auth = await requireWorker(request, env, version, {
+async function handleSubmitBounty(
+  bountyId: string,
+  request: Request,
+  env: Env,
+  version: string,
+  options?: {
+    authOverride?: { worker: WorkerRecordV1; auth: WorkerAuthContext };
+  },
+): Promise<Response> {
+  const auth = options?.authOverride ?? (await requireWorker(request, env, version, {
     action: 'submit_bounty',
-  });
+  }));
   if ('error' in auth) return auth.error;
 
   const bodyRaw = await parseJsonBody(request);
@@ -18266,6 +18459,254 @@ async function handlePostArenaDeskClaimLoop(
   return jsonResponse(summary, 200, version);
 }
 
+async function handlePostArenaDeskSubmissionLoop(
+  request: Request,
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const adminError = requireAdmin(request, env, version);
+  if (adminError) return adminError;
+
+  const body = await parseJsonBody(request);
+  if (!isRecord(body)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const workerDid = d1String(body.worker_did)?.trim();
+  if (!workerDid || !workerDid.startsWith('did:')) {
+    return errorResponse('INVALID_REQUEST', 'worker_did is required', 400, { field: 'worker_did' }, version);
+  }
+
+  const bountyIdsRaw = body.bounty_ids;
+  const bountyIdsParsed = bountyIdsRaw === undefined || bountyIdsRaw === null
+    ? []
+    : parseStringList(bountyIdsRaw, 500, 160, true);
+
+  if (bountyIdsRaw !== undefined && bountyIdsRaw !== null && bountyIdsParsed === null) {
+    return errorResponse('INVALID_REQUEST', 'bounty_ids must be string[]', 400, { field: 'bounty_ids' }, version);
+  }
+
+  const bountyIds = dedupeStrings((bountyIdsParsed ?? []).map((entry) => entry.trim()));
+  if (bountyIds.some((entry) => !entry.startsWith('bty_'))) {
+    return errorResponse('INVALID_REQUEST', 'bounty_ids must contain bounty IDs (bty_*)', 400, { field: 'bounty_ids' }, version);
+  }
+
+  const targetRaw = d1Number(body.target_submissions);
+  let targetSubmissions = bountyIds.length > 0 ? bountyIds.length : 10;
+  if (targetRaw !== null) {
+    if (!Number.isInteger(targetRaw) || targetRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'target_submissions must be a positive integer', 400, { field: 'target_submissions' }, version);
+    }
+    targetSubmissions = Math.min(targetRaw, 200);
+  }
+
+  const limitRaw = d1Number(body.limit);
+  let limit = Math.max(targetSubmissions * 2, 30);
+  if (limitRaw !== null) {
+    if (!Number.isInteger(limitRaw) || limitRaw <= 0) {
+      return errorResponse('INVALID_REQUEST', 'limit must be a positive integer', 400, { field: 'limit' }, version);
+    }
+    limit = Math.min(limitRaw, 400);
+  }
+
+  const dryRun = body.dry_run === true;
+
+  let worker: WorkerRecordV1 | null;
+  try {
+    worker = await getWorkerByDid(env.BOUNTIES_DB, workerDid);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
+  }
+
+  if (!worker) {
+    return errorResponse('WORKER_NOT_REGISTERED', 'Worker is not registered in marketplace', 404, { worker_did: workerDid }, version);
+  }
+
+  let signer: { did: string; privateKey: CryptoKey };
+  try {
+    signer = await makeArenaConformanceSignerFromSeed(ARENA_CONFORMANCE_AGENT_SEED);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('INTERNAL_ERROR', `Failed to load conformance signer: ${message}`, 500, undefined, version);
+  }
+
+  if (signer.did !== workerDid) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'worker_did must match conformance proof signer DID for execution autopilot',
+      400,
+      { expected_worker_did: signer.did },
+      version,
+    );
+  }
+
+  const candidateBountyIds = bountyIds.length > 0
+    ? bountyIds
+    : (await listBounties(env.BOUNTIES_DB, { status: 'accepted', is_code_bounty: false }, Math.max(limit, targetSubmissions * 3)))
+        .map((entry) => entry.bounty_id);
+
+  const workerAuthOverride: WorkerAuthContext = {
+    worker_did: workerDid,
+    auth_mode: 'scoped_token',
+    token_hash: null,
+    scope: [WORKER_AUTH_SCOPE_BY_ACTION.submit_bounty],
+    aud: [resolveWorkerAuthRequiredAudience(env)],
+    token_scope_hash_b64u: null,
+    token_lane: 'canonical',
+    payment_account_did: null,
+    agent_did: workerDid,
+    iat: null,
+    exp: null,
+    bearer_token: null,
+  };
+
+  const decisions: Array<Record<string, unknown>> = [];
+  for (const bountyId of candidateBountyIds) {
+    if (decisions.length >= limit) break;
+    if (decisions.filter((entry) => entry.submission_status === 'pending_review' && entry.proof_verify_status === 'valid').length >= targetSubmissions) {
+      break;
+    }
+
+    let bounty: BountyV2 | null;
+    try {
+      bounty = await getBountyById(env.BOUNTIES_DB, bountyId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      decisions.push({ bounty_id: bountyId, status: 'failed', reason_code: 'DB_READ_FAILED', error: message });
+      continue;
+    }
+
+    if (!bounty) {
+      decisions.push({ bounty_id: bountyId, status: 'skipped', reason_code: 'BOUNTY_NOT_FOUND' });
+      continue;
+    }
+
+    if (bounty.status !== 'accepted') {
+      decisions.push({ bounty_id: bountyId, status: 'skipped', reason_code: 'BOUNTY_NOT_ACCEPTED', bounty_status: bounty.status });
+      continue;
+    }
+
+    if (bounty.worker_did !== workerDid) {
+      decisions.push({
+        bounty_id: bountyId,
+        status: 'skipped',
+        reason_code: 'WORKER_MISMATCH',
+        bounty_worker_did: bounty.worker_did,
+      });
+      continue;
+    }
+
+    if (bounty.is_code_bounty) {
+      decisions.push({ bounty_id: bountyId, status: 'skipped', reason_code: 'CODE_BOUNTY_UNSUPPORTED' });
+      continue;
+    }
+
+    const idempotencyKey = `arena-autosubmit:${bountyId}:${crypto.randomUUID().replace(/-/g, '')}`;
+    let proofArtifacts: { runId: string; proofBundleEnvelope: Record<string, unknown>; urm: Record<string, unknown> };
+    try {
+      proofArtifacts = await buildArenaExecutionAutopilotProofArtifacts(workerDid, bountyId, signer);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      decisions.push({ bounty_id: bountyId, status: 'failed', reason_code: 'PROOF_BUILD_FAILED', error: message });
+      continue;
+    }
+
+    if (dryRun) {
+      decisions.push({
+        bounty_id: bountyId,
+        status: 'dry_run',
+        reason_code: 'ARENA_SUBMISSION_DRY_RUN',
+        run_id: proofArtifacts.runId,
+        idempotency_key: idempotencyKey,
+      });
+      continue;
+    }
+
+    const submitRequest = new Request(`https://internal/v1/bounties/${encodeURIComponent(bountyId)}/submit`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        worker_did: workerDid,
+        idempotency_key: idempotencyKey,
+        proof_bundle_envelope: proofArtifacts.proofBundleEnvelope,
+        urm: proofArtifacts.urm,
+        result_summary: `arena execution autopilot submission for ${bountyId}`,
+        artifacts: [
+          {
+            kind: 'execution_log',
+            label: 'arena-autopilot-log',
+            url: `urn:arena:execution:${proofArtifacts.runId}`,
+          },
+        ],
+      }),
+    });
+
+    const submitResponse = await handleSubmitBounty(bountyId, submitRequest, env, version, {
+      authOverride: {
+        worker,
+        auth: workerAuthOverride,
+      },
+    });
+
+    let submitPayload: unknown;
+    let submitPayloadRaw = '';
+    try {
+      submitPayloadRaw = await submitResponse.text();
+      submitPayload = JSON.parse(submitPayloadRaw);
+    } catch {
+      submitPayload = { raw: submitPayloadRaw };
+    }
+
+    const payloadRecord = isRecord(submitPayload) ? submitPayload : null;
+    const submission = payloadRecord && isRecord(payloadRecord.submission) ? payloadRecord.submission : null;
+    const verification = payloadRecord && isRecord(payloadRecord.verification) ? payloadRecord.verification : null;
+    const verificationProof = verification && isRecord(verification.proof_bundle) ? verification.proof_bundle : null;
+
+    const submissionStatus = d1String(submission?.status) ?? d1String(payloadRecord?.status) ?? null;
+    const proofVerifyStatus = d1String(submission?.proof_verify_status) ?? d1String(verificationProof?.status) ?? null;
+
+    decisions.push({
+      bounty_id: bountyId,
+      http_status: submitResponse.status,
+      submission_id: d1String(submission?.submission_id) ?? null,
+      submission_status: submissionStatus,
+      proof_verify_status: proofVerifyStatus,
+      idempotency_key: idempotencyKey,
+      run_id: proofArtifacts.runId,
+      response: submitPayload,
+    });
+  }
+
+  const successfulPendingReview = decisions.filter(
+    (entry) => entry.submission_status === 'pending_review' && entry.proof_verify_status === 'valid',
+  ).length;
+
+  return jsonResponse(
+    {
+      schema_version: 'arena_execution_submission_autopilot.v1',
+      computed_at: new Date().toISOString(),
+      worker_did: workerDid,
+      dry_run: dryRun,
+      limits: {
+        target_submissions: targetSubmissions,
+        limit,
+        candidate_bounty_ids: candidateBountyIds,
+      },
+      totals: {
+        decisions: decisions.length,
+        successful_pending_review: successfulPendingReview,
+        target_met: successfulPendingReview >= targetSubmissions,
+      },
+      decisions,
+    },
+    200,
+    version,
+  );
+}
+
 async function handleGetArenaPolicyOptimizer(
   request: Request,
   url: URL,
@@ -19991,6 +20432,10 @@ export default {
 
       if (path === '/v1/arena/desk/claim-loop' && method === 'POST') {
         return handlePostArenaDeskClaimLoop(request, env, version);
+      }
+
+      if (path === '/v1/arena/desk/submit-loop' && method === 'POST') {
+        return handlePostArenaDeskSubmissionLoop(request, env, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {
