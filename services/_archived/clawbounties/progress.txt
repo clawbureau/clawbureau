@@ -1600,3 +1600,18 @@ Started: 2026-02-02T03:08:26.937005
   - Exit code 2 = critical, 0 = healthy/warn
   - Writes summary.json + full-dashboard.json to OUT_DIR
 - Test: `scripts/arena/run-ops-roi-dashboard.test.mjs`
+
+## 2026-02-20 - AGP-US-085 fleet health alerting
+- Added `GET /v1/arena/desk/fleet-health` endpoint (admin-only):
+  - Returns `arena_fleet_health.v1` schema with overall status + deterministic alerts
+  - Status: healthy / degraded / critical (derived from alert severities)
+  - 12 deterministic alert codes across 5 health dimensions:
+    - ROI: FLEET_ACCEPT_RATE_CRITICAL, FLEET_ACCEPT_RATE_LOW, FLEET_OVERRIDE_RATE_CRITICAL,
+      FLEET_OVERRIDE_RATE_HIGH, FLEET_REWORK_RATE_HIGH, FLEET_COST_PER_ACCEPTED_HIGH, FLEET_ROI_NO_DATA
+    - Backlog: FLEET_BACKLOG_CRITICAL, FLEET_BACKLOG_HIGH
+    - Workers: FLEET_NO_ACTIVE_WORKERS
+    - Cron: FLEET_CRON_DISABLED
+    - Duels: FLEET_DUEL_STALE
+  - fleet_summary: active_workers, pending_backlog, roi_status, roi_sample_count, cron_enabled, recent_duel_count
+- Added `scripts/arena/run-fleet-health-monitor.mjs` for automated monitoring
+  - Exit code 2 = critical, 0 = healthy/degraded, 1 = fetch failure

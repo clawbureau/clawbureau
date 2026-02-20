@@ -16818,6 +16818,138 @@ async function computeArenaRoiDashboard(
   };
 }
 
+
+
+// AGP-US-085: fleet health alerting
+interface FleetHealthAlert {
+  code: string;
+  severity: 'critical' | 'warning' | 'info';
+  message: string;
+  value: number | string | null;
+  threshold: number | string | null;
+}
+
+async function handleGetFleetHealth(
+  env: Env,
+  version: string,
+): Promise<Response> {
+  const now = new Date();
+  const alerts: FleetHealthAlert[] = [];
+
+  // 1. ROI health check
+  const roiPayload = await computeArenaRoiDashboard(env.BOUNTIES_DB, {
+    taskFingerprint: '',
+    objectiveProfileName: '',
+    contenderId: '',
+    experimentId: '',
+    experimentArm: '',
+    limit: 2000,
+    minSamples: 5,
+    nowIso: now.toISOString(),
+  });
+  const roiMetrics = roiPayload.metrics as Record<string, unknown> | null;
+  const roiStatus = typeof roiPayload.status === 'string' ? roiPayload.status : 'unknown';
+
+  if (roiMetrics) {
+    const acceptRate = typeof roiMetrics.first_pass_accept_rate === 'number' ? roiMetrics.first_pass_accept_rate : 0;
+    const overrideRate = typeof roiMetrics.override_rate === 'number' ? roiMetrics.override_rate : 0;
+    const reworkRate = typeof roiMetrics.rework_rate === 'number' ? roiMetrics.rework_rate : 0;
+    const costPerAccepted = typeof roiMetrics.cost_per_accepted_bounty_usd === 'number' ? roiMetrics.cost_per_accepted_bounty_usd : 0;
+
+    if (acceptRate < 0.3) {
+      alerts.push({ code: 'FLEET_ACCEPT_RATE_CRITICAL', severity: 'critical', message: `First-pass accept rate ${(acceptRate * 100).toFixed(1)}% below 30% threshold`, value: acceptRate, threshold: 0.3 });
+    } else if (acceptRate < 0.5) {
+      alerts.push({ code: 'FLEET_ACCEPT_RATE_LOW', severity: 'warning', message: `First-pass accept rate ${(acceptRate * 100).toFixed(1)}% below 50% threshold`, value: acceptRate, threshold: 0.5 });
+    }
+    if (overrideRate > 0.4) {
+      alerts.push({ code: 'FLEET_OVERRIDE_RATE_CRITICAL', severity: 'critical', message: `Override rate ${(overrideRate * 100).toFixed(1)}% exceeds 40% threshold`, value: overrideRate, threshold: 0.4 });
+    } else if (overrideRate > 0.25) {
+      alerts.push({ code: 'FLEET_OVERRIDE_RATE_HIGH', severity: 'warning', message: `Override rate ${(overrideRate * 100).toFixed(1)}% exceeds 25% threshold`, value: overrideRate, threshold: 0.25 });
+    }
+    if (reworkRate > 0.3) {
+      alerts.push({ code: 'FLEET_REWORK_RATE_HIGH', severity: 'warning', message: `Rework rate ${(reworkRate * 100).toFixed(1)}% exceeds 30% threshold`, value: reworkRate, threshold: 0.3 });
+    }
+    if (costPerAccepted > 2.0) {
+      alerts.push({ code: 'FLEET_COST_PER_ACCEPTED_HIGH', severity: 'warning', message: `Cost per accepted bounty $${costPerAccepted.toFixed(4)} exceeds $2.00`, value: costPerAccepted, threshold: 2.0 });
+    }
+  } else {
+    alerts.push({ code: 'FLEET_ROI_NO_DATA', severity: 'info', message: 'ROI metrics unavailable (insufficient outcome data)', value: null, threshold: null });
+  }
+
+  // 2. Pending backlog check
+  const pendingRuns = await listPendingArenaRuns(env.BOUNTIES_DB, { limit: 5000 });
+  const pendingMetrics = buildArenaPendingBacklogMetrics(pendingRuns);
+  const pendingCount = typeof pendingMetrics.pending_count === 'number' ? pendingMetrics.pending_count : 0;
+
+  if (pendingCount > 50) {
+    alerts.push({ code: 'FLEET_BACKLOG_CRITICAL', severity: 'critical', message: `Pending backlog ${pendingCount} exceeds 50 threshold`, value: pendingCount, threshold: 50 });
+  } else if (pendingCount > 20) {
+    alerts.push({ code: 'FLEET_BACKLOG_HIGH', severity: 'warning', message: `Pending backlog ${pendingCount} exceeds 20 threshold`, value: pendingCount, threshold: 20 });
+  }
+
+  // 3. Fleet worker registry check
+  let fleetWorkerCount = 0;
+  try {
+    const fleetResult = await env.BOUNTIES_DB
+      .prepare('SELECT COUNT(*) as cnt FROM bounty_arena_harness_fleet_workers WHERE status = ?')
+      .bind('active')
+      .first<{ cnt: number }>();
+    fleetWorkerCount = fleetResult?.cnt ?? 0;
+  } catch { /* D1 error — report as alert */ }
+
+  if (fleetWorkerCount === 0) {
+    alerts.push({ code: 'FLEET_NO_ACTIVE_WORKERS', severity: 'critical', message: 'No active fleet workers registered', value: fleetWorkerCount, threshold: 1 });
+  }
+
+  // 4. Cron resolver check
+  const cronEnabled = (env.ARENA_RESOLVER_CRON_ENABLED ?? 'true').trim().toLowerCase();
+  const cronIsEnabled = cronEnabled !== 'false' && cronEnabled !== '0';
+  if (!cronIsEnabled) {
+    alerts.push({ code: 'FLEET_CRON_DISABLED', severity: 'warning', message: 'Arena resolver cron is disabled', value: 'disabled', threshold: 'enabled' });
+  }
+
+  // 5. Duel league activity check
+  let recentDuelCount = 0;
+  try {
+    const cutoff = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000)).toISOString();
+    const duelResult = await env.BOUNTIES_DB
+      .prepare('SELECT COUNT(*) as cnt FROM bounty_arena_contenders WHERE created_at >= ?')
+      .bind(cutoff)
+      .first<{ cnt: number }>();
+    recentDuelCount = duelResult?.cnt ?? 0;
+  } catch { /* D1 error */ }
+
+  if (recentDuelCount === 0) {
+    alerts.push({ code: 'FLEET_DUEL_STALE', severity: 'warning', message: 'No duel activity in the last 7 days', value: 0, threshold: 1 });
+  }
+
+  // Derive overall health
+  const hasCritical = alerts.some((a) => a.severity === 'critical');
+  const hasWarning = alerts.some((a) => a.severity === 'warning');
+  const overallStatus = hasCritical ? 'critical' : hasWarning ? 'degraded' : 'healthy';
+
+  const roiTotals = roiPayload.totals as Record<string, unknown> | null;
+  const sampleCount = typeof roiTotals?.sample_count === 'number' ? roiTotals.sample_count : 0;
+
+  return jsonResponse({
+    schema_version: 'arena_fleet_health.v1',
+    computed_at: now.toISOString(),
+    status: overallStatus,
+    alert_count: alerts.length,
+    critical_count: alerts.filter((a) => a.severity === 'critical').length,
+    warning_count: alerts.filter((a) => a.severity === 'warning').length,
+    alerts,
+    fleet_summary: {
+      active_workers: fleetWorkerCount,
+      pending_backlog: pendingCount,
+      roi_status: roiStatus,
+      roi_sample_count: sampleCount,
+      cron_enabled: cronIsEnabled,
+      recent_duel_count: recentDuelCount,
+    },
+  }, 200, version);
+}
+
 function computePercentile(sortedValues: number[], p: number): number {
   if (sortedValues.length === 0) return 0;
   const index = (p / 100) * (sortedValues.length - 1);
@@ -23832,6 +23964,13 @@ export default {
           cron_min_age_minutes: cronMinAge,
           pending_backlog: pendingMetrics,
         }, 200, version);
+      }
+
+      // AGP-US-085: fleet health alerting
+      if (path === '/v1/arena/desk/fleet-health' && method === 'GET') {
+        const adminError = requireAdmin(request, env, version);
+        if (adminError) return adminError;
+        return handleGetFleetHealth(env, version);
       }
 
       if (path === '/v1/arena/calibration' && method === 'GET') {
