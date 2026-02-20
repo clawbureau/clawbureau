@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "story": "AGP-US-082",
+  "generated_at": "2026-02-20T19:27:27Z",
+  "staging": {
+    "outcomes_seeded": 9,
+    "roi_status": "ARENA_ROI_READY",
+    "sample_count": 24
+  },
+  "production": {
+    "outcomes_seeded": 7,
+    "roi_status": "ARENA_ROI_READY",
+    "sample_count": 16
+  },
+  "acceptance": {
+    "staging_roi_not_insufficient": true,
+    "staging_outcomes_gte_10": true,
+    "production_outcomes_gte_5": true,
+    "all_decisions_deterministic": true
+  }
+}
