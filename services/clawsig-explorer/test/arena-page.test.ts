@@ -43,7 +43,7 @@ describe('arena pages', () => {
     expect(html).toContain('KPI Gate');
     expect(html).toContain('claim success');
     expect(html).toContain('proof valid rate');
-    expect(html).toContain('Throughput + backlog');
+    expect(html).toContain('Pipeline throughput');
     expect(html).toContain('Gate thresholds');
     expect(html).toContain('ARENA_MISSION_KPI_PASS');
   });

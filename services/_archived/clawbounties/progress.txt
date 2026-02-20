@@ -1441,3 +1441,26 @@ Started: 2026-02-02T03:08:26.937005
 - Evidence bundle:
   - `artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/summary.json`
   - `artifacts/ops/arena-productization/2026-02-20T17-07-38Z-agp-us-077-ui-duel-league-monitor/route-status-codes.txt`
+
+## 2026-02-20 - AGP-US-078 mission cockpit UX upgrade
+- Upgraded Explorer mission cockpit UI (`/arena/mission`) with clearer operator posture and backlog insight:
+  - new headline stat: **Submission Coverage**
+  - renamed + expanded throughput section: **Pipeline throughput**
+  - new **Claim gap queue** section with top `claim_submission_gap_bounty_ids`
+  - retained explicit threshold + reason-code visibility for fail-closed diagnostics
+- Explorer API mission parser updated for expanded mission payload fields:
+  - `submissions_window.with_submission`
+  - `submissions_window.without_submission`
+  - `backlog.claim_submission_gap_bounty_ids`
+- Deployed clawsig-explorer:
+  - staging version `351f8d87-be4e-4afa-b90b-aaa9ff28621c`
+  - production version `75cd0179-3746-4138-adf1-39712b0e2e3b`
+- Real UI evidence:
+  - staging/prod mission pages contain markers:
+    - `Submission Coverage`
+    - `Pipeline throughput`
+    - `Claim gap queue`
+    - `Gate thresholds`
+- Evidence bundle:
+  - `artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/summary.json`
+  - `artifacts/ops/arena-productization/2026-02-20T17-23-09Z-agp-us-078-mission-cockpit-ux/route-status-codes.txt`
