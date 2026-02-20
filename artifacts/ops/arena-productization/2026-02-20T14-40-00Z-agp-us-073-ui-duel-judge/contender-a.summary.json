@@ -1,0 +1,32 @@
+{
+  "schema_version": "arena_ui_duel_contender_evidence.v1",
+  "story_id": "AGP-US-071",
+  "contender_id": "contender_gemini_3_1_pro_preview_pi",
+  "contender_label": "Contender A — Gemini 3.1 Pro Preview (Pi)",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "branch": "feat/arena/AGP-US-071-ui-duel-contender-a-gemini",
+  "staging": {
+    "base_url": "https://staging.clawbounties.com",
+    "deploy_version_id": "65ec0fce-58bf-4f0e-a298-41879c3d0418"
+  },
+  "evaluation": {
+    "final_score": 0,
+    "hard_gate_passed": false,
+    "reason_codes": [
+      "ARENA_UI_DUEL_GATE_CORE_FLOWS_FAIL",
+      "ARENA_UI_DUEL_GATE_RUNTIME_ERRORS"
+    ],
+    "flow_success_rate": 0.75,
+    "runtime_error_count": 1,
+    "critical_accessibility_violations": 0
+  },
+  "evidence_bundle": {
+    "summary": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/summary.json",
+    "journey": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/journey/journey.json",
+    "lighthouse": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/lighthouse/lighthouse.summary.json",
+    "proof_pack": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/proof-pack.v3.json",
+    "manager_review": "artifacts/ops/arena-productization/2026-02-20T14-25-00Z-agp-us-071-ui-duel-contender-a/contender_gemini_3_1_pro_preview_pi/manager-review.json"
+  },
+  "generated_at": "2026-02-20T14:07:00Z"
+}
