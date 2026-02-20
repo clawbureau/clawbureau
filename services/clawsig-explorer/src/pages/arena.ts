@@ -1,5 +1,5 @@
 import { esc, fmtNum, layout, relativeTime, statusBadge, type PageMeta } from '../layout.js';
-import type { ArenaMissionSummaryView, ArenaReportView } from '../api.js';
+import type { ArenaContenderView, ArenaMissionSummaryView, ArenaReportView } from '../api.js';
 
 interface ArenaIndexItem {
   arena_id: string;
@@ -71,6 +71,85 @@ function contractCheckMatrix(report: ArenaReportView): string {
   `;
 }
 
+function renderEvaluatorMetrics(raw: Record<string, unknown>): string {
+  // Show the real evaluator metrics from Playwright duel evaluator
+  const ux = typeof raw.ux_score === 'number' ? raw.ux_score : null;
+  const perf = typeof raw.perf_score === 'number' ? raw.perf_score : null;
+  const a11y = typeof raw.a11y_score === 'number' ? raw.a11y_score : null;
+  const visual = typeof raw.visual_score === 'number' ? raw.visual_score : null;
+  const maint = typeof raw.maint_score === 'number' ? raw.maint_score : null;
+  const lhPerf = typeof raw.lighthouse_performance === 'number' ? raw.lighthouse_performance : null;
+  const lhA11y = typeof raw.lighthouse_accessibility === 'number' ? raw.lighthouse_accessibility : null;
+  const lhCls = typeof raw.lighthouse_cls === 'number' ? raw.lighthouse_cls : null;
+  const flowRate = typeof raw.flow_success_rate === 'number' ? raw.flow_success_rate : null;
+  const flowsPassed = typeof raw.flows_passed === 'number' ? raw.flows_passed : null;
+  const flowsTotal = typeof raw.flows_total === 'number' ? raw.flows_total : null;
+  const avgTiming = typeof raw.avg_timing_ms === 'number' ? raw.avg_timing_ms : null;
+  const runtimeErrors = typeof raw.runtime_error_count === 'number' ? raw.runtime_error_count : null;
+  const criticalA11y = typeof raw.critical_a11y_violations === 'number' ? raw.critical_a11y_violations : null;
+  const friction = typeof raw.friction_events === 'number' ? raw.friction_events : null;
+
+  const cells: string[] = [];
+  if (ux !== null) cells.push(renderMetricCell('UX', ux.toFixed(1)));
+  if (perf !== null) cells.push(renderMetricCell('perf', perf.toFixed(1)));
+  if (a11y !== null) cells.push(renderMetricCell('a11y', a11y.toFixed(1)));
+  if (visual !== null) cells.push(renderMetricCell('visual', visual.toFixed(1)));
+  if (maint !== null) cells.push(renderMetricCell('maint', maint.toFixed(1)));
+  if (lhPerf !== null) cells.push(renderMetricCell('LH perf', (lhPerf * 100).toFixed(0) + '%'));
+  if (lhA11y !== null) cells.push(renderMetricCell('LH a11y', (lhA11y * 100).toFixed(0) + '%'));
+  if (lhCls !== null) cells.push(renderMetricCell('CLS', lhCls.toFixed(3)));
+  if (flowRate !== null) cells.push(renderMetricCell('flows', `${flowRate * 100}%`));
+  if (flowsPassed !== null && flowsTotal !== null) cells.push(renderMetricCell('flow pass', `${flowsPassed}/${flowsTotal}`));
+  if (avgTiming !== null) cells.push(renderMetricCell('avg timing', `${avgTiming.toFixed(0)}ms`));
+  if (runtimeErrors !== null) cells.push(renderMetricCell('RT errors', String(runtimeErrors)));
+  if (criticalA11y !== null) cells.push(renderMetricCell('crit a11y', String(criticalA11y)));
+  if (friction !== null) cells.push(renderMetricCell('friction', String(friction)));
+
+  // Hard gates sub-section
+  const hardGates = raw.hard_gates;
+  if (hardGates && typeof hardGates === 'object') {
+    const hg = hardGates as Record<string, unknown>;
+    if (typeof hg.core_flows_pass === 'boolean') cells.push(renderMetricCell('core flows', hg.core_flows_pass ? 'PASS' : 'FAIL'));
+    if (typeof hg.no_runtime_errors === 'boolean') cells.push(renderMetricCell('no RT err', hg.no_runtime_errors ? 'PASS' : 'FAIL'));
+    if (typeof hg.no_a11y_critical === 'boolean') cells.push(renderMetricCell('no crit a11y', hg.no_a11y_critical ? 'PASS' : 'FAIL'));
+  }
+
+  // Reason codes from evaluator
+  const evalReasonCodes = Array.isArray(raw.reason_codes) ? raw.reason_codes : [];
+
+  if (cells.length === 0) return '';
+
+  return `
+    <div class="diag-grid" style="grid-template-columns: repeat(3, minmax(100px, 1fr)); gap:0.25rem">
+      ${cells.join('\n')}
+    </div>
+    ${evalReasonCodes.length > 0
+      ? `<div class="dim" style="font-size:0.7rem; margin-top:0.3rem">${evalReasonCodes.map((rc) => esc(String(rc))).join(', ')}</div>`
+      : ''}
+  `;
+}
+
+function renderCanonicalMetrics(contender: ArenaContenderView): string {
+  return `
+    <div class="diag-grid" style="grid-template-columns: repeat(2, minmax(110px, 1fr)); gap:0.3rem">
+      ${renderMetricCell('quality', contender.metrics.quality_score.toFixed(2))}
+      ${renderMetricCell('risk', contender.metrics.risk_score.toFixed(2))}
+      ${renderMetricCell('efficiency', contender.metrics.efficiency_score.toFixed(2))}
+      ${renderMetricCell('cost', `$${contender.metrics.cost_usd.toFixed(4)}`)}
+    </div>
+  `;
+}
+
+function renderReviewPasteInline(paste: string): string {
+  if (!paste || paste.length === 0) return '<span class="dim" style="font-size:0.75rem">No review paste</span>';
+  const lines = paste.split('\n').map((line) => esc(line.trim())).filter((l) => l.length > 0);
+  return `
+    <div style="font-size:0.75rem; line-height:1.4; font-family:var(--font-mono); background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius); padding:0.5rem; max-height:6rem; overflow-y:auto; white-space:pre-wrap">
+${lines.join('\n')}
+    </div>
+  `;
+}
+
 function contenderRows(report: ArenaReportView): string {
   return report.contenders
     .map((contender) => {
@@ -87,16 +166,13 @@ function contenderRows(report: ArenaReportView): string {
           metrics: contender.metrics,
         }, null, 2);
 
-      const reasonCodes = contender.score_explain.reason_codes.length > 0
-        ? contender.score_explain.reason_codes.join(', ')
-        : 'none';
+      const hasEvaluatorMetrics = contender.raw_evaluator_metrics !== null
+        && typeof contender.raw_evaluator_metrics === 'object'
+        && Object.keys(contender.raw_evaluator_metrics).length > 0;
 
-      const evidenceLinks = contender.score_explain.evidence_links.length > 0
-        ? contender.score_explain.evidence_links
-          .slice(0, 2)
-          .map((entry) => `<a href="${esc(entry.url)}" target="_blank" rel="noreferrer">${esc(entry.label)} ↗</a>`)
-          .join(' · ')
-        : 'no evidence link';
+      const metricsHtml = hasEvaluatorMetrics
+        ? renderEvaluatorMetrics(contender.raw_evaluator_metrics!)
+        : renderCanonicalMetrics(contender);
 
       return `
         <tr>
@@ -112,28 +188,16 @@ function contenderRows(report: ArenaReportView): string {
             <div class="dim" style="font-size:0.75rem">${esc(contender.harness)}</div>
           </td>
           <td>
-            <div class="mono" style="font-size:0.75rem; display:grid; gap:0.12rem">
-              <span>${esc(contender.tools.join(', ') || 'none')}</span>
-              <span>${esc(contender.skills.join(', ') || 'none')}</span>
-            </div>
+            <div class="mono" style="font-size:0.84rem; font-weight:600">${contender.score.toFixed(1)}</div>
           </td>
-          <td>
-            <div class="mono">${contender.score.toFixed(4)}</div>
-            <div class="dim" style="font-size:0.74rem">${evidenceLinks}</div>
-            <div class="dim" style="font-size:0.7rem">${esc(reasonCodes)}</div>
+          <td style="min-width:260px">
+            ${metricsHtml}
           </td>
-          <td>
-            <div class="diag-grid" style="grid-template-columns: repeat(2, minmax(110px, 1fr)); gap:0.3rem">
-              ${renderMetricCell('quality', contender.metrics.quality_score.toFixed(2))}
-              ${renderMetricCell('risk', contender.metrics.risk_score.toFixed(2))}
-              ${renderMetricCell('efficiency', contender.metrics.efficiency_score.toFixed(2))}
-              ${renderMetricCell('cost', `$${contender.metrics.cost_usd.toFixed(4)}`)}
-            </div>
-          </td>
-          <td>
-            <div style="display:grid; gap:0.35rem">
-              <button id="review-paste-${esc(contender.contender_id)}" class="copy-btn" data-copy="${esc(reviewPaste)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Review Paste</button>
-              <button id="manager-review-${esc(contender.contender_id)}" class="copy-btn" data-copy="${esc(managerJson)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Manager JSON</button>
+          <td style="min-width:240px">
+            ${renderReviewPasteInline(reviewPaste)}
+            <div style="display:flex; gap:0.35rem; margin-top:0.35rem">
+              <button class="copy-btn" data-copy="${esc(reviewPaste)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy Paste</button>
+              <button class="copy-btn" data-copy="${esc(managerJson)}" onclick="navigator.clipboard.writeText(this.getAttribute('data-copy') || ''); this.textContent='Copied';">Copy JSON</button>
             </div>
           </td>
         </tr>
@@ -797,10 +861,9 @@ export function arenaComparePage(report: ArenaReportView): string {
             <tr>
               <th>Contender</th>
               <th>Model/Harness</th>
-              <th>Tools/Skills</th>
               <th>Score</th>
-              <th>Quality/Risk/Efficiency</th>
-              <th>Review Artifacts</th>
+              <th>Evaluator Metrics</th>
+              <th>Review</th>
             </tr>
           </thead>
           <tbody>
@@ -1017,6 +1080,7 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           ],
         },
         review_paste: 'Decision Summary: Promote contender\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=92.00, risk=26.00, efficiency=81.00, cost=$0.7800, latency=16000ms\nRecommendation: use for high-risk API hardening bounties',
+        raw_evaluator_metrics: null,
         manager_review_json: '{\n  "decision": "promote",\n  "confidence": 0.782,\n  "reason_codes": ["ARENA_READY_TO_PROMOTE"]\n}',
       },
       {
@@ -1049,6 +1113,7 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           ],
         },
         review_paste: 'Decision Summary: Manual review required\nContract Compliance: PASS (2 mandatory passed, 0 mandatory failed)\nDelivery/Risk: quality=86.00, risk=38.00, efficiency=90.00, cost=$0.5400, latency=11200ms\nRecommendation: use for speed-oriented triage work',
+        raw_evaluator_metrics: null,
         manager_review_json: '{\n  "decision": "conditional",\n  "confidence": 0.612,\n  "reason_codes": ["ARENA_OPTIONAL_CRITERION_MISS"]\n}',
       },
       {
@@ -1081,6 +1146,7 @@ export function sampleArenaReport(arenaId: string): ArenaReportView | null {
           ],
         },
         review_paste: 'Decision Summary: Reject contender\nContract Compliance: FAIL (0 mandatory passed, 2 mandatory failed)\nDelivery/Risk: quality=74.00, risk=52.00, efficiency=72.00, cost=$0.3100, latency=22100ms\nRecommendation: tighten contract language and rerun',
+        raw_evaluator_metrics: null,
         manager_review_json: '{\n  "decision": "reject",\n  "confidence": 0.361,\n  "reason_codes": ["ARENA_MANDATORY_CHECK_FAILED"]\n}',
       },
     ],

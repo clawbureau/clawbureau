@@ -11,10 +11,8 @@ describe('arena pages', () => {
     expect(html).toContain('Arena Compare: arena_bty_arena_001');
     expect(html).toContain('Contenders table');
     expect(html).toContain('Contract check matrix');
-    expect(html).toContain('Copy Review Paste');
-    expect(html).toContain('Copy Manager JSON');
-    expect(html).toContain('review-paste-contender_codex_pi');
-    expect(html).toContain('manager-review-contender_codex_pi');
+    expect(html).toContain('Copy Paste');
+    expect(html).toContain('Copy JSON');
     expect(html).toContain('contender_codex_pi');
     expect(html).toContain('ac_contract_binding');
     expect(html).toContain('Winner rationale + tradeoffs');

@@ -715,6 +715,8 @@ export interface ArenaContenderView {
     cost_usd: number;
     autonomy_score: number;
   };
+  /** Raw evaluator metrics when available (e.g. Playwright duel evaluator data). */
+  raw_evaluator_metrics: Record<string, unknown> | null;
   check_results: ArenaCheckResult[];
   score_explain: {
     final_score: number;
@@ -1157,6 +1159,7 @@ interface ArenaReportResponse {
       reason_codes?: unknown;
       evidence_links?: unknown;
     };
+    raw_evaluator_metrics?: Record<string, unknown> | null;
     review_paste?: unknown;
     manager_review_json?: unknown;
   }>;
@@ -1417,6 +1420,9 @@ function parseArenaContender(row: NonNullable<ArenaReportResponse['contenders']>
       cost_usd: asNumber(row.metrics?.cost_usd, 0),
       autonomy_score: asNumber(row.metrics?.autonomy_score, 0),
     },
+    raw_evaluator_metrics: row.raw_evaluator_metrics && typeof row.raw_evaluator_metrics === 'object'
+      ? row.raw_evaluator_metrics
+      : null,
     check_results: checkResults,
     score_explain: {
       final_score: finalScore,
