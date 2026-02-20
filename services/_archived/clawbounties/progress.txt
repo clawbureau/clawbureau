@@ -1319,3 +1319,19 @@ Started: 2026-02-02T03:08:26.937005
 - Real-data baseline evidence persisted:
   - `artifacts/ops/arena-productization/2026-02-20T13-10-00Z-agp-us-070-ui-duel-baseline/baseline_ui_duel_infra/summary.json`
   - baseline hard gates pass, final score `99.4`.
+
+## 2026-02-20 - AGP-US-071 UI duel contender A (Gemini 3.1 Pro Preview) implementation
+- Redesigned /duel UI route with professional operator surface:
+  - Structured card-based layout with header navigation and environment badge.
+  - Proper ARIA roles (listbox/option, aria-selected, role=status, aria-live, aria-label).
+  - Improved visual hierarchy: reward formatting, status pills with semantic colors.
+  - Clean detail grid with labeled cells and monospace values.
+  - Focus-visible outlines, scrollbar styling, responsive grid breakpoint.
+  - Screen-reader-only utility class for accessibility.
+- Preserved all contract-required DOM IDs: #adminKey, #workerDid, #loadBounties, #claimBounty, #submitBounty, #actionStatus.
+- Preserved [data-testid='bounty-row'] on all bounty row elements.
+- All four core flows wired to live APIs: browse, details, claim, submit (no mock data).
+- Fail-closed error handling: admin key required before any API call, all errors surfaced to #actionStatus.
+- Typecheck: npm run typecheck passes clean.
+- Evaluator tests: run-ui-duel-evaluator.test.mjs (1/1) + ui-duel-score.test.mjs (2/2) all pass.
+- Evidence placeholder: artifacts/ops/arena-productization/AGP-US-071-contender-A/summary.json

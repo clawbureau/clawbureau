@@ -1,0 +1,65 @@
+{
+  "schema_version": "arena_ui_duel_contender_summary.v1",
+  "story_id": "AGP-US-071",
+  "contender_id": "contender_gemini_3_1_pro_preview_pi",
+  "contender_label": "Contender A — Gemini 3.1 Pro Preview (Pi)",
+  "contract_id": "contract_clawbounties_ui_duel_v1",
+  "task_fingerprint": "frontend:clawbounties:ux-redesign",
+  "branch": "feat/arena/AGP-US-071-ui-duel-contender-a-gemini",
+  "generated_at": "2026-02-20T13:57:00Z",
+  "implementation": {
+    "ui_route": "/duel",
+    "file_changed": "services/_archived/clawbounties/src/ui-duel-page.ts",
+    "preserved_dom_ids": [
+      "adminKey",
+      "workerDid",
+      "loadBounties",
+      "claimBounty",
+      "submitBounty",
+      "actionStatus"
+    ],
+    "preserved_data_testids": [
+      "bounty-row"
+    ],
+    "core_flows_wired": [
+      "browse",
+      "details",
+      "claim",
+      "submit"
+    ],
+    "mock_data": false,
+    "fail_closed_errors": true
+  },
+  "validations": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "status": "PASS"
+    },
+    "evaluator_test": {
+      "command": "node --test scripts/arena/run-ui-duel-evaluator.test.mjs",
+      "status": "PASS",
+      "tests_passed": 1,
+      "tests_total": 1
+    },
+    "score_test": {
+      "command": "node --test scripts/arena/ui-duel-score.test.mjs",
+      "status": "PASS",
+      "tests_passed": 2,
+      "tests_total": 2
+    }
+  },
+  "design_changes": [
+    "Card-based layout with header navigation bar",
+    "Environment badge with semantic color coding",
+    "ARIA roles: listbox/option with aria-selected state",
+    "Status pills with color-coded semantics (open=green, accepted=blue, pending=amber)",
+    "Reward formatting from minor units to dollar display",
+    "Focus-visible outlines on all interactive elements",
+    "Responsive grid with mobile breakpoint at 900px",
+    "Structured detail grid with labeled cells",
+    "Custom scrollbar styling for bounty list",
+    "Screen-reader-only utility class"
+  ],
+  "evidence_status": "PLACEHOLDER",
+  "notes": "Full evaluator run (journey + Lighthouse + axe) pending live staging deployment."
+}
