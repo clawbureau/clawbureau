@@ -27,7 +27,7 @@ jobs:
       - name: Install + build clawsig-sdk
         run: |
           cd packages/clawsig-sdk
-          npm ci
+          npm install --ignore-scripts
           npm run build
 
       - name: Install + build clawverify-core
