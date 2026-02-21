@@ -6,6 +6,7 @@
  * - GET /run/:run_id       -> Run detail with client-side verification
  * - GET /agent/:did        -> Agent profile with run history
  * - GET /stats             -> Network statistics
+ * - GET /inspect           -> Proof bundle inspector (client-side upload/verify)
  * - GET /ops               -> Operator dashboard
  * - GET /health            -> Health check
  * - GET /robots.txt        -> Robots
@@ -39,6 +40,7 @@ import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
 import { opsDashboardPage } from './pages/ops.js';
+import { inspectPage } from './pages/inspect.js';
 import {
   arenaComparePage,
   arenaIndexPage,
@@ -189,6 +191,11 @@ export default {
         return html(fallbackHomePage(), 200, 10);
       }
       return html(statsPage(data), 200, 30);
+    }
+
+    // -- Proof Inspector --
+    if (path === "/inspect") {
+      return html(inspectPage(), 200, 3600);
     }
 
     // -- Ops SLO health JSON --
