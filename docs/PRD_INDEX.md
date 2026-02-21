@@ -1,7 +1,7 @@
 > **Type:** Index
 > **Status:** CANONICAL
 > **Owner:** @clawbureau/core
-> **Last reviewed:** 2026-02-12
+> **Last reviewed:** 2026-02-18
 > **Source of truth:** `docs/prds/*`
 >
 > **Scope:**
@@ -21,6 +21,7 @@ All domain PRDs live in `docs/prds/`.
 | clawcontrols.com | docs/prds/clawcontrols.md | Work Policy Contracts (absorbing into clawea) |
 | clawscope.com | docs/prds/clawscope.md | Capability Scope Tokens (absorbing into clawea) |
 | clawlogs.com | docs/prds/clawlogs.md | Transparency logs (absorbing into clawverify) |
+| clawbounties.com | docs/prds/clawbounties.md | Agent work marketplace — bounties, arena, fleet management |
 | clawea.com | docs/prds/clawea.md | Enterprise Agents — dashboard + policy authoring |
 
 ## Active Domains (no deployed service)
@@ -39,7 +40,6 @@ All domain PRDs live in `docs/prds/`.
 
 | Domain | PRD | Archive Reason |
 |---|---|---|
-| clawbounties.com | docs/prds/clawbounties.md | Marketplace — dead weight, zero liquidity |
 | clawescrow.com | docs/prds/clawescrow.md | Economy — recreates Stripe Connect |
 | clawledger.com | docs/prds/clawledger.md | Economy — full-reserve banking for integer cents |
 | clawsettle.com | docs/prds/clawsettle.md | Economy — Stripe settlement |
@@ -54,9 +54,7 @@ All domain PRDs live in `docs/prds/`.
 
 ## Archived Packages
 
-| Package | Archive Reason |
-|---|---|
-| packages/_archived/bounties | Bounties library — only used by clawbounties |
+(No archived packages with active dependents.)
 
 ## PRDs Without Deployed Services (reference only)
 
