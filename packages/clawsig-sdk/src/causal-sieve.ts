@@ -475,6 +475,22 @@ export async function getIncrementalMutations(
       diffOut.split('\n').map(l => l.trim()).filter(Boolean),
     );
 
+    // Untracked files — must be collected into currentFiles BEFORE the
+    // deletion-detection loop so that pre-existing untracked files aren't
+    // falsely reported as deleted on subsequent incremental diffs.
+    const { stdout: untracked } = await execFileAsync(
+      'git', ['ls-files', '--others', '--exclude-standard'],
+      { cwd: workdir, timeout: 5000 },
+    );
+    for (const line of untracked.split('\n')) {
+      if (!line.trim()) continue;
+      const untrackedPath = line.trim();
+      // Use a synthetic hash so tracked-vs-untracked never collides.
+      if (!currentFiles.has(untrackedPath)) {
+        currentFiles.set(untrackedPath, `untracked:${untrackedPath}`);
+      }
+    }
+
     // Detect changes since last snapshot
     for (const [path, hash] of currentFiles) {
       const prevHash = previousFiles.get(path);
@@ -488,18 +504,6 @@ export async function getIncrementalMutations(
     for (const [path] of previousFiles) {
       if (!currentFiles.has(path)) {
         mutations.push({ path, status: 'deleted' });
-      }
-    }
-
-    // Untracked files
-    const { stdout: untracked } = await execFileAsync(
-      'git', ['ls-files', '--others', '--exclude-standard'],
-      { cwd: workdir, timeout: 5000 },
-    );
-    for (const line of untracked.split('\n')) {
-      if (!line.trim()) continue;
-      if (!previousFiles.has(line.trim())) {
-        mutations.push({ path: line.trim(), status: 'added' });
       }
     }
   } catch {
@@ -823,8 +827,12 @@ export class CausalSieve {
     this.onViolation = options.onViolation;
   }
 
-  /** Initialize git file snapshot. Call before agent starts. */
+  /** Initialize git file snapshot. Call before agent starts.
+   *  Mutations from the initial scan are discarded — they represent
+   *  the pre-existing baseline, not changes caused by the wrapped process. */
   async initialize(): Promise<void> {
+    // Pass empty map; returned mutations (all pre-existing files) are intentionally
+    // discarded so they don't appear as side-effect receipts in the bundle.
     const { currentFiles } = await getIncrementalMutations(new Map(), this.cwd);
     this.fileSnapshot = currentFiles;
     this.snapshotInitialized = true;
