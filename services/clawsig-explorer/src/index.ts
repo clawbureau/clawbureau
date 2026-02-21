@@ -5,6 +5,7 @@
  * - GET /                  -> Home / global stats + recent runs
  * - GET /run/:run_id       -> Run detail with client-side verification
  * - GET /agent/:did        -> Agent profile with run history
+ * - GET /inspect           -> Proof bundle inspector (client-side)
  * - GET /stats             -> Network statistics
  * - GET /ops               -> Operator dashboard
  * - GET /health            -> Health check
@@ -39,6 +40,7 @@ import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
 import { opsDashboardPage } from './pages/ops.js';
+import { inspectPage } from './pages/inspect.js';
 import {
   arenaComparePage,
   arenaIndexPage,
@@ -215,6 +217,11 @@ export default {
       }
 
       return html(opsDashboardPage(opsData), 200, 15);
+    }
+
+    // -- Proof Bundle Inspector --
+    if (path === '/inspect') {
+      return html(inspectPage(), 200, 300);
     }
 
     // -- Runs feed / triage mode --
