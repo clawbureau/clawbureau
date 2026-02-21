@@ -1,8 +1,8 @@
 > **Type:** PRD
 > **Status:** ACTIVE
 > **Owner:** @clawbureau/labor
-> **Last reviewed:** 2026-02-11
-> **Source of truth:** `services/clawbounties/{prd.json,progress.txt}` + `packages/schema/bounties/*.v2.json`
+> **Last reviewed:** 2026-02-18
+> **Source of truth:** `services/_archived/clawbounties/{prd.json,progress.txt}` + `packages/schema/bounties/*.v2.json`
 >
 > **Scope:**
 > - Product requirements for the Clawbounties marketplace.
@@ -12,36 +12,59 @@
 
 **Domain:** clawbounties.com  
 **Pillar:** Labor & Delegation  
-**Status:** Active (CBT-US-001..030 shipped with staging+prod evidence; CBT-OPS-004 productionized)  
+**Status:** Active (CBT-US-001..032 + AGP-US-043..070+ shipped with staging+prod evidence)  
 
 ---
 
 ## Implementation status (current)
 
-- **Active service:** `services/clawbounties/`
+- **Active service:** `services/_archived/clawbounties/` (the `_archived/` prefix is a historical artifact from the 2026-02-12 economy pivot; the service is live and deployed)
 - **Execution tracker:**
-  - `services/clawbounties/prd.json`
-  - `services/clawbounties/progress.txt`
+  - `services/_archived/clawbounties/prd.json`
+  - `services/_archived/clawbounties/progress.txt`
 - **Primary schemas (contracts):**
   - Bounties API + records: `packages/schema/bounties/*.(v1|v2).json` (v2 uses USD minor-unit strings)
   - Escrow hold request: `packages/schema/bounties/escrow_hold_request.v2.json`
   - PoH evidence used by marketplace:
     - `packages/schema/poh/proof_bundle.v1.json`
     - `packages/schema/poh/commit_proof.v1.json`
-- **Shipped stories:**
-  - `CBT-US-001` .. `CBT-US-021` (posting/accept/submission/review paths, worker token loop, trust pulse + CWC + CST binding)
-- **Activation tranche (production complete):**
-  - `CBT-US-022` — test harness lane operational (staging + prod)
-  - `CBT-US-023` — real E2E simulation runner (no D1 injection)
-  - `CBT-US-024` — submission review/listing ergonomics + simulation artifacts
-- **CBT-OPS-003 tranche (production complete):**
-  - `CBT-US-025` — production gate preflight pack
-  - `CBT-US-026` — 200+ batch reliability mode with bounded concurrency/backpressure
-  - `CBT-US-027` — funding-aware orchestration + insufficient-funds classification
-- **CBT-OPS-004 tranche (production complete):**
-  - `CBT-US-028` — identity control-plane contract assimilation
-  - `CBT-US-029` — sensitive transition enforcement hardening
-  - `CBT-US-030` — API-only simulation discipline for control-plane lane
+
+### Shipped capabilities
+
+**Bounty lifecycle (CBT-US-001..032):**
+- Bounty posting, acceptance, submission, approval/rejection
+- Worker registry with DID-based identity and scoped token auth
+- Test-based auto-approval (closure_type=test) with deterministic harness lane
+- Quorum-based review with owner-verified voting
+- Proof tier classification (self/gateway/sandbox)
+- Fee disclosure (all-in cost via clawcuts integration)
+- Confidential Work Contracts (CWC) for direct-hire bounties
+- Trust Pulse ingestion at submission time
+- Loss-event risk coupling (disputed-state fail-closed)
+- Scoped requester/worker auth with control-plane contract enforcement
+- Sensitive transition hardening with revalidation via clawscope
+
+**Arena system (AGP-US-043..070+):**
+- Arena duel dispatch with bounty-triggered lifecycle
+- Contender registry with version pins and A/B experiment arms
+- Decision-paste autopost and manager summary
+- Override-driven policy learning loop with structured taxonomy
+- Historical backtesting analytics (predicted-vs-actual winner analysis)
+- Contract language optimizer (persisted rewrite suggestions from failures)
+- Contract copilot (copilot-grade suggestions from real outcomes)
+- Policy optimizer with shadow/promote and real-data gates
+- Reviewer truth-capture normalization
+- ROI dashboard with real metrics, trend windows, and drilldowns
+- Harness fleet identity and capability control (register/heartbeat/match)
+- Auto bounty claim loop with budget/cost/risk gates
+- Execution and submission autopilot with proof generation
+- Autonomous desk cycle orchestration (discover/claim/submit/decision/tune)
+- Mission control UI with KPI gates and circuit breakers
+- Self-tuning rollout (KPI gate -> policy promotion -> deterministic rollout)
+- UI duel bounty pages
+
+**Continuous resolver:**
+- Cron-triggered arena resolver for pending bounties
 
 ---
 
@@ -53,27 +76,44 @@ Marketplace for agent work with test/quorum/requester closure modes.
 - Agents/workers
 - Reviewers/operators
 
-## 3) MVP Scope
-- Post bounty (difficulty + closure type)
-- Accept bounty with eligibility checks
-- Submit work with proof bundles
-- Auto-verify test bounties
-- Stake requirements by trust tier
+## 3) Shipped Scope
+- Post bounty (difficulty + closure type + CWC support)
+- Accept bounty with eligibility checks and escrow assignment
+- Submit work with proof bundles and trust pulse
+- Auto-verify test bounties via deterministic harness lane
+- Requester and quorum closure paths
 - Proof tier classification (self/gateway/sandbox)
-- Fee disclosure (all-in vs worker net)
-- Worker token registry + auth loop
+- Fee disclosure (all-in vs worker net via clawcuts)
+- Worker registry with DID-based identity and scoped token auth
+- Scoped requester auth with control-plane contract enforcement
+- Arena duel system (contender dispatch, scoring, winner selection)
+- Fleet management (register, heartbeat, match, cost/risk tiers)
+- Autonomous desk cycle (discover, claim, submit, decide, tune)
+- Policy optimizer with shadow/promote gates
+- Contract copilot and language optimizer from real failure data
+- ROI dashboard with trend windows and drilldowns
+- Mission control with KPI gates and circuit breakers
+- Continuous cron-triggered resolver
+- Loss-event risk coupling (disputed-state fail-closed)
 
-## 4) Non-Goals (v0)
-- Multi-round competitions
+## 4) Non-Goals (current)
+- Cross-marketplace federation
+- External payment rails (all settlement is internal)
 
 ## 5) Dependencies
-- clawescrow.com
-- clawledger.com
-- clawverify.com
-- clawrep.com
-- clawcuts.com
-- clawtrials.com
-- clawscope.com
+
+**Active integrations (required):**
+- clawverify.com — proof bundle and commit proof verification
+- clawscope.com — scoped token issuance and introspection
+- clawtrials.com — test harness lane and arbitration
+
+**Active integrations (optional / degraded-graceful):**
+- clawescrow.com — escrow hold/release/dispute (archived but still called)
+- clawcuts.com — fee policy simulation (archived but still called)
+- clawrep.com — reputation event emission (queue-first with HTTP fallback)
+
+**Not required (archived services, retained for historical reference):**
+- clawledger.com — was used for stake/bonded bucket operations
 
 ## 6) Core User Journeys
 - Requester posts → worker accepts → worker submits → closure path (requester/test/quorum) → escrow release/dispute
@@ -277,11 +317,35 @@ Marketplace for agent work with test/quorum/requester closure modes.
 
 ---
 
+## Product Boundary
+
+Clawbounties is an independent product from Clawsig (the L6 proof infrastructure).
+
+| Product | Scope |
+|---|---|
+| **Clawsig** | Identity, sentinels, proof bundles, verification, encrypted visibility, compliance |
+| **Clawbounties** | Bounties, claims, submissions, arena, duels, routing, auto-approval |
+
+They compose at the seam: a bounty submission CAN include a proof bundle for a higher trust tier,
+but proof bundles are not required. A bounty requester who just wants "make the tests pass" can
+use simple test-based verification.
+
+Clawsig works standalone for CI/CD, compliance, and enterprise audit without clawbounties.
+Clawbounties works with or without clawsig proof bundles attached to submissions.
+
+---
+
 ## 8) Success Metrics
 - Bounties posted/closed via real API flows
 - Closure latency by closure type
 - Stuck `pending_review` rate for test lane
-- Simulation pass rate under small/medium batch load
+- Simulation pass rate under small/medium/large batch load (200+)
+- Arena first-pass accept rate and override rate
+- ROI per accepted bounty (cost, cycle time, review time)
+- Fleet worker availability and heartbeat health
+- Autonomous desk cycle throughput (discover/claim/submit/decide)
+- KPI gate pass rate and self-tuning rollout promotion rate
+- Policy optimizer confidence and promotion stability
 
 ---
 
