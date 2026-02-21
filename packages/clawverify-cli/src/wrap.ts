@@ -28,6 +28,7 @@ import {
   InterposeState,
   hashJsonB64u,
 } from '@clawbureau/clawsig-sdk';
+import { loadIdentity, identityToAgentDid } from './identity.js';
 import type {
   SignedEnvelope,
   ProofBundlePayload,
@@ -230,11 +231,18 @@ export async function wrap(
 ): Promise<number> {
   const { publish, outputPath } = options;
 
-  // 1. Generate ephemeral DID
-  const agentDid = await generateEphemeralDid();
+  // 1. Load persistent identity or fall back to ephemeral DID
+  const persistentIdentity = await loadIdentity();
+  let agentDid;
+  if (persistentIdentity) {
+    agentDid = await identityToAgentDid(persistentIdentity);
+    process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Persistent DID: ${agentDid.did}\n`);
+  } else {
+    agentDid = await generateEphemeralDid();
+    process.stderr.write(`\n\x1b[33m[clawsig]\x1b[0m No persistent identity found. Run \`clawsig init\` to create one.\n`);
+    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
+  }
   const runId = `run_${crypto.randomUUID()}`;
-
-  process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
   process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
 
   // 2. Load local WPC policy (if present) and compile for bash sentinel

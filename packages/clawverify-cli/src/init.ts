@@ -10,6 +10,7 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { generateIdentity, loadIdentity, defaultIdentityPath } from './identity.js';
 
 const CLAWSIG_DIR = '.clawsig';
 
@@ -64,24 +65,44 @@ export interface InitOptions {
   targetDir?: string;
   /** Force overwrite existing files */
   force?: boolean;
+  /** Store identity globally at ~/.clawsig/ instead of project-level */
+  global?: boolean;
 }
 
 export interface InitResult {
   created: string[];
   skipped: string[];
   dir: string;
+  /** The persistent DID, if an identity was created or already existed. */
+  did?: string;
 }
 
-export function runInit(options: InitOptions = {}): InitResult {
+export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const targetDir = resolve(options.targetDir ?? process.cwd());
   const clawsigDir = join(targetDir, CLAWSIG_DIR);
 
   const created: string[] = [];
   const skipped: string[] = [];
+  let did: string | undefined;
 
   // Create .clawsig/ directory
   if (!existsSync(clawsigDir)) {
     mkdirSync(clawsigDir, { recursive: true });
+  }
+
+  // --- Identity generation ---
+  const identityPath = defaultIdentityPath(!!options.global, targetDir);
+  if (existsSync(identityPath) && !options.force) {
+    // Load existing identity to report the DID
+    const existing = await loadIdentity(targetDir);
+    if (existing) {
+      did = existing.did;
+      skipped.push('identity.jwk.json');
+    }
+  } else {
+    const identity = await generateIdentity(identityPath);
+    did = identity.did;
+    created.push('identity.jwk.json');
   }
 
   // Write policy.json
@@ -102,5 +123,5 @@ export function runInit(options: InitOptions = {}): InitResult {
     created.push('README.md');
   }
 
-  return { created, skipped, dir: clawsigDir };
+  return { created, skipped, dir: clawsigDir, did };
 }
