@@ -56,7 +56,7 @@ function contractCheckMatrix(report: ArenaReportView): string {
 
   return `
     <div style="overflow-x:auto">
-      <table>
+      <table class="check-matrix-table">
         <thead>
           <tr>
             <th>Contract Criterion</th>
@@ -189,6 +189,9 @@ function contenderRows(report: ArenaReportView): string {
           </td>
           <td>
             <div class="mono" style="font-size:0.84rem; font-weight:600">${contender.score.toFixed(1)}</div>
+            <div style="width:100%; height:4px; background:rgba(255,255,255,0.1); margin-top:4px; border-radius:2px; overflow:hidden">
+              <div style="width:${Math.min(100, Math.max(0, contender.score))}%; height:100%; background:var(--cyan); box-shadow:0 0 5px var(--cyan)"></div>
+            </div>
           </td>
           <td style="min-width:260px">
             ${metricsHtml}
@@ -683,7 +686,64 @@ export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
     path: '/arena/mission',
   };
 
-  return layout(meta, `
+  return layout(meta, `<style>
+  :root {
+    --bg: #05050f; --card-bg: rgba(13, 13, 26, 0.85); --card-border: rgba(0, 240, 255, 0.2);
+    --border: var(--card-border); --text: #e0e0ff; --dim: #8b8bba;
+    --cyan: #00f0ff; --magenta: #ff003c; --lime: #39ff14;
+    --glow-cyan: 0 0 10px rgba(0, 240, 255, 0.4); --glow-lime: 0 0 10px rgba(57, 255, 20, 0.4);
+    --glow-magenta: 0 0 10px rgba(255, 0, 60, 0.4); font-family: 'Inter', -apple-system, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); }
+  .page-title { text-transform: uppercase; letter-spacing: 2px; background: linear-gradient(90deg, #fff, var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 20px rgba(0, 240, 255, 0.2); font-weight: 800; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05), 0 4px 12px rgba(0,0,0,0.5); backdrop-filter: blur(10px); position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+  .card:hover { box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.1), 0 8px 24px rgba(0,0,0,0.6); }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+  .section-title { text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); font-weight: 700; border-bottom: 1px solid rgba(0, 240, 255, 0.1); padding-bottom: 8px; margin-bottom: 12px; }
+  .diag-chip { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(0, 240, 255, 0.15); border-left: 2px solid var(--cyan); border-radius: 4px; padding: 6px 8px; display: flex; flex-direction: column; }
+  .diag-chip-label { font-size: 0.65rem; text-transform: uppercase; color: var(--dim); letter-spacing: 0.5px; }
+  .diag-chip-value { font-size: 0.85rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: #fff; text-shadow: var(--glow-cyan); }
+  table { border-collapse: separate; border-spacing: 0 4px; width: 100%; }
+  th { background: rgba(0, 240, 255, 0.05); color: var(--cyan); text-transform: uppercase; font-size: 0.75rem; padding: 10px; border-bottom: 1px solid var(--card-border); }
+  td { background: rgba(255,255,255,0.02); padding: 10px; border-top: 1px solid rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.02); }
+  td:first-child { border-left: 1px solid rgba(255,255,255,0.02); border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+  td:last-child { border-right: 1px solid rgba(255,255,255,0.02); border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+  tr:hover td { background: rgba(0, 240, 255, 0.05); }
+  .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+  .status-badge.pass { background: rgba(57, 255, 20, 0.1); color: var(--lime); border: 1px solid var(--lime); text-shadow: var(--glow-lime); }
+  .status-badge.fail { background: rgba(255, 0, 60, 0.1); color: var(--magenta); border: 1px solid var(--magenta); text-shadow: var(--glow-magenta); }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: rgba(0, 0, 0, 0.5); border: 1px solid var(--card-border); border-radius: 8px; padding: 20px; text-align: center; box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.05); }
+  .stat-card .value { font-size: 2rem; font-weight: 800; color: #fff; text-shadow: var(--glow-cyan); margin-bottom: 8px; }
+  .stat-card .label { font-size: 0.8rem; text-transform: uppercase; color: var(--cyan); letter-spacing: 1px; }
+  .viewer-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; overflow-x: auto; }
+  .viewer-tab { background: transparent; color: var(--dim); border: 1px solid transparent; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; transition: 0.2s; white-space: nowrap; }
+  .viewer-tab:hover { color: #fff; background: rgba(0, 240, 255, 0.1); }
+  .viewer-tab.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0, 240, 255, 0.05); box-shadow: inset 0 0 10px rgba(0,240,255,0.2); }
+  .viewer-pane { display: none; } .viewer-pane.active { display: block; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .json-tree { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: rgba(0,0,0,0.5); padding: 12px; border-radius: 8px; max-height: 400px; overflow-y: auto; color: #ccc; }
+  .json-key { color: var(--cyan); } .json-string { color: var(--lime); } .json-number { color: #f0a; } .json-boolean { color: #ffb86c; }
+  .json-toggle { cursor: pointer; user-select: none; color: #888; margin-right: 4px; }
+  .json-toggle::before { content: '▶'; display: inline-block; transition: 0.2s; font-size: 0.6rem; }
+  .json-toggle.open::before { transform: rotate(90deg); }
+  .json-children { margin-left: 16px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 8px; display: none; }
+  .json-children.open { display: block; }
+  .lightbox-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
+  .lightbox-overlay.active { display: flex; }
+  .lightbox-img { max-width: 90%; max-height: 80vh; border: 1px solid var(--cyan); box-shadow: 0 0 30px rgba(0,240,255,0.3); }
+  .lightbox-close, .lightbox-prev, .lightbox-next { background: transparent; border: none; color: #fff; font-size: 2rem; cursor: pointer; position: absolute; transition: 0.2s; }
+  .lightbox-close:hover, .lightbox-prev:hover, .lightbox-next:hover { color: var(--cyan); text-shadow: var(--glow-cyan); }
+  .lightbox-close { top: 20px; right: 30px; } .lightbox-prev { left: 30px; top: 50%; transform: translateY(-50%); } .lightbox-next { right: 30px; top: 50%; transform: translateY(-50%); }
+  .filmstrip { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; max-width: 90%; padding-bottom: 8px; }
+  .filmstrip-thumb { height: 60px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; opacity: 0.5; transition: 0.2s; }
+  .filmstrip-thumb.active { opacity: 1; border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+  .check-matrix-table td { text-align: center; }
+  .check-matrix-table .status-badge.pass { background: var(--lime); color: transparent; width: 16px; height: 16px; border-radius: 2px; padding: 0; display: inline-block; box-shadow: 0 0 8px var(--lime); overflow: hidden; text-indent: -9999px; }
+  .check-matrix-table .status-badge.fail { background: var(--magenta); color: transparent; width: 16px; height: 16px; border-radius: 2px; padding: 0; display: inline-block; box-shadow: 0 0 8px var(--magenta); overflow: hidden; text-indent: -9999px; }
+</style>
+
+
     <h1 class="page-title">Arena Mission Control</h1>
     <p class="page-subtitle">Operational cockpit for claim → submit throughput, proof quality, and live backlog pressure.</p>
 
@@ -772,58 +832,53 @@ export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
   `);
 }
 
-function renderVisualEvidence(report: ArenaReportView, artifactsBaseUrl: string | null): string {
+function renderInteractiveArtifactViewer(report: ArenaReportView, artifactsBaseUrl: string | null): string {
   if (!artifactsBaseUrl || !report.contract?.bounty_id) return '';
-
   const bountyId = report.contract.bounty_id;
+
+  const htmlTabs = report.contenders.map((c, i) => `
+    <button class="viewer-tab ${i === 0 ? 'active' : ''}" onclick="switchHtmlTab('${esc(c.contender_id)}')">
+      ${esc(c.contender_id)}
+    </button>
+  `).join('');
+
+  const htmlPanes = report.contenders.map((c, i) => `
+    <div id="html-pane-${esc(c.contender_id)}" class="viewer-pane ${i === 0 ? 'active' : ''}" style="height:600px;">
+      <iframe src="${esc(artifactsBaseUrl)}/arena/${esc(bountyId)}/${esc(c.contender_id)}/output/index.html" sandbox="allow-scripts allow-same-origin" style="width:100%;height:100%;border:1px solid var(--border);border-radius:8px;background:#fff;" loading="lazy"></iframe>
+    </div>
+  `).join('');
+
   const steps = ['browse', 'details', 'claim', 'submit'] as const;
   const stepFiles = ['01-browse.png', '02-details.png', '03-claim.png', '04-submit.png'];
+  const galleryImages: {src: string, caption: string}[] = [];
 
-  // Build side-by-side screenshot comparisons
-  const rows = steps.map((step, idx) => {
+  const screenshotHtml = steps.map((step, idx) => {
     const cols = report.contenders.map((c) => {
       const url = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/screenshots/${stepFiles[idx]}`;
+      const imgIdx = galleryImages.length;
+      galleryImages.push({ src: url, caption: `${step} - ${c.contender_id}` });
       return `
         <div style="flex:1; min-width:300px">
-          <div class="dim" style="font-size:0.78rem; margin-bottom:0.3rem">${esc(c.contender_id)} &mdash; ${esc(c.label)}</div>
-          <a href="${esc(url)}" target="_blank" rel="noreferrer">
-            <img src="${esc(url)}" alt="${esc(step)} screenshot for ${esc(c.contender_id)}"
-                 style="width:100%; border-radius:var(--radius); border:1px solid var(--border)"
-                 loading="lazy" onerror="this.parentElement.innerHTML='<span class=dim>Screenshot not available</span>'" />
-          </a>
+          <div class="dim" style="font-size:0.78rem; margin-bottom:0.3rem">${esc(c.contender_id)}</div>
+          <img src="${esc(url)}" alt="${esc(step)}" style="width:100%; border-radius:4px; border:1px solid var(--border); cursor:pointer;" loading="lazy" onclick="openLightbox(${imgIdx})" onerror="this.parentElement.innerHTML='<span class=dim>Screenshot not available</span>'" />
         </div>
       `;
     }).join('');
-
-    return `
-      <div style="margin-bottom:1.5rem">
-        <p style="font-weight:600; font-size:0.88rem; margin-bottom:0.5rem; text-transform:capitalize">${step}</p>
-        <div style="display:flex; gap:1rem; flex-wrap:wrap">
-          ${cols}
-        </div>
-      </div>
-    `;
+    return `<div style="margin-bottom:1.5rem"><p style="font-weight:600; font-size:0.88rem; margin-bottom:0.5rem; text-transform:capitalize">${step}</p><div style="display:flex; gap:1rem; flex-wrap:wrap">${cols}</div></div>`;
   }).join('');
 
-  // Journey timing comparison
-  const timingRows = report.contenders.map((c) => {
+  const jsonUrlsHtml = report.contenders.map((c) => {
     const raw = c.raw_evaluator_metrics;
     const avgMs = raw && typeof raw.avg_timing_ms === 'number' ? raw.avg_timing_ms.toFixed(0) + 'ms' : 'N/A';
-    const friction = raw && typeof raw.friction_events === 'number' ? String(raw.friction_events) : 'N/A';
-    const rtErrors = raw && typeof raw.runtime_error_count === 'number' ? String(raw.runtime_error_count) : 'N/A';
     const journeyUrl = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/journey.json`;
     const lighthouseUrl = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/lighthouse/lighthouse.summary.json`;
     return `
       <tr>
         <td class="mono">${esc(c.contender_id)}</td>
-        <td>${esc(c.model)}</td>
         <td class="mono">${avgMs}</td>
-        <td>${friction}</td>
-        <td>${rtErrors}</td>
         <td>
-          <a href="${esc(journeyUrl)}" target="_blank" class="dim" style="font-size:0.75rem">journey.json ↗</a>
-          &middot;
-          <a href="${esc(lighthouseUrl)}" target="_blank" class="dim" style="font-size:0.75rem">lighthouse ↗</a>
+          <button class="viewer-tab" onclick="loadJson('${esc(journeyUrl)}')">journey.json</button>
+          <button class="viewer-tab" onclick="loadJson('${esc(lighthouseUrl)}')">lighthouse.json</button>
         </td>
       </tr>
     `;
@@ -831,26 +886,133 @@ function renderVisualEvidence(report: ArenaReportView, artifactsBaseUrl: string 
 
   return `
     <div class="card">
-      <p class="section-title">Visual evidence — side-by-side screenshots</p>
-      <p class="dim" style="font-size:0.78rem; margin-bottom:1rem">Playwright captured each UI flow step. Click to view full size.</p>
-      ${rows}
+      <p class="section-title">Live Output Embed</p>
+      <div class="viewer-tabs">${htmlTabs}</div>
+      ${htmlPanes}
     </div>
 
     <div class="card">
-      <p class="section-title">Journey + Lighthouse data</p>
-      <div style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr><th>Contender</th><th>Model</th><th>Avg Timing</th><th>Friction</th><th>RT Errors</th><th>Raw Data</th></tr>
-          </thead>
-          <tbody>
-            ${timingRows}
-          </tbody>
-        </table>
+      <p class="section-title">Visual evidence & Gallery</p>
+      <p class="dim" style="font-size:0.78rem; margin-bottom:1rem">Click any screenshot to open the lightbox gallery.</p>
+      ${screenshotHtml}
+    </div>
+
+    <div class="card">
+      <p class="section-title">JSON Artifacts Viewer</p>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:300px;">
+          <table>
+            <thead><tr><th>Contender</th><th>Timing</th><th>Load JSON</th></tr></thead>
+            <tbody>${jsonUrlsHtml}</tbody>
+          </table>
+        </div>
+        <div style="flex:2; min-width:400px; border:1px solid var(--border); border-radius:8px; padding:8px; background:rgba(0,0,0,0.5);">
+          <div id="json-viewer-content" class="json-tree"><span class="dim">Select a JSON file to view.</span></div>
+        </div>
       </div>
     </div>
+
+    <div id="lightbox" class="lightbox-overlay">
+      <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+      <button class="lightbox-prev" onclick="prevLightbox()">&#10094;</button>
+      <button class="lightbox-next" onclick="nextLightbox()">&#10095;</button>
+      <img id="lightbox-img" class="lightbox-img" src="" alt="" />
+      <div id="lightbox-caption" style="color:#fff; margin-top:8px; font-family:monospace;"></div>
+      <div class="filmstrip" id="filmstrip-container"></div>
+    </div>
+
+    <script>
+      function renderJsonTree(data) {
+        if (typeof data === 'string') return '<span class="json-string">"' + escapeHtml(data) + '"</span>';
+        if (typeof data === 'number') return '<span class="json-number">' + data + '</span>';
+        if (typeof data === 'boolean') return '<span class="json-boolean">' + data + '</span>';
+        if (data === null) return '<span class="json-boolean">null</span>';
+        if (Array.isArray(data)) {
+          if (data.length === 0) return '[]';
+          let html = '<span class="json-toggle" onclick="toggleJson(this)"></span>[';
+          html += '<div class="json-children">';
+          data.forEach((item, i) => {
+            html += '<div>' + renderJsonTree(item) + (i < data.length - 1 ? ',' : '') + '</div>';
+          });
+          html += '</div>]';
+          return html;
+        }
+        if (typeof data === 'object') {
+          const keys = Object.keys(data);
+          if (keys.length === 0) return '{}';
+          let html = '<span class="json-toggle" onclick="toggleJson(this)"></span>{';
+          html += '<div class="json-children">';
+          keys.forEach((key, i) => {
+            html += '<div><span class="json-key">"' + escapeHtml(key) + '"</span>: ' + renderJsonTree(data[key]) + (i < keys.length - 1 ? ',' : '') + '</div>';
+          });
+          html += '</div>}';
+          return html;
+        }
+        return '';
+      }
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, function(m) {
+          switch (m) {
+            case '&': return '&amp;';
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '"': return '&quot;';
+            case "'": return '&#39;';
+            default: return m;
+          }
+        });
+      }
+      window.toggleJson = function(el) {
+        el.classList.toggle('open');
+        el.nextElementSibling.classList.toggle('open');
+      };
+      window.loadJson = function(url) {
+        const container = document.getElementById('json-viewer-content');
+        container.innerHTML = '<span class="dim">Loading...</span>';
+        fetch(url).then(res => { if(!res.ok) throw new Error('Failed to load'); return res.json(); })
+          .then(data => { container.innerHTML = renderJsonTree(data); })
+          .catch(err => { container.innerHTML = '<span class="json-string">Error: ' + err.message + '</span>'; });
+      };
+      window.switchHtmlTab = function(contenderId) {
+        document.querySelectorAll('.viewer-tab').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.viewer-pane').forEach(el => el.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById('html-pane-' + contenderId).classList.add('active');
+      };
+      const galleryData = JSON.parse('${JSON.stringify(galleryImages).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "\\'")}');
+      let currentIdx = 0;
+      window.openLightbox = function(idx) {
+        currentIdx = idx;
+        const lb = document.getElementById('lightbox');
+        lb.classList.add('active');
+        updateLightbox();
+        const fs = document.getElementById('filmstrip-container');
+        fs.innerHTML = galleryData.map((img, i) => 
+          '<img src="' + img.src + '" class="filmstrip-thumb ' + (i === idx ? 'active' : '') + '" onclick="openLightbox(' + i + ')" />'
+        ).join('');
+      };
+      window.closeLightbox = function() { document.getElementById('lightbox').classList.remove('active'); };
+      window.prevLightbox = function() { currentIdx = (currentIdx > 0) ? currentIdx - 1 : galleryData.length - 1; updateLightbox(); };
+      window.nextLightbox = function() { currentIdx = (currentIdx < galleryData.length - 1) ? currentIdx + 1 : 0; updateLightbox(); };
+      function updateLightbox() {
+        if (!galleryData[currentIdx]) return;
+        document.getElementById('lightbox-img').src = galleryData[currentIdx].src;
+        document.getElementById('lightbox-caption').textContent = galleryData[currentIdx].caption;
+        document.querySelectorAll('.filmstrip-thumb').forEach((el, i) => {
+          if (i === currentIdx) el.classList.add('active');
+          else el.classList.remove('active');
+        });
+      }
+      document.addEventListener('keydown', function(e) {
+        if (!document.getElementById('lightbox').classList.contains('active')) return;
+        if (e.key === 'Escape') closeLightbox();
+        if (e.key === 'ArrowLeft') prevLightbox();
+        if (e.key === 'ArrowRight') nextLightbox();
+      });
+    </script>
   `;
 }
+
 
 export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: string | null = null): string {
   const meta: PageMeta = {
@@ -859,7 +1021,64 @@ export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: stri
     path: `/arena/${report.arena_id}`,
   };
 
-  return layout(meta, `
+  return layout(meta, `<style>
+  :root {
+    --bg: #05050f; --card-bg: rgba(13, 13, 26, 0.85); --card-border: rgba(0, 240, 255, 0.2);
+    --border: var(--card-border); --text: #e0e0ff; --dim: #8b8bba;
+    --cyan: #00f0ff; --magenta: #ff003c; --lime: #39ff14;
+    --glow-cyan: 0 0 10px rgba(0, 240, 255, 0.4); --glow-lime: 0 0 10px rgba(57, 255, 20, 0.4);
+    --glow-magenta: 0 0 10px rgba(255, 0, 60, 0.4); font-family: 'Inter', -apple-system, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); }
+  .page-title { text-transform: uppercase; letter-spacing: 2px; background: linear-gradient(90deg, #fff, var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 20px rgba(0, 240, 255, 0.2); font-weight: 800; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05), 0 4px 12px rgba(0,0,0,0.5); backdrop-filter: blur(10px); position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+  .card:hover { box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.1), 0 8px 24px rgba(0,0,0,0.6); }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+  .section-title { text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); font-weight: 700; border-bottom: 1px solid rgba(0, 240, 255, 0.1); padding-bottom: 8px; margin-bottom: 12px; }
+  .diag-chip { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(0, 240, 255, 0.15); border-left: 2px solid var(--cyan); border-radius: 4px; padding: 6px 8px; display: flex; flex-direction: column; }
+  .diag-chip-label { font-size: 0.65rem; text-transform: uppercase; color: var(--dim); letter-spacing: 0.5px; }
+  .diag-chip-value { font-size: 0.85rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: #fff; text-shadow: var(--glow-cyan); }
+  table { border-collapse: separate; border-spacing: 0 4px; width: 100%; }
+  th { background: rgba(0, 240, 255, 0.05); color: var(--cyan); text-transform: uppercase; font-size: 0.75rem; padding: 10px; border-bottom: 1px solid var(--card-border); }
+  td { background: rgba(255,255,255,0.02); padding: 10px; border-top: 1px solid rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.02); }
+  td:first-child { border-left: 1px solid rgba(255,255,255,0.02); border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+  td:last-child { border-right: 1px solid rgba(255,255,255,0.02); border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+  tr:hover td { background: rgba(0, 240, 255, 0.05); }
+  .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+  .status-badge.pass { background: rgba(57, 255, 20, 0.1); color: var(--lime); border: 1px solid var(--lime); text-shadow: var(--glow-lime); }
+  .status-badge.fail { background: rgba(255, 0, 60, 0.1); color: var(--magenta); border: 1px solid var(--magenta); text-shadow: var(--glow-magenta); }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: rgba(0, 0, 0, 0.5); border: 1px solid var(--card-border); border-radius: 8px; padding: 20px; text-align: center; box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.05); }
+  .stat-card .value { font-size: 2rem; font-weight: 800; color: #fff; text-shadow: var(--glow-cyan); margin-bottom: 8px; }
+  .stat-card .label { font-size: 0.8rem; text-transform: uppercase; color: var(--cyan); letter-spacing: 1px; }
+  .viewer-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; overflow-x: auto; }
+  .viewer-tab { background: transparent; color: var(--dim); border: 1px solid transparent; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; transition: 0.2s; white-space: nowrap; }
+  .viewer-tab:hover { color: #fff; background: rgba(0, 240, 255, 0.1); }
+  .viewer-tab.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0, 240, 255, 0.05); box-shadow: inset 0 0 10px rgba(0,240,255,0.2); }
+  .viewer-pane { display: none; } .viewer-pane.active { display: block; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .json-tree { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: rgba(0,0,0,0.5); padding: 12px; border-radius: 8px; max-height: 400px; overflow-y: auto; color: #ccc; }
+  .json-key { color: var(--cyan); } .json-string { color: var(--lime); } .json-number { color: #f0a; } .json-boolean { color: #ffb86c; }
+  .json-toggle { cursor: pointer; user-select: none; color: #888; margin-right: 4px; }
+  .json-toggle::before { content: '▶'; display: inline-block; transition: 0.2s; font-size: 0.6rem; }
+  .json-toggle.open::before { transform: rotate(90deg); }
+  .json-children { margin-left: 16px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 8px; display: none; }
+  .json-children.open { display: block; }
+  .lightbox-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
+  .lightbox-overlay.active { display: flex; }
+  .lightbox-img { max-width: 90%; max-height: 80vh; border: 1px solid var(--cyan); box-shadow: 0 0 30px rgba(0,240,255,0.3); }
+  .lightbox-close, .lightbox-prev, .lightbox-next { background: transparent; border: none; color: #fff; font-size: 2rem; cursor: pointer; position: absolute; transition: 0.2s; }
+  .lightbox-close:hover, .lightbox-prev:hover, .lightbox-next:hover { color: var(--cyan); text-shadow: var(--glow-cyan); }
+  .lightbox-close { top: 20px; right: 30px; } .lightbox-prev { left: 30px; top: 50%; transform: translateY(-50%); } .lightbox-next { right: 30px; top: 50%; transform: translateY(-50%); }
+  .filmstrip { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; max-width: 90%; padding-bottom: 8px; }
+  .filmstrip-thumb { height: 60px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; opacity: 0.5; transition: 0.2s; }
+  .filmstrip-thumb.active { opacity: 1; border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+  .check-matrix-table td { text-align: center; }
+  .check-matrix-table .status-badge.pass { background: var(--lime); color: transparent; width: 16px; height: 16px; border-radius: 2px; padding: 0; display: inline-block; box-shadow: 0 0 8px var(--lime); overflow: hidden; text-indent: -9999px; }
+  .check-matrix-table .status-badge.fail { background: var(--magenta); color: transparent; width: 16px; height: 16px; border-radius: 2px; padding: 0; display: inline-block; box-shadow: 0 0 8px var(--magenta); overflow: hidden; text-indent: -9999px; }
+</style>
+
+
     <h1 class="page-title">Arena Compare: ${esc(report.arena_id)}</h1>
     <p class="page-subtitle">Transparent contender comparison across model/harness/tool stack, contract checks, and objective scoring.</p>
 
@@ -958,7 +1177,7 @@ export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: stri
       ${contractCheckMatrix(report)}
     </div>
 
-    ${renderVisualEvidence(report, artifactsBaseUrl)}
+    ${renderInteractiveArtifactViewer(report, artifactsBaseUrl)}
 
   `);
 }
@@ -994,7 +1213,64 @@ export function arenaIndexPage(arenas: ArenaIndexItem[]): string {
       </tr>
     `;
 
-  return layout(meta, `
+  return layout(meta, `<style>
+  :root {
+    --bg: #05050f; --card-bg: rgba(13, 13, 26, 0.85); --card-border: rgba(0, 240, 255, 0.2);
+    --border: var(--card-border); --text: #e0e0ff; --dim: #8b8bba;
+    --cyan: #00f0ff; --magenta: #ff003c; --lime: #39ff14;
+    --glow-cyan: 0 0 10px rgba(0, 240, 255, 0.4); --glow-lime: 0 0 10px rgba(57, 255, 20, 0.4);
+    --glow-magenta: 0 0 10px rgba(255, 0, 60, 0.4); font-family: 'Inter', -apple-system, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); }
+  .page-title { text-transform: uppercase; letter-spacing: 2px; background: linear-gradient(90deg, #fff, var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 20px rgba(0, 240, 255, 0.2); font-weight: 800; }
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05), 0 4px 12px rgba(0,0,0,0.5); backdrop-filter: blur(10px); position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+  .card:hover { box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.1), 0 8px 24px rgba(0,0,0,0.6); }
+  .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--cyan), transparent); }
+  .section-title { text-transform: uppercase; letter-spacing: 1px; color: var(--cyan); font-weight: 700; border-bottom: 1px solid rgba(0, 240, 255, 0.1); padding-bottom: 8px; margin-bottom: 12px; }
+  .diag-chip { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(0, 240, 255, 0.15); border-left: 2px solid var(--cyan); border-radius: 4px; padding: 6px 8px; display: flex; flex-direction: column; }
+  .diag-chip-label { font-size: 0.65rem; text-transform: uppercase; color: var(--dim); letter-spacing: 0.5px; }
+  .diag-chip-value { font-size: 0.85rem; font-weight: 600; font-family: 'JetBrains Mono', monospace; color: #fff; text-shadow: var(--glow-cyan); }
+  table { border-collapse: separate; border-spacing: 0 4px; width: 100%; }
+  th { background: rgba(0, 240, 255, 0.05); color: var(--cyan); text-transform: uppercase; font-size: 0.75rem; padding: 10px; border-bottom: 1px solid var(--card-border); }
+  td { background: rgba(255,255,255,0.02); padding: 10px; border-top: 1px solid rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.02); }
+  td:first-child { border-left: 1px solid rgba(255,255,255,0.02); border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+  td:last-child { border-right: 1px solid rgba(255,255,255,0.02); border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+  tr:hover td { background: rgba(0, 240, 255, 0.05); }
+  .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+  .status-badge.pass { background: rgba(57, 255, 20, 0.1); color: var(--lime); border: 1px solid var(--lime); text-shadow: var(--glow-lime); }
+  .status-badge.fail { background: rgba(255, 0, 60, 0.1); color: var(--magenta); border: 1px solid var(--magenta); text-shadow: var(--glow-magenta); }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: rgba(0, 0, 0, 0.5); border: 1px solid var(--card-border); border-radius: 8px; padding: 20px; text-align: center; box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.05); }
+  .stat-card .value { font-size: 2rem; font-weight: 800; color: #fff; text-shadow: var(--glow-cyan); margin-bottom: 8px; }
+  .stat-card .label { font-size: 0.8rem; text-transform: uppercase; color: var(--cyan); letter-spacing: 1px; }
+  .viewer-tabs { display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--card-border); padding-bottom: 8px; overflow-x: auto; }
+  .viewer-tab { background: transparent; color: var(--dim); border: 1px solid transparent; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; text-transform: uppercase; transition: 0.2s; white-space: nowrap; }
+  .viewer-tab:hover { color: #fff; background: rgba(0, 240, 255, 0.1); }
+  .viewer-tab.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0, 240, 255, 0.05); box-shadow: inset 0 0 10px rgba(0,240,255,0.2); }
+  .viewer-pane { display: none; } .viewer-pane.active { display: block; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  .json-tree { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: rgba(0,0,0,0.5); padding: 12px; border-radius: 8px; max-height: 400px; overflow-y: auto; color: #ccc; }
+  .json-key { color: var(--cyan); } .json-string { color: var(--lime); } .json-number { color: #f0a; } .json-boolean { color: #ffb86c; }
+  .json-toggle { cursor: pointer; user-select: none; color: #888; margin-right: 4px; }
+  .json-toggle::before { content: '▶'; display: inline-block; transition: 0.2s; font-size: 0.6rem; }
+  .json-toggle.open::before { transform: rotate(90deg); }
+  .json-children { margin-left: 16px; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 8px; display: none; }
+  .json-children.open { display: block; }
+  .lightbox-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 9999; justify-content: center; align-items: center; flex-direction: column; }
+  .lightbox-overlay.active { display: flex; }
+  .lightbox-img { max-width: 90%; max-height: 80vh; border: 1px solid var(--cyan); box-shadow: 0 0 30px rgba(0,240,255,0.3); }
+  .lightbox-close, .lightbox-prev, .lightbox-next { background: transparent; border: none; color: #fff; font-size: 2rem; cursor: pointer; position: absolute; transition: 0.2s; }
+  .lightbox-close:hover, .lightbox-prev:hover, .lightbox-next:hover { color: var(--cyan); text-shadow: var(--glow-cyan); }
+  .lightbox-close { top: 20px; right: 30px; } .lightbox-prev { left: 30px; top: 50%; transform: translateY(-50%); } .lightbox-next { right: 30px; top: 50%; transform: translateY(-50%); }
+  .filmstrip { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; max-width: 90%; padding-bottom: 8px; }
+  .filmstrip-thumb { height: 60px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; opacity: 0.5; transition: 0.2s; }
+  .filmstrip-thumb.active { opacity: 1; border-color: var(--cyan); box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+  .check-matrix-table td { text-align: center; }
+  .check-matrix-table .status-badge.pass { background: var(--lime); color: transparent; width: 16px; height: 16px; border-radius: 2px; padding: 0; display: inline-block; box-shadow: 0 0 8px var(--lime); overflow: hidden; text-indent: -9999px; }
+  .check-matrix-table .status-badge.fail { background: var(--magenta); color: transparent; width: 16px; height: 16px; border-radius: 2px; padding: 0; display: inline-block; box-shadow: 0 0 8px var(--magenta); overflow: hidden; text-indent: -9999px; }
+</style>
+
+
     <h1 class="page-title">Bounty Arena Index</h1>
     <p class="page-subtitle">Compare contender stacks and copy decision artifacts for human and manager review loops. <a href="/arena/mission">Open mission control &rarr;</a></p>
 
