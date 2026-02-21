@@ -132,9 +132,16 @@ export const SCHEMA_ALLOWLIST: readonly SchemaAllowlistEntry[] = [
   {
     schema_id: 'proof_bundle',
     version: '1',
-    supported_versions: ['1'],
+    supported_versions: ['1', '2'],
     status: 'active',
     added_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    schema_id: 'encrypted_proof_payload',
+    version: '1',
+    supported_versions: ['1'],
+    status: 'active',
+    added_at: '2026-02-21T00:00:00Z',
   },
   {
     schema_id: 'event_chain',
