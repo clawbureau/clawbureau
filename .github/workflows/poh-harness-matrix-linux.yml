@@ -31,6 +31,12 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install + build clawsig-sdk
+        run: |
+          cd packages/clawsig-sdk
+          npm install
+          npm run build
+
       - name: Install + build clawverify-core
         run: |
           cd packages/clawverify-core
