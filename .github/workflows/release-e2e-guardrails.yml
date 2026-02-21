@@ -60,6 +60,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install + build clawsig-sdk
+        run: |
+          cd packages/clawsig-sdk
+          npm install --ignore-scripts
+          npm run build
+
       - name: Run release-prep closure gate
         run: node scripts/release/run-clawsig-v0.2-package-prep.mjs
 
