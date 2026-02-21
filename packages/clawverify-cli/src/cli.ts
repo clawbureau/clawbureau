@@ -26,7 +26,7 @@ function usageText(): string {
     'clawverify / clawsig — CLI for the Clawsig Protocol',
     '',
     'Usage:',
-    '  clawsig wrap [--no-publish] [--output <path>] -- <command> [args...]',
+    '  clawsig wrap [--verbose] [--no-publish] [--output <path>] -- <command> [args...]',
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
     '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>]',
     '  clawverify verify commit-sig   --input <path>',
@@ -72,7 +72,7 @@ type ParsedArgs =
   | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
-  | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string }
+  | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -96,12 +96,13 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
     const flagArgs = argv.slice(1, dashDashIdx);
     const publish = !flagArgs.includes('--no-publish');
+    const verboseFlag = flagArgs.includes('--verbose') || flagArgs.includes('-v');
     const outputPath = readFlag(flagArgs, '--output');
 
     const wrapCommand = argv[dashDashIdx + 1]!;
     const wrapArgs = argv.slice(dashDashIdx + 2);
 
-    return { command: 'wrap', wrapCommand, wrapArgs, publish, outputPath };
+    return { command: 'wrap', wrapCommand, wrapArgs, publish, outputPath, verbose: verboseFlag };
   }
 
   if (argv[0] === 'compliance') {
@@ -195,6 +196,7 @@ async function main() {
     const exitCode = await wrap(parsed.wrapCommand, parsed.wrapArgs, {
       publish: parsed.publish,
       outputPath: parsed.outputPath,
+      verbose: parsed.verbose,
     });
     process.exitCode = exitCode;
     return;

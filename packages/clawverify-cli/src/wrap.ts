@@ -27,8 +27,12 @@ import {
   compilePolicyToBash,
   InterposeState,
   hashJsonB64u,
+  filterExecutionReceipts,
+  filterNetworkReceipts,
+  computeBundleSummary,
 } from '@clawbureau/clawsig-sdk';
 import { loadIdentity, identityToAgentDid } from './identity.js';
+import type { BundleSummaryStats } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
   ProofBundlePayload,
@@ -50,6 +54,8 @@ export interface WrapOptions {
   publish: boolean;
   /** Optional file path to write the proof bundle JSON. */
   outputPath?: string;
+  /** Show full diagnostic output (sentinel status, receipt details). Defaults to false. */
+  verbose?: boolean;
 }
 
 interface VaaSResponse {
@@ -229,7 +235,17 @@ export async function wrap(
   args: string[],
   options: WrapOptions,
 ): Promise<number> {
-  const { publish, outputPath } = options;
+  const { publish, outputPath, verbose = false } = options;
+
+  /** Write diagnostic line to stderr, only in verbose mode. */
+  const diag = (msg: string) => {
+    if (verbose) process.stderr.write(msg);
+  };
+
+  // Quiet mode: single startup line
+  if (!verbose) {
+    process.stderr.write(`\x1b[2mclawsig: securing execution...\x1b[0m\n`);
+  }
 
   // 1. Load persistent identity or fall back to ephemeral DID
   const persistentIdentity = await loadIdentity();
@@ -243,7 +259,9 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
   }
   const runId = `run_${crypto.randomUUID()}`;
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
+
+  diag(`\n\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
 
   // 2. Load local WPC policy (if present) and compile for bash sentinel
   const policy = await loadLocalPolicy();
@@ -252,9 +270,9 @@ export async function wrap(
     const compiledPolicyPath = join(process.cwd(), '.clawsig', 'policy.compiled');
     if (!isWindows) {
       await compilePolicyToBash(policyJsonPath, compiledPolicyPath).catch(() => {});
-      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (compiled for sentinel)\n`);
+      diag(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (compiled for sentinel)\n`);
     } else {
-      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (active in Sieve)\n`);
+      diag(`\x1b[36m[clawsig]\x1b[0m Policy loaded: ${policy.statements.length} statements (active in Sieve)\n`);
     }
   }
 
@@ -277,12 +295,12 @@ export async function wrap(
       await copyFile(sdkPolicyPath, destPolicyPath).catch(() => {});
       await chmod(destPolicyPath, 0o755).catch(() => {});
 
-      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG + policy evaluator)\n`);
+      diag(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ACTIVE (trap DEBUG + policy evaluator)\n`);
     } catch {
-      process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (could not locate sentinel-shell.sh)\n`);
+      diag(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (could not locate sentinel-shell.sh)\n`);
     }
   } else {
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (Windows — BASH_ENV not available)\n`);
+    diag(`\x1b[33m[clawsig]\x1b[0m Sentinel Shell: disabled (Windows — BASH_ENV not available)\n`);
   }
 
   // Start FS Sentinel — pass traceFile explicitly (child writes to it, parent reads)
@@ -291,7 +309,7 @@ export async function wrap(
     traceFile,
   });
   fsSentinel.start();
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ACTIVE (fs.watch + trace polling)\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ACTIVE (fs.watch + trace polling)\n`);
 
   // Start Network Sentinel
   const netSentinel = new NetSentinel({
@@ -320,24 +338,24 @@ export async function wrap(
       );
     },
   });
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Local proxy listening on 127.0.0.1:${proxy.port}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Causal Sieve: ACTIVE (tool observability enabled)\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Local proxy listening on 127.0.0.1:${proxy.port}\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Causal Sieve: ACTIVE (tool observability enabled)\n`);
   if (usePassthrough) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Mode: passthrough (direct to upstream, Sieve-only)\n`);
   } else if (configuredClawproxyUrl) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Mode: clawproxy (${configuredClawproxyUrl})\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Mode: clawproxy (${configuredClawproxyUrl})\n`);
   }
 
   // 4b. Build and resolve the interposition library (Layer 6)
   const disableInterpose = process.env['CLAWSIG_DISABLE_INTERPOSE'] === '1';
   const interposeLib = disableInterpose ? null : await resolveInterposeLibrary(tmpDir);
   if (interposeLib) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ACTIVE (${interposeLib.mechanism})\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ACTIVE (${interposeLib.mechanism})\n`);
   } else {
     const reason = disableInterpose
       ? 'disabled by CLAWSIG_DISABLE_INTERPOSE=1'
       : (isWindows ? 'Windows gracefully bypassed' : 'no C compiler or cached lib');
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (${reason})\n`);
+    diag(`\x1b[33m[clawsig]\x1b[0m Interpose Sentinel: disabled (${reason})\n`);
   }
 
   // 5. Spawn child process with env overrides
@@ -388,7 +406,7 @@ export async function wrap(
     childEnv['GEMINI_BASE_URL'] = `http://127.0.0.1:${proxy.port}/v1/proxy/google`;
     childEnv['GOOGLE_GENERATIVE_AI_BASE_URL'] = childEnv['GEMINI_BASE_URL'];
   } else {
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m Provider base override disabled for ${commandName} (OAuth compatibility). Set CLAWSIG_FORCE_BASE_URL_OVERRIDE=1 to force.\n`);
+    diag(`\x1b[33m[clawsig]\x1b[0m Provider base override disabled for ${commandName} (OAuth compatibility). Set CLAWSIG_FORCE_BASE_URL_OVERRIDE=1 to force.\n`);
     delete childEnv['OPENAI_BASE_URL'];
     delete childEnv['OPENAI_API_BASE'];
   }
@@ -401,7 +419,7 @@ export async function wrap(
     childEnv['ANTHROPIC_API_KEY'] = process.env['ANTHROPIC_API_KEY'];
   }
 
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Spawning: ${command} ${args.join(' ')}\n\n`);
 
   let childPid = 0;
   let childProcess: ChildProcess | null = null;
@@ -445,7 +463,7 @@ export async function wrap(
       netSentinel.setTargetPid(childProcess.pid);
     }
     netSentinel.start();
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ACTIVE (${childPid ? `PID ${childPid}` : 'all connections'})\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ACTIVE (${childPid ? `PID ${childPid}` : 'all connections'})\n`);
 
     childProcess.on('error', (err) => {
       process.stderr.write(`\n\x1b[31m[clawsig]\x1b[0m Failed to spawn: ${err.message}\n`);
@@ -465,8 +483,8 @@ export async function wrap(
   await fsSentinel.stop();
   netSentinel.stop();
 
-  process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Child exited with code ${exitCode}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Receipts collected: ${proxy.receiptCount}\n`);
+  diag(`\n\x1b[36m[clawsig]\x1b[0m Child exited with code ${exitCode}\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Receipts collected: ${proxy.receiptCount}\n`);
 
   // Harvest Sentinel Shell trace
   const shellEvents = await harvestShellTrace(traceFile);
@@ -543,32 +561,33 @@ export async function wrap(
   const allNetworkReceipts = [...networkReceipts, ...interposeReceipts.network];
   const allExecutionReceipts = [...executionReceipts, ...interposeReceipts.execution];
 
-  // Sentinel summary
-  if (!isWindows) process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ${shellEvents.length} commands captured\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ${fsSentinel.eventCount} file events\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
+  // Sentinel summary (verbose only)
+  if (!isWindows) diag(`\x1b[36m[clawsig]\x1b[0m Sentinel Shell: ${shellEvents.length} commands captured\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m FS Sentinel: ${fsSentinel.eventCount} file events\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Net Sentinel: ${netSentinel.eventCount} connections (${netSentinel.suspiciousCount} suspicious)\n`);
   if (interposeEvents.length > 0) {
     const parts = [`${interposeReceipts.network.length} net`, `${interposeReceipts.execution.length} exec`];
     if (interposeReceipts.gateway.length > 0) parts.push(`${interposeReceipts.gateway.length} gateway`);
     if (interposeReceipts.transcript.length > 0) parts.push(`${interposeReceipts.transcript.length} transcript`);
     if (interposeReceipts.toolCalls.length > 0) parts.push(`${interposeReceipts.toolCalls.length} tool_calls`);
     if (interposeReceipts.anomalies.length > 0) parts.push(`${interposeReceipts.anomalies.length} anomalies`);
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ${interposeEvents.length} syscalls (${parts.join(', ')})\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Interpose Sentinel: ${interposeEvents.length} syscalls (${parts.join(', ')})\n`);
   }
   if (preloadGatewayReceipts.length > 0) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Preload LLM intercepts: ${preloadGatewayReceipts.length} (via diagnostics_channel + fetch)\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Preload LLM intercepts: ${preloadGatewayReceipts.length} (via diagnostics_channel + fetch)\n`);
   }
   if (sniGatewayReceipts.length > 0) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m TLS SNI intercepts: ${sniEvents.length} connections → ${sniGatewayReceipts.length} LLM domains\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m TLS SNI intercepts: ${sniEvents.length} connections → ${sniGatewayReceipts.length} LLM domains\n`);
   }
   if (interposeOracle.totalEvents > 0) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${interposeSummary.pid_tree_size} PIDs, ${interposeSummary.bound_ports.length} server ports${interposeSummary.bound_ports.length > 0 ? ` (${interposeSummary.bound_ports.join(',')})` : ''}, ${interposeSummary.env_audits} credentials, ${interposeSummary.cred_leaks} leaks\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Interpose Oracle: ${interposeSummary.pid_tree_size} PIDs, ${interposeSummary.bound_ports.length} server ports${interposeSummary.bound_ports.length > 0 ? ` (${interposeSummary.bound_ports.join(',')})` : ''}, ${interposeSummary.env_audits} credentials, ${interposeSummary.cred_leaks} leaks\n`);
   }
 
   if (interposeSummary.cldd.escapes_suspected) {
-    process.stderr.write(`\x1b[33m[clawsig]\x1b[0m CLDD: unmediated_connections=${interposeSummary.cldd.unmediated_connections}, unmonitored_spawns=${interposeSummary.cldd.unmonitored_spawns}, escapes_suspected=${interposeSummary.cldd.escapes_suspected}\n`);
+    diag(`\x1b[33m[clawsig]\x1b[0m CLDD: unmediated_connections=${interposeSummary.cldd.unmediated_connections}, unmonitored_spawns=${interposeSummary.cldd.unmonitored_spawns}, escapes_suspected=${interposeSummary.cldd.escapes_suspected}\n`);
   }
 
+  // Suspicious connections are always shown (security-critical)
   if (netSentinel.suspiciousCount > 0) {
     process.stderr.write(`\x1b[31m[clawsig]\x1b[0m WARNING: Suspicious network connections detected!\n`);
     for (const e of netSentinel.getSuspiciousEvents().slice(0, 5)) {
@@ -581,12 +600,25 @@ export async function wrap(
   await proxy.stop();
   const bundle = await proxy.compileProofBundle();
 
-  // Inject sentinel receipts into the bundle
-  if (allExecutionReceipts.length > 0) {
-    bundle.payload.execution_receipts = allExecutionReceipts;
+  // Filter noise receipts before injecting into bundle.
+  // Full data remains available in memory for verbose diagnostics.
+  const unfilteredExecutionCount = allExecutionReceipts.length;
+  const unfilteredNetworkCount = allNetworkReceipts.length;
+  const filteredExecutionReceipts = filterExecutionReceipts(allExecutionReceipts);
+  const filteredNetworkReceipts = filterNetworkReceipts(allNetworkReceipts);
+  const filteredOutExecution = unfilteredExecutionCount - filteredExecutionReceipts.length;
+  const filteredOutNetwork = unfilteredNetworkCount - filteredNetworkReceipts.length;
+
+  if (verbose && (filteredOutExecution > 0 || filteredOutNetwork > 0)) {
+    diag(`\x1b[36m[clawsig]\x1b[0m Noise filtered: ${filteredOutExecution} execution, ${filteredOutNetwork} network receipts removed\n`);
   }
-  if (allNetworkReceipts.length > 0) {
-    bundle.payload.network_receipts = allNetworkReceipts;
+
+  // Inject filtered sentinel receipts into the bundle
+  if (filteredExecutionReceipts.length > 0) {
+    bundle.payload.execution_receipts = filteredExecutionReceipts;
+  }
+  if (filteredNetworkReceipts.length > 0) {
+    bundle.payload.network_receipts = filteredNetworkReceipts;
   }
   // Inject Agent Genealogy Receipt (full process tree with harness attribution)
   const genealogyTree = interposeOracle.getGenealogyTree();
@@ -700,25 +732,27 @@ export async function wrap(
     sign: (data) => agentDid.sign(data),
   });
 
-  // Print summary
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
+  // Verbose receipt breakdown
   const totalReceipts = bundle.payload.receipts?.length ?? 0;
   const nonGateway = interposeReceipts.transcript.length + interposeReceipts.toolCalls.length + interposeReceipts.anomalies.length;
   const totalGw = totalReceipts - nonGateway;
   const proxyGateway = totalGw - preloadGatewayReceipts.length - sniGatewayReceipts.length - interposeReceipts.gateway.length;
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length}, interpose: ${interposeReceipts.gateway.length})\n`);
+
+  diag(`\x1b[36m[clawsig]\x1b[0m Bundle ID: ${bundle.payload.bundle_id}\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Event chain: ${bundle.payload.event_chain?.length ?? 0} events\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Gateway receipts: ${totalGw} (proxy: ${proxyGateway < 0 ? 0 : proxyGateway}, preload: ${preloadGatewayReceipts.length}, sni: ${sniGatewayReceipts.length}, interpose: ${interposeReceipts.gateway.length})\n`);
   if (interposeReceipts.transcript.length > 0) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Transcript events: ${interposeReceipts.transcript.length} (via interpose FSM)\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Transcript events: ${interposeReceipts.transcript.length} (via interpose FSM)\n`);
   }
   if (interposeReceipts.toolCalls.length > 0) {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool call events: ${interposeReceipts.toolCalls.length} (via interpose FSM)\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Tool call events: ${interposeReceipts.toolCalls.length} (via interpose FSM)\n`);
   }
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Execution receipts: ${allExecutionReceipts.length} (shell: ${executionReceipts.length}, interpose: ${interposeReceipts.execution.length})\n`);
-  process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Network receipts: ${allNetworkReceipts.length} (polling: ${networkReceipts.length}, interpose: ${interposeReceipts.network.length})\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Tool receipts (Causal Sieve): ${proxy.toolReceiptCount}\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Side-effect receipts: ${proxy.sideEffectReceiptCount}\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Execution receipts: ${filteredExecutionReceipts.length} (shell: ${executionReceipts.length}, interpose: ${interposeReceipts.execution.length}, filtered: ${filteredOutExecution})\n`);
+  diag(`\x1b[36m[clawsig]\x1b[0m Network receipts: ${filteredNetworkReceipts.length} (polling: ${networkReceipts.length}, interpose: ${interposeReceipts.network.length}, filtered: ${filteredOutNetwork})\n`);
   if (proxy.violationCount > 0) {
+    // Violations are always shown (security-critical)
     process.stderr.write(`\x1b[31m[clawsig]\x1b[0m Policy violations: ${proxy.violationCount}\n`);
   }
 
@@ -729,12 +763,31 @@ export async function wrap(
   } catch { /* ignore cleanup errors */ }
 
   // 5. Always write bundle to .clawsig/proof_bundle.json
-  await writeBundleToDisk(bundle);
+  const bundlePath = await writeBundleToDisk(bundle, verbose);
 
   // 5b. Also write to custom output path if requested
   if (outputPath) {
     await writeFile(outputPath, JSON.stringify(bundle, null, 2), 'utf-8');
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle also written to: ${outputPath}\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Bundle also written to: ${outputPath}\n`);
+  }
+
+  // Compute and print summary box (quiet mode)
+  if (!verbose) {
+    const bundleJson = JSON.stringify(bundle);
+    const gwCount = totalGw > 0 ? totalGw : 0;
+    const summary = computeBundleSummary({
+      bundleJson,
+      gatewayCount: gwCount,
+      toolCallCount: proxy.toolReceiptCount,
+      executionCount: filteredExecutionReceipts.length,
+      sideEffectCount: proxy.sideEffectReceiptCount,
+      networkCount: filteredNetworkReceipts.length,
+      humanApprovalCount: bundle.payload.human_approval_receipts?.length ?? 0,
+      otherCount: nonGateway,
+      filteredExecution: filteredOutExecution,
+      filteredNetwork: filteredOutNetwork,
+    });
+    printSummaryBox(summary, exitCode, bundlePath ?? outputPath ?? '.clawsig/proof_bundle.json');
   }
 
   // 6. Publish to VaaS and try to attach badge to open PR
@@ -744,11 +797,11 @@ export async function wrap(
       await tryAttachBadgeToPR(publishResult.badgeUrl, publishResult.ledgerUrl);
     }
   } else {
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Publish skipped (--no-publish)\n`);
+    diag(`\x1b[36m[clawsig]\x1b[0m Publish skipped (--no-publish)\n`);
 
     // Always print the local bundle to stdout if not publishing
     if (!outputPath) {
-      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Proof bundle (local):\n`);
+      if (verbose) process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Proof bundle (local):\n`);
       process.stdout.write(JSON.stringify(bundle, null, 2) + '\n');
     }
   }
@@ -816,20 +869,66 @@ function printLocalFallback(bundle: SignedEnvelope<ProofBundlePayload>): void {
  * Always write the proof bundle to .clawsig/proof_bundle.json.
  * This ensures the bundle survives even if VaaS is unreachable or
  * the agent already pushed a PR before the wrapper exits (Bug 3).
+ * Returns the bundle path on success, null on failure.
  */
-async function writeBundleToDisk(bundle: SignedEnvelope<ProofBundlePayload>): Promise<void> {
+async function writeBundleToDisk(
+  bundle: SignedEnvelope<ProofBundlePayload>,
+  verbose: boolean,
+): Promise<string | null> {
   try {
     const dir = join(process.cwd(), '.clawsig');
     await mkdir(dir, { recursive: true });
     const bundlePath = join(dir, 'proof_bundle.json');
     await writeFile(bundlePath, JSON.stringify(bundle, null, 2), 'utf-8');
-    process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle written to: ${bundlePath}\n`);
+    if (verbose) {
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle written to: ${bundlePath}\n`);
+    }
+    return bundlePath;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown error';
     process.stderr.write(
       `\x1b[33m[clawsig]\x1b[0m Could not write bundle to .clawsig/proof_bundle.json: ${message}\n`,
     );
+    return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Summary Box (quiet mode output)
+// ---------------------------------------------------------------------------
+
+/**
+ * Print a compact summary box to stderr after the child process exits.
+ * This is the only clawsig output in default (quiet) mode.
+ */
+function printSummaryBox(
+  summary: BundleSummaryStats,
+  exitCode: number,
+  bundlePath: string,
+): void {
+  const status = exitCode === 0 ? 'PASS' : 'FAIL';
+  const statusColor = exitCode === 0 ? '\x1b[32m' : '\x1b[31m';
+  const reset = '\x1b[0m';
+  const dim = '\x1b[2m';
+
+  // Build receipt parts string
+  const parts: string[] = [];
+  if (summary.receiptCounts.gateway > 0) parts.push(`${summary.receiptCounts.gateway} gateway`);
+  if (summary.receiptCounts.tool_call > 0) parts.push(`${summary.receiptCounts.tool_call} tool_call`);
+  if (summary.receiptCounts.side_effect > 0) parts.push(`${summary.receiptCounts.side_effect} side_effect`);
+  if (summary.receiptCounts.execution > 0) parts.push(`${summary.receiptCounts.execution} execution`);
+  if (summary.receiptCounts.network > 0) parts.push(`${summary.receiptCounts.network} network`);
+  if (summary.receiptCounts.human_approval > 0) parts.push(`${summary.receiptCounts.human_approval} approval`);
+  if (summary.receiptCounts.other > 0) parts.push(`${summary.receiptCounts.other} other`);
+  const receiptsStr = parts.length > 0 ? parts.join(', ') : 'none';
+
+  const line = `${dim}${'─'.repeat(45)}${reset}`;
+  process.stderr.write(`\n${dim}── clawsig summary ──────────────────────────${reset}\n`);
+  process.stderr.write(`  Status   : ${statusColor}${status}${reset} (exit code ${exitCode})\n`);
+  process.stderr.write(`  Coverage : ${summary.coverageTier}\n`);
+  process.stderr.write(`  Receipts : ${receiptsStr}\n`);
+  process.stderr.write(`  Bundle   : ${bundlePath} (${summary.bundleSizeHuman})\n`);
+  process.stderr.write(`${line}\n`);
 }
 
 /**
