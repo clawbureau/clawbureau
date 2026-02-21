@@ -35,6 +35,7 @@ import {
   fetchDuelLeague,
 } from './api.js';
 import { runDetailPage, runNotFoundPage } from './pages/run.js';
+import { inspectPage } from './pages/inspect.js';
 import { agentProfilePage, agentNotFoundPage } from './pages/agent.js';
 import { homePage, statsPage } from './pages/home.js';
 import { runsFeedPage } from './pages/runs.js';
@@ -174,6 +175,11 @@ export default {
     }
 
     // -- Home --
+    // -- Inspector --
+    if (path === "/inspect") {
+      return html(inspectPage(), 200, 86400);
+    }
+
     if (path === "/") {
       const data = await fetchGlobalStats(apiOpts);
       if (!data) {
