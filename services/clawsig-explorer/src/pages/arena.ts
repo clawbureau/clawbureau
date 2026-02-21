@@ -32,41 +32,21 @@ function contractCheckMatrix(report: ArenaReportView): string {
     `;
   }
 
-  const headerCells = report.contenders
-    .map((contender) => `<th>${esc(contender.contender_id)}</th>`)
-    .join('');
-
-  const rows = criterionIds
-    .map((criterionId) => {
-      const cells = report.contenders
-        .map((contender) => {
-          const check = contender.check_results.find((entry) => entry.criterion_id === criterionId);
-          if (!check) {
-            return `<td class="dim">N/A</td>`;
-          }
-
-          const cls = check.status === 'PASS' ? 'pass' : 'fail';
-          return `<td><span class="status-badge ${cls}" title="${esc(check.reason_code)}">${esc(check.status)}</span></td>`;
-        })
-        .join('');
-
-      return `<tr><td class="mono">${esc(criterionId)}</td>${cells}</tr>`;
-    })
-    .join('');
-
   return `
-    <div style="overflow-x:auto">
-      <table>
-        <thead>
-          <tr>
-            <th>Contract Criterion</th>
-            ${headerCells}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
+    <div class="matrix-grid" style="grid-template-columns: minmax(150px, 2fr) repeat(${report.contenders.length}, 1fr)">
+      <div class="matrix-cell header">Criterion</div>
+      ${report.contenders.map(c => `<div class="matrix-cell col-header mono">${esc(c.contender_id.replace('contender_', ''))}</div>`).join('')}
+      
+      ${criterionIds.map(crit => `
+        <div class="matrix-cell header mono">${esc(crit)}</div>
+        ${report.contenders.map(c => {
+            const check = c.check_results.find(x => x.criterion_id === crit);
+            if (!check) return '<div class="matrix-cell cell-na">N/A</div>';
+            const cls = check.status === 'PASS' ? 'cell-pass' : 'cell-fail';
+            const icon = check.status === 'PASS' ? '✓ PASS' : '✗ FAIL';
+            return `<div class="matrix-cell ${cls}" title="${esc(check.reason_code)}">${icon}</div>`;
+        }).join('')}
+      `).join('')}
     </div>
   `;
 }
@@ -774,83 +754,568 @@ export function arenaMissionPage(summary: ArenaMissionSummaryView): string {
 
 function renderVisualEvidence(report: ArenaReportView, artifactsBaseUrl: string | null): string {
   if (!artifactsBaseUrl || !report.contract?.bounty_id) return '';
-
   const bountyId = report.contract.bounty_id;
+  
   const steps = ['browse', 'details', 'claim', 'submit'] as const;
   const stepFiles = ['01-browse.png', '02-details.png', '03-claim.png', '04-submit.png'];
 
-  // Build side-by-side screenshot comparisons
-  const rows = steps.map((step, idx) => {
-    const cols = report.contenders.map((c) => {
-      const url = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/screenshots/${stepFiles[idx]}`;
-      return `
-        <div style="flex:1; min-width:300px">
-          <div class="dim" style="font-size:0.78rem; margin-bottom:0.3rem">${esc(c.contender_id)} &mdash; ${esc(c.label)}</div>
-          <a href="${esc(url)}" target="_blank" rel="noreferrer">
-            <img src="${esc(url)}" alt="${esc(step)} screenshot for ${esc(c.contender_id)}"
-                 style="width:100%; border-radius:var(--radius); border:1px solid var(--border)"
-                 loading="lazy" onerror="this.parentElement.innerHTML='<span class=dim>Screenshot not available</span>'" />
-          </a>
-        </div>
-      `;
-    }).join('');
-
+  const rows = report.contenders.map(c => {
     return `
-      <div style="margin-bottom:1.5rem">
-        <p style="font-weight:600; font-size:0.88rem; margin-bottom:0.5rem; text-transform:capitalize">${step}</p>
-        <div style="display:flex; gap:1rem; flex-wrap:wrap">
-          ${cols}
+      <div style="margin-bottom: 2rem;">
+        <h3 class="mono" style="margin-bottom:0.5rem; color:var(--text-main); font-size:1rem;">${esc(c.contender_id)}</h3>
+        <div class="filmstrip">
+          ${steps.map((step, idx) => {
+            const url = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/screenshots/${stepFiles[idx]}`;
+            return `
+              <div class="filmstrip-col">
+                <div class="dim mono" style="font-size:0.75rem; margin-bottom:0.4rem; text-transform:uppercase;">${step}</div>
+                <img class="filmstrip-img" src="${esc(url)}" alt="${esc(step)}" loading="lazy" onclick="window.open(this.src, '_blank')" onerror="this.parentElement.style.display='none'" />
+              </div>
+            `;
+          }).join('')}
         </div>
       </div>
     `;
   }).join('');
-
-  // Journey timing comparison
-  const timingRows = report.contenders.map((c) => {
-    const raw = c.raw_evaluator_metrics;
-    const avgMs = raw && typeof raw.avg_timing_ms === 'number' ? raw.avg_timing_ms.toFixed(0) + 'ms' : 'N/A';
-    const friction = raw && typeof raw.friction_events === 'number' ? String(raw.friction_events) : 'N/A';
-    const rtErrors = raw && typeof raw.runtime_error_count === 'number' ? String(raw.runtime_error_count) : 'N/A';
-    const journeyUrl = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/journey/journey.json`;
-    const lighthouseUrl = `${artifactsBaseUrl}/arena/${bountyId}/${c.contender_id}/lighthouse/lighthouse.summary.json`;
-    return `
-      <tr>
-        <td class="mono">${esc(c.contender_id)}</td>
-        <td>${esc(c.model)}</td>
-        <td class="mono">${avgMs}</td>
-        <td>${friction}</td>
-        <td>${rtErrors}</td>
-        <td>
-          <a href="${esc(journeyUrl)}" target="_blank" class="dim" style="font-size:0.75rem">journey.json ↗</a>
-          &middot;
-          <a href="${esc(lighthouseUrl)}" target="_blank" class="dim" style="font-size:0.75rem">lighthouse ↗</a>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
+  
   return `
     <div class="card">
-      <p class="section-title">Visual evidence — side-by-side screenshots</p>
-      <p class="dim" style="font-size:0.78rem; margin-bottom:1rem">Playwright captured each UI flow step. Click to view full size.</p>
+      <p class="section-title">Screenshot Journey</p>
+      <p class="dim" style="font-size:0.8rem; margin-bottom:1rem;">Click any thumbnail to view full size screenshot.</p>
       ${rows}
     </div>
+  `;
+}
 
+
+function renderArenaStyles() {
+  return `<style>
+    @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700;800&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+    :root {
+      --bg-dark: #07070a;
+      --bg-surface: #101016;  
+      --bg-panel: #16161e;
+      --accent-teal: #00d4aa;
+      --accent-teal-glow: rgba(0, 212, 170, 0.3);
+      --accent-red: #ff2a5f;
+      --accent-red-glow: rgba(255, 42, 95, 0.3);
+      --text-main: #f0f0f5;
+      --text-dim: #8b8b99;
+      --border: #22222d;
+      --font-display: 'Chakra Petch', sans-serif;
+      --font-body: 'Outfit', sans-serif;  
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --bg: var(--bg-dark);
+      --bg-card: var(--bg-panel);
+      --text: var(--text-main);
+      --font-sans: var(--font-body);
+      --pass: var(--accent-teal);
+      --fail: var(--accent-red);
+    }
+    
+    body {
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+    }
+
+    .page-title, .section-title, h1, h2, h3 {
+      font-family: var(--font-display);
+      text-transform: uppercase;
+    }
+
+    .page-title {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--text-main);
+      text-shadow: 0 0 20px rgba(255,255,255,0.1);
+      margin-bottom: 0.5rem;
+    }
+    
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02), 0 4px 20px rgba(0,0,0,0.5);
+      border-radius: 4px;
+      clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 15px, 100% 100%, 15px 100%, 0 calc(100% - 15px));
+      padding: 1.5rem;
+      position: relative;
+    }
+
+    .section-title {
+      border-left: 3px solid var(--accent-teal);
+      padding-left: 0.5rem;
+      font-size: 1.1rem;
+      letter-spacing: 0.05em;
+      color: var(--text-main);
+      margin-bottom: 1rem;
+    }
+    
+    .vs-hero {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      margin: 3rem 0;
+      padding: 2rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .vs-contender {
+      flex: 1;
+      text-align: center;
+      z-index: 2;
+      position: relative;
+      padding: 2rem;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    
+    .vs-contender.winner {
+      border-color: var(--accent-teal);
+      box-shadow: 0 0 30px var(--accent-teal-glow), inset 0 0 20px var(--accent-teal-glow);
+    }
+    
+    .vs-contender.winner::before {
+      content: 'WINNER';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent-teal);
+      color: #000;
+      font-family: var(--font-display);
+      font-weight: 800;
+      padding: 2px 10px;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      box-shadow: 0 0 10px var(--accent-teal);
+      animation: pulse-crown 2s infinite;
+    }
+    
+    @keyframes pulse-crown {
+      0% { box-shadow: 0 0 5px var(--accent-teal); }
+      50% { box-shadow: 0 0 20px var(--accent-teal), 0 0 40px var(--accent-teal); }
+      100% { box-shadow: 0 0 5px var(--accent-teal); }
+    }
+
+    .vs-contender.loser {
+      opacity: 0.8;
+    }
+    
+    .vs-name {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      word-break: break-all;
+    }
+    
+    .vs-harness {
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .vs-score-wrapper {
+      margin-top: 1rem;
+    }
+    
+    .vs-score-val {
+      font-family: var(--font-display);
+      font-size: 3rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+    .winner .vs-score-val {
+      color: var(--accent-teal);
+      text-shadow: 0 0 15px var(--accent-teal-glow);
+    }
+    
+    .score-bar {
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      width: 100%;
+      position: relative;
+    }
+    
+    .score-fill {
+      height: 100%;
+      background: var(--text-dim);
+      width: 0;
+      animation: fill-bar 1.5s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+    }
+    .winner .score-fill { background: var(--accent-teal); box-shadow: 0 0 10px var(--accent-teal-glow); }
+    
+    @keyframes fill-bar {
+      to { width: var(--target-width); }
+    }
+    
+    .vs-divider {
+      font-family: var(--font-display);
+      font-size: 4rem;
+      font-weight: 800;
+      color: var(--border);
+      text-shadow: 0 0 20px rgba(0,0,0,0.8);
+      z-index: 2;
+      font-style: italic;
+    }
+    
+    .viewer-tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .viewer-tab {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 0.5rem 1rem;
+      font-family: var(--font-display);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      cursor: pointer;
+      clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+      transition: 0.2s;
+    }
+    .viewer-tab.active {
+      background: rgba(0, 212, 170, 0.1);
+      border-color: var(--accent-teal);
+      color: var(--accent-teal);
+      box-shadow: inset 0 0 15px var(--accent-teal-glow);
+    }
+    
+    .iframe-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      height: 600px;
+    }
+    .iframe-split.full {
+      grid-template-columns: 1fr;
+    }
+    .iframe-pane {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      background: #000;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .iframe-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+    }
+    .iframe-pane iframe {
+      flex: 1;
+      width: 100%;
+      border: none;
+      background: #fff;
+    }
+
+    .filmstrip {
+      display: flex;
+      gap: 1rem;
+      overflow-x: auto;
+      padding-bottom: 1rem;
+    }
+    .filmstrip-col {
+      min-width: 250px;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      padding: 0.5rem;
+      border-radius: 4px;
+    }
+    .filmstrip-img {
+      width: 100%;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: 0.2s border-color;
+    }
+    .filmstrip-img:hover {
+      border-color: var(--accent-teal);
+    }
+    
+    .gauges-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+    .gauge-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      padding: 1rem;
+      text-align: center;
+      border-radius: 4px;
+    }
+    .gauge-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: conic-gradient(var(--accent-teal) var(--deg), var(--border) 0deg);
+      margin: 0 auto 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .gauge-circle::after {
+      content: '';
+      position: absolute;
+      inset: 6px;
+      background: var(--bg-surface);
+      border-radius: 50%;
+    }
+    .gauge-val {
+      position: relative;
+      z-index: 2;
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.2rem;
+    }
+    .gauge-label {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .matrix-grid {
+      display: grid;
+      gap: 2px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .matrix-cell {
+      background: var(--bg-surface);
+      padding: 0.5rem;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .matrix-cell.header {
+      font-family: var(--font-display);
+      color: var(--text-dim);
+      text-transform: uppercase;
+      justify-content: flex-start;
+    }
+    .matrix-cell.col-header {
+      justify-content: center;
+      font-size: 0.7rem;
+      text-align: center;
+    }
+    .cell-pass {
+      background: rgba(0, 212, 170, 0.1);
+      color: var(--accent-teal);
+      box-shadow: inset 0 0 10px var(--accent-teal-glow);
+    }
+    .cell-fail {
+      background: rgba(255, 42, 95, 0.1);
+      color: var(--accent-red);
+      box-shadow: inset 0 0 10px var(--accent-red-glow);
+    }
+    .cell-na {
+      color: var(--text-dim);
+    }
+    
+    table { background: var(--bg-surface); border: 1px solid var(--border); }
+    th { background: rgba(0,0,0,0.3); font-family: var(--font-display); color: var(--text-main); border-bottom: 1px solid var(--border); }
+    td { border-bottom: 1px solid var(--border); }
+  </style>`;
+}
+
+
+
+function renderVSHero(report: ArenaReportView): string {
+  const c = report.contenders;
+  if (c.length < 2) return '';
+  const winnerId = report.winner.contender_id;
+  
+  const top2 = [...c].sort((a,b) => b.score - a.score).slice(0,2);
+  
+  const htmls = top2.map((contender) => {
+    const isWinner = contender.contender_id === winnerId;
+    const cls = isWinner ? 'winner' : 'loser';
+    const percent = Math.min(100, Math.max(0, contender.score));
+    
+    return `
+      <div class="vs-contender ${cls}">
+        <div class="vs-name">${esc(contender.contender_id.replace('contender_', ''))}</div>
+        <div class="vs-harness">${esc(contender.harness)} &middot; ${esc(contender.model)}</div>
+        <div class="vs-score-wrapper">
+          <div class="vs-score-val">${contender.score.toFixed(1)}</div>
+          <div class="score-bar">
+             <div class="score-fill" style="--target-width: ${percent}%"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  return `
+    <div class="vs-hero">
+      ${htmls[0]}
+      <div class="vs-divider">VS</div>
+      ${htmls[1]}
+    </div>
+  `;
+}
+
+
+
+function renderLiveOutputViewer(report: ArenaReportView, artifactsBaseUrl: string | null): string {
+  if (!artifactsBaseUrl || !report.contract?.bounty_id) return '';
+  const bountyId = report.contract.bounty_id;
+  const c = report.contenders;
+  
+  if (c.length < 2) return '';
+  
+  const c1 = c[0];
+  const c2 = c[1];
+  
+  const c1Url = `${artifactsBaseUrl}/arena/${bountyId}/${c1.contender_id}/output/index.html`;
+  const c2Url = `${artifactsBaseUrl}/arena/${bountyId}/${c2.contender_id}/output/index.html`;
+
+  return `
+    <div class="card" id="live-viewer">
+      <p class="section-title">Live Output Viewer</p>
+      
+      <div class="viewer-controls" style="margin-bottom:1rem; display:flex; justify-content:space-between;">
+        <div class="viewer-tabs" id="viewer-tabs">
+          ${c.map((contender, idx) => `
+            <button class="viewer-tab ${idx < 2 ? 'active' : ''}" data-id="${esc(contender.contender_id)}" data-url="${esc(`${artifactsBaseUrl}/arena/${bountyId}/${contender.contender_id}/output/index.html`)}">
+              ${esc(contender.contender_id.replace('contender_', ''))}
+            </button>
+          `).join('')}
+        </div>
+        <button class="viewer-tab" id="toggle-split" style="border-color:var(--text-dim); color:var(--text-main)">Toggle Full Width</button>
+      </div>
+      
+      <div class="iframe-split" id="iframe-split">
+        <div class="iframe-pane" id="pane-1">
+          <div class="iframe-header"><span class="pane-title">${esc(c1.contender_id)}</span><a href="${esc(c1Url)}" target="_blank" class="pass">↗ Open</a></div>
+          <iframe id="iframe-1" src="${esc(c1Url)}" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+        <div class="iframe-pane" id="pane-2">
+          <div class="iframe-header"><span class="pane-title">${esc(c2.contender_id)}</span><a href="${esc(c2Url)}" target="_blank" class="pass">↗ Open</a></div>
+          <iframe id="iframe-2" src="${esc(c2Url)}" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
+      </div>
+      
+      <script>
+        (function() {
+           var split = document.getElementById('iframe-split');
+           var toggle = document.getElementById('toggle-split');
+           if(!split || !toggle) return;
+           
+           toggle.addEventListener('click', function() {
+             split.classList.toggle('full');
+             var isFull = split.classList.contains('full');
+             document.getElementById('pane-2').style.display = isFull ? 'none' : 'flex';
+           });
+           
+           var tabs = document.querySelectorAll('.viewer-tab[data-id]');
+           for (var i = 0; i < tabs.length; i++) {
+             tabs[i].addEventListener('click', function() {
+                if (this.classList.contains('active')) return;
+                
+                var activeTabs = document.querySelectorAll('.viewer-tab.active[data-id]');
+                var isFull = split.classList.contains('full');
+                
+                var url = this.getAttribute('data-url');
+                var id = this.getAttribute('data-id');
+                
+                if (isFull) {
+                  for (var j = 0; j < activeTabs.length; j++) {
+                     activeTabs[j].classList.remove('active');
+                  }
+                  this.classList.add('active');
+                  
+                  document.getElementById('iframe-1').src = url;
+                  document.querySelector('#pane-1 .pane-title').textContent = id;
+                  document.querySelector('#pane-1 a').href = url;
+                } else {
+                  var t1 = activeTabs[0];
+                  var t2 = activeTabs.length > 1 ? activeTabs[1] : null;
+                  
+                  if(t1) t1.classList.remove('active');
+                  if(t2) {
+                     t2.classList.add('active');
+                     document.getElementById('iframe-1').src = t2.getAttribute('data-url');
+                     document.querySelector('#pane-1 .pane-title').textContent = t2.getAttribute('data-id');
+                     document.querySelector('#pane-1 a').href = t2.getAttribute('data-url');
+                  }
+                  
+                  this.classList.add('active');
+                  document.getElementById('iframe-2').src = url;
+                  document.querySelector('#pane-2 .pane-title').textContent = id;
+                  document.querySelector('#pane-2 a').href = url;
+                }
+             });
+           }
+        })();
+      </script>
+    </div>
+  `;
+}
+
+
+
+function renderScoreBreakdown(report: ArenaReportView): string {
+  const winner = report.contenders.find(c => c.contender_id === report.winner.contender_id) || report.contenders[0];
+  const m = winner.metrics;
+  
+  return `
     <div class="card">
-      <p class="section-title">Journey + Lighthouse data</p>
-      <div style="overflow-x:auto">
-        <table>
-          <thead>
-            <tr><th>Contender</th><th>Model</th><th>Avg Timing</th><th>Friction</th><th>RT Errors</th><th>Raw Data</th></tr>
-          </thead>
-          <tbody>
-            ${timingRows}
-          </tbody>
-        </table>
+      <p class="section-title">Score Breakdown (${esc(winner.contender_id)})</p>
+      <div class="gauges-grid">
+         <div class="gauge-card">
+           <div class="gauge-circle" style="--deg: ${m.quality_score * 3.6}deg">
+             <div class="gauge-val">${m.quality_score}</div>
+           </div>
+           <div class="gauge-label">Quality</div>
+         </div>
+         <div class="gauge-card">
+           <div class="gauge-circle" style="--deg: ${(100 - m.risk_score) * 3.6}deg">
+             <div class="gauge-val">${m.risk_score}</div>
+           </div>
+           <div class="gauge-label">Risk</div>
+         </div>
+         <div class="gauge-card">
+           <div class="gauge-circle" style="--deg: ${m.efficiency_score * 3.6}deg">
+             <div class="gauge-val">${m.efficiency_score}</div>
+           </div>
+           <div class="gauge-label">Efficiency</div>
+         </div>
+         <div class="gauge-card">
+           <div class="gauge-circle" style="--deg: ${m.autonomy_score * 3.6}deg">
+             <div class="gauge-val">${m.autonomy_score}</div>
+           </div>
+           <div class="gauge-label">Autonomy</div>
+         </div>
       </div>
     </div>
   `;
 }
+
 
 export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: string | null = null): string {
   const meta: PageMeta = {
@@ -860,6 +1325,15 @@ export function arenaComparePage(report: ArenaReportView, artifactsBaseUrl: stri
   };
 
   return layout(meta, `
+    ${renderArenaStyles()}
+    
+    ${renderVSHero(report)}
+    
+    
+
+    ${renderLiveOutputViewer(report, artifactsBaseUrl)}
+    
+    ${renderScoreBreakdown(report)}
     <h1 class="page-title">Arena Compare: ${esc(report.arena_id)}</h1>
     <p class="page-subtitle">Transparent contender comparison across model/harness/tool stack, contract checks, and objective scoring.</p>
 
