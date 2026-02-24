@@ -406,12 +406,30 @@ export async function wrap(
   let childPid = 0;
   let childProcess: ChildProcess | null = null;
 
-  // Handle Ctrl+C gracefully: forward to child instead of killing parent first.
-  // Without this, Ctrl+C may orphan the child process (especially on Windows).
-  const sigintHandler = () => {
-    if (childProcess && !childProcess.killed) childProcess.kill('SIGINT');
+  // Handle signals gracefully: forward to child instead of killing parent first.
+  // SIGINT: user pressed Ctrl+C (terminal interrupt)
+  // SIGTERM: process manager (systemd, Docker, interactive_shell autoExitOnQuiet)
+  // SIGHUP: terminal closed (SSH disconnect, terminal tab close)
+  //
+  // Without these handlers, Node.js default behavior kills the parent immediately
+  // on SIGTERM/SIGHUP. This prevents the bundle compilation phase (phase 6) from
+  // running, producing zero proof artifacts. This is the root cause of
+  // "clawsig wrap produces no proof bundle when killed via SIGTERM".
+  //
+  // The fix: intercept all three signals, forward to child, let child exit
+  // normally, and the 'exit' event resolves the promise → bundle compiles.
+  const forwardSignalToChild = (signal: NodeJS.Signals) => {
+    if (childProcess && !childProcess.killed) {
+      process.stderr.write(`\n\x1b[36m[clawsig]\x1b[0m Received ${signal}, forwarding to child (PID ${childProcess.pid ?? '?'})...\n`);
+      childProcess.kill(signal);
+    }
   };
+  const sigintHandler = () => forwardSignalToChild('SIGINT');
+  const sigtermHandler = () => forwardSignalToChild('SIGTERM');
+  const sighupHandler = () => forwardSignalToChild('SIGHUP');
   process.on('SIGINT', sigintHandler);
+  process.on('SIGTERM', sigtermHandler);
+  if (!isWindows) process.on('SIGHUP', sighupHandler);
 
   const exitCode = await new Promise<number>((resolve) => {
     childProcess = spawn(command, args, {
@@ -440,6 +458,8 @@ export async function wrap(
   });
 
   process.off('SIGINT', sigintHandler);
+  process.off('SIGTERM', sigtermHandler);
+  if (!isWindows) process.off('SIGHUP', sighupHandler);
 
   // 6. Stop sentinels, harvest data, compile proof bundle
   await fsSentinel.stop();
