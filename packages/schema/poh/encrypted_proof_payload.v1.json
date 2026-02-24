@@ -1,0 +1,360 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.poh.encrypted_proof_payload.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Encrypted Proof Payload v1",
+  "description": "Plaintext content encrypted within a v2 proof bundle's encrypted_payload field. This structure is JCS-canonicalized, then encrypted with AES-256-GCM. It carries the human-readable operational details that the public layer represents only as hashes. All fields are optional — producers include only the categories relevant to the run.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "payload_version": {
+      "const": "1",
+      "description": "Encrypted payload schema version."
+    },
+    "bundle_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Proof bundle ID this payload belongs to. MUST match the enclosing bundle's bundle_id."
+    },
+
+    "tool_calls": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "Plaintext tool call details. Each entry corresponds to a tool_receipt in the public layer (matched by receipt_id or positional index).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool_name", "timestamp"],
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Corresponding tool_receipt.receipt_id in the public layer."
+          },
+          "tool_name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Canonical tool name (e.g. 'bash', 'read_file', 'web_search')."
+          },
+          "arguments": {
+            "type": "object",
+            "description": "Full tool arguments (the plaintext behind args_hash_b64u)."
+          },
+          "result_summary": {
+            "type": "string",
+            "maxLength": 8192,
+            "description": "Human-readable summary of the tool result. Truncated for large outputs."
+          },
+          "result_status": {
+            "type": "string",
+            "enum": ["success", "error", "timeout"],
+            "description": "Outcome of the tool call."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp of tool invocation."
+          },
+          "latency_ms": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Tool execution latency in milliseconds."
+          }
+        }
+      }
+    },
+
+    "commands": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "Plaintext shell/system commands executed by the agent.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command"],
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Corresponding tool_receipt.receipt_id (for tool_name='bash' or similar)."
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full command string as executed."
+          },
+          "exit_code": {
+            "type": "integer",
+            "description": "Process exit code."
+          },
+          "working_directory": {
+            "type": "string",
+            "description": "Working directory at time of execution."
+          },
+          "stdout_summary": {
+            "type": "string",
+            "maxLength": 8192,
+            "description": "Truncated stdout (first/last N bytes)."
+          },
+          "stderr_summary": {
+            "type": "string",
+            "maxLength": 8192,
+            "description": "Truncated stderr (first/last N bytes)."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+
+    "file_operations": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "Plaintext file operation details.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "path"],
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Corresponding tool_receipt or side_effect_receipt ID."
+          },
+          "operation": {
+            "type": "string",
+            "enum": ["read", "write", "delete", "rename", "mkdir", "chmod"],
+            "description": "File operation type."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Absolute or relative file path."
+          },
+          "dest_path": {
+            "type": "string",
+            "description": "Destination path (for rename operations)."
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "File size in bytes (for read/write)."
+          },
+          "content_hash_b64u": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "minLength": 8,
+            "description": "SHA-256 hash of file content, base64url (no padding)."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+
+    "network_connections": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "Plaintext network connection details.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["remote_host", "protocol", "direction"],
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Corresponding side_effect_receipt ID."
+          },
+          "remote_host": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Remote hostname or IP address."
+          },
+          "remote_port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "description": "Remote port number."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": ["https", "http", "tcp", "udp", "wss", "ws", "grpc"],
+            "description": "Network protocol."
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["outbound", "inbound"],
+            "description": "Connection direction from agent's perspective."
+          },
+          "url": {
+            "type": "string",
+            "description": "Full URL (for HTTP/HTTPS connections)."
+          },
+          "method": {
+            "type": "string",
+            "description": "HTTP method (GET, POST, etc.)."
+          },
+          "status_code": {
+            "type": "integer",
+            "description": "HTTP response status code."
+          },
+          "bytes_transferred": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total bytes sent + received."
+          },
+          "vendor_id": {
+            "type": "string",
+            "description": "Vendor/service identifier (e.g. 'github', 'slack', 's3')."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+
+    "llm_interactions": {
+      "type": "array",
+      "maxItems": 256,
+      "description": "Plaintext LLM interaction details. Each entry corresponds to a gateway receipt in the public layer.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["provider", "model"],
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Corresponding gateway receipt's receipt_id."
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "description": "LLM provider (e.g. 'anthropic', 'openai', 'google')."
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model identifier."
+          },
+          "prompt_summary": {
+            "type": "string",
+            "maxLength": 16384,
+            "description": "Truncated prompt or system prompt summary."
+          },
+          "completion_summary": {
+            "type": "string",
+            "maxLength": 16384,
+            "description": "Truncated completion/response summary."
+          },
+          "prompt_tokens": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Input token count."
+          },
+          "completion_tokens": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Output token count."
+          },
+          "cost_usd": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Estimated cost in USD."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "latency_ms": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+
+    "human_approvals": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "Plaintext human approval details.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["approval_type"],
+        "properties": {
+          "receipt_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Corresponding human_approval_receipt ID."
+          },
+          "approval_type": {
+            "type": "string",
+            "enum": ["explicit_approve", "explicit_deny", "auto_approve", "timeout_deny"]
+          },
+          "scope_description": {
+            "type": "string",
+            "description": "Human-readable description of what was approved/denied."
+          },
+          "approver_identity": {
+            "type": "string",
+            "description": "Human approver identity (email, username, DID)."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+
+    "run_summary": {
+      "type": "object",
+      "description": "Optional high-level run summary.",
+      "additionalProperties": false,
+      "properties": {
+        "task_description": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "What the agent was asked to do."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["success", "failure", "partial", "cancelled"],
+          "description": "Overall run outcome."
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Total run wall-clock time in milliseconds."
+        },
+        "files_modified": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of files created or modified."
+        },
+        "total_tool_calls": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total tool invocations."
+        },
+        "total_llm_calls": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total LLM API calls."
+        },
+        "total_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Estimated total LLM cost in USD."
+        }
+      }
+    }
+  }
+}

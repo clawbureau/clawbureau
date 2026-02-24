@@ -1,0 +1,199 @@
+{
+  "comment": "Proof Bundle v2 with Encrypted Visibility - Golden Test Fixture - NOT REAL CRYPTOGRAPHIC MATERIAL",
+  "purpose": "This fixture validates v2 schema parsing with encrypted_payload and viewer_keys. All ciphertext, keys, IVs, tags, and signatures are deterministic dummy values for testing only. Do NOT use as a cryptographic reference.",
+
+  "bundle_version": "2",
+  "schema_version": "proof_bundle.v2",
+  "bundle_id": "epv-golden-001",
+  "agent_did": "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+
+  "visibility": "requester",
+
+  "encrypted_payload": {
+    "ciphertext_b64u": "dGVzdC1jaXBoZXJ0ZXh0LWR1bW15LWRhdGEtdGhpcy1pcy1ub3QtcmVhbC1hZXMtMjU2LWdjbS1lbmNyeXB0ZWQtY29udGVudC1pdC1pcy1hLXBsYWNlaG9sZGVyLWZvci10ZXN0aW5n",
+    "iv_b64u": "dGVzdC1pdi1ub25j",
+    "tag_b64u": "dGVzdC1nY20tYXV0aC10YWc",
+    "plaintext_hash_b64u": "qUiQJl7hKB2a-FxjzVk1ZA1RQODm_0f3nP72c2dVmBE"
+  },
+
+  "viewer_keys": [
+    {
+      "viewer_did": "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+      "ephemeral_public_key_b64u": "dGVzdC1lcGhlbWVyYWwta2V5LTAxLXBhZGRlZA",
+      "wrapped_key_b64u": "dGVzdC13cmFwcGVkLWFlcy0yNTYta2V5LWZvci1vd25lci12aWV3ZXI",
+      "wrapped_key_iv_b64u": "d3JhcC1pdi1vd25y",
+      "wrapped_key_tag_b64u": "d3JhcC10YWctb3duZXItdmFs",
+      "role": "owner",
+      "key_derivation": "X25519-HKDF-SHA256"
+    },
+    {
+      "viewer_did": "did:key:z6MknSLrJoTcukLrE435hVNQT4JUhbvWLX4kUzqkEStBU8Vi",
+      "ephemeral_public_key_b64u": "dGVzdC1lcGhlbWVyYWwta2V5LTAyLXBhZGRlZA",
+      "wrapped_key_b64u": "dGVzdC13cmFwcGVkLWFlcy0yNTYta2V5LWZvci1yZXF1ZXN0ZXItdmlldw",
+      "wrapped_key_iv_b64u": "d3JhcC1pdi1yZXFy",
+      "wrapped_key_tag_b64u": "d3JhcC10YWctcmVxci12YWxz",
+      "role": "requester",
+      "key_derivation": "X25519-HKDF-SHA256"
+    }
+  ],
+
+  "event_chain": [
+    {
+      "event_id": "evt-epv-001",
+      "run_id": "run-epv-golden-001",
+      "event_type": "llm_call",
+      "timestamp": "2026-02-21T12:00:00Z",
+      "payload_hash_b64u": "qUiQJl7hKB2a-FxjzVk1ZA1RQODm_0f3nP72c2dVmBE",
+      "prev_hash_b64u": null,
+      "event_hash_b64u": "Kx8bV2RLTHM-nBJ7zXfOuY9d8sWz1aQeK3TYZN5ckhs"
+    },
+    {
+      "event_id": "evt-epv-002",
+      "run_id": "run-epv-golden-001",
+      "event_type": "tool_call",
+      "timestamp": "2026-02-21T12:00:01Z",
+      "payload_hash_b64u": "7xGhN_rLV3jDC5M9_-SdPvR3eqAT2s4Lr0fKBnNzQwk",
+      "prev_hash_b64u": "Kx8bV2RLTHM-nBJ7zXfOuY9d8sWz1aQeK3TYZN5ckhs",
+      "event_hash_b64u": "P4sR6k2M-OY-XQzjF-TbVx1cWAnR8aDeK3gZN5ckh0s"
+    },
+    {
+      "event_id": "evt-epv-003",
+      "run_id": "run-epv-golden-001",
+      "event_type": "side_effect",
+      "timestamp": "2026-02-21T12:00:02Z",
+      "payload_hash_b64u": "Rm3X9kV-2T4bN8qLmAeScYdWfRjPx1oKz5hU7nEtCgI",
+      "prev_hash_b64u": "P4sR6k2M-OY-XQzjF-TbVx1cWAnR8aDeK3gZN5ckh0s",
+      "event_hash_b64u": "Jw7Xn-3kRmT9pYV2BvLeQ1sHfAcMdZuNx8gK6rOtDiU"
+    }
+  ],
+
+  "receipts": [
+    {
+      "envelope_version": "1",
+      "envelope_type": "gateway_receipt",
+      "payload": {
+        "receipt_version": "1",
+        "receipt_id": "rcpt-epv-gw-001",
+        "gateway_id": "gw-clawproxy-staging-01",
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-20250514",
+        "request_hash_b64u": "qUiQJl7hKB2a-FxjzVk1ZA1RQODm_0f3nP72c2dVmBE",
+        "response_hash_b64u": "7xGhN_rLV3jDC5M9_-SdPvR3eqAT2s4Lr0fKBnNzQwk",
+        "tokens_input": 1500,
+        "tokens_output": 800,
+        "latency_ms": 2340,
+        "timestamp": "2026-02-21T12:00:00Z"
+      },
+      "payload_hash_b64u": "Kx8bV2RLTHM-nBJ7zXfOuY9d8sWz1aQeK3TYZN5ckhs",
+      "hash_algorithm": "SHA-256",
+      "signature_b64u": "dGVzdC1zaWduYXR1cmUtZm9yLWdhdGV3YXktcmVjZWlwdC1ub3QtcmVhbC1lZDI1NTE5LWR1bW15",
+      "algorithm": "Ed25519",
+      "signer_did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "issued_at": "2026-02-21T12:00:00Z"
+    }
+  ],
+
+  "tool_receipts": [
+    {
+      "receipt_version": "1",
+      "receipt_id": "rcpt-epv-tool-001",
+      "tool_name": "bash",
+      "args_hash_b64u": "P4sR6k2M-OY-XQzjF-TbVx1cWAnR8aDeK3gZN5ckh0s",
+      "result_hash_b64u": "Rm3X9kV-2T4bN8qLmAeScYdWfRjPx1oKz5hU7nEtCgI",
+      "result_status": "success",
+      "hash_algorithm": "SHA-256",
+      "agent_did": "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+      "timestamp": "2026-02-21T12:00:01Z",
+      "latency_ms": 150,
+      "binding": {
+        "run_id": "run-epv-golden-001",
+        "event_hash_b64u": "P4sR6k2M-OY-XQzjF-TbVx1cWAnR8aDeK3gZN5ckh0s"
+      }
+    }
+  ],
+
+  "side_effect_receipts": [
+    {
+      "receipt_version": "1",
+      "receipt_id": "rcpt-epv-se-001",
+      "effect_class": "filesystem_write",
+      "target_digest": "Jw7Xn-3kRmT9pYV2BvLeQ1sHfAcMdZuNx8gK6rOtDiU",
+      "request_digest": "Rm3X9kV-2T4bN8qLmAeScYdWfRjPx1oKz5hU7nEtCgI",
+      "response_digest": "qUiQJl7hKB2a-FxjzVk1ZA1RQODm_0f3nP72c2dVmBE",
+      "hash_algorithm": "SHA-256",
+      "bytes_written": 2048,
+      "agent_did": "did:key:z6MktwupdmLXVVqTzCw4i46r4uGyosGXRnR3XjN4Zq7oMMsw",
+      "timestamp": "2026-02-21T12:00:02Z"
+    }
+  ],
+
+  "metadata": {
+    "harness": {
+      "id": "pi",
+      "version": "1.4.0",
+      "runtime": "host",
+      "config_hash_b64u": "Kx8bV2RLTHM-nBJ7zXfOuY9d8sWz1aQeK3TYZN5ckhs"
+    }
+  },
+
+  "_test_plaintext_reference": {
+    "comment": "This field is NOT part of the schema. It shows what the encrypted_payload ciphertext would decrypt to, for test verification purposes only.",
+    "decrypted_payload": {
+      "payload_version": "1",
+      "bundle_id": "epv-golden-001",
+      "tool_calls": [
+        {
+          "receipt_id": "rcpt-epv-tool-001",
+          "tool_name": "bash",
+          "arguments": { "command": "npm test" },
+          "result_summary": "All 42 tests passed.",
+          "result_status": "success",
+          "timestamp": "2026-02-21T12:00:01Z",
+          "latency_ms": 150
+        }
+      ],
+      "commands": [
+        {
+          "receipt_id": "rcpt-epv-tool-001",
+          "command": "npm test",
+          "exit_code": 0,
+          "working_directory": "/home/agent/project",
+          "stdout_summary": "Test Suites: 5 passed, 5 total\nTests: 42 passed, 42 total",
+          "timestamp": "2026-02-21T12:00:01Z"
+        }
+      ],
+      "file_operations": [
+        {
+          "receipt_id": "rcpt-epv-se-001",
+          "operation": "write",
+          "path": "src/lib/handler.ts",
+          "size_bytes": 2048,
+          "timestamp": "2026-02-21T12:00:02Z"
+        }
+      ],
+      "llm_interactions": [
+        {
+          "receipt_id": "rcpt-epv-gw-001",
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-20250514",
+          "prompt_summary": "Fix the failing test in handler.ts...",
+          "completion_summary": "I'll update the handler to fix the edge case...",
+          "prompt_tokens": 1500,
+          "completion_tokens": 800,
+          "cost_usd": 0.012,
+          "timestamp": "2026-02-21T12:00:00Z",
+          "latency_ms": 2340
+        }
+      ],
+      "run_summary": {
+        "task_description": "Fix failing tests in handler.ts",
+        "outcome": "success",
+        "duration_ms": 5200,
+        "files_modified": 1,
+        "total_tool_calls": 1,
+        "total_llm_calls": 1,
+        "total_cost_usd": 0.012
+      }
+    }
+  }
+}

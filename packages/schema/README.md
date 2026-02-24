@@ -74,6 +74,8 @@ Shared JSON schemas for Claw Bureau services.
 - `web_receipt.v1.json`
 - `web_receipt_envelope.v1.json`
 - `proof_bundle.v1.json`
+- `proof_bundle.v2.json` (extends v1 with encrypted proof visibility — see `ENCRYPTED_PROOF_VISIBILITY_v1.md`)
+- `encrypted_proof_payload.v1.json` (plaintext structure encrypted inside v2 bundles)
 - `proof_bundle_envelope.v1.json`
 - `event_chain.v1.json`
 - `receipt_binding.v1.json`
@@ -97,3 +99,4 @@ Shared JSON schemas for Claw Bureau services.
 - `log_inclusion_proof_golden.v1.json`
 - `web_receipt_golden.v1.json`
 - `export_bundle_golden.v1.json`
+- `proof_bundle_v2_encrypted.golden.json` (v2 bundle with encrypted payload and two viewer key slots)
