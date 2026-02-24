@@ -32,7 +32,7 @@ function usageText(): string {
     '  clawverify verify commit-sig   --input <path>',
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>]',
     '  clawverify migrate-policy      <v1-policy.json>',
-    '  clawverify init [--dir <path>] [--force]',
+    '  clawverify init [--dir <path>] [--force] [--global]',
     '  clawverify explain <REASON_CODE>',
     '  clawverify version',
     '',
@@ -69,7 +69,7 @@ function hasFlag(args: string[], name: string): boolean {
 type ParsedArgs =
   | { command: 'verify'; kind: CliKind; inputPath: string; configPath?: string; urmPath?: string }
   | { command: 'compliance'; inputPath: string; framework: string; outputPath?: string }
-  | { command: 'init'; targetDir?: string; force: boolean }
+  | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string }
@@ -129,7 +129,8 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   if (argv[0] === 'init') {
     const targetDir = readFlag(argv, '--dir');
     const force = hasFlag(argv, '--force');
-    return { command: 'init', targetDir, force };
+    const global = hasFlag(argv, '--global');
+    return { command: 'init', targetDir, force, global };
   }
 
   if (argv[0] !== 'verify') {
@@ -200,9 +201,10 @@ async function main() {
   }
 
   if (parsed.command === 'init') {
-    const result = runInit({
+    const result = await runInit({
       targetDir: parsed.targetDir,
       force: parsed.force,
+      global: parsed.global,
     });
 
     process.stdout.write(`Initialized .clawsig/ in ${result.dir}\n`);
@@ -213,6 +215,10 @@ async function main() {
     if (result.skipped.length > 0) {
       process.stdout.write(`  Skipped (already exists): ${result.skipped.join(', ')}\n`);
       process.stdout.write('  Use --force to overwrite existing files.\n');
+    }
+
+    if (result.did) {
+      process.stdout.write(`\n  Agent DID: ${result.did}\n`);
     }
 
     process.stdout.write('\nNext steps:\n');
