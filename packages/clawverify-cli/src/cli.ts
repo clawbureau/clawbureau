@@ -19,6 +19,7 @@ import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
+import { rotateIdentity, RotationError } from './identity-rotation.js';
 import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
 
 function nowIso(): string {
@@ -37,6 +38,7 @@ function usageText(): string {
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
+    '  clawsig identity rotate [--dir <path>] [--global] [--json]',
     '  clawverify explain <REASON_CODE> [--json]',
     '  clawverify version [--json]',
     '',
@@ -84,6 +86,7 @@ type ParsedArgs =
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean }
+  | { command: 'identity-rotate'; targetDir?: string; global: boolean }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -136,6 +139,13 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const code = argv[1];
     if (!code) throw new CliUsageError('Usage: clawverify explain <REASON_CODE>');
     return { command: 'explain', code: code.toUpperCase() };
+  }
+
+  if (argv[0] === 'identity' && argv[1] === 'rotate') {
+    const rest = argv.slice(2);
+    const targetDir = readFlag(rest, '--dir');
+    const global = hasFlag(rest, '--global');
+    return { command: 'identity-rotate', targetDir, global };
   }
 
   if (argv[0] === 'init') {
@@ -250,6 +260,44 @@ async function main() {
       }
     } else {
       runMigratePolicy(parsed.inputPath);
+    }
+    return;
+  }
+
+  if (parsed.command === 'identity-rotate') {
+    try {
+      const result = await rotateIdentity({
+        dir: parsed.targetDir,
+        global: parsed.global,
+      });
+
+      if (jsonMode) {
+        printJson({
+          status: 'OK',
+          old_did: result.old_did,
+          new_did: result.new_did,
+          identity_path: result.identity_path,
+          continuity_proof_path: result.continuity_proof_path,
+          continuity_proof: result.continuity_proof,
+        });
+      } else {
+        process.stdout.write('Identity rotated successfully.\n\n');
+        process.stdout.write(`  Old DID: ${result.old_did}\n`);
+        process.stdout.write(`  New DID: ${result.new_did}\n\n`);
+        process.stdout.write(`  Identity:        ${result.identity_path}\n`);
+        process.stdout.write(`  Continuity proof: ${result.continuity_proof_path}\n`);
+      }
+    } catch (err) {
+      process.exitCode = 2;
+      const message = err instanceof Error ? err.message : String(err);
+      if (jsonMode) {
+        printJsonError({
+          code: err instanceof RotationError ? err.code : 'INTERNAL_ERROR',
+          message,
+        });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
     }
     return;
   }
@@ -470,6 +518,9 @@ main().catch((err: unknown) => {
     message = err.message;
   } else if (err instanceof CliConfigError) {
     code = 'CONFIG_ERROR';
+    message = err.message;
+  } else if (err instanceof RotationError) {
+    code = err.code;
     message = err.message;
   } else {
     code = 'INTERNAL_ERROR';
