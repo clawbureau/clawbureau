@@ -23,3 +23,9 @@
   - `docs/specs/clawea/INTEGRATION_MANIFEST_v1.md`
 - Product boundary:
   - `docs/specs/PRODUCT_BOUNDARY_v1.md`
+
+## Agent Skills
+
+- Clawsig CLI skill (for Pi / Claude Code / agent harnesses):
+  - `docs/skills/clawsig/SKILL.md`
+  - Install: `cp docs/skills/clawsig/SKILL.md ~/.pi/agent/skills/clawsig/SKILL.md`
