@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { resolveVerifierConfig, CliConfigError } from './config.js';
 import { CliUsageError } from './errors.js';
 import {
@@ -10,12 +13,13 @@ import {
   verifyProofBundleFromFile,
 } from './verify.js';
 import { runComplianceReport } from './compliance-cmd.js';
-import { hintForReasonCode, explainReasonCode } from './hints.js';
+import { hintForReasonCode, explainReasonCode, explainReasonCodeJson } from './hints.js';
 import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
-import { formatCliVersion } from './version.js';
-import type { CliOutput, CliKind } from './types.js';
+import { CLI_VERSION, formatCliVersion } from './version.js';
+import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
+import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -26,15 +30,19 @@ function usageText(): string {
     'clawverify / clawsig — CLI for the Clawsig Protocol',
     '',
     'Usage:',
-    '  clawsig wrap [--verbose] [--no-publish] [--output <path>] -- <command> [args...]',
-    '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>]',
-    '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>]',
-    '  clawverify verify commit-sig   --input <path>',
-    '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>]',
-    '  clawverify migrate-policy      <v1-policy.json>',
-    '  clawverify init [--dir <path>] [--force] [--global]',
-    '  clawverify explain <REASON_CODE>',
-    '  clawverify version',
+    '  clawsig wrap [--json] [--verbose] [--no-publish] [--output <path>] -- <command> [args...]',
+    '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>] [--json]',
+    '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>] [--json]',
+    '  clawverify verify commit-sig   --input <path> [--json]',
+    '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
+    '  clawverify migrate-policy      <v1-policy.json> [--json]',
+    '  clawverify init [--dir <path>] [--force] [--global] [--json]',
+    '  clawverify explain <REASON_CODE> [--json]',
+    '  clawverify version [--json]',
+    '',
+    'Global flags:',
+    '  --json    Machine-parseable JSON output (no ANSI, no colors)',
+    '            Works in any position before the -- separator.',
     '',
     'Exit codes:',
     '  0 = PASS (valid)',
@@ -43,12 +51,15 @@ function usageText(): string {
     '',
     'Examples:',
     '  clawsig wrap -- python my_agent.py',
+    '  clawsig wrap --json -- node agent.js',
     '  clawsig wrap --output bundle.json -- node agent.js',
     '  clawsig wrap --no-publish -- npx my-agent',
     '  clawverify verify proof-bundle --input bundle.json --config clawverify.config.v1.json',
+    '  clawverify verify proof-bundle --input bundle.json --json',
     '  clawverify compliance bundle.json --framework soc2',
     '  clawverify init',
     '  clawverify explain HASH_MISMATCH',
+    '  clawverify explain HASH_MISMATCH --json',
     '',
     'Docs: https://clawsig.com',
   ].join('\n');
@@ -169,36 +180,160 @@ function output(out: CliOutput): void {
   process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
 }
 
+/** Classify a receipt for the --json receipt_counts summary. */
+function classifyReceiptType(raw: unknown): string {
+  if (!raw || typeof raw !== 'object') return 'unknown';
+  const r = raw as Record<string, unknown>;
+  const envType = r.envelope_type as string | undefined;
+  const rcptType = r.receipt_type as string | undefined;
+  if (envType === 'gateway_receipt' || rcptType?.includes('gateway')) return 'gateway';
+  if (envType === 'tool_receipt' || rcptType?.includes('tool')) return 'tool_call';
+  if (envType === 'side_effect_receipt' || rcptType?.includes('side_effect')) return 'side_effect';
+  if (envType === 'human_approval_receipt' || rcptType?.includes('human_approval')) return 'human_approval';
+  return envType ?? rcptType ?? 'unknown';
+}
+
+/** Derive wrap coverage tier from receipt counts. */
+function determineWrapCoverage(receiptCounts: Record<string, number>): string {
+  if (receiptCounts['gateway']) return 'gateway';
+  return 'self';
+}
+
 async function main() {
-  const parsed = parseCliArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  const jsonMode = isJsonMode(rawArgs);
+  const parsed = parseCliArgs(stripJsonFlag(rawArgs));
 
   if (parsed.command === 'version') {
-    process.stdout.write(`${formatCliVersion()}\n`);
+    if (jsonMode) {
+      printJson({ version: CLI_VERSION, name: 'clawverify' });
+    } else {
+      process.stdout.write(`${formatCliVersion()}\n`);
+    }
     return;
   }
 
   if (parsed.command === 'explain') {
-    process.stdout.write(`${explainReasonCode(parsed.code)}\n`);
+    if (jsonMode) {
+      printJson(explainReasonCodeJson(parsed.code));
+    } else {
+      process.stdout.write(`${explainReasonCode(parsed.code)}\n`);
+    }
     return;
   }
 
   if (parsed.command === 'compliance') {
-    await runComplianceReport(parsed.inputPath, parsed.framework, parsed.outputPath);
+    if (jsonMode) {
+      // Compliance already outputs JSON; suppress any stderr decoration
+      const origStderrWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (() => true) as typeof process.stderr.write;
+      try {
+        await runComplianceReport(parsed.inputPath, parsed.framework, parsed.outputPath);
+      } finally {
+        process.stderr.write = origStderrWrite;
+      }
+    } else {
+      await runComplianceReport(parsed.inputPath, parsed.framework, parsed.outputPath);
+    }
     return;
   }
 
   if (parsed.command === 'migrate-policy') {
-    runMigratePolicy(parsed.inputPath);
+    if (jsonMode) {
+      // migrate-policy already outputs JSON to stdout; suppress stderr messages
+      const origStderrWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (() => true) as typeof process.stderr.write;
+      try {
+        runMigratePolicy(parsed.inputPath);
+      } finally {
+        process.stderr.write = origStderrWrite;
+      }
+    } else {
+      runMigratePolicy(parsed.inputPath);
+    }
     return;
   }
 
   if (parsed.command === 'wrap') {
-    const exitCode = await wrap(parsed.wrapCommand, parsed.wrapArgs, {
-      publish: parsed.publish,
-      outputPath: parsed.outputPath,
-      verbose: parsed.verbose,
-    });
-    process.exitCode = exitCode;
+    if (jsonMode) {
+      // Suppress all human-readable output during wrap
+      const origStdoutWrite = process.stdout.write.bind(process.stdout);
+      const origStderrWrite = process.stderr.write.bind(process.stderr);
+      process.stdout.write = (() => true) as typeof process.stdout.write;
+      process.stderr.write = (() => true) as typeof process.stderr.write;
+
+      const startTime = Date.now();
+      let exitCode: number;
+      try {
+        exitCode = await wrap(parsed.wrapCommand, parsed.wrapArgs, {
+          publish: parsed.publish,
+          outputPath: parsed.outputPath,
+          verbose: parsed.verbose,
+        });
+      } finally {
+        process.stdout.write = origStdoutWrite;
+        process.stderr.write = origStderrWrite;
+      }
+
+      const durationMs = Date.now() - startTime;
+
+      // Read the bundle file to build a structured summary
+      let bundleSummary: Record<string, unknown> = {};
+      try {
+        const bundleFullPath = join(process.cwd(), '.clawsig', 'proof_bundle.json');
+        const bundleRaw = await readFile(bundleFullPath, 'utf-8');
+        const bundle = JSON.parse(bundleRaw) as Record<string, unknown>;
+        const payload = bundle.payload as Record<string, unknown> | undefined;
+
+        const receipts = Array.isArray(payload?.receipts) ? payload.receipts : [];
+        const executionReceipts = Array.isArray(payload?.execution_receipts)
+          ? payload.execution_receipts
+          : [];
+        const networkReceipts = Array.isArray(payload?.network_receipts)
+          ? payload.network_receipts
+          : [];
+
+        const receiptCounts: Record<string, number> = {};
+        for (const r of receipts) {
+          const type = classifyReceiptType(r);
+          receiptCounts[type] = (receiptCounts[type] ?? 0) + 1;
+        }
+        if (executionReceipts.length > 0) {
+          receiptCounts['execution'] = executionReceipts.length;
+        }
+        if (networkReceipts.length > 0) {
+          receiptCounts['network'] = networkReceipts.length;
+        }
+
+        const bundleStat = await stat(bundleFullPath);
+
+        bundleSummary = {
+          agent_did: payload?.agent_did ?? bundle.signer_did ?? null,
+          bundle_path: '.clawsig/proof_bundle.json',
+          bundle_size_bytes: bundleStat.size,
+          coverage: determineWrapCoverage(receiptCounts),
+          receipt_counts: receiptCounts,
+        };
+      } catch {
+        // Bundle file may not exist if wrap failed early
+      }
+
+      printJson({
+        status: exitCode === 0 ? 'PASS' : 'FAIL',
+        exit_code: exitCode,
+        ...bundleSummary,
+        duration_ms: durationMs,
+      });
+
+      process.exitCode = exitCode;
+    } else {
+      const exitCode = await wrap(parsed.wrapCommand, parsed.wrapArgs, {
+        publish: parsed.publish,
+        outputPath: parsed.outputPath,
+        verbose: parsed.verbose,
+      });
+      process.exitCode = exitCode;
+    }
     return;
   }
 
@@ -209,25 +344,40 @@ async function main() {
       global: parsed.global,
     });
 
-    process.stdout.write(`Initialized .clawsig/ in ${result.dir}\n`);
+    if (jsonMode) {
+      const policyCreated = result.created.includes('policy.json');
+      const policyExists = policyCreated || result.skipped.includes('policy.json');
+      printJson({
+        identity_created: false,
+        identity_did: null,
+        identity_path: null,
+        policy_created: policyCreated,
+        policy_path: policyExists ? join(result.dir, 'policy.json') : null,
+        dir: result.dir,
+        created: result.created,
+        skipped: result.skipped,
+      });
+    } else {
+      process.stdout.write(`Initialized .clawsig/ in ${result.dir}\n`);
 
-    if (result.created.length > 0) {
-      process.stdout.write(`  Created: ${result.created.join(', ')}\n`);
-    }
-    if (result.skipped.length > 0) {
-      process.stdout.write(`  Skipped (already exists): ${result.skipped.join(', ')}\n`);
-      process.stdout.write('  Use --force to overwrite existing files.\n');
-    }
+      if (result.created.length > 0) {
+        process.stdout.write(`  Created: ${result.created.join(', ')}\n`);
+      }
+      if (result.skipped.length > 0) {
+        process.stdout.write(`  Skipped (already exists): ${result.skipped.join(', ')}\n`);
+        process.stdout.write('  Use --force to overwrite existing files.\n');
+      }
 
-    if (result.did) {
-      process.stdout.write(`\n  Agent DID: ${result.did}\n`);
-    }
+      if (result.did) {
+        process.stdout.write(`\n  Agent DID: ${result.did}\n`);
+      }
 
-    process.stdout.write('\nNext steps:\n');
-    process.stdout.write('  1. Edit .clawsig/policy.json to configure your policy\n');
-    process.stdout.write('  2. Install the Claw Verified GitHub App\n');
-    process.stdout.write('  3. Have an AI agent open a PR with a proof bundle\n');
-    process.stdout.write('\nDocs: https://clawprotocol.org/github-app\n');
+      process.stdout.write('\nNext steps:\n');
+      process.stdout.write('  1. Edit .clawsig/policy.json to configure your policy\n');
+      process.stdout.write('  2. Install the Claw Verified GitHub App\n');
+      process.stdout.write('  3. Have an AI agent open a PR with a proof bundle\n');
+      process.stdout.write('\nDocs: https://clawprotocol.org/github-app\n');
+    }
     return;
   }
 
@@ -247,43 +397,94 @@ async function main() {
         : await verifyExportBundleFromFile({ inputPath, configPath, config });
 
   out = attachHint(out);
-  output(out);
+
+  if (jsonMode) {
+    if (kind === 'commit_sig') {
+      const v = (out as CliVerifyOutput).verification as
+        | Record<string, unknown>
+        | undefined;
+      printJson({
+        result: out.status,
+        signer_did: v?.signer_did ?? null,
+        commit_sha: v?.commit_sha ?? null,
+        message: v?.message ?? null,
+      });
+    } else if (kind === 'proof_bundle') {
+      let agentDid: string | null = null;
+      let receiptCount = 0;
+      try {
+        const raw = JSON.parse(await readFile(inputPath, 'utf-8')) as Record<
+          string,
+          unknown
+        >;
+        const envelope = (raw.envelope ?? raw) as Record<string, unknown>;
+        const payload = (envelope.payload ?? envelope) as Record<
+          string,
+          unknown
+        >;
+        agentDid =
+          (payload.agent_did as string) ??
+          (envelope.signer_did as string) ??
+          null;
+        receiptCount = Array.isArray(payload.receipts)
+          ? payload.receipts.length
+          : 0;
+      } catch {
+        /* input already validated by verify */
+      }
+
+      printJson({
+        result: out.status,
+        tier: 'gateway',
+        schema_version: 'proof_bundle.v1',
+        agent_did: agentDid,
+        reason_codes: out.status === 'PASS' ? [] : [out.reason_code],
+        receipt_count: receiptCount,
+        warnings: out.hint ? [out.hint] : [],
+      });
+    } else {
+      // export-bundle / aggregate-bundle
+      printJson({
+        result: out.status,
+        schema_version: kind.replace('_', '-') + '.v1',
+        reason_codes: out.status === 'PASS' ? [] : [out.reason_code],
+        warnings: out.hint ? [out.hint] : [],
+      });
+    }
+  } else {
+    output(out);
+  }
+
   process.exitCode = exitCodeForOutput(out);
 }
 
 main().catch((err: unknown) => {
-  const verifiedAt = nowIso();
+  const jsonModeOnError = isJsonMode(process.argv.slice(2));
+  process.exitCode = 2;
+
+  let code: string;
+  let message: string;
 
   if (err instanceof CliUsageError) {
-    output({
-      status: 'ERROR',
-      verified_at: verifiedAt,
-      reason_code: 'USAGE_ERROR',
-      reason: err.message,
-      hint: hintForReasonCode('USAGE_ERROR'),
-    });
-    process.exitCode = 2;
-    return;
+    code = 'USAGE_ERROR';
+    message = err.message;
+  } else if (err instanceof CliConfigError) {
+    code = 'CONFIG_ERROR';
+    message = err.message;
+  } else {
+    code = 'INTERNAL_ERROR';
+    message = err instanceof Error ? err.message : 'unknown error';
   }
 
-  if (err instanceof CliConfigError) {
+  if (jsonModeOnError) {
+    printJsonError({ code, message });
+  } else {
     output({
       status: 'ERROR',
-      verified_at: verifiedAt,
-      reason_code: 'CONFIG_ERROR',
-      reason: err.message,
-      hint: hintForReasonCode('CONFIG_ERROR'),
+      verified_at: nowIso(),
+      reason_code: code,
+      reason: message,
+      hint: hintForReasonCode(code),
     });
-    process.exitCode = 2;
-    return;
   }
-
-  output({
-    status: 'ERROR',
-    verified_at: verifiedAt,
-    reason_code: 'INTERNAL_ERROR',
-    reason: err instanceof Error ? err.message : 'unknown error',
-    hint: hintForReasonCode('INTERNAL_ERROR'),
-  });
-  process.exitCode = 2;
 });

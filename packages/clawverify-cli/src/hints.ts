@@ -270,6 +270,48 @@ export function hintForReasonCode(code: string): string | undefined {
 }
 
 /**
+ * Structured reason-code explanation for --json output.
+ */
+export interface ReasonCodeExplanation {
+  code: string;
+  severity: 'PASS' | 'FAIL' | 'ERROR' | 'UNKNOWN';
+  description: string;
+  remediation: string;
+}
+
+/**
+ * Return a structured explanation object for a reason code.
+ * Used by `clawverify explain <CODE> --json`.
+ */
+export function explainReasonCodeJson(code: string): ReasonCodeExplanation {
+  const hint = HINTS[code];
+
+  let severity: ReasonCodeExplanation['severity'];
+  if (code === 'OK' || code === 'VALID') {
+    severity = 'PASS';
+  } else if (
+    code === 'INTERNAL_ERROR' ||
+    code === 'USAGE_ERROR' ||
+    code === 'CONFIG_ERROR' ||
+    code === 'PARSE_ERROR' ||
+    code === 'CANONICALIZATION_ERROR'
+  ) {
+    severity = 'ERROR';
+  } else if (hint) {
+    severity = 'FAIL';
+  } else {
+    severity = 'UNKNOWN';
+  }
+
+  return {
+    code,
+    severity,
+    description: hint ?? `Unknown reason code: ${code}`,
+    remediation: hint ?? 'See the full reason code registry for details.',
+  };
+}
+
+/**
  * Full explanation: reason code + meaning + hint.
  * Used by `--explain` flag.
  */
