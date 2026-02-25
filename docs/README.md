@@ -27,6 +27,7 @@ This `docs/` folder is the canonical, reviewable documentation for the Claw Bure
 - **Plans (marketing/launch; non-binding):** `docs/plans/README.md`
 - **OpenClaw mirror (upstream reference):** `docs/openclaw/README.md`
 - **Oracle outputs (research inputs, not canonical):** `docs/oracle/README.md`
+- **Agent skills (harness skill files):** `docs/skills/README.md`
 
 ## Core “current truth” docs
 
