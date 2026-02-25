@@ -20,6 +20,8 @@ import { wrap } from './wrap.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
+import { VALID_VISIBILITY_MODES } from './epv-crypto.js';
+import type { VisibilityMode } from './epv-crypto.js';
 import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
 
 function nowIso(): string {
@@ -31,7 +33,9 @@ function usageText(): string {
     'clawverify / clawsig — CLI for the Clawsig Protocol',
     '',
     'Usage:',
-    '  clawsig wrap [--json] [--verbose] [--no-publish] [--output <path>] -- <command> [args...]',
+    '  clawsig wrap [--json] [--verbose] [--no-publish] [--output <path>]',
+    '               [--visibility public|owner|requester|auditor]',
+    '               [--viewer-did <did>]... -- <command> [args...]',
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>] [--json]',
     '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>] [--json]',
     '  clawverify verify commit-sig   --input <path> [--json]',
@@ -79,13 +83,23 @@ function hasFlag(args: string[], name: string): boolean {
   return args.includes(name);
 }
 
+function readAllFlags(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === name && args[i + 1] && !args[i + 1]!.startsWith('--')) {
+      values.push(args[i + 1]!);
+    }
+  }
+  return values;
+}
+
 type ParsedArgs =
   | { command: 'verify'; kind: CliKind; inputPath: string; configPath?: string; urmPath?: string }
   | { command: 'compliance'; inputPath: string; framework: string; outputPath?: string }
   | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
-  | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean }
+  | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
   | { command: 'identity-rotate'; targetDir?: string; global: boolean }
   | { command: 'version' };
 
@@ -113,10 +127,27 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const verboseFlag = flagArgs.includes('--verbose') || flagArgs.includes('-v');
     const outputPath = readFlag(flagArgs, '--output');
 
+    // EPV-002: visibility mode + viewer DIDs
+    const visibilityRaw = readFlag(flagArgs, '--visibility') ?? 'public';
+    if (!VALID_VISIBILITY_MODES.includes(visibilityRaw as VisibilityMode)) {
+      throw new CliUsageError(
+        `Invalid --visibility value: '${visibilityRaw}'. ` +
+        `Allowed values: ${VALID_VISIBILITY_MODES.join(', ')}`,
+      );
+    }
+    const visibility = visibilityRaw as VisibilityMode;
+    const viewerDids = readAllFlags(flagArgs, '--viewer-did');
+
+    if ((visibility === 'requester' || visibility === 'auditor') && viewerDids.length === 0) {
+      throw new CliUsageError(
+        `--visibility=${visibility} requires at least one --viewer-did.`,
+      );
+    }
+
     const wrapCommand = argv[dashDashIdx + 1]!;
     const wrapArgs = argv.slice(dashDashIdx + 2);
 
-    return { command: 'wrap', wrapCommand, wrapArgs, publish, outputPath, verbose: verboseFlag };
+    return { command: 'wrap', wrapCommand, wrapArgs, publish, outputPath, verbose: verboseFlag, visibility, viewerDids };
   }
 
   if (argv[0] === 'compliance') {
@@ -317,6 +348,8 @@ async function main() {
           publish: parsed.publish,
           outputPath: parsed.outputPath,
           verbose: parsed.verbose,
+          visibility: parsed.visibility,
+          viewerDids: parsed.viewerDids,
         });
       } finally {
         process.stdout.write = origStdoutWrite;
@@ -379,6 +412,8 @@ async function main() {
         publish: parsed.publish,
         outputPath: parsed.outputPath,
         verbose: parsed.verbose,
+        visibility: parsed.visibility,
+        viewerDids: parsed.viewerDids,
       });
       process.exitCode = exitCode;
     }

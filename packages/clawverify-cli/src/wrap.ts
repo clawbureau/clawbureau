@@ -32,6 +32,8 @@ import {
   computeBundleSummary,
 } from '@clawbureau/clawsig-sdk';
 import { loadIdentity, identityToAgentDid } from './identity.js';
+import { validateVisibilityArgs, applyVisibility } from './epv-crypto.js';
+import type { VisibilityMode } from './epv-crypto.js';
 import type { BundleSummaryStats } from '@clawbureau/clawsig-sdk';
 import type {
   SignedEnvelope,
@@ -56,6 +58,10 @@ export interface WrapOptions {
   outputPath?: string;
   /** Show full diagnostic output (sentinel status, receipt details). Defaults to false. */
   verbose?: boolean;
+  /** EPV-002: Proof visibility mode. Defaults to 'public'. */
+  visibility?: VisibilityMode;
+  /** EPV-002: Viewer DIDs for non-public visibility modes. */
+  viewerDids?: string[];
 }
 
 interface VaaSResponse {
@@ -235,7 +241,7 @@ export async function wrap(
   args: string[],
   options: WrapOptions,
 ): Promise<number> {
-  const { publish, outputPath, verbose = false } = options;
+  const { publish, outputPath, verbose = false, visibility = 'public', viewerDids = [] } = options;
 
   /** Write diagnostic line to stderr, only in verbose mode. */
   const diag = (msg: string) => {
@@ -259,6 +265,19 @@ export async function wrap(
     process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
   }
   const runId = `run_${crypto.randomUUID()}`;
+
+  // EPV-002: Validate visibility args early (fail-closed before spawning child)
+  let epvMode: ReturnType<typeof validateVisibilityArgs> | null = null;
+  if (visibility !== 'public') {
+    try {
+      epvMode = validateVisibilityArgs(visibility, viewerDids, agentDid.did);
+      diag(`\x1b[36m[clawsig]\x1b[0m Visibility: ${epvMode.mode} (${epvMode.resolvedViewerDids.length} viewer(s))\n`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`\x1b[31m[clawsig]\x1b[0m EPV error: ${msg}\n`);
+      return 2;
+    }
+  }
 
   diag(`\n\x1b[36m[clawsig]\x1b[0m Ephemeral DID: ${agentDid.did}\n`);
   diag(`\x1b[36m[clawsig]\x1b[0m Run ID: ${runId}\n`);
@@ -724,6 +743,24 @@ export async function wrap(
     commandName,
     exitCode,
   });
+
+  // EPV-002: Apply visibility mode transformation (non-public modes only).
+  // Must happen after all payload mutations and before the final seal.
+  if (epvMode && epvMode.mode !== 'public') {
+    try {
+      applyVisibility(
+        bundle.payload as unknown as Record<string, unknown>,
+        epvMode.mode,
+        epvMode.resolvedViewerDids,
+        agentDid.did,
+      );
+      diag(`\x1b[36m[clawsig]\x1b[0m EPV: bundle encrypted for ${epvMode.resolvedViewerDids.length} viewer(s) (visibility=${epvMode.mode})\n`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`\x1b[31m[clawsig]\x1b[0m EPV crypto failure: ${msg}\n`);
+      return 1;
+    }
+  }
 
   // Final seal happens after all payload mutation. This preserves deterministic
   // signature sequencing and avoids post-sign envelope drift.
