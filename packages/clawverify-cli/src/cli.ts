@@ -18,6 +18,7 @@ import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
 import { runWorkInit } from './work-cmd.js';
+import { runWorkList } from './work-list.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
@@ -45,6 +46,7 @@ function usageText(): string {
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
     '  clawsig work init [--marketplace <url>] [--register] [--json]',
+    '  clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]',
     '  clawverify explain <REASON_CODE> [--json]',
     '  clawverify version [--json]',
     '',
@@ -68,6 +70,9 @@ function usageText(): string {
     '  clawverify init',
     '  clawsig work init',
     '  clawsig work init --marketplace https://clawbounties.clawea.workers.dev --register',
+    '  clawsig work list',
+    '  clawsig work list --json --skills typescript,rust --budget-min 100',
+    '  clawsig work list --repo clawbureau/clawsig-sdk',
     '  clawverify explain HASH_MISMATCH',
     '  clawverify explain HASH_MISMATCH --json',
     '',
@@ -102,6 +107,7 @@ type ParsedArgs =
   | { command: 'compliance'; inputPath: string; framework: string; outputPath?: string }
   | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
   | { command: 'work-init'; marketplace?: string; register: boolean }
+  | { command: 'work-list'; marketplace?: string; skills?: string; budgetMin?: number; repo?: string }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
@@ -156,15 +162,28 @@ function parseCliArgs(argv: string[]): ParsedArgs {
   }
 
   if (argv[0] === 'work') {
-    if (argv[1] !== 'init') {
-      throw new CliUsageError(
-        'Usage: clawsig work init [--marketplace <url>] [--register] [--json]\n\n' +
-        'Available work subcommands: init',
-      );
+    if (argv[1] === 'init') {
+      const marketplace = readFlag(argv, '--marketplace');
+      const register = hasFlag(argv, '--register');
+      return { command: 'work-init', marketplace, register };
     }
-    const marketplace = readFlag(argv, '--marketplace');
-    const register = hasFlag(argv, '--register');
-    return { command: 'work-init', marketplace, register };
+
+    if (argv[1] === 'list') {
+      const marketplace = readFlag(argv, '--marketplace');
+      const skills = readFlag(argv, '--skills');
+      const budgetMinRaw = readFlag(argv, '--budget-min');
+      const budgetMin = budgetMinRaw !== undefined ? Number(budgetMinRaw) : undefined;
+      if (budgetMin !== undefined && (isNaN(budgetMin) || budgetMin < 0)) {
+        throw new CliUsageError('--budget-min must be a non-negative number.');
+      }
+      const repo = readFlag(argv, '--repo');
+      return { command: 'work-list', marketplace, skills, budgetMin, repo };
+    }
+
+    throw new CliUsageError(
+      'Usage: clawsig work <subcommand> [options]\n\n' +
+      'Available work subcommands: init, list',
+    );
   }
 
   if (argv[0] === 'compliance') {
@@ -441,6 +460,17 @@ async function main() {
     await runWorkInit({
       marketplace: parsed.marketplace,
       register: parsed.register,
+      json: jsonMode,
+    });
+    return;
+  }
+
+  if (parsed.command === 'work-list') {
+    await runWorkList({
+      marketplace: parsed.marketplace,
+      skills: parsed.skills,
+      budgetMin: parsed.budgetMin,
+      repo: parsed.repo,
       json: jsonMode,
     });
     return;
