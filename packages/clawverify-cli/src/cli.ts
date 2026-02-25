@@ -22,6 +22,7 @@ import { runWorkList } from './work-list.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
+import { runInspect, InspectError } from './inspect-cmd.js';
 import { VALID_VISIBILITY_MODES } from './epv-crypto.js';
 import type { VisibilityMode } from './epv-crypto.js';
 import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
@@ -44,6 +45,7 @@ function usageText(): string {
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
+    '  clawsig inspect --input <bundle.json> [--decrypt] [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
     '  clawsig work init [--marketplace <url>] [--register] [--json]',
     '  clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]',
@@ -73,6 +75,8 @@ function usageText(): string {
     '  clawsig work list',
     '  clawsig work list --json --skills typescript,rust --budget-min 100',
     '  clawsig work list --repo clawbureau/clawsig-sdk',
+    '  clawsig inspect --input bundle.json',
+    '  clawsig inspect --input bundle.json --decrypt --json',
     '  clawverify explain HASH_MISMATCH',
     '  clawverify explain HASH_MISMATCH --json',
     '',
@@ -111,6 +115,7 @@ type ParsedArgs =
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
+  | { command: 'inspect'; inputPath: string; decrypt: boolean }
   | { command: 'identity-rotate'; targetDir?: string; global: boolean }
   | { command: 'version' };
 
@@ -121,6 +126,18 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (argv[0] === 'version' || hasFlag(argv, '--version')) {
     return { command: 'version' };
+  }
+
+  if (argv[0] === 'inspect') {
+    const inputPath = readFlag(argv, '--input');
+    if (!inputPath) {
+      throw new CliUsageError(
+        'Usage: clawsig inspect --input <bundle.json> [--decrypt] [--json]\n\n' +
+        'The --input flag is required.',
+      );
+    }
+    const decrypt = hasFlag(argv, '--decrypt');
+    return { command: 'inspect', inputPath, decrypt };
   }
 
   if (argv[0] === 'wrap') {
@@ -362,6 +379,26 @@ async function main() {
           code: err instanceof RotationError ? err.code : 'INTERNAL_ERROR',
           message,
         });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'inspect') {
+    try {
+      await runInspect({
+        inputPath: parsed.inputPath,
+        decrypt: parsed.decrypt,
+        json: jsonMode,
+      });
+    } catch (err) {
+      process.exitCode = 1;
+      const message = err instanceof Error ? err.message : String(err);
+      const code = err instanceof InspectError ? err.code : 'INTERNAL_ERROR';
+      if (jsonMode) {
+        printJsonError({ code, message });
       } else {
         process.stderr.write(`Error: ${message}\n`);
       }
@@ -611,6 +648,9 @@ main().catch((err: unknown) => {
     code = 'CONFIG_ERROR';
     message = err.message;
   } else if (err instanceof RotationError) {
+    code = err.code;
+    message = err.message;
+  } else if (err instanceof InspectError) {
     code = err.code;
     message = err.message;
   } else {

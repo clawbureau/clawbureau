@@ -81,7 +81,7 @@ const SENSITIVE_PAYLOAD_FIELDS = [
 // Base64url helpers
 // ---------------------------------------------------------------------------
 
-function toBase64Url(bytes: Uint8Array | Buffer): string {
+export function toBase64Url(bytes: Uint8Array | Buffer): string {
   return Buffer.from(bytes)
     .toString('base64')
     .replace(/\+/g, '-')
@@ -89,7 +89,7 @@ function toBase64Url(bytes: Uint8Array | Buffer): string {
     .replace(/=+$/g, '');
 }
 
-function fromBase64Url(str: string): Buffer {
+export function fromBase64Url(str: string): Buffer {
   let padded = str.replace(/-/g, '+').replace(/_/g, '/');
   const pad = padded.length % 4;
   if (pad === 2) padded += '==';
@@ -475,4 +475,164 @@ export function applyVisibility(
     // Best-effort key zeroization
     contentKey.fill(0);
   }
+}
+
+// ---------------------------------------------------------------------------
+// EPV-003: Decryption primitives (inspect --decrypt)
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a 32-byte Ed25519 private key seed to a 32-byte X25519 private key.
+ *
+ * Follows RFC 8032 / RFC 7748:
+ *   1. SHA-512(seed) -> 64 bytes
+ *   2. Take first 32 bytes
+ *   3. Clamp: bytes[0] &= 248, bytes[31] &= 127, bytes[31] |= 64
+ *
+ * @throws Error on invalid seed length.
+ */
+export function ed25519SeedToX25519Private(seed: Uint8Array): Uint8Array {
+  if (seed.length !== 32) {
+    throw new Error(
+      `Invalid Ed25519 seed length: ${seed.length}, expected 32`,
+    );
+  }
+
+  const hash = crypto.createHash('sha512').update(seed).digest();
+  const scalar = new Uint8Array(hash.buffer, hash.byteOffset, 32);
+
+  // Clamp per RFC 7748 section 5
+  scalar[0]! &= 248;
+  scalar[31]! &= 127;
+  scalar[31]! |= 64;
+
+  return scalar;
+}
+
+/**
+ * Create an X25519 private key (crypto.KeyObject) from Ed25519 JWK keypair.
+ *
+ * Uses ed25519SeedToX25519Private for the private scalar and
+ * ed25519PublicKeyToX25519 for the public point, then imports as X25519 JWK.
+ *
+ * @throws Error on invalid JWK fields or conversion failure.
+ */
+export function createX25519PrivateKeyFromEd25519Jwk(
+  ed25519PrivateJwk: JsonWebKey,
+  ed25519PublicJwk: JsonWebKey,
+): crypto.KeyObject {
+  const seedField = ed25519PrivateJwk.d;
+  const pubField = ed25519PublicJwk.x;
+
+  if (!seedField || typeof seedField !== 'string') {
+    throw new Error('Ed25519 JWK missing private key field (d)');
+  }
+  if (!pubField || typeof pubField !== 'string') {
+    throw new Error('Ed25519 JWK missing public key field (x)');
+  }
+
+  const seed = fromBase64Url(seedField);
+  const ed25519PubRaw = fromBase64Url(pubField);
+
+  const x25519Private = ed25519SeedToX25519Private(seed);
+  const x25519Public = ed25519PublicKeyToX25519(ed25519PubRaw);
+
+  const x25519Jwk = {
+    kty: 'OKP' as const,
+    crv: 'X25519' as const,
+    d: toBase64Url(x25519Private),
+    x: toBase64Url(x25519Public),
+  };
+
+  return crypto.createPrivateKey({ key: x25519Jwk, format: 'jwk' });
+}
+
+/**
+ * Unwrap an AES-256 content key from a ViewerKeyEntry using the viewer's
+ * X25519 private key.
+ *
+ * Reverses wrapKeyForViewer:
+ *   1. Import ephemeral public key from entry
+ *   2. ECDH(viewer_private, ephemeral_public) -> shared secret
+ *   3. HKDF-SHA256(shared_secret, salt, info) -> wrapping key
+ *   4. AES-256-GCM decrypt(wrapping_key, wrapped_key) -> content key
+ *
+ * @throws Error on any crypto failure (fail-closed).
+ */
+export function unwrapContentKey(
+  viewerX25519PrivateKey: crypto.KeyObject,
+  entry: ViewerKeyEntry,
+): Buffer {
+  // Import ephemeral public key from raw bytes via JWK
+  const ephemeralPubRaw = fromBase64Url(entry.ephemeral_public_key_b64u);
+  const ephemeralPubJwk = {
+    kty: 'OKP' as const,
+    crv: 'X25519' as const,
+    x: toBase64Url(ephemeralPubRaw),
+  };
+  const ephemeralPublicKey = crypto.createPublicKey({ key: ephemeralPubJwk, format: 'jwk' });
+
+  // X25519 ECDH -> shared secret
+  const sharedSecret = crypto.diffieHellman({
+    privateKey: viewerX25519PrivateKey,
+    publicKey: ephemeralPublicKey,
+  });
+
+  // HKDF-SHA256 -> wrapping key
+  const wrappingKey = Buffer.from(
+    crypto.hkdfSync('sha256', sharedSecret, HKDF_SALT, HKDF_INFO, 32),
+  );
+
+  // AES-256-GCM decrypt the wrapped content key
+  const wrappedKey = fromBase64Url(entry.wrapped_key_b64u);
+  const wrappedKeyIv = fromBase64Url(entry.wrapped_key_iv_b64u);
+  const wrappedKeyTag = fromBase64Url(entry.wrapped_key_tag_b64u);
+
+  const decipher = crypto.createDecipheriv('aes-256-gcm', wrappingKey, wrappedKeyIv);
+  decipher.setAuthTag(wrappedKeyTag);
+  const contentKey = Buffer.concat([decipher.update(wrappedKey), decipher.final()]);
+
+  return contentKey;
+}
+
+/**
+ * Decrypt an encrypted payload and verify plaintext integrity.
+ *
+ * 1. AES-256-GCM decrypt(content_key, ciphertext) -> plaintext
+ * 2. SHA-256(plaintext) == plaintext_hash -> integrity verified
+ * 3. JSON.parse(plaintext) -> sensitive fields object
+ *
+ * Fail-closed: throws on any decryption, integrity, or parse failure.
+ *
+ * @throws Error on AES-GCM failure, hash mismatch, or invalid JSON.
+ */
+export function decryptAndVerifyPayload(
+  contentKey: Buffer,
+  encryptedPayload: EncryptedPayloadFields,
+): Record<string, unknown> {
+  const ciphertext = fromBase64Url(encryptedPayload.ciphertext_b64u);
+  const iv = fromBase64Url(encryptedPayload.iv_b64u);
+  const tag = fromBase64Url(encryptedPayload.tag_b64u);
+  const expectedHash = fromBase64Url(encryptedPayload.plaintext_hash_b64u);
+
+  // AES-256-GCM decrypt
+  const decipher = crypto.createDecipheriv('aes-256-gcm', contentKey, iv);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+
+  // Verify integrity: SHA-256(plaintext) must match stored hash
+  const actualHash = crypto.createHash('sha256').update(plaintext).digest();
+  if (!actualHash.equals(expectedHash)) {
+    throw new Error(
+      'Plaintext integrity check failed: SHA-256 hash mismatch after decryption',
+    );
+  }
+
+  // Parse JSON
+  const parsed = JSON.parse(plaintext.toString('utf-8'));
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Decrypted payload is not a valid JSON object');
+  }
+
+  return parsed as Record<string, unknown>;
 }
