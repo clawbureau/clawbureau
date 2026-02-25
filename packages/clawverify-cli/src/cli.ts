@@ -17,6 +17,7 @@ import { hintForReasonCode, explainReasonCode, explainReasonCodeJson } from './h
 import { runInit } from './init.js';
 import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
+import { runWorkInit } from './work-cmd.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
@@ -39,6 +40,7 @@ function usageText(): string {
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
+    '  clawsig work init [--marketplace <url>] [--register] [--json]',
     '  clawverify explain <REASON_CODE> [--json]',
     '  clawverify version [--json]',
     '',
@@ -60,6 +62,8 @@ function usageText(): string {
     '  clawverify verify proof-bundle --input bundle.json --json',
     '  clawverify compliance bundle.json --framework soc2',
     '  clawverify init',
+    '  clawsig work init',
+    '  clawsig work init --marketplace https://clawbounties.clawea.workers.dev --register',
     '  clawverify explain HASH_MISMATCH',
     '  clawverify explain HASH_MISMATCH --json',
     '',
@@ -83,6 +87,7 @@ type ParsedArgs =
   | { command: 'verify'; kind: CliKind; inputPath: string; configPath?: string; urmPath?: string }
   | { command: 'compliance'; inputPath: string; framework: string; outputPath?: string }
   | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
+  | { command: 'work-init'; marketplace?: string; register: boolean }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean }
@@ -117,6 +122,18 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     const wrapArgs = argv.slice(dashDashIdx + 2);
 
     return { command: 'wrap', wrapCommand, wrapArgs, publish, outputPath, verbose: verboseFlag };
+  }
+
+  if (argv[0] === 'work') {
+    if (argv[1] !== 'init') {
+      throw new CliUsageError(
+        'Usage: clawsig work init [--marketplace <url>] [--register] [--json]\n\n' +
+        'Available work subcommands: init',
+      );
+    }
+    const marketplace = readFlag(argv, '--marketplace');
+    const register = hasFlag(argv, '--register');
+    return { command: 'work-init', marketplace, register };
   }
 
   if (argv[0] === 'compliance') {
@@ -382,6 +399,15 @@ async function main() {
       });
       process.exitCode = exitCode;
     }
+    return;
+  }
+
+  if (parsed.command === 'work-init') {
+    await runWorkInit({
+      marketplace: parsed.marketplace,
+      register: parsed.register,
+      json: jsonMode,
+    });
     return;
   }
 

@@ -6,5 +6,11 @@ export { generateIdentity, loadIdentity, identityToAgentDid, defaultIdentityPath
 export { wrap } from './wrap.js';
 export type { InitOptions, InitResult } from './init.js';
 export type { ClawsigIdentity } from './identity.js';
+export { runWorkInit } from './work-cmd.js';
+export { loadWorkConfig, saveWorkConfig, workConfigPath, workConfigExists, DEFAULT_MARKETPLACE_URL } from './work-config.js';
+export { registerWorker } from './work-api.js';
+export type { WorkInitOptions, WorkInitResult } from './work-cmd.js';
+export type { WorkConfig, WorkerRegistration } from './work-config.js';
+export type { RegisterWorkerRequest, RegisterWorkerResult } from './work-api.js';
 export type { WrapOptions } from './wrap.js';
 export type { CliOutput, CliVerifyOutput, ClawverifyConfigV1, ResolvedVerifierConfig } from './types.js';
