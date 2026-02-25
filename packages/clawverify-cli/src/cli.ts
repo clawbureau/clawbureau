@@ -20,6 +20,7 @@ import { wrap } from './wrap.js';
 import { runWorkInit } from './work-cmd.js';
 import { runWorkList } from './work-list.js';
 import { runWorkClaim } from './work-claim.js';
+import { runWorkSubmit } from './work-submit.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
@@ -51,6 +52,7 @@ function usageText(): string {
     '  clawsig work init [--marketplace <url>] [--register] [--json]',
     '  clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]',
     '  clawsig work claim --bounty <bty_id> [--idempotency-key <key>] [--cwc-worker-envelope <path>] [--marketplace <url>] [--json]',
+    '  clawsig work submit --proof-bundle <path> [--bounty <bty_id>] [--commit-proof <path>] [--urm <path>] [--idempotency-key <key>] [--marketplace <url>] [--json]',
     '  clawverify explain <REASON_CODE> [--json]',
     '  clawverify version [--json]',
     '',
@@ -79,6 +81,8 @@ function usageText(): string {
     '  clawsig work list --repo clawbureau/clawsig-sdk',
     '  clawsig work claim --bounty bty_1234abcd',
     '  clawsig work claim --bounty bty_1234abcd --cwc-worker-envelope ./cwc-worker-envelope.json',
+    '  clawsig work submit --proof-bundle .clawsig/proof_bundle.json',
+    '  clawsig work submit --bounty bty_1234abcd --proof-bundle .clawsig/proof_bundle.json --commit-proof proofs/commit.sig.json',
     '  clawsig inspect --input bundle.json',
     '  clawsig inspect --input bundle.json --decrypt --json',
     '  clawverify explain HASH_MISMATCH',
@@ -117,6 +121,7 @@ type ParsedArgs =
   | { command: 'work-init'; marketplace?: string; register: boolean }
   | { command: 'work-list'; marketplace?: string; skills?: string; budgetMin?: number; repo?: string }
   | { command: 'work-claim'; bountyId: string; marketplace?: string; idempotencyKey?: string; cwcWorkerEnvelopePath?: string }
+  | { command: 'work-submit'; proofBundlePath: string; bountyId?: string; commitProofPath?: string; urmPath?: string; idempotencyKey?: string; marketplace?: string; resultSummary?: string }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
@@ -216,9 +221,37 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       return { command: 'work-claim', bountyId, marketplace, idempotencyKey, cwcWorkerEnvelopePath };
     }
 
+    if (argv[1] === 'submit') {
+      const proofBundlePath = readFlag(argv, '--proof-bundle');
+      if (!proofBundlePath) {
+        throw new CliUsageError(
+          'Usage: clawsig work submit --proof-bundle <path> [--bounty <bty_id>] [--commit-proof <path>] [--urm <path>] [--idempotency-key <key>] [--marketplace <url>] [--json]\n\n' +
+          'The --proof-bundle flag is required.',
+        );
+      }
+
+      const bountyId = readFlag(argv, '--bounty');
+      const commitProofPath = readFlag(argv, '--commit-proof');
+      const urmPath = readFlag(argv, '--urm');
+      const idempotencyKey = readFlag(argv, '--idempotency-key');
+      const marketplace = readFlag(argv, '--marketplace');
+      const resultSummary = readFlag(argv, '--result-summary');
+
+      return {
+        command: 'work-submit',
+        proofBundlePath,
+        bountyId,
+        commitProofPath,
+        urmPath,
+        idempotencyKey,
+        marketplace,
+        resultSummary,
+      };
+    }
+
     throw new CliUsageError(
       'Usage: clawsig work <subcommand> [options]\n\n' +
-      'Available work subcommands: init, list, claim',
+      'Available work subcommands: init, list, claim, submit',
     );
   }
 
@@ -538,6 +571,20 @@ async function main() {
       marketplace: parsed.marketplace,
       idempotencyKey: parsed.idempotencyKey,
       cwcWorkerEnvelopePath: parsed.cwcWorkerEnvelopePath,
+      json: jsonMode,
+    });
+    return;
+  }
+
+  if (parsed.command === 'work-submit') {
+    await runWorkSubmit({
+      proofBundlePath: parsed.proofBundlePath,
+      bountyId: parsed.bountyId,
+      commitProofPath: parsed.commitProofPath,
+      urmPath: parsed.urmPath,
+      idempotencyKey: parsed.idempotencyKey,
+      marketplace: parsed.marketplace,
+      resultSummary: parsed.resultSummary,
       json: jsonMode,
     });
     return;

@@ -64,6 +64,48 @@ export type AcceptBountyResult =
   | { ok: true; claim: AcceptBountyResponse }
   | { ok: false; code: string; message: string; details?: unknown };
 
+export interface SubmitBountyRequest {
+  workerDid: string;
+  authToken: string;
+  proofBundleEnvelope: Record<string, unknown>;
+  idempotencyKey?: string;
+  urm?: Record<string, unknown>;
+  commitProofEnvelope?: Record<string, unknown>;
+  artifacts?: unknown[];
+  agentPack?: Record<string, unknown>;
+  resultSummary?: string;
+  trustPulse?: Record<string, unknown>;
+  executionAttestations?: Record<string, unknown>[];
+}
+
+export interface SubmitBountyResponse {
+  submission_id: string;
+  bounty_id: string;
+  status: string;
+  verification?: {
+    proof_bundle?: {
+      status?: string;
+      reason?: string;
+      verified_at?: string;
+      tier?: string | null;
+      [key: string]: unknown;
+    };
+    commit_proof?: {
+      status?: string;
+      reason?: string;
+      verified_at?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  next_actions?: string[];
+  [key: string]: unknown;
+}
+
+export type SubmitBountyResult =
+  | { ok: true; submission: SubmitBountyResponse }
+  | { ok: false; code: string; message: string; details?: unknown };
+
 // ---------------------------------------------------------------------------
 // Internal: pluggable fetch for testability
 // ---------------------------------------------------------------------------
@@ -374,6 +416,99 @@ export async function acceptBounty(
       ok: false,
       code: 'CLAIM_PARSE_ERROR',
       message: 'Could not parse claim response as JSON',
+    };
+  }
+}
+
+/**
+ * Submit completed bounty work.
+ *
+ * POST {marketplaceUrl}/v1/bounties/{bounty_id}/submit
+ * Authorization: Bearer <worker token>
+ */
+export async function submitBounty(
+  marketplaceUrl: string,
+  bountyId: string,
+  request: SubmitBountyRequest,
+): Promise<SubmitBountyResult> {
+  const url = `${marketplaceUrl.replace(/\/+$/, '')}/v1/bounties/${encodeURIComponent(bountyId)}/submit`;
+
+  const body: Record<string, unknown> = {
+    worker_did: request.workerDid,
+    proof_bundle_envelope: request.proofBundleEnvelope,
+  };
+
+  if (request.idempotencyKey) body.idempotency_key = request.idempotencyKey;
+  if (request.urm) body.urm = request.urm;
+  if (request.commitProofEnvelope) body.commit_proof_envelope = request.commitProofEnvelope;
+  if (request.artifacts) body.artifacts = request.artifacts;
+  if (request.agentPack) body.agent_pack = request.agentPack;
+  if (request.resultSummary) body.result_summary = request.resultSummary;
+  if (request.trustPulse) body.trust_pulse = request.trustPulse;
+  if (request.executionAttestations) body.execution_attestations = request.executionAttestations;
+
+  let response: Response;
+  try {
+    response = await _fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${request.authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'NETWORK_ERROR',
+      message: err instanceof Error ? err.message : 'fetch failed',
+    };
+  }
+
+  if (!response.ok) {
+    const parsed = await parseApiError(response, 'SUBMIT_FAILED');
+    return {
+      ok: false,
+      code: parsed.code,
+      message: parsed.message,
+      ...(parsed.details !== undefined ? { details: parsed.details } : {}),
+    };
+  }
+
+  try {
+    const bodyRaw = (await response.json()) as Record<string, unknown>;
+    const submission: SubmitBountyResponse = {
+      submission_id: typeof bodyRaw.submission_id === 'string' ? bodyRaw.submission_id : '',
+      bounty_id: typeof bodyRaw.bounty_id === 'string' ? bodyRaw.bounty_id : bountyId,
+      status: typeof bodyRaw.status === 'string' ? bodyRaw.status : 'pending_review',
+    };
+
+    if (toRecord(bodyRaw.verification)) {
+      submission.verification = bodyRaw.verification as SubmitBountyResponse['verification'];
+    }
+
+    if (Array.isArray(bodyRaw.next_actions)) {
+      const nextActions = bodyRaw.next_actions
+        .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+        .map((v) => v.trim());
+      if (nextActions.length > 0) {
+        submission.next_actions = nextActions;
+      }
+    }
+
+    for (const [k, v] of Object.entries(bodyRaw)) {
+      if (!(k in submission)) {
+        submission[k] = v;
+      }
+    }
+
+    return { ok: true, submission };
+  } catch {
+    return {
+      ok: false,
+      code: 'SUBMIT_PARSE_ERROR',
+      message: 'Could not parse submit response as JSON',
     };
   }
 }
