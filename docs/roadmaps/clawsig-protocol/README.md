@@ -38,6 +38,10 @@ To become **the protocol** (lowest friction + highest trust), Claw needs:
 - Stories: `docs/roadmaps/clawsig-protocol/prd.json`
 - Progress log: `docs/roadmaps/clawsig-protocol/progress.txt`
 
+## Product boundary
+
+- `docs/specs/PRODUCT_BOUNDARY_v1.md` — defines the boundary between Clawsig (this protocol) and Clawbounties (marketplace). Endpoint ownership, shared-concept governance, and the optional-proof composition contract.
+
 ## Guiding constraints
 
 - **Fail-closed** by default in verification/auth.
