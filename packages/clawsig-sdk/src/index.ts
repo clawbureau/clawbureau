@@ -107,6 +107,16 @@ export type { FsEvent, FsSentinelOptions } from './fs-sentinel.js';
 export type { CommandAnalysis } from './command-analyzer.js';
 export type { NetEvent, NetSentinelOptions } from './net-sentinel.js';
 
+// Receipt noise filtering
+export {
+  isNoiseExecutionReceipt,
+  isNoiseNetworkReceipt,
+  filterExecutionReceipts,
+  filterNetworkReceipts,
+  computeBundleSummary,
+} from './receipt-filter.js';
+export type { BundleSummaryStats } from './receipt-filter.js';
+
 // Interpose State (graph attribution oracle from C library)
 export { InterposeState } from './interpose-state.js';
 export type {
