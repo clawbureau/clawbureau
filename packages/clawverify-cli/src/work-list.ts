@@ -9,6 +9,7 @@ import { loadIdentity } from './identity.js';
 import {
   DEFAULT_MARKETPLACE_URL,
   loadWorkConfig,
+  resolveWorkerAuthToken,
 } from './work-config.js';
 import { listBounties } from './work-api.js';
 import type { Bounty } from './work-api.js';
@@ -146,6 +147,7 @@ export async function runWorkList(options: WorkListOptions = {}): Promise<WorkLi
   // 1. Resolve marketplace URL: flag > work config > default.
   let marketplaceUrl = options.marketplace;
   let workerDid: string | null = null;
+  let authToken: string | null = null;
 
   // Best-effort: read work config for marketplace + DID context.
   const workConfig = await loadWorkConfig(options.projectDir);
@@ -154,6 +156,7 @@ export async function runWorkList(options: WorkListOptions = {}): Promise<WorkLi
       marketplaceUrl = workConfig.marketplaceUrl;
     }
     workerDid = workConfig.workerDid;
+    authToken = resolveWorkerAuthToken(workConfig);
   }
 
   // If still no marketplace, try identity for DID context, then use default.
@@ -167,7 +170,7 @@ export async function runWorkList(options: WorkListOptions = {}): Promise<WorkLi
   marketplaceUrl = marketplaceUrl ?? DEFAULT_MARKETPLACE_URL;
 
   // 2. Fetch bounties.
-  const result = await listBounties(marketplaceUrl, workerDid ?? undefined);
+  const result = await listBounties(marketplaceUrl, workerDid ?? undefined, authToken ?? undefined);
 
   if (!result.ok) {
     const errResult: WorkListResult = {

@@ -319,6 +319,43 @@ describe('runWorkList: success', () => {
     }
   });
 
+  it('sends Authorization header when worker auth token exists in work config', async () => {
+    const identityPath = join(tmpDir, '.clawsig', 'identity.jwk.json');
+    const identity = await generateIdentity(identityPath);
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: DEFAULT_MARKETPLACE_URL,
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-1',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: {
+          mode: 'token',
+          token: 'tok_xyz',
+        },
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    let capturedHeaders: Record<string, string> = {};
+    const restore = __setFetch(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedHeaders = (init?.headers ?? {}) as Record<string, string>;
+      return new Response(JSON.stringify({ bounties: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    try {
+      await quietAsync(() => runWorkList({ projectDir: tmpDir }));
+      expect(capturedHeaders.Authorization).toBe('Bearer tok_xyz');
+    } finally {
+      restore();
+    }
+  });
+
   it('works without prior work init (best effort)', async () => {
     // No identity, no work config — should still hit default marketplace.
     let requestedUrl = '';
