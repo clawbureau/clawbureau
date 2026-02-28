@@ -19,6 +19,7 @@ import { runMigratePolicy } from './migrate-policy.js';
 import { wrap } from './wrap.js';
 import { runWorkInit } from './work-cmd.js';
 import { runWorkList } from './work-list.js';
+import { runWorkClaim } from './work-claim.js';
 import { CLI_VERSION, formatCliVersion } from './version.js';
 import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-output.js';
 import { rotateIdentity, RotationError } from './identity-rotation.js';
@@ -49,6 +50,7 @@ function usageText(): string {
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
     '  clawsig work init [--marketplace <url>] [--register] [--json]',
     '  clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]',
+    '  clawsig work claim --bounty <bty_id> [--idempotency-key <key>] [--cwc-worker-envelope <path>] [--marketplace <url>] [--json]',
     '  clawverify explain <REASON_CODE> [--json]',
     '  clawverify version [--json]',
     '',
@@ -75,6 +77,8 @@ function usageText(): string {
     '  clawsig work list',
     '  clawsig work list --json --skills typescript,rust --budget-min 100',
     '  clawsig work list --repo clawbureau/clawsig-sdk',
+    '  clawsig work claim --bounty bty_1234abcd',
+    '  clawsig work claim --bounty bty_1234abcd --cwc-worker-envelope ./cwc-worker-envelope.json',
     '  clawsig inspect --input bundle.json',
     '  clawsig inspect --input bundle.json --decrypt --json',
     '  clawverify explain HASH_MISMATCH',
@@ -112,6 +116,7 @@ type ParsedArgs =
   | { command: 'init'; targetDir?: string; force: boolean; global: boolean }
   | { command: 'work-init'; marketplace?: string; register: boolean }
   | { command: 'work-list'; marketplace?: string; skills?: string; budgetMin?: number; repo?: string }
+  | { command: 'work-claim'; bountyId: string; marketplace?: string; idempotencyKey?: string; cwcWorkerEnvelopePath?: string }
   | { command: 'explain'; code: string }
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
@@ -197,9 +202,23 @@ function parseCliArgs(argv: string[]): ParsedArgs {
       return { command: 'work-list', marketplace, skills, budgetMin, repo };
     }
 
+    if (argv[1] === 'claim') {
+      const bountyId = readFlag(argv, '--bounty');
+      if (!bountyId) {
+        throw new CliUsageError(
+          'Usage: clawsig work claim --bounty <bty_id> [--idempotency-key <key>] [--cwc-worker-envelope <path>] [--marketplace <url>] [--json]\n\n' +
+          'The --bounty flag is required.',
+        );
+      }
+      const marketplace = readFlag(argv, '--marketplace');
+      const idempotencyKey = readFlag(argv, '--idempotency-key');
+      const cwcWorkerEnvelopePath = readFlag(argv, '--cwc-worker-envelope');
+      return { command: 'work-claim', bountyId, marketplace, idempotencyKey, cwcWorkerEnvelopePath };
+    }
+
     throw new CliUsageError(
       'Usage: clawsig work <subcommand> [options]\n\n' +
-      'Available work subcommands: init, list',
+      'Available work subcommands: init, list, claim',
     );
   }
 
@@ -508,6 +527,17 @@ async function main() {
       skills: parsed.skills,
       budgetMin: parsed.budgetMin,
       repo: parsed.repo,
+      json: jsonMode,
+    });
+    return;
+  }
+
+  if (parsed.command === 'work-claim') {
+    await runWorkClaim({
+      bountyId: parsed.bountyId,
+      marketplace: parsed.marketplace,
+      idempotencyKey: parsed.idempotencyKey,
+      cwcWorkerEnvelopePath: parsed.cwcWorkerEnvelopePath,
       json: jsonMode,
     });
     return;
