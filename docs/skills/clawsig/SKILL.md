@@ -381,35 +381,57 @@ clawverify version --json
 
 ---
 
-## 8. Work Commands (planned — not yet shipped)
+## 8. Work Commands (implemented)
 
-The following work-lifecycle commands are planned but **not yet implemented** in the CLI. Do not attempt to run them. They are documented here for forward planning only.
+Work-lifecycle commands are now shipped in the CLI.
 
-| Planned command | Intent | Status |
-|-----------------|--------|--------|
-| `clawsig work init` | Initialize a work session with DID + scope binding | Not implemented |
-| `clawsig work register` | Register agent availability for a task/bounty | Not implemented |
-| `clawsig work list` | List available work items from marketplace | Not implemented |
-| `clawsig work claim` | Claim a work item with DID-signed commitment | Not implemented |
-| `clawsig work submit` | Submit completed work with proof bundle attachment | Not implemented |
+| Command | Intent | Status |
+|---------|--------|--------|
+| `clawsig work init` | Initialize local work config and optional marketplace registration | Implemented |
+| `clawsig work list` | List available work items from marketplace with local filters | Implemented |
+| `clawsig work claim` | Claim a work item and persist active bounty context | Implemented |
+| `clawsig work submit` | Submit completed work with proof bundle binding and next actions | Implemented |
 
-### Safe fallback for work-lifecycle tasks
-
-Until `work` subcommands ship, use this equivalent workflow:
+There is no separate `clawsig work register` command; registration is handled by:
 
 ```bash
-# 1. Ensure identity exists
+clawsig work init --register --json
+```
+
+### Typical work loop
+
+```bash
+# 1. Ensure persistent identity
 clawsig init --json
 
-# 2. Wrap the agent run (produces proof bundle)
-clawsig wrap --json --output proof_bundle.json -- <agent-command>
+# 2. Initialize work config + register worker token
+clawsig work init --register --json
 
-# 3. Verify the bundle offline
-clawverify verify proof-bundle --input proof_bundle.json --json
+# 3. Find work
+clawsig work list --json --skills typescript,rust --budget-min 100
 
-# 4. Attach bundle to PR / submit manually
-#    (proof_bundle.json is the deliverable)
+# 4. Claim a bounty (stores active context in .clawsig/work.json)
+clawsig work claim --bounty bty_... --json
+
+# 5. Run agent + produce proof bundle
+clawsig wrap --output .clawsig/proof_bundle.json -- <agent-command>
+
+# 6. Submit using active context (or pass --bounty explicitly)
+clawsig work submit --proof-bundle .clawsig/proof_bundle.json --json
 ```
+
+### JSON output highlights
+
+`work claim --json` returns fields including:
+- `status`, `marketplace`, `worker_did`, `bounty_id`, `idempotency_key`
+- `claim` (marketplace accept response)
+- `active_bounty` (persisted local context)
+- `next_actions[]`
+
+`work submit --json` returns fields including:
+- `status`, `marketplace`, `worker_did`, `bounty_id`, `idempotency_key`
+- `submission` (marketplace submit response)
+- `next_actions[]` (server-provided when available, with deterministic fallbacks)
 
 ---
 
@@ -452,7 +474,13 @@ The clawsig CLI follows fail-closed design:
 
 ```
 clawsig init [--global] [--force] [--dir <path>] [--json]
+clawsig identity rotate [--dir <path>] [--global] [--json]
 clawsig wrap [--json] [--verbose] [--no-publish] [--output <path>] -- <command> [args...]
+clawsig inspect --input <bundle.json> [--decrypt] [--json]
+clawsig work init [--marketplace <url>] [--register] [--json]
+clawsig work list [--json] [--skills <csv>] [--budget-min <n>] [--repo <owner/repo>] [--marketplace <url>]
+clawsig work claim --bounty <bty_id> [--idempotency-key <key>] [--cwc-worker-envelope <path>] [--marketplace <url>] [--json]
+clawsig work submit --proof-bundle <path> [--bounty <bty_id>] [--commit-proof <path>] [--urm <path>] [--idempotency-key <key>] [--marketplace <url>] [--json]
 clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>] [--json]
 clawverify verify export-bundle --input <path> [--config <path>] [--json]
 clawverify verify aggregate-bundle --input <path> [--config <path>] [--json]
