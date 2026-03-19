@@ -30,6 +30,7 @@ import { runInspect, InspectError } from './inspect-cmd.js';
 import { addFleetAgent, listFleetAgents, revokeFleetAgent, FleetError } from './fleet.js';
 import { linkGithubIdentity, showGithubIdentity, GithubBindingError } from './identity-github.js';
 import { VALID_VISIBILITY_MODES } from './epv-crypto.js';
+import { signCommitProofEnvelopeForCurrentIdentity } from './commit-proof.js';
 import type { VisibilityMode } from './epv-crypto.js';
 import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
 
@@ -48,6 +49,7 @@ function usageText(): string {
     '  clawverify verify proof-bundle --input <path> [--urm <path>] [--config <path>] [--json]',
     '  clawverify verify export-bundle|aggregate-bundle --input <path> [--config <path>] [--json]',
     '  clawverify verify commit-sig   --input <path> [--json]',
+    '  clawsig sign-commit <sha> [--json]',
     '  clawverify compliance <bundle.json> [--framework soc2|iso27001|eu-ai-act] [--output <file>] [--json]',
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
@@ -104,6 +106,7 @@ function usageText(): string {
     '  clawsig inspect --input bundle.json --decrypt --json',
     '  clawsig identity show --json',
     '  clawsig identity link-github --github octocat --json',
+    '  clawsig sign-commit $(git rev-parse HEAD)',
     '  clawverify explain HASH_MISMATCH',
     '  clawverify explain HASH_MISMATCH --json',
     '',
@@ -153,6 +156,7 @@ type ParsedArgs =
   | { command: 'fleet-add'; name: string }
   | { command: 'fleet-list' }
   | { command: 'fleet-revoke'; name: string }
+  | { command: 'sign-commit'; commitSha: string }
   | { command: 'version' };
 
 function parseCliArgs(argv: string[]): ParsedArgs {
@@ -162,6 +166,14 @@ function parseCliArgs(argv: string[]): ParsedArgs {
 
   if (argv[0] === 'version' || hasFlag(argv, '--version')) {
     return { command: 'version' };
+  }
+
+  if (argv[0] === 'sign-commit') {
+    const commitSha = argv[1];
+    if (!commitSha || commitSha.startsWith('--')) {
+      throw new CliUsageError('Usage: clawsig sign-commit <sha> [--json]');
+    }
+    return { command: 'sign-commit', commitSha };
   }
 
   if (argv[0] === 'inspect') {
@@ -471,6 +483,16 @@ async function main() {
       printJson({ version: CLI_VERSION, name: 'clawverify' });
     } else {
       process.stdout.write(`${formatCliVersion()}\n`);
+    }
+    return;
+  }
+
+  if (parsed.command === 'sign-commit') {
+    const envelope = await signCommitProofEnvelopeForCurrentIdentity(parsed.commitSha);
+    if (jsonMode) {
+      printJson(envelope);
+    } else {
+      process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
     }
     return;
   }

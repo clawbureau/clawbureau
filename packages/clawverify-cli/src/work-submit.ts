@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
 import { loadIdentity } from './identity.js';
+import { normalizeCommitProofEnvelope } from './commit-proof.js';
 import {
   DEFAULT_MARKETPLACE_URL,
   loadWorkConfig,
@@ -824,7 +825,8 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
   let commitProofEnvelope: Record<string, unknown> | undefined;
   if (options.commitProofPath) {
     try {
-      commitProofEnvelope = await loadJsonObject(options.commitProofPath);
+      const rawCommitProof = await loadJsonObject(options.commitProofPath);
+      commitProofEnvelope = await normalizeCommitProofEnvelope(rawCommitProof, identity) as unknown as Record<string, unknown>;
     } catch (err) {
       const code = 'COMMIT_PROOF_INVALID';
       const message = err instanceof Error ? err.message : 'Could not parse commit proof JSON';
