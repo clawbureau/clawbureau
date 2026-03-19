@@ -265,7 +265,7 @@ async function makeAggregateEnvelope(args: {
     signerDid: args.issuerDid,
     privateKey: args.issuerKey,
     issuedAt: '2026-02-18T00:10:02.000Z',
-    expiresAt: '2026-03-18T00:10:02.000Z',
+    expiresAt: '2027-03-18T00:10:02.000Z',
   })) as AggregateBundleEnvelope;
 }
 
