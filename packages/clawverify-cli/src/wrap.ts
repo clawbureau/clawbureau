@@ -34,6 +34,7 @@ import {
 import { identityToAgentDid } from './identity.js';
 import { loadIdentityForWrap } from './fleet.js';
 import { validateVisibilityArgs, applyVisibility } from './epv-crypto.js';
+import { activeBountyPath, loadActiveBounty } from './active-bounty.js';
 import type { VisibilityMode } from './epv-crypto.js';
 import type { BundleSummaryStats } from '@clawbureau/clawsig-sdk';
 import type {
@@ -276,11 +277,47 @@ export async function wrap(
   // EPV-002: Validate visibility args early (fail-closed before spawning child)
   let epvMode: ReturnType<typeof validateVisibilityArgs> | null = null;
   if (visibility !== 'public') {
+    const resolvedViewerDids = [...viewerDids];
+    let loadedRequesterDid = false;
+    if (visibility === 'requester' && resolvedViewerDids.length === 0) {
+      const path = activeBountyPath();
+      try {
+        const activeBounty = await loadActiveBounty(undefined, { strict: true });
+        if (!activeBounty) {
+          throw new Error(
+            `No active bounty context found at ${path}. Claim a bounty first or pass --viewer-did <requester_did>.`,
+          );
+        }
+        if (activeBounty.workerDid !== agentDid.did) {
+          throw new Error(
+            `Active bounty worker DID (${activeBounty.workerDid}) does not match current identity DID (${agentDid.did}). ` +
+            'Re-claim the bounty with this identity or pass --viewer-did explicitly.',
+          );
+        }
+        if (!activeBounty.requesterDid) {
+          throw new Error(
+            `Active bounty context at ${path} does not include requester DID. ` +
+            'Pass --viewer-did <requester_did> explicitly or use a different visibility mode.',
+          );
+        }
+        resolvedViewerDids.push(activeBounty.requesterDid);
+        loadedRequesterDid = true;
+        diag('\x1b[36m[clawsig]\x1b[0m EPV: loaded requester DID from .clawsig/active-bounty.json\n');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`\x1b[31m[clawsig]\x1b[0m EPV error: ${msg}\n`);
+        return 2;
+      }
+    }
+
     try {
-      epvMode = validateVisibilityArgs(visibility, viewerDids, agentDid.did);
+      epvMode = validateVisibilityArgs(visibility, resolvedViewerDids, agentDid.did);
       diag(`\x1b[36m[clawsig]\x1b[0m Visibility: ${epvMode.mode} (${epvMode.resolvedViewerDids.length} viewer(s))\n`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      let msg = err instanceof Error ? err.message : String(err);
+      if (loadedRequesterDid) {
+        msg = `Requester DID loaded from ${activeBountyPath()} is invalid: ${msg}`;
+      }
       process.stderr.write(`\x1b[31m[clawsig]\x1b[0m EPV error: ${msg}\n`);
       return 2;
     }

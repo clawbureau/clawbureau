@@ -20,6 +20,7 @@ import {
   type ActiveBountyContext,
   type WorkConfig,
 } from './work-config.js';
+import { saveActiveBounty } from './active-bounty.js';
 import { printJson, printJsonError } from './json-output.js';
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,19 @@ function claimNextActions(code: string, bountyId: string): string[] {
         `clawsig work claim --bounty ${bountyId}`,
       ];
   }
+}
+
+function extractRequesterDid(claim: AcceptBountyResponse): string | undefined {
+  const requesterDidRaw =
+    (typeof claim['requester_did'] === 'string' ? claim['requester_did'] : undefined)
+    ?? (typeof claim['requesterDid'] === 'string' ? claim['requesterDid'] : undefined);
+
+  if (!requesterDidRaw) return undefined;
+  const requesterDid = requesterDidRaw.trim();
+  if (requesterDid.length === 0 || !requesterDid.startsWith('did:')) {
+    return undefined;
+  }
+  return requesterDid;
 }
 
 function emitError(
@@ -310,6 +324,7 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
   }
 
   const claim = claimResult.claim;
+  const requesterDid = extractRequesterDid(claim);
   const now = new Date().toISOString();
   const activeBounty: ActiveBountyContext = {
     bountyId: claim.bounty_id || bountyId,
@@ -318,6 +333,7 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
     status: claim.status || 'accepted',
     claimedAt: now,
     idempotencyKey,
+    ...(requesterDid ? { requesterDid } : {}),
     ...(typeof claim.escrow_id === 'string' && claim.escrow_id.trim().length > 0 ? { escrowId: claim.escrow_id.trim() } : {}),
   };
 
@@ -329,6 +345,7 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
   };
 
   const savedConfigPath = await saveWorkConfig(updatedConfig, projectDir);
+  await saveActiveBounty(activeBounty, projectDir);
   const nextActions = [
     `clawsig work submit --proof-bundle .clawsig/proof_bundle.json --bounty ${activeBounty.bountyId}`,
     'clawsig wrap --output .clawsig/proof_bundle.json -- <agent-command>',

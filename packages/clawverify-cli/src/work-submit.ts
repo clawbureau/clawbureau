@@ -20,6 +20,12 @@ import {
   type ActiveBountyContext,
   type WorkConfig,
 } from './work-config.js';
+import {
+  activeBountyPath,
+  loadActiveBounty,
+  saveActiveBounty,
+  type ActiveBountyRecord,
+} from './active-bounty.js';
 import { submitBounty } from './work-api.js';
 import type { SubmitBountyResponse } from './work-api.js';
 import { printJson, printJsonError } from './json-output.js';
@@ -119,6 +125,54 @@ function extractReceiptMissionIds(proofBundleEnvelope: Record<string, unknown>):
   }
 
   return Array.from(missionIds);
+}
+
+function extractProofBundlePayload(
+  proofBundleEnvelope: Record<string, unknown>,
+): Record<string, unknown> {
+  const payload = proofBundleEnvelope.payload;
+  if (isRecord(payload)) {
+    return payload;
+  }
+  return proofBundleEnvelope;
+}
+
+function extractRequesterDid(
+  bountyId: string,
+  workerDid: string,
+  activeBounty: ActiveBountyContext | undefined,
+  activeBountyFile: ActiveBountyRecord | null,
+): string | undefined {
+  const fromWorkConfig = activeBounty?.bountyId === bountyId && activeBounty.workerDid === workerDid
+    ? activeBounty.requesterDid
+    : undefined;
+  if (typeof fromWorkConfig === 'string' && fromWorkConfig.trim().length > 0) {
+    return fromWorkConfig.trim();
+  }
+
+  const fromActiveFile = activeBountyFile?.bountyId === bountyId && activeBountyFile.workerDid === workerDid
+    ? activeBountyFile.requesterDid
+    : undefined;
+  if (typeof fromActiveFile === 'string' && fromActiveFile.trim().length > 0) {
+    return fromActiveFile.trim();
+  }
+
+  return undefined;
+}
+
+function extractViewerDids(bundlePayload: Record<string, unknown>): string[] {
+  const viewerKeysRaw = bundlePayload.viewer_keys;
+  if (!Array.isArray(viewerKeysRaw)) return [];
+
+  const dids = new Set<string>();
+  for (const entry of viewerKeysRaw) {
+    if (!isRecord(entry)) continue;
+    const did = entry.viewer_did;
+    if (typeof did === 'string' && did.trim().length > 0) {
+      dids.add(did.trim());
+    }
+  }
+  return Array.from(dids);
 }
 
 function submitErrorNextActions(code: string, bountyId: string, proofBundlePath: string): string[] {
@@ -416,7 +470,9 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     });
   }
 
-  const proofAgentDid = proofBundleEnvelope.agent_did;
+  const proofBundlePayload = extractProofBundlePayload(proofBundleEnvelope);
+
+  const proofAgentDid = proofBundlePayload.agent_did;
   if (typeof proofAgentDid === 'string' && proofAgentDid.trim().length > 0 && proofAgentDid.trim() !== workerDid) {
     const code = 'PROOF_AGENT_DID_MISMATCH';
     const message = `proof bundle agent_did (${proofAgentDid.trim()}) does not match worker DID (${workerDid}).`;
@@ -437,7 +493,7 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     });
   }
 
-  const missionIds = extractReceiptMissionIds(proofBundleEnvelope);
+  const missionIds = extractReceiptMissionIds(proofBundlePayload);
   if (missionIds.length > 0 && missionIds.some((id) => id !== bountyId)) {
     const code = 'PROOF_BOUNTY_BINDING_MISMATCH';
     const message = `Receipt binding mission_id does not match target bounty ${bountyId}.`;
@@ -458,6 +514,101 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
       nextActions,
       details: { mission_ids: missionIds },
     });
+  }
+
+  const proofVisibility = proofBundlePayload.visibility;
+  let activeBountyFile: ActiveBountyRecord | null = null;
+  if (!activeBounty?.requesterDid) {
+    try {
+      activeBountyFile = await loadActiveBounty(projectDir, {
+        strict: proofVisibility === 'requester',
+      });
+    } catch (err) {
+      const code = 'ACTIVE_BOUNTY_INVALID';
+      const message = err instanceof Error ? err.message : 'Could not load active bounty context.';
+      const nextActions = [
+        `Inspect ${activeBountyPath(projectDir)}`,
+        `Recreate active context: clawsig work claim --bounty ${bountyId}`,
+      ];
+      process.exitCode = 2;
+      emitError(jsonMode, code, message, nextActions);
+      return makeErrorResult({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+      });
+    }
+  }
+  const requesterDid = extractRequesterDid(bountyId, workerDid, activeBounty, activeBountyFile);
+  if (proofVisibility === 'requester') {
+    if (!isRecord(proofBundlePayload.encrypted_payload)) {
+      const code = 'PROOF_BUNDLE_REQUESTER_ENCRYPTION_INVALID';
+      const message = 'proof bundle visibility=requester requires encrypted_payload.';
+      const nextActions = [
+        `Recreate proof bundle: clawsig wrap --visibility requester --output ${options.proofBundlePath} -- <agent-command>`,
+      ];
+      process.exitCode = 2;
+      emitError(jsonMode, code, message, nextActions);
+      return makeErrorResult({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+      });
+    }
+
+    if (!requesterDid) {
+      const code = 'PROOF_BUNDLE_REQUESTER_DID_UNKNOWN';
+      const message =
+        'proof bundle visibility=requester requires requester DID from the active bounty context.';
+      const nextActions = [
+        `Claim the bounty first: clawsig work claim --bounty ${bountyId}`,
+        `Recreate proof bundle after claim: clawsig wrap --visibility requester --output ${options.proofBundlePath} -- <agent-command>`,
+      ];
+      process.exitCode = 2;
+      emitError(jsonMode, code, message, nextActions);
+      return makeErrorResult({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+      });
+    }
+
+    const viewerDids = extractViewerDids(proofBundlePayload);
+    if (!viewerDids.includes(requesterDid)) {
+      const code = 'PROOF_BUNDLE_REQUESTER_VIEWER_MISSING';
+      const message = `proof bundle visibility=requester is missing requester DID in viewer_keys (${requesterDid}).`;
+      const nextActions = [
+        `Recreate proof bundle: clawsig wrap --visibility requester --output ${options.proofBundlePath} -- <agent-command>`,
+        'Or provide requester DID explicitly: --viewer-did <requester_did>',
+      ];
+      process.exitCode = 2;
+      emitError(jsonMode, code, message, nextActions);
+      return makeErrorResult({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+      });
+    }
   }
 
   let urm: Record<string, unknown> | undefined;
@@ -557,6 +708,7 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     status: response.status,
     claimedAt: activeBounty?.claimedAt ?? now,
     idempotencyKey: activeBounty?.idempotencyKey ?? idempotencyKey,
+    ...(requesterDid ? { requesterDid } : {}),
     ...(activeBounty?.escrowId ? { escrowId: activeBounty.escrowId } : {}),
     ...(response.submission_id ? { submissionId: response.submission_id } : {}),
     submittedAt: now,
@@ -569,6 +721,7 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     activeBounty: updatedActiveBounty,
   };
   const savedConfigPath = await saveWorkConfig(updatedConfig, projectDir);
+  await saveActiveBounty(updatedActiveBounty, projectDir);
 
   if (jsonMode) {
     printJson({
