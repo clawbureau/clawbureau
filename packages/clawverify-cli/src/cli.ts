@@ -27,6 +27,7 @@ import { isJsonMode, stripJsonFlag, printJson, printJsonError } from './json-out
 import { rotateIdentity, RotationError } from './identity-rotation.js';
 import { runInspect, InspectError } from './inspect-cmd.js';
 import { addFleetAgent, listFleetAgents, revokeFleetAgent, FleetError } from './fleet.js';
+import { linkGithubIdentity, showGithubIdentity, GithubBindingError } from './identity-github.js';
 import { VALID_VISIBILITY_MODES } from './epv-crypto.js';
 import type { VisibilityMode } from './epv-crypto.js';
 import type { CliOutput, CliKind, CliVerifyOutput } from './types.js';
@@ -50,6 +51,8 @@ function usageText(): string {
     '  clawverify migrate-policy      <v1-policy.json> [--json]',
     '  clawverify init [--dir <path>] [--force] [--global] [--json]',
     '  clawsig inspect --input <bundle.json> [--decrypt] [--json]',
+    '  clawsig identity show [--json]',
+    '  clawsig identity link-github --github <username> [--json]',
     '  clawsig identity rotate [--dir <path>] [--global] [--json]',
     '  clawsig fleet add <name> [--json]',
     '  clawsig fleet list [--json]',
@@ -96,6 +99,8 @@ function usageText(): string {
     '  clawsig work status sub_1234abcd --watch --interval 5',
     '  clawsig inspect --input bundle.json',
     '  clawsig inspect --input bundle.json --decrypt --json',
+    '  clawsig identity show --json',
+    '  clawsig identity link-github --github octocat --json',
     '  clawverify explain HASH_MISMATCH',
     '  clawverify explain HASH_MISMATCH --json',
     '',
@@ -138,6 +143,8 @@ type ParsedArgs =
   | { command: 'migrate-policy'; inputPath: string }
   | { command: 'wrap'; wrapCommand: string; wrapArgs: string[]; publish: boolean; outputPath?: string; verbose: boolean; visibility: VisibilityMode; viewerDids: string[] }
   | { command: 'inspect'; inputPath: string; decrypt: boolean }
+  | { command: 'identity-show' }
+  | { command: 'identity-link-github'; githubUsername: string }
   | { command: 'identity-rotate'; targetDir?: string; global: boolean }
   | { command: 'fleet-add'; name: string }
   | { command: 'fleet-list' }
@@ -323,6 +330,22 @@ function parseCliArgs(argv: string[]): ParsedArgs {
     return { command: 'explain', code: code.toUpperCase() };
   }
 
+  if (argv[0] === 'identity' && argv[1] === 'show') {
+    return { command: 'identity-show' };
+  }
+
+  if (argv[0] === 'identity' && argv[1] === 'link-github') {
+    const rest = argv.slice(2);
+    const githubUsername = readFlag(rest, '--github');
+    if (!githubUsername) {
+      throw new CliUsageError(
+        'Usage: clawsig identity link-github --github <username> [--json]\n\n' +
+        'The --github flag is required.',
+      );
+    }
+    return { command: 'identity-link-github', githubUsername };
+  }
+
   if (argv[0] === 'identity' && argv[1] === 'rotate') {
     const rest = argv.slice(2);
     const targetDir = readFlag(rest, '--dir');
@@ -504,6 +527,88 @@ async function main() {
           code: err instanceof RotationError ? err.code : 'INTERNAL_ERROR',
           message,
         });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'identity-show') {
+    try {
+      const result = await showGithubIdentity();
+      if (jsonMode) {
+        printJson(result);
+      } else {
+        process.stdout.write('Identity summary:\n');
+        process.stdout.write(`  DID: ${result.identity_did ?? '(none)'}\n`);
+
+        if (!result.github_binding) {
+          process.stdout.write('  GitHub binding: not linked\n');
+          process.stdout.write('\nRun: clawsig identity link-github --github <username>\n');
+        } else {
+          process.stdout.write(
+            `  GitHub: ${result.github_binding.github_username} (id: ${result.github_binding.github_user_id})\n`,
+          );
+          process.stdout.write(`  Profile: ${result.github_binding.profile_url}\n`);
+          process.stdout.write(`  Binding file: ${result.github_binding.binding_path}\n`);
+          process.stdout.write(`  Updated at: ${result.github_binding.updated_at}\n`);
+          process.stdout.write('  Linked DIDs:\n');
+          for (const did of result.github_binding.linked_dids) {
+            process.stdout.write(`    - ${did}\n`);
+          }
+        }
+      }
+    } catch (err) {
+      const code = err instanceof GithubBindingError ? err.code : 'INTERNAL_ERROR';
+      process.exitCode = 1;
+      const message = err instanceof Error ? err.message : String(err);
+      if (jsonMode) {
+        printJsonError({ code, message });
+      } else {
+        process.stderr.write(`Error: ${message}\n`);
+      }
+    }
+    return;
+  }
+
+  if (parsed.command === 'identity-link-github') {
+    try {
+      const result = await linkGithubIdentity({
+        githubUsername: parsed.githubUsername,
+        json: jsonMode,
+      });
+
+      if (jsonMode) {
+        printJson(result);
+      } else {
+        process.stdout.write('GitHub identity linked.\n\n');
+        process.stdout.write(`  GitHub: ${result.github_username} (id: ${result.github_user_id})\n`);
+        process.stdout.write(`  DID: ${result.did}\n`);
+        process.stdout.write(`  Binding file: ${result.binding_path}\n`);
+        process.stdout.write('  Linked DIDs:\n');
+        for (const did of result.linked_dids) {
+          process.stdout.write(`    - ${did}\n`);
+        }
+
+        if (result.published) {
+          process.stdout.write('  Ledger publish: yes\n');
+          if (result.ledger_url) {
+            process.stdout.write(`  Ledger URL: ${result.ledger_url}\n`);
+          }
+        } else if (result.publish_error) {
+          process.stdout.write(`  Ledger publish: no (${result.publish_error.message})\n`);
+        } else {
+          process.stdout.write('  Ledger publish: skipped (not configured)\n');
+        }
+      }
+    } catch (err) {
+      const code = err instanceof GithubBindingError ? err.code : 'INTERNAL_ERROR';
+      process.exitCode =
+        code === 'IDENTITY_MISSING' || code === 'GITHUB_CLIENT_ID_MISSING' ? 2 : 1;
+      const message = err instanceof Error ? err.message : String(err);
+      if (jsonMode) {
+        printJsonError({ code, message });
       } else {
         process.stderr.write(`Error: ${message}\n`);
       }
@@ -910,6 +1015,9 @@ main().catch((err: unknown) => {
     code = err.code;
     message = err.message;
   } else if (err instanceof FleetError) {
+    code = err.code;
+    message = err.message;
+  } else if (err instanceof GithubBindingError) {
     code = err.code;
     message = err.message;
   } else if (err instanceof InspectError) {
