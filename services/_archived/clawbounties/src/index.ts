@@ -97,6 +97,9 @@ type ClosureType = 'test' | 'requester' | 'quorum';
 type BountyStatus = 'open' | 'accepted' | 'pending_review' | 'approved' | 'rejected' | 'disputed' | 'cancelled';
 type BountyArenaStatus = 'idle' | 'started' | 'completed' | 'failed';
 type ProofTier = 'self' | 'gateway' | 'sandbox';
+type MinimumProofTier = 'none' | 'gateway' | 'sandbox';
+type SubmissionTrustTier = 'test-pass' | 'gateway' | 'sandbox';
+type ProofVerifyStatus = 'not_provided' | 'pending' | 'valid' | 'invalid';
 type SubmissionStatus = 'pending_review' | 'invalid' | 'approved' | 'rejected';
 type VerificationStatus = 'VALID' | 'INVALID';
 
@@ -349,6 +352,7 @@ interface BountyV2 {
   is_code_bounty: boolean;
   tags: string[];
   min_proof_tier: ProofTier;
+  minimum_proof_tier: MinimumProofTier;
   require_owner_verified_votes: boolean;
   test_harness_id: string | null;
   metadata: Record<string, unknown>;
@@ -672,6 +676,7 @@ interface BountyListItemV2 {
   is_code_bounty: boolean;
   tags: string[];
   min_proof_tier: ProofTier;
+  minimum_proof_tier: MinimumProofTier;
 }
 
 interface WorkerBountyListItemV2 {
@@ -686,6 +691,7 @@ interface WorkerBountyListItemV2 {
   is_code_bounty: boolean;
   tags: string[];
   min_proof_tier: ProofTier;
+  minimum_proof_tier: MinimumProofTier;
 }
 
 interface VerifyBundleComponentResults {
@@ -904,8 +910,8 @@ interface SubmissionSummaryView {
   bounty_id: string;
   worker_did: string;
   status: SubmissionStatus;
-  proof_verify_status: 'valid' | 'invalid';
-  proof_tier: ProofTier | null;
+  proof_verify_status: ProofVerifyStatus;
+  proof_tier: SubmissionTrustTier | null;
   commit_proof_verify_status: 'valid' | 'invalid' | null;
   commit_sha: string | null;
   created_at: string;
@@ -928,10 +934,10 @@ interface SubmissionDetailView {
   idempotency_key: string | null;
   verification: {
     proof_bundle: {
-      status: 'valid' | 'invalid';
+      status: ProofVerifyStatus;
       reason: string | null;
       verified_at: string | null;
-      proof_tier: ProofTier | null;
+      proof_tier: SubmissionTrustTier | null;
       proof_bundle_hash_b64u: string | null;
     };
     commit_proof: {
@@ -997,10 +1003,10 @@ interface SubmissionRecord {
 
   proof_bundle_envelope: Record<string, unknown>;
   proof_bundle_hash_b64u: string | null;
-  proof_verify_status: 'valid' | 'invalid';
+  proof_verify_status: ProofVerifyStatus;
   proof_verify_reason: string | null;
   proof_verified_at: string | null;
-  proof_tier: ProofTier | null;
+  proof_tier: SubmissionTrustTier | null;
 
   /** Optional evidence array forwarded to clawverify for sandbox-tier uplift (CEA-US-010). */
   execution_attestations: Record<string, unknown>[] | null;
@@ -1026,12 +1032,13 @@ interface SubmitBountyResponseV1 {
   submission_id: string;
   bounty_id: string;
   status: SubmissionStatus;
+  proof_status?: 'pending' | 'valid' | 'invalid';
   verification: {
     proof_bundle: {
-      status: 'valid' | 'invalid';
+      status: ProofVerifyStatus;
       reason?: string;
       verified_at?: string;
-      tier?: ProofTier | null;
+      tier?: SubmissionTrustTier | null;
     };
     commit_proof?: {
       status: 'valid' | 'invalid';
@@ -1262,10 +1269,43 @@ function parseProofTier(input: unknown): ProofTier | null {
   return null;
 }
 
+function parseMinimumProofTier(input: unknown): MinimumProofTier | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'none' || v === 'gateway' || v === 'sandbox') return v;
+  return null;
+}
+
+function toStoredMinProofTier(value: MinimumProofTier): ProofTier {
+  if (value === 'none') return 'self';
+  return value;
+}
+
+function toMinimumProofTier(value: ProofTier): MinimumProofTier {
+  if (value === 'self') return 'none';
+  return value;
+}
+
+function parseSubmissionTrustTier(input: unknown): SubmissionTrustTier | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'gateway' || v === 'sandbox' || v === 'test-pass') return v;
+  // Back-compat: historical "self" maps to baseline trust.
+  if (v === 'self') return 'test-pass';
+  return null;
+}
+
 function parseSubmissionStatus(input: unknown): SubmissionStatus | null {
   if (!isNonEmptyString(input)) return null;
   const v = input.trim();
   if (v === 'pending_review' || v === 'invalid' || v === 'approved' || v === 'rejected') return v;
+  return null;
+}
+
+function parseProofVerifyStatus(input: unknown): ProofVerifyStatus | null {
+  if (!isNonEmptyString(input)) return null;
+  const v = input.trim();
+  if (v === 'not_provided' || v === 'pending' || v === 'valid' || v === 'invalid') return v;
   return null;
 }
 
@@ -4135,15 +4175,26 @@ async function trialsCreateCase(
   };
 }
 
-function buildSubmissionTrialEvidence(submission: SubmissionRecord): {
+async function resolveSubmissionProofHashB64u(submission: SubmissionRecord): Promise<string> {
+  const existing = submission.proof_bundle_hash_b64u?.trim() ?? '';
+  if (existing) return existing;
+
+  const canonical = stableStringify({
+    schema: 'clawbounties.submission.test-pass-proof-hash.v1',
+    submission_id: submission.submission_id,
+    bounty_id: submission.bounty_id,
+    worker_did: submission.worker_did,
+    created_at: submission.created_at,
+  });
+  return sha256B64uUtf8(canonical);
+}
+
+async function buildSubmissionTrialEvidence(submission: SubmissionRecord): Promise<{
   proof_bundle_hash_b64u: string;
   receipt_refs: string[];
   artifact_refs: string[];
-} {
-  const proofHash = submission.proof_bundle_hash_b64u?.trim() ?? '';
-  if (!proofHash) {
-    throw new Error('TRIALS_EVIDENCE_MISSING_PROOF_BUNDLE_HASH');
-  }
+}> {
+  const proofHash = await resolveSubmissionProofHashB64u(submission);
 
   const receiptRefs = new Set<string>();
   receiptRefs.add(`proof_bundle:${proofHash}`);
@@ -4401,16 +4452,51 @@ function deriveProofTier(result: VerifyBundleResult): ProofTier | null {
   return 'self';
 }
 
-function proofTierRank(tier: ProofTier): number {
-  // Canonical ordering: self < gateway < sandbox
+function minimumProofTierRank(tier: MinimumProofTier): number {
   switch (tier) {
-    case 'self':
+    case 'none':
+      return 0;
+    case 'gateway':
+      return 2;
+    case 'sandbox':
+      return 3;
+  }
+}
+
+function submissionTrustTierRank(tier: SubmissionTrustTier): number {
+  switch (tier) {
+    case 'test-pass':
       return 1;
     case 'gateway':
       return 2;
     case 'sandbox':
       return 3;
   }
+}
+
+function trustTierFromProofTier(tier: ProofTier | null): SubmissionTrustTier {
+  if (tier === 'gateway' || tier === 'sandbox') return tier;
+  return 'test-pass';
+}
+
+function getSubmissionApprovalBlockReason(bounty: BountyV2, submission: SubmissionRecord): string | null {
+  if (submission.commit_proof_verify_status === 'invalid') {
+    return 'Submission commit proof is invalid';
+  }
+
+  if (bounty.is_code_bounty && submission.commit_proof_verify_status !== 'valid') {
+    return 'Submission commit proof is required for code bounties';
+  }
+
+  if (bounty.cwc_hash_b64u && submission.proof_verify_status !== 'valid') {
+    return 'Submission proof bundle must be valid for Confidential Work Contract bounties';
+  }
+
+  return null;
+}
+
+function isSubmissionEligibleForApproval(bounty: BountyV2, submission: SubmissionRecord): boolean {
+  return getSubmissionApprovalBlockReason(bounty, submission) === null;
 }
 
 type ReplayReceiptKey = {
@@ -4704,6 +4790,10 @@ function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
     },
   };
 
+  if (record.proof_verify_status === 'pending' || record.proof_verify_status === 'valid' || record.proof_verify_status === 'invalid') {
+    response.proof_status = record.proof_verify_status;
+  }
+
   if (record.commit_proof_verify_status) {
     response.verification.commit_proof = {
       status: record.commit_proof_verify_status,
@@ -4769,6 +4859,9 @@ function minorToUsd(minor: string): number {
 }
 
 function toRepProofTier(value: string | null | undefined): 'unknown' | 'self' | 'gateway' | 'sandbox' | 'tee' | 'witnessed_web' {
+  if (value === 'test-pass') {
+    return 'self';
+  }
   if (value === 'self' || value === 'gateway' || value === 'sandbox') {
     return value;
   }
@@ -5468,6 +5561,7 @@ function parseBountyRow(row: Record<string, unknown>): BountyV2 | null {
     is_code_bounty: Boolean(is_code_bounty_num),
     tags,
     min_proof_tier,
+    minimum_proof_tier: toMinimumProofTier(min_proof_tier),
     require_owner_verified_votes: Boolean(require_owner_verified_votes_num),
     test_harness_id,
     metadata,
@@ -5493,7 +5587,7 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
   const proof_verify_status_raw = d1String(row.proof_verify_status);
   const proof_verify_reason = d1String(row.proof_verify_reason);
   const proof_verified_at = d1String(row.proof_verified_at);
-  const proof_tier = parseProofTier(d1String(row.proof_tier));
+  const proof_tier = parseSubmissionTrustTier(d1String(row.proof_tier));
   const execution_attestations_json = d1String(row.execution_attestations_json);
 
   const commit_proof_envelope_json = d1String(row.commit_proof_envelope_json);
@@ -5516,7 +5610,7 @@ function parseSubmissionRow(row: Record<string, unknown>): SubmissionRecord | nu
     return null;
   }
 
-  const proof_verify_status = proof_verify_status_raw === 'valid' ? 'valid' : proof_verify_status_raw === 'invalid' ? 'invalid' : null;
+  const proof_verify_status = parseProofVerifyStatus(proof_verify_status_raw);
   if (!proof_verify_status) return null;
 
   const proof_bundle_envelope = parseJsonObject(proof_bundle_envelope_json);
@@ -5767,17 +5861,6 @@ async function resolveSubmissionTestLaneFailure(
       code: 'TEST_HARNESS_NOT_CONFIGURED',
       message: 'Bounty is missing test_harness_id for closure_type=test',
       status: 503,
-      details: {
-        submission_id: submission.submission_id,
-      },
-    };
-  }
-
-  if (!isNonEmptyString(submission.proof_bundle_hash_b64u)) {
-    return {
-      code: 'TEST_HARNESS_INPUT_INVALID',
-      message: 'Submission is missing proof_bundle_hash_b64u',
-      status: 500,
       details: {
         submission_id: submission.submission_id,
       },
@@ -6660,52 +6743,6 @@ async function getReplayReceipt(
   return { bounty_id, submission_id, first_seen_at };
 }
 
-async function insertSubmissionWithReplayGuards(
-  db: D1Database,
-  params: {
-    record: SubmissionRecord;
-    agent_did?: string | null;
-    run_id?: string | null;
-    receipt_keys?: ReplayReceiptKey[];
-    trust_pulse?: StoredTrustPulseRow | null;
-  }
-): Promise<void> {
-  const stmts: D1PreparedStatement[] = [];
-
-  if (params.agent_did && params.run_id) {
-    stmts.push(
-      prepareInsertReplayRun(db, {
-        agent_did: params.agent_did,
-        run_id: params.run_id,
-        bounty_id: params.record.bounty_id,
-        submission_id: params.record.submission_id,
-      })
-    );
-  }
-
-  if (params.receipt_keys && params.receipt_keys.length > 0) {
-    for (const k of params.receipt_keys) {
-      stmts.push(
-        prepareInsertReplayReceipt(db, {
-          receipt_signer_did: k.receipt_signer_did,
-          receipt_id: k.receipt_id,
-          bounty_id: params.record.bounty_id,
-          submission_id: params.record.submission_id,
-        })
-      );
-    }
-  }
-
-  // Insert submission first (trust pulse references submission_id).
-  stmts.push(prepareInsertSubmission(db, params.record));
-
-  if (params.trust_pulse) {
-    stmts.push(prepareInsertSubmissionTrustPulse(db, params.trust_pulse));
-  }
-
-  await db.batch(stmts);
-}
-
 async function insertTestResult(db: D1Database, record: TestResultRecord): Promise<void> {
   await db
     .prepare(
@@ -6862,6 +6899,326 @@ async function updateSubmissionStatus(
   const result = await db.prepare(sql).bind(...bindings).run();
   if (!result || !result.success || !result.meta || result.meta.changes === 0) {
     throw new Error('SUBMISSION_STATUS_UPDATE_FAILED');
+  }
+}
+
+async function updateSubmissionProofVerification(
+  db: D1Database,
+  params: {
+    submission_id: string;
+    proof_verify_status: 'valid' | 'invalid';
+    proof_verify_reason: string | null;
+    proof_verified_at: string;
+    proof_tier: SubmissionTrustTier;
+    now: string;
+  }
+): Promise<void> {
+  const result = await db
+    .prepare(
+      `UPDATE submissions
+         SET proof_verify_status = ?,
+             proof_verify_reason = ?,
+             proof_verified_at = ?,
+             proof_tier = ?,
+             updated_at = ?
+       WHERE submission_id = ?
+         AND proof_verify_status = 'pending'`
+    )
+    .bind(
+      params.proof_verify_status,
+      params.proof_verify_reason,
+      params.proof_verified_at,
+      params.proof_tier,
+      params.now,
+      params.submission_id
+    )
+    .run();
+
+  if (!result || !result.success || !result.meta || result.meta.changes === 0) {
+    throw new Error('SUBMISSION_PROOF_UPDATE_FAILED');
+  }
+}
+
+async function runSubmissionProofVerification(
+  env: Env,
+  params: {
+    submission_id: string;
+    bounty_id: string;
+    worker_did: string;
+    min_proof_tier: ProofTier;
+    minimum_proof_tier: MinimumProofTier;
+    cwc_hash_b64u: string | null;
+    cwc_wpc_policy_hash_b64u: string | null;
+    cwc_token_scope_hash_b64u: string | null;
+    job_token_scope_hash_b64u: string | null;
+    proof_bundle_envelope: Record<string, unknown>;
+    urm: Record<string, unknown> | null;
+    execution_attestations: Record<string, unknown>[] | null;
+  }
+): Promise<void> {
+  const now = new Date().toISOString();
+  let proofStatus: 'valid' | 'invalid' = 'invalid';
+  let proofReason = 'Proof verification did not complete';
+  let proofVerifiedAt = now;
+  let proofTier: SubmissionTrustTier = 'test-pass';
+
+  try {
+    const verified = await verifyProofBundle(
+      env,
+      params.proof_bundle_envelope,
+      params.urm ?? null,
+      params.execution_attestations ?? undefined
+    );
+
+    proofVerifiedAt = isNonEmptyString(verified.result.verified_at) ? verified.result.verified_at.trim() : now;
+
+    if (verified.result.status !== 'VALID') {
+      proofStatus = 'invalid';
+      proofReason = verified.result.reason.trim() || 'clawverify returned INVALID';
+      proofTier = 'test-pass';
+    } else {
+      const bundleAgentDid = extractProofBundleAgentDid(params.proof_bundle_envelope);
+      if (!bundleAgentDid) {
+        proofStatus = 'invalid';
+        proofReason = 'proof_bundle_envelope.payload.agent_did is required';
+        proofTier = 'test-pass';
+      } else if (bundleAgentDid !== params.worker_did) {
+        proofStatus = 'invalid';
+        proofReason = 'proof_bundle_envelope.payload.agent_did must match worker_did';
+        proofTier = 'test-pass';
+      } else {
+        const rawTier = deriveProofTier(verified.result);
+        const derivedTrustTier = trustTierFromProofTier(rawTier);
+        const meetsMinimum = submissionTrustTierRank(derivedTrustTier) >= minimumProofTierRank(params.minimum_proof_tier);
+
+        if (derivedTrustTier === 'test-pass') {
+          proofStatus = 'invalid';
+          proofReason = 'proof bundle verified but did not reach gateway tier';
+          proofTier = 'test-pass';
+        } else if (!meetsMinimum) {
+          proofStatus = 'invalid';
+          proofReason = `proof tier '${derivedTrustTier}' does not meet minimum_proof_tier '${params.minimum_proof_tier}'`;
+          proofTier = 'test-pass';
+        } else {
+          proofStatus = 'valid';
+          proofReason = verified.result.reason.trim() || 'proof bundle verified';
+          proofTier = derivedTrustTier;
+        }
+      }
+    }
+
+    if (proofStatus === 'valid') {
+      let replayRunId: string | null = null;
+      let replayReceiptKeys: ReplayReceiptKey[] = [];
+      let verifiedBoundReceiptCount = 0;
+      let verifiedBoundPolicyHashes = new Set<string>();
+      let verifiedBoundMissingPolicyHashCount = 0;
+      let verifiedBoundTokenScopeHashes = new Set<string>();
+      let verifiedBoundMissingTokenScopeHashCount = 0;
+
+      const binding = extractRunIdAndEventHashesFromProofBundle(params.proof_bundle_envelope);
+      if (binding) {
+        replayRunId = binding.run_id;
+        const computed = await computeReplayReceiptKeys(env, params.proof_bundle_envelope, {
+          run_id: binding.run_id,
+          allowed_event_hashes_b64u: binding.event_hashes_b64u,
+        });
+        replayReceiptKeys = computed.keys;
+        verifiedBoundReceiptCount = computed.verified_bound_receipt_count;
+        verifiedBoundPolicyHashes = computed.verified_bound_policy_hashes;
+        verifiedBoundMissingPolicyHashCount = computed.verified_bound_missing_policy_hash_count;
+        verifiedBoundTokenScopeHashes = computed.verified_bound_token_scope_hashes;
+        verifiedBoundMissingTokenScopeHashCount = computed.verified_bound_missing_token_scope_hash_count;
+      } else {
+        const receipts = extractReceiptsFromProofBundle(params.proof_bundle_envelope);
+        if (receipts.length > 0) {
+          proofStatus = 'invalid';
+          proofReason = 'proof_bundle_envelope.payload.event_chain is required when receipts are present';
+          proofTier = 'test-pass';
+        }
+      }
+
+      if (proofStatus === 'valid' && replayRunId) {
+        const seen = await getReplayRun(env.BOUNTIES_DB, {
+          agent_did: params.worker_did,
+          run_id: replayRunId,
+        });
+        if (seen && seen.submission_id !== params.submission_id) {
+          proofStatus = 'invalid';
+          proofReason = `run_id already used in prior submission (${seen.submission_id})`;
+          proofTier = 'test-pass';
+        }
+      }
+
+      if (proofStatus === 'valid' && replayReceiptKeys.length > 0) {
+        for (const key of replayReceiptKeys) {
+          const seen = await getReplayReceipt(env.BOUNTIES_DB, {
+            receipt_signer_did: key.receipt_signer_did,
+            receipt_id: key.receipt_id,
+          });
+          if (seen && seen.submission_id !== params.submission_id) {
+            proofStatus = 'invalid';
+            proofReason = `receipt_id already used in prior submission (${seen.submission_id})`;
+            proofTier = 'test-pass';
+            break;
+          }
+        }
+      }
+
+      if (proofStatus === 'valid' && params.cwc_hash_b64u) {
+        const expectedPolicyHash = params.cwc_wpc_policy_hash_b64u;
+        if (!expectedPolicyHash) {
+          proofStatus = 'invalid';
+          proofReason = 'CWC bounty is missing cwc_wpc_policy_hash_b64u';
+          proofTier = 'test-pass';
+        } else {
+          let expectedTokenScopeHash = params.cwc_token_scope_hash_b64u;
+
+          if (!expectedTokenScopeHash) {
+            try {
+              expectedTokenScopeHash = await computeTokenScopeHashB64uV1({
+                sub: params.worker_did,
+                aud: CWC_JOB_CST_AUD,
+                scope: CWC_JOB_CST_SCOPE,
+                policy_hash_b64u: expectedPolicyHash,
+                mission_id: params.bounty_id,
+              });
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              proofStatus = 'invalid';
+              proofReason = `CWC token_scope_hash computation failed: ${message}`;
+              proofTier = 'test-pass';
+            }
+
+            if (
+              proofStatus === 'valid' &&
+              (!expectedTokenScopeHash || !isSha256B64u(expectedTokenScopeHash))
+            ) {
+              proofStatus = 'invalid';
+              proofReason = 'CWC token_scope_hash_b64u is invalid';
+              proofTier = 'test-pass';
+            }
+          }
+
+          if (proofStatus === 'valid') {
+            if (verifiedBoundReceiptCount === 0) {
+              proofStatus = 'invalid';
+              proofReason = 'CWC requires at least one verified, run-bound gateway receipt';
+              proofTier = 'test-pass';
+            } else if (verifiedBoundMissingPolicyHashCount > 0) {
+              proofStatus = 'invalid';
+              proofReason = 'CWC requires binding.policy_hash on all verified, run-bound gateway receipts';
+              proofTier = 'test-pass';
+            } else {
+              const mismatched = Array.from(verifiedBoundPolicyHashes).filter((hash) => hash !== expectedPolicyHash);
+              if (mismatched.length > 0 || !verifiedBoundPolicyHashes.has(expectedPolicyHash)) {
+                proofStatus = 'invalid';
+                proofReason = `CWC policy_hash mismatch (expected ${expectedPolicyHash}, got ${Array.from(verifiedBoundPolicyHashes).join(', ') || 'none'})`;
+                proofTier = 'test-pass';
+              }
+            }
+          }
+
+          if (proofStatus === 'valid') {
+            if (verifiedBoundMissingTokenScopeHashCount > 0) {
+              proofStatus = 'invalid';
+              proofReason = 'CWC requires binding.token_scope_hash_b64u on all verified, run-bound gateway receipts';
+              proofTier = 'test-pass';
+            } else if (
+              !expectedTokenScopeHash ||
+              verifiedBoundTokenScopeHashes.size !== 1 ||
+              !verifiedBoundTokenScopeHashes.has(expectedTokenScopeHash)
+            ) {
+              proofStatus = 'invalid';
+              proofReason = `CWC token_scope_hash mismatch (expected ${expectedTokenScopeHash ?? 'none'}, got ${Array.from(verifiedBoundTokenScopeHashes).join(', ') || 'none'})`;
+              proofTier = 'test-pass';
+            }
+          }
+        }
+      }
+
+      if (
+        proofStatus === 'valid' &&
+        params.job_token_scope_hash_b64u &&
+        !params.cwc_hash_b64u &&
+        params.min_proof_tier !== 'self'
+      ) {
+        const expectedTokenScopeHash = params.job_token_scope_hash_b64u;
+
+        if (verifiedBoundReceiptCount === 0) {
+          proofStatus = 'invalid';
+          proofReason = 'Job binding requires at least one verified, run-bound gateway receipt';
+          proofTier = 'test-pass';
+        } else if (verifiedBoundMissingTokenScopeHashCount > 0) {
+          proofStatus = 'invalid';
+          proofReason = 'Job binding requires binding.token_scope_hash_b64u on all verified, run-bound gateway receipts';
+          proofTier = 'test-pass';
+        } else if (
+          verifiedBoundTokenScopeHashes.size !== 1 ||
+          !verifiedBoundTokenScopeHashes.has(expectedTokenScopeHash)
+        ) {
+          proofStatus = 'invalid';
+          proofReason = `Job token_scope_hash mismatch (expected ${expectedTokenScopeHash}, got ${Array.from(verifiedBoundTokenScopeHashes).join(', ') || 'none'})`;
+          proofTier = 'test-pass';
+        }
+      }
+
+      if (proofStatus === 'valid') {
+        const replayStatements: D1PreparedStatement[] = [];
+        if (replayRunId) {
+          replayStatements.push(
+            prepareInsertReplayRun(env.BOUNTIES_DB, {
+              agent_did: params.worker_did,
+              run_id: replayRunId,
+              bounty_id: params.bounty_id,
+              submission_id: params.submission_id,
+            })
+          );
+        }
+
+        for (const key of replayReceiptKeys) {
+          replayStatements.push(
+            prepareInsertReplayReceipt(env.BOUNTIES_DB, {
+              receipt_signer_did: key.receipt_signer_did,
+              receipt_id: key.receipt_id,
+              bounty_id: params.bounty_id,
+              submission_id: params.submission_id,
+            })
+          );
+        }
+
+        if (replayStatements.length > 0) {
+          try {
+            await env.BOUNTIES_DB.batch(replayStatements);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            proofStatus = 'invalid';
+            proofReason = `replay marker insert failed: ${message}`;
+            proofTier = 'test-pass';
+          }
+        }
+      }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    proofStatus = 'invalid';
+    proofReason = `verification failed: ${message}`;
+    proofVerifiedAt = now;
+    proofTier = 'test-pass';
+  }
+
+  try {
+    await updateSubmissionProofVerification(env.BOUNTIES_DB, {
+      submission_id: params.submission_id,
+      proof_verify_status: proofStatus,
+      proof_verify_reason: proofReason,
+      proof_verified_at: proofVerifiedAt,
+      proof_tier: proofTier,
+      now: new Date().toISOString(),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to persist proof verification for submission ${params.submission_id}: ${message}`);
   }
 }
 
@@ -10378,17 +10735,7 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
     };
   }
 
-  const proofBundleHash = submission.proof_bundle_hash_b64u?.trim();
-  if (!proofBundleHash) {
-    return {
-      applied: false,
-      failure: {
-        code: 'TEST_HARNESS_INPUT_INVALID',
-        message: 'Submission is missing proof_bundle_hash_b64u',
-        status: 500,
-      },
-    };
-  }
+  const proofBundleHash = await resolveSubmissionProofHashB64u(submission);
 
   const request: TestHarnessRunRequest = {
     schema_version: '1',
@@ -10641,7 +10988,7 @@ async function autoApproveTestSubmission(env: Env, bounty: BountyV2, submission:
       worker_did: submission.worker_did,
       opened_by: bounty.requester_did,
       reason: 'Auto-rejected: test harness failed',
-      evidence: buildSubmissionTrialEvidence(submission),
+      evidence: await buildSubmissionTrialEvidence(submission),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -10826,6 +11173,7 @@ async function listBounties(
       is_code_bounty: Boolean(is_code_bounty_num),
       tags,
       min_proof_tier,
+      minimum_proof_tier: toMinimumProofTier(min_proof_tier),
     });
   }
 
@@ -10919,6 +11267,7 @@ async function listWorkerBounties(
       is_code_bounty: Boolean(is_code_bounty_num),
       tags,
       min_proof_tier,
+      minimum_proof_tier: toMinimumProofTier(min_proof_tier),
     });
   }
 
@@ -11211,6 +11560,7 @@ function docsPage(origin: string): string {
   }'</pre>
 
       <h3>POST /v1/bounties/{bounty_id}/submit</h3>
+      <p><code>proof_bundle_envelope</code> is optional. When attached, verification runs asynchronously and the submit response includes <code>proof_status</code>.</p>
       <pre>curl -sS \
   -X POST "${o}/v1/bounties/bty_.../submit" \
   -H "Authorization: Bearer &lt;WORKER_TOKEN&gt;" \
@@ -11256,7 +11606,7 @@ function docsPage(origin: string): string {
     "closure_type": "requester",
     "difficulty_scalar": 1.0,
     "is_code_bounty": false,
-    "min_proof_tier": "self",
+    "minimum_proof_tier": "none",
     "tags": ["typescript", "testing"],
     "idempotency_key": "post:example:001",
     "metadata": {"requested_worker_did": "did:key:zWorker..."}
@@ -12582,6 +12932,7 @@ async function handleSubmitBounty(
   version: string,
   options?: {
     authOverride?: { worker: WorkerRecordV1; auth: WorkerAuthContext };
+    executionContext?: ExecutionContext;
   },
 ): Promise<Response> {
   const auth = options?.authOverride ?? (await requireWorker(request, env, version, {
@@ -12614,25 +12965,32 @@ async function handleSubmitBounty(
     return errorResponse('UNAUTHORIZED', 'worker_did must match authenticated worker', 401, undefined, version);
   }
 
-  if (!isRecord(proof_bundle_envelope_raw)) {
-    return errorResponse('INVALID_REQUEST', 'proof_bundle_envelope is required', 400, undefined, version);
+  const hasProofBundle = proof_bundle_envelope_raw !== undefined && proof_bundle_envelope_raw !== null;
+  if (hasProofBundle && !isRecord(proof_bundle_envelope_raw)) {
+    return errorResponse('INVALID_REQUEST', 'proof_bundle_envelope must be an object when provided', 400, undefined, version);
   }
+  const proofBundleEnvelope = hasProofBundle ? (proof_bundle_envelope_raw as Record<string, unknown>) : null;
 
   if (urm_raw !== undefined && urm_raw !== null && !isRecord(urm_raw)) {
     return errorResponse('INVALID_REQUEST', 'urm must be an object', 400, undefined, version);
   }
+  if (!hasProofBundle && urm_raw !== undefined && urm_raw !== null) {
+    return errorResponse('INVALID_REQUEST', 'urm requires proof_bundle_envelope', 400, undefined, version);
+  }
 
-  // POH-US-015: URM materialization is required when the proof bundle includes a URM reference.
-  const proofPayload = (proof_bundle_envelope_raw as Record<string, unknown>).payload;
-  const hasUrmRef = isRecord(proofPayload) && proofPayload.urm !== undefined && proofPayload.urm !== null;
-  if (hasUrmRef && (urm_raw === undefined || urm_raw === null)) {
-    return errorResponse(
-      'INVALID_REQUEST',
-      'urm is required when proof_bundle_envelope.payload.urm is present',
-      400,
-      undefined,
-      version
-    );
+  if (proofBundleEnvelope) {
+    // POH-US-015: URM materialization is required when the proof bundle includes a URM reference.
+    const proofPayload = proofBundleEnvelope.payload;
+    const hasUrmRef = isRecord(proofPayload) && proofPayload.urm !== undefined && proofPayload.urm !== null;
+    if (hasUrmRef && (urm_raw === undefined || urm_raw === null)) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'urm is required when proof_bundle_envelope.payload.urm is present',
+        400,
+        undefined,
+        version
+      );
+    }
   }
 
   if (commit_proof_envelope_raw !== undefined && commit_proof_envelope_raw !== null && !isRecord(commit_proof_envelope_raw)) {
@@ -12654,9 +13012,16 @@ async function handleSubmitBounty(
   if (trust_pulse_raw !== undefined && trust_pulse_raw !== null && !isRecord(trust_pulse_raw)) {
     return errorResponse('INVALID_REQUEST', 'trust_pulse must be an object', 400, undefined, version);
   }
+  if (!hasProofBundle && trust_pulse_raw !== undefined && trust_pulse_raw !== null) {
+    return errorResponse('INVALID_REQUEST', 'trust_pulse requires proof_bundle_envelope', 400, undefined, version);
+  }
 
   let execution_attestations: Record<string, unknown>[] | null = null;
   if (execution_attestations_raw !== undefined && execution_attestations_raw !== null) {
+    if (!hasProofBundle) {
+      return errorResponse('INVALID_REQUEST', 'execution_attestations requires proof_bundle_envelope', 400, undefined, version);
+    }
+
     if (!Array.isArray(execution_attestations_raw)) {
       return errorResponse('INVALID_REQUEST', 'execution_attestations must be an array', 400, undefined, version);
     }
@@ -12722,7 +13087,7 @@ async function handleSubmitBounty(
         schema: 'clawbounties.submit.v1',
         bounty_id: bountyId,
         worker_did,
-        proof_bundle_envelope: proof_bundle_envelope_raw,
+        proof_bundle_envelope: proofBundleEnvelope,
         commit_proof_envelope: commit_proof_envelope_raw ?? null,
         artifacts: artifacts_raw ?? null,
         agent_pack: agent_pack_raw ?? null,
@@ -12797,6 +13162,16 @@ async function handleSubmitBounty(
     return errorResponse('INVALID_REQUEST', 'commit_proof_envelope is required for code bounties', 400, undefined, version);
   }
 
+  if (bounty.cwc_hash_b64u && !proofBundleEnvelope) {
+    return errorResponse(
+      'INVALID_REQUEST',
+      'proof_bundle_envelope is required for Confidential Work Contract bounties',
+      400,
+      undefined,
+      version
+    );
+  }
+
   if (bounty.cwc_hash_b64u && !bounty.cwc_worker_envelope) {
     return errorResponse(
       'CWC_COUNTERSIGN_REQUIRED',
@@ -12808,16 +13183,6 @@ async function handleSubmitBounty(
   }
 
   const now = new Date().toISOString();
-
-  let proofBundleResponse: VerifyBundleResponse;
-  try {
-    proofBundleResponse = await verifyProofBundle(env, proof_bundle_envelope_raw, urm_raw, execution_attestations ?? undefined);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return errorResponse('VERIFY_FAILED', message, 502, undefined, version);
-  }
-
-  const proofBundleAgentDid = extractProofBundleAgentDid(proof_bundle_envelope_raw);
 
   // Trust Pulse storage (self-reported, non-tier): optional `trust_pulse` field.
   const trustPulseInput = isRecord(trust_pulse_raw) ? (trust_pulse_raw as Record<string, unknown>) : null;
@@ -12835,7 +13200,11 @@ async function handleSubmitBounty(
       );
     }
 
-    const bindingFromBundle = extractTrustPulseBindingFromProofBundle(proof_bundle_envelope_raw);
+    if (!proofBundleEnvelope) {
+      return errorResponse('TRUST_PULSE_UNBOUND', 'trust_pulse requires proof_bundle_envelope', 400, undefined, version);
+    }
+
+    const bindingFromBundle = extractTrustPulseBindingFromProofBundle(proofBundleEnvelope);
     if (!bindingFromBundle) {
       return errorResponse(
         'TRUST_PULSE_UNBOUND',
@@ -12929,32 +13298,6 @@ async function handleSubmitBounty(
     };
   }
 
-  if (proofBundleResponse.result.status === 'VALID') {
-    if (!proofBundleAgentDid) {
-      return errorResponse('INVALID_REQUEST', 'proof_bundle_envelope.payload.agent_did is required', 400, undefined, version);
-    }
-
-    if (proofBundleAgentDid !== worker_did) {
-      return errorResponse(
-        'UNAUTHORIZED',
-        'proof_bundle_envelope.payload.agent_did must match worker_did',
-        401,
-        { agent_did: proofBundleAgentDid },
-        version
-      );
-    }
-  }
-
-  let proofStatus: 'valid' | 'invalid' = proofBundleResponse.result.status === 'VALID' ? 'valid' : 'invalid';
-  let proofReason = proofBundleResponse.result.reason.trim();
-  const proofTier = deriveProofTier(proofBundleResponse.result);
-
-  const minProofTierOk = proofTier !== null && proofTierRank(proofTier) >= proofTierRank(bounty.min_proof_tier);
-  if (proofStatus === 'valid' && !minProofTierOk) {
-    proofStatus = 'invalid';
-    proofReason = `proof tier '${proofTier ?? 'unknown'}' does not meet min_proof_tier '${bounty.min_proof_tier}'`;
-  }
-
   let commitProofResponse: VerifyCommitProofResponse | null = null;
   let commitStatus: 'valid' | 'invalid' | null = null;
   if (commit_proof_envelope_raw) {
@@ -12967,151 +13310,14 @@ async function handleSubmitBounty(
 
     commitStatus = commitProofResponse.result.status === 'VALID' ? 'valid' : 'invalid';
   }
+  const initialProofStatus: ProofVerifyStatus = hasProofBundle ? 'pending' : 'not_provided';
+  const initialProofReason = hasProofBundle ? 'proof verification queued' : 'no proof bundle attached';
+  const initialProofTier: SubmissionTrustTier = 'test-pass';
 
-  let replayRunId: string | null = null;
-  let replayReceiptKeys: ReplayReceiptKey[] = [];
-  let verifiedBoundReceiptCount = 0;
-  let verifiedBoundPolicyHashes = new Set<string>();
-  let verifiedBoundMissingPolicyHashCount = 0;
-  let verifiedBoundTokenScopeHashes = new Set<string>();
-  let verifiedBoundMissingTokenScopeHashCount = 0;
-
-  const replayAgentDid = proofBundleResponse.result.status === 'VALID' ? proofBundleAgentDid : null;
-  if (proofBundleResponse.result.status === 'VALID') {
-    const binding = extractRunIdAndEventHashesFromProofBundle(proof_bundle_envelope_raw);
-
-    if (binding) {
-      replayRunId = binding.run_id;
-      try {
-        const computed = await computeReplayReceiptKeys(env, proof_bundle_envelope_raw, {
-          run_id: binding.run_id,
-          allowed_event_hashes_b64u: binding.event_hashes_b64u,
-        });
-
-        replayReceiptKeys = computed.keys;
-        verifiedBoundReceiptCount = computed.verified_bound_receipt_count;
-        verifiedBoundPolicyHashes = computed.verified_bound_policy_hashes;
-        verifiedBoundMissingPolicyHashCount = computed.verified_bound_missing_policy_hash_count;
-        verifiedBoundTokenScopeHashes = computed.verified_bound_token_scope_hashes;
-        verifiedBoundMissingTokenScopeHashCount = computed.verified_bound_missing_token_scope_hash_count;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        return errorResponse('REPLAY_PROTECTION_FAILED', message, 502, undefined, version);
-      }
-    } else {
-      const receipts = extractReceiptsFromProofBundle(proof_bundle_envelope_raw);
-      if (receipts.length > 0) {
-        return errorResponse(
-          'INVALID_REQUEST',
-          'proof_bundle_envelope.payload.event_chain is required when receipts are present',
-          400,
-          undefined,
-          version
-        );
-      }
-    }
-  }
-
-  // Enforce Confidential Work Contract (CWC) binding for otherwise-valid submissions.
-  // We only evaluate this when the proof bundle verified as VALID and passes min_proof_tier.
-  if (bounty.cwc_hash_b64u && proofStatus === 'valid' && proofBundleResponse.result.status === 'VALID') {
-    const expectedPolicyHash = bounty.cwc_wpc_policy_hash_b64u;
-    if (!expectedPolicyHash) {
-      return errorResponse('CWC_INVALID_BOUNTY', 'Bounty is missing cwc_wpc_policy_hash_b64u', 500, undefined, version);
-    }
-
-    let expectedTokenScopeHash = bounty.cwc_token_scope_hash_b64u;
-
-    // Backwards compatibility: if the token scope hash isn't stored yet, compute it deterministically
-    // from the CWC job CST claims.
-    if (!expectedTokenScopeHash) {
-      try {
-        expectedTokenScopeHash = await computeTokenScopeHashB64uV1({
-          sub: worker_did,
-          aud: CWC_JOB_CST_AUD,
-          scope: CWC_JOB_CST_SCOPE,
-          policy_hash_b64u: expectedPolicyHash,
-          mission_id: bounty.bounty_id,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        return errorResponse(
-          'CWC_TOKEN_SCOPE_HASH_FAILED',
-          `Failed to compute token_scope_hash_b64u: ${message}`,
-          500,
-          undefined,
-          version
-        );
-      }
-
-      if (!expectedTokenScopeHash || !isSha256B64u(expectedTokenScopeHash)) {
-        return errorResponse(
-          'CWC_TOKEN_SCOPE_HASH_FAILED',
-          'Computed token_scope_hash_b64u is invalid',
-          500,
-          { token_scope_hash_b64u: expectedTokenScopeHash },
-          version
-        );
-      }
-    }
-
-    if (verifiedBoundReceiptCount === 0) {
-      proofStatus = 'invalid';
-      proofReason = 'CWC requires at least one verified, run-bound gateway receipt';
-    } else if (verifiedBoundMissingPolicyHashCount > 0) {
-      proofStatus = 'invalid';
-      proofReason = 'CWC requires binding.policy_hash on all verified, run-bound gateway receipts';
-    } else {
-      const mismatched = Array.from(verifiedBoundPolicyHashes).filter((h) => h !== expectedPolicyHash);
-      if (mismatched.length > 0 || !verifiedBoundPolicyHashes.has(expectedPolicyHash)) {
-        proofStatus = 'invalid';
-        proofReason = `CWC policy_hash mismatch (expected ${expectedPolicyHash}, got ${Array.from(verifiedBoundPolicyHashes).join(', ') || 'none'})`;
-      }
-    }
-
-    if (proofStatus === 'valid') {
-      if (verifiedBoundMissingTokenScopeHashCount > 0) {
-        proofStatus = 'invalid';
-        proofReason = 'CWC requires binding.token_scope_hash_b64u on all verified, run-bound gateway receipts';
-      } else if (verifiedBoundTokenScopeHashes.size !== 1 || !verifiedBoundTokenScopeHashes.has(expectedTokenScopeHash)) {
-        proofStatus = 'invalid';
-        proofReason = `CWC token_scope_hash mismatch (expected ${expectedTokenScopeHash}, got ${Array.from(verifiedBoundTokenScopeHashes).join(', ') || 'none'})`;
-      }
-    }
-  }
-
-  // POH-US-022: enforce job-scoped CST binding for non-CWC bounties (when configured).
-  //
-  // We only enforce this when:
-  // - the proof bundle verified as VALID
-  // - min_proof_tier passed (proofStatus still 'valid')
-  // - the bounty requires gateway-tier proofs (min_proof_tier !== 'self')
-  // - the bounty has a stored job_token_scope_hash_b64u (new regime)
-  if (
-    bounty.job_token_scope_hash_b64u &&
-    !bounty.cwc_hash_b64u &&
-    bounty.min_proof_tier !== 'self' &&
-    proofStatus === 'valid' &&
-    proofBundleResponse.result.status === 'VALID'
-  ) {
-    const expectedTokenScopeHash = bounty.job_token_scope_hash_b64u;
-
-    if (verifiedBoundReceiptCount === 0) {
-      proofStatus = 'invalid';
-      proofReason = 'Job binding requires at least one verified, run-bound gateway receipt';
-    } else if (verifiedBoundMissingTokenScopeHashCount > 0) {
-      proofStatus = 'invalid';
-      proofReason = 'Job binding requires binding.token_scope_hash_b64u on all verified, run-bound gateway receipts';
-    } else if (verifiedBoundTokenScopeHashes.size !== 1 || !verifiedBoundTokenScopeHashes.has(expectedTokenScopeHash)) {
-      proofStatus = 'invalid';
-      proofReason = `Job token_scope_hash mismatch (expected ${expectedTokenScopeHash}, got ${Array.from(verifiedBoundTokenScopeHashes).join(', ') || 'none'})`;
-    }
-  }
-
-  const isValid = proofStatus === 'valid' && (commitStatus ?? 'valid') === 'valid';
+  const isValid = (commitStatus ?? 'valid') === 'valid';
   const submissionStatus: SubmissionStatus = isValid ? 'pending_review' : 'invalid';
 
-  const proof_bundle_hash_b64u = isRecord(proof_bundle_envelope_raw) ? d1String(proof_bundle_envelope_raw.payload_hash_b64u) : null;
+  const proof_bundle_hash_b64u = proofBundleEnvelope ? d1String(proofBundleEnvelope.payload_hash_b64u) : null;
   const commit_proof_hash_b64u = isRecord(commit_proof_envelope_raw) ? d1String(commit_proof_envelope_raw.payload_hash_b64u) : null;
 
   let commit_sha: string | null = null;
@@ -13143,12 +13349,12 @@ async function handleSubmitBounty(
     worker_did,
     status: submissionStatus,
     idempotency_key,
-    proof_bundle_envelope: proof_bundle_envelope_raw,
+    proof_bundle_envelope: proofBundleEnvelope ?? {},
     proof_bundle_hash_b64u: proof_bundle_hash_b64u ? proof_bundle_hash_b64u.trim() : null,
-    proof_verify_status: proofStatus,
-    proof_verify_reason: proofReason,
-    proof_verified_at: proofBundleResponse.result.verified_at.trim(),
-    proof_tier: proofTier,
+    proof_verify_status: initialProofStatus,
+    proof_verify_reason: initialProofReason,
+    proof_verified_at: null,
+    proof_tier: initialProofTier,
     execution_attestations,
     commit_proof_envelope: isRecord(commit_proof_envelope_raw) ? commit_proof_envelope_raw : null,
     commit_proof_hash_b64u: commit_proof_hash_b64u ? commit_proof_hash_b64u.trim() : null,
@@ -13166,23 +13372,13 @@ async function handleSubmitBounty(
   };
 
   try {
-    if (proofBundleResponse.result.status === 'VALID') {
-      await insertSubmissionWithReplayGuards(env.BOUNTIES_DB, {
-        record,
-        agent_did: replayAgentDid,
-        run_id: replayRunId,
-        receipt_keys: replayReceiptKeys,
-        trust_pulse: storedTrustPulse,
-      });
+    if (storedTrustPulse) {
+      await env.BOUNTIES_DB.batch([
+        prepareInsertSubmission(env.BOUNTIES_DB, record),
+        prepareInsertSubmissionTrustPulse(env.BOUNTIES_DB, storedTrustPulse),
+      ]);
     } else {
-      if (storedTrustPulse) {
-        await env.BOUNTIES_DB.batch([
-          prepareInsertSubmission(env.BOUNTIES_DB, record),
-          prepareInsertSubmissionTrustPulse(env.BOUNTIES_DB, storedTrustPulse),
-        ]);
-      } else {
-        await insertSubmission(env.BOUNTIES_DB, record);
-      }
+      await insertSubmission(env.BOUNTIES_DB, record);
     }
   } catch (err) {
     try {
@@ -13214,51 +13410,6 @@ async function handleSubmitBounty(
     } catch (lookupErr) {
       const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
       return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
-    }
-
-    if (proofBundleResponse.result.status === 'VALID') {
-      try {
-        if (replayAgentDid && replayRunId) {
-          const seen = await getReplayRun(env.BOUNTIES_DB, {
-            agent_did: replayAgentDid,
-            run_id: replayRunId,
-          });
-          if (seen) {
-            return errorResponse(
-              'REPLAY_RUN_ID_REUSED',
-              'run_id already used in a prior submission',
-              409,
-              { run_id: replayRunId, first_seen: seen },
-              version
-            );
-          }
-        }
-
-        if (replayReceiptKeys.length > 0) {
-          for (const k of replayReceiptKeys) {
-            const seen = await getReplayReceipt(env.BOUNTIES_DB, {
-              receipt_signer_did: k.receipt_signer_did,
-              receipt_id: k.receipt_id,
-            });
-            if (seen) {
-              return errorResponse(
-                'REPLAY_RECEIPT_ID_REUSED',
-                'receipt_id already used in a prior submission',
-                409,
-                {
-                  receipt_signer_did: k.receipt_signer_did,
-                  receipt_id: k.receipt_id,
-                  first_seen: seen,
-                },
-                version
-              );
-            }
-          }
-        }
-      } catch (lookupErr) {
-        const message = lookupErr instanceof Error ? lookupErr.message : 'Unknown error';
-        return errorResponse('DB_READ_FAILED', message, 500, undefined, version);
-      }
     }
 
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -13300,6 +13451,32 @@ async function handleSubmitBounty(
           `Failed to persist arena failure lifecycle for bounty ${bounty.bounty_id} submission ${submission_id}: ${syncMessage}`,
         );
       }
+    }
+  }
+
+  if (proofBundleEnvelope) {
+    const verificationPromise = runSubmissionProofVerification(env, {
+      submission_id,
+      bounty_id: bounty.bounty_id,
+      worker_did,
+      min_proof_tier: bounty.min_proof_tier,
+      minimum_proof_tier: bounty.minimum_proof_tier,
+      cwc_hash_b64u: bounty.cwc_hash_b64u,
+      cwc_wpc_policy_hash_b64u: bounty.cwc_wpc_policy_hash_b64u,
+      cwc_token_scope_hash_b64u: bounty.cwc_token_scope_hash_b64u,
+      job_token_scope_hash_b64u: bounty.job_token_scope_hash_b64u,
+      proof_bundle_envelope: proofBundleEnvelope,
+      urm: isRecord(urm_raw) ? (urm_raw as Record<string, unknown>) : null,
+      execution_attestations,
+    });
+
+    if (options?.executionContext) {
+      options.executionContext.waitUntil(verificationPromise);
+    } else {
+      void verificationPromise.catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Failed to run background proof verification for submission ${submission_id}: ${message}`);
+      });
     }
   }
 
@@ -13592,16 +13769,9 @@ async function handleApproveBounty(
     return errorResponse('INVALID_STATUS', `Submission status is '${submission.status}'`, 409, undefined, version);
   }
 
-  if (submission.proof_verify_status !== 'valid') {
-    return errorResponse('SUBMISSION_INVALID', 'Submission proof bundle is invalid', 422, undefined, version);
-  }
-
-  if (submission.commit_proof_verify_status === 'invalid') {
-    return errorResponse('SUBMISSION_INVALID', 'Submission commit proof is invalid', 422, undefined, version);
-  }
-
-  if (bounty.is_code_bounty && submission.commit_proof_verify_status !== 'valid') {
-    return errorResponse('SUBMISSION_INVALID', 'Submission commit proof is required for code bounties', 422, undefined, version);
+  const approvalBlockReason = getSubmissionApprovalBlockReason(bounty, submission);
+  if (approvalBlockReason) {
+    return errorResponse('SUBMISSION_INVALID', approvalBlockReason, 422, undefined, version);
   }
 
   const verification: Record<string, unknown> = {
@@ -13921,7 +14091,7 @@ async function handleRejectBounty(
         worker_did: bounty.worker_did,
         opened_by: requesterAuth.requester_did,
         reason,
-        evidence: buildSubmissionTrialEvidence(resolvedSubmission),
+        evidence: await buildSubmissionTrialEvidence(resolvedSubmission),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14052,7 +14222,7 @@ async function handleRejectBounty(
       worker_did: bounty.worker_did,
       opened_by: requesterAuth.requester_did,
       reason,
-      evidence: buildSubmissionTrialEvidence(submission),
+      evidence: await buildSubmissionTrialEvidence(submission),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -14222,6 +14392,7 @@ async function handlePostBounty(
   const is_code_bounty_raw = bodyRaw.is_code_bounty;
   const tags_raw = bodyRaw.tags;
   const min_proof_tier_raw = bodyRaw.min_proof_tier;
+  const minimum_proof_tier_raw = bodyRaw.minimum_proof_tier;
   const require_owner_verified_votes_raw = bodyRaw.require_owner_verified_votes;
   const test_harness_id_raw = bodyRaw.test_harness_id;
   const idempotency_key_raw = bodyRaw.idempotency_key;
@@ -14275,7 +14446,33 @@ async function handlePostBounty(
     return errorResponse('INVALID_REQUEST', 'tags must be an array of non-empty strings (max 10)', 400, undefined, version);
   }
 
-  const min_proof_tier = parseProofTier(min_proof_tier_raw) ?? 'self';
+  const minProofTierLegacy = parseProofTier(min_proof_tier_raw);
+  const minimumProofTierExplicit = parseMinimumProofTier(minimum_proof_tier_raw);
+  if (minimum_proof_tier_raw !== undefined && minimum_proof_tier_raw !== null && !minimumProofTierExplicit) {
+    return errorResponse('INVALID_REQUEST', 'minimum_proof_tier must be one of none|gateway|sandbox', 400, undefined, version);
+  }
+
+  if (min_proof_tier_raw !== undefined && min_proof_tier_raw !== null && !minProofTierLegacy) {
+    return errorResponse('INVALID_REQUEST', 'min_proof_tier must be one of self|gateway|sandbox', 400, undefined, version);
+  }
+
+  if (minimumProofTierExplicit && minProofTierLegacy) {
+    const mappedLegacy = toMinimumProofTier(minProofTierLegacy);
+    if (minimumProofTierExplicit !== mappedLegacy) {
+      return errorResponse(
+        'INVALID_REQUEST',
+        'minimum_proof_tier conflicts with min_proof_tier',
+        400,
+        { minimum_proof_tier: minimumProofTierExplicit, min_proof_tier: minProofTierLegacy },
+        version
+      );
+    }
+  }
+
+  const minimum_proof_tier =
+    minimumProofTierExplicit ??
+    (minProofTierLegacy ? toMinimumProofTier(minProofTierLegacy) : 'none');
+  const min_proof_tier = toStoredMinProofTier(minimum_proof_tier);
 
   let require_owner_verified_votes = false;
   if (require_owner_verified_votes_raw !== undefined) {
@@ -14502,6 +14699,7 @@ async function handlePostBounty(
         is_code_bounty,
         tags,
         min_proof_tier,
+        minimum_proof_tier,
         requested_worker_did: requested_worker_did ?? null,
         cwc_hash_b64u,
         cwc_wpc_policy_hash_b64u,
@@ -14565,6 +14763,7 @@ async function handlePostBounty(
     is_code_bounty,
     tags,
     min_proof_tier,
+    minimum_proof_tier,
     require_owner_verified_votes,
     test_harness_id,
     metadata,
@@ -19940,6 +20139,7 @@ async function handlePostArenaDeskDiscoverLoop(
       is_code_bounty: false,
       tags: seedTags,
       min_proof_tier: 'self',
+      minimum_proof_tier: 'none',
       metadata: {
         arena_seed: true,
         arena_seed_version: '1',
@@ -20104,6 +20304,7 @@ async function handlePostArenaDeskDiscoverLoop(
           is_code_bounty: false,
           tags: seedTags,
           min_proof_tier: 'self',
+          minimum_proof_tier: 'none',
           require_owner_verified_votes: false,
           test_harness_id: null,
           metadata: {
@@ -20365,9 +20566,7 @@ async function handlePostArenaDeskDecisionLoop(
       continue;
     }
 
-    const proofValid = submission.proof_verify_status === 'valid';
-    const commitValidForCode = !bounty.is_code_bounty || submission.commit_proof_verify_status === 'valid';
-    const eligibleForApproval = proofValid && commitValidForCode;
+    const eligibleForApproval = isSubmissionEligibleForApproval(bounty, submission);
 
     let action: 'approve' | 'reject' | null = null;
     if (decisionMode === 'approve_valid') {
@@ -24145,7 +24344,7 @@ export default {
     console.log(JSON.stringify(result));
   },
 
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method.toUpperCase();
@@ -24497,7 +24696,7 @@ export default {
         if (!bountyId) {
           return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
         }
-        return handleSubmitBounty(bountyId, request, env, version);
+        return handleSubmitBounty(bountyId, request, env, version, { executionContext: ctx });
       }
 
       if (path === '/v1/bounties' && method === 'POST') {
