@@ -9,10 +9,10 @@
  */
 
 import { spawn, execFile, type ChildProcess } from 'node:child_process';
-import { readFile, writeFile, mkdir, unlink, copyFile, chmod, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink, copyFile, chmod, stat, rename } from 'node:fs/promises';
 import { openSync, readSync, closeSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { join, dirname, basename } from 'node:path';
+import { join, dirname, basename, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -45,6 +45,7 @@ import type {
   GatewayReceiptPayload,
   LocalPolicy,
   CommandAnalysis,
+  FsEvent,
 } from '@clawbureau/clawsig-sdk';
 
 const execFileAsync = promisify(execFile);
@@ -82,11 +83,28 @@ interface PublishResult {
   ledgerUrl?: string;
 }
 
+interface RunSummaryJson {
+  status: 'PASS' | 'FAIL';
+  tier: 'self' | 'gateway';
+  cost_usd: number;
+  tools_used: string[];
+  files_modified: string[];
+  policy_violations: number;
+  network_connections: number;
+  bundle_path: string;
+  did: string;
+  timestamp: string;
+  duration_seconds: number;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const VAAS_URL = 'https://api.clawverify.com/v1/verify';
+const CLAWSIG_DIR = '.clawsig';
+const BUNDLE_FILE = 'proof_bundle.json';
+const RUN_SUMMARY_FILE = 'run_summary.json';
 
 function toBase64Url(bytes: Uint8Array): string {
   return Buffer.from(bytes)
@@ -243,6 +261,7 @@ export async function wrap(
   args: string[],
   options: WrapOptions,
 ): Promise<number> {
+  const wrapStartedAtMs = Date.now();
   const { publish, outputPath, verbose = false, visibility = 'public', viewerDids = [] } = options;
 
   /** Write diagnostic line to stderr, only in verbose mode. */
@@ -846,9 +865,24 @@ export async function wrap(
   // 5. Always write bundle to .clawsig/proof_bundle.json
   const bundlePath = await writeBundleToDisk(bundle, verbose);
 
+  const runSummary: RunSummaryJson = {
+    status: exitCode === 0 ? 'PASS' : 'FAIL',
+    tier: totalGw > 0 ? 'gateway' : 'self',
+    cost_usd: extractBundleCostUsd(bundle),
+    tools_used: collectToolsUsed(bundle),
+    files_modified: collectFilesModified(fsSentinel.getEvents()),
+    policy_violations: proxy.violationCount,
+    network_connections: filteredNetworkReceipts.length,
+    bundle_path: '.clawsig/proof_bundle.json',
+    did: agentDid.did,
+    timestamp: new Date().toISOString(),
+    duration_seconds: Math.max(0, Math.round((Date.now() - wrapStartedAtMs) / 1000)),
+  };
+  await writeRunSummaryToDisk(runSummary, verbose);
+
   // 5b. Also write to custom output path if requested
   if (outputPath) {
-    await writeFile(outputPath, JSON.stringify(bundle, null, 2), 'utf-8');
+    await writeJsonAtomic(outputPath, bundle, 2);
     diag(`\x1b[36m[clawsig]\x1b[0m Bundle also written to: ${outputPath}\n`);
   }
 
@@ -957,10 +991,10 @@ async function writeBundleToDisk(
   verbose: boolean,
 ): Promise<string | null> {
   try {
-    const dir = join(process.cwd(), '.clawsig');
+    const dir = join(process.cwd(), CLAWSIG_DIR);
     await mkdir(dir, { recursive: true });
-    const bundlePath = join(dir, 'proof_bundle.json');
-    await writeFile(bundlePath, JSON.stringify(bundle, null, 2), 'utf-8');
+    const bundlePath = join(dir, BUNDLE_FILE);
+    await writeJsonAtomic(bundlePath, bundle, 2);
     if (verbose) {
       process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Bundle written to: ${bundlePath}\n`);
     }
@@ -972,6 +1006,171 @@ async function writeBundleToDisk(
     );
     return null;
   }
+}
+
+async function writeRunSummaryToDisk(
+  summary: RunSummaryJson,
+  verbose: boolean,
+): Promise<string | null> {
+  try {
+    const dir = join(process.cwd(), CLAWSIG_DIR);
+    await mkdir(dir, { recursive: true });
+    const summaryPath = join(dir, RUN_SUMMARY_FILE);
+    await writeJsonAtomic(summaryPath, summary);
+    if (verbose) {
+      process.stderr.write(`\x1b[36m[clawsig]\x1b[0m Run summary written to: ${summaryPath}\n`);
+    }
+    return summaryPath;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown error';
+    process.stderr.write(
+      `\x1b[33m[clawsig]\x1b[0m Could not write run summary to .clawsig/run_summary.json: ${message}\n`,
+    );
+    return null;
+  }
+}
+
+async function writeJsonAtomic(
+  filePath: string,
+  value: unknown,
+  indent?: number,
+): Promise<void> {
+  const dir = dirname(filePath);
+  await mkdir(dir, { recursive: true });
+
+  const tempPath = join(
+    dir,
+    `.${basename(filePath)}.tmp-${process.pid}-${Date.now()}-${crypto.randomUUID()}`,
+  );
+
+  try {
+    const json = JSON.stringify(value, null, indent);
+    await writeFile(tempPath, json, 'utf-8');
+    await rename(tempPath, filePath);
+  } catch (err) {
+    await unlink(tempPath).catch(() => {});
+    throw err;
+  }
+}
+
+function extractBundleCostUsd(bundle: SignedEnvelope<ProofBundlePayload>): number {
+  const payload = bundle.payload as unknown as Record<string, unknown>;
+
+  const fromRunSummary = readNumericField(payload['run_summary'], ['total_cost_usd', 'cost_usd']);
+  if (fromRunSummary !== null) return roundUsd(fromRunSummary);
+
+  const fromMetadataRunSummary = readNumericField(payload['metadata'], ['total_cost_usd', 'cost_usd']);
+  if (fromMetadataRunSummary !== null) return roundUsd(fromMetadataRunSummary);
+
+  const llmInteractions = payload['llm_interactions'];
+  if (Array.isArray(llmInteractions)) {
+    let total = 0;
+    let hasCosts = false;
+    for (const item of llmInteractions) {
+      if (!isObjectRecord(item)) continue;
+      const cost = item['cost_usd'];
+      if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) continue;
+      total += cost;
+      hasCosts = true;
+    }
+    if (hasCosts) return roundUsd(total);
+  }
+
+  return 0;
+}
+
+function readNumericField(
+  value: unknown,
+  fieldNames: string[],
+): number | null {
+  if (!isObjectRecord(value)) return null;
+  for (const fieldName of fieldNames) {
+    const candidate = value[fieldName];
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function roundUsd(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function collectToolsUsed(
+  bundle: SignedEnvelope<ProofBundlePayload>,
+  maxItems = 8,
+): string[] {
+  const tools = new Set<string>();
+  const addTool = (toolName: unknown) => {
+    if (typeof toolName !== 'string') return;
+    const trimmed = toolName.trim();
+    if (trimmed.length === 0) return;
+    tools.add(trimToMaxLength(trimmed, 48));
+  };
+
+  const payload = bundle.payload as unknown as Record<string, unknown>;
+  if (Array.isArray(payload['tool_receipts'])) {
+    for (const toolReceipt of payload['tool_receipts']) {
+      if (!isObjectRecord(toolReceipt)) continue;
+      addTool(toolReceipt['tool_name']);
+    }
+  }
+
+  if (Array.isArray(payload['receipts'])) {
+    for (const rawReceipt of payload['receipts']) {
+      if (!isObjectRecord(rawReceipt)) continue;
+
+      const envelopeType = rawReceipt['envelope_type'];
+      if (envelopeType === 'tool_receipt' && isObjectRecord(rawReceipt['payload'])) {
+        addTool(rawReceipt['payload']['tool_name']);
+      }
+
+      if (rawReceipt['receipt_type'] === 'tool_call') {
+        addTool(rawReceipt['tool_name']);
+      }
+    }
+  }
+
+  return Array.from(tools).slice(0, maxItems);
+}
+
+function collectFilesModified(
+  events: FsEvent[],
+  maxItems = 8,
+): string[] {
+  const mutations = new Set<string>();
+  const cwd = process.cwd();
+  const relevantOperations = new Set<FsEvent['operation']>([
+    'change',
+    'write',
+    'rename',
+    'delete',
+    'mkdir',
+  ]);
+
+  for (const event of events) {
+    if (!relevantOperations.has(event.operation)) continue;
+    if (event.isDirectory) continue;
+
+    const relativePath = relative(cwd, event.path);
+    if (relativePath === '' || relativePath === '.' || relativePath === '..') continue;
+    if (relativePath.startsWith('..')) continue;
+
+    const normalized = relativePath.split('\\').join('/');
+    if (normalized.startsWith('.clawsig/')) continue;
+
+    mutations.add(trimToMaxLength(normalized, 120));
+    if (mutations.size >= maxItems) break;
+  }
+
+  return Array.from(mutations);
+}
+
+function trimToMaxLength(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  if (maxLength <= 3) return value.slice(0, maxLength);
+  return `${value.slice(0, maxLength - 3)}...`;
 }
 
 // ---------------------------------------------------------------------------

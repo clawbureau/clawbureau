@@ -25,7 +25,13 @@ const CLI_PATH = resolve(__dirname, '../dist/cli.js');
 async function runWrap(
   workdir: string,
   extraFlags: string[] = [],
-): Promise<{ stderr: string; stdout: string; exitCode: number; bundlePath: string }> {
+): Promise<{
+  stderr: string;
+  stdout: string;
+  exitCode: number;
+  bundlePath: string;
+  summaryPath: string;
+}> {
   const args = [
     CLI_PATH,
     'wrap',
@@ -51,6 +57,7 @@ async function runWrap(
     stdout,
     exitCode: 0,
     bundlePath: join(workdir, '.clawsig', 'proof_bundle.json'),
+    summaryPath: join(workdir, '.clawsig', 'run_summary.json'),
   };
 }
 
@@ -189,6 +196,33 @@ describe('clawsig wrap quiet mode (SKL-003)', () => {
       expect(bundle.payload.agent_did).toMatch(/^did:key:/);
       expect(bundle.payload_hash_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
       expect(bundle.signature_b64u).toMatch(/^[A-Za-z0-9_-]+$/);
+    } finally {
+      await rm(workdir, { recursive: true, force: true });
+    }
+  });
+
+  it('run_summary.json is generated with required fields and compact size', async () => {
+    const workdir = await mkdtemp(join(tmpdir(), 'clawsig-summary-'));
+
+    try {
+      const { summaryPath } = await runWrap(workdir);
+      const raw = await readFile(summaryPath, 'utf-8');
+      const summary = JSON.parse(raw) as Record<string, unknown>;
+
+      expect(summary['status']).toMatch(/^(PASS|FAIL)$/);
+      expect(typeof summary['tier']).toBe('string');
+      expect(typeof summary['cost_usd']).toBe('number');
+      expect(Array.isArray(summary['tools_used'])).toBe(true);
+      expect(Array.isArray(summary['files_modified'])).toBe(true);
+      expect(typeof summary['policy_violations']).toBe('number');
+      expect(typeof summary['network_connections']).toBe('number');
+      expect(summary['bundle_path']).toBe('.clawsig/proof_bundle.json');
+      expect(typeof summary['did']).toBe('string');
+      expect(typeof summary['timestamp']).toBe('string');
+      expect(typeof summary['duration_seconds']).toBe('number');
+
+      // Lightweight distillation target.
+      expect(Buffer.byteLength(raw, 'utf-8')).toBeLessThan(500);
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }

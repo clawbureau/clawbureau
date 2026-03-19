@@ -75,7 +75,13 @@ beforeAll(() => {
 async function runWrap(
   workdir: string,
   extraFlags: string[] = [],
-): Promise<{ stderr: string; stdout: string; exitCode: number; bundlePath: string }> {
+): Promise<{
+  stderr: string;
+  stdout: string;
+  exitCode: number;
+  bundlePath: string;
+  summaryPath: string;
+}> {
   const args = [
     CLI_PATH,
     'wrap',
@@ -102,6 +108,7 @@ async function runWrap(
       stdout,
       exitCode: 0,
       bundlePath: join(workdir, '.clawsig', 'proof_bundle.json'),
+      summaryPath: join(workdir, '.clawsig', 'run_summary.json'),
     };
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; code?: number; status?: number };
@@ -110,6 +117,7 @@ async function runWrap(
       stdout: e.stdout ?? '',
       exitCode: e.status ?? e.code ?? 1,
       bundlePath: join(workdir, '.clawsig', 'proof_bundle.json'),
+      summaryPath: join(workdir, '.clawsig', 'run_summary.json'),
     };
   }
 }
@@ -407,7 +415,7 @@ describe('clawsig wrap --visibility (CLI integration)', () => {
   it('--visibility public produces v1 bundle (unchanged)', async () => {
     const workdir = await mkdtemp(join(tmpdir(), 'epv-pub-'));
     try {
-      const { exitCode, bundlePath } = await runWrap(workdir, ['--visibility', 'public']);
+      const { exitCode, bundlePath, summaryPath } = await runWrap(workdir, ['--visibility', 'public']);
       expect(exitCode).toBe(0);
 
       const raw = await readFile(bundlePath, 'utf-8');
@@ -417,6 +425,11 @@ describe('clawsig wrap --visibility (CLI integration)', () => {
       expect(payload.bundle_version).toBe('1');
       expect(payload.encrypted_payload).toBeUndefined();
       expect(payload.viewer_keys).toBeUndefined();
+
+      const summaryRaw = await readFile(summaryPath, 'utf-8');
+      const summary = JSON.parse(summaryRaw) as Record<string, unknown>;
+      expect(summary['bundle_path']).toBe('.clawsig/proof_bundle.json');
+      expect(summary['status']).toMatch(/^(PASS|FAIL)$/);
     } finally {
       await rm(workdir, { recursive: true, force: true });
     }

@@ -2,6 +2,7 @@
   "name": "@clawbureau/schema",
   "version": "0.2.0",
   "private": true,
+  "types": "./index.d.ts",
   "description": "Shared JSON schemas for Claw Bureau services",
   "license": "MIT"
 }
