@@ -1,0 +1,41 @@
+Clawsig v1 progress log
+========================
+
+2026-02-18: Roadmap created
+- 5 epics, 24 beads filed (monorepo-20a, monorepo-epv, monorepo-skl, monorepo-nxb, monorepo-dcp)
+- Dependency graph established
+- prd.json with 14 P1 stories
+- Deep-think synthesis reviewed: skills > MCP, clawbounties stays, decouple products
+
+2026-02-28: Critical path complete (PRs #435-#449)
+- 14 beads merged: all P1 critical-path items
+- SIG-KEY-001/002: persistent identity + key rotation
+- EPV-001/002/003: proof_bundle.v2 schema, visibility modes, inspect --decrypt
+- SKL-001/002/003: --json CLI, SKILL.md, quiet wrap output
+- NXB-001/002/003/004: work init, list, claim, submit
+- DCP-001/002: unarchive clawbounties, API contract boundary
+- +11,152 lines shipped
+
+2026-03-19: Roadmap COMPLETE (PRs #450-#459)
+- 15 remaining beads merged (10 tasks + 5 epics closed)
+- All 29/29 beads closed
+- GPT-5.3-Codex workers + GPT-5.4 xhigh reviewers pipeline
+- 41 bugs caught by reviewers, 13 security/critical fixes
+- +9,786 lines shipped
+- PRs:
+  #450 SIG-KEY-003 fleet identity registry
+  #451 DCP-003 optional proof bundles
+  #452 DCP-004 standalone mode (no marketplace)
+  #453 EPV-004 GitHub-DID binding attestation
+  #454 EPV-006 bounty encrypted proof for requester
+  #455 AWL-005 work status command
+  #456 AWL-006 structured task spec format
+  #457 AWL-007 next_actions[] in all API responses
+  #458 SKL-004 run_summary.json
+  #459 EPV-005 Explorer decryption via GitHub OAuth
+
+Post-v1 items flagged during review:
+- Crypto: HKDF salt binding + JCS canonicalization (epv6 review)
+- Schema: canonical github_did_binding attestation schema (epv4 review)
+- Security: GET-based logout CSRF in Explorer (epv5 review)
+- Testing: expired TTL fixtures, empty cross-platform/wrap-reseal test suites
