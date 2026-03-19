@@ -365,3 +365,24 @@ describe('schema/runtime contract wiring', () => {
     expect(out.valid).toBe(true);
   });
 });
+
+// DCP-003: minimum_proof_tier schema addition
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+describe('DCP-003: bounty schema minimum_proof_tier', () => {
+  it('bounty.v2.json includes minimum_proof_tier field', () => {
+    const schema = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../packages/schema/bounties/bounty.v2.json'), 'utf8')
+    );
+    expect(schema.properties).toHaveProperty('minimum_proof_tier');
+  });
+
+  it('post_bounty_request.v2.json includes minimum_proof_tier field', () => {
+    const schema = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../packages/schema/bounties/post_bounty_request.v2.json'), 'utf8')
+    );
+    expect(schema.properties).toHaveProperty('minimum_proof_tier');
+  });
+});

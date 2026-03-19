@@ -80,7 +80,14 @@
       "type": "string",
       "enum": ["self", "gateway", "sandbox"],
       "default": "self",
-      "description": "Minimum proof tier required for acceptance (self|gateway|sandbox)"
+      "deprecated": true,
+      "description": "Legacy alias for minimum_proof_tier. Mapping: self->none, gateway->gateway, sandbox->sandbox."
+    },
+    "minimum_proof_tier": {
+      "type": "string",
+      "enum": ["none", "gateway", "sandbox"],
+      "default": "none",
+      "description": "Optional requester floor for proof-tier uplift. Submissions without qualifying proof remain at test-pass."
     },
     "min_poh_tier": {
       "type": "integer",
