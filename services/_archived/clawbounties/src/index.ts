@@ -55,6 +55,8 @@ export interface Env {
 
   /** Worker auth token TTL in seconds for /v1/workers/register (defaults to 86400). */
   WORKER_TOKEN_TTL_SECONDS?: string;
+  /** HMAC secret for self-issued worker JWTs from /v1/workers/register. */
+  WORKER_JWT_SECRET?: string;
 
   /** Compatibility path: allow admin + x-requester-did requester auth (disabled by default). */
   REQUESTER_AUTH_COMPAT_LEGACY?: string;
@@ -115,6 +117,12 @@ type WorkerAuthAction =
   | 'reregister_worker';
 
 type ScopedTokenLane = 'legacy' | 'canonical';
+type ParsedCompactJwt = {
+  header: Record<string, unknown>;
+  payload: Record<string, unknown>;
+  signing_input: string;
+  signature: Uint8Array;
+};
 
 interface RequesterAuthContext {
   requester_did: string;
@@ -151,6 +159,14 @@ interface WorkerAuthContext {
   iat: number | null;
   exp: number | null;
   bearer_token: string | null;
+}
+
+interface WorkerSelfIssuedJwtClaims {
+  sub: string;
+  aud: string[];
+  scope: string[];
+  iat: number;
+  exp: number;
 }
 
 interface ScopeIntrospectionSuccess {
@@ -226,6 +242,9 @@ const WORKER_AUTH_SCOPE_BY_ACTION: Record<WorkerAuthAction, string> = {
   read_trust_pulse: 'clawbounties:submission:trust-pulse:read',
   reregister_worker: 'clawbounties:worker:register',
 };
+
+const WORKER_SELF_ISSUED_JWT_ISSUER = 'clawbounties:worker:self-issued';
+const WORKER_SELF_ISSUED_SCOPE = 'worker';
 
 type FeePayer = 'buyer' | 'worker';
 type FeeSplitKind = 'platform' | 'referral';
@@ -1869,8 +1888,98 @@ function getBearerToken(header: string | null): string | null {
   return trimmed;
 }
 
+function decodeJwtSegmentToRecord(segment: string): Record<string, unknown> | null {
+  try {
+    const decoded = new TextDecoder().decode(base64UrlDecode(segment));
+    const parsed = JSON.parse(decoded) as unknown;
+    if (!isRecord(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function parseCompactJwt(token: string): ParsedCompactJwt | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [headerPart, payloadPart, signaturePart] = parts;
+  if (!headerPart || !payloadPart || !signaturePart) return null;
+
+  const header = decodeJwtSegmentToRecord(headerPart);
+  const payload = decodeJwtSegmentToRecord(payloadPart);
+  if (!header || !payload) return null;
+
+  try {
+    const signature = base64UrlDecode(signaturePart);
+    return {
+      header,
+      payload,
+      signing_input: `${headerPart}.${payloadPart}`,
+      signature,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function looksLikeJwtToken(token: string): boolean {
   return token.split('.').length === 3;
+}
+
+function resolveWorkerJwtSecret(env: Env): string | null {
+  const value = env.WORKER_JWT_SECRET?.trim();
+  if (!value) return null;
+  return value;
+}
+
+async function verifyHs256JwtSignature(
+  signingInput: string,
+  signature: Uint8Array,
+  secret: string
+): Promise<boolean> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+
+  return crypto.subtle.verify('HMAC', key, signature, new TextEncoder().encode(signingInput));
+}
+
+async function mintWorkerSelfIssuedJwt(params: {
+  worker_did: string;
+  aud: string;
+  iat: number;
+  exp: number;
+  secret: string;
+}): Promise<string> {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = {
+    iss: WORKER_SELF_ISSUED_JWT_ISSUER,
+    sub: params.worker_did,
+    aud: params.aud,
+    iat: params.iat,
+    exp: params.exp,
+    scope: WORKER_SELF_ISSUED_SCOPE,
+  };
+
+  const encodedHeader = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
+  const encodedPayload = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(params.secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signingInput));
+
+  return `${signingInput}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
 function isAdminAuthorized(request: Request, env: Env): boolean {
@@ -1914,6 +2023,109 @@ function requireRiskService(request: Request, env: Env, version: string): Respon
   return null;
 }
 
+async function validateSelfIssuedWorkerJwt(
+  env: Env,
+  token: string,
+  version: string,
+  action: WorkerAuthAction
+): Promise<{ claims: WorkerSelfIssuedJwtClaims } | { skip: true } | { error: Response }> {
+  const parsed = parseCompactJwt(token);
+  if (!parsed) return { skip: true };
+
+  const issuer = isNonEmptyString(parsed.payload.iss) ? parsed.payload.iss.trim() : null;
+  if (issuer !== WORKER_SELF_ISSUED_JWT_ISSUER) return { skip: true };
+
+  const alg = isNonEmptyString(parsed.header.alg) ? parsed.header.alg.trim() : null;
+  if (alg !== 'HS256') {
+    return {
+      error: errorResponse('WORKER_TOKEN_INVALID', 'Worker self-issued token uses unsupported algorithm', 401, undefined, version),
+    };
+  }
+
+  const secret = resolveWorkerJwtSecret(env);
+  if (!secret) {
+    return {
+      error: errorResponse(
+        'WORKER_JWT_SECRET_NOT_CONFIGURED',
+        'WORKER_JWT_SECRET is not configured for worker token verification',
+        503,
+        undefined,
+        version
+      ),
+    };
+  }
+
+  const signatureValid = await verifyHs256JwtSignature(parsed.signing_input, parsed.signature, secret);
+  if (!signatureValid) {
+    return {
+      error: errorResponse('WORKER_TOKEN_INVALID', 'Worker self-issued token signature is invalid', 401, undefined, version),
+    };
+  }
+
+  const worker_did = isNonEmptyString(parsed.payload.sub) ? parsed.payload.sub.trim() : null;
+  if (!worker_did || !worker_did.startsWith('did:')) {
+    return {
+      error: errorResponse('WORKER_SUB_INVALID', 'Worker token subject must be a DID', 401, undefined, version),
+    };
+  }
+
+  const scope = parseTokenScopeClaim(parsed.payload.scope);
+  if (!scope.includes(WORKER_SELF_ISSUED_SCOPE) && !hasWorkerScope(scope, action)) {
+    return {
+      error: errorResponse(
+        'WORKER_SCOPE_REQUIRED',
+        'Worker token does not include the required scope for this action',
+        403,
+        { required_scope: WORKER_AUTH_SCOPE_BY_ACTION[action], scope },
+        version
+      ),
+    };
+  }
+
+  const requiredAudience = resolveWorkerAuthRequiredAudience(env);
+  const aud = parseTokenAudClaim(parsed.payload.aud);
+  if (!aud.includes(requiredAudience)) {
+    return {
+      error: errorResponse(
+        'WORKER_AUDIENCE_REQUIRED',
+        'Worker token audience does not include clawbounties',
+        403,
+        { required_audience: requiredAudience, aud },
+        version
+      ),
+    };
+  }
+
+  const iat = typeof parsed.payload.iat === 'number' && Number.isFinite(parsed.payload.iat)
+    ? Math.floor(parsed.payload.iat)
+    : null;
+  const exp = typeof parsed.payload.exp === 'number' && Number.isFinite(parsed.payload.exp)
+    ? Math.floor(parsed.payload.exp)
+    : null;
+  if (iat === null || exp === null || exp <= iat) {
+    return {
+      error: errorResponse('WORKER_TOKEN_INVALID', 'Worker self-issued token has invalid temporal claims', 401, undefined, version),
+    };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (exp <= nowSeconds) {
+    return {
+      error: errorResponse('WORKER_TOKEN_INVALID', 'Worker self-issued token is expired', 401, undefined, version),
+    };
+  }
+
+  return {
+    claims: {
+      sub: worker_did,
+      aud,
+      scope,
+      iat,
+      exp,
+    },
+  };
+}
+
 async function requireWorker(
   request: Request,
   env: Env,
@@ -1933,6 +2145,57 @@ async function requireWorker(
   const workerHint = params?.worker_did_hint?.trim() || null;
 
   if (looksLikeJwtToken(token)) {
+    const selfIssued = await validateSelfIssuedWorkerJwt(env, token, version, action);
+    if ('error' in selfIssued) return selfIssued;
+
+    if ('claims' in selfIssued) {
+      const worker_did = selfIssued.claims.sub;
+      if (workerHint && workerHint !== worker_did) {
+        return {
+          error: errorResponse(
+            'WORKER_SUB_MISMATCH',
+            'worker_did does not match worker token subject',
+            401,
+            { worker_did, requested_worker_did: workerHint },
+            version
+          ),
+        };
+      }
+
+      let worker: WorkerRecordV1 | null;
+      try {
+        worker = await getWorkerByDid(env.BOUNTIES_DB, worker_did);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        return { error: errorResponse('DB_READ_FAILED', message, 500, undefined, version) };
+      }
+
+      if (!worker) {
+        return {
+          error: errorResponse('WORKER_NOT_REGISTERED', 'Worker is not registered in marketplace', 404, undefined, version),
+        };
+      }
+
+      const tokenHash = await sha256HexUtf8(token);
+      return {
+        worker,
+        auth: {
+          worker_did,
+          auth_mode: 'scoped_token',
+          token_hash: tokenHash,
+          scope: selfIssued.claims.scope,
+          aud: selfIssued.claims.aud,
+          token_scope_hash_b64u: null,
+          token_lane: null,
+          payment_account_did: null,
+          agent_did: worker_did,
+          iat: selfIssued.claims.iat,
+          exp: selfIssued.claims.exp,
+          bearer_token: token,
+        },
+      };
+    }
+
     const introspection = await introspectWorkerToken(env, token, version);
     if ('error' in introspection) return introspection;
 
@@ -3189,12 +3452,6 @@ function resolveWorkerTokenTtlSeconds(env: Env): number {
   if (ttl > 30 * 24 * 60 * 60) return 24 * 60 * 60;
 
   return ttl;
-}
-
-function generateWorkerToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return base64UrlEncode(bytes);
 }
 
 // ---------------------------------------------------------------------------
@@ -12234,11 +12491,36 @@ async function handleRegisterWorker(request: Request, env: Env, version: string)
 
   const worker_id = existing?.worker_id ?? `wrk_${crypto.randomUUID()}`;
   const created_at = existing?.created_at ?? now;
-
-  const authToken = generateWorkerToken();
-  const auth_token_hash_hex = await sha256HexUtf8(authToken);
   const ttlSeconds = resolveWorkerTokenTtlSeconds(env);
-  const auth_token_expires_at = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + ttlSeconds;
+  const workerJwtSecret = resolveWorkerJwtSecret(env);
+  if (!workerJwtSecret) {
+    return errorResponse(
+      'WORKER_JWT_SECRET_NOT_CONFIGURED',
+      'WORKER_JWT_SECRET is not configured',
+      503,
+      undefined,
+      version
+    );
+  }
+
+  let authToken: string;
+  try {
+    authToken = await mintWorkerSelfIssuedJwt({
+      worker_did,
+      aud: resolveWorkerAuthRequiredAudience(env),
+      iat,
+      exp,
+      secret: workerJwtSecret,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return errorResponse('INTERNAL_ERROR', `Failed to issue worker token: ${message}`, 500, undefined, version);
+  }
+
+  const auth_token_hash_hex = await sha256HexUtf8(authToken);
+  const auth_token_expires_at = new Date(exp * 1000).toISOString();
 
   const record: WorkerRecordV1 = {
     worker_id,
