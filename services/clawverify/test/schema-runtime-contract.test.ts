@@ -366,20 +366,27 @@ describe('schema/runtime contract wiring', () => {
   });
 });
 
+function extractInterfaceBody(source: string, interfaceName: string): string {
+  const pattern = new RegExp(`export interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`, 'm');
+  const match = source.match(pattern);
+  return match?.[1] ?? '';
+}
+
 // DCP-003: minimum_proof_tier schema addition
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
 
 describe('DCP-003: bounty schema minimum_proof_tier', () => {
-  it('bounty.v2.json includes minimum_proof_tier field', () => {
+  it('bounty.v2.json includes minimum_proof_tier field', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
     const schema = JSON.parse(
       readFileSync(resolve(__dirname, '../../../packages/schema/bounties/bounty.v2.json'), 'utf8')
     );
     expect(schema.properties).toHaveProperty('minimum_proof_tier');
   });
 
-  it('post_bounty_request.v2.json includes minimum_proof_tier field', () => {
+  it('post_bounty_request.v2.json includes minimum_proof_tier field', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
     const schema = JSON.parse(
       readFileSync(resolve(__dirname, '../../../packages/schema/bounties/post_bounty_request.v2.json'), 'utf8')
     );
@@ -388,8 +395,6 @@ describe('DCP-003: bounty schema minimum_proof_tier', () => {
 });
 
 // SKL-004: RunSummary schema type addition
-import { describe, it, expect } from 'vitest';
-
 describe('SKL-004: RunSummary schema type', () => {
   it('packages/schema exports RunSummary type definition', async () => {
     const { readFileSync } = await import('fs');
@@ -410,5 +415,78 @@ describe('AWL-006: task_spec.v1 schema', () => {
     expect(schema.required).toEqual(
       expect.arrayContaining(['objective', 'repo', 'base_ref', 'validation', 'constraints', 'deliverables'])
     );
+  });
+});
+
+describe('EPV-004: github_did_binding schema contract', () => {
+  it('keeps schema and identity-github TypeScript interfaces aligned', async () => {
+    const { existsSync, readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+
+    const schemaPath = resolve(__dirname, '../../../packages/schema/identity/github_did_binding.v1.json');
+    expect(existsSync(schemaPath)).toBe(true);
+
+    const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
+    expect(schema.properties?.envelope_type?.const).toBe('github_did_binding');
+    expect(schema.properties?.payload?.properties?.attestation_type?.const).toBe('github_did_binding');
+    expect(schema.properties?.algorithm?.const).toBe('Ed25519');
+    expect(schema.properties?.hash_algorithm?.const).toBe('SHA-256');
+
+    expect(schema.required).toEqual(
+      expect.arrayContaining([
+        'envelope_version',
+        'envelope_type',
+        'payload',
+        'payload_hash_b64u',
+        'hash_algorithm',
+        'signature_b64u',
+        'algorithm',
+        'signer_did',
+        'issued_at',
+      ])
+    );
+    expect(schema.properties?.payload?.required).toEqual(
+      expect.arrayContaining([
+        'attestation_version',
+        'attestation_type',
+        'attestation_id',
+        'github_username',
+        'github_user_id',
+        'did',
+        'statement',
+        'issued_at',
+      ])
+    );
+
+    const source = readFileSync(
+      resolve(__dirname, '../../../packages/clawverify-cli/src/identity-github.ts'),
+      'utf8'
+    );
+
+    const payloadInterface = extractInterfaceBody(source, 'GithubDidBindingAttestationPayload');
+    expect(payloadInterface.length).toBeGreaterThan(0);
+    expect(payloadInterface).toContain("attestation_version: '1';");
+    expect(payloadInterface).toContain("attestation_type: 'github_did_binding';");
+    for (const field of [
+      'attestation_id',
+      'github_username',
+      'github_user_id',
+      'did',
+      'statement',
+      'issued_at',
+    ]) {
+      expect(payloadInterface).toContain(`${field}:`);
+    }
+
+    const envelopeInterface = extractInterfaceBody(source, 'GithubDidBindingAttestationEnvelope');
+    expect(envelopeInterface.length).toBeGreaterThan(0);
+    expect(envelopeInterface).toContain("envelope_version: '1';");
+    expect(envelopeInterface).toContain("envelope_type: 'github_did_binding';");
+    expect(envelopeInterface).toContain('payload: GithubDidBindingAttestationPayload;');
+    expect(envelopeInterface).toContain("hash_algorithm: 'SHA-256';");
+    expect(envelopeInterface).toContain("algorithm: 'Ed25519';");
+    for (const field of ['payload_hash_b64u', 'signature_b64u', 'signer_did', 'issued_at']) {
+      expect(envelopeInterface).toContain(`${field}:`);
+    }
   });
 });

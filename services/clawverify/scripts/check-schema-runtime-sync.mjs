@@ -74,6 +74,10 @@ const contractTestPath = path.resolve(
   repoRoot,
   'services/clawverify/test/schema-runtime-contract.test.ts'
 );
+const githubBindingSchemaPath = path.resolve(
+  repoRoot,
+  'packages/schema/identity/github_did_binding.v1.json'
+);
 
 const requiredGeneratedValidators = [
   'validateVirV2',
@@ -127,12 +131,16 @@ for (const snippet of requiredAllowlistEntries) {
 if (!fs.existsSync(contractTestPath)) {
   fail('Missing contract test: services/clawverify/test/schema-runtime-contract.test.ts');
 }
+if (!fs.existsSync(githubBindingSchemaPath)) {
+  fail('Missing schema contract: packages/schema/identity/github_did_binding.v1.json');
+}
 
 assertFileContains(contractTestPath, 'web_receipts', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'coverage_attestations', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'binary_semantic_evidence_attestations', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'vir_receipts', 'schema-runtime-contract.test.ts');
 assertFileContains(contractTestPath, 'span_id', 'schema-runtime-contract.test.ts');
+assertFileContains(contractTestPath, 'github_did_binding', 'schema-runtime-contract.test.ts');
 
 // Regeneration guard: if running the generator mutates the generated file, fail.
 const generatedBefore = fs.readFileSync(generatedPath, 'utf8');
