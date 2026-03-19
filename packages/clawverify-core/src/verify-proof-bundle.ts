@@ -1533,6 +1533,40 @@ function validateEnvelopeStructure(
   );
 }
 
+function isEnvelopeInput(value: unknown): value is Record<string, unknown> {
+  if (!isObjectRecord(value)) return false;
+  return (
+    'envelope_version' in value &&
+    'payload' in value &&
+    'signature_b64u' in value
+  );
+}
+
+function normalizeLegacyRawReceiptEntries(payload: unknown): unknown {
+  if (!isObjectRecord(payload)) return payload;
+  const receipts = payload.receipts;
+  if (!Array.isArray(receipts)) return payload;
+
+  const normalizedReceipts = receipts.filter((entry) => {
+    if (!isObjectRecord(entry)) return true;
+    // clawsig wrap can append non-envelope diagnostic receipts into payload.receipts.
+    // Keep envelope-style receipts as-is and ignore only legacy raw objects.
+    if ('envelope_type' in entry) return true;
+    if ('receipt_type' in entry) return false;
+    return true;
+  });
+
+  if (normalizedReceipts.length === receipts.length) return payload;
+
+  const normalizedPayload: Record<string, unknown> = { ...payload };
+  if (normalizedReceipts.length > 0) {
+    normalizedPayload.receipts = normalizedReceipts;
+  } else {
+    delete normalizedPayload.receipts;
+  }
+  return normalizedPayload;
+}
+
 /**
  * Validate proof bundle payload structure against PoH schema (proof_bundle.v1).
  *
@@ -2674,19 +2708,25 @@ export async function verifyProofBundle(
     ? Math.max(0, Math.trunc(options.ttlSkewMs as number))
     : 0;
 
-  // 1. Validate envelope structure
-  if (!validateEnvelopeStructure(envelope)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Malformed envelope: missing required fields',
-        verified_at: now,
-      },
-      error: {
-        code: 'MALFORMED_ENVELOPE',
-        message: 'Envelope is missing required fields or has invalid structure',
-      },
-    };
+  const hasEnvelopeFormat = isEnvelopeInput(envelope);
+  let parsedEnvelope: SignedEnvelope<ProofBundlePayload> | null = null;
+  if (hasEnvelopeFormat) {
+    // 1. Validate envelope structure
+    if (!validateEnvelopeStructure(envelope)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Malformed envelope: missing required fields',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'Envelope is missing required fields or has invalid structure',
+        },
+      };
+    }
+
+    parsedEnvelope = envelope;
   }
 
   const causalPolicy = resolveCausalPolicySnapshot(options);
@@ -2712,205 +2752,215 @@ export async function verifyProofBundle(
 
   const resolvedCausalPolicy = causalPolicy.snapshot;
 
-  // 2. Fail-closed: reject unknown envelope version
-  if (!isAllowedVersion(envelope.envelope_version)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Unknown envelope version: ${envelope.envelope_version}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'UNKNOWN_ENVELOPE_VERSION',
-        message: `Envelope version "${envelope.envelope_version}" is not in the allowlist`,
-        field: 'envelope_version',
-      },
-    };
-  }
-
-  // 3. Fail-closed: reject unknown envelope type
-  if (!isAllowedType(envelope.envelope_type)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Unknown envelope type: ${envelope.envelope_type}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'UNKNOWN_ENVELOPE_TYPE',
-        message: `Envelope type "${envelope.envelope_type}" is not in the allowlist`,
-        field: 'envelope_type',
-      },
-    };
-  }
-
-  // 4. Verify this is a proof_bundle envelope
-  if (envelope.envelope_type !== 'proof_bundle') {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Expected proof_bundle envelope, got: ${envelope.envelope_type}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'UNKNOWN_ENVELOPE_TYPE',
-        message: 'This endpoint only accepts proof_bundle envelopes',
-        field: 'envelope_type',
-      },
-    };
-  }
-
-  // 5. Fail-closed: reject unknown signature algorithm
-  if (!isAllowedAlgorithm(envelope.algorithm)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Unknown signature algorithm: ${envelope.algorithm}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'UNKNOWN_ALGORITHM',
-        message: `Signature algorithm "${envelope.algorithm}" is not in the allowlist`,
-        field: 'algorithm',
-      },
-    };
-  }
-
-  // 6. Fail-closed: reject unknown hash algorithm
-  if (!isAllowedHashAlgorithm(envelope.hash_algorithm)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Unknown hash algorithm: ${envelope.hash_algorithm}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'UNKNOWN_HASH_ALGORITHM',
-        message: `Hash algorithm "${envelope.hash_algorithm}" is not in the allowlist`,
-        field: 'hash_algorithm',
-      },
-    };
-  }
-
-  // 7. Validate DID format
-  if (!isValidDidFormat(envelope.signer_did)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Invalid DID format: ${envelope.signer_did}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'INVALID_DID_FORMAT',
-        message:
-          'Signer DID does not match expected format (did:key:... or did:web:...)',
-        field: 'signer_did',
-      },
-    };
-  }
-
-  // 8. Validate issued_at format
-  if (!isValidIsoDate(envelope.issued_at)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Invalid issued_at date format',
-        verified_at: now,
-      },
-      error: {
-        code: 'MALFORMED_ENVELOPE',
-        message: 'issued_at must be a valid ISO 8601 date string',
-        field: 'issued_at',
-      },
-    };
-  }
-
-  if (envelope.expires_at !== undefined) {
-    if (!isValidIsoDate(envelope.expires_at)) {
+  if (parsedEnvelope) {
+    // 2. Fail-closed: reject unknown envelope version
+    if (!isAllowedVersion(parsedEnvelope.envelope_version)) {
       return {
         result: {
           status: 'INVALID',
-          reason: 'Invalid expires_at date format',
+          reason: `Unknown envelope version: ${parsedEnvelope.envelope_version}`,
+          verified_at: now,
+        },
+        error: {
+          code: 'UNKNOWN_ENVELOPE_VERSION',
+          message: `Envelope version "${parsedEnvelope.envelope_version}" is not in the allowlist`,
+          field: 'envelope_version',
+        },
+      };
+    }
+
+    // 3. Fail-closed: reject unknown envelope type
+    if (!isAllowedType(parsedEnvelope.envelope_type)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Unknown envelope type: ${parsedEnvelope.envelope_type}`,
+          verified_at: now,
+        },
+        error: {
+          code: 'UNKNOWN_ENVELOPE_TYPE',
+          message: `Envelope type "${parsedEnvelope.envelope_type}" is not in the allowlist`,
+          field: 'envelope_type',
+        },
+      };
+    }
+
+    // 4. Verify this is a proof_bundle envelope
+    if (parsedEnvelope.envelope_type !== 'proof_bundle') {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Expected proof_bundle envelope, got: ${parsedEnvelope.envelope_type}`,
+          verified_at: now,
+        },
+        error: {
+          code: 'UNKNOWN_ENVELOPE_TYPE',
+          message: 'This endpoint only accepts proof_bundle envelopes',
+          field: 'envelope_type',
+        },
+      };
+    }
+
+    // 5. Fail-closed: reject unknown signature algorithm
+    if (!isAllowedAlgorithm(parsedEnvelope.algorithm)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Unknown signature algorithm: ${parsedEnvelope.algorithm}`,
+          verified_at: now,
+        },
+        error: {
+          code: 'UNKNOWN_ALGORITHM',
+          message: `Signature algorithm "${parsedEnvelope.algorithm}" is not in the allowlist`,
+          field: 'algorithm',
+        },
+      };
+    }
+
+    // 6. Fail-closed: reject unknown hash algorithm
+    if (!isAllowedHashAlgorithm(parsedEnvelope.hash_algorithm)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Unknown hash algorithm: ${parsedEnvelope.hash_algorithm}`,
+          verified_at: now,
+        },
+        error: {
+          code: 'UNKNOWN_HASH_ALGORITHM',
+          message: `Hash algorithm "${parsedEnvelope.hash_algorithm}" is not in the allowlist`,
+          field: 'hash_algorithm',
+        },
+      };
+    }
+
+    // 7. Validate DID format
+    if (!isValidDidFormat(parsedEnvelope.signer_did)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Invalid DID format: ${parsedEnvelope.signer_did}`,
+          verified_at: now,
+        },
+        error: {
+          code: 'INVALID_DID_FORMAT',
+          message:
+            'Signer DID does not match expected format (did:key:... or did:web:...)',
+          field: 'signer_did',
+        },
+      };
+    }
+
+    // 8. Validate issued_at format
+    if (!isValidIsoDate(parsedEnvelope.issued_at)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Invalid issued_at date format',
           verified_at: now,
         },
         error: {
           code: 'MALFORMED_ENVELOPE',
-          message: 'expires_at must be a valid ISO 8601 date string',
-          field: 'expires_at',
+          message: 'issued_at must be a valid ISO 8601 date string',
+          field: 'issued_at',
         },
       };
     }
 
-    if (verificationTimeMs > Date.parse(envelope.expires_at) + ttlSkewMs) {
+    if (parsedEnvelope.expires_at !== undefined) {
+      if (!isValidIsoDate(parsedEnvelope.expires_at)) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Invalid expires_at date format',
+            verified_at: now,
+          },
+          error: {
+            code: 'MALFORMED_ENVELOPE',
+            message: 'expires_at must be a valid ISO 8601 date string',
+            field: 'expires_at',
+          },
+        };
+      }
+
+      if (verificationTimeMs > Date.parse(parsedEnvelope.expires_at) + ttlSkewMs) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Proof bundle envelope has expired',
+            verified_at: now,
+          },
+          error: {
+            code: 'EXPIRED_TTL',
+            message: 'Envelope expires_at is in the past for the verification time',
+            field: 'expires_at',
+          },
+        };
+      }
+    }
+
+    // 9. Validate base64url fields
+    if (!isValidBase64Url(parsedEnvelope.payload_hash_b64u)) {
       return {
         result: {
           status: 'INVALID',
-          reason: 'Proof bundle envelope has expired',
+          reason: 'Invalid payload_hash_b64u format',
           verified_at: now,
         },
         error: {
-          code: 'EXPIRED_TTL',
-          message: 'Envelope expires_at is in the past for the verification time',
-          field: 'expires_at',
+          code: 'MALFORMED_ENVELOPE',
+          message: 'payload_hash_b64u must be a valid base64url string',
+          field: 'payload_hash_b64u',
+        },
+      };
+    }
+
+    if (!isValidBase64Url(parsedEnvelope.signature_b64u)) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: 'Invalid signature_b64u format',
+          verified_at: now,
+        },
+        error: {
+          code: 'MALFORMED_ENVELOPE',
+          message: 'signature_b64u must be a valid base64url string',
+          field: 'signature_b64u',
+        },
+      };
+    }
+
+    // 9.75 Strict JSON schema validation (Ajv) for envelope + payload
+    // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
+    const schemaPayload = normalizeLegacyRawReceiptEntries(parsedEnvelope.payload);
+    const schemaEnvelope =
+      schemaPayload === parsedEnvelope.payload
+        ? parsedEnvelope
+        : { ...parsedEnvelope, payload: schemaPayload };
+    const schemaResult = validateProofBundleEnvelopeV1(schemaEnvelope);
+    if (!schemaResult.valid) {
+      const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
+      const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
+
+      return {
+        result: {
+          status: 'INVALID',
+          reason: schemaResult.message,
+          verified_at: now,
+        },
+        error: {
+          code: schemaErrorCode,
+          message: schemaResult.message,
+          field: schemaResult.field,
         },
       };
     }
   }
 
-  // 9. Validate base64url fields
-  if (!isValidBase64Url(envelope.payload_hash_b64u)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Invalid payload_hash_b64u format',
-        verified_at: now,
-      },
-      error: {
-        code: 'MALFORMED_ENVELOPE',
-        message: 'payload_hash_b64u must be a valid base64url string',
-        field: 'payload_hash_b64u',
-      },
-    };
-  }
-
-  if (!isValidBase64Url(envelope.signature_b64u)) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Invalid signature_b64u format',
-        verified_at: now,
-      },
-      error: {
-        code: 'MALFORMED_ENVELOPE',
-        message: 'signature_b64u must be a valid base64url string',
-        field: 'signature_b64u',
-      },
-    };
-  }
-
-  // 9.75 Strict JSON schema validation (Ajv) for envelope + payload
-  // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
-  const schemaResult = validateProofBundleEnvelopeV1(envelope);
-  if (!schemaResult.valid) {
-    const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
-    const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
-
-    return {
-      result: {
-        status: 'INVALID',
-        reason: schemaResult.message,
-        verified_at: now,
-      },
-      error: {
-        code: schemaErrorCode,
-        message: schemaResult.message,
-        field: schemaResult.field,
-      },
-    };
-  }
+  const payloadInput = parsedEnvelope ? parsedEnvelope.payload : envelope;
+  const normalizedPayloadInput = normalizeLegacyRawReceiptEntries(payloadInput);
 
   // 10. Validate proof bundle payload structure against PoH schema
-  const payloadValidation = validateBundlePayload(envelope.payload);
+  const payloadValidation = validateBundlePayload(normalizedPayloadInput);
   if (!payloadValidation.valid) {
     return {
       result: {
@@ -2919,7 +2969,7 @@ export async function verifyProofBundle(
         verified_at: now,
       },
       error: {
-        code: 'MALFORMED_ENVELOPE',
+        code: parsedEnvelope ? 'MALFORMED_ENVELOPE' : 'SCHEMA_VALIDATION_FAILED',
         message: payloadValidation.error ?? 'Proof bundle payload is missing required fields or has no components',
         field: 'payload',
       },
@@ -2927,7 +2977,7 @@ export async function verifyProofBundle(
   }
 
   // Type assertion after schema validation
-  if (!isBundlePayload(envelope.payload)) {
+  if (!isBundlePayload(normalizedPayloadInput)) {
     return {
       result: {
         status: 'INVALID',
@@ -2943,7 +2993,7 @@ export async function verifyProofBundle(
   }
 
   // CVF-US-025: enforce count/size limits and uniqueness constraints (fail-closed)
-  const p = envelope.payload;
+  const p = normalizedPayloadInput;
 
   if (p.event_chain && p.event_chain.length > MAX_EVENT_CHAIN_ENTRIES) {
     return {
@@ -3068,11 +3118,11 @@ export async function verifyProofBundle(
   // CAUSAL_RECEIPT_REPLAY_DETECTED / CAUSAL_SPAN_REUSE_CONFLICT checks.
 
   // 11. Validate agent_did in payload matches expected format
-  if (!isValidDidFormat(envelope.payload.agent_did)) {
+  if (!isValidDidFormat(p.agent_did)) {
     return {
       result: {
         status: 'INVALID',
-        reason: `Invalid agent_did format: ${envelope.payload.agent_did}`,
+        reason: `Invalid agent_did format: ${p.agent_did}`,
         verified_at: now,
       },
       error: {
@@ -3083,115 +3133,117 @@ export async function verifyProofBundle(
     };
   }
 
-  // CVF-US-022: Enforce envelope signer DID equals payload agent DID
-  if (envelope.signer_did !== envelope.payload.agent_did) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Proof bundle signer_did must match payload.agent_did',
-        verified_at: now,
-      },
-      error: {
-        code: 'INVALID_DID_FORMAT',
-        message: 'envelope.signer_did must equal payload.agent_did',
-        field: 'signer_did',
-      },
-    };
-  }
-
-  // 12. Recompute hash and verify it matches
-  try {
-    const computedHash = await computeHash(
-      envelope.payload,
-      envelope.hash_algorithm
-    );
-
-    if (computedHash !== envelope.payload_hash_b64u) {
+  if (parsedEnvelope) {
+    // CVF-US-022: Enforce envelope signer DID equals payload agent DID
+    if (parsedEnvelope.signer_did !== p.agent_did) {
       return {
         result: {
           status: 'INVALID',
-          reason: 'Payload hash mismatch: envelope may have been tampered with',
+          reason: 'Proof bundle signer_did must match payload.agent_did',
+          verified_at: now,
+        },
+        error: {
+          code: 'INVALID_DID_FORMAT',
+          message: 'envelope.signer_did must equal payload.agent_did',
+          field: 'signer_did',
+        },
+      };
+    }
+
+    // 12. Recompute hash and verify it matches
+    try {
+      const computedHash = await computeHash(
+        parsedEnvelope.payload,
+        parsedEnvelope.hash_algorithm
+      );
+
+      if (computedHash !== parsedEnvelope.payload_hash_b64u) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Payload hash mismatch: envelope may have been tampered with',
+            verified_at: now,
+          },
+          error: {
+            code: 'HASH_MISMATCH',
+            message: 'Computed payload hash does not match envelope hash',
+          },
+        };
+      }
+    } catch (err) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Hash computation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
           verified_at: now,
         },
         error: {
           code: 'HASH_MISMATCH',
-          message: 'Computed payload hash does not match envelope hash',
+          message: 'Failed to compute payload hash',
         },
       };
     }
-  } catch (err) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Hash computation failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'HASH_MISMATCH',
-        message: 'Failed to compute payload hash',
-      },
-    };
-  }
 
-  // 13. Extract public key from DID
-  const publicKeyBytes = extractPublicKeyFromDidKey(envelope.signer_did);
-  if (!publicKeyBytes) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: 'Could not extract public key from signer DID',
-        verified_at: now,
-      },
-      error: {
-        code: 'INVALID_DID_FORMAT',
-        message:
-          'Unable to extract Ed25519 public key from did:key. Ensure the DID uses the Ed25519 multicodec prefix.',
-        field: 'signer_did',
-      },
-    };
-  }
-
-  // 14. Verify envelope signature
-  try {
-    const signatureBytes = base64UrlDecode(envelope.signature_b64u);
-    const messageBytes = new TextEncoder().encode(envelope.payload_hash_b64u);
-
-    const isValid = await verifySignature(
-      envelope.algorithm,
-      publicKeyBytes,
-      signatureBytes,
-      messageBytes
-    );
-
-    if (!isValid) {
+    // 13. Extract public key from DID
+    const publicKeyBytes = extractPublicKeyFromDidKey(parsedEnvelope.signer_did);
+    if (!publicKeyBytes) {
       return {
         result: {
           status: 'INVALID',
-          reason: 'Signature verification failed',
+          reason: 'Could not extract public key from signer DID',
+          verified_at: now,
+        },
+        error: {
+          code: 'INVALID_DID_FORMAT',
+          message:
+            'Unable to extract Ed25519 public key from did:key. Ensure the DID uses the Ed25519 multicodec prefix.',
+          field: 'signer_did',
+        },
+      };
+    }
+
+    // 14. Verify envelope signature
+    try {
+      const signatureBytes = base64UrlDecode(parsedEnvelope.signature_b64u);
+      const messageBytes = new TextEncoder().encode(parsedEnvelope.payload_hash_b64u);
+
+      const isValid = await verifySignature(
+        parsedEnvelope.algorithm,
+        publicKeyBytes,
+        signatureBytes,
+        messageBytes
+      );
+
+      if (!isValid) {
+        return {
+          result: {
+            status: 'INVALID',
+            reason: 'Signature verification failed',
+            verified_at: now,
+          },
+          error: {
+            code: 'SIGNATURE_INVALID',
+            message: 'The Ed25519 signature does not match the payload hash',
+          },
+        };
+      }
+    } catch (err) {
+      return {
+        result: {
+          status: 'INVALID',
+          reason: `Signature verification error: ${err instanceof Error ? err.message : 'unknown error'}`,
           verified_at: now,
         },
         error: {
           code: 'SIGNATURE_INVALID',
-          message: 'The Ed25519 signature does not match the payload hash',
+          message: 'Failed to verify signature',
         },
       };
     }
-  } catch (err) {
-    return {
-      result: {
-        status: 'INVALID',
-        reason: `Signature verification error: ${err instanceof Error ? err.message : 'unknown error'}`,
-        verified_at: now,
-      },
-      error: {
-        code: 'SIGNATURE_INVALID',
-        message: 'Failed to verify signature',
-      },
-    };
   }
 
   // 15. Validate individual components
-  const payload = envelope.payload;
+  const payload = p;
   const componentResults: NonNullable<ProofBundleVerificationResult['component_results']> = {
     envelope_valid: true,
     causal_policy_profile: resolvedCausalPolicy.profile,
