@@ -53,9 +53,6 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 /** HKDF info string for key derivation (unique to EPV-002). */
 const HKDF_INFO = 'clawsig-epv-002-key-wrap';
 
-/** HKDF salt: 32 zero bytes (per HKDF spec when no natural salt exists). */
-const HKDF_SALT = Buffer.alloc(32);
-
 /**
  * Payload fields that contain sensitive operational details.
  * These are encrypted and removed from the outer bundle in non-public modes.
@@ -268,6 +265,60 @@ function aes256GcmEncrypt(plaintext: Buffer, key: Buffer): AesGcmResult {
 }
 
 // ---------------------------------------------------------------------------
+// JSON canonicalization + HKDF salt binding
+// ---------------------------------------------------------------------------
+
+/**
+ * RFC 8785 JSON Canonicalization Scheme (JCS).
+ *
+ * Fail-closed: throws on unsupported/non-JSON values.
+ */
+function jcsCanonicalize(value: unknown): string {
+  if (value === null) return 'null';
+
+  switch (typeof value) {
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Non-finite number not allowed in JCS');
+      }
+      return JSON.stringify(value);
+    case 'string':
+      return JSON.stringify(value);
+    case 'object': {
+      if (Array.isArray(value)) {
+        return `[${value.map(jcsCanonicalize).join(',')}]`;
+      }
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      const parts: string[] = [];
+      for (const k of keys) {
+        parts.push(`${JSON.stringify(k)}:${jcsCanonicalize(obj[k])}`);
+      }
+      return `{${parts.join(',')}}`;
+    }
+    default:
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
+/**
+ * Bind X25519 public-key context into HKDF salt:
+ *   salt = SHA-256(sender_public_key || recipient_public_key)
+ */
+function deriveHkdfSalt(
+  senderX25519PublicKey: Uint8Array,
+  recipientX25519PublicKey: Uint8Array,
+): Buffer {
+  return crypto
+    .createHash('sha256')
+    .update(senderX25519PublicKey)
+    .update(recipientX25519PublicKey)
+    .digest();
+}
+
+// ---------------------------------------------------------------------------
 // X25519 ECDH + HKDF-SHA256 key wrapping
 // ---------------------------------------------------------------------------
 
@@ -304,9 +355,15 @@ function wrapKeyForViewer(contentKey: Buffer, viewerX25519Public: Uint8Array): W
     publicKey: viewerPublicKey,
   });
 
+  // Export ephemeral public key raw bytes via JWK
+  const ephPubJwk = ephemeral.publicKey.export({ format: 'jwk' }) as { x: string };
+  const ephemeralPublicKey = fromBase64Url(ephPubJwk.x);
+
+  const hkdfSalt = deriveHkdfSalt(ephemeralPublicKey, viewerX25519Public);
+
   // HKDF-SHA256 -> 32-byte wrapping key
   const wrappingKey = Buffer.from(
-    crypto.hkdfSync('sha256', sharedSecret, HKDF_SALT, HKDF_INFO, 32),
+    crypto.hkdfSync('sha256', sharedSecret, hkdfSalt, HKDF_INFO, 32),
   );
 
   // Wrap content key with AES-256-GCM
@@ -314,10 +371,6 @@ function wrapKeyForViewer(contentKey: Buffer, viewerX25519Public: Uint8Array): W
   const cipher = crypto.createCipheriv('aes-256-gcm', wrappingKey, wrapIv);
   const wrappedKey = Buffer.concat([cipher.update(contentKey), cipher.final()]);
   const wrappedKeyTag = cipher.getAuthTag();
-
-  // Export ephemeral public key raw bytes via JWK
-  const ephPubJwk = ephemeral.publicKey.export({ format: 'jwk' }) as { x: string };
-  const ephemeralPublicKey = fromBase64Url(ephPubJwk.x);
 
   return { ephemeralPublicKey, wrappedKey, wrappedKeyIv: wrapIv, wrappedKeyTag };
 }
@@ -417,8 +470,8 @@ export function applyVisibility(
     }
   }
 
-  // 2. Serialize plaintext to JSON bytes
-  const plaintext = Buffer.from(JSON.stringify(sensitiveData), 'utf-8');
+  // 2. Serialize plaintext to JCS-canonicalized JSON bytes
+  const plaintext = Buffer.from(jcsCanonicalize(sensitiveData), 'utf-8');
 
   // 3. SHA-256 hash of plaintext for integrity verification after decryption
   const plaintextHash = crypto.createHash('sha256').update(plaintext).digest();
@@ -578,9 +631,20 @@ export function unwrapContentKey(
     publicKey: ephemeralPublicKey,
   });
 
+  const viewerPubJwk = crypto.createPublicKey(viewerX25519PrivateKey).export({
+    format: 'jwk',
+  }) as { x?: string };
+
+  if (!viewerPubJwk.x) {
+    throw new Error('Failed to derive viewer X25519 public key for HKDF salt binding');
+  }
+
+  const viewerX25519Public = fromBase64Url(viewerPubJwk.x);
+  const hkdfSalt = deriveHkdfSalt(ephemeralPubRaw, viewerX25519Public);
+
   // HKDF-SHA256 -> wrapping key
   const wrappingKey = Buffer.from(
-    crypto.hkdfSync('sha256', sharedSecret, HKDF_SALT, HKDF_INFO, 32),
+    crypto.hkdfSync('sha256', sharedSecret, hkdfSalt, HKDF_INFO, 32),
   );
 
   // AES-256-GCM decrypt the wrapped content key

@@ -58,6 +58,33 @@ function encodeBase58(bytes: Uint8Array): string {
   return result || '1';
 }
 
+function jcsCanonicalize(value: unknown): string {
+  if (value === null) return 'null';
+
+  switch (typeof value) {
+    case 'boolean':
+      return value ? 'true' : 'false';
+    case 'number':
+      if (!Number.isFinite(value)) {
+        throw new Error('Non-finite number not allowed in JCS');
+      }
+      return JSON.stringify(value);
+    case 'string':
+      return JSON.stringify(value);
+    case 'object': {
+      if (Array.isArray(value)) {
+        return `[${value.map((entry) => jcsCanonicalize(entry)).join(',')}]`;
+      }
+      const obj = value as Record<string, unknown>;
+      const keys = Object.keys(obj).sort();
+      const parts = keys.map((key) => `${JSON.stringify(key)}:${jcsCanonicalize(obj[key])}`);
+      return `{${parts.join(',')}}`;
+    }
+    default:
+      throw new Error(`Unsupported value type for JCS: ${typeof value}`);
+  }
+}
+
 interface TestIdentity {
   did: string;
   publicKeyJwk: JsonWebKey;
@@ -286,6 +313,114 @@ describe('encrypt -> unwrap -> decrypt round-trip', () => {
       );
       expect(decrypted.receipts).toEqual(originalReceipts);
     }
+  });
+
+  it('uses JCS canonicalized plaintext for integrity hash', () => {
+    const identity = generateTestIdentity();
+
+    const payloadA: Record<string, unknown> = {
+      bundle_version: '1',
+      bundle_id: 'test-canonical-a',
+      agent_did: identity.did,
+      receipts: [{ b: 2, a: 1 }],
+      event_chain: [{ z: 'last', a: 'first' }],
+    };
+
+    const payloadB: Record<string, unknown> = {
+      bundle_version: '1',
+      bundle_id: 'test-canonical-b',
+      agent_did: identity.did,
+      receipts: [{ a: 1, b: 2 }],
+      event_chain: [{ a: 'first', z: 'last' }],
+    };
+
+    applyVisibility(payloadA, 'owner', [identity.did], identity.did);
+    applyVisibility(payloadB, 'owner', [identity.did], identity.did);
+
+    const encryptedA = payloadA.encrypted_payload as EncryptedPayloadFields;
+    const encryptedB = payloadB.encrypted_payload as EncryptedPayloadFields;
+    expect(encryptedA.plaintext_hash_b64u).toBe(encryptedB.plaintext_hash_b64u);
+
+    const canonicalSensitive = jcsCanonicalize({
+      receipts: [{ a: 1, b: 2 }],
+      event_chain: [{ a: 'first', z: 'last' }],
+    });
+    const expectedHash = crypto.createHash('sha256').update(canonicalSensitive, 'utf-8').digest();
+    expect(encryptedA.plaintext_hash_b64u).toBe(toBase64Url(expectedHash));
+  });
+
+  it('binds HKDF salt to public key context (legacy zero-salt unwrap fails)', () => {
+    const identity = generateTestIdentity();
+    const payload: Record<string, unknown> = {
+      bundle_version: '1',
+      bundle_id: 'test-hkdf-salt-binding',
+      agent_did: identity.did,
+      receipts: [{ receipt_id: 'rcpt_1', data: 'sensitive-data' }],
+    };
+
+    applyVisibility(payload, 'owner', [identity.did], identity.did);
+
+    const viewerKeys = payload.viewer_keys as ViewerKeyEntry[];
+    const myEntry = viewerKeys.find((vk) => vk.viewer_did === identity.did)!;
+
+    const x25519Key = createX25519PrivateKeyFromEd25519Jwk(
+      identity.privateKeyJwk,
+      identity.publicKeyJwk,
+    );
+
+    const ephemeralPubRaw = fromBase64Url(myEntry.ephemeral_public_key_b64u);
+    const ephemeralPubJwk = {
+      kty: 'OKP' as const,
+      crv: 'X25519' as const,
+      x: toBase64Url(ephemeralPubRaw),
+    };
+    const ephemeralPublicKey = crypto.createPublicKey({ key: ephemeralPubJwk, format: 'jwk' });
+    const sharedSecret = crypto.diffieHellman({
+      privateKey: x25519Key,
+      publicKey: ephemeralPublicKey,
+    });
+
+    const viewerEdPublic = parseDidKeyToEd25519PublicKey(identity.did);
+    const viewerX25519Public = ed25519PublicKeyToX25519(viewerEdPublic);
+
+    const boundSalt = crypto
+      .createHash('sha256')
+      .update(ephemeralPubRaw)
+      .update(viewerX25519Public)
+      .digest();
+    const boundWrappingKey = Buffer.from(
+      crypto.hkdfSync('sha256', sharedSecret, boundSalt, Buffer.from('clawsig-epv-002-key-wrap'), 32),
+    );
+
+    const wrappedKey = fromBase64Url(myEntry.wrapped_key_b64u);
+    const wrappedIv = fromBase64Url(myEntry.wrapped_key_iv_b64u);
+    const wrappedTag = fromBase64Url(myEntry.wrapped_key_tag_b64u);
+
+    const boundDecipher = crypto.createDecipheriv('aes-256-gcm', boundWrappingKey, wrappedIv);
+    boundDecipher.setAuthTag(wrappedTag);
+    const manuallyUnwrapped = Buffer.concat([
+      boundDecipher.update(wrappedKey),
+      boundDecipher.final(),
+    ]);
+
+    const unwrappedByApi = unwrapContentKey(x25519Key, myEntry);
+    expect(unwrappedByApi.equals(manuallyUnwrapped)).toBe(true);
+
+    const legacyWrappingKey = Buffer.from(
+      crypto.hkdfSync(
+        'sha256',
+        sharedSecret,
+        Buffer.alloc(32),
+        Buffer.from('clawsig-epv-002-key-wrap'),
+        32,
+      ),
+    );
+    expect(() => {
+      const legacyDecipher = crypto.createDecipheriv('aes-256-gcm', legacyWrappingKey, wrappedIv);
+      legacyDecipher.setAuthTag(wrappedTag);
+      legacyDecipher.update(wrappedKey);
+      legacyDecipher.final();
+    }).toThrow();
   });
 });
 
