@@ -102,6 +102,16 @@ function htmlNoStore(body: string, status = 200): Response {
   });
 }
 
+function methodNotAllowed(allow: string[]): Response {
+  return new Response('Method Not Allowed', {
+    status: 405,
+    headers: {
+      Allow: allow.join(', '),
+      'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+    },
+  });
+}
+
 function normalizeQueryValue(raw: string | null): string | undefined {
   if (!raw) return undefined;
   const trimmed = raw.trim();
@@ -233,8 +243,11 @@ export default {
     if (path === '/auth/github/callback' && method === 'GET') {
       return completeGithubOauth(request, env);
     }
+    if (path === '/auth/logout' && method === 'POST') {
+      return logoutGithubSession(request, env);
+    }
     if (path === '/auth/logout' && method === 'GET') {
-      return logoutGithubSession(request);
+      return methodNotAllowed(['POST']);
     }
 
     // -- Inspect API: load bundle from URL --
@@ -402,6 +415,7 @@ export default {
           name: session?.name ?? null,
         },
         authStatus,
+        logoutCsrfToken: session?.logoutCsrfToken ?? null,
       }), 200);
     }
 

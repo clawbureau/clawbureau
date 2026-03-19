@@ -32,6 +32,13 @@ export interface ExplorerSession {
   githubId: number;
   name: string | null;
   avatarUrl: string | null;
+  logoutCsrfToken: string;
+}
+
+interface ValidatedSession {
+  secret: string;
+  token: string;
+  claims: SessionClaims;
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -361,7 +368,7 @@ function isSecureRequest(request: Request): boolean {
   return new URL(request.url).protocol === 'https:';
 }
 
-export async function readExplorerSession(request: Request, env: AuthEnv): Promise<ExplorerSession | null> {
+async function readValidatedSession(request: Request, env: AuthEnv): Promise<ValidatedSession | null> {
   const secret = env.EXPLORER_SESSION_SECRET?.trim();
   if (!secret) return null;
 
@@ -372,11 +379,32 @@ export async function readExplorerSession(request: Request, env: AuthEnv): Promi
   const claims = await decodeSessionToken(token, secret);
   if (!claims) return null;
 
+  return { secret, token, claims };
+}
+
+async function buildLogoutCsrfToken(sessionToken: string, secret: string): Promise<string> {
+  return signHs256(`logout:${sessionToken}`, secret);
+}
+
+function readFormString(formData: FormData | null, key: string): string | null {
+  if (!formData) return null;
+  const value = formData.get(key);
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+export async function readExplorerSession(request: Request, env: AuthEnv): Promise<ExplorerSession | null> {
+  const session = await readValidatedSession(request, env);
+  if (!session) return null;
+  const logoutCsrfToken = await buildLogoutCsrfToken(session.token, session.secret);
+
   return {
-    login: claims.login,
-    githubId: claims.github_id,
-    name: claims.name ?? null,
-    avatarUrl: claims.avatar_url ?? null,
+    login: session.claims.login,
+    githubId: session.claims.github_id,
+    name: session.claims.name ?? null,
+    avatarUrl: session.claims.avatar_url ?? null,
+    logoutCsrfToken,
   };
 }
 
@@ -471,13 +499,28 @@ export async function completeGithubOauth(request: Request, env: AuthEnv): Promi
   return redirectWithCookies(`${requestOrigin}${returnToWithAuth}`, [clearStateCookie, sessionCookie]);
 }
 
-export function logoutGithubSession(request: Request): Response {
+export async function logoutGithubSession(request: Request, env: AuthEnv): Promise<Response> {
+  const formData = await request.formData().catch(() => null);
+  const activeSession = await readValidatedSession(request, env);
+  if (activeSession) {
+    const submittedCsrfToken = readFormString(formData, 'csrf_token');
+    const expectedCsrfToken = await buildLogoutCsrfToken(activeSession.token, activeSession.secret);
+    if (!submittedCsrfToken || submittedCsrfToken !== expectedCsrfToken) {
+      return new Response('Forbidden', {
+        status: 403,
+        headers: {
+          'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+        },
+      });
+    }
+  }
+
   const secure = isSecureRequest(request);
   const clearSession = clearCookie(SESSION_COOKIE, secure);
   const clearState = clearCookie(OAUTH_STATE_COOKIE, secure);
   const requestUrl = new URL(request.url);
 
-  const returnTo = normalizeReturnPath(requestUrl.searchParams.get('return_to'));
+  const returnTo = normalizeReturnPath(readFormString(formData, 'return_to') ?? requestUrl.searchParams.get('return_to'));
   const location = `${requestUrl.origin}${addQueryParam(returnTo, 'auth', 'logged_out')}`;
   return redirectWithCookies(location, [clearSession, clearState]);
 }
