@@ -8,6 +8,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import type { TaskSpecV1 } from './task-spec.generated.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,6 +46,8 @@ export interface ActiveBountyContext {
   submissionId?: string;
   /** ISO timestamp of the last submit operation (if any). */
   submittedAt?: string;
+  /** Optional structured task requirements attached to this bounty. */
+  taskSpec?: TaskSpecV1;
 }
 
 /** On-disk format of .clawsig/work.json. */

@@ -22,6 +22,7 @@ export interface ActiveBountyRecord {
   escrowId?: string;
   submissionId?: string;
   submittedAt?: string;
+  taskSpec?: unknown;
 }
 
 export interface LoadActiveBountyOptions {
@@ -116,6 +117,7 @@ function parseActiveBountyRecord(
   const escrowId = readStringField(parsed, 'escrowId', 'escrow_id');
   const submissionId = readStringField(parsed, 'submissionId', 'submission_id');
   const submittedAt = readStringField(parsed, 'submittedAt', 'submitted_at');
+  const taskSpec = parsed.taskSpec ?? parsed.task_spec;
 
   return {
     bountyId,
@@ -128,6 +130,7 @@ function parseActiveBountyRecord(
     ...(escrowId ? { escrowId } : {}),
     ...(submissionId ? { submissionId } : {}),
     ...(submittedAt ? { submittedAt } : {}),
+    ...(taskSpec !== undefined ? { taskSpec } : {}),
   };
 }
 
@@ -202,6 +205,7 @@ export async function saveActiveBounty(
     ...(activeBounty.escrowId ? { escrow_id: activeBounty.escrowId } : {}),
     ...(activeBounty.submissionId ? { submission_id: activeBounty.submissionId } : {}),
     ...(activeBounty.submittedAt ? { submitted_at: activeBounty.submittedAt } : {}),
+    ...(activeBounty.taskSpec !== undefined ? { task_spec: activeBounty.taskSpec } : {}),
   };
 
   await writeFile(path, JSON.stringify(content, null, 2) + '\n', 'utf-8');

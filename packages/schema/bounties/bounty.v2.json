@@ -150,6 +150,10 @@
       "type": "string",
       "description": "Idempotency key for the post operation"
     },
+    "task_spec": {
+      "$ref": "https://schemas.clawbureau.org/claw.bounties.task_spec.v1.json",
+      "description": "Optional structured task requirements for agent-readable execution and submission validation."
+    },
     "metadata": {
       "type": "object",
       "description": "Additional metadata for the bounty"

@@ -23,6 +23,8 @@ import {
 import { saveActiveBounty } from './active-bounty.js';
 import { isMarketplaceEnabled } from './runtime-config.js';
 import { printJson, printJsonError } from './json-output.js';
+import { parseTaskSpecV1 } from './task-spec.js';
+import type { TaskSpecV1 } from './task-spec.generated.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +53,7 @@ export interface WorkClaimResult {
   idempotencyKey: string;
   claim?: AcceptBountyResponse;
   activeBounty?: ActiveBountyContext;
+  taskSpec?: TaskSpecV1;
   configPath: string;
   nextActions: string[];
   error?: { code: string; message: string; details?: unknown };
@@ -349,6 +352,34 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
   }
 
   const claim = claimResult.claim;
+  let taskSpec: TaskSpecV1 | undefined;
+  if (claim.task_spec !== undefined) {
+    const parsedTaskSpec = parseTaskSpecV1(claim.task_spec);
+    if (!parsedTaskSpec.ok) {
+      const code = 'TASK_SPEC_INVALID';
+      const message = 'Claim response contained an invalid task_spec payload.';
+      const nextActions = [
+        `clawsig work claim --bounty ${bountyId}`,
+        'Contact bounty requester: task_spec payload must match task_spec.v1 schema.',
+      ];
+      process.exitCode = 1;
+      emitError(jsonMode, code, message, nextActions, { issues: parsedTaskSpec.issues });
+      return makeResultError({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey,
+        configPath,
+        code,
+        message,
+        nextActions,
+        details: { issues: parsedTaskSpec.issues },
+      });
+    }
+    taskSpec = parsedTaskSpec.taskSpec;
+    claim.task_spec = taskSpec;
+  }
+
   const requesterDid = extractRequesterDid(claim);
   const now = new Date().toISOString();
   const activeBounty: ActiveBountyContext = {
@@ -360,6 +391,7 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
     idempotencyKey,
     ...(requesterDid ? { requesterDid } : {}),
     ...(typeof claim.escrow_id === 'string' && claim.escrow_id.trim().length > 0 ? { escrowId: claim.escrow_id.trim() } : {}),
+    ...(taskSpec ? { taskSpec } : {}),
   };
 
   const updatedConfig: WorkConfig = {
@@ -386,6 +418,7 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
       config_path: savedConfigPath,
       claim,
       active_bounty: activeBounty,
+      ...(taskSpec ? { task_spec: taskSpec } : {}),
       next_actions: nextActions,
     });
   } else {
@@ -408,6 +441,7 @@ export async function runWorkClaim(options: WorkClaimOptions): Promise<WorkClaim
     idempotencyKey,
     claim,
     activeBounty,
+    ...(taskSpec ? { taskSpec } : {}),
     configPath: savedConfigPath,
     nextActions,
   };

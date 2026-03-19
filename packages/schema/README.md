@@ -25,6 +25,7 @@ Shared JSON schemas for Claw Bureau services.
 - `post_bounty_response.v1.json`, `post_bounty_response.v2.json`
 - `escrow_hold_request.v1.json`, `escrow_hold_request.v2.json`
 - `bounty.v1.json`, `bounty.v2.json`
+- `task_spec.v1.json`
 
 ### `escrow/`
 - `escrow.v1.json`, `escrow.v2.json`

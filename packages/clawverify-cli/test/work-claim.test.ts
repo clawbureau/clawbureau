@@ -1,16 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { generateIdentity } from '../src/identity.js';
 import { saveWorkConfig, loadWorkConfig, DEFAULT_MARKETPLACE_URL } from '../src/work-config.js';
 import type { WorkConfig } from '../src/work-config.js';
+import { activeBountyPath } from '../src/active-bounty.js';
 import { __setFetch } from '../src/work-api.js';
 import { saveRuntimeConfig } from '../src/runtime-config.js';
 import { runWorkClaim } from '../src/work-claim.js';
 
 let tmpDir: string;
+const validTaskSpec = {
+  version: '1',
+  objective: 'Implement structured schema integration',
+  repo: 'clawbureau/clawverify-cli',
+  base_ref: 'main',
+  files_hint: ['src/work-submit.ts', 'src/work-claim.ts'],
+  validation: {
+    commands: ['pnpm typecheck', 'pnpm test'],
+    timeout_seconds: 300,
+  },
+  constraints: {
+    max_files_changed: 20,
+    forbidden_patterns: ['rm -rf', 'force push'],
+    required_proof_tier: 'gateway',
+  },
+  deliverables: ['pr', 'proof_bundle', 'did_signature'],
+} as const;
 
 async function quietAsync<T>(fn: () => Promise<T>): Promise<T> {
   const origOut = process.stdout.write;
@@ -178,6 +196,7 @@ describe('runWorkClaim', () => {
           accepted_at: '2025-02-20T00:00:00.000Z',
           fee_policy_version: 'cuts_v1',
           payout: { worker_net_minor: '120', currency: 'USD' },
+          task_spec: validTaskSpec,
         }),
         { status: 201, headers: { 'Content-Type': 'application/json' } },
       );
@@ -204,6 +223,66 @@ describe('runWorkClaim', () => {
       expect(updated?.activeBounty?.bountyId).toBe('bty_test');
       expect(updated?.activeBounty?.workerDid).toBe(identity.did);
       expect(updated?.activeBounty?.idempotencyKey).toBe(`claim:bty_test:${identity.did}`);
+      expect(updated?.activeBounty?.taskSpec?.version).toBe('1');
+
+      const activeFile = await readFile(activeBountyPath(tmpDir), 'utf-8');
+      const activeFromDisk = JSON.parse(activeFile) as Record<string, unknown>;
+      expect(activeFromDisk['bounty_id']).toBe('bty_test');
+      expect((activeFromDisk['task_spec'] as Record<string, unknown>)['version']).toBe('1');
+      expect(result.taskSpec?.deliverables).toEqual(['pr', 'proof_bundle', 'did_signature']);
+    } finally {
+      restore();
+    }
+  });
+
+  it('fails when claim response task_spec is invalid', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: 'https://market.example.com',
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: {
+          mode: 'token',
+          token: 'tok_abc123',
+        },
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    const restore = __setFetch(async () =>
+      new Response(
+        JSON.stringify({
+          bounty_id: 'bty_test',
+          escrow_id: 'esc_001',
+          status: 'accepted',
+          worker_did: identity.did,
+          accepted_at: '2025-02-20T00:00:00.000Z',
+          task_spec: {
+            version: '1',
+            objective: '',
+          },
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkClaim({
+          bountyId: 'bty_test',
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('TASK_SPEC_INVALID');
+      expect(process.exitCode).toBe(1);
     } finally {
       restore();
     }
