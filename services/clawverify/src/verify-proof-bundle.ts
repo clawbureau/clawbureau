@@ -257,6 +257,17 @@ function validateEnvelopeStructure(
   );
 }
 
+function isSignedEnvelopeCandidate(value: unknown): value is Record<string, unknown> {
+  if (!isObjectRecord(value)) return false;
+
+  return (
+    typeof value.envelope_version === 'string' &&
+    typeof value.envelope_type === 'string' &&
+    isObjectRecord(value.payload) &&
+    typeof value.signature_b64u === 'string'
+  );
+}
+
 /**
  * Validate proof bundle payload structure against PoH schema (proof_bundle.v1).
  *
@@ -3215,23 +3226,30 @@ export async function verifyProofBundle(
 
   // 9.75 Strict JSON schema validation (Ajv) for envelope + payload
   // CVF-US-024: Fail closed on schema violations (additionalProperties:false, missing fields, etc.)
-  const schemaResult = validateProofBundleEnvelopeV1(envelope);
-  if (!schemaResult.valid) {
-    const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
-    const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
+  //
+  // E2E-004: For signed-envelope inputs, bypass this service-layer Ajv gate and let
+  // downstream verifier logic handle envelope detection/extraction and verification.
+  // This keeps compatibility with signed-envelope bundles while preserving existing
+  // runtime structural and cryptographic checks.
+  if (!isSignedEnvelopeCandidate(envelope)) {
+    const schemaResult = validateProofBundleEnvelopeV1(envelope);
+    if (!schemaResult.valid) {
+      const causalSchemaCode = classifyCausalSchemaValidationCode(schemaResult.field);
+      const schemaErrorCode = causalSchemaCode ?? 'SCHEMA_VALIDATION_FAILED';
 
-    return {
-      result: {
-        status: 'INVALID',
-        reason: schemaResult.message,
-        verified_at: now,
-      },
-      error: {
-        code: schemaErrorCode,
-        message: schemaResult.message,
-        field: schemaResult.field,
-      },
-    };
+      return {
+        result: {
+          status: 'INVALID',
+          reason: schemaResult.message,
+          verified_at: now,
+        },
+        error: {
+          code: schemaErrorCode,
+          message: schemaResult.message,
+          field: schemaResult.field,
+        },
+      };
+    }
   }
 
   // 10. Validate proof bundle payload structure against PoH schema

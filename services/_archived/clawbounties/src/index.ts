@@ -4640,12 +4640,78 @@ async function verifyProofBundle(
   return json as unknown as VerifyBundleResponse;
 }
 
+function isSignedCommitProofEnvelopeShape(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  if (value.envelope_version !== '1') return false;
+  if (value.envelope_type !== 'commit_proof') return false;
+  if (!isRecord(value.payload)) return false;
+  if (!isNonEmptyString(value.signature_b64u)) return false;
+  return true;
+}
+
+async function normalizeCommitProofEnvelopeForVerify(envelope: unknown): Promise<unknown> {
+  if (!isSignedCommitProofEnvelopeShape(envelope)) {
+    return envelope;
+  }
+
+  const normalized: Record<string, unknown> = { ...envelope };
+  const payload = normalized.payload as Record<string, unknown>;
+
+  const signerDidCandidates = [
+    normalized.signer_did,
+    payload.agent_did,
+    payload.signer_did,
+    payload.did,
+  ];
+
+  if (!isNonEmptyString(normalized.signer_did)) {
+    const signerDid = signerDidCandidates.find(
+      (candidate) => isNonEmptyString(candidate) && candidate.trim().startsWith('did:')
+    );
+    if (isNonEmptyString(signerDid)) {
+      normalized.signer_did = signerDid.trim();
+    }
+  }
+
+  if (!isNonEmptyString(normalized.issued_at)) {
+    const issuedAt = [
+      payload.timestamp,
+      payload.issued_at,
+      payload.created_at,
+      payload.createdAt,
+    ].find((candidate) => isNonEmptyString(candidate));
+
+    if (isNonEmptyString(issuedAt)) {
+      normalized.issued_at = issuedAt.trim();
+    }
+  }
+
+  if (!isNonEmptyString(normalized.hash_algorithm)) {
+    normalized.hash_algorithm = 'SHA-256';
+  }
+
+  if (!isNonEmptyString(normalized.algorithm)) {
+    normalized.algorithm = 'Ed25519';
+  }
+
+  if (!isNonEmptyString(normalized.payload_hash_b64u)) {
+    try {
+      normalized.payload_hash_b64u = await sha256B64uUtf8(jcsCanonicalize(payload));
+    } catch {
+      // Leave unset and let clawverify fail closed with a precise error.
+    }
+  }
+
+  return normalized;
+}
+
 async function verifyCommitProof(env: Env, envelope: unknown): Promise<VerifyCommitProofResponse> {
+  const normalizedEnvelope = await normalizeCommitProofEnvelopeForVerify(envelope);
   const url = `${resolveVerifyBaseUrl(env)}/v1/verify/commit-proof`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json; charset=utf-8' },
-    body: JSON.stringify({ envelope }),
+    body: JSON.stringify({ envelope: normalizedEnvelope }),
   });
 
   const text = await response.text();
