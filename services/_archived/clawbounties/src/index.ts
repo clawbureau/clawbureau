@@ -288,6 +288,18 @@ interface AllInCostV2 {
   currency: 'USD';
 }
 
+export interface NextAction {
+  action: string;
+  command?: string;
+  reason?: string;
+  poll_url?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface NextActionsEnvelope {
+  next_actions: NextAction[];
+}
+
 interface PostBountyResponseV2 {
   schema_version: '2';
   bounty_id: string;
@@ -1039,6 +1051,7 @@ interface SubmitBountyResponseV1 {
       verified_at?: string;
     };
   };
+  next_actions: NextAction[];
 }
 
 interface EscrowReleaseResponse {
@@ -1171,6 +1184,7 @@ interface AcceptBountyResponseV1 {
   payout: { worker_net_minor: string; currency: 'USD' };
 
   cwc_auth?: CwcAuthResponseV1;
+  next_actions: NextAction[];
 }
 
 interface IssueBountyCstResponseV1 {
@@ -4702,6 +4716,7 @@ function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
         tier: record.proof_tier ?? undefined,
       },
     },
+    next_actions: buildSubmitNextActions(record),
   };
 
   if (record.commit_proof_verify_status) {
@@ -4713,6 +4728,135 @@ function buildSubmitResponse(record: SubmissionRecord): SubmitBountyResponseV1 {
   }
 
   return response;
+}
+
+function buildListNextActions(
+  bounties: Array<{ bounty_id: string; status: BountyStatus }>
+): NextAction[] {
+  const actions: NextAction[] = [];
+  const seenBountyIds = new Set<string>();
+
+  for (const bounty of bounties) {
+    if (bounty.status !== 'open') continue;
+    if (seenBountyIds.has(bounty.bounty_id)) continue;
+    seenBountyIds.add(bounty.bounty_id);
+
+    actions.push({
+      action: 'claim',
+      command: `clawsig work claim --bounty ${bounty.bounty_id}`,
+      reason: 'Bounty is open and available to claim',
+    });
+  }
+
+  return actions;
+}
+
+function buildClaimNextActions(bountyId: string): NextAction[] {
+  return [
+    {
+      action: 'wrap',
+      command: 'clawsig wrap --output .clawsig/proof_bundle.json -- <agent-command>',
+      reason: 'Generate the proof bundle before submitting work',
+    },
+    {
+      action: 'submit',
+      command: `clawsig work submit --bounty ${bountyId} --proof-bundle .clawsig/proof_bundle.json`,
+      reason: 'Submit completed work for this bounty',
+    },
+  ];
+}
+
+function buildSubmissionFixReason(record: SubmissionRecord): string {
+  if (record.status === 'rejected') {
+    return 'Submission was rejected during review';
+  }
+
+  const reasons: string[] = [];
+  if (isNonEmptyString(record.proof_verify_reason)) {
+    reasons.push(`Proof bundle: ${record.proof_verify_reason.trim()}`);
+  }
+  if (isNonEmptyString(record.commit_proof_verify_reason)) {
+    reasons.push(`Commit proof: ${record.commit_proof_verify_reason.trim()}`);
+  }
+  if (reasons.length > 0) {
+    return reasons.join('; ');
+  }
+
+  return 'Submission requires fixes before it can be accepted';
+}
+
+function buildSubmissionFixDetails(record: SubmissionRecord): Record<string, unknown> {
+  return {
+    submission_status: record.status,
+    proof_bundle: {
+      status: record.proof_verify_status,
+      reason: record.proof_verify_reason,
+    },
+    commit_proof: record.commit_proof_verify_status
+      ? {
+          status: record.commit_proof_verify_status,
+          reason: record.commit_proof_verify_reason,
+        }
+      : null,
+  };
+}
+
+function buildSubmitNextActions(record: SubmissionRecord): NextAction[] {
+  if (record.status === 'invalid') {
+    return [
+      {
+        action: 'fix',
+        command: `clawsig work submit --bounty ${record.bounty_id} --proof-bundle .clawsig/proof_bundle.json`,
+        reason: buildSubmissionFixReason(record),
+        details: buildSubmissionFixDetails(record),
+      },
+    ];
+  }
+
+  return [
+    {
+      action: 'wait',
+      reason: record.status === 'approved'
+        ? 'Submission approved; settlement finalization in progress'
+        : 'Auto-approval in progress',
+      poll_url: `/v1/submissions/${record.submission_id}`,
+    },
+  ];
+}
+
+function buildSubmissionStatusNextActions(record: SubmissionRecord): NextAction[] {
+  if (record.status === 'pending_review') {
+    return [
+      {
+        action: 'wait',
+        reason: 'Submission is pending review',
+        poll_url: `/v1/submissions/${record.submission_id}`,
+      },
+    ];
+  }
+
+  if (record.status === 'invalid' || record.status === 'rejected') {
+    return [
+      {
+        action: 'fix',
+        command: `clawsig work submit --bounty ${record.bounty_id} --proof-bundle .clawsig/proof_bundle.json`,
+        reason: buildSubmissionFixReason(record),
+        details: buildSubmissionFixDetails(record),
+      },
+    ];
+  }
+
+  if (record.status === 'approved') {
+    return [
+      {
+        action: 'claim',
+        command: 'clawsig work list --json',
+        reason: 'Submission approved; claim another open bounty',
+      },
+    ];
+  }
+
+  return [];
 }
 
 function parseNonNegativeMinor(input: unknown): bigint | null {
@@ -12258,6 +12402,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
           worker_net_minor: bounty.fee_quote.quote.worker_net_minor,
           currency: 'USD',
         },
+        next_actions: buildClaimNextActions(bounty.bounty_id),
       };
 
       if (issuedCst) {
@@ -12365,6 +12510,7 @@ async function handleAcceptBounty(bountyId: string, request: Request, env: Env, 
       worker_net_minor: updated.fee_quote.quote.worker_net_minor,
       currency: 'USD',
     },
+    next_actions: buildClaimNextActions(updated.bounty_id),
   };
 
   if (issuedCst) {
@@ -13355,6 +13501,26 @@ async function handleSubmitBounty(
 
   const response = buildSubmitResponse(responseRecord);
   return jsonResponse(response, isValid ? 201 : 422, version);
+}
+
+async function handlePostSubmission(request: Request, env: Env, version: string): Promise<Response> {
+  const bodyRaw = await parseJsonBody(request);
+  if (!isRecord(bodyRaw)) {
+    return errorResponse('INVALID_REQUEST', 'Invalid JSON body', 400, undefined, version);
+  }
+
+  const bountyIdRaw = bodyRaw.bounty_id;
+  if (!isNonEmptyString(bountyIdRaw) || !bountyIdRaw.trim().startsWith('bty_')) {
+    return errorResponse('INVALID_REQUEST', 'bounty_id must be a bounty id', 400, { field: 'bounty_id' }, version);
+  }
+
+  const proxyRequest = new Request('https://internal/v1/submissions', {
+    method: 'POST',
+    headers: request.headers,
+    body: JSON.stringify(bodyRaw),
+  });
+
+  return handleSubmitBounty(bountyIdRaw.trim(), proxyRequest, env, version);
 }
 
 async function handleApproveBounty(
@@ -14631,7 +14797,7 @@ async function handleListBounties(url: URL, env: Env, version: string): Promise<
   const tags = url.searchParams.getAll('tag').map((t) => t.trim()).filter((t) => t.length > 0);
 
   const bounties = await listBounties(env.BOUNTIES_DB, { status, is_code_bounty, tags }, 100);
-  return jsonResponse({ bounties }, 200, version);
+  return jsonResponse({ bounties, next_actions: buildListNextActions(bounties) }, 200, version);
 }
 
 async function handleListBountiesForWorker(request: Request, url: URL, env: Env, version: string): Promise<Response> {
@@ -14674,7 +14840,7 @@ async function handleListBountiesForWorker(request: Request, url: URL, env: Env,
     { status, is_code_bounty, tags },
     100
   );
-  return jsonResponse({ bounties }, 200, version);
+  return jsonResponse({ bounties, next_actions: buildListNextActions(bounties) }, 200, version);
 }
 
 async function handleRiskLossEvent(
@@ -23433,7 +23599,7 @@ async function handleGetSubmissionDetail(
     view.arena = latestArenaPayload;
   }
 
-  return jsonResponse({ submission: view }, 200, version);
+  return jsonResponse({ submission: view, next_actions: buildSubmissionStatusNextActions(submission) }, 200, version);
 }
 
 async function handleGetSubmissionTrustPulse(
@@ -24482,6 +24648,15 @@ export default {
         return handleAcceptBounty(bountyId, request, env, version);
       }
 
+      const claimMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/claim$/);
+      if (claimMatch && method === 'POST') {
+        const bountyId = claimMatch[1];
+        if (!bountyId) {
+          return errorResponse('NOT_FOUND', 'Not found', 404, { path, method }, version);
+        }
+        return handleAcceptBounty(bountyId, request, env, version);
+      }
+
       const cstMatch = path.match(/^\/v1\/bounties\/(bty_[a-f0-9-]+)\/cst$/);
       if (cstMatch && method === 'POST') {
         const bountyId = cstMatch[1];
@@ -24536,6 +24711,10 @@ export default {
           return handleListBounties(url, env, version);
         }
         return handleListBountiesForWorker(request, url, env, version);
+      }
+
+      if (path === '/v1/submissions' && method === 'POST') {
+        return handlePostSubmission(request, env, version);
       }
 
       const submissionTrustPulseMatch = path.match(/^\/v1\/submissions\/(sub_[a-f0-9-]+)\/trust-pulse$/);
