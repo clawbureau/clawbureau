@@ -7,6 +7,7 @@
  */
 
 import type { WorkerRegistration } from './work-config.js';
+import type { TaskSpecV1 } from './task-spec.generated.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,6 +58,7 @@ export interface AcceptBountyResponse {
     currency?: string;
     [key: string]: unknown;
   };
+  task_spec?: TaskSpecV1;
   [key: string]: unknown;
 }
 

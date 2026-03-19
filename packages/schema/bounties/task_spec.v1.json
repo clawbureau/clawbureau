@@ -1,0 +1,110 @@
+{
+  "$id": "https://schemas.clawbureau.org/claw.bounties.task_spec.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task Spec v1",
+  "description": "Structured task requirements attached to a bounty for agent-readable execution and submission checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "objective",
+    "repo",
+    "base_ref",
+    "files_hint",
+    "validation",
+    "constraints",
+    "deliverables"
+  ],
+  "properties": {
+    "version": {
+      "const": "1",
+      "description": "Task spec format version."
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20000,
+      "description": "Natural-language objective describing what the worker should build."
+    },
+    "repo": {
+      "type": "string",
+      "pattern": "^[^/\\s]+/[^/\\s]+$",
+      "description": "Repository identifier in owner/repo format."
+    },
+    "base_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Base branch or ref workers should target (for example: main)."
+    },
+    "files_hint": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "description": "File or directory hints to narrow worker scope."
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "timeout_seconds"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "description": "Validation commands workers should run before submission."
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400,
+          "description": "Maximum allowed runtime for validation commands."
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files_changed", "forbidden_patterns", "required_proof_tier"],
+      "properties": {
+        "max_files_changed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000,
+          "description": "Maximum number of files that may be changed by the worker."
+        },
+        "forbidden_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "description": "Disallowed command/content patterns for worker execution."
+        },
+        "required_proof_tier": {
+          "type": "string",
+          "enum": ["self", "gateway", "sandbox"],
+          "description": "Minimum proof tier required for successful settlement."
+        }
+      }
+    },
+    "deliverables": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["pr", "proof_bundle", "did_signature"]
+      },
+      "description": "Required deliverables that must be provided at submission time."
+    }
+  }
+}

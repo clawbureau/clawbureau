@@ -51,6 +51,13 @@ export type { WorkSubmitOptions, WorkSubmitResult } from './work-submit.js';
 export type { WorkStatusOptions, WorkStatusResult } from './work-status.js';
 export type { WorkConfig, WorkerRegistration, ActiveBountyContext } from './work-config.js';
 export type {
+  TaskSpecV1,
+  TaskSpecValidationV1,
+  TaskSpecConstraintsV1,
+  TaskDeliverable,
+  RequiredProofTier,
+} from './task-spec.generated.js';
+export type {
   RegisterWorkerRequest,
   RegisterWorkerResult,
   AcceptBountyRequest,

@@ -398,3 +398,17 @@ describe('SKL-004: RunSummary schema type', () => {
     expect(content).toContain('RunSummary');
   });
 });
+
+// AWL-006: task_spec.v1 schema addition
+describe('AWL-006: task_spec.v1 schema', () => {
+  it('task_spec.v1.json exists and has required fields', async () => {
+    const { readFileSync, existsSync } = await import('fs');
+    const { resolve } = await import('path');
+    const schemaPath = resolve(__dirname, '../../../packages/schema/bounties/task_spec.v1.json');
+    expect(existsSync(schemaPath)).toBe(true);
+    const schema = JSON.parse(readFileSync(schemaPath, 'utf8'));
+    expect(schema.required).toEqual(
+      expect.arrayContaining(['objective', 'repo', 'base_ref', 'validation', 'constraints', 'deliverables'])
+    );
+  });
+});

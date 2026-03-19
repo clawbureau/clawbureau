@@ -30,6 +30,8 @@ import { isMarketplaceEnabled } from './runtime-config.js';
 import { submitBounty } from './work-api.js';
 import type { SubmitBountyResponse } from './work-api.js';
 import { printJson, printJsonError } from './json-output.js';
+import { hasDeliverable, parseTaskSpecV1 } from './task-spec.js';
+import type { TaskDeliverable, TaskSpecV1 } from './task-spec.generated.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,6 +66,8 @@ export interface WorkSubmitResult {
   workerDid: string;
   idempotencyKey: string;
   configPath: string;
+  taskSpec?: TaskSpecV1;
+  validatedDeliverables?: TaskDeliverable[];
   nextActions: string[];
   error?: { code: string; message: string; details?: unknown };
 }
@@ -178,6 +182,58 @@ function extractViewerDids(bundlePayload: Record<string, unknown>): string[] {
     }
   }
   return Array.from(dids);
+}
+
+function containsPrReference(value: string): boolean {
+  if (value.includes('/pull/')) return true;
+  if (/#\d+\b/.test(value)) return true;
+  if (/\bpr\s*[:#-]?\s*\d+\b/i.test(value)) return true;
+  return false;
+}
+
+function validateTaskSpecDeliverables(input: {
+  taskSpec: TaskSpecV1;
+  commitProofPath?: string;
+  resultSummary?: string;
+}): {
+  ok: true;
+  validatedDeliverables: TaskDeliverable[];
+} | {
+  ok: false;
+  missing: Array<{ deliverable: TaskDeliverable; message: string }>;
+} {
+  const missing: Array<{ deliverable: TaskDeliverable; message: string }> = [];
+  const validatedDeliverables = input.taskSpec.deliverables.slice();
+
+  if (hasDeliverable(input.taskSpec, 'did_signature')) {
+    if (!input.commitProofPath || input.commitProofPath.trim().length === 0) {
+      missing.push({
+        deliverable: 'did_signature',
+        message: 'Missing commit signature deliverable: pass --commit-proof <path>.',
+      });
+    }
+  }
+
+  if (hasDeliverable(input.taskSpec, 'pr')) {
+    const summary = input.resultSummary?.trim() ?? '';
+    if (!summary) {
+      missing.push({
+        deliverable: 'pr',
+        message: 'Missing PR deliverable: pass --result-summary with a PR URL or reference.',
+      });
+    } else if (!containsPrReference(summary)) {
+      missing.push({
+        deliverable: 'pr',
+        message: 'PR deliverable is invalid: --result-summary must include a PR URL or #<number>.',
+      });
+    }
+  }
+
+  if (missing.length > 0) {
+    return { ok: false, missing };
+  }
+
+  return { ok: true, validatedDeliverables };
 }
 
 function submitErrorNextActions(code: string, bountyId: string, proofBundlePath: string): string[] {
@@ -406,6 +462,33 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
 
   const workerDid = workConfig.workerDid;
   const activeBounty = workConfig.activeBounty;
+  let taskSpec: TaskSpecV1 | undefined;
+  const taskSpecRaw = activeBounty?.taskSpec;
+  if (taskSpecRaw !== undefined) {
+    const parsedTaskSpec = parseTaskSpecV1(taskSpecRaw);
+    if (!parsedTaskSpec.ok) {
+      const code = 'TASK_SPEC_INVALID';
+      const message = 'Stored active bounty task_spec is invalid.';
+      const nextActions = [
+        `clawsig work claim --bounty ${activeBounty?.bountyId ?? '<bty_id>'}`,
+        'Update local active bounty context with a valid task_spec.v1 payload.',
+      ];
+      process.exitCode = 2;
+      emitError(jsonMode, code, message, nextActions, { issues: parsedTaskSpec.issues });
+      return makeErrorResult({
+        bountyId: options.bountyId ?? activeBounty?.bountyId ?? '',
+        marketplace: options.marketplace ?? workConfig.marketplaceUrl,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+        details: { issues: parsedTaskSpec.issues },
+      });
+    }
+    taskSpec = parsedTaskSpec.taskSpec;
+  }
 
   let bountyId = options.bountyId?.trim();
   if (!bountyId && activeBounty?.bountyId) {
@@ -477,6 +560,7 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     ?? activeBounty?.marketplaceUrl
     ?? workConfig.marketplaceUrl
     ?? DEFAULT_MARKETPLACE_URL;
+  let validatedDeliverables: TaskDeliverable[] | undefined;
 
   let rawProofBundleEnvelope: Record<string, unknown>;
   try {
@@ -548,7 +632,7 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
 
   const proofVisibility = proofBundlePayload.visibility;
   let activeBountyFile: ActiveBountyRecord | null = null;
-  if (!activeBounty?.requesterDid) {
+  if (!activeBounty?.requesterDid || taskSpec === undefined) {
     try {
       activeBountyFile = await loadActiveBounty(projectDir, {
         strict: proofVisibility === 'requester',
@@ -574,6 +658,33 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
       });
     }
   }
+
+  if (taskSpec === undefined && activeBountyFile?.taskSpec !== undefined) {
+    const parsedTaskSpec = parseTaskSpecV1(activeBountyFile.taskSpec);
+    if (!parsedTaskSpec.ok) {
+      const code = 'TASK_SPEC_INVALID';
+      const message = 'Stored active bounty task_spec is invalid.';
+      const nextActions = [
+        `clawsig work claim --bounty ${activeBounty?.bountyId ?? activeBountyFile.bountyId ?? '<bty_id>'}`,
+        'Update local active bounty context with a valid task_spec.v1 payload.',
+      ];
+      process.exitCode = 2;
+      emitError(jsonMode, code, message, nextActions, { issues: parsedTaskSpec.issues });
+      return makeErrorResult({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+        details: { issues: parsedTaskSpec.issues },
+      });
+    }
+    taskSpec = parsedTaskSpec.taskSpec;
+  }
+
   const requesterDid = extractRequesterDid(bountyId, workerDid, activeBounty, activeBountyFile);
   if (proofVisibility === 'requester') {
     if (!isRecord(proofBundlePayload.encrypted_payload)) {
@@ -639,6 +750,52 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
         nextActions,
       });
     }
+  }
+
+  if (taskSpec) {
+    const deliverableValidation = validateTaskSpecDeliverables({
+      taskSpec,
+      commitProofPath: options.commitProofPath,
+      resultSummary: options.resultSummary,
+    });
+
+    if (!deliverableValidation.ok) {
+      const code = 'TASK_SPEC_DELIVERABLES_MISSING';
+      const message = 'Submission is missing required task_spec deliverables.';
+      const nextActions = deliverableValidation.missing.map((item) => {
+        if (item.deliverable === 'did_signature') {
+          return `clawsig work submit --proof-bundle ${options.proofBundlePath} --bounty ${bountyId} --commit-proof proofs/<branch>/commit.sig.json`;
+        }
+        if (item.deliverable === 'pr') {
+          return `clawsig work submit --proof-bundle ${options.proofBundlePath} --bounty ${bountyId} --result-summary "PR: https://github.com/${taskSpec.repo}/pull/<number>"`;
+        }
+        return `clawsig work submit --proof-bundle ${options.proofBundlePath} --bounty ${bountyId}`;
+      });
+      process.exitCode = 2;
+      emitError(
+        jsonMode,
+        code,
+        message,
+        nextActions,
+        { missing_deliverables: deliverableValidation.missing, task_spec: taskSpec },
+      );
+      return makeErrorResult({
+        bountyId,
+        marketplace,
+        workerDid,
+        idempotencyKey: options.idempotencyKey ?? '',
+        configPath,
+        code,
+        message,
+        nextActions,
+        details: {
+          missing_deliverables: deliverableValidation.missing,
+          task_spec: taskSpec,
+        },
+      });
+    }
+
+    validatedDeliverables = deliverableValidation.validatedDeliverables;
   }
 
   let urm: Record<string, unknown> | undefined;
@@ -740,6 +897,7 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     idempotencyKey: activeBounty?.idempotencyKey ?? idempotencyKey,
     ...(requesterDid ? { requesterDid } : {}),
     ...(activeBounty?.escrowId ? { escrowId: activeBounty.escrowId } : {}),
+    ...(taskSpec ? { taskSpec } : {}),
     ...(response.submission_id ? { submissionId: response.submission_id } : {}),
     submittedAt: now,
   };
@@ -761,6 +919,8 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
       bounty_id: bountyId,
       idempotency_key: idempotencyKey,
       submission: response,
+      ...(taskSpec ? { task_spec: taskSpec } : {}),
+      ...(validatedDeliverables ? { validated_deliverables: validatedDeliverables } : {}),
       next_actions: nextActions,
       config_path: savedConfigPath,
     });
@@ -784,6 +944,8 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     workerDid,
     idempotencyKey,
     configPath: savedConfigPath,
+    ...(taskSpec ? { taskSpec } : {}),
+    ...(validatedDeliverables ? { validatedDeliverables } : {}),
     nextActions,
   };
 }

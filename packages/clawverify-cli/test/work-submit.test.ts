@@ -11,6 +11,23 @@ import { saveRuntimeConfig } from '../src/runtime-config.js';
 import { runWorkSubmit } from '../src/work-submit.js';
 
 let tmpDir: string;
+const validTaskSpec = {
+  version: '1',
+  objective: 'Ship structured task spec integration',
+  repo: 'clawbureau/clawverify-cli',
+  base_ref: 'main',
+  files_hint: ['src/work-submit.ts'],
+  validation: {
+    commands: ['pnpm typecheck', 'pnpm test'],
+    timeout_seconds: 300,
+  },
+  constraints: {
+    max_files_changed: 20,
+    forbidden_patterns: ['rm -rf', 'force push'],
+    required_proof_tier: 'gateway',
+  },
+  deliverables: ['pr', 'proof_bundle', 'did_signature'],
+} as const;
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return !!input && typeof input === 'object' && !Array.isArray(input);
@@ -323,6 +340,9 @@ describe('runWorkSubmit', () => {
 
   it('accepts wrapped proof bundles with payload fields under envelope.payload', async () => {
     const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+  it('fails before submit when task_spec requires did_signature but --commit-proof is missing', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    const requesterDid = 'did:key:z6MkrRequester000000000000000000000000000001';
 
     const config: WorkConfig = {
       configVersion: '1',
@@ -341,6 +361,8 @@ describe('runWorkSubmit', () => {
         status: 'accepted',
         claimedAt: '2025-01-01T00:00:02Z',
         idempotencyKey: 'claim:bty_test',
+        requesterDid,
+        taskSpec: validTaskSpec,
       },
     };
     await saveWorkConfig(config, tmpDir);
@@ -375,11 +397,141 @@ describe('runWorkSubmit', () => {
         { status: 201, headers: { 'Content-Type': 'application/json' } },
       );
     });
+    const proofPath = join(tmpDir, 'bundle.json');
+    await writeJson(proofPath, {
+      payload: {
+        agent_did: identity.did,
+        visibility: 'requester',
+        encrypted_payload: {
+          ciphertext_b64u: 'abc',
+          iv_b64u: 'abc',
+          tag_b64u: 'abc',
+          plaintext_hash_b64u: 'abc',
+        },
+        viewer_keys: [
+          { viewer_did: identity.did, role: 'owner' },
+          { viewer_did: requesterDid, role: 'requester' },
+        ],
+        receipts: [
+          {
+            payload: {
+              binding: {
+                mission_id: 'bty_test',
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const restore = __setFetch(async () =>
+      new Response(
+        JSON.stringify({ error: 'SHOULD_NOT_BE_CALLED' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
 
     try {
       const result = await quietAsync(() =>
         runWorkSubmit({
           proofBundlePath: proofPath,
+          resultSummary: 'PR: https://github.com/clawbureau/clawverify-cli/pull/123',
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('TASK_SPEC_DELIVERABLES_MISSING');
+      expect(process.exitCode).toBe(2);
+    } finally {
+      restore();
+    }
+  });
+
+  it('passes deliverable validation when commit proof and PR summary are provided', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    const requesterDid = 'did:key:z6MkrRequester000000000000000000000000000001';
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: 'https://market.example.com',
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: { mode: 'token', token: 'tok_abc' },
+      },
+      activeBounty: {
+        bountyId: 'bty_test',
+        workerDid: identity.did,
+        marketplaceUrl: 'https://market.example.com',
+        status: 'accepted',
+        claimedAt: '2025-01-01T00:00:02Z',
+        idempotencyKey: 'claim:bty_test',
+        requesterDid,
+        taskSpec: validTaskSpec,
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    const proofPath = join(tmpDir, 'bundle.json');
+    await writeJson(proofPath, {
+      payload: {
+        agent_did: identity.did,
+        visibility: 'requester',
+        encrypted_payload: {
+          ciphertext_b64u: 'abc',
+          iv_b64u: 'abc',
+          tag_b64u: 'abc',
+          plaintext_hash_b64u: 'abc',
+        },
+        viewer_keys: [
+          { viewer_did: identity.did, role: 'owner' },
+          { viewer_did: requesterDid, role: 'requester' },
+        ],
+        receipts: [
+          {
+            payload: {
+              binding: {
+                mission_id: 'bty_test',
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const commitProofPath = join(tmpDir, 'commit.sig.json');
+    await writeJson(commitProofPath, {
+      envelope_version: '1',
+      envelope_type: 'commit_proof',
+      payload: {
+        version: '1',
+      },
+    });
+
+    const restore = __setFetch(async () =>
+      new Response(
+        JSON.stringify({
+          submission_id: 'sub_002',
+          bounty_id: 'bty_test',
+          status: 'pending_review',
+          verification: {
+            proof_bundle: { status: 'valid', tier: 'gateway' },
+          },
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkSubmit({
+          proofBundlePath: proofPath,
+          commitProofPath,
+          resultSummary: 'PR: https://github.com/clawbureau/clawverify-cli/pull/123',
           json: true,
           projectDir: tmpDir,
         }),
@@ -389,6 +541,8 @@ describe('runWorkSubmit', () => {
       const submittedEnvelope = capturedBody.proof_bundle_envelope as Record<string, unknown>;
       expect(isRecord(submittedEnvelope)).toBe(true);
       expect((submittedEnvelope.payload as Record<string, unknown>).agent_did).toBe(identity.did);
+      expect(result.taskSpec?.version).toBe('1');
+      expect(result.validatedDeliverables).toEqual(['pr', 'proof_bundle', 'did_signature']);
     } finally {
       restore();
     }
