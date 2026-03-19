@@ -38,6 +38,7 @@ Shared JSON schemas for Claw Bureau services.
 - `platform_claim.v1.json`
 - `org_roster_claim_manifest.v1.json`
 - `did_rotation.v1.json`
+- `github_did_binding.v1.json`
 - `identity_export_bundle.v1.json`
 
 ### `delegation/`
