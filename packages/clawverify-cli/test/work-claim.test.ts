@@ -7,6 +7,7 @@ import { generateIdentity } from '../src/identity.js';
 import { saveWorkConfig, loadWorkConfig, DEFAULT_MARKETPLACE_URL } from '../src/work-config.js';
 import type { WorkConfig } from '../src/work-config.js';
 import { __setFetch } from '../src/work-api.js';
+import { saveRuntimeConfig } from '../src/runtime-config.js';
 import { runWorkClaim } from '../src/work-claim.js';
 
 let tmpDir: string;
@@ -88,6 +89,56 @@ describe('runWorkClaim', () => {
     expect(result.status).toBe('error');
     expect(result.error?.code).toBe('WORKER_AUTH_MISSING');
     expect(process.exitCode).toBe(2);
+  });
+
+  it('blocks marketplace calls when runtime config disables marketplace', async () => {
+    const identity = await generateIdentity(join(tmpDir, '.clawsig', 'identity.jwk.json'));
+    await saveRuntimeConfig(
+      {
+        configVersion: '1',
+        marketplace: { enabled: false },
+      },
+      tmpDir,
+    );
+
+    const config: WorkConfig = {
+      configVersion: '1',
+      workerDid: identity.did,
+      marketplaceUrl: DEFAULT_MARKETPLACE_URL,
+      createdAt: '2025-01-01T00:00:00Z',
+      registration: {
+        workerId: 'w-123',
+        registeredAt: '2025-01-01T00:00:01Z',
+        auth: {
+          mode: 'token',
+          token: 'tok_abc123',
+        },
+      },
+    };
+    await saveWorkConfig(config, tmpDir);
+
+    let fetchCalled = false;
+    const restore = __setFetch(async () => {
+      fetchCalled = true;
+      return new Response('{}', { status: 200 });
+    });
+
+    try {
+      const result = await quietAsync(() =>
+        runWorkClaim({
+          bountyId: 'bty_test',
+          json: true,
+          projectDir: tmpDir,
+        }),
+      );
+
+      expect(result.status).toBe('error');
+      expect(result.error?.code).toBe('MARKETPLACE_DISABLED');
+      expect(process.exitCode).toBe(2);
+      expect(fetchCalled).toBe(false);
+    } finally {
+      restore();
+    }
   });
 
   it('claims bounty and persists activeBounty context', async () => {

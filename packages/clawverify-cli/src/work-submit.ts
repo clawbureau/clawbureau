@@ -26,6 +26,7 @@ import {
   saveActiveBounty,
   type ActiveBountyRecord,
 } from './active-bounty.js';
+import { isMarketplaceEnabled } from './runtime-config.js';
 import { submitBounty } from './work-api.js';
 import type { SubmitBountyResponse } from './work-api.js';
 import { printJson, printJsonError } from './json-output.js';
@@ -72,7 +73,7 @@ export interface WorkSubmitResult {
 // ---------------------------------------------------------------------------
 
 function isRecord(input: unknown): input is Record<string, unknown> {
-  return !!input && typeof input === 'object';
+  return !!input && typeof input === 'object' && !Array.isArray(input);
 }
 
 async function loadJsonObject(path: string): Promise<Record<string, unknown>> {
@@ -135,6 +136,10 @@ function extractProofBundlePayload(
     return payload;
   }
   return proofBundleEnvelope;
+}
+
+function unwrapProofBundleEnvelope(input: Record<string, unknown>): Record<string, unknown> {
+  return isRecord(input.envelope) ? input.envelope : input;
 }
 
 function extractRequesterDid(
@@ -300,6 +305,30 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
   const jsonMode = !!options.json;
   const projectDir = options.projectDir;
   const configPath = workConfigPath(projectDir);
+  const marketplaceEnabled = await isMarketplaceEnabled(projectDir);
+
+  if (!marketplaceEnabled) {
+    const code = 'MARKETPLACE_DISABLED';
+    const message =
+      'Marketplace integration is disabled (.clawsig/runtime.json: marketplace.enabled=false). ' +
+      '`clawsig work submit` requires marketplace access.';
+    const nextActions = [
+      'clawsig config set marketplace.enabled true',
+      'Use standalone mode commands: clawsig init, clawsig wrap, clawverify verify, clawsig inspect',
+    ];
+    process.exitCode = 2;
+    emitError(jsonMode, code, message, nextActions);
+    return makeErrorResult({
+      bountyId: options.bountyId ?? '',
+      marketplace: options.marketplace ?? DEFAULT_MARKETPLACE_URL,
+      workerDid: '',
+      idempotencyKey: options.idempotencyKey ?? '',
+      configPath,
+      code,
+      message,
+      nextActions,
+    });
+  }
 
   if (!options.proofBundlePath || options.proofBundlePath.trim().length === 0) {
     const code = 'USAGE_ERROR';
@@ -449,9 +478,9 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     ?? workConfig.marketplaceUrl
     ?? DEFAULT_MARKETPLACE_URL;
 
-  let proofBundleEnvelope: Record<string, unknown>;
+  let rawProofBundleEnvelope: Record<string, unknown>;
   try {
-    proofBundleEnvelope = await loadJsonObject(options.proofBundlePath);
+    rawProofBundleEnvelope = await loadJsonObject(options.proofBundlePath);
   } catch (err) {
     const code = 'PROOF_BUNDLE_INVALID';
     const message = err instanceof Error ? err.message : 'Could not parse proof bundle JSON';
@@ -470,9 +499,10 @@ export async function runWorkSubmit(options: WorkSubmitOptions): Promise<WorkSub
     });
   }
 
+  const proofBundleEnvelope = unwrapProofBundleEnvelope(rawProofBundleEnvelope);
   const proofBundlePayload = extractProofBundlePayload(proofBundleEnvelope);
 
-  const proofAgentDid = proofBundlePayload.agent_did;
+  const proofAgentDid = proofBundlePayload.agent_did ?? proofBundleEnvelope.agent_did;
   if (typeof proofAgentDid === 'string' && proofAgentDid.trim().length > 0 && proofAgentDid.trim() !== workerDid) {
     const code = 'PROOF_AGENT_DID_MISMATCH';
     const message = `proof bundle agent_did (${proofAgentDid.trim()}) does not match worker DID (${workerDid}).`;

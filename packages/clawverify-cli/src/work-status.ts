@@ -17,6 +17,7 @@ import {
   resolveWorkerAuthToken,
   workConfigPath,
 } from './work-config.js';
+import { isMarketplaceEnabled } from './runtime-config.js';
 import { getSubmissionStatus, type SubmissionStatusResponse } from './work-api.js';
 import { printJson, printJsonError } from './json-output.js';
 
@@ -283,11 +284,36 @@ export async function runWorkStatus(options: WorkStatusOptions = {}): Promise<Wo
   const configPath = workConfigPath(projectDir);
   const watch = !!options.watch;
   const intervalSeconds = options.intervalSeconds ?? 10;
+  const marketplaceEnabled = await isMarketplaceEnabled(projectDir);
 
   if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
     const code = 'USAGE_ERROR';
     const message = '--interval must be a positive number.';
     const nextActions = ['clawsig work status [submission_id] [--watch] [--interval <seconds>]'];
+    process.exitCode = 2;
+    emitError(jsonMode, code, message, nextActions);
+    return makeErrorResult({
+      submissionId: options.submissionId?.trim() ?? '',
+      marketplace: options.marketplace ?? DEFAULT_MARKETPLACE_URL,
+      workerDid: '',
+      watch,
+      intervalSeconds,
+      nextActions,
+      configPath,
+      code,
+      message,
+    });
+  }
+
+  if (!marketplaceEnabled) {
+    const code = 'MARKETPLACE_DISABLED';
+    const message =
+      'Marketplace integration is disabled (.clawsig/runtime.json: marketplace.enabled=false). ' +
+      '`clawsig work status` requires marketplace access.';
+    const nextActions = [
+      'clawsig config set marketplace.enabled true',
+      'Use standalone mode commands: clawsig init, clawsig wrap, clawverify verify, clawsig inspect',
+    ];
     process.exitCode = 2;
     emitError(jsonMode, code, message, nextActions);
     return makeErrorResult({

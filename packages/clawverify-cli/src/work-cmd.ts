@@ -13,8 +13,8 @@ import {
   DEFAULT_MARKETPLACE_URL,
   loadWorkConfig,
   saveWorkConfig,
-  workConfigPath,
 } from './work-config.js';
+import { isMarketplaceEnabled } from './runtime-config.js';
 import { registerWorker } from './work-api.js';
 import { printJson, printJsonError } from './json-output.js';
 
@@ -39,6 +39,7 @@ export interface WorkInitResult {
   configPath: string;
   config: WorkConfig;
   registered: boolean;
+  warning?: { code: string; message: string; nextActions: string[] };
   /** Present only on error. */
   error?: { code: string; message: string };
 }
@@ -51,6 +52,7 @@ export async function runWorkInit(options: WorkInitOptions = {}): Promise<WorkIn
   const jsonMode = !!options.json;
   const marketplaceUrl = options.marketplace ?? DEFAULT_MARKETPLACE_URL;
   const projectDir = options.projectDir;
+  const marketplaceEnabled = await isMarketplaceEnabled(projectDir);
 
   // 1. Ensure persistent identity exists.
   const identity = await loadIdentity(projectDir);
@@ -103,47 +105,72 @@ export async function runWorkInit(options: WorkInitOptions = {}): Promise<WorkIn
 
   // 3. Optional marketplace registration.
   let registered = false;
+  let warning: { code: string; message: string; nextActions: string[] } | undefined;
+  let registrationError: { code: string; message: string; nextActions: string[] } | undefined;
   if (options.register) {
-    const result = await registerWorker(marketplaceUrl, { workerDid: identity.did });
-
-    if (!result.ok) {
-      if (jsonMode) {
-        process.exitCode = 1;
-        printJson({
-          status: 'error',
-          worker_did: identity.did,
-          marketplace_url: marketplaceUrl,
-          registered: false,
-          error: { code: result.code, message: result.message },
-          next_actions: ['Retry with: clawsig work init --register'],
-          config_path: workConfigPath(projectDir),
-        });
-      } else {
-        process.exitCode = 1;
-        process.stderr.write(`Registration failed: ${result.message}\n`);
-        process.stderr.write('Work config was still saved (offline mode).\n');
-        process.stderr.write('Retry registration with: clawsig work init --register\n');
-      }
-
-      // Save config without registration (offline fallback).
-      const configPath = await saveWorkConfig(config, projectDir);
-
-      return {
-        status: 'error',
-        workerDid: identity.did,
-        configPath,
-        config,
-        registered: false,
-        error: { code: result.code, message: result.message },
+    if (!marketplaceEnabled) {
+      warning = {
+        code: 'MARKETPLACE_DISABLED',
+        message:
+          'Marketplace integration is disabled (.clawsig/runtime.json: marketplace.enabled=false). ' +
+          'Skipping worker registration and continuing in standalone mode.',
+        nextActions: ['clawsig config set marketplace.enabled true'],
       };
-    }
+    } else {
+      const result = await registerWorker(marketplaceUrl, { workerDid: identity.did });
 
-    config.registration = result.registration;
-    registered = true;
+      if (!result.ok) {
+        registrationError = {
+          code: result.code,
+          message: result.message,
+          nextActions: ['clawsig work init --register'],
+        };
+      } else {
+        config.registration = result.registration;
+        registered = true;
+      }
+    }
   }
 
   // 4. Write config to disk.
   const configPath = await saveWorkConfig(config, projectDir);
+
+  if (registrationError) {
+    if (jsonMode) {
+      process.exitCode = 1;
+      printJson({
+        status: 'error',
+        worker_did: identity.did,
+        marketplace_url: marketplaceUrl,
+        marketplace_enabled: marketplaceEnabled,
+        registered: false,
+        error: {
+          code: registrationError.code,
+          message: registrationError.message,
+        },
+        next_actions: registrationError.nextActions,
+        config_path: configPath,
+      });
+    } else {
+      process.exitCode = 1;
+      process.stderr.write(`Registration failed: ${registrationError.message}\n`);
+      process.stderr.write('Work config was still saved for standalone/offline usage.\n');
+      process.stderr.write(`Saved config: ${configPath}\n`);
+      process.stderr.write('Retry registration with: clawsig work init --register\n');
+    }
+
+    return {
+      status: 'error',
+      workerDid: identity.did,
+      configPath,
+      config,
+      registered: false,
+      error: {
+        code: registrationError.code,
+        message: registrationError.message,
+      },
+    };
+  }
 
   // 5. Output.
   if (jsonMode) {
@@ -151,19 +178,25 @@ export async function runWorkInit(options: WorkInitOptions = {}): Promise<WorkIn
       status: 'ok',
       worker_did: identity.did,
       marketplace_url: marketplaceUrl,
+      marketplace_enabled: marketplaceEnabled,
       registered,
       config_path: configPath,
       created_at: now,
       ...(config.registration ? { registration: config.registration } : {}),
+      ...(warning ? { warning } : {}),
     });
   } else {
     process.stdout.write(`Work config initialized at ${configPath}\n`);
     process.stdout.write(`  Worker DID: ${identity.did}\n`);
     process.stdout.write(`  Marketplace: ${marketplaceUrl}\n`);
+    process.stdout.write(`  Marketplace enabled: ${marketplaceEnabled ? 'yes' : 'no'}\n`);
     if (registered) {
       process.stdout.write(`  Registered: yes (worker_id: ${config.registration?.workerId})\n`);
     } else {
       process.stdout.write('  Registered: no (use --register to register with marketplace)\n');
+    }
+    if (warning) {
+      process.stdout.write(`  Info: ${warning.message}\n`);
     }
   }
 
@@ -173,5 +206,6 @@ export async function runWorkInit(options: WorkInitOptions = {}): Promise<WorkIn
     configPath,
     config,
     registered,
+    ...(warning ? { warning } : {}),
   };
 }
